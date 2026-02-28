@@ -20,6 +20,7 @@
   "dependencies": {
     "@forge/server": "workspace:*",
     "@hono/node-server": "^1.19.9",
+    "@photonjs/hono": "^0.1.12",
     "hono": "^4.0.0"
   },
   "devDependencies": {

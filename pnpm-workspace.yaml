@@ -1,5 +1,4 @@
 packages:
   - 'packages/*'
-  - 'adapters/*'
   - 'create-forge-app'
   - 'playground'

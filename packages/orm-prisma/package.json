@@ -21,8 +21,15 @@
     "@forge/orm": "workspace:*",
     "@prisma/client": "^5.0.0"
   },
+  "optionalDependencies": {
+    "pg": "^8.0.0",
+    "@prisma/adapter-pg": "^6.0.0",
+    "@libsql/client": "^0.15.0",
+    "@prisma/adapter-libsql": "^6.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.0.0",
     "prisma": "^5.0.0",
     "typescript": "^5.4.0"
   }

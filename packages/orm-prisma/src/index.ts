@@ -151,11 +151,24 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 class PrismaAdapter implements OrmAdapter {
   private constructor(private prisma: PrismaClient) {}
 
-  static async make(passed?: PrismaClient): Promise<PrismaAdapter> {
-    if (passed) return new PrismaAdapter(passed)
+  static async make(config: PrismaConfig = {}): Promise<PrismaAdapter> {
+    if (config.client) return new PrismaAdapter(config.client)
+
+    const opts: Record<string, unknown> = {}
+
+    if (config.driver === 'postgresql' && config.url) {
+      const { Pool } = await import('pg') as any
+      const { PrismaPg } = await import('@prisma/adapter-pg') as any
+      opts['adapter'] = new PrismaPg(new Pool({ connectionString: config.url }))
+    } else if (config.driver === 'sqlite' && config.url) {
+      const { createClient } = await import('@libsql/client') as any
+      const { PrismaLibSql } = await import('@prisma/adapter-libsql') as any
+      opts['adapter'] = new PrismaLibSql(createClient({ url: config.url }))
+    }
+
     const mod = await import('@prisma/client') as any
     const PC  = mod.PrismaClient ?? mod.default?.PrismaClient ?? mod.default
-    return new PrismaAdapter(new PC())
+    return new PrismaAdapter(new PC(opts))
   }
 
   query<T>(table: string): QueryBuilder<T> {
@@ -175,12 +188,14 @@ class PrismaAdapter implements OrmAdapter {
 
 export interface PrismaConfig {
   client?: PrismaClient
+  driver?: 'postgresql' | 'sqlite' | 'mysql'
+  url?: string
 }
 
 export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
   return {
     async create(): Promise<OrmAdapter> {
-      return PrismaAdapter.make(config.client)
+      return PrismaAdapter.make(config)
     },
   }
 }

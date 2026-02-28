@@ -1,0 +1,17 @@
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Forge CLI state (color rotation persistence)
+.forge-cli-state.json
+
+# Cache & tooling
+.turbo/
+*.log

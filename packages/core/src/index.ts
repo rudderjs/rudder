@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { Container, container } from '@forge/di'
-import { Env } from '@forge/support'
+import { Env, ConfigRepository, setConfigRepository } from '@forge/support'
 
 // ─── Service Provider ──────────────────────────────────────
 
@@ -21,6 +21,8 @@ export interface AppConfig {
   env?: string
   debug?: boolean
   providers?: (new (app: Application) => ServiceProvider)[]
+  /** Config values loaded from config/ files — bound to the container as 'config' */
+  config?: Record<string, unknown>
 }
 
 // ─── Application ───────────────────────────────────────────
@@ -45,6 +47,13 @@ export class Application {
     this.container.instance('app', this)
     this.container.instance('Application', this)
 
+    // Load config repository if provided
+    if (config.config) {
+      const repo = new ConfigRepository(config.config)
+      setConfigRepository(repo)
+      this.container.instance('config', repo)
+    }
+
     // Register providers
     for (const Provider of config.providers ?? []) {
       this.providers.push(new Provider(this))
@@ -53,18 +62,22 @@ export class Application {
 
   /** Create or return the singleton Application instance */
   static create(config?: AppConfig): Application {
-    if (!Application.instance) {
-      Application.instance = new Application(config)
+    const g = globalThis as Record<string, unknown>
+    if (!g['__forge_app__']) {
+      g['__forge_app__'] = new Application(config)
     }
+    Application.instance = g['__forge_app__'] as Application
     return Application.instance
   }
 
   /** Get the global app instance */
   static getInstance(): Application {
-    if (!Application.instance) {
+    const g = globalThis as Record<string, unknown>
+    const inst = (g['__forge_app__'] ?? Application.instance) as Application | undefined
+    if (!inst) {
       throw new Error('[Forge] Application has not been created yet. Call Application.create() first.')
     }
-    return Application.instance
+    return inst
   }
 
   // ── Container proxy methods ───────────────────────────────
@@ -139,4 +152,8 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 
 export { Container, container } from '@forge/di'
 export { Injectable, Inject } from '@forge/di'
-export { Collection, Env, sleep, ucfirst, tap, pick, omit } from '@forge/support'
+export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config } from '@forge/support'
+
+// ─── Config helper ─────────────────────────────────────────
+
+export function defineConfig<T>(config: T): T { return config }

@@ -68,6 +68,26 @@ export interface ServerAdapterFactory<TConfig = unknown> {
   (config?: TConfig): ServerAdapterProvider
 }
 
+export type FetchHandler = (
+  request: Request,
+  env?:    unknown,
+  ctx?:    unknown
+) => Promise<Response>
+
 export interface ServerAdapterProvider {
+  /** Identifies the server framework — used to resolve the right @photonjs/* adapter */
+  type: string
+
+  /** Create the ServerAdapter instance for @forge/router decorator routing */
   create(): ServerAdapter
+
+  /** Create the raw native framework app (Hono, H3, …) for direct route registration */
+  createApp(): unknown
+
+  /**
+   * Create a WinterCG-compatible fetch handler with Vike SSR middleware applied.
+   * `setup` receives a ServerAdapter — mount your router onto it before SSR middleware runs.
+   * Returns a Promise so adapters can defer heavy imports until runtime (not config-load time).
+   */
+  createFetchHandler(setup?: (adapter: ServerAdapter) => void): Promise<FetchHandler>
 }

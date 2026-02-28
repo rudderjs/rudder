@@ -57,10 +57,6 @@ framework-root/
 │   ├── config/             # Config loader + env helper
 │   ├── support/            # Helpers, macros, collection class
 │   └── testing/            # Testing utilities
-├── adapters/
-│   ├── react/              # React UI adapter
-│   ├── vue/                # Vue UI adapter
-│   └── solid/              # Solid UI adapter
 ├── create-forge-app/       # CLI scaffolder (like create-next-app)
 └── docs/                   # Documentation site (built with the framework itself)
 ```
@@ -135,8 +131,8 @@ my-app/
 │   ├── Unit/
 │   └── Feature/
 │
-├── forge.config.ts             # Framework config (UI adapter, ORM, queue)
-├── vite.config.ts              # Vite + Vike config (minimal, mostly auto)
+├── bootstrap/app.ts            # App wiring (server, providers, routes)
+├── vite.config.ts              # Vite + Vike config (UI framework plugins)
 ├── tsconfig.json
 └── package.json
 ```
@@ -291,23 +287,26 @@ forge routes:list
 
 ---
 
-## forge.config.ts (Top-level config)
+## bootstrap/app.ts (App wiring)
 
 ```ts
-import { defineConfig } from '@forge/core'
-import { react } from '@forge/adapter-react'
-import { prisma } from '@forge/orm-prisma'
-import { inngest } from '@forge/queue-inngest'
+import 'reflect-metadata'
+import 'dotenv/config'
+import { Application } from '@forge/core'
+import { hono } from '@forge/server-hono'   // or express() / fastify() / h3()
+import { router } from '@forge/router'
+import { providers } from './providers.ts'
+import configs from '../config/index.ts'
+import '../routes/api.ts'
 
-export default defineConfig({
-  ui: react(),           // or vue() / solid()
-  server: hono(),        // or express() / fastify() / h3()
-  orm: prisma(),         // or drizzle()
-  queue: inngest({
-    eventKey: process.env.INNGEST_EVENT_KEY,
-  }),
+export const server = hono()
+export const app = Application.create({ name: configs.app.name, providers })
+export const handleFetch = await server.createFetchHandler((adapter) => {
+  router.mount(adapter)
 })
 ```
+
+UI framework is handled by Vike's ecosystem — install `vike-react`, `vike-vue`, or `vike-solid` and configure in `vite.config.ts` and `pages/+config.ts`.
 
 ---
 
@@ -329,9 +328,6 @@ export default defineConfig({
 @forge/cli
 @forge/support
 @forge/testing
-@forge/adapter-react
-@forge/adapter-vue
-@forge/adapter-solid
 @forge/server-hono
 @forge/server-express
 @forge/server-fastify

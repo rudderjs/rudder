@@ -17,6 +17,9 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
   "devDependencies": {
     "@types/node": "^25.3.2",
     "typescript": "^5.4.0"

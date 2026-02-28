@@ -158,3 +158,79 @@ export const tap = <T>(val: T, fn: (v: T) => void): T => {
   fn(val)
   return val
 }
+
+// ─── ConfigRepository ──────────────────────────────────────
+
+export class ConfigRepository {
+  constructor(private readonly data: Record<string, unknown>) {}
+
+  get<T = unknown>(key: string, fallback?: T): T {
+    const parts = key.split('.')
+    let current: unknown = this.data
+    for (const part of parts) {
+      if (current === null || typeof current !== 'object' || !(part in (current as object))) {
+        return fallback as T
+      }
+      current = (current as Record<string, unknown>)[part]
+    }
+    return (current ?? fallback) as T
+  }
+
+  set(key: string, value: unknown): void {
+    const parts = key.split('.')
+    let current = this.data
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i]!
+      if (typeof current[part] !== 'object' || current[part] === null) {
+        current[part] = {}
+      }
+      current = current[part] as Record<string, unknown>
+    }
+    current[parts[parts.length - 1]!] = value
+  }
+
+  has(key: string): boolean {
+    return this.get(key) !== undefined
+  }
+
+  all(): Record<string, unknown> {
+    return this.data
+  }
+}
+
+// Module-level config singleton — set by Application.create()
+let _repo: ConfigRepository | null = null
+
+/** @internal — called by @forge/core Application */
+export function setConfigRepository(repo: ConfigRepository): void {
+  _repo = repo
+  ;(globalThis as Record<string, unknown>)['__forge_config__'] = repo
+}
+
+/**
+ * Access a config value by dot-notation key.
+ * @example config('app.name') // → 'Forge'
+ * @example config('database.connections.postgresql.url', '')
+ */
+export function config<T = unknown>(key: string, fallback?: T): T {
+  const repo = _repo
+    ?? (globalThis as Record<string, unknown>)['__forge_config__'] as ConfigRepository | undefined
+  return (repo?.get(key, fallback) ?? fallback) as T
+}
+
+// ─── defineEnv ─────────────────────────────────────────────
+
+import { z } from 'zod'
+
+export function defineEnv<T extends z.ZodRawShape>(
+  schema: z.ZodObject<T>
+): z.infer<z.ZodObject<T>> {
+  const parsed = schema.safeParse(process.env)
+  if (!parsed.success) {
+    const lines = parsed.error.issues
+      .map(i => `  ${i.path.join('.')}: ${i.message}`)
+      .join('\n')
+    throw new Error(`[Forge] Invalid environment configuration:\n${lines}`)
+  }
+  return parsed.data
+}

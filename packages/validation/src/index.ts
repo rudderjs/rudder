@@ -1,4 +1,4 @@
-import { z, ZodSchema, ZodError } from 'zod'
+import { z, ZodType, ZodError } from 'zod'
 import type { ForgeRequest } from '@forge/server'
 
 // ─── Validation Error ──────────────────────────────────────
@@ -19,7 +19,7 @@ export class ValidationError extends Error {
 
 // ─── Form Request ──────────────────────────────────────────
 
-export abstract class FormRequest<T extends ZodSchema = ZodSchema> {
+export abstract class FormRequest<T extends ZodType = ZodType> {
   protected req!: ForgeRequest
 
   /** Define the Zod schema for this request */
@@ -62,7 +62,7 @@ export abstract class FormRequest<T extends ZodSchema = ZodSchema> {
 
 // ─── Validate helper (inline, no class needed) ─────────────
 
-export async function validate<T extends ZodSchema>(
+export async function validate<T extends ZodType>(
   schema: T,
   req: ForgeRequest
 ): Promise<z.infer<T>> {
@@ -89,7 +89,7 @@ export async function validate<T extends ZodSchema>(
 
 // ─── Validation Middleware ─────────────────────────────────
 
-export function validateWith<T extends ZodSchema>(
+export function validateWith<T extends ZodType>(
   schema: T
 ) {
   return async (
