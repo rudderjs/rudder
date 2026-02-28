@@ -4,6 +4,6 @@ import vikePhoton from 'vike-photon/config'
 export default {
   extends: [vikePhoton],
   photon: {
-    server: 'src/index.ts',
+    server: 'bootstrap/app.ts',
   },
 } as unknown as Config

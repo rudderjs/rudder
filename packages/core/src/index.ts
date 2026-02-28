@@ -276,6 +276,10 @@ export class Forge {
     await this._boot
     return this._handler!(request, env, ctx)
   }
+
+  /** WinterCG-compatible fetch handler — allows bootstrap/app.ts to be used directly as the server entry */
+  readonly fetch = (request: Request, env?: unknown, ctx?: unknown): Promise<Response> =>
+    this.handleRequest(request, env, ctx)
 }
 
 // ─── Artisan Registry ──────────────────────────────────────
