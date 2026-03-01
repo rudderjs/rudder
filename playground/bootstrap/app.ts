@@ -2,6 +2,7 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@forge/core'
 import { hono } from '@forge/server-hono'
+import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -14,8 +15,9 @@ export default Application.configure({
     api:      () => import('../routes/api.ts'),
     commands: () => import('../routes/console.ts'),
   })
-  .withMiddleware((_m) => {
-    // _m.use(new CorsMiddleware().toHandler())
+  .withMiddleware((m) => {
+    // Global middleware — runs on every request
+    // m.use(new RequestIdMiddleware().toHandler())  // adds X-Request-Id to every response
   })
   .withExceptions((_e) => {
     // future: exception reporting and rendering

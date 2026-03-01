@@ -214,7 +214,10 @@ export class AppBuilder {
 // ─── Forge (Configured Application) ───────────────────────
 
 export class Forge {
-  private _boot:    Promise<void>
+  /** Phase 1: providers only — safe to await in CLI (no Vike virtual imports) */
+  private _providerBoot: Promise<void>
+  /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
+  private _boot: Promise<void> | null = null
   private _handler: FetchHandler | null = null
 
   constructor(
@@ -223,10 +226,8 @@ export class Forge {
     private readonly _loaders: Array<() => Promise<unknown>>,
     private readonly _mwFn?:   (m: MiddlewareConfigurator) => void,
   ) {
-    // Boot eagerly — like Laravel/AdonisJS. Errors surface at startup,
-    // not on the first request. Serverless still works (promise settles
-    // before or during the first request).
-    this._boot = this._bootstrap()
+    // Boot providers eagerly — errors surface at startup (DB connection failures, etc.)
+    this._providerBoot = this._bootstrapProviders()
   }
 
   /** Suppress Vike's informational console noise — runs once at boot, adapter-agnostic */
@@ -236,29 +237,31 @@ export class Forge {
       return msg.includes('[vike]') && (
         msg.includes('HTTP request')           ||
         msg.includes('HTTP response')          ||
-        msg.includes("doesn't match the route")
+        msg.includes("doesn't match the route")||
+        msg.includes('thrown by')               // guard() / hook throw notifications
       )
     }
-    const _log = console.log;  const _warn = console.warn
-    console.log  = (...a: unknown[]) => { if (!isNoise(a)) _log(...a)  }
-    console.warn = (...a: unknown[]) => { if (!isNoise(a)) _warn(...a) }
+    const _log   = console.log
+    const _warn  = console.warn
+    const _info  = console.info
+    const _error = console.error
+    console.log   = (...a: unknown[]) => { if (!isNoise(a)) _log(...a)   }
+    console.warn  = (...a: unknown[]) => { if (!isNoise(a)) _warn(...a)  }
+    console.info  = (...a: unknown[]) => { if (!isNoise(a)) _info(...a)  }
+    console.error = (...a: unknown[]) => { if (!isNoise(a)) _error(...a) }
   }
 
-  private async _bootstrap(): Promise<void> {
-    // Silence Vike's duplicate/noisy logs — works regardless of server adapter
+  /** Phase 1 — load routes + boot service providers. Safe in CLI (no Vike virtual URLs). */
+  private async _bootstrapProviders(): Promise<void> {
     this._suppressVikeNoise()
-
-    // Load route files — side effects register routes on the global router
     await Promise.all(this._loaders.map(l => l()))
-
-    // Bootstrap the application (register + boot all service providers)
     await this._app.bootstrap()
+  }
 
-    // Apply global middleware then mount routes onto the server adapter
+  /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
+  private async _createHandler(): Promise<void> {
     const mw = new MiddlewareConfigurator()
     this._mwFn?.(mw)
-
-    // Dynamic import avoids a circular-dep between @forge/core and @forge/router
     const { router } = await import('@forge/router')
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
@@ -266,13 +269,13 @@ export class Forge {
     })
   }
 
-  /** Boot the application without starting an HTTP server — used by the CLI */
+  /** Boot providers without starting an HTTP server — used by the CLI */
   async boot(): Promise<void> {
-    await Promise.all(this._loaders.map(l => l()))
-    await this._app.bootstrap()
+    await this._providerBoot
   }
 
   async handleRequest(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
+    if (!this._boot) this._boot = this._providerBoot.then(() => this._createHandler())
     await this._boot
     return this._handler!(request, env, ctx)
   }
