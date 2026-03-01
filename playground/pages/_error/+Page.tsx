@@ -1,3 +1,4 @@
+import '@/index.css'
 import { usePageContext } from 'vike-react/usePageContext'
 
 export default function Page() {

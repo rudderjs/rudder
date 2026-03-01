@@ -251,11 +251,11 @@ export class Forge {
     console.error = (...a: unknown[]) => { if (!isNoise(a)) _error(...a) }
   }
 
-  /** Phase 1 — load routes + boot service providers. Safe in CLI (no Vike virtual URLs). */
+  /** Phase 1 — boot service providers then load routes. Safe in CLI (no Vike virtual URLs). */
   private async _bootstrapProviders(): Promise<void> {
     this._suppressVikeNoise()
-    await Promise.all(this._loaders.map(l => l()))
     await this._app.bootstrap()
+    await Promise.all(this._loaders.map(l => l()))
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */

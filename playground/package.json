@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@forge/core": "workspace:*",
+    "@forge/di": "workspace:*",
     "@forge/middleware": "workspace:*",
     "@forge/orm": "workspace:*",
     "@forge/orm-prisma": "workspace:*",
