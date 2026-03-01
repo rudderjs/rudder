@@ -89,7 +89,7 @@ export class LoggerMiddleware extends Middleware {
   }
 }
 
-/** Simple rate limiter middleware (in-memory) */
+/** Simple rate limiter middleware (in-memory, skips static assets & Vite internals) */
 export class ThrottleMiddleware extends Middleware {
   private hits = new Map<string, { count: number; reset: number }>()
 
@@ -100,18 +100,38 @@ export class ThrottleMiddleware extends Middleware {
     super()
   }
 
+  /** True for Vite internals and static assets — these should not be rate-limited */
+  private isAsset(path: string): boolean {
+    if (path.startsWith('/@')) return true        // Vite internals (/@vite, /@react-refresh, …)
+    if (path.startsWith('/node_modules')) return true
+    const segment = path.split('/').pop() ?? ''
+    return segment.includes('.')                  // any file extension → static asset
+  }
+
+  /** Best-effort client identifier from request headers */
+  private clientKey(req: ForgeRequest): string {
+    return (
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ??
+      req.headers['x-real-ip'] ??
+      'unknown'
+    )
+  }
+
   handle(req: ForgeRequest, res: ForgeResponse, next: () => Promise<void>): Promise<void> {
-    const ip  = req.headers['x-forwarded-for'] ?? req.headers['host'] ?? 'unknown'
+    // Never throttle static assets — would break Vite HMR and page loads in dev
+    if (this.isAsset(req.path)) return next()
+
+    const key = this.clientKey(req)
     const now = Date.now()
-    const rec = this.hits.get(ip)
+    const rec = this.hits.get(key)
 
     if (!rec || now > rec.reset) {
-      this.hits.set(ip, { count: 1, reset: now + this.windowMs })
+      this.hits.set(key, { count: 1, reset: now + this.windowMs })
       return next()
     }
 
     if (rec.count >= this.max) {
-      res.status(429).json({ message: 'Too many requests' })
+      res.status(429).json({ message: 'Too many requests. Please slow down.' })
       return Promise.resolve()
     }
 

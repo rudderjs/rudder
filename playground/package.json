@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vike dev",
     "build": "vike build",
+    "start": "node ./dist/server/index.mjs",
     "preview": "node ./dist/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "artisan": "tsx node_modules/@forge/cli/src/index.ts"

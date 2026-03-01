@@ -11,7 +11,7 @@ import type { ForgeRequest, ForgeResponse } from '@forge/server'
  */
 export class RequestIdMiddleware extends Middleware {
   async handle(req: ForgeRequest, res: ForgeResponse, next: () => Promise<void>): Promise<void> {
-    console.log('RequestIdMiddleware: handling request')
+    // console.log('RequestIdMiddleware: handling request')
     const id = req.headers['x-request-id'] ?? crypto.randomUUID()
     ;(req as Record<string, unknown>)['requestId'] = id
     await next()

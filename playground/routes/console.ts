@@ -16,9 +16,9 @@ artisan.command('inspire', () => {
 artisan.command('db:seed', async () => {
   console.log('Seeding database...')
 
-  await User.create({ name: 'Alice',   email: 'alice@example.com',   role: 'admin' })
-  await User.create({ name: 'Bob',     email: 'bob@example.com',     role: 'user'  })
-  await User.create({ name: 'Charlie', email: 'charlie@example.com', role: 'user'  })
+  await User.create({ name: 'Alice',   email: 'alice2@example.com',   role: 'admin' })
+  await User.create({ name: 'Bob',     email: 'bob2@example.com',     role: 'user'  })
+  await User.create({ name: 'Charlie', email: 'charlie2@example.com', role: 'user'  })
 
   console.log('Done. 3 users seeded.')
 }).description('Seed the database with sample data')
