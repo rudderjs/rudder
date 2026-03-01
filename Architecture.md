@@ -417,5 +417,5 @@ pnpm artisan db:seed
 | **v0.3** | ✅ Fluent bootstrap, artisan console routes, DB seeding, multi-provider |
 | **v0.4** | Auth module (sessions, JWT, guards) |
 | **v0.5** | Tests (node:test), Drizzle adapter, BullMQ adapter |
-| **v0.6** | Vue + Solid adapters, create-forge-app CLI |
+| **v0.6** | Vike Vue + Solid integration, create-forge-app CLI |
 | **v1.0** | Docs site, public launch |

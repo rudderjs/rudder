@@ -24,7 +24,7 @@ export class AuthMiddleware extends Middleware {
 
     // Token is present — attach it to the request for downstream handlers
     const token = header.slice(7)
-    ;(req as Record<string, unknown>)['token'] = token
+    ;(req as unknown as Record<string, unknown>)['token'] = token
 
     return next()
   }

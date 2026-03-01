@@ -1,11 +1,17 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "outDir": "dist",
     "noEmit": true,
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*", "pages/**/*", "*.ts", "*.tsx"]
+  "include": ["src/**/*", "pages/**/*", "app/**/*", "bootstrap/**/*", "routes/**/*", "*.ts", "*.tsx"]
 }
