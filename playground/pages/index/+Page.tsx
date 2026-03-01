@@ -1,3 +1,4 @@
+import '@/index.css'
 import { useData } from 'vike-react/useData'
 import { Button } from '@/components/ui/button'
 import type { Data } from './+data.js'
@@ -9,7 +10,7 @@ export default function Page() {
       <h1 className="text-4xl font-bold tracking-tight">{data.title}</h1>
       <p className="text-muted-foreground">{data.message}</p>
       <div className="flex gap-2">
-        <Button>Get Started</Button>
+        <a href="/todos"><Button>View Todos</Button></a>
         <Button variant="outline">Learn More</Button>
       </div>
     </div>

@@ -366,6 +366,9 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@forge/di':
+        specifier: workspace:*
+        version: link:../packages/di
       '@forge/middleware':
         specifier: workspace:*
         version: link:../packages/middleware

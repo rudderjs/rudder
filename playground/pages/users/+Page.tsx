@@ -1,3 +1,4 @@
+import '@/index.css'
 import { useData } from 'vike-react/useData'
 import type { Data } from './+data.js'
 
