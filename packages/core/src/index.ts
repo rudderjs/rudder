@@ -221,6 +221,7 @@ export class Forge {
   /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
   private _boot: Promise<void> | null = null
   private _handler: FetchHandler | null = null
+  private _handlerReadyLogged = false
 
   constructor(
     private readonly _app:     Application,
@@ -258,6 +259,7 @@ export class Forge {
     this._suppressVikeNoise()
     await this._app.bootstrap()
     await Promise.all(this._loaders.map(l => l()))
+    console.log('[Forge] providers boot complete — routes loaded')
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
@@ -269,6 +271,11 @@ export class Forge {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       router.mount(adapter)
     })
+
+    if (!this._handlerReadyLogged) {
+      this._handlerReadyLogged = true
+      console.log('[Forge] handler ready — first request can be served')
+    }
   }
 
   /** Boot providers without starting an HTTP server — used by the CLI */
