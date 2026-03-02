@@ -85,8 +85,10 @@ function packageJson(ctx: TemplateContext): string {
   }
 
   const deps = {
+    '@forge/artisan':          '^0.0.1',
     '@forge/auth-better-auth': '^0.0.1',
     '@forge/cache':            '^0.0.1',
+    '@forge/contracts':        '^0.0.1',
     '@forge/core':             '^0.0.1',
     '@forge/di':               '^0.0.1',
     '@forge/middleware':       '^0.0.1',
@@ -96,7 +98,6 @@ function packageJson(ctx: TemplateContext): string {
     '@forge/rate-limit':       '^0.0.1',
     '@forge/router':           '^0.0.1',
     '@forge/schedule':         '^0.0.1',
-    '@forge/server':           '^0.0.1',
     '@forge/server-hono':      '^0.0.1',
     '@forge/storage':          '^0.0.1',
     '@forge/support':          '^0.0.1',
@@ -854,7 +855,7 @@ export class AppServiceProvider extends ServiceProvider {
 
 function requestIdMiddleware(): string {
   return `import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/server'
+import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
 
 /**
  * Attaches a unique X-Request-Id header to every response.
@@ -923,7 +924,7 @@ function routesWeb(): string {
 }
 
 function routesConsole(): string {
-  return `import { artisan } from '@forge/core'
+  return `import { artisan } from '@forge/artisan'
 
 artisan.command('inspire', () => {
   const quotes = [
