@@ -29,11 +29,11 @@ router.get('/api/me', async (req) => {
 
 router.get('/api/users', async (_req, res) => {
   const users = await Cache.remember('users:all', 60, () => {
-      console.log('this shoild log only once becouse it cached 1123');
+      console.log('this shoild log only once becouse it cached 1123466');
       return resolve<UserService>(UserService).findAll()
   })
 
-  return res.json({ data: users })
+  return res.json({ data: users, cached: true })
 })
 
 router.get('/api/users/:id', async (req, res) => {

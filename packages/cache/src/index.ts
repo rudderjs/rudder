@@ -16,11 +16,27 @@ export interface CacheAdapterProvider {
 
 // ─── Cache Registry ────────────────────────────────────────
 
-export class CacheRegistry {
-  private static adapter: CacheAdapter | null = null
+const FORGE_CACHE_REGISTRY_KEY = Symbol.for('forge.cache.registry')
 
-  static set(adapter: CacheAdapter): void { this.adapter = adapter }
-  static get(): CacheAdapter | null        { return this.adapter }
+type CacheRegistryState = {
+  adapter: CacheAdapter | null
+}
+
+function getCacheRegistryState(): CacheRegistryState {
+  const globalState = globalThis as typeof globalThis & {
+    [FORGE_CACHE_REGISTRY_KEY]?: CacheRegistryState
+  }
+
+  if (!globalState[FORGE_CACHE_REGISTRY_KEY]) {
+    globalState[FORGE_CACHE_REGISTRY_KEY] = { adapter: null }
+  }
+
+  return globalState[FORGE_CACHE_REGISTRY_KEY]
+}
+
+export class CacheRegistry {
+  static set(adapter: CacheAdapter): void { getCacheRegistryState().adapter = adapter }
+  static get(): CacheAdapter | null        { return getCacheRegistryState().adapter }
 }
 
 // ─── Cache Facade ──────────────────────────────────────────
