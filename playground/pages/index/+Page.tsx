@@ -12,6 +12,7 @@ export default function Page() {
     await fetch('/api/auth/sign-out', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
+      body:    '{}',
     })
     window.location.href = '/'
   }
