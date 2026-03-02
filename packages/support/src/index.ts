@@ -112,38 +112,30 @@ export const Env = {
 
 // ─── Helpers ───────────────────────────────────────────────
 
-/** Pause execution for a given number of milliseconds */
 export const sleep = (ms: number): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms))
 
-/** Capitalize the first letter of a string */
 export const ucfirst = (str: string): string =>
   str.charAt(0).toUpperCase() + str.slice(1)
 
-/** Convert camelCase or PascalCase to snake_case */
 export const toSnakeCase = (str: string): string =>
   str.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`).replace(/^_/, '')
 
-/** Convert snake_case to camelCase */
 export const toCamelCase = (str: string): string =>
   str.replace(/_([a-z])/g, (_, l) => l.toUpperCase())
 
-/** Check if a value is a plain object */
 export const isObject = (val: unknown): val is Record<string, unknown> =>
   typeof val === 'object' && val !== null && !Array.isArray(val)
 
-/** Deep clone a plain object or array */
 export const deepClone = <T>(val: T): T =>
   JSON.parse(JSON.stringify(val))
 
-/** Pick specific keys from an object */
 export const pick = <T extends object, K extends keyof T>(
   obj: T,
   keys: K[]
 ): Pick<T, K> =>
   keys.reduce((acc, k) => ({ ...acc, [k]: obj[k] }), {} as Pick<T, K>)
 
-/** Omit specific keys from an object */
 export const omit = <T extends object, K extends keyof T>(
   obj: T,
   keys: K[]
@@ -153,7 +145,6 @@ export const omit = <T extends object, K extends keyof T>(
   return result as Omit<T, K>
 }
 
-/** Tap into a value, run a side effect, return the value */
 export const tap = <T>(val: T, fn: (v: T) => void): T => {
   fn(val)
   return val
@@ -198,7 +189,6 @@ export class ConfigRepository {
   }
 }
 
-// Module-level config singleton — set by Application.create()
 let _repo: ConfigRepository | null = null
 
 /** @internal — called by @forge/core Application */
@@ -207,11 +197,6 @@ export function setConfigRepository(repo: ConfigRepository): void {
   ;(globalThis as Record<string, unknown>)['__forge_config__'] = repo
 }
 
-/**
- * Access a config value by dot-notation key.
- * @example config('app.name') // → 'Forge'
- * @example config('database.connections.postgresql.url', '')
- */
 export function config<T = unknown>(key: string, fallback?: T): T {
   const repo = _repo
     ?? (globalThis as Record<string, unknown>)['__forge_config__'] as ConfigRepository | undefined
@@ -221,18 +206,16 @@ export function config<T = unknown>(key: string, fallback?: T): T {
 // ─── resolveOptionalPeer ───────────────────────────────────
 
 /**
- * Dynamically import an optional peer package that is installed in the
- * user's app (process.cwd()), not in the Forge framework package itself.
+ * Dynamically import an optional peer package installed in the user's app
+ * (process.cwd()), not inside node_modules/@forge/*.
  *
- * Plain `import(specifier)` resolves relative to the importing file's
- * location (inside node_modules/@forge/*), where optional peers are not
- * installed. This helper resolves the package path from the app's working
- * directory first, then imports the resolved absolute path.
+ * Uses createRequire anchored to the app root so optional peers installed
+ * in the user's project are resolvable regardless of where @forge/* lives.
  *
  * All optional peer packages must include `"default": "./dist/index.js"`
- * in their exports field so that the CJS resolver used here can find them.
+ * in their exports field so the CJS resolver can find them.
  *
- * `node:module` is imported lazily so this file stays out of browser bundles.
+ * `node:module` is imported lazily to stay out of browser bundles.
  */
 export async function resolveOptionalPeer<T = Record<string, unknown>>(specifier: string): Promise<T> {
   const { createRequire } = await import('node:module')

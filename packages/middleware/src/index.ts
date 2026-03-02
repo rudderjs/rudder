@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, ForgeRequest, ForgeResponse } from './server.js'
+import type { MiddlewareHandler, ForgeRequest, ForgeResponse } from '@forge/contracts'
 
 // ─── Base Middleware Class ─────────────────────────────────
 

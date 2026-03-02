@@ -1,13 +1,15 @@
 {
-  "name": "@forge/server-hono",
+  "name": "@forge/middleware",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "import": "./dist/index.js",
+      "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
   },
@@ -18,10 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/contracts": "workspace:*",
-    "@hono/node-server": "^1.19.9",
-    "@photonjs/hono": "^0.1.12",
-    "hono": "^4.12.0"
+    "@forge/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

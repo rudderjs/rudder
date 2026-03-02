@@ -8,7 +8,7 @@ import type {
   MiddlewareHandler,
   ForgeRequest,
   ForgeResponse,
-} from '@forge/core/server'
+} from '@forge/contracts'
 
 // ─── Hono Adapter Config ───────────────────────────────────
 

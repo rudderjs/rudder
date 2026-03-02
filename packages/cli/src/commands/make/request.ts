@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string): string {
-  return `import { FormRequest, z } from '@forge/core'
+  return `import { FormRequest, z } from '@forge/validation'
 
 export class ${className} extends FormRequest {
   authorize(): boolean {

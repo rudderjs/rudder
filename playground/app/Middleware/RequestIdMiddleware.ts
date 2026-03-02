@@ -1,5 +1,5 @@
-import { Middleware } from '@forge/core'
-import type { ForgeRequest, ForgeResponse } from '@forge/core'
+import { Middleware } from '@forge/middleware'
+import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
 
 /**
  * Example global middleware.

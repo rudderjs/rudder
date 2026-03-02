@@ -14,6 +14,9 @@
   },
   "dependencies": {
     "@forge/auth-better-auth": "workspace:*",
+    "@forge/contracts":       "workspace:*",
+    "@forge/middleware":       "workspace:*",
+    "@forge/validation":       "workspace:*",
     "@forge/queue-bullmq": "workspace:*",
     "@forge/cache": "workspace:*",
     "@forge/core": "workspace:*",

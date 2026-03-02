@@ -1,5 +1,5 @@
 import { z, ZodType, ZodError } from 'zod'
-import type { ForgeRequest } from './server.js'
+import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
 
 // ─── Validation Error ──────────────────────────────────────
 
@@ -94,7 +94,7 @@ export function validateWith<T extends ZodType>(
 ) {
   return async (
     req: ForgeRequest,
-    _res: import('./server.js').ForgeResponse,
+    _res: ForgeResponse,
     next: () => Promise<void>
   ) => {
     await validate(schema, req)

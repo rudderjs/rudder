@@ -38,8 +38,15 @@
 ```
 forge/
 ├── packages/
+│   ├── contracts/          # Pure TypeScript types — no runtime code (erased at build)
+│   │                       #   ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler, etc.
+│   ├── support/            # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer
+│   │                       #   sideEffects: false — fully tree-shakeable
+│   ├── di/                 # DI container: Container, @Injectable, @Inject, reflect-metadata
+│   ├── middleware/         # Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
+│   ├── validation/         # FormRequest, validate(), validateWith(), ValidationError, z re-export
 │   ├── core/               # Bootstrapper, Application, Forge, ServiceProvider, artisan registry
-│   │                       #   subpaths: ./support  ./di  ./server  ./middleware  ./validation
+│   │                       #   re-exports contracts · support · di · middleware · validation
 │   ├── router/             # Global router singleton + decorator-based routing
 │   ├── orm/                # ORM contract + base Model + ModelRegistry
 │   ├── orm-prisma/         # Prisma adapter (multi-driver: pg, libsql, default)
@@ -141,31 +148,32 @@ my-app/
 ## Dependency Flow
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  @forge/core                                            │
-│    └── subpaths: support · di · server ·                │
-│                  middleware · validation                 │
-└─────────────────────────────────────────────────────────┘
-         │ resolveOptionalPeer() at runtime
-         ▼
-   @forge/router ──(peerDep, types only)──▶ @forge/core
-         ▲
-         │ static import
-   @forge/server-hono
-   @forge/rate-limit
-   @forge/queue
-   @forge/cache
-   @forge/mail
-   @forge/storage
-   @forge/events
-   @forge/schedule
-   @forge/auth-better-auth
-         ▲
-   orm-prisma   queue-bullmq   queue-inngest
-   cache-redis  storage-s3     mail-nodemailer
+Level 1 (parallel — no framework deps):
+  @forge/contracts   @forge/support   @forge/di
+          │                │               │
+          └────────────────┴───────────────┘
+                           │
+          ┌────────────────┼──────────────────────────┐
+          ▼                ▼                          ▼
+   @forge/router    @forge/middleware         @forge/server-hono
+   @forge/validation @forge/rate-limit
+          │
+          └──────────────────┐
+                             ▼
+                      @forge/core (+ support + di + middleware + validation + router)
+                             │
+           ┌─────────────────┼──────────────────┐
+           ▼                 ▼                  ▼
+    @forge/queue       @forge/cache       @forge/orm
+    @forge/mail        @forge/storage     @forge/events
+    @forge/schedule    @forge/auth        @forge/validation
+    @forge/auth-better-auth
+           │
+    orm-prisma   queue-bullmq   queue-inngest
+    cache-redis  storage-s3     mail-nodemailer
 ```
 
-**Cycle avoidance**: `@forge/core` does not list `@forge/router` as any declared dependency. It loads router at runtime using `resolveOptionalPeer('@forge/router')` — a helper that resolves the package path relative to `process.cwd()` (the user's app) and returns a dynamic import with an absolute path, making the specifier opaque to Rollup's static analysis. `@forge/router` lists `@forge/core` as a `peerDependency` only, so Turbo builds core first without detecting a reverse cycle.
+**Clean DAG — no cycles**: `@forge/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@forge/router` and `@forge/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@forge/core` lists `@forge/router` as a regular dependency and imports it with a plain `await import('@forge/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
 
 ---
 

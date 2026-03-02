@@ -1,7 +1,6 @@
-import 'reflect-metadata'
-import { Container, container } from './di.js'
-import { Env, ConfigRepository, setConfigRepository, resolveOptionalPeer } from './support.js'
-import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from './server.js'
+import { Container, container } from '@forge/di'
+import { Env, ConfigRepository, setConfigRepository } from '@forge/support'
+import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@forge/contracts'
 
 // ─── Service Provider ──────────────────────────────────────
 
@@ -268,7 +267,7 @@ export class Forge {
     this._suppressVikeNoise()
     if (this._app.isDevelopment()) {
       artisan.reset()
-      const { router } = await resolveOptionalPeer<{ router: { reset(): void } }>('@forge/router')
+      const { router } = await import('@forge/router') as { router: { reset(): void } }
       router.reset()
     }
     await this._app.bootstrap()
@@ -280,7 +279,7 @@ export class Forge {
   private async _createHandler(): Promise<void> {
     const mw = new MiddlewareConfigurator()
     this._mwFn?.(mw)
-    const { router } = await resolveOptionalPeer<{ router: { mount(adapter: ServerAdapter): void } }>('@forge/router')
+    const { router } = await import('@forge/router') as { router: { mount(adapter: ServerAdapter): void } }
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       router.mount(adapter)
@@ -548,11 +547,9 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 
 // ─── Re-exports ────────────────────────────────────────────
 
-export { Container, container, Injectable, Inject } from './di.js'
-export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer } from './support.js'
-export type { ForgeRequest, ForgeResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from './server.js'
-export { Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware, fromClass } from './middleware.js'
-export { FormRequest, ValidationError, validate, validateWith, z } from './validation.js'
+export { Container, container, Injectable, Inject } from '@forge/di'
+export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer } from '@forge/support'
+export type { ForgeRequest, ForgeResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@forge/contracts'
 
 // ─── Config helper ─────────────────────────────────────────
 

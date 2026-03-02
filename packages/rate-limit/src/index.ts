@@ -1,5 +1,5 @@
 import { CacheRegistry } from '@forge/cache'
-import type { ForgeRequest, ForgeResponse, MiddlewareHandler } from '@forge/core/server'
+import type { ForgeRequest, ForgeResponse, MiddlewareHandler } from '@forge/contracts'
 
 // ─── Internal types ────────────────────────────────────────
 

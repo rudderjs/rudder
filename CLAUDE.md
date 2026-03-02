@@ -58,8 +58,13 @@ pnpm artisan db:seed            # Seed via artisan command
 ```
 forge/
 ├── packages/           # Core framework packages (@forge/*)
+│   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
+│   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
+│   ├── di/             # DI container: Container, @Injectable, @Inject
+│   ├── middleware/     # Middleware base class, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
+│   ├── validation/     # FormRequest, validate(), validateWith(), ValidationError, z re-export
 │   ├── core/           # App bootstrapper, ServiceProvider, Forge, artisan registry
-│   │                   #   + subpath exports: ./support  ./di  ./server  ./middleware  ./validation
+│   │                   #   re-exports: di · support · contracts types
 │   ├── router/         # Decorator routing + global router singleton
 │   ├── orm/            # ORM contract/interface + Model base class
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
@@ -93,12 +98,12 @@ forge/
 
 | Package | Status | Notes |
 |---|---|---|
-| `@forge/core` | ✅ Complete | Application, ServiceProvider, Forge, AppBuilder, artisan registry |
-| `@forge/core/support` | ✅ Complete | Collection, Env, defineEnv, ConfigRepository, helpers, resolveOptionalPeer |
-| `@forge/core/di` | ✅ Complete | Container, @Injectable, @Inject |
-| `@forge/core/server` | ✅ Complete | ServerAdapter interface, HttpMethod (ALL), FetchHandler |
-| `@forge/core/middleware` | ✅ Complete | Pipeline, CORS, Logger, Throttle |
-| `@forge/core/validation` | ✅ Complete | FormRequest, validate(), z re-export |
+| `@forge/contracts` | ✅ Complete | Pure TypeScript types: ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler, RouteDefinition, FetchHandler |
+| `@forge/support` | ✅ Complete | Collection, Env, defineEnv, ConfigRepository, resolveOptionalPeer, helpers — `sideEffects: false` |
+| `@forge/di` | ✅ Complete | Container, @Injectable, @Inject, reflect-metadata |
+| `@forge/middleware` | ✅ Complete | Middleware base class, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware, fromClass |
+| `@forge/validation` | ✅ Complete | FormRequest, validate(), validateWith(), ValidationError, z re-export |
+| `@forge/core` | ✅ Complete | Application, ServiceProvider, Forge, AppBuilder, artisan registry — re-exports di + support + contracts types |
 | `@forge/server-hono` | ✅ Complete | Hono adapter, HonoConfig, unified logger, CORS |
 | `@forge/router` | ✅ Complete | Decorators + Router singleton, router.all() |
 | `@forge/queue` | ✅ Complete | Job, QueueAdapter interface, queue:work command |
