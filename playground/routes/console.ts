@@ -39,4 +39,4 @@ schedule.call(async () => {
 // Log a heartbeat every minute (useful for confirming the scheduler is alive)
 schedule.call(() => {
   console.log('[Heartbeat] Scheduler is running —', new Date().toISOString())
-}).everyMinute().description('Heartbeat log')
+}).everySecond().description('Heartbeat log')
