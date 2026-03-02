@@ -8,6 +8,7 @@ export abstract class Middleware {
     res: ForgeResponse,
     next: () => Promise<void>
   ): void | Promise<void>
+
   /** Convert class instance to a handler function */
   toHandler(): MiddlewareHandler {
     return (req, res, next) => this.handle(req, res, next)

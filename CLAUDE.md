@@ -59,18 +59,18 @@ pnpm artisan db:seed            # Seed via artisan command
 forge/
 ├── packages/           # Core framework packages (@forge/*)
 │   ├── core/           # App bootstrapper, ServiceProvider, Forge, artisan registry
-│   ├── di/             # DI container + @Injectable/@Inject decorators
+│   │                   #   + subpath exports: ./support  ./di  ./server  ./middleware  ./validation
 │   ├── router/         # Decorator routing + global router singleton
-│   ├── middleware/     # Middleware pipeline + built-ins
-│   ├── validation/     # FormRequest + Zod integration
 │   ├── orm/            # ORM contract/interface + Model base class
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
-│   ├── orm-drizzle/    # Drizzle adapter (scaffold — notImplemented stub)
-│   ├── queue/          # Queue contract/interface
+│   ├── orm-drizzle/    # Drizzle adapter (stub)
+│   ├── queue/          # Queue contract/interface + queue:work artisan command
 │   ├── queue-inngest/  # Inngest adapter
 │   ├── queue-bullmq/   # BullMQ adapter ✅
-│   ├── server/         # Server adapter contract (HttpMethod, FetchHandler)
 │   ├── server-hono/    # Hono adapter ✅ (HonoConfig, logger, CORS)
+│   ├── server-express/ # Express adapter (stub)
+│   ├── server-fastify/ # Fastify adapter (stub)
+│   ├── server-h3/      # H3 adapter (stub)
 │   ├── auth/           # Auth module — shared types (AuthUser, AuthSession, AuthResult)
 │   ├── auth-better-auth/ # better-auth adapter — betterAuth() factory, prismaAdapter wiring
 │   ├── storage/        # Storage facade, LocalAdapter (built-in), storage() factory, storage:link
@@ -81,7 +81,7 @@ forge/
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper, events() factory
 │   ├── mail/           # Mailable, Mail facade, LogAdapter, mail() factory
 │   ├── mail-nodemailer/ # Nodemailer SMTP adapter (optional peer)
-│   ├── support/        # Helpers, Collection, Env, defineEnv, ConfigRepository
+│   ├── rate-limit/     # Cache-backed rate limiting — RateLimit.perMinute/Hour/Day
 │   └── cli/            # Forge CLI — make:*, module:*, artisan user commands
 ├── create-forge-app/   # Project scaffolder CLI
 └── playground/         # Demo app — primary integration reference
@@ -93,16 +93,17 @@ forge/
 
 | Package | Status | Notes |
 |---|---|---|
-| `@forge/support` | ✅ Complete | Collection, Env, defineEnv, ConfigRepository, helpers |
-| `@forge/di` | ✅ Complete | Container, @Injectable, @Inject |
 | `@forge/core` | ✅ Complete | Application, ServiceProvider, Forge, AppBuilder, artisan registry |
-| `@forge/server` | ✅ Complete | ServerAdapter interface, HttpMethod (ALL), FetchHandler |
+| `@forge/core/support` | ✅ Complete | Collection, Env, defineEnv, ConfigRepository, helpers, resolveOptionalPeer |
+| `@forge/core/di` | ✅ Complete | Container, @Injectable, @Inject |
+| `@forge/core/server` | ✅ Complete | ServerAdapter interface, HttpMethod (ALL), FetchHandler |
+| `@forge/core/middleware` | ✅ Complete | Pipeline, CORS, Logger, Throttle |
+| `@forge/core/validation` | ✅ Complete | FormRequest, validate(), z re-export |
 | `@forge/server-hono` | ✅ Complete | Hono adapter, HonoConfig, unified logger, CORS |
 | `@forge/router` | ✅ Complete | Decorators + Router singleton, router.all() |
-| `@forge/middleware` | ✅ Complete | Pipeline, CORS, Logger, Throttle |
-| `@forge/validation` | ✅ Complete | FormRequest, validate(), z re-export |
-| `@forge/queue` | ✅ Complete | Job, QueueAdapter interface |
+| `@forge/queue` | ✅ Complete | Job, QueueAdapter interface, queue:work command |
 | `@forge/queue-inngest` | ✅ Complete | Inngest adapter |
+| `@forge/queue-bullmq` | ✅ Complete | BullMQ Redis-backed queue — job registry, graceful shutdown |
 | `@forge/orm` | ✅ Complete | Model, QueryBuilder, ModelRegistry |
 | `@forge/orm-prisma` | ✅ Complete | Prisma adapter, multi-driver (pg, libsql, default) |
 | `@forge/cli` | ✅ Complete | make:*, module:*, module:publish, cfonts banner, user artisan commands |
@@ -117,10 +118,9 @@ forge/
 | `@forge/mail` | ✅ Complete | Mailable, Mail facade, LogAdapter (built-in dev), mail() factory |
 | `@forge/mail-nodemailer` | ✅ Complete | Nodemailer SMTP adapter — optional peer for smtp driver |
 | `@forge/rate-limit` | ✅ Complete | Cache-backed rate limiting — RateLimit.perMinute/Hour/Day, X-RateLimit-* headers |
+| `create-forge-app` | ✅ Complete | Interactive CLI scaffolder — project name, db driver, Todo module option |
 | `@forge/notification` | 📋 Planned | Multi-channel notifications (mail, database) via Notifiable pattern |
 | `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
-| `@forge/queue-bullmq` | ✅ Complete | BullMQ Redis-backed queue — job registry, graceful shutdown, `queue:work` artisan command |
-| `create-forge-app` | ✅ Complete | Interactive CLI scaffolder — project name, db driver, Todo module option; 33–39 files generated |
 
 ---
 
@@ -129,16 +129,17 @@ forge/
 ### Dependency Flow
 
 ```
-@forge/support
-      ↑
-@forge/di
-      ↑
-@forge/core  ←─────────────────────── @forge/server (dynamic import, avoids cycle)
-      ↑                                @forge/router  (dynamic import, avoids cycle)
-@forge/router   @forge/middleware   @forge/orm   @forge/queue   @forge/validation
-      ↑                ↑               ↑              ↑
-@forge/server ←── server-hono      orm-prisma    queue-inngest
+@forge/core  (includes: support · di · server · middleware · validation)
+      │
+      ├── (resolveOptionalPeer) ──→ @forge/router   (loaded at runtime, avoids Turbo cycle)
+      │
+      ↑ (peer dep, types only)
+@forge/router   @forge/orm   @forge/queue   @forge/rate-limit
+      ↑               ↑              ↑
+@forge/server-hono  orm-prisma   queue-bullmq / queue-inngest
 ```
+
+> **Cycle resolution**: `@forge/core` has no declared dependency on `@forge/router`. It loads router at runtime via `resolveOptionalPeer('@forge/router')` (opaque to Rollup static analysis). `@forge/router` lists `@forge/core` as a `peerDependency` only — Turbo builds core first without detecting a reverse cycle.
 
 ### Core Abstractions
 
@@ -166,6 +167,19 @@ The `Forge` instance is the app entry point:
 - `forge.handleRequest(request)` — lazy-bootstraps on first HTTP request (used by `src/index.ts`)
 - `forge.boot()` — bootstraps providers without starting HTTP (used by CLI)
 
+#### `@forge/core` subpath exports
+
+`@forge/core` ships five tree-shakable subpaths in addition to the main barrel:
+
+| Import | Contents |
+|--------|----------|
+| `@forge/core` | Everything below, plus Application, ServiceProvider, Forge, artisan |
+| `@forge/core/support` | Env, Collection, ConfigRepository, resolveOptionalPeer, helpers |
+| `@forge/core/di` | Container, Injectable, Inject |
+| `@forge/core/server` | ServerAdapter, ForgeRequest, ForgeResponse, HttpMethod, FetchHandler |
+| `@forge/core/middleware` | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware |
+| `@forge/core/validation` | FormRequest, ValidationError, validate, z |
+
 #### `@forge/core` — Artisan Registry
 
 ```ts
@@ -179,7 +193,7 @@ artisan.command('db:seed', async () => {
 
 Commands registered here automatically appear in `pnpm artisan --help` and can be run with `pnpm artisan db:seed`.
 
-#### `@forge/di` — Service Container
+#### DI — Service Container
 ```ts
 container.bind('key', (c) => new MyService())
 container.singleton(MyService, (c) => new MyService())
@@ -188,6 +202,7 @@ container.make(MyService)   // auto-resolves @Injectable classes
 - Uses `reflect-metadata` — always `import 'reflect-metadata'` at entry point
 - `@Injectable()` marks a class for auto-resolution
 - `@Inject(token)` overrides constructor parameter injection token
+- Import from `@forge/core` or `@forge/core/di`
 
 #### `@forge/router` — Routing
 
@@ -287,11 +302,12 @@ The playground is the canonical reference implementation:
 playground/
 ├── bootstrap/
 │   ├── app.ts          # Application.configure()...create() — app entry wiring
-│   └── providers.ts    # Default export: [DatabaseServiceProvider, AppServiceProvider, ...]
+│   └── providers.ts    # Default export: [DatabaseServiceProvider, betterAuth(...), AppServiceProvider, ...]
 ├── config/
 │   ├── app.ts          # APP_NAME, APP_ENV, APP_DEBUG
 │   ├── server.ts       # PORT, CORS, TRUST_PROXY
 │   ├── database.ts     # DB_CONNECTION, DATABASE_URL connections
+│   ├── auth.ts         # AUTH_SECRET, APP_URL, betterAuth config
 │   ├── queue.ts
 │   ├── mail.ts
 │   └── index.ts        # barrel re-export
@@ -302,17 +318,16 @@ playground/
 │   │   └── UserService.ts
 │   └── Providers/
 │       ├── DatabaseServiceProvider.ts  # connects Prisma, sets ModelRegistry
-│       ├── AppServiceProvider.ts       # binds UserService, GreetingService
-│       └── AuthServiceProvider.ts
+│       └── AppServiceProvider.ts       # binds UserService, GreetingService
 ├── routes/
 │   ├── api.ts          # router.get/post/all() — side-effect file, no export
 │   └── console.ts      # artisan.command() — side-effect file, no export
 ├── pages/              # Vike file-based routing (SSR pages)
 ├── prisma/
-│   └── schema.prisma   # Prisma schema (SQLite by default)
+│   └── schema.prisma   # Prisma schema (SQLite by default) — includes better-auth tables
 ├── src/
 │   └── index.ts        # WinterCG entry: export default { fetch: forge.handleRequest }
-├── .env                # DATABASE_URL, PORT, APP_* vars
+├── .env                # DATABASE_URL, PORT, APP_*, AUTH_SECRET vars
 └── vite.config.ts      # Vite + Vike + React config
 ```
 
@@ -342,7 +357,7 @@ Forge uses three distinct config layers — there is **no `forge.config.ts`**:
 - Always `import 'reflect-metadata'` at the **entry point** of any app using decorators
 - `module: "NodeNext"` — use `.js` extensions in all imports even for `.ts` source files
 - `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`
-- Package `exports` always point to `dist/index.js`
+- Package `exports` always point to `dist/index.js` and must include `"default": "./dist/index.js"` for CJS resolver compat
 - Turbo respects `^build` — changing a package auto-rebuilds all dependents
 
 ## Common Pitfalls
@@ -353,7 +368,8 @@ Forge uses three distinct config layers — there is **no `forge.config.ts`**:
 - **Prisma client missing**: Run `pnpm exec prisma generate` from `playground/` after schema changes
 - **Prisma DB missing**: Run `pnpm exec prisma db push` from `playground/` to create the SQLite file
 - **Decorator errors**: Ensure `experimentalDecorators` and `emitDecoratorMetadata` in the package's `tsconfig.json`
-- **Circular deps (`@forge/core` ↔ `@forge/router`)**: Resolved via dynamic `import('@forge/router')` inside `Forge._bootstrap()`. Never add `@forge/core` as a dep of `@forge/router` or `@forge/server`.
-- **Provider/route edits not applying in dev**: `playground/bootstrap/providers.ts` and `routes/*.ts` changes are hot-applied; you should not need to restart `pnpm dev`. If behavior looks stale after pulling changes, run `pnpm --filter @forge/di build && pnpm --filter @forge/router build && pnpm --filter @forge/core build` once.
+- **Circular dep (`@forge/core` ↔ `@forge/router`)**: Core loads router via `resolveOptionalPeer('@forge/router')` (runtime, Rollup-opaque). Never add `@forge/core` to `@forge/router`'s `dependencies` or `devDependencies` — only `peerDependencies`.
+- **Optional peer `ERR_PACKAGE_PATH_NOT_EXPORTED`**: All optional peer packages must include `"default": "./dist/index.js"` in their `exports` field — `createRequire.resolve()` uses the CJS condition which can't see `"import"`-only entries.
+- **`node:module` in browser bundle**: `resolveOptionalPeer` uses `await import('node:module')` (dynamic/lazy) — do NOT hoist the `createRequire` import to the top of `support.ts`; it would break the browser build.
 - **Port in use (EADDRINUSE 24678)**: Kill the stale Vite process — `lsof -ti :24678 -ti :3000 | xargs kill -9`
 - **`artisan` commands not appearing**: CLI must be run from a directory containing `bootstrap/app.ts` (i.e., from `playground/`, not the repo root)
