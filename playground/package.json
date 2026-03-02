@@ -16,6 +16,7 @@
     "@forge/cache": "workspace:*",
     "@forge/core": "workspace:*",
     "@forge/schedule": "workspace:*",
+    "@forge/storage": "workspace:*",
     "@forge/events": "workspace:*",
     "@forge/mail": "workspace:*",
     "@forge/mail-nodemailer": "workspace:*",

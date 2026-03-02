@@ -76,6 +76,8 @@ forge/
 │   ├── server-h3/      # H3 adapter (stub)
 │   ├── auth/           # Auth module — shared types (AuthUser, AuthSession, AuthResult)
 │   ├── auth-better-auth/ # better-auth adapter — betterAuth() factory, prismaAdapter wiring
+│   ├── storage/        # Storage facade, LocalAdapter (built-in), storage() factory, storage:link
+│   ├── storage-s3/     # S3 adapter via @aws-sdk/client-s3 (optional peer)
 │   ├── schedule/       # Task scheduler — schedule singleton, scheduler() factory, schedule:run/work/list
 │   ├── cache/          # Cache facade, MemoryAdapter (built-in), cache() factory
 │   ├── cache-redis/    # Redis adapter via ioredis (optional peer)
@@ -109,6 +111,8 @@ forge/
 | `@forge/cli` | ✅ Complete | make:*, module:*, module:publish, cfonts banner, user artisan commands |
 | `@forge/auth` | ✅ Complete | Shared AuthUser, AuthSession, AuthResult types |
 | `@forge/auth-better-auth` | ✅ Complete | better-auth adapter — betterAuth() factory, /api/auth/* mount |
+| `@forge/storage` | ✅ Complete | Storage facade, LocalAdapter (built-in), storage() factory, storage:link |
+| `@forge/storage-s3` | ✅ Complete | S3/R2/MinIO adapter via @aws-sdk/client-s3 — optional peer |
 | `@forge/schedule` | ✅ Complete | Task scheduler, schedule:run / schedule:work / schedule:list |
 | `@forge/cache` | ✅ Complete | Cache facade, MemoryAdapter (built-in), cache() factory |
 | `@forge/cache-redis` | ✅ Complete | Redis adapter via ioredis — optional peer for redis driver |

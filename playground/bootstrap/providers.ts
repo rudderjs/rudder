@@ -4,6 +4,7 @@ import { queue } from '@forge/queue'
 import { events } from '@forge/events'
 import { mail } from '@forge/mail'
 import { cache } from '@forge/cache'
+import { storage } from '@forge/storage'
 import { scheduler } from '@forge/schedule'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
@@ -19,6 +20,7 @@ export default [
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
   mail(configs.mail),
   cache(configs.cache),
+  storage(configs.storage),
   scheduler(),
   AppServiceProvider,
   TodoServiceProvider,
