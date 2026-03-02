@@ -65,10 +65,10 @@ forge/
 │   ├── validation/     # FormRequest + Zod integration
 │   ├── orm/            # ORM contract/interface + Model base class
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
-│   ├── orm-drizzle/    # Drizzle adapter (stub)
+│   ├── orm-drizzle/    # Drizzle adapter (scaffold — notImplemented stub)
 │   ├── queue/          # Queue contract/interface
 │   ├── queue-inngest/  # Inngest adapter
-│   ├── queue-bullmq/   # BullMQ adapter (stub)
+│   ├── queue-bullmq/   # BullMQ adapter ✅
 │   ├── server/         # Server adapter contract (HttpMethod, FetchHandler)
 │   ├── server-hono/    # Hono adapter ✅ (HonoConfig, logger, CORS)
 │   ├── server-express/ # Express adapter (stub)

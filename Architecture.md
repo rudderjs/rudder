@@ -52,8 +52,8 @@ forge/
 │   ├── validation/         # FormRequest + Zod integration
 │   ├── queue/              # Queue contract + Job base class
 │   ├── queue-inngest/      # Inngest adapter
-│   ├── queue-bullmq/       # BullMQ adapter (stub)
-│   ├── auth/               # Auth module (stub)
+│   ├── queue-bullmq/       # BullMQ adapter ✅
+│   ├── auth/               # Auth module (contracts scaffold — notImplemented stub)
 │   ├── cli/                # Artisan-style CLI (make:*, module:*, user commands via artisan)
 │   └── support/            # Helpers, Collection, Env, defineEnv, ConfigRepository
 ├── create-forge-app/       # CLI scaffolder (like create-next-app)
@@ -415,7 +415,7 @@ pnpm artisan db:seed
 | **v0.1** | ✅ Core, DI, Router, CLI scaffold, Hono adapter, Vike SSR |
 | **v0.2** | ✅ ORM (Prisma), Validation, Middleware, Queue (Inngest) |
 | **v0.3** | ✅ Fluent bootstrap, artisan console routes, DB seeding, multi-provider |
-| **v0.4** | Auth module (sessions, JWT, guards) |
-| **v0.5** | Tests (node:test), Drizzle adapter, BullMQ adapter |
-| **v0.6** | Vike Vue + Solid integration, create-forge-app CLI |
+| **v0.4** | Auth module (sessions, JWT, guards) — contracts scaffold in place |
+| **v0.5** | Tests (node:test), Drizzle adapter; ✅ BullMQ adapter complete |
+| **v0.6** | Vue + Solid adapters, create-forge-app CLI |
 | **v1.0** | Docs site, public launch |
