@@ -73,6 +73,13 @@ export interface QueueAdapter {
 
   /** Start processing jobs (for self-hosted adapters like BullMQ) */
   work?(queue?: string): Promise<void>
+
+  /**
+   * For cloud adapters (Inngest etc.): returns the serve handler for the
+   * /api/inngest endpoint. The QueueServiceProvider mounts it automatically.
+   * The returned function receives the framework-native context (Hono Context).
+   */
+  serveHandler?(): (ctx: unknown) => Promise<Response>
 }
 
 // ─── Queue Adapter Factory ─────────────────────────────────
@@ -167,6 +174,15 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       QueueRegistry.set(adapter)
       this.app.instance('queue', adapter)
+
+      // Cloud adapters (Inngest etc.) expose a serve endpoint.
+      // Mount it automatically — no user config needed.
+      if (typeof adapter.serveHandler === 'function') {
+        const { router } = await import('@forge/router')
+        const handler = adapter.serveHandler()
+        router.all('/api/inngest', (req) => handler(req.raw))
+        console.log(`[QueueServiceProvider] mounted — /api/inngest`)
+      }
 
       console.log(`[QueueServiceProvider] booted — driver: ${driver}`)
     }

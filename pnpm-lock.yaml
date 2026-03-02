@@ -234,6 +234,9 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../core
+      '@forge/router':
+        specifier: workspace:*
+        version: link:../router
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

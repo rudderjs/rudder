@@ -1,7 +1,9 @@
 import { Env } from '@forge/support'
+import type { QueueConfig } from '@forge/queue'
+import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
 
 export default {
-  default: Env.get('QUEUE_CONNECTION', 'inngest'),
+  default: Env.get('QUEUE_CONNECTION', 'sync'),
 
   connections: {
     sync: {
@@ -9,10 +11,13 @@ export default {
     },
 
     inngest: {
-      driver:      'inngest',
-      eventKey:    Env.get('INNGEST_EVENT_KEY',    ''),
-      signingKey:  Env.get('INNGEST_SIGNING_KEY',  ''),
-      serveHost:   Env.get('INNGEST_SERVE_HOST',   'http://localhost:3000'),
+      driver:     'inngest',
+      appId:      Env.get('INNGEST_APP_ID',      'forge-app'),
+      eventKey:   Env.get('INNGEST_EVENT_KEY',   ''),
+      signingKey: Env.get('INNGEST_SIGNING_KEY',  ''),
+      // Job classes registered as Inngest functions.
+      // Inngest calls back via POST /api/inngest to execute them.
+      jobs: [WelcomeUserJob],
     },
   },
-}
+} satisfies QueueConfig
