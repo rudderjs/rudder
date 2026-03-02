@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vike dev",
+    "dev:clean": "pids=$(lsof -ti :24678 -ti :3000 2>/dev/null); if [ -n \"$pids\" ]; then kill -9 $pids; fi; vike dev",
     "build": "vike build",
     "start": "node ./dist/server/index.mjs",
     "preview": "node ./dist/server/index.mjs",
