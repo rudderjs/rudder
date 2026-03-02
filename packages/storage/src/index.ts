@@ -141,6 +141,14 @@ export interface StorageConfig {
   disks: Record<string, StorageDiskConfig>
 }
 
+// ─── Helpers ───────────────────────────────────────────────
+
+function makeUnavailableAdapter(msg: string): StorageAdapter {
+  const reject = (): Promise<never> => Promise.reject(new Error(msg))
+  const throws = (): never => { throw new Error(msg) }
+  return { put: reject, get: reject, text: reject, delete: reject, exists: reject, list: reject, url: throws, path: throws }
+}
+
 // ─── Service Provider Factory ──────────────────────────────
 
 /**
@@ -168,9 +176,19 @@ export function storage(config: StorageConfig): new (app: Application) => Servic
         if (driver === 'local') {
           adapter = new LocalAdapter(diskConfig as unknown as LocalDiskConfig)
         } else if (driver === 's3') {
-          // @ts-ignore — @forge/storage-s3 is an optional peer
-          const { s3 } = await import('@forge/storage-s3') as any
-          adapter = await (s3 as (c: unknown) => StorageAdapterProvider)(diskConfig).create()
+          let s3Mod: any
+          try {
+            // @ts-ignore — @forge/storage-s3 is an optional peer
+            s3Mod = await import('@forge/storage-s3')
+          } catch (err: unknown) {
+            if ((err as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND') {
+              const msg = `[Forge Storage] Disk "${name}" requires @forge/storage-s3. Install it: pnpm add @forge/storage-s3`
+              StorageRegistry.set(name, makeUnavailableAdapter(msg))
+              continue
+            }
+            throw err
+          }
+          adapter = await (s3Mod.s3 as (c: unknown) => StorageAdapterProvider)(diskConfig).create()
         } else {
           throw new Error(`[Forge Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
         }
