@@ -14,6 +14,9 @@
   "dependencies": {
     "@forge/auth-better-auth": "workspace:*",
     "@forge/core": "workspace:*",
+    "@forge/events": "workspace:*",
+    "@forge/mail": "workspace:*",
+    "@forge/mail-nodemailer": "workspace:*",
     "@forge/queue": "workspace:*",
     "@forge/di": "workspace:*",
     "@forge/middleware": "workspace:*",

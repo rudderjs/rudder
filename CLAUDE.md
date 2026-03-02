@@ -76,6 +76,9 @@ forge/
 │   ├── server-h3/      # H3 adapter (stub)
 │   ├── auth/           # Auth module — shared types (AuthUser, AuthSession, AuthResult)
 │   ├── auth-better-auth/ # better-auth adapter — betterAuth() factory, prismaAdapter wiring
+│   ├── events/         # EventDispatcher, Listener interface, dispatch() helper, events() factory
+│   ├── mail/           # Mailable, Mail facade, LogAdapter, mail() factory
+│   ├── mail-nodemailer/ # Nodemailer SMTP adapter (optional peer)
 │   ├── support/        # Helpers, Collection, Env, defineEnv, ConfigRepository
 │   └── cli/            # Forge CLI — make:*, module:*, artisan user commands
 ├── create-forge-app/   # Project scaffolder CLI
@@ -103,6 +106,9 @@ forge/
 | `@forge/cli` | ✅ Complete | make:*, module:*, module:publish, cfonts banner, user artisan commands |
 | `@forge/auth` | ✅ Complete | Shared AuthUser, AuthSession, AuthResult types |
 | `@forge/auth-better-auth` | ✅ Complete | better-auth adapter — betterAuth() factory, /api/auth/* mount |
+| `@forge/events` | ✅ Complete | EventDispatcher, Listener interface, dispatch(), events() factory |
+| `@forge/mail` | ✅ Complete | Mailable, Mail facade, LogAdapter (built-in dev), mail() factory |
+| `@forge/mail-nodemailer` | ✅ Complete | Nodemailer SMTP adapter — optional peer for smtp driver |
 | `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
 | `@forge/queue-bullmq` | 📋 Planned | BullMQ adapter |
 
