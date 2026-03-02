@@ -21,7 +21,10 @@ export interface BetterAuthConfig {
 
 /**
  * Returns a ServiceProvider constructor that configures better-auth and
- * mounts /api/auth/* routes in boot().
+ * binds the auth instance to the DI container in boot().
+ *
+ * The /api/auth/* route must be registered separately in routes/api.ts
+ * using app().make('auth') to get the handler.
  *
  * Usage in bootstrap/providers.ts:
  *   import { betterAuth } from '@forge/auth-better-auth'
@@ -33,10 +36,7 @@ export function betterAuth(config: BetterAuthConfig): new (app: Application) => 
     register(): void {}
 
     async boot(): Promise<void> {
-      const [{ betterAuth: createAuth }, { router }] = await Promise.all([
-        import('better-auth'),
-        import('@forge/router'),
-      ])
+      const { betterAuth: createAuth } = await import('better-auth')
 
       // Resolve database if it's a Promise (supports async factory pattern)
       let database = config.database instanceof Promise ? await config.database : config.database
@@ -75,15 +75,7 @@ export function betterAuth(config: BetterAuthConfig): new (app: Application) => 
       // Bind into DI container
       this.app.instance('auth', auth)
 
-      // Mount /api/auth/* — pass the original native Request directly to better-auth.
-      // req.raw is the Hono Context (c), and c.req.raw is the Web API Request.
-      // HonoAdapter: `if (result instanceof Response) response = result` preserves Set-Cookie.
-      router.all('/api/auth/*', (req) => {
-        const honoCtx = req.raw as { req: { raw: Request } }
-        return auth.handler(honoCtx.req.raw)
-      })
-
-      console.log('[BetterAuthServiceProvider] booted — /api/auth/* mounted')
+      console.log('[BetterAuthServiceProvider] booted — auth instance bound to DI container')
     }
   }
 

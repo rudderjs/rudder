@@ -6,7 +6,7 @@ import { Storage } from '@forge/storage'
 import { RateLimit } from '@forge/rate-limit'
 import { UserService } from '../app/Services/UserService.js'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
-import { RequestIdMiddleware } from 'app/Middleware/RequestIdMiddleware.js'
+import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 
 // Per-route middleware instance — reused across protected routes
 const authMw = new AuthMiddleware().toHandler()
@@ -78,6 +78,13 @@ router.delete('/api/files/:filename', async (req, res) => {
   await Storage.delete(`uploads/${filename}`)
   return res.json({ deleted: filename })
 })
+
+// Auth routes — delegate all /api/auth/* requests to better-auth, with a stricter rate limit
+router.all('/api/auth/*', (req) => {
+  const auth = app().make<BetterAuthInstance>('auth')
+  const honoCtx = req.raw as { req: { raw: Request } }
+  return auth.handler(honoCtx.req.raw)
+}, [authLimit])
 
 // Catch-all: any unmatched /api/* route returns 404 instead of falling through to Vike
 router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))
