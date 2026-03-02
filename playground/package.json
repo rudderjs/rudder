@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@forge/auth-better-auth": "workspace:*",
+    "@forge/cache": "workspace:*",
     "@forge/core": "workspace:*",
     "@forge/events": "workspace:*",
     "@forge/mail": "workspace:*",

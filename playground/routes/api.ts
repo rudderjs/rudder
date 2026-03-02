@@ -1,6 +1,7 @@
 import { router } from '@forge/router'
 import { resolve, app } from '@forge/core'
 import type { BetterAuthInstance } from '@forge/auth-better-auth'
+import { Cache } from '@forge/cache'
 import { UserService } from '../app/Services/UserService.js'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 import { RequestIdMiddleware } from 'app/Middleware/RequestIdMiddleware.js'
@@ -22,8 +23,11 @@ router.get('/api/me', async (req) => {
 // router.get('/id', (_req, res) => res.json({ id: res.header('X-Request-Id') }), [RequestIdMiddleware])  // example of using the RequestIdMiddleware on a specific route
 
 // Public routes — no auth required
+// Results are cached for 60 s — subsequent calls skip the DB query
 router.get('/api/users', async (_req, res) => {
-  const users = await resolve<UserService>(UserService).findAll()
+  const users = await Cache.remember('users:all', 60, () =>
+    resolve<UserService>(UserService).findAll()
+  )
   return res.json({ data: users })
 }, [authMw])  // optional per-route middleware, e.g. for logging or auth
 
