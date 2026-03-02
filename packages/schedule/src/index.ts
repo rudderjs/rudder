@@ -14,6 +14,7 @@ export class ScheduledTask {
   cron(expression: string): this { this._cron = expression; return this }
 
   // ── Convenience helpers ────────────────────────────────
+  everySecond(): this         { return this.cron('* * * * * *') }
   everyMinute(): this         { return this.cron('* * * * *') }
   everyTwoMinutes(): this     { return this.cron('*/2 * * * *') }
   everyFiveMinutes(): this    { return this.cron('*/5 * * * *') }
@@ -145,9 +146,11 @@ export function scheduler(): new (app: Application) => ServiceProvider {
         console.log(`[Schedule] Worker started — ${tasks.length} task(s) registered.`)
         console.log('[Schedule] Press Ctrl+C to stop.\n')
 
+        const jobs: Cron[] = []
+
         for (const task of tasks) {
           const label = task.getDescription() || task.getCron()
-          new Cron(task.getCron(), async () => {
+          jobs.push(new Cron(task.getCron(), async () => {
             process.stdout.write(`[Schedule] Running "${label}" ... `)
             try {
               await task.getCallback()()
@@ -156,16 +159,18 @@ export function scheduler(): new (app: Application) => ServiceProvider {
               console.log('✗')
               console.error(err)
             }
-          })
+          }))
         }
 
         // Keep the process alive until Ctrl+C
         await new Promise<void>((resolve) => {
-          process.on('SIGINT', () => {
+          process.once('SIGINT', () => {
+            for (const job of jobs) job.stop()
             console.log('\n[Schedule] Worker stopped.')
             resolve()
           })
         })
+        process.exit(0)
       }).description('Start the schedule worker (in-process cron, Ctrl+C to stop)')
 
       // ── schedule:list ─────────────────────────────────────
