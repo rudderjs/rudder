@@ -10,6 +10,9 @@
     "clean": "turbo run clean",
     "artisan": "tsx packages/cli/src/index.ts"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/engines", "prisma", "msgpackr-extract", "protobufjs", "better-sqlite3"]
+  },
   "devDependencies": {
     "tsx": "^4.21.0",
     "turbo": "^2.0.0",

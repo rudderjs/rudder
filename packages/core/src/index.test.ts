@@ -5,6 +5,7 @@ import { Application, defineConfig } from './index.js'
 
 function resetSingleton(): void {
   ;(Application as unknown as Record<string, unknown>)['instance'] = undefined
+  ;(globalThis as Record<string, unknown>)['__forge_app__'] = undefined
 }
 
 describe('Application', () => {

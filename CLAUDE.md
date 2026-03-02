@@ -74,7 +74,16 @@ forge/
 │   ├── server-express/ # Express adapter (stub)
 │   ├── server-fastify/ # Fastify adapter (stub)
 │   ├── server-h3/      # H3 adapter (stub)
-│   ├── auth/           # Auth module (contracts scaffold — notImplemented stub)
+│   ├── auth/           # Auth module — shared types (AuthUser, AuthSession, AuthResult)
+│   ├── auth-better-auth/ # better-auth adapter — betterAuth() factory, prismaAdapter wiring
+│   ├── storage/        # Storage facade, LocalAdapter (built-in), storage() factory, storage:link
+│   ├── storage-s3/     # S3 adapter via @aws-sdk/client-s3 (optional peer)
+│   ├── schedule/       # Task scheduler — schedule singleton, scheduler() factory, schedule:run/work/list
+│   ├── cache/          # Cache facade, MemoryAdapter (built-in), cache() factory
+│   ├── cache-redis/    # Redis adapter via ioredis (optional peer)
+│   ├── events/         # EventDispatcher, Listener interface, dispatch() helper, events() factory
+│   ├── mail/           # Mailable, Mail facade, LogAdapter, mail() factory
+│   ├── mail-nodemailer/ # Nodemailer SMTP adapter (optional peer)
 │   ├── support/        # Helpers, Collection, Env, defineEnv, ConfigRepository
 │   └── cli/            # Forge CLI — make:*, module:*, artisan user commands
 ├── create-forge-app/   # Project scaffolder CLI
@@ -100,9 +109,21 @@ forge/
 | `@forge/orm` | ✅ Complete | Model, QueryBuilder, ModelRegistry |
 | `@forge/orm-prisma` | ✅ Complete | Prisma adapter, multi-driver (pg, libsql, default) |
 | `@forge/cli` | ✅ Complete | make:*, module:*, module:publish, cfonts banner, user artisan commands |
-| `@forge/auth` | 📋 Planned | Sessions, JWT, guards (contracts + notImplemented scaffold) |
-| `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter (notImplemented scaffold) |
-| `@forge/queue-bullmq` | ✅ Complete | BullMQ adapter, Redis queue dispatching |
+| `@forge/auth` | ✅ Complete | Shared AuthUser, AuthSession, AuthResult types |
+| `@forge/auth-better-auth` | ✅ Complete | better-auth adapter — betterAuth() factory, /api/auth/* mount |
+| `@forge/storage` | ✅ Complete | Storage facade, LocalAdapter (built-in), storage() factory, storage:link |
+| `@forge/storage-s3` | ✅ Complete | S3/R2/MinIO adapter via @aws-sdk/client-s3 — optional peer |
+| `@forge/schedule` | ✅ Complete | Task scheduler, schedule:run / schedule:work / schedule:list |
+| `@forge/cache` | ✅ Complete | Cache facade, MemoryAdapter (built-in), cache() factory |
+| `@forge/cache-redis` | ✅ Complete | Redis adapter via ioredis — optional peer for redis driver |
+| `@forge/events` | ✅ Complete | EventDispatcher, Listener interface, dispatch(), events() factory |
+| `@forge/mail` | ✅ Complete | Mailable, Mail facade, LogAdapter (built-in dev), mail() factory |
+| `@forge/mail-nodemailer` | ✅ Complete | Nodemailer SMTP adapter — optional peer for smtp driver |
+| `@forge/rate-limit` | ✅ Complete | Cache-backed rate limiting — RateLimit.perMinute/Hour/Day, X-RateLimit-* headers |
+| `@forge/notification` | 📋 Planned | Multi-channel notifications (mail, database) via Notifiable pattern |
+| `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
+| `@forge/queue-bullmq` | 📋 Planned | BullMQ adapter |
+| `create-forge-app` | 📋 Planned | Scaffolder polish — `npm create forge-app@latest` end-to-end |
 
 ---
 

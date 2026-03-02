@@ -52,50 +52,36 @@ export class ${name}Service {
 `
 }
 
-function controllerStub(name: string): string {
-  const prefix = `/${name.replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`)).toLowerCase()}s`
-  return `import { Controller, Get, Post } from '@forge/router'
-import type { Context } from '@forge/server'
-import { ${name}Service } from './${name}Service.js'
-
-@Controller('${prefix}')
-export class ${name}Controller {
-  constructor(private service: ${name}Service) {}
-
-  @Get('/')
-  async index(_ctx: Context) {
-    const items = await this.service.findAll()
-    return { data: items }
-  }
-
-  @Get('/:id')
-  async show({ params }: Context) {
-    const item = await this.service.findById(params!['id'] as string)
-    if (!item) return { error: 'Not found' }
-    return { data: item }
-  }
-
-  @Post('/')
-  async store({ body }: Context) {
-    const item = await this.service.create(body as any)
-    return { data: item }
-  }
-}
-`
-}
-
 function providerStub(name: string): string {
+  const prefix = `/api/${name.replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`)).toLowerCase()}s`
   return `import { ServiceProvider } from '@forge/core'
-import { ${name}Controller } from './${name}Controller.js'
+import { router } from '@forge/router'
+import { ${name}Service } from './${name}Service.js'
+import { ${name}InputSchema } from './${name}Schema.js'
 
 export class ${name}ServiceProvider extends ServiceProvider {
   register(): void {
-    // Register ${name} module bindings
+    this.app.singleton(${name}Service, () => new ${name}Service())
   }
 
   override async boot(): Promise<void> {
-    const router = this.app.make<any>('router')
-    router?.registerController(${name}Controller)
+    const service = this.app.make<${name}Service>(${name}Service)
+
+    router.get('${prefix}', async (_req, res) => {
+      res.json({ data: await service.findAll() })
+    })
+
+    router.get('${prefix}/:id', async (req, res) => {
+      const item = await service.findById(req.params['id']!)
+      if (!item) { res.status(404).json({ message: 'Not found.' }); return }
+      res.json({ data: item })
+    })
+
+    router.post('${prefix}', async (req, res) => {
+      const parsed = ${name}InputSchema.safeParse(req.body)
+      if (!parsed.success) { res.status(422).json({ errors: parsed.error.flatten().fieldErrors }); return }
+      res.status(201).json({ data: await service.create(parsed.data) })
+    })
   }
 }
 `
@@ -181,7 +167,7 @@ export const providers: (new (app: Application) => ServiceProvider)[] = []\n`
 export function makeModule(program: Command): void {
   program
     .command('make:module <name>')
-    .description('Scaffold a new module with schema, service, controller, provider, test, and Prisma model')
+    .description('Scaffold a new module with schema, service, provider, test, and Prisma model')
     .option('-f, --force', 'Overwrite existing files')
     .action(async (name: string, opts: { force?: boolean }) => {
       intro(`Creating module: ${name}`)
@@ -190,7 +176,6 @@ export function makeModule(program: Command): void {
       const files: Array<{ path: string; content: string }> = [
         { path: `${moduleDir}/${name}Schema.ts`,          content: schemaStub(name) },
         { path: `${moduleDir}/${name}Service.ts`,         content: serviceStub(name) },
-        { path: `${moduleDir}/${name}Controller.ts`,      content: controllerStub(name) },
         { path: `${moduleDir}/${name}ServiceProvider.ts`, content: providerStub(name) },
         { path: `${moduleDir}/${name}.test.ts`,           content: testStub(name) },
         { path: `${moduleDir}/${name}.prisma`,            content: prismaStub(name) },

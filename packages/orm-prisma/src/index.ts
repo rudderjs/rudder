@@ -164,6 +164,11 @@ class PrismaAdapter implements OrmAdapter {
       const { createClient } = await import('@libsql/client') as any
       const { PrismaLibSql } = await import('@prisma/adapter-libsql') as any
       opts['adapter'] = new PrismaLibSql(createClient({ url: config.url }))
+    } else {
+      // Default: local SQLite via better-sqlite3 (Prisma 7 requires an adapter)
+      const dbUrl = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
+      const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as any
+      opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
     }
 
     const mod = await import('@prisma/client') as any

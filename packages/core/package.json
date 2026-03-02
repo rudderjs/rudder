@@ -23,6 +23,7 @@
     "@forge/support": "workspace:*",
     "@forge/server": "workspace:*",
     "@forge/router": "workspace:*",
+    "@clack/prompts": "^1.0.0",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {

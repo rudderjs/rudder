@@ -63,15 +63,20 @@ function normalizeResponse(c: any): ForgeResponse {
       c.header('Content-Type', 'application/json')
       Object.entries(headers).forEach(([k, v]) => c.header(k, v))
       c.status(statusCode)
-      return c.json(data)
+      // Hono v4: c.json() returns a Response but does NOT set c.res automatically.
+      // We must set c.res explicitly so Hono/srvx always has a valid response to send.
+      c.res = c.json(data)
+      return c.res
     },
     send(data) {
       Object.entries(headers).forEach(([k, v]) => c.header(k, v))
       c.status(statusCode)
-      return c.text(data)
+      c.res = c.text(data)
+      return c.res
     },
     redirect(url, code = 302) {
-      return c.redirect(url, code)
+      c.res = c.redirect(url, code)
+      return c.res
     },
   }
 }
@@ -140,23 +145,29 @@ class HonoAdapter implements ServerAdapter {
         try { req.body = await c.req.json() } catch { req.body = {} }
       }
 
-      // Run middleware chain
+      // Run middleware chain with the handler as the final step.
+      // If any middleware short-circuits (doesn't call next), the handler never runs.
+      let response: Response | undefined
       const middleware = [...route.middleware]
       let idx = 0
+
       const next = async (): Promise<void> => {
         const fn = middleware[idx++]
-        if (fn) await fn(req, res, next)
+        if (fn) {
+          await fn(req, res, next)
+        } else {
+          // All middleware passed — run the handler with a fresh response context
+          // so its status/headers are independent of any middleware state
+          const handlerRes = normalizeResponse(c)
+          const result = await route.handler(req, handlerRes)
+          if (result instanceof Response)                    response = result
+          else if (result !== undefined && result !== null)  response = c.json(result) as Response
+          else                                               response = c.res as Response
+        }
       }
+
       await next()
-
-      // Run handler — auto JSON serialize if data is returned
-      const result = await route.handler(req, res)
-      let response: Response
-      if (result instanceof Response)                      response = result
-      else if (result !== undefined && result !== null)    response = c.json(result) as Response
-      else                                                 response = c.res as Response
-
-      return response
+      return response ?? c.res as Response
     })
   }
 
@@ -165,6 +176,11 @@ class HonoAdapter implements ServerAdapter {
       const req = normalizeRequest(c)
       const res = normalizeResponse(c)
       await middleware(req, res, honoNext)
+      // Hono v4 requires the handler to finalize the context.
+      // c.res is always a valid Response (downstream response, or Hono's 404 default).
+      // Returning it here covers both cases: pass-through (next was called) and
+      // short-circuit (middleware set c.res via normalizeResponse.json/send).
+      return c.res
     })
   }
 
@@ -219,10 +235,10 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const path = new URL(c.req.url).pathname
         if (!shouldLog(path)) return next()
         const n = nextReqId()
-        console.log(`${dim(ts())} ${boldYellow('[forge]')}[request-${n}] HTTP request  → ${path}`)
+        console.log(`${dim(ts())} ${boldYellow('[forge]')}${dim(`[request-${n}]`)} HTTP request  ${dim('→')} ${path}`)
         await next()
         const status = (c.res as Response | undefined)?.status ?? 200
-        console.log(`${dim(ts())} ${boldYellow('[forge]')}[request-${n}] HTTP response ← ${path} ${statusColor(status)}`)
+        console.log(`${dim(ts())} ${boldYellow('[forge]')}${dim(`[request-${n}]`)} HTTP response ${dim('←')} ${path} ${statusColor(status)}`)
       })
 
       setup?.(new HonoAdapter(app))
