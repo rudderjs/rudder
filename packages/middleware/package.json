@@ -15,7 +15,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "TSX_TSCONFIG_PATH=./tsconfig.test.json node --import tsx/esm --test src/index.test.ts"
   },
   "dependencies": {
     "@forge/core": "workspace:*",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
     "typescript": "^5.4.0"
   }
 }
