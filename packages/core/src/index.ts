@@ -154,6 +154,7 @@ export interface ConfigureOptions {
 }
 
 export interface RoutingOptions {
+  web?:      () => Promise<unknown>
   api?:      () => Promise<unknown>
   commands?: () => Promise<unknown>
 }
@@ -187,6 +188,7 @@ export class AppBuilder {
   constructor(private readonly _options: ConfigureOptions) {}
 
   withRouting(routes: RoutingOptions): this {
+    if (routes.web)      this._loaders.push(routes.web)
     if (routes.api)      this._loaders.push(routes.api)
     if (routes.commands) this._loaders.push(routes.commands)
     return this
@@ -214,7 +216,10 @@ export class AppBuilder {
 // ─── Forge (Configured Application) ───────────────────────
 
 export class Forge {
-  private _boot:    Promise<void>
+  /** Phase 1: providers only — safe to await in CLI (no Vike virtual imports) */
+  private _providerBoot: Promise<void>
+  /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
+  private _boot: Promise<void> | null = null
   private _handler: FetchHandler | null = null
 
   constructor(
@@ -223,10 +228,8 @@ export class Forge {
     private readonly _loaders: Array<() => Promise<unknown>>,
     private readonly _mwFn?:   (m: MiddlewareConfigurator) => void,
   ) {
-    // Boot eagerly — like Laravel/AdonisJS. Errors surface at startup,
-    // not on the first request. Serverless still works (promise settles
-    // before or during the first request).
-    this._boot = this._bootstrap()
+    // Boot providers eagerly — errors surface at startup (DB connection failures, etc.)
+    this._providerBoot = this._bootstrapProviders()
   }
 
   /** Suppress Vike's informational console noise — runs once at boot, adapter-agnostic */
@@ -236,29 +239,31 @@ export class Forge {
       return msg.includes('[vike]') && (
         msg.includes('HTTP request')           ||
         msg.includes('HTTP response')          ||
-        msg.includes("doesn't match the route")
+        msg.includes("doesn't match the route")||
+        msg.includes('thrown by')               // guard() / hook throw notifications
       )
     }
-    const _log = console.log;  const _warn = console.warn
-    console.log  = (...a: unknown[]) => { if (!isNoise(a)) _log(...a)  }
-    console.warn = (...a: unknown[]) => { if (!isNoise(a)) _warn(...a) }
+    const _log   = console.log
+    const _warn  = console.warn
+    const _info  = console.info
+    const _error = console.error
+    console.log   = (...a: unknown[]) => { if (!isNoise(a)) _log(...a)   }
+    console.warn  = (...a: unknown[]) => { if (!isNoise(a)) _warn(...a)  }
+    console.info  = (...a: unknown[]) => { if (!isNoise(a)) _info(...a)  }
+    console.error = (...a: unknown[]) => { if (!isNoise(a)) _error(...a) }
   }
 
-  private async _bootstrap(): Promise<void> {
-    // Silence Vike's duplicate/noisy logs — works regardless of server adapter
+  /** Phase 1 — boot service providers then load routes. Safe in CLI (no Vike virtual URLs). */
+  private async _bootstrapProviders(): Promise<void> {
     this._suppressVikeNoise()
-
-    // Load route files — side effects register routes on the global router
-    await Promise.all(this._loaders.map(l => l()))
-
-    // Bootstrap the application (register + boot all service providers)
     await this._app.bootstrap()
+    await Promise.all(this._loaders.map(l => l()))
+  }
 
-    // Apply global middleware then mount routes onto the server adapter
+  /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
+  private async _createHandler(): Promise<void> {
     const mw = new MiddlewareConfigurator()
     this._mwFn?.(mw)
-
-    // Dynamic import avoids a circular-dep between @forge/core and @forge/router
     const { router } = await import('@forge/router')
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
@@ -266,13 +271,13 @@ export class Forge {
     })
   }
 
-  /** Boot the application without starting an HTTP server — used by the CLI */
+  /** Boot providers without starting an HTTP server — used by the CLI */
   async boot(): Promise<void> {
-    await Promise.all(this._loaders.map(l => l()))
-    await this._app.bootstrap()
+    await this._providerBoot
   }
 
   async handleRequest(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
+    if (!this._boot) this._boot = this._providerBoot.then(() => this._createHandler())
     await this._boot
     return this._handler!(request, env, ctx)
   }
@@ -310,6 +315,7 @@ export class CommandBuilder {
 
 export class ArtisanRegistry {
   private _commands: CommandBuilder[] = []
+  private _classes:  (new () => Command)[] = []
 
   command(name: string, handler: ConsoleHandler): CommandBuilder {
     const cmd = new CommandBuilder(name, handler)
@@ -317,7 +323,186 @@ export class ArtisanRegistry {
     return cmd
   }
 
-  getCommands(): CommandBuilder[] { return this._commands }
+  /** Register one or more class-based commands */
+  register(...CommandClasses: (new () => Command)[]): void {
+    this._classes.push(...CommandClasses)
+  }
+
+  getCommands(): CommandBuilder[]         { return this._commands }
+  getClasses():  (new () => Command)[]    { return this._classes  }
+}
+
+// ─── Signature Parser ──────────────────────────────────────
+
+export interface CommandArgDef {
+  name:         string
+  required:     boolean
+  variadic:     boolean
+  defaultValue?: string
+}
+
+export interface CommandOptDef {
+  name:          string
+  shorthand?:    string
+  hasValue:      boolean
+  defaultValue?: string
+}
+
+export interface ParsedSignature {
+  name: string
+  args: CommandArgDef[]
+  opts: CommandOptDef[]
+}
+
+export function parseSignature(signature: string): ParsedSignature {
+  const nameMatch = signature.match(/^([\w:.-]+)/)
+  const name = nameMatch?.[1] ?? signature
+  const args: CommandArgDef[] = []
+  const opts: CommandOptDef[] = []
+
+  for (const [, block] of signature.matchAll(/\{([^}]+)\}/g)) {
+    // Strip inline description: {user : The user ID} → {user}
+    const trimmed = block!.split(':')[0]!.trim()
+
+    if (trimmed.startsWith('--')) {
+      // Option: {--force} {--name=} {--name=default} {--N|name=}
+      const inner = trimmed.slice(2)
+      const eqIdx = inner.indexOf('=')
+      const hasValue = eqIdx !== -1
+      const namePart = hasValue ? inner.slice(0, eqIdx) : inner
+      const defaultValue = hasValue ? inner.slice(eqIdx + 1) || undefined : undefined
+      const parts = namePart.includes('|') ? namePart.split('|') as [string, string] : null
+      const optName = parts ? parts[1] : namePart
+      const shorthand = parts ? parts[0] : undefined
+      const optDef: CommandOptDef = { name: optName, hasValue }
+      if (shorthand)    optDef.shorthand    = shorthand
+      if (defaultValue) optDef.defaultValue = defaultValue
+      opts.push(optDef)
+    } else {
+      // Argument: {user} {user?} {user=default} {user*}
+      const variadic = trimmed.endsWith('*')
+      const optional = trimmed.endsWith('?')
+      const raw      = trimmed.replace(/[?*]$/, '')
+      const eqIdx    = raw.indexOf('=')
+      const hasDefault = eqIdx !== -1
+      const argName    = hasDefault ? raw.slice(0, eqIdx) : raw
+      const defaultValue = hasDefault ? raw.slice(eqIdx + 1) || undefined : undefined
+      const argDef: CommandArgDef = { name: argName, required: !optional && !hasDefault && !variadic, variadic }
+      if (defaultValue) argDef.defaultValue = defaultValue
+      args.push(argDef)
+    }
+  }
+
+  return { name, args, opts }
+}
+
+// ─── Command (class-based, Laravel-style) ──────────────────
+
+const ANSI = {
+  green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
+  red:    (s: string) => `\x1b[31m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  cyan:   (s: string) => `\x1b[36m${s}\x1b[0m`,
+  dim:    (s: string) => `\x1b[2m${s}\x1b[0m`,
+}
+
+export abstract class Command {
+  abstract readonly signature:   string
+  abstract readonly description: string
+
+  private _args: Record<string, unknown> = {}
+  private _opts: Record<string, unknown> = {}
+
+  /** @internal — called by the CLI runner before handle() */
+  _setContext(args: Record<string, unknown>, opts: Record<string, unknown>): void {
+    this._args = args
+    this._opts = opts
+  }
+
+  // ── Argument / option accessors ───────────────────────────
+
+  argument(name: string): string {
+    return String(this._args[name] ?? '')
+  }
+
+  arguments(): Record<string, unknown> {
+    return { ...this._args }
+  }
+
+  option(name: string): string | boolean | undefined {
+    return this._opts[name] as string | boolean | undefined
+  }
+
+  options(): Record<string, unknown> {
+    return { ...this._opts }
+  }
+
+  // ── Output helpers ────────────────────────────────────────
+
+  info(message: string):    void { console.log(ANSI.green(message))  }
+  error(message: string):   void { console.error(ANSI.red(message))  }
+  warn(message: string):    void { console.warn(ANSI.yellow(message)) }
+  line(message = ''):       void { console.log(message)              }
+  comment(message: string): void { console.log(ANSI.dim(message))    }
+  newLine(count = 1):       void { console.log('\n'.repeat(count - 1)) }
+
+  table(headers: string[], rows: string[][]): void {
+    const widths = headers.map((h, i) =>
+      Math.max(h.length, ...rows.map(r => (r[i] ?? '').length))
+    )
+    const sep = widths.map(w => '-'.repeat(w + 2)).join('+')
+    const fmt = (cells: string[]) =>
+      cells.map((c, i) => ` ${c.padEnd(widths[i] ?? 0)} `).join('|')
+    console.log(sep)
+    console.log(fmt(headers))
+    console.log(sep)
+    for (const row of rows) console.log(fmt(row))
+    console.log(sep)
+  }
+
+  // ── Interactive prompts ───────────────────────────────────
+
+  /** Ask a free-text question — like Laravel's $this->ask() */
+  async ask(message: string, defaultValue?: string): Promise<string> {
+    const { text, isCancel } = await import('@clack/prompts')
+    const opts: Parameters<typeof text>[0] = { message }
+    if (defaultValue) { opts.defaultValue = defaultValue; opts.placeholder = defaultValue }
+    const result = await text(opts)
+    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    return result as string
+  }
+
+  /** Ask a yes/no question — like Laravel's $this->confirm() */
+  async confirm(message: string, defaultValue = false): Promise<boolean> {
+    const { confirm, isCancel } = await import('@clack/prompts')
+    const result = await confirm({ message, initialValue: defaultValue })
+    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    return result as boolean
+  }
+
+  /** Ask the user to pick from a list — like Laravel's $this->choice() */
+  async choice(message: string, choices: string[], defaultValue?: string): Promise<string> {
+    const { select, isCancel } = await import('@clack/prompts')
+    const result = await select({
+      message,
+      options: choices.map(c => ({ value: c, label: c })),
+      initialValue: defaultValue ?? choices[0],
+    })
+    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    return result as string
+  }
+
+  /** Ask for a hidden input — like Laravel's $this->secret() */
+  async secret(message: string): Promise<string> {
+    const { password, isCancel } = await import('@clack/prompts')
+    const result = await password({ message })
+    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    return result as string
+  }
+
+  // ── Lifecycle ─────────────────────────────────────────────
+
+  abstract handle(): void | Promise<void>
 }
 
 const _g = globalThis as Record<string, unknown>
