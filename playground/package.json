@@ -13,8 +13,9 @@
     "artisan": "tsx node_modules/@forge/cli/src/index.ts"
   },
   "dependencies": {
+    "@forge/artisan":          "workspace:*",
     "@forge/auth-better-auth": "workspace:*",
-    "@forge/contracts":       "workspace:*",
+    "@forge/contracts":        "workspace:*",
     "@forge/middleware":       "workspace:*",
     "@forge/validation":       "workspace:*",
     "@forge/queue-bullmq": "workspace:*",

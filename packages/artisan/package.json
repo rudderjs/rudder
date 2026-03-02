@@ -1,5 +1,5 @@
 {
-  "name": "@forge/core",
+  "name": "@forge/artisan",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -17,20 +17,13 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "test": "TSX_TSCONFIG_PATH=./tsconfig.test.json node --import tsx/esm --test src/index.test.ts"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/artisan":     "workspace:*",
-    "@forge/contracts":   "workspace:*",
-    "@forge/di":          "workspace:*",
-    "@forge/router":      "workspace:*",
-    "@forge/support":     "workspace:*",
-    "reflect-metadata":   "^0.2.2"
+    "@clack/prompts": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0",
-    "tsx": "^4.0.0"
+    "typescript": "^5.4.0"
   }
 }
