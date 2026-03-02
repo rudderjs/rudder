@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@forge/core'
 import { hono } from '@forge/server-hono'
-import { ThrottleMiddleware } from '@forge/middleware'
+import { RateLimit } from '@forge/rate-limit'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
@@ -18,8 +18,8 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    // Global middleware — runs on every request (static assets are automatically skipped)
-    m.use(new ThrottleMiddleware(60, 60_000).toHandler())  // 60 req/min per IP, API/pages only
+    // Global rate limit — cache-backed, persists across restarts
+    m.use(RateLimit.perMinute(60).toHandler())
     m.use(new RequestIdMiddleware().toHandler())
   })
   .withExceptions((_e) => {

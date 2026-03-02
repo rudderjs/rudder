@@ -21,6 +21,7 @@
     "@forge/mail": "workspace:*",
     "@forge/mail-nodemailer": "workspace:*",
     "@forge/queue": "workspace:*",
+    "@forge/rate-limit": "workspace:*",
     "@forge/di": "workspace:*",
     "@forge/middleware": "workspace:*",
     "@forge/orm": "workspace:*",

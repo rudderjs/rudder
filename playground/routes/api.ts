@@ -3,12 +3,16 @@ import { resolve, app } from '@forge/core'
 import type { BetterAuthInstance } from '@forge/auth-better-auth'
 import { Cache } from '@forge/cache'
 import { Storage } from '@forge/storage'
+import { RateLimit } from '@forge/rate-limit'
 import { UserService } from '../app/Services/UserService.js'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 import { RequestIdMiddleware } from 'app/Middleware/RequestIdMiddleware.js'
 
 // Per-route middleware instance — reused across protected routes
 const authMw = new AuthMiddleware().toHandler()
+
+// Stricter limit for expensive endpoints
+const authLimit = RateLimit.perMinute(5).message('Too many auth attempts. Try again later.').toHandler()
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -25,12 +29,13 @@ router.get('/api/me', async (req) => {
 
 // Public routes — no auth required
 // Results are cached for 60 s — subsequent calls skip the DB query
+// Rate-limited to 60 req/min per IP
 router.get('/api/users', async (_req, res) => {
   const users = await Cache.remember('users:all', 60, () =>
     resolve<UserService>(UserService).findAll()
   )
   return res.json({ data: users })
-}, [authMw])  // optional per-route middleware, e.g. for logging or auth
+}, [authMw])
 
 router.get('/api/users/:id', async (req, res) => {
   const user = await resolve<UserService>(UserService).findById(req.params['id']!)
@@ -45,13 +50,13 @@ router.post('/api/users', async (req, res) => {
 }, [authMw])
 
 // ── File storage demo ──────────────────────────────────────
-// PUT /api/files/:filename  — write a text file
+// PUT /api/files/:filename  — write a text file (10 uploads/min per IP)
 router.put('/api/files/:filename', async (req, res) => {
   const { filename } = req.params as { filename: string }
   const content = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
   await Storage.put(`uploads/${filename}`, content)
   return res.json({ path: `uploads/${filename}`, url: Storage.url(`uploads/${filename}`) })
-})
+}, [RateLimit.perMinute(10).toHandler()])
 
 // GET /api/files  — list uploaded files
 router.get('/api/files', async (_req, res) => {

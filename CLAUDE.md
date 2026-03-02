@@ -119,8 +119,11 @@ forge/
 | `@forge/events` | ✅ Complete | EventDispatcher, Listener interface, dispatch(), events() factory |
 | `@forge/mail` | ✅ Complete | Mailable, Mail facade, LogAdapter (built-in dev), mail() factory |
 | `@forge/mail-nodemailer` | ✅ Complete | Nodemailer SMTP adapter — optional peer for smtp driver |
+| `@forge/rate-limit` | ✅ Complete | Cache-backed rate limiting — RateLimit.perMinute/Hour/Day, X-RateLimit-* headers |
+| `@forge/notification` | 📋 Planned | Multi-channel notifications (mail, database) via Notifiable pattern |
 | `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
 | `@forge/queue-bullmq` | 📋 Planned | BullMQ adapter |
+| `create-forge-app` | 📋 Planned | Scaffolder polish — `npm create forge-app@latest` end-to-end |
 
 ---
 
