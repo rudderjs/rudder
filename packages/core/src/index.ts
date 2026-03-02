@@ -154,6 +154,7 @@ export interface ConfigureOptions {
 }
 
 export interface RoutingOptions {
+  web?:      () => Promise<unknown>
   api?:      () => Promise<unknown>
   commands?: () => Promise<unknown>
 }
@@ -187,6 +188,7 @@ export class AppBuilder {
   constructor(private readonly _options: ConfigureOptions) {}
 
   withRouting(routes: RoutingOptions): this {
+    if (routes.web)      this._loaders.push(routes.web)
     if (routes.api)      this._loaders.push(routes.api)
     if (routes.commands) this._loaders.push(routes.commands)
     return this

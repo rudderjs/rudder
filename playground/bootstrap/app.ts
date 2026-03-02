@@ -13,6 +13,7 @@ export default Application.configure({
   providers,
 })
   .withRouting({
+    web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
     commands: () => import('../routes/console.ts'),
   })
