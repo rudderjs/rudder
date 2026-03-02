@@ -180,13 +180,13 @@ export function storage(config: StorageConfig): new (app: Application) => Servic
           try {
             // @ts-ignore — @forge/storage-s3 is an optional peer
             s3Mod = await import('@forge/storage-s3')
-          } catch (err: unknown) {
-            if ((err as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND') {
-              const msg = `[Forge Storage] Disk "${name}" requires @forge/storage-s3. Install it: pnpm add @forge/storage-s3`
-              StorageRegistry.set(name, makeUnavailableAdapter(msg))
-              continue
-            }
-            throw err
+          } catch {
+            // Any import failure means @forge/storage-s3 isn't available (not installed or not built).
+            // Vite's module runner wraps ERR_MODULE_NOT_FOUND in a RunnerError without .code,
+            // so we catch broadly and mark the disk as unavailable instead of crashing.
+            const msg = `[Forge Storage] Disk "${name}" requires @forge/storage-s3. Install it: pnpm add @forge/storage-s3`
+            StorageRegistry.set(name, makeUnavailableAdapter(msg))
+            continue
           }
           adapter = await (s3Mod.s3 as (c: unknown) => StorageAdapterProvider)(diskConfig).create()
         } else {
