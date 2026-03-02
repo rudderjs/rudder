@@ -95,14 +95,14 @@ export interface QueueAdapterFactory<TConfig = unknown> {
 // ─── Global Queue Registry ─────────────────────────────────
 
 export class QueueRegistry {
-  private static adapter: QueueAdapter | null = null
+  private static readonly _key = '__forge_queue_adapter__'
 
   static set(adapter: QueueAdapter): void {
-    this.adapter = adapter
+    (globalThis as Record<string, unknown>)[QueueRegistry._key] = adapter
   }
 
   static get(): QueueAdapter | null {
-    return this.adapter
+    return ((globalThis as Record<string, unknown>)[QueueRegistry._key] as QueueAdapter | undefined) ?? null
   }
 }
 

@@ -17,10 +17,15 @@ export interface CacheAdapterProvider {
 // ─── Cache Registry ────────────────────────────────────────
 
 export class CacheRegistry {
-  private static adapter: CacheAdapter | null = null
+  private static readonly _key = '__forge_cache_adapter__'
 
-  static set(adapter: CacheAdapter): void { this.adapter = adapter }
-  static get(): CacheAdapter | null        { return this.adapter }
+  static set(adapter: CacheAdapter): void {
+    (globalThis as Record<string, unknown>)[CacheRegistry._key] = adapter
+  }
+
+  static get(): CacheAdapter | null {
+    return ((globalThis as Record<string, unknown>)[CacheRegistry._key] as CacheAdapter | undefined) ?? null
+  }
 }
 
 // ─── Cache Facade ──────────────────────────────────────────

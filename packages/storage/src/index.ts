@@ -37,15 +37,27 @@ export interface StorageAdapterProvider {
 // ─── Storage Registry ──────────────────────────────────────
 
 export class StorageRegistry {
-  private static readonly adapters = new Map<string, StorageAdapter>()
-  private static defaultDisk = 'local'
+  private static readonly _adaptersKey = '__forge_storage_adapters__'
+  private static readonly _defaultKey  = '__forge_storage_default__'
 
-  static set(name: string, adapter: StorageAdapter): void { this.adapters.set(name, adapter) }
-  static setDefault(name: string): void                   { this.defaultDisk = name }
+  private static _adapters(): Map<string, StorageAdapter> {
+    const g = globalThis as Record<string, unknown>
+    if (!g[StorageRegistry._adaptersKey]) {
+      g[StorageRegistry._adaptersKey] = new Map<string, StorageAdapter>()
+    }
+    return g[StorageRegistry._adaptersKey] as Map<string, StorageAdapter>
+  }
+
+  static set(name: string, adapter: StorageAdapter): void { this._adapters().set(name, adapter) }
+
+  static setDefault(name: string): void {
+    (globalThis as Record<string, unknown>)[StorageRegistry._defaultKey] = name
+  }
 
   static get(name?: string): StorageAdapter {
-    const key = name ?? this.defaultDisk
-    const a   = this.adapters.get(key)
+    const defaultDisk = ((globalThis as Record<string, unknown>)[StorageRegistry._defaultKey] as string | undefined) ?? 'local'
+    const key = name ?? defaultDisk
+    const a   = this._adapters().get(key)
     if (!a) throw new Error(`[Forge Storage] Disk "${key}" not found. Check your storage config.`)
     return a
   }

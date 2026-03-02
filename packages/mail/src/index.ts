@@ -57,13 +57,24 @@ export interface MailAdapterProvider {
 // ─── Mail Registry ─────────────────────────────────────────
 
 export class MailRegistry {
-  private static adapter: MailAdapter | null = null
-  private static _from: { address: string; name?: string } = { address: 'noreply@example.com' }
+  private static readonly _adapterKey = '__forge_mail_adapter__'
+  private static readonly _fromKey    = '__forge_mail_from__'
 
-  static set(adapter: MailAdapter): void  { this.adapter = adapter }
-  static get(): MailAdapter | null        { return this.adapter }
-  static setFrom(from: { address: string; name?: string }): void { this._from = { ...from } }
-  static getFrom(): { address: string; name?: string }           { return { ...this._from } }
+  static set(adapter: MailAdapter): void {
+    (globalThis as Record<string, unknown>)[MailRegistry._adapterKey] = adapter
+  }
+
+  static get(): MailAdapter | null {
+    return ((globalThis as Record<string, unknown>)[MailRegistry._adapterKey] as MailAdapter | undefined) ?? null
+  }
+
+  static setFrom(from: { address: string; name?: string }): void {
+    (globalThis as Record<string, unknown>)[MailRegistry._fromKey] = { ...from }
+  }
+
+  static getFrom(): { address: string; name?: string } {
+    return { ...(((globalThis as Record<string, unknown>)[MailRegistry._fromKey] as { address: string; name?: string } | undefined) ?? { address: 'noreply@example.com' }) }
+  }
 }
 
 // ─── Pending Send (fluent builder) ─────────────────────────
