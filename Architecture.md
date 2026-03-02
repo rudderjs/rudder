@@ -62,6 +62,18 @@ forge/
 
 ---
 
+## Playground Dev Notes
+
+From `playground/`, prefer:
+
+```bash
+pnpm dev:clean
+```
+
+This clears stale listeners on ports `24678` (Vite dev/HMR server) and `3000` (Forge app server) before starting `vike dev`, which avoids `EADDRINUSE` after interrupted sessions.
+
+---
+
 ## Application Folder Structure (User's App)
 
 ```
