@@ -18,6 +18,7 @@ export default defineConfig({
       '@clack/core', '@clack/prompts',    // CLI interactive prompts — Node.js only
       '@forge/queue-inngest',             // optional — only needed when driver=inngest
       '@forge/queue-bullmq',              // optional — only needed when driver=bullmq
+      '@forge/mail-nodemailer',           // optional — only needed when mail driver=smtp
       '@forge/server-express',            // optional server adapters
       '@forge/server-fastify',
       '@forge/server-h3',
@@ -30,7 +31,7 @@ export default defineConfig({
       // CLI/server-only; they must never be bundled for the browser.
       external: (id) =>
         id.startsWith('@clack/') ||
-        ['@forge/queue-inngest', '@forge/queue-bullmq', '@forge/orm-drizzle',
+        ['@forge/queue-inngest', '@forge/queue-bullmq', '@forge/mail-nodemailer', '@forge/orm-drizzle',
          '@forge/server-express', '@forge/server-fastify', '@forge/server-h3'].includes(id),
     },
   },

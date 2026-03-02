@@ -143,6 +143,51 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/events:
+    dependencies:
+      '@forge/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/mail:
+    dependencies:
+      '@forge/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/mail-nodemailer:
+    dependencies:
+      '@forge/mail':
+        specifier: workspace:*
+        version: link:../mail
+      nodemailer:
+        specifier: ^6.9.0
+        version: 6.10.1
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      '@types/nodemailer':
+        specifier: ^6.4.0
+        version: 6.4.23
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/middleware:
     dependencies:
       '@forge/core':
@@ -406,6 +451,15 @@ importers:
       '@forge/di':
         specifier: workspace:*
         version: link:../packages/di
+      '@forge/events':
+        specifier: workspace:*
+        version: link:../packages/events
+      '@forge/mail':
+        specifier: workspace:*
+        version: link:../packages/mail
+      '@forge/mail-nodemailer':
+        specifier: workspace:*
+        version: link:../packages/mail-nodemailer
       '@forge/middleware':
         specifier: workspace:*
         version: link:../packages/middleware
@@ -2944,6 +2998,9 @@ packages:
   '@types/node@25.3.2':
     resolution: {integrity: sha512-RpV6r/ij22zRRdyBPcxDeKAzH43phWVKEjL2iksqo1Vz3CuBUrgmPpPhALKiRfU7OMCmeeO9vECBMsV0hMTG8Q==}
 
+  '@types/nodemailer@6.4.23':
+    resolution: {integrity: sha512-aFV3/NsYFLSx9mbb5gtirBSXJnAlrusoKNuPbxsASWc7vrKLmIrTQRpdcxNcSFL3VW2A2XpeLEavwb2qMi6nlQ==}
+
   '@types/oracledb@6.5.2':
     resolution: {integrity: sha512-kK1eBS/Adeyis+3OlBDMeQQuasIDLUYXsi2T15ccNJ0iyUpQ4xDF7svFu3+bGVrI0CMBUclPciz+lsQR3JX3TQ==}
 
@@ -4625,6 +4682,10 @@ packages:
 
   node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
+
+  nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
 
   nopt@8.1.0:
     resolution: {integrity: sha512-ieGu42u/Qsa4TFktmaKEwM6MQH0pOWnaB3htzh0JRtx84+Mebc0cbZYN5bC+6WTZ4+77xrL9Pn5m7CV6VIkV7A==}
@@ -8419,6 +8480,10 @@ snapshots:
     dependencies:
       undici-types: 7.18.2
 
+  '@types/nodemailer@6.4.23':
+    dependencies:
+      '@types/node': 25.3.2
+
   '@types/oracledb@6.5.2':
     dependencies:
       '@types/node': 25.3.2
@@ -9934,6 +9999,8 @@ snapshots:
   node-gyp-build@4.8.4: {}
 
   node-releases@2.0.27: {}
+
+  nodemailer@6.10.1: {}
 
   nopt@8.1.0:
     dependencies:
