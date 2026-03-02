@@ -377,3 +377,20 @@ Expected: All packages build successfully, including the three fixed stubs.
 git add .
 git commit -m "chore: verify all stub packages build correctly"
 ```
+
+---
+
+### Post-plan note (2026-03-02): Dev HMR behavior
+
+Provider and route side-effect changes are now hot-applied in development:
+
+- `playground/bootstrap/providers.ts`
+- `playground/routes/*.ts`
+
+You should not need to restart `pnpm dev` after reordering providers or editing route registration files.
+
+If a workspace still appears stale after pulling changes, run once from repo root:
+
+```bash
+pnpm --filter @forge/di build && pnpm --filter @forge/router build && pnpm --filter @forge/core build
+```
