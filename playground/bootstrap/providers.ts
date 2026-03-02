@@ -3,6 +3,7 @@ import { betterAuth } from '@forge/auth-better-auth'
 import { queue } from '@forge/queue'
 import { events } from '@forge/events'
 import { mail } from '@forge/mail'
+import { cache } from '@forge/cache'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
@@ -16,6 +17,7 @@ export default [
   queue(configs.queue),
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
   mail(configs.mail),
+  cache(configs.cache),
   AppServiceProvider,
   TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]

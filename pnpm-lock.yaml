@@ -50,6 +50,35 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/cache:
+    dependencies:
+      '@forge/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/cache-redis:
+    dependencies:
+      '@forge/cache':
+        specifier: workspace:*
+        version: link:../cache
+      ioredis:
+        specifier: ^5.3.0
+        version: 5.9.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/cli:
     dependencies:
       '@clack/prompts':
@@ -445,6 +474,9 @@ importers:
       '@forge/auth-better-auth':
         specifier: workspace:*
         version: link:../packages/auth-better-auth
+      '@forge/cache':
+        specifier: workspace:*
+        version: link:../packages/cache
       '@forge/core':
         specifier: workspace:*
         version: link:../packages/core
