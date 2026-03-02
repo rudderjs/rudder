@@ -1,4 +1,5 @@
-import { ServiceProvider, type Application } from '@forge/core'
+import { ServiceProvider, artisan, type Application } from '@forge/core'
+import { createRequire } from 'node:module'
 
 // ─── Job Contract ──────────────────────────────────────────
 
@@ -158,15 +159,21 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       let adapter: QueueAdapter
 
+      // Resolve optional peer packages from the user's app directory (process.cwd()),
+      // not from @forge/queue's own node_modules. This is required because
+      // @forge/queue-bullmq and @forge/queue-inngest are installed in the user's
+      // app, not in @forge/queue itself.
+      const appRequire = createRequire(process.cwd() + '/package.json')
+
       if (driver === 'sync') {
         adapter = new SyncAdapter()
       } else if (driver === 'inngest') {
-        // @ts-ignore — @forge/queue-inngest is an optional peer; loaded at runtime when driver=inngest
-        const { inngest } = await import('@forge/queue-inngest') as any
+        // @ts-ignore — @forge/queue-inngest is an optional peer
+        const { inngest } = await import(appRequire.resolve('@forge/queue-inngest')) as any
         adapter = (inngest as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
       } else if (driver === 'bullmq') {
-        // @ts-ignore — @forge/queue-bullmq is an optional peer; loaded at runtime when driver=bullmq
-        const { bullmq } = await import('@forge/queue-bullmq') as any
+        // @ts-ignore — @forge/queue-bullmq is an optional peer
+        const { bullmq } = await import(appRequire.resolve('@forge/queue-bullmq')) as any
         adapter = (bullmq as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
       } else {
         throw new Error(`[Forge Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
@@ -174,6 +181,18 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       QueueRegistry.set(adapter)
       this.app.instance('queue', adapter)
+
+      // Always register queue:work so it appears in `pnpm artisan --help`.
+      // Fails gracefully when the active driver doesn't support workers (e.g. sync, inngest).
+      artisan.command('queue:work', async (args) => {
+        if (typeof adapter.work !== 'function') {
+          console.error(`[Forge Queue] Driver "${driver}" does not support workers.`)
+          console.error(`[Forge Queue] Switch to "bullmq" in config/queue.ts and set QUEUE_CONNECTION=bullmq in .env.`)
+          process.exit(1)
+        }
+        const queueName = args[0] ?? 'default'
+        await adapter.work(queueName)
+      }).description('Start a queue worker — pnpm artisan queue:work [queue=default]')
 
       // Cloud adapters (Inngest etc.) expose a serve endpoint.
       // Mount it automatically — no user config needed.

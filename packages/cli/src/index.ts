@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   }
 
   program.action(() => program.help())
-  program.parse()
+  await program.parseAsync()
 }
 
 main().catch(console.error)

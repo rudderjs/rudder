@@ -548,6 +548,9 @@ importers:
       '@forge/queue':
         specifier: workspace:*
         version: link:../packages/queue
+      '@forge/queue-bullmq':
+        specifier: workspace:*
+        version: link:../packages/queue-bullmq
       '@forge/rate-limit':
         specifier: workspace:*
         version: link:../packages/rate-limit

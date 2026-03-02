@@ -119,7 +119,7 @@ forge/
 | `@forge/rate-limit` | ✅ Complete | Cache-backed rate limiting — RateLimit.perMinute/Hour/Day, X-RateLimit-* headers |
 | `@forge/notification` | 📋 Planned | Multi-channel notifications (mail, database) via Notifiable pattern |
 | `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
-| `@forge/queue-bullmq` | 📋 Planned | BullMQ adapter |
+| `@forge/queue-bullmq` | ✅ Complete | BullMQ Redis-backed queue — job registry, graceful shutdown, `queue:work` artisan command |
 | `create-forge-app` | ✅ Complete | Interactive CLI scaffolder — project name, db driver, Todo module option; 33–39 files generated |
 
 ---

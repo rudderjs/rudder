@@ -1,4 +1,5 @@
 import { ServiceProvider, type Application } from '@forge/core'
+import { createRequire } from 'node:module'
 
 // ─── Adapter Contract ──────────────────────────────────────
 
@@ -144,11 +145,13 @@ export function cache(config: CacheConfig): new (app: Application) => ServicePro
 
       let adapter: CacheAdapter
 
+      const appRequire = createRequire(process.cwd() + '/package.json')
+
       if (driver === 'memory') {
         adapter = new MemoryAdapter()
       } else if (driver === 'redis') {
         // @ts-ignore — @forge/cache-redis is an optional peer
-        const { redis } = await import('@forge/cache-redis') as any
+        const { redis } = await import(appRequire.resolve('@forge/cache-redis')) as any
         adapter = await (redis as (c: unknown) => CacheAdapterProvider)(storeConfig).create()
       } else {
         throw new Error(`[Forge Cache] Unknown driver "${driver}". Available: memory, redis`)
