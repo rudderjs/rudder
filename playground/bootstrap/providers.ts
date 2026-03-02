@@ -6,6 +6,7 @@ import { mail } from '@forge/mail'
 import { cache } from '@forge/cache'
 import { storage } from '@forge/storage'
 import { scheduler } from '@forge/schedule'
+import { notifications } from '@forge/notification'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
@@ -21,6 +22,7 @@ export default [
   cache(configs.cache),
   storage(configs.storage),
   scheduler(),
+  notifications(),
   DatabaseServiceProvider,  // must boot first — sets up ModelRegistry
   AppServiceProvider,
   TodoServiceProvider,

@@ -126,7 +126,7 @@ forge/
 | `@forge/mail-nodemailer` | ✅ Complete | Nodemailer SMTP adapter — optional peer for smtp driver |
 | `@forge/rate-limit` | ✅ Complete | Cache-backed rate limiting — RateLimit.perMinute/Hour/Day, X-RateLimit-* headers |
 | `create-forge-app` | ✅ Complete | Interactive CLI scaffolder — project name, db driver, Todo module option |
-| `@forge/notification` | 📋 Planned | Multi-channel notifications (mail, database) via Notifiable pattern |
+| `@forge/notification` | ✅ Complete | Multi-channel notifications (mail, database) — Notifiable, Notification, ChannelRegistry, notify() |
 | `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
 
 ---

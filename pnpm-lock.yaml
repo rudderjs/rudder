@@ -262,6 +262,25 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/notification:
+    dependencies:
+      '@forge/core':
+        specifier: workspace:*
+        version: link:../core
+      '@forge/mail':
+        specifier: workspace:*
+        version: link:../mail
+      '@forge/orm':
+        specifier: workspace:*
+        version: link:../orm
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/orm:
     dependencies:
       '@forge/core':
@@ -543,6 +562,9 @@ importers:
       '@forge/middleware':
         specifier: workspace:*
         version: link:../packages/middleware
+      '@forge/notification':
+        specifier: workspace:*
+        version: link:../packages/notification
       '@forge/orm':
         specifier: workspace:*
         version: link:../packages/orm

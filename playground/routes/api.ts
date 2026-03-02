@@ -4,9 +4,11 @@ import type { BetterAuthInstance } from '@forge/auth-better-auth'
 import { Cache } from '@forge/cache'
 import { Storage } from '@forge/storage'
 import { RateLimit } from '@forge/rate-limit'
+import { notify } from '@forge/notification'
 import { UserService } from '../app/Services/UserService.js'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
+import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
 // Per-route middleware instance — reused across protected routes
 const authMw = new AuthMiddleware().toHandler()
@@ -87,6 +89,15 @@ router.delete('/api/files/:filename', async (req, res) => {
   const { filename } = req.params as { filename: string }
   await Storage.delete(`uploads/${filename}`)
   return res.json({ deleted: filename })
+})
+
+// POST /api/notify/welcome  — send a WelcomeNotification to a notifiable (mail + database)
+// Body: { id, email, name? }
+router.post('/api/notify/welcome', async (req, res) => {
+  const { id, email, name } = req.body as { id?: string; email?: string; name?: string }
+  if (!id || !email) return res.status(422).json({ message: 'id and email are required.' })
+  await notify({ id, email, name }, new WelcomeNotification())
+  return res.json({ sent: true })
 })
 
 // Auth routes — delegate all /api/auth/* requests to better-auth, with a stricter rate limit

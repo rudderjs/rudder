@@ -55,6 +55,7 @@ describe('DI contract baseline', () => {
     class Service {
       constructor(readonly logger: Logger) {}
     }
+    Reflect.defineMetadata('design:paramtypes', [Logger], Service)
 
     const local = new Container()
     const service = local.make(Service)
@@ -68,6 +69,7 @@ describe('DI contract baseline', () => {
     class ConfigConsumer {
       constructor(@Inject('app.name') readonly name: string) {}
     }
+    Reflect.defineMetadata('design:paramtypes', [String], ConfigConsumer)
 
     const local = new Container()
     local.instance('app.name', 'ForgeApp')

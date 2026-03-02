@@ -27,6 +27,7 @@
     "@forge/mail": "workspace:*",
     "@forge/mail-nodemailer": "workspace:*",
     "@forge/queue": "workspace:*",
+    "@forge/notification": "workspace:*",
     "@forge/rate-limit": "workspace:*",
     "@forge/orm": "workspace:*",
     "@forge/orm-prisma": "workspace:*",
