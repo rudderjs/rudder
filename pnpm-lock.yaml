@@ -370,6 +370,22 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/schedule:
+    dependencies:
+      '@forge/core':
+        specifier: workspace:*
+        version: link:../core
+      croner:
+        specifier: ^9.0.0
+        version: 9.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/server:
     devDependencies:
       '@types/node':
@@ -507,6 +523,9 @@ importers:
       '@forge/router':
         specifier: workspace:*
         version: link:../packages/router
+      '@forge/schedule':
+        specifier: workspace:*
+        version: link:../packages/schedule
       '@forge/server':
         specifier: workspace:*
         version: link:../packages/server
@@ -3548,6 +3567,10 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+
+  croner@9.1.0:
+    resolution: {integrity: sha512-p9nwwR4qyT5W996vBZhdvBCnMhicY5ytZkR4D1Xj0wuTDEiMnjwR57Q3RXYY/s0EpX6Ay3vgIcfaR+ewGHsi+g==}
+    engines: {node: '>=18.0'}
 
   cross-fetch@4.1.0:
     resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
@@ -9020,6 +9043,8 @@ snapshots:
   cron-parser@4.9.0:
     dependencies:
       luxon: 3.7.2
+
+  croner@9.1.0: {}
 
   cross-fetch@4.1.0:
     dependencies:

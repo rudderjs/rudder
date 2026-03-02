@@ -76,6 +76,7 @@ forge/
 │   ├── server-h3/      # H3 adapter (stub)
 │   ├── auth/           # Auth module — shared types (AuthUser, AuthSession, AuthResult)
 │   ├── auth-better-auth/ # better-auth adapter — betterAuth() factory, prismaAdapter wiring
+│   ├── schedule/       # Task scheduler — schedule singleton, scheduler() factory, schedule:run/work/list
 │   ├── cache/          # Cache facade, MemoryAdapter (built-in), cache() factory
 │   ├── cache-redis/    # Redis adapter via ioredis (optional peer)
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper, events() factory
@@ -108,6 +109,7 @@ forge/
 | `@forge/cli` | ✅ Complete | make:*, module:*, module:publish, cfonts banner, user artisan commands |
 | `@forge/auth` | ✅ Complete | Shared AuthUser, AuthSession, AuthResult types |
 | `@forge/auth-better-auth` | ✅ Complete | better-auth adapter — betterAuth() factory, /api/auth/* mount |
+| `@forge/schedule` | ✅ Complete | Task scheduler, schedule:run / schedule:work / schedule:list |
 | `@forge/cache` | ✅ Complete | Cache facade, MemoryAdapter (built-in), cache() factory |
 | `@forge/cache-redis` | ✅ Complete | Redis adapter via ioredis — optional peer for redis driver |
 | `@forge/events` | ✅ Complete | EventDispatcher, Listener interface, dispatch(), events() factory |

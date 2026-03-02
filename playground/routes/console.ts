@@ -1,4 +1,6 @@
 import { artisan } from '@forge/core'
+import { schedule } from '@forge/schedule'
+import { Cache } from '@forge/cache'
 import { User } from '../app/Models/User.js'
 import { SendEmails } from '../app/Commands/SendEmails.js'
 
@@ -26,3 +28,15 @@ artisan.command('db:seed', async () => {
 
   console.log('Done. 3 users seeded.')
 }).description('Seed the database with sample data')
+
+// ─── Scheduled Tasks ───────────────────────────────────────
+
+// Flush the users query cache every 5 minutes so stale data doesn't linger
+schedule.call(async () => {
+  await Cache.forget('users:all')
+}).everyFiveMinutes().description('Flush users:all cache')
+
+// Log a heartbeat every minute (useful for confirming the scheduler is alive)
+schedule.call(() => {
+  console.log('[Heartbeat] Scheduler is running —', new Date().toISOString())
+}).everyMinute().description('Heartbeat log')
