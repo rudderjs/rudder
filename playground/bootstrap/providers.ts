@@ -14,7 +14,6 @@ import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListe
 import configs from '../config/index.js'
 
 export default [
-  DatabaseServiceProvider,  // must boot first — sets up ModelRegistry
   betterAuth(configs.auth),
   queue(configs.queue),
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
@@ -22,6 +21,8 @@ export default [
   cache(configs.cache),
   storage(configs.storage),
   scheduler(),
+
+  DatabaseServiceProvider,  // must boot first — sets up ModelRegistry
   AppServiceProvider,
   TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]

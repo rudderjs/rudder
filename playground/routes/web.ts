@@ -10,5 +10,5 @@ import { router } from '@forge/router'
 // Example: sitemap
 router.get('/test-get-route', (_req, res) => {
   res.header('Content-Type', 'application/xml')
-  res.send(`<?xml version="1.0"?>...`)
+  res.send(`1`)
 })

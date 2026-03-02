@@ -31,11 +31,12 @@ router.get('/api/me', async (req) => {
 // Results are cached for 60 s — subsequent calls skip the DB query
 // Rate-limited to 60 req/min per IP
 router.get('/api/users', async (_req, res) => {
-  const users = await Cache.remember('users:all', 60, () =>
-    resolve<UserService>(UserService).findAll()
-  )
+  const users = await Cache.remember('users:all', 60, () => {
+    console.log('Cache miss for users:all — querying database...')
+     return resolve<UserService>(UserService).findAll();
+  })
   return res.json({ data: users })
-}, [authMw])
+})
 
 router.get('/api/users/:id', async (req, res) => {
   const user = await resolve<UserService>(UserService).findById(req.params['id']!)
