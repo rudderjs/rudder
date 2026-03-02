@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@forge/server'
+import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@forge/core/server'
 import { Router, Controller, Get, Post, Middleware } from './index.js'
 
 class FakeServerAdapter implements ServerAdapter {

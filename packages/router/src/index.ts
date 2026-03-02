@@ -5,7 +5,7 @@ import type {
   RouteHandler,
   MiddlewareHandler,
   HttpMethod,
-} from '@forge/server'
+} from '@forge/core/server'
 
 // ─── Metadata Keys ─────────────────────────────────────────
 

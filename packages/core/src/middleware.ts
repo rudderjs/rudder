@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, ForgeRequest, ForgeResponse } from '@forge/server'
+import type { MiddlewareHandler, ForgeRequest, ForgeResponse } from './server.js'
 
 // ─── Base Middleware Class ─────────────────────────────────
 
@@ -8,7 +8,6 @@ export abstract class Middleware {
     res: ForgeResponse,
     next: () => Promise<void>
   ): void | Promise<void>
-
   /** Convert class instance to a handler function */
   toHandler(): MiddlewareHandler {
     return (req, res, next) => this.handle(req, res, next)

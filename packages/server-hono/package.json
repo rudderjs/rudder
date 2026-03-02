@@ -18,10 +18,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/server": "workspace:*",
+    "@forge/core": "workspace:*",
     "@hono/node-server": "^1.19.9",
     "@photonjs/hono": "^0.1.12",
-    "hono": "^4.0.0"
+    "hono": "^4.12.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@forge/cache":  "workspace:*",
-    "@forge/server": "workspace:*"
+    "@forge/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

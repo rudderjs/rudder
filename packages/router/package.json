@@ -8,6 +8,7 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
+      "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
   },
@@ -19,8 +20,10 @@
     "test": "TSX_TSCONFIG_PATH=./tsconfig.test.json node --import tsx/esm --test src/index.test.ts"
   },
   "dependencies": {
-    "@forge/server": "workspace:*",
     "reflect-metadata": "^0.2.2"
+  },
+  "peerDependencies": {
+    "@forge/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

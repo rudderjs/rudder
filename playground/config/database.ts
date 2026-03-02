@@ -1,4 +1,4 @@
-import { Env } from '@forge/support'
+import { Env } from '@forge/core'
 
 export default {
   default: Env.get('DB_CONNECTION', 'sqlite'),

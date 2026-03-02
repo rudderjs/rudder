@@ -1,4 +1,4 @@
-import { Env } from '@forge/support'
+import { Env } from '@forge/core'
 import type { BetterAuthConfig } from '@forge/auth-better-auth'
 import { dispatch } from '@forge/events'
 import { UserRegistered } from '../app/Events/UserRegistered.js'

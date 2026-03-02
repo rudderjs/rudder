@@ -5,10 +5,37 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": ["./dist/index.js", "./dist/di.js"],
   "exports": {
     ".": {
       "import": "./dist/index.js",
+      "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./support": {
+      "import": "./dist/support.js",
+      "default": "./dist/support.js",
+      "types": "./dist/support.d.ts"
+    },
+    "./di": {
+      "import": "./dist/di.js",
+      "default": "./dist/di.js",
+      "types": "./dist/di.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "default": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./middleware": {
+      "import": "./dist/middleware.js",
+      "default": "./dist/middleware.js",
+      "types": "./dist/middleware.d.ts"
+    },
+    "./validation": {
+      "import": "./dist/validation.js",
+      "default": "./dist/validation.js",
+      "types": "./dist/validation.d.ts"
     }
   },
   "scripts": {
@@ -19,12 +46,9 @@
     "test": "TSX_TSCONFIG_PATH=./tsconfig.test.json node --import tsx/esm --test src/index.test.ts"
   },
   "dependencies": {
-    "@forge/di": "workspace:*",
-    "@forge/support": "workspace:*",
-    "@forge/server": "workspace:*",
-    "@forge/router": "workspace:*",
     "@clack/prompts": "^1.0.0",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

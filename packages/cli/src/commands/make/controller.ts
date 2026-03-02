@@ -6,7 +6,7 @@ import chalk from 'chalk'
 
 function stub(className: string, prefix: string): string {
   return `import { Controller, Get } from '@forge/router'
-import type { Context } from '@forge/server'
+import type { Context } from '@forge/core'
 
 @Controller('${prefix}')
 export class ${className} {

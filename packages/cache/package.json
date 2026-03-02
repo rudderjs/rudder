@@ -18,8 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/core":    "workspace:*",
-    "@forge/support": "workspace:*"
+    "@forge/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

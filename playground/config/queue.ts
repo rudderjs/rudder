@@ -1,4 +1,4 @@
-import { Env } from '@forge/support'
+import { Env } from '@forge/core'
 import type { QueueConfig } from '@forge/queue'
 import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
 

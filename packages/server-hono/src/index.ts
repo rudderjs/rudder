@@ -8,7 +8,7 @@ import type {
   MiddlewareHandler,
   ForgeRequest,
   ForgeResponse,
-} from '@forge/server'
+} from '@forge/core/server'
 
 // ─── Hono Adapter Config ───────────────────────────────────
 
@@ -242,8 +242,10 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       })
 
       setup?.(new HonoAdapter(app))
-      apply(app)
-      const server = photonServe(app)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      apply(app as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const server = photonServe(app as any)
       return async (request) => server.fetch(request)
     },
   }

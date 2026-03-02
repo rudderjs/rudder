@@ -1,4 +1,4 @@
-import { Injectable } from '@forge/di'
+import { Injectable } from '@forge/core'
 import { resolve } from '@forge/core'
 import type { OrmAdapter } from '@forge/orm'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'

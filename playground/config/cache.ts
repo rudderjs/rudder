@@ -1,4 +1,4 @@
-import { Env } from '@forge/support'
+import { Env } from '@forge/core'
 import type { CacheConfig } from '@forge/cache'
 
 export default {

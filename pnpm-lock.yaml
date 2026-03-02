@@ -68,9 +68,6 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../core
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../support
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -140,47 +137,16 @@ importers:
       '@clack/prompts':
         specifier: ^1.0.0
         version: 1.0.1
-      '@forge/di':
-        specifier: workspace:*
-        version: link:../di
-      '@forge/router':
-        specifier: workspace:*
-        version: link:../router
-      '@forge/server':
-        specifier: workspace:*
-        version: link:../server
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../support
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
+      zod:
         specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/di:
-    dependencies:
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../support
-      reflect-metadata:
-        specifier: ^0.2.2
-        version: 0.2.2
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
-      '@types/reflect-metadata':
-        specifier: ^0.1.0
-        version: 0.1.0
       tsx:
         specifier: ^4.0.0
         version: 4.21.0
@@ -206,9 +172,6 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../core
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../support
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -232,25 +195,6 @@ importers:
       '@types/nodemailer':
         specifier: ^6.4.0
         version: 6.4.23
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/middleware:
-    dependencies:
-      '@forge/core':
-        specifier: workspace:*
-        version: link:../core
-      '@forge/server':
-        specifier: workspace:*
-        version: link:../server
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -333,9 +277,6 @@ importers:
       '@forge/router':
         specifier: workspace:*
         version: link:../router
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../support
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -381,9 +322,9 @@ importers:
       '@forge/cache':
         specifier: workspace:*
         version: link:../cache
-      '@forge/server':
+      '@forge/core':
         specifier: workspace:*
-        version: link:../server
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -394,9 +335,9 @@ importers:
 
   packages/router:
     dependencies:
-      '@forge/server':
+      '@forge/core':
         specifier: workspace:*
-        version: link:../server
+        version: link:../core
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -430,20 +371,11 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  packages/server:
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   packages/server-hono:
     dependencies:
-      '@forge/server':
+      '@forge/core':
         specifier: workspace:*
-        version: link:../server
+        version: link:../core
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.12.3)
@@ -451,7 +383,7 @@ importers:
         specifier: ^0.1.12
         version: 0.1.12(@hono/node-server@1.19.9(hono@4.12.3))(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       hono:
-        specifier: ^4.0.0
+        specifier: ^4.12.0
         version: 4.12.3
     devDependencies:
       '@types/node':
@@ -466,9 +398,6 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../core
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../support
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -493,38 +422,6 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  packages/support:
-    dependencies:
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-    devDependencies:
-      '@types/node':
-        specifier: ^25.3.2
-        version: 25.3.2
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/validation:
-    dependencies:
-      '@forge/server':
-        specifier: workspace:*
-        version: link:../server
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   playground:
     dependencies:
       '@forge/auth-better-auth':
@@ -536,9 +433,6 @@ importers:
       '@forge/core':
         specifier: workspace:*
         version: link:../packages/core
-      '@forge/di':
-        specifier: workspace:*
-        version: link:../packages/di
       '@forge/events':
         specifier: workspace:*
         version: link:../packages/events
@@ -548,9 +442,6 @@ importers:
       '@forge/mail-nodemailer':
         specifier: workspace:*
         version: link:../packages/mail-nodemailer
-      '@forge/middleware':
-        specifier: workspace:*
-        version: link:../packages/middleware
       '@forge/orm':
         specifier: workspace:*
         version: link:../packages/orm
@@ -572,21 +463,12 @@ importers:
       '@forge/schedule':
         specifier: workspace:*
         version: link:../packages/schedule
-      '@forge/server':
-        specifier: workspace:*
-        version: link:../packages/server
       '@forge/server-hono':
         specifier: workspace:*
         version: link:../packages/server-hono
       '@forge/storage':
         specifier: workspace:*
         version: link:../packages/storage
-      '@forge/support':
-        specifier: workspace:*
-        version: link:../packages/support
-      '@forge/validation':
-        specifier: workspace:*
-        version: link:../packages/validation
       '@photonjs/hono':
         specifier: ^0.1.12
         version: 0.1.12(@hono/node-server@1.19.9(hono@4.12.3))(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { Env } from '@forge/support'
+import { Env } from '@forge/core'
 import type { StorageConfig } from '@forge/storage'
 
 export default {

@@ -27,7 +27,7 @@ export type ${name} = z.infer<typeof ${name}OutputSchema>
 }
 
 function serviceStub(name: string): string {
-  return `import { Injectable } from '@forge/di'
+  return `import { Injectable } from '@forge/core'
 import type { ${name}Input, ${name} } from './${name}Schema.js'
 
 @Injectable()

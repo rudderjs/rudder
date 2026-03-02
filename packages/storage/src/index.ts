@@ -1,5 +1,5 @@
 import { ServiceProvider, artisan, type Application } from '@forge/core'
-import { resolveOptionalPeer } from '@forge/support'
+import { resolveOptionalPeer } from '@forge/core'
 import nodePath from 'node:path'
 import fs from 'node:fs/promises'
 

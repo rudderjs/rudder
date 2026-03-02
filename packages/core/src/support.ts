@@ -220,8 +220,6 @@ export function config<T = unknown>(key: string, fallback?: T): T {
 
 // ─── resolveOptionalPeer ───────────────────────────────────
 
-import { createRequire } from 'node:module'
-
 /**
  * Dynamically import an optional peer package that is installed in the
  * user's app (process.cwd()), not in the Forge framework package itself.
@@ -233,8 +231,11 @@ import { createRequire } from 'node:module'
  *
  * All optional peer packages must include `"default": "./dist/index.js"`
  * in their exports field so that the CJS resolver used here can find them.
+ *
+ * `node:module` is imported lazily so this file stays out of browser bundles.
  */
 export async function resolveOptionalPeer<T = Record<string, unknown>>(specifier: string): Promise<T> {
+  const { createRequire } = await import('node:module')
   const appRequire = createRequire(process.cwd() + '/package.json')
   const resolved   = appRequire.resolve(specifier)
   return import(/* @vite-ignore */ resolved) as Promise<T>
