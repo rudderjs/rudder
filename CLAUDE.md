@@ -63,8 +63,9 @@ forge/
 │   ├── di/             # DI container: Container, @Injectable, @Inject
 │   ├── middleware/     # Middleware base class, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
 │   ├── validation/     # FormRequest, validate(), validateWith(), ValidationError, z re-export
-│   ├── core/           # App bootstrapper, ServiceProvider, Forge, artisan registry
-│   │                   #   re-exports: di · support · contracts types
+│   ├── artisan/        # ArtisanRegistry, Command base class, parseSignature, artisan singleton
+│   ├── core/           # App bootstrapper, ServiceProvider, Forge, AppBuilder
+│   │                   #   re-exports: di · support · contracts types · artisan
 │   ├── router/         # Decorator routing + global router singleton
 │   ├── orm/            # ORM contract/interface + Model base class
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
@@ -103,7 +104,8 @@ forge/
 | `@forge/di` | ✅ Complete | Container, @Injectable, @Inject, reflect-metadata |
 | `@forge/middleware` | ✅ Complete | Middleware base class, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware, fromClass |
 | `@forge/validation` | ✅ Complete | FormRequest, validate(), validateWith(), ValidationError, z re-export |
-| `@forge/core` | ✅ Complete | Application, ServiceProvider, Forge, AppBuilder, artisan registry — re-exports di + support + contracts types |
+| `@forge/artisan` | ✅ Complete | ArtisanRegistry, Command base class, parseSignature, artisan singleton — no framework deps |
+| `@forge/core` | ✅ Complete | Application, ServiceProvider, Forge, AppBuilder — re-exports di + support + contracts types + artisan |
 | `@forge/server-hono` | ✅ Complete | Hono adapter, HonoConfig, unified logger, CORS |
 | `@forge/router` | ✅ Complete | Decorators + Router singleton, router.all() |
 | `@forge/queue` | ✅ Complete | Job, QueueAdapter interface, queue:work command |

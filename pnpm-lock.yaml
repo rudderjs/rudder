@@ -31,6 +31,19 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/artisan:
+    dependencies:
+      '@clack/prompts':
+        specifier: ^1.0.0
+        version: 1.0.1
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/auth:
     dependencies:
       '@forge/core':
@@ -97,6 +110,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.0.0
         version: 1.0.1
+      '@forge/artisan':
+        specifier: workspace:*
+        version: link:../artisan
       '@forge/core':
         specifier: workspace:*
         version: link:../core
@@ -143,9 +159,9 @@ importers:
 
   packages/core:
     dependencies:
-      '@clack/prompts':
-        specifier: ^1.0.0
-        version: 1.0.1
+      '@forge/artisan':
+        specifier: workspace:*
+        version: link:../artisan
       '@forge/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -500,6 +516,9 @@ importers:
 
   playground:
     dependencies:
+      '@forge/artisan':
+        specifier: workspace:*
+        version: link:../packages/artisan
       '@forge/auth-better-auth':
         specifier: workspace:*
         version: link:../packages/auth-better-auth

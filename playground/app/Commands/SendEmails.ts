@@ -1,4 +1,4 @@
-import { Command } from '@forge/core'
+import { Command } from '@forge/artisan'
 
 export class SendEmails extends Command {
   readonly signature   = 'mail:send {--force : Skip confirmation}'

@@ -1,4 +1,4 @@
-import { artisan } from '@forge/core'
+import { artisan } from '@forge/artisan'
 import { schedule } from '@forge/schedule'
 import { Cache } from '@forge/cache'
 import { User } from '../app/Models/User.js'

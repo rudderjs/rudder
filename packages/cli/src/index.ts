@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { makeCommand } from './commands/make.js'
 import { moduleCommand } from './commands/module.js'
-import { artisan, parseSignature } from '@forge/core'
+import { artisan, parseSignature } from '@forge/artisan'
 
 async function renderBanner(): Promise<void> {
   if (!process.stdout.isTTY) return
