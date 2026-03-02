@@ -12,6 +12,7 @@ import type {
 const CONTROLLER_PREFIX     = 'forge:controller:prefix'
 const CONTROLLER_MIDDLEWARE = 'forge:controller:middleware'
 const ROUTE_DEFINITIONS     = 'forge:route:definitions'
+const ROUTE_MIDDLEWARE      = 'forge:route:middleware'
 
 // ─── Route Meta (stored per method) ───────────────────────
 
@@ -35,7 +36,14 @@ export function Controller(prefix = ''): ClassDecorator {
 export function Middleware(middleware: MiddlewareHandler[]): ClassDecorator & MethodDecorator {
   return (target: any, key?: string | symbol) => {
     if (key) {
-      // Method-level middleware
+      // Method-level middleware (supports both decorator orders)
+      const perHandler: Record<string, MiddlewareHandler[]> =
+        Reflect.getMetadata(ROUTE_MIDDLEWARE, target) ?? {}
+      const handlerKey = String(key)
+      perHandler[handlerKey] = [...(perHandler[handlerKey] ?? []), ...middleware]
+      Reflect.defineMetadata(ROUTE_MIDDLEWARE, perHandler, target)
+
+      // If route metadata already exists, merge immediately too.
       const routes: RouteMeta[] = Reflect.getMetadata(ROUTE_DEFINITIONS, target) ?? []
       const route = routes.find(r => r.handlerKey === key)
       if (route) route.middleware = [...middleware, ...route.middleware]
@@ -50,9 +58,13 @@ export function Middleware(middleware: MiddlewareHandler[]): ClassDecorator & Me
 function createMethodDecorator(method: HttpMethod) {
   return (path = '/'): MethodDecorator =>
     (target, key) => {
+      const perHandler: Record<string, MiddlewareHandler[]> =
+        Reflect.getMetadata(ROUTE_MIDDLEWARE, target) ?? {}
+      const handlerMiddleware = perHandler[String(key)] ?? []
+
       const routes: RouteMeta[] =
         Reflect.getMetadata(ROUTE_DEFINITIONS, target) ?? []
-      routes.push({ method, path, handlerKey: key, middleware: [] })
+      routes.push({ method, path, handlerKey: key, middleware: [...handlerMiddleware] })
       Reflect.defineMetadata(ROUTE_DEFINITIONS, routes, target)
     }
 }
