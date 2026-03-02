@@ -412,6 +412,9 @@ importers:
       '@forge/orm-prisma':
         specifier: workspace:*
         version: link:../packages/orm-prisma
+      '@forge/queue':
+        specifier: workspace:*
+        version: link:../packages/queue
       '@forge/router':
         specifier: workspace:*
         version: link:../packages/router

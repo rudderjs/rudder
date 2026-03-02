@@ -1,13 +1,15 @@
 import { redirect } from 'vike/abort'
-import { app } from '@forge/core'
-import type { BetterAuthInstance } from '@forge/auth-better-auth'
 import type { GuardAsync } from 'vike/types'
+import type { BetterAuthInstance } from '@forge/auth-better-auth'
 
 export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
-  if (!pageContext.headers) return  // client-side navigation: skip (app() is server-only)
+  // import.meta.env.SSR is a Vite compile-time constant — this entire block is
+  // tree-shaken from the client bundle, keeping @forge/core server-only.
+  if (!import.meta.env.SSR) return
+  const { app } = await import('@forge/core')
   const auth    = app().make<BetterAuthInstance>('auth')
   const session = await auth.api.getSession({
-    headers: new Headers(pageContext.headers),
+    headers: new Headers(pageContext.headers ?? {}),
   })
   if (session?.user) throw redirect('/')
 }

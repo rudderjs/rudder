@@ -15,6 +15,8 @@ export interface BetterAuthConfig {
   emailAndPassword?: { enabled?: boolean; requireEmailVerification?: boolean }
   socialProviders?: Record<string, { clientId: string; clientSecret: string }>
   trustedOrigins?: string[]
+  /** Called after a new user is successfully created — ideal for dispatching jobs or events */
+  onUserCreated?: (user: { id: string; name: string; email: string }) => void | Promise<void>
 }
 
 /**
@@ -57,6 +59,17 @@ export function betterAuth(config: BetterAuthConfig): new (app: Application) => 
         },
         ...(config.socialProviders && { socialProviders: config.socialProviders }),
         ...(config.trustedOrigins  && { trustedOrigins:  config.trustedOrigins  }),
+        ...(config.onUserCreated && {
+          databaseHooks: {
+            user: {
+              create: {
+                after: async (user: { id: string; name: string; email: string }) => {
+                  await config.onUserCreated!(user)
+                },
+              },
+            },
+          },
+        }),
       })
 
       // Bind into DI container

@@ -1,5 +1,6 @@
 import { Env } from '@forge/support'
 import type { BetterAuthConfig } from '@forge/auth-better-auth'
+import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
 
 async function createDatabase(): Promise<unknown> {
   const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as any
@@ -18,4 +19,8 @@ export default {
   database:         _prisma,
   databaseProvider: 'sqlite' as const,
   emailAndPassword: { enabled: true },
+
+  onUserCreated: async (user) => {
+    await WelcomeUserJob.dispatch(user.name, user.email).send()
+  },
 } satisfies BetterAuthConfig

@@ -1,7 +1,7 @@
 import { Env } from '@forge/support'
 
 export default {
-  default: Env.get('QUEUE_CONNECTION', 'sync'),
+  default: Env.get('QUEUE_CONNECTION', 'inngest'),
 
   connections: {
     sync: {

@@ -1,3 +1,5 @@
+import { ServiceProvider, type Application } from '@forge/core'
+
 // ─── Job Contract ──────────────────────────────────────────
 
 export abstract class Job {
@@ -95,4 +97,80 @@ export class QueueRegistry {
   static get(): QueueAdapter | null {
     return this.adapter
   }
+}
+
+// ─── Sync Adapter ──────────────────────────────────────────
+
+class SyncAdapter implements QueueAdapter {
+  async dispatch(job: Job): Promise<void> {
+    try {
+      await job.handle()
+    } catch (error) {
+      job.failed?.(error)
+      throw error
+    }
+  }
+}
+
+// ─── Queue Config ──────────────────────────────────────────
+
+export interface QueueConnectionConfig {
+  driver: string
+  [key: string]: unknown
+}
+
+export interface QueueConfig {
+  /** The default connection name (e.g. 'sync', 'inngest', 'bullmq') */
+  default: string
+  /** Named connections — must have at least one matching `default` */
+  connections: Record<string, QueueConnectionConfig>
+}
+
+// ─── Service Provider Factory ──────────────────────────────
+
+/**
+ * Returns a QueueServiceProvider class configured for the given queue config.
+ * Reads `config.default` to pick the driver, then boots the matching adapter.
+ *
+ * Built-in drivers:  sync
+ * Plugin drivers:    inngest (@forge/queue-inngest), bullmq (@forge/queue-bullmq)
+ *
+ * Usage in bootstrap/providers.ts:
+ *   import { queue } from '@forge/queue'
+ *   import configs from '../config/index.js'
+ *   export default [..., queue(configs.queue), ...]
+ */
+export function queue(config: QueueConfig): new (app: Application) => ServiceProvider {
+  class QueueServiceProvider extends ServiceProvider {
+    register(): void {}
+
+    async boot(): Promise<void> {
+      const connectionName   = config.default
+      const connectionConfig = config.connections[connectionName] ?? { driver: 'sync' }
+      const driver           = connectionConfig['driver'] as string
+
+      let adapter: QueueAdapter
+
+      if (driver === 'sync') {
+        adapter = new SyncAdapter()
+      } else if (driver === 'inngest') {
+        // @ts-ignore — @forge/queue-inngest is an optional peer; loaded at runtime when driver=inngest
+        const { inngest } = await import('@forge/queue-inngest') as any
+        adapter = (inngest as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
+      } else if (driver === 'bullmq') {
+        // @ts-ignore — @forge/queue-bullmq is an optional peer; loaded at runtime when driver=bullmq
+        const { bullmq } = await import('@forge/queue-bullmq') as any
+        adapter = (bullmq as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
+      } else {
+        throw new Error(`[Forge Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
+      }
+
+      QueueRegistry.set(adapter)
+      this.app.instance('queue', adapter)
+
+      console.log(`[QueueServiceProvider] booted — driver: ${driver}`)
+    }
+  }
+
+  return QueueServiceProvider
 }
