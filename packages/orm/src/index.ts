@@ -134,20 +134,21 @@ export interface OrmAdapterProvider {
 // ─── Global ORM Registry ───────────────────────────────────
 
 export class ModelRegistry {
-  private static adapter: OrmAdapter | null = null
+  private static readonly _key = '__forge_orm_adapter__'
 
   static set(adapter: OrmAdapter): void {
-    this.adapter = adapter
+    (globalThis as Record<string, unknown>)[ModelRegistry._key] = adapter
   }
 
   static get(): OrmAdapter | null {
-    return this.adapter
+    return ((globalThis as Record<string, unknown>)[ModelRegistry._key] as OrmAdapter | undefined) ?? null
   }
 
   static getAdapter(): OrmAdapter {
-    if (!this.adapter) {
+    const adapter = this.get()
+    if (!adapter) {
       throw new Error('[Forge ORM] No ORM adapter registered. Did you configure one in forge.config.ts?')
     }
-    return this.adapter
+    return adapter
   }
 }
