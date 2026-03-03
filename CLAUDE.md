@@ -69,7 +69,7 @@ forge/
 │   ├── router/         # Decorator routing + global router singleton
 │   ├── orm/            # ORM contract/interface + Model base class
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
-│   ├── orm-drizzle/    # Drizzle adapter (stub)
+│   ├── orm-drizzle/    # Drizzle adapter (multi-driver: sqlite, postgresql, libsql)
 │   ├── queue/          # Queue contract/interface + queue:work artisan command
 │   ├── queue-inngest/  # Inngest adapter
 │   ├── queue-bullmq/   # BullMQ adapter ✅
@@ -127,7 +127,7 @@ forge/
 | `@forge/rate-limit` | ✅ Complete | Cache-backed rate limiting — RateLimit.perMinute/Hour/Day, X-RateLimit-* headers |
 | `create-forge-app` | ✅ Complete | Interactive CLI scaffolder — project name, db driver, Todo module option |
 | `@forge/notification` | ✅ Complete | Multi-channel notifications (mail, database) — Notifiable, Notification, ChannelRegistry, notify() |
-| `@forge/orm-drizzle` | 📋 Planned | Drizzle adapter |
+| `@forge/orm-drizzle` | ✅ Complete | Drizzle adapter — multi-driver (sqlite, postgresql, libsql), DrizzleTableRegistry |
 
 ---
 
