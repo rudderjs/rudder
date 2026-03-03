@@ -2,10 +2,21 @@ import path from 'path'
 import { defineConfig } from 'vite'
 import vike from 'vike/plugin'
 import react from '@vitejs/plugin-react'
+import vue from '@vitejs/plugin-vue'
+import vikeSolid from 'vike-solid/vite'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [vike(), react(), tailwindcss()],
+  plugins: [
+    vike(),
+    // React: handles all .tsx/.jsx except the solid-demo page directory
+    react({ exclude: ['**/pages/solid-demo/**'] }),
+    // Vue: handles .vue files — no JSX conflict
+    vue(),
+    // Solid: scoped to the solid-demo page directory only to avoid JSX conflict with React
+    vikeSolid({ include: ['**/pages/solid-demo/**'] }),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
