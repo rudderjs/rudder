@@ -56,7 +56,7 @@ pnpm artisan db:seed            # Seed via artisan command
 ## Monorepo Layout
 
 ```
-forge/
+boostkit/
 ├── packages/           # Core framework packages (@boostkit/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
