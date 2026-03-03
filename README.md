@@ -67,6 +67,7 @@ pnpm dev
 import 'reflect-metadata'
 import { Application } from '@boostkit/core'
 import { hono } from '@boostkit/server-hono'
+import { RateLimit } from '@boostkit/middleware'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
