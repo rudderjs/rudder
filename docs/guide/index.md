@@ -29,11 +29,16 @@ Forge uses [Vike](https://vike.dev) as its SSR/routing layer, which means you ca
 
 ### WinterCG-Compatible Runtime
 
-Every Forge app exports a standard [WinterCG Fetch handler](https://wintercg.org/):
+Forge exposes a standard [WinterCG Fetch handler](https://wintercg.org/) through `bootstrap/app.ts`. Vike's `vike-photon` plugin wires it directly as the SSR server — no separate entry file needed:
 
 ```ts
-// src/index.ts
-export default { fetch: forge.handleRequest }
+// pages/+config.ts
+import vikePhoton from 'vike-photon/config'
+
+export default {
+  extends: [vikePhoton],
+  photon: { server: 'bootstrap/app.ts' },
+}
 ```
 
 This means you can deploy to Node.js, Cloudflare Workers, Deno Deploy, Bun, or any runtime that speaks the Fetch API.

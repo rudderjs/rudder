@@ -64,9 +64,10 @@ pnpm add @forge/orm @forge/orm-drizzle drizzle-orm better-sqlite3
 
 ### 3. Bootstrap the application
 
-Create `bootstrap/app.ts`:
+Create `bootstrap/app.ts`. This is both the bootstrap file **and** the application entry point — `import 'reflect-metadata'` goes here:
 
 ```ts
+import 'reflect-metadata'
 import { Application } from '@forge/core'
 import { hono } from '@forge/server-hono'
 import providers from './providers.js'
@@ -98,16 +99,23 @@ export default [
 ]
 ```
 
-### 4. Entry point
+### 4. Wire Vike to the app
 
-Create `src/index.ts`:
+Create `pages/+config.ts` to point Vike's `vike-photon` plugin at `bootstrap/app.ts`:
 
 ```ts
-import 'reflect-metadata'
-import forge from '../bootstrap/app.js'
+import type { Config } from 'vike/types'
+import vikePhoton from 'vike-photon/config'
 
-export default { fetch: forge.handleRequest }
+export default {
+  extends: [vikePhoton],
+  photon: {
+    server: 'bootstrap/app.ts',
+  },
+} as unknown as Config
 ```
+
+This is the only wiring needed — `vike-photon` consumes the exported `Forge` instance directly as the HTTP server.
 
 ### 5. Config files
 
@@ -135,6 +143,14 @@ export { default as server } from './server.js'
 ```
 
 ### 6. Vite config
+
+Install `vike-photon`:
+
+```bash
+pnpm add vike-photon vike
+```
+
+
 
 Create `vite.config.ts`:
 

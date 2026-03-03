@@ -39,8 +39,6 @@ my-app/
 │   └── +config.ts          # Vike renderer config
 ├── prisma/
 │   └── schema.prisma       # Prisma schema — models, relations, datasource
-├── src/
-│   └── index.ts            # WinterCG entry: export default { fetch: forge.handleRequest }
 ├── .env                    # Secrets and environment-specific values
 ├── .env.example            # Template for team members
 ├── package.json
@@ -100,16 +98,24 @@ Vike file-based SSR pages. Files named `+Page.tsx` are rendered at the correspon
 
 Contains `schema.prisma`. Run `pnpm exec prisma generate` after any schema change. SQLite is the default datasource in development.
 
-### `src/index.ts`
+### `bootstrap/app.ts` — The Entry Point
 
-The WinterCG-compatible HTTP entry point. This file must import `reflect-metadata` once before anything else:
+`bootstrap/app.ts` is both the bootstrap and the HTTP entry point. It must have `import 'reflect-metadata'` at the top, and it `export default`s the `Forge` instance returned by `.create()`.
+
+`pages/+config.ts` wires Vike to use it via `vike-photon`:
 
 ```ts
-import 'reflect-metadata'
-import forge from '../bootstrap/app.js'
+// pages/+config.ts
+import type { Config } from 'vike/types'
+import vikePhoton from 'vike-photon/config'
 
-export default { fetch: forge.handleRequest }
+export default {
+  extends: [vikePhoton],
+  photon: { server: 'bootstrap/app.ts' },
+} as unknown as Config
 ```
+
+No separate `src/index.ts` is needed — `vike-photon` consumes the `Forge` instance directly.
 
 ## Module Structure (optional)
 

@@ -1,21 +1,35 @@
 # Deployment
 
-Forge apps export a standard WinterCG Fetch handler, making them deployable to any runtime that supports the Fetch API — Node.js, Cloudflare Workers, Bun, or Deno.
+Forge apps use `vike-photon` to wire `bootstrap/app.ts` as the HTTP server, making them deployable to any runtime that supports the Fetch API — Node.js, Cloudflare Workers, Bun, or Deno.
 
 ## Entry Point
 
-Your `src/index.ts` is the deployment entry point:
+`bootstrap/app.ts` is the entry point. It exports the `Forge` instance, which `vike-photon` uses as the HTTP server:
 
 ```ts
+// bootstrap/app.ts
 import 'reflect-metadata'
-import forge from '../bootstrap/app.js'
+import { Application } from '@forge/core'
+import { hono } from '@forge/server-hono'
+// ...
 
-export default { fetch: forge.handleRequest }
+export default Application.configure({ ... }).create()
 ```
 
-The `handleRequest` method:
+```ts
+// pages/+config.ts
+import type { Config } from 'vike/types'
+import vikePhoton from 'vike-photon/config'
+
+export default {
+  extends: [vikePhoton],
+  photon: { server: 'bootstrap/app.ts' },
+} as unknown as Config
+```
+
+`forge.handleRequest`:
 - Lazily bootstraps providers on the first request
-- Handles the request via the Hono adapter
+- Handles requests via the Hono adapter
 - Returns a standard `Response`
 
 ## Node.js
@@ -31,13 +45,7 @@ pnpm build       # Compile TypeScript → dist/
 ### Start the server
 
 ```bash
-node dist/src/index.js
-```
-
-Or use the built Vite/Vike SSR server:
-
-```bash
-pnpm build && node dist/server/index.js
+node dist/server/index.js
 ```
 
 ### Environment Variables

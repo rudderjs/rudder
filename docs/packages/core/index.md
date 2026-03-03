@@ -38,11 +38,17 @@ export default Application.configure({
 ```
 
 ```ts
-// src/index.ts  (WinterCG entry point)
-import forge from '../bootstrap/app.js'
+// pages/+config.ts  (wires Vike to the Forge instance)
+import type { Config } from 'vike/types'
+import vikePhoton from 'vike-photon/config'
 
-export default { fetch: forge.handleRequest }
+export default {
+  extends: [vikePhoton],
+  photon: { server: 'bootstrap/app.ts' },
+} as unknown as Config
 ```
+
+`bootstrap/app.ts` is the entry point — `import 'reflect-metadata'` belongs at the top of that file, not in a separate `src/index.ts`.
 
 ---
 

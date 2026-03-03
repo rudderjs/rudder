@@ -171,7 +171,7 @@ export default Application.configure({
 ```
 
 The `Forge` instance is the app entry point:
-- `forge.handleRequest(request)` — lazy-bootstraps on first HTTP request (used by `src/index.ts`)
+- `forge.handleRequest(request)` — lazy-bootstraps on first HTTP request (consumed by `vike-photon` via `pages/+config.ts`)
 - `forge.boot()` — bootstraps providers without starting HTTP (used by CLI)
 
 #### `@forge/core` subpath exports
@@ -332,8 +332,6 @@ playground/
 ├── pages/              # Vike file-based routing (SSR pages)
 ├── prisma/
 │   └── schema.prisma   # Prisma schema (SQLite by default) — includes better-auth tables
-├── src/
-│   └── index.ts        # WinterCG entry: export default { fetch: forge.handleRequest }
 ├── .env                # DATABASE_URL, PORT, APP_*, AUTH_SECRET vars
 └── vite.config.ts      # Vite + Vike + React config
 ```
