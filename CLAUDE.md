@@ -101,8 +101,8 @@ boostkit/
 │   ├── storage/        # Storage facade, LocalAdapter + S3Adapter (built-in)
 │   │                   #   S3 driver requires optional dep: @aws-sdk/client-s3
 │   ├── schedule/       # Task scheduler — schedule singleton, scheduler() factory
-│   ├── cache/          # Cache facade, MemoryAdapter (built-in), cache() factory
-│   ├── cache-redis/    # Redis adapter via ioredis (optional peer)
+│   ├── cache/          # Cache facade, MemoryAdapter + RedisAdapter (built-in)
+│   │                   #   Redis driver requires optional dep: ioredis
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper
 │   ├── mail/           # Mailable, Mail facade, LogAdapter, mail() factory
 │   ├── mail-nodemailer/ # Nodemailer SMTP adapter
@@ -138,8 +138,7 @@ boostkit/
 | `@boostkit/auth` | 0.0.1 | AuthUser/Session/Result types + betterAuth() factory (merged from auth-better-auth) |
 | `@boostkit/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
 | `@boostkit/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
-| `@boostkit/cache` | 0.0.1 | Cache facade, MemoryAdapter, cache() factory |
-| `@boostkit/cache-redis` | 0.0.1 | Redis adapter via ioredis |
+| `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
 | `@boostkit/events` | 0.0.1 | EventDispatcher, Listener, dispatch(), events() factory |
 | `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter, mail() factory |
 | `@boostkit/mail-nodemailer` | 0.0.1 | Nodemailer SMTP adapter |
@@ -149,6 +148,7 @@ boostkit/
 - `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
 - `@boostkit/rate-limit` → merged into `@boostkit/middleware`
 - `@boostkit/storage-s3` → merged into `@boostkit/storage`
+- `@boostkit/cache-redis` → merged into `@boostkit/cache`
 
 ---
 
@@ -169,8 +169,8 @@ boostkit/
 @boostkit/core        (Application, ServiceProvider, bootstrap)
        │
 @boostkit/orm    @boostkit/queue    @boostkit/cache    @boostkit/storage
-       │              │                  │                   │
- orm-prisma      queue-bullmq       cache-redis          (s3 built-in)
+       │              │              (redis built-in)   (s3 built-in)
+ orm-prisma      queue-bullmq
  orm-drizzle     queue-inngest
        │
 @boostkit/auth   @boostkit/events   @boostkit/mail   @boostkit/schedule

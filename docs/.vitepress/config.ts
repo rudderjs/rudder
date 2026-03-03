@@ -100,7 +100,7 @@ export default defineConfig({
           text: 'Cache',
           items: [
             { text: '@boostkit/cache', link: '/packages/cache/' },
-            { text: '@boostkit/cache-redis', link: '/packages/cache/redis' },
+            { text: 'Redis Driver', link: '/packages/cache/redis' },
           ],
         },
         {

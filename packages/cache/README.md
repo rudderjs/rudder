@@ -44,5 +44,4 @@ const count = await Cache.get<number>('users:count')
 
 ## Notes
 
-- Built-in driver: `memory`.
-- Plugin driver supported by factory: `redis` (via `@boostkit/cache-redis`).
+- Built-in drivers: `memory` (in-process) and `redis` (requires `ioredis`: `pnpm add ioredis`).

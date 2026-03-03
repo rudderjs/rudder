@@ -75,8 +75,8 @@ BoostKit is structured as a clean DAG — no circular dependencies:
 @boostkit/core        (Application, ServiceProvider, bootstrap)
        │
 @boostkit/orm         @boostkit/queue    @boostkit/cache    @boostkit/storage
-       │                │               │               │
- orm-prisma        queue-bullmq    cache-redis      storage-s3
+       │                │            (redis built-in)  (s3 built-in)
+ orm-prisma        queue-bullmq
  orm-drizzle       queue-inngest
        │
 @boostkit/auth   @boostkit/events   @boostkit/mail   @boostkit/schedule   @boostkit/middleware

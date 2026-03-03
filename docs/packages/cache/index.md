@@ -117,7 +117,7 @@ Each store entry must include a `driver` field. Additional fields depend on the 
   driver: 'memory'
 }
 
-// Redis store (requires @boostkit/cache-redis)
+// Redis store (requires ioredis: pnpm add ioredis)
 {
   driver: 'redis',
   host: 'localhost',
@@ -150,7 +150,7 @@ The default built-in driver. Stores values in an in-process `Map`. Data does not
 
 ## Redis Driver
 
-For Redis-backed caching, install and configure `@boostkit/cache-redis`. See the [Redis adapter docs](./redis).
+For Redis-backed caching, install `ioredis` and set `driver: 'redis'`. See the [Redis driver docs](./redis).
 
 ## Notes
 
