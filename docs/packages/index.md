@@ -12,12 +12,14 @@ All `@forge/*` packages are published to npm individually. Install only what you
 | [@forge/middleware](./core/middleware) | HTTP middleware base class, pipeline runner, and built-in implementations. | `pnpm add @forge/middleware` |
 | [@forge/validation](./core/validation) | Zod-powered request validation with FormRequest and middleware helpers. | `pnpm add @forge/validation` |
 | [@forge/artisan](./artisan) | CLI registry, Command base class, and the global `artisan` singleton. | `pnpm add @forge/artisan` |
+| [@forge/cli](/cli/) | Code generators (`make:*`, `make:module`) and artisan command dispatcher. Install as a dev dependency. | `pnpm add -D @forge/cli` |
 | [@forge/core](./core/) | Application bootstrap, service provider lifecycle, and framework-level runtime orchestration. | `pnpm add @forge/core` |
 
 ## Server
 
 | Package | Description | Install |
 |---|---|---|
+| [@forge/router](./server/router) | Fluent HTTP router and decorator-based controller support — the global `router` singleton. | `pnpm add @forge/router` |
 | [@forge/server-hono](./server/hono) | Hono-based HTTP server adapter with unified request logging and CORS support. | `pnpm add @forge/server-hono` |
 
 ## ORM

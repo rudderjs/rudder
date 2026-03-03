@@ -69,6 +69,7 @@ export default defineConfig({
         {
           text: 'Server',
           items: [
+            { text: '@forge/router', link: '/packages/server/router' },
             { text: '@forge/server-hono', link: '/packages/server/hono' },
           ],
         },
