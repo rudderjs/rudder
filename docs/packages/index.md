@@ -49,8 +49,7 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 
 | Package | Description | Install |
 |---|---|---|
-| [@boostkit/cache](./cache/) | Cache facade, built-in MemoryAdapter, and `cache()` factory. | `pnpm add @boostkit/cache` |
-| [@boostkit/cache-redis](./cache/redis) | Redis cache adapter via ioredis — optional peer for the `redis` driver. | `pnpm add @boostkit/cache-redis` |
+| [@boostkit/cache](./cache/) | Cache facade, built-in MemoryAdapter, and `cache()` factory. Redis driver built-in (requires `ioredis`). | `pnpm add @boostkit/cache` |
 
 ## Storage
 

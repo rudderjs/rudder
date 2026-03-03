@@ -1,16 +1,16 @@
-# @boostkit/cache-redis
+# Redis Driver
 
-Redis cache adapter for `@boostkit/cache` using ioredis.
+Redis cache adapter built into `@boostkit/cache` via ioredis.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/cache-redis ioredis
+pnpm add ioredis
 ```
 
 ## Setup
 
-Add a `redis` store to your cache configuration and set `default` (or add it alongside other stores):
+Add a `redis` store to your cache configuration:
 
 ```ts
 // config/cache.ts
@@ -34,7 +34,7 @@ export default {
 } satisfies CacheConfig
 ```
 
-No changes are needed in `bootstrap/providers.ts` — `@boostkit/cache` dynamically loads the `redis` driver when it sees `driver: 'redis'` in a store config.
+No changes are needed in `bootstrap/providers.ts` — `@boostkit/cache` automatically uses the Redis driver when it sees `driver: 'redis'` in a store config.
 
 ## Configuration
 
@@ -50,21 +50,9 @@ No changes are needed in `bootstrap/providers.ts` — `@boostkit/cache` dynamica
 | `url`      | `string?` | Full Redis connection URL (e.g. `redis://:<password>@host:6379/0`). Takes priority over `host`/`port` when provided. |
 | `prefix`   | `string?` | Key prefix applied to all cache keys. Useful for namespacing in shared Redis instances. |
 
-## `redis(config)`
-
-`redis(config)` returns a `CacheAdapterProvider` that registers the Redis adapter under the `'redis'` driver name — matching the key `@boostkit/cache` uses for dynamic loading.
-
-```ts
-import { redis } from '@boostkit/cache-redis'
-
-// Returned provider is registered automatically via @boostkit/cache dynamic loading.
-// You do not need to add it to bootstrap/providers.ts manually.
-const provider = redis(storeConfig)
-```
-
 ## Notes
 
-- The adapter is exported as `'redis'` to match the driver name `@boostkit/cache` uses for dynamic loading — no manual provider registration is required.
 - Set a `prefix` to namespace keys when sharing a Redis instance across multiple applications or environments.
 - When `url` is provided it takes priority over individual `host`, `port`, `password`, and `db` fields.
 - The underlying ioredis client handles reconnection automatically.
+- In a multi-process or multi-instance deployment, use the Redis driver so counters are shared across instances (important for rate limiting).

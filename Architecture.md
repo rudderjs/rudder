@@ -60,8 +60,8 @@ boostkit/
 │   │                       #   (merged from auth-better-auth — single package)
 │   ├── storage/            # Storage facade, LocalAdapter + S3Adapter (built-in)
 │   │                       #   S3 driver needs optional dep: @aws-sdk/client-s3
-│   ├── cache/              # Cache facade, MemoryAdapter, cache() factory
-│   ├── cache-redis/        # Redis adapter via ioredis
+│   ├── cache/              # Cache facade, MemoryAdapter + RedisAdapter (built-in)
+│   │                       #   Redis driver needs optional dep: ioredis
 │   ├── events/             # EventDispatcher, Listener interface, dispatch() helper
 │   ├── mail/               # Mailable, Mail facade, LogAdapter, mail() factory
 │   ├── mail-nodemailer/    # Nodemailer SMTP adapter
@@ -168,7 +168,7 @@ Level 1 (parallel — no framework deps):
     @boostkit/schedule    @boostkit/auth        @boostkit/validation
            │
     orm-prisma   queue-bullmq   queue-inngest
-    cache-redis  mail-nodemailer
+    mail-nodemailer
 ```
 
 **Clean DAG — no cycles**: `@boostkit/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@boostkit/router` and `@boostkit/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@boostkit/core` lists `@boostkit/router` as a regular dependency and imports it with a plain `await import('@boostkit/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
@@ -447,7 +447,7 @@ await cache().forget('key')
 await cache().remember('key', 60, () => expensiveQuery())
 ```
 
-Drivers: `memory` (built-in, default) and `redis` (via `@boostkit/cache-redis` optional peer).
+Drivers: `memory` (built-in, default) and `redis` (built-in — install `ioredis` to use Redis).
 
 ---
 
@@ -574,7 +574,7 @@ pnpm artisan db:seed
 
 ### Optional Peer Packages
 
-Packages like `@boostkit/queue-bullmq`, `@boostkit/cache-redis`, `@boostkit/mail-nodemailer` are **optional peers** — the user installs only what they need.
+Packages like `@boostkit/queue-bullmq`, `@boostkit/mail-nodemailer` are **optional peers** — the user installs only what they need.
 
 They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@boostkit/core/support`. This helper:
 1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@boostkit/*`

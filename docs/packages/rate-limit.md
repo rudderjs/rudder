@@ -163,4 +163,4 @@ The `message` field reflects the value set via `.message()`, or the default show
 - `@boostkit/cache` must be registered in `bootstrap/providers.ts` before rate limiting middleware is applied. The rate limiter uses the default cache store to track counters.
 - Static assets and Vite internals (HMR, `/@vite/`, `/__vite_ping`) are automatically excluded from rate limiting.
 - Counters are stored with a TTL matching the window duration — they expire automatically without manual cleanup.
-- In a multi-process or multi-instance deployment, use `@boostkit/cache-redis` as the cache backend so counters are shared across instances.
+- In a multi-process or multi-instance deployment, use the `redis` cache driver (`pnpm add ioredis`) so rate limit counters are shared across instances.
