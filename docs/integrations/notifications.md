@@ -133,8 +133,8 @@ router.get('/api/me/notifications', async (req, res) => {
   const userId = (req as any).user.id
   const notifications = await User.getAdapter().query('notification')
     .where('notifiable_id', userId)
-    .where('notifiable_type', 'user')
-    .orderBy('created_at', 'desc')
+    .where('notifiable_type', 'users')
+    .orderBy('created_at', 'DESC')
     .get()
 
   return res.json({ data: notifications })
