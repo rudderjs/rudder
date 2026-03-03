@@ -68,12 +68,30 @@ export interface DispatchOptions {
   queue?: string
 }
 
+export interface QueueStats {
+  waiting:   number
+  active:    number
+  completed: number
+  failed:    number
+  delayed:   number
+  paused:    number
+}
+
+export interface FailedJobInfo {
+  id:       string
+  name:     string
+  data:     unknown
+  error:    string
+  failedAt: Date
+  attempts: number
+}
+
 export interface QueueAdapter {
   /** Dispatch a job */
   dispatch(job: Job, options?: DispatchOptions): Promise<void>
 
-  /** Start processing jobs (for self-hosted adapters like BullMQ) */
-  work?(queue?: string): Promise<void>
+  /** Start processing jobs (for self-hosted adapters like BullMQ) — comma-separated queue names */
+  work?(queues?: string): Promise<void>
 
   /**
    * For cloud adapters (Inngest etc.): returns the serve handler for the
@@ -81,6 +99,21 @@ export interface QueueAdapter {
    * The returned function receives the framework-native context (Hono Context).
    */
   serveHandler?(): (ctx: unknown) => Promise<Response>
+
+  /** Return waiting/active/completed/failed/delayed/paused counts for a queue */
+  status?(queueName?: string): Promise<QueueStats>
+
+  /** Drain waiting + delayed jobs from a queue */
+  flush?(queueName?: string): Promise<void>
+
+  /** List recently failed jobs */
+  failures?(queueName?: string, limit?: number): Promise<FailedJobInfo[]>
+
+  /** Re-enqueue all failed jobs, returns count */
+  retryFailed?(queueName?: string): Promise<number>
+
+  /** Close queue connections */
+  disconnect?(): Promise<void>
 }
 
 // ─── Queue Adapter Factory ─────────────────────────────────
@@ -182,9 +215,67 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
           console.error(`[Forge Queue] Switch to "bullmq" in config/queue.ts and set QUEUE_CONNECTION=bullmq in .env.`)
           process.exit(1)
         }
+        const queues = args[0] ?? 'default'
+        await adapter.work(queues)
+      }).description('Start a queue worker — pnpm artisan queue:work [queues=default]')
+
+      artisan.command('queue:status', async (args) => {
+        if (typeof adapter.status !== 'function') {
+          console.error(`[Forge Queue] Driver "${driver}" does not support queue status.`)
+          process.exit(1)
+        }
         const queueName = args[0] ?? 'default'
-        await adapter.work(queueName)
-      }).description('Start a queue worker — pnpm artisan queue:work [queue=default]')
+        const stats = await adapter.status(queueName)
+        console.log(`\nQueue: ${queueName}`)
+        console.log(`  Waiting:   ${stats.waiting}`)
+        console.log(`  Active:    ${stats.active}`)
+        console.log(`  Completed: ${stats.completed}`)
+        console.log(`  Failed:    ${stats.failed}`)
+        console.log(`  Delayed:   ${stats.delayed}`)
+        console.log(`  Paused:    ${stats.paused}\n`)
+      }).description('Show queue stats — pnpm artisan queue:status [queue=default]')
+
+      artisan.command('queue:clear', async (args) => {
+        if (typeof adapter.flush !== 'function') {
+          console.error(`[Forge Queue] Driver "${driver}" does not support queue:clear.`)
+          process.exit(1)
+        }
+        const queueName = args[0] ?? 'default'
+        await adapter.flush(queueName)
+        console.log(`[Forge Queue] Queue "${queueName}" cleared (waiting + delayed jobs removed).`)
+      }).description('Drain waiting + delayed jobs — pnpm artisan queue:clear [queue=default]')
+
+      artisan.command('queue:failed', async (args) => {
+        if (typeof adapter.failures !== 'function') {
+          console.error(`[Forge Queue] Driver "${driver}" does not support queue:failed.`)
+          process.exit(1)
+        }
+        const queueName = args[0] ?? 'default'
+        const jobs = await adapter.failures(queueName)
+        if (jobs.length === 0) {
+          console.log(`[Forge Queue] No failed jobs in queue "${queueName}".`)
+          return
+        }
+        console.log(`\nFailed jobs in queue "${queueName}" (${jobs.length}):\n`)
+        for (const job of jobs) {
+          console.log(`  ID:       ${job.id}`)
+          console.log(`  Name:     ${job.name}`)
+          console.log(`  Error:    ${job.error}`)
+          console.log(`  Attempts: ${job.attempts}`)
+          console.log(`  Failed:   ${job.failedAt.toISOString()}`)
+          console.log()
+        }
+      }).description('List failed jobs — pnpm artisan queue:failed [queue=default]')
+
+      artisan.command('queue:retry', async (args) => {
+        if (typeof adapter.retryFailed !== 'function') {
+          console.error(`[Forge Queue] Driver "${driver}" does not support queue:retry.`)
+          process.exit(1)
+        }
+        const queueName = args[0] ?? 'default'
+        const count = await adapter.retryFailed(queueName)
+        console.log(`[Forge Queue] Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
+      }).description('Retry all failed jobs — pnpm artisan queue:retry [queue=default]')
 
       // Cloud adapters (Inngest etc.) expose a serve endpoint.
       // Mount it automatically — no user config needed.
