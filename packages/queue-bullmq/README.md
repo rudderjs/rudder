@@ -16,7 +16,7 @@ import { bullmq } from '@boostkit/queue-bullmq'
 const provider = bullmq({
   host: '127.0.0.1',
   port: 6379,
-  prefix: 'forge',
+  prefix: 'boostkit',
   jobs: [],
 })
 

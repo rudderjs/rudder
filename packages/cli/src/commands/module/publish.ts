@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import type { Command } from 'commander'
 import { intro, outro, spinner, log } from '@clack/prompts'
 
-const MARKERS_RE = /\/\/ <forge:modules:start>[\s\S]*?\/\/ <forge:modules:end>/m
+const MARKERS_RE = /\/\/ <boostkit:modules:start>[\s\S]*?\/\/ <boostkit:modules:end>/m
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ function buildMergedBlock(shards: Array<{ module: string; file: string; content:
     .map(s => `// module: ${s.module} (${s.file})\n${s.content.trim()}`)
     .join('\n\n')
 
-  return `// <forge:modules:start>\n${inner}\n// <forge:modules:end>`
+  return `// <boostkit:modules:start>\n${inner}\n// <boostkit:modules:end>`
 }
 
 function runCommand(cmd: string, args: string[], cwd: string): Promise<void> {

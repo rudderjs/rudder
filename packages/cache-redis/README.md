@@ -17,7 +17,7 @@ const provider = redis({
   driver: 'redis',
   host: '127.0.0.1',
   port: 6379,
-  prefix: 'forge:',
+  prefix: 'boostkit:',
 })
 
 const adapter = provider.create()

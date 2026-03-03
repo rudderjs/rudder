@@ -1,6 +1,6 @@
 # @boostkit/orm-drizzle
 
-Drizzle ORM adapter for Forge. Implements the `OrmAdapterProvider` / `OrmAdapter` / `QueryBuilder<T>` contract using Drizzle's SQL-like fluent API.
+Drizzle ORM adapter for BoostKit. Implements the `OrmAdapterProvider` / `OrmAdapter` / `QueryBuilder<T>` contract using Drizzle's SQL-like fluent API.
 
 ---
 

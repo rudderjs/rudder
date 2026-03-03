@@ -8,8 +8,8 @@ type Binding<T = unknown> = { factory: Factory<T>; singleton: boolean }
 
 // ─── Decorators ────────────────────────────────────────────
 
-const INJECTABLE_METADATA = 'forge:injectable'
-const INJECT_METADATA     = 'forge:inject'
+const INJECTABLE_METADATA = 'boostkit:injectable'
+const INJECT_METADATA     = 'boostkit:inject'
 
 /** Mark a class as injectable (auto-resolved by the container) */
 export function Injectable(): ClassDecorator {

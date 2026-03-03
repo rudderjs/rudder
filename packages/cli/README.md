@@ -1,6 +1,6 @@
 # @boostkit/cli
 
-Forge CLI — code generators, module scaffolding, and artisan command dispatch.
+BoostKit CLI — code generators, module scaffolding, and artisan command dispatch.
 
 ## Installation
 
@@ -28,7 +28,7 @@ pnpm artisan make:controller User # Generate a controller
 pnpm artisan db:seed              # Run a user-defined command
 ```
 
-**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the Forge application (`forge.boot()`) before dispatching commands — all service providers, DI bindings, and database connections are available.
+**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the BoostKit application (`forge.boot()`) before dispatching commands — all service providers, DI bindings, and database connections are available.
 
 ## How It Works
 

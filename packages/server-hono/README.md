@@ -1,6 +1,6 @@
 # @boostkit/server-hono
 
-Hono-based server adapter provider implementing Forge server contracts.
+Hono-based server adapter provider implementing BoostKit server contracts.
 
 ## Installation
 

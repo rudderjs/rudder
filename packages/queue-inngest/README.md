@@ -22,7 +22,7 @@ export default {
   connections: {
     inngest: {
       driver:     'inngest',
-      appId:      Env.get('INNGEST_APP_ID', 'my-forge-app'),
+      appId:      Env.get('INNGEST_APP_ID', 'my-boostkit-app'),
       signingKey: Env.get('INNGEST_SIGNING_KEY'),
       eventKey:   Env.get('INNGEST_EVENT_KEY'),
       baseUrl:    Env.get('APP_URL', 'http://localhost:3000'),
@@ -111,13 +111,13 @@ await SendWelcomeEmailJob.dispatch({
 
 ## Event Naming
 
-Forge maps job class names to Inngest event names using the pattern:
+BoostKit maps job class names to Inngest event names using the pattern:
 
 ```
-forge/job.<ClassName>
+boostkit/job.<ClassName>
 ```
 
-For example, `SendWelcomeEmailJob` is dispatched as the `forge/job.SendWelcomeEmailJob` event.
+For example, `SendWelcomeEmailJob` is dispatched as the `boostkit/job.SendWelcomeEmailJob` event.
 
 ## Retries
 
@@ -144,7 +144,7 @@ Set `APP_URL` so Inngest can reach your endpoint:
 
 ```dotenv
 APP_URL=http://localhost:3000
-INNGEST_APP_ID=my-forge-app
+INNGEST_APP_ID=my-boostkit-app
 ```
 
 ## Production Setup
@@ -152,7 +152,7 @@ INNGEST_APP_ID=my-forge-app
 In production (Inngest Cloud):
 
 ```dotenv
-INNGEST_APP_ID=my-forge-app
+INNGEST_APP_ID=my-boostkit-app
 INNGEST_SIGNING_KEY=signkey-prod-...
 INNGEST_EVENT_KEY=eventkey-...
 APP_URL=https://my-app.example.com

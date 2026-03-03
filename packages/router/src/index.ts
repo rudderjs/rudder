@@ -9,10 +9,10 @@ import type {
 
 // ─── Metadata Keys ─────────────────────────────────────────
 
-const CONTROLLER_PREFIX     = 'forge:controller:prefix'
-const CONTROLLER_MIDDLEWARE = 'forge:controller:middleware'
-const ROUTE_DEFINITIONS     = 'forge:route:definitions'
-const ROUTE_MIDDLEWARE      = 'forge:route:middleware'
+const CONTROLLER_PREFIX     = 'boostkit:controller:prefix'
+const CONTROLLER_MIDDLEWARE = 'boostkit:controller:middleware'
+const ROUTE_DEFINITIONS     = 'boostkit:route:definitions'
+const ROUTE_MIDDLEWARE      = 'boostkit:route:middleware'
 
 // ─── Route Meta (stored per method) ───────────────────────
 
@@ -152,7 +152,7 @@ export class Router {
     }
   }
 
-  /** Get all registered routes (useful for forge routes:list) */
+  /** Get all registered routes (useful for boostkit routes:list) */
   list(): RouteDefinition[] {
     return [...this.routes]
   }

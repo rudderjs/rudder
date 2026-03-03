@@ -51,7 +51,7 @@ function makeHandler(opts: RateLimitOptions): MiddlewareHandler {
     if (!cache) return next()   // no cache registered — fail open
 
     const now    = Date.now()
-    const cKey   = `forge:rl:${buildKey(opts.keyBy, req)}`
+    const cKey   = `boostkit:rl:${buildKey(opts.keyBy, req)}`
     const record = await cache.get<RateRecord>(cKey)
 
     let count:     number

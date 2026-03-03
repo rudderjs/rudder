@@ -293,7 +293,7 @@ function prismaSchema(ctx: TemplateContext): string {
     : 'mysql'
 
   const todoModel = ctx.withTodo ? `
-// <forge:modules:start>
+// <boostkit:modules:start>
 // module: Todo (Todo.prisma)
 model Todo {
   id        String   @id @default(cuid())
@@ -302,10 +302,10 @@ model Todo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-// <forge:modules:end>
+// <boostkit:modules:end>
 ` : `
-// <forge:modules:start>
-// <forge:modules:end>
+// <boostkit:modules:start>
+// <boostkit:modules:end>
 `
 
   return `generator client {
@@ -708,7 +708,7 @@ export default {
       host:     Env.get('REDIS_HOST', '127.0.0.1'),
       port:     Env.getNumber('REDIS_PORT', 6379),
       password: Env.get('REDIS_PASSWORD', ''),
-      prefix:   Env.get('CACHE_PREFIX', 'forge:'),
+      prefix:   Env.get('CACHE_PREFIX', 'boostkit:'),
     },
   },
 } satisfies CacheConfig

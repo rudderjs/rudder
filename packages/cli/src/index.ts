@@ -10,7 +10,7 @@ async function renderBanner(): Promise<void> {
   if (!process.stdout.isTTY) return
   try {
     const { default: cfonts } = await import('cfonts')
-    const stateFile = path.join(process.cwd(), '.forge-cli-state.json')
+    const stateFile = path.join(process.cwd(), '.boostkit-cli-state.json')
     const pairs: [string, string][] = [
       ['cyan', 'magenta'],
       ['yellow', 'green'],
@@ -23,7 +23,7 @@ async function renderBanner(): Promise<void> {
       const state = JSON.parse(raw) as { lastColorPairIndex?: number }
       idx = ((state.lastColorPairIndex ?? -1) + 1) % pairs.length
     } catch { /* ignore */ }
-    cfonts.say('Forge', { font: 'block', colors: pairs[idx]!, space: false })
+    cfonts.say('BoostKit', { font: 'block', colors: pairs[idx]!, space: false })
     fs.writeFile(stateFile, JSON.stringify({ lastColorPairIndex: idx })).catch(() => {})
   } catch { /* ignore */ }
 }
@@ -60,7 +60,7 @@ async function resolveAppRoot(): Promise<string | null> {
 }
 
 /**
- * Bootstrap the Forge application so providers (DB, etc.) are ready before
+ * Bootstrap the BoostKit application so providers (DB, etc.) are ready before
  * running any command.
  */
 async function bootApp(): Promise<void> {
@@ -98,8 +98,8 @@ async function main(): Promise<void> {
   if (isHelpOrNoArgs) await renderBanner()
 
   program
-    .name('forge')
-    .description('⚡ Forge Framework CLI')
+    .name('boostkit')
+    .description('⚡ BoostKit CLI')
     .version('0.0.1')
 
   makeCommand(program)

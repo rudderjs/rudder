@@ -30,7 +30,7 @@ export default Application.configure({
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
-- `AppBuilder`, `Forge`
+- `AppBuilder`, `BoostKit`
 - `app()`, `resolve()`
 - `defineConfig()`
 - Re-exports from `@boostkit/artisan`, `@boostkit/di`, `@boostkit/support`, and `@boostkit/contracts` types
@@ -47,4 +47,4 @@ export default Application.configure({
 ## Notes
 
 - `Application.create()` is singleton-based and can recreate in development/local mode when config is passed.
-- `Forge.boot()` boots providers; `Forge.handleRequest()` lazily creates the HTTP handler.
+- `BoostKit.boot()` boots providers; `BoostKit.handleRequest()` lazily creates the HTTP handler.

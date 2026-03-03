@@ -23,7 +23,7 @@ class UserService {
 }
 
 const c = new Container()
-c.instance('app.name', 'Forge')
+c.instance('app.name', 'BoostKit')
 const service = c.make(UserService)
 ```
 

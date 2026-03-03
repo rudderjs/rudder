@@ -40,7 +40,7 @@ export class Application {
 
   private constructor(config: AppConfig = {}) {
     this.container = container
-    this.name  = config.name  ?? Env.get('APP_NAME',  'Forge')
+    this.name  = config.name  ?? Env.get('APP_NAME',  'BoostKit')
     this.env   = config.env   ?? Env.get('APP_ENV',   'production')
     this.debug = config.debug ?? Env.getBool('APP_DEBUG', false)
 
@@ -222,7 +222,7 @@ export class AppBuilder {
   }
 }
 
-// ─── Forge (Configured Application) ───────────────────────
+// ─── BoostKit (Configured Application) ─────────────────────
 
 export class Forge {
   /** Phase 1: providers only — safe to await in CLI (no Vike virtual imports) */

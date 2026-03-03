@@ -235,10 +235,10 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const path = new URL(c.req.url).pathname
         if (!shouldLog(path)) return next()
         const n = nextReqId()
-        console.log(`${dim(ts())} ${boldYellow('[forge]')}${dim(`[request-${n}]`)} HTTP request  ${dim('→')} ${path}`)
+        console.log(`${dim(ts())} ${boldYellow('[boostkit]')}${dim(`[request-${n}]`)} HTTP request  ${dim('→')} ${path}`)
         await next()
         const status = (c.res as Response | undefined)?.status ?? 200
-        console.log(`${dim(ts())} ${boldYellow('[forge]')}${dim(`[request-${n}]`)} HTTP response ${dim('←')} ${path} ${statusColor(status)}`)
+        console.log(`${dim(ts())} ${boldYellow('[boostkit]')}${dim(`[request-${n}]`)} HTTP response ${dim('←')} ${path} ${statusColor(status)}`)
       })
 
       setup?.(new HonoAdapter(app))

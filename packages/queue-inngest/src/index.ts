@@ -15,7 +15,7 @@ export interface InngestConfig {
   signingKey?: string
   /**
    * Job classes to register as Inngest functions.
-   * Each class is mapped to a "forge/job.<ClassName>" event.
+   * Each class is mapped to a "boostkit/job.<ClassName>" event.
    *
    * @example
    *   jobs: [WelcomeUserJob, ProcessOrderJob]
@@ -28,7 +28,7 @@ export interface InngestConfig {
 
 /** Derives the Inngest event name from a Job class */
 function eventName(JobClass: { name: string }): string {
-  return `forge/job.${JobClass.name}`
+  return `boostkit/job.${JobClass.name}`
 }
 
 // ─── Inngest Adapter ───────────────────────────────────────
@@ -39,7 +39,7 @@ class InngestAdapter implements QueueAdapter {
 
   constructor(config: InngestConfig) {
     this.client = new Inngest({
-      id: config.appId ?? 'forge-app',
+      id: config.appId ?? 'boostkit-app',
       ...(config.eventKey ? { eventKey: config.eventKey } : {}),
     })
 
@@ -69,7 +69,7 @@ class InngestAdapter implements QueueAdapter {
     )
 
     // Build the Hono-compatible serve handler for GET + POST /api/inngest.
-    // The Hono Context (c) is passed directly — it IS req.raw in the Forge adapter.
+    // The Hono Context (c) is passed directly — it IS req.raw in the BoostKit adapter.
     this.handler = serve({
       client:    this.client,
       functions,

@@ -29,7 +29,7 @@ export declare class Router {
     registerController(ControllerClass: new () => any): this;
     /** Mount all routes onto a server adapter */
     mount(server: ServerAdapter): void;
-    /** Get all registered routes (useful for forge routes:list) */
+    /** Get all registered routes (useful for boostkit routes:list) */
     list(): RouteDefinition[];
 }
 export declare const router: Router;

@@ -22,7 +22,7 @@ const provider = nodemailer(
     password: 'pass',
     encryption: 'tls',
   },
-  { address: 'noreply@example.com', name: 'Forge' }
+  { address: 'noreply@example.com', name: 'BoostKit' }
 )
 ```
 
