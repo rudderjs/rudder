@@ -1,11 +1,11 @@
-# @forge/mail
+# @boostkit/mail
 
 Mail facade, Mailable abstraction, and provider factory.
 
 ## Installation
 
 ```bash
-pnpm add @forge/mail
+pnpm add @boostkit/mail
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ pnpm add @forge/mail
 
 ```ts
 // config/mail.ts
-import type { MailConfig } from '@forge/mail'
+import type { MailConfig } from '@boostkit/mail'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
@@ -34,7 +34,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@forge/mail'
+import { mail } from '@boostkit/mail'
 import configs from '../config/index.js'
 
 export default [
@@ -51,7 +51,7 @@ export default [
 Extend `Mailable` and implement the `build()` method. `build()` must return `this`.
 
 ```ts
-import { Mailable } from '@forge/mail'
+import { Mailable } from '@boostkit/mail'
 
 export class WelcomeEmail extends Mailable {
   constructor(private readonly userName: string) {
@@ -79,7 +79,7 @@ build() {
 ### Using the Mail Facade
 
 ```ts
-import { Mail } from '@forge/mail'
+import { Mail } from '@boostkit/mail'
 import { WelcomeEmail } from '../app/Mail/WelcomeEmail.js'
 
 // Send to a single recipient
@@ -130,7 +130,7 @@ Each mailer entry requires a `driver` field plus any driver-specific options.
 // Log driver (built-in)
 { driver: 'log' }
 
-// SMTP via @forge/mail-nodemailer
+// SMTP via @boostkit/mail-nodemailer
 {
   driver: 'smtp',
   host: 'smtp.mailgun.org',
@@ -159,7 +159,7 @@ The `log` driver prints all outgoing email to the console. It is the recommended
 
 ## SMTP Driver
 
-For production SMTP delivery, install `@forge/mail-nodemailer`. See the [Nodemailer adapter docs](./nodemailer).
+For production SMTP delivery, install `@boostkit/mail-nodemailer`. See the [Nodemailer adapter docs](./nodemailer).
 
 ## Notes
 

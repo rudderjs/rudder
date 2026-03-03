@@ -1,9 +1,9 @@
-# @forge/middleware
+# @boostkit/middleware
 
 HTTP middleware base class, pipeline runner, and built-in implementations.
 
 ```bash
-pnpm add @forge/middleware
+pnpm add @boostkit/middleware
 ```
 
 ---
@@ -15,8 +15,8 @@ pnpm add @forge/middleware
 Extend the `Middleware` base class and implement the `handle` method. Call `next(req, res)` to pass control to the next middleware or route handler.
 
 ```ts
-import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Middleware } from '@boostkit/middleware'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
@@ -43,7 +43,7 @@ export class AuthMiddleware extends Middleware {
 Convert a middleware class instance to a `MiddlewareHandler` function using `.toHandler()`.
 
 ```ts
-import { router } from '@forge/router'
+import { router } from '@boostkit/router'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 
 router.get('/api/profile', handler, [new AuthMiddleware().toHandler()])
@@ -54,7 +54,7 @@ router.get('/api/profile', handler, [new AuthMiddleware().toHandler()])
 `fromClass` is a convenience function that instantiates a middleware class and calls `.toHandler()` in one step.
 
 ```ts
-import { fromClass } from '@forge/middleware'
+import { fromClass } from '@boostkit/middleware'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 
 const authHandler = fromClass(AuthMiddleware)
@@ -67,8 +67,8 @@ const authHandler = fromClass(AuthMiddleware)
 `Pipeline` runs a sequence of `MiddlewareHandler` functions in order, passing the request and response through each one. Use it when you want to compose middleware outside of the router.
 
 ```ts
-import { Pipeline } from '@forge/middleware'
-import { LoggerMiddleware, CorsMiddleware } from '@forge/middleware'
+import { Pipeline } from '@boostkit/middleware'
+import { LoggerMiddleware, CorsMiddleware } from '@boostkit/middleware'
 
 const pipeline = new Pipeline([
   new LoggerMiddleware().toHandler(),
@@ -93,7 +93,7 @@ const response = await pipeline.run(req, res, async (req, res) => {
 ### CorsMiddleware Options
 
 ```ts
-import { CorsMiddleware } from '@forge/middleware'
+import { CorsMiddleware } from '@boostkit/middleware'
 
 const cors = new CorsMiddleware({
   origin:  'https://example.com',
@@ -105,7 +105,7 @@ const cors = new CorsMiddleware({
 ### ThrottleMiddleware Options
 
 ```ts
-import { ThrottleMiddleware } from '@forge/middleware'
+import { ThrottleMiddleware } from '@boostkit/middleware'
 
 const throttle = new ThrottleMiddleware({
   limit:  100,       // max requests
@@ -117,7 +117,7 @@ const throttle = new ThrottleMiddleware({
 
 ## MiddlewareHandler Type
 
-`MiddlewareHandler` is the canonical function signature for all middleware in Forge. It is exported from `@forge/contracts` and re-exported here for convenience.
+`MiddlewareHandler` is the canonical function signature for all middleware in Forge. It is exported from `@boostkit/contracts` and re-exported here for convenience.
 
 ```ts
 type MiddlewareHandler = (
@@ -131,6 +131,6 @@ type MiddlewareHandler = (
 
 ## Notes
 
-- `ThrottleMiddleware` uses an in-memory store. It does not persist across process restarts and is not shared between multiple instances. For distributed rate limiting use `@forge/rate-limit` with the Redis cache adapter.
-- `@forge/middleware` depends on `@forge/contracts` only. It does not depend on `@forge/core`, so it can be used in adapters and edge middleware without pulling in the full framework.
+- `ThrottleMiddleware` uses an in-memory store. It does not persist across process restarts and is not shared between multiple instances. For distributed rate limiting use `@boostkit/rate-limit` with the Redis cache adapter.
+- `@boostkit/middleware` depends on `@boostkit/contracts` only. It does not depend on `@boostkit/core`, so it can be used in adapters and edge middleware without pulling in the full framework.
 - `sideEffects: false` — fully tree-shakable.

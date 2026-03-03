@@ -1,11 +1,11 @@
-# @forge/auth-better-auth
+# @boostkit/auth-better-auth
 
 better-auth service provider factory for Forge.
 
 ## Installation
 
 ```bash
-pnpm add @forge/auth-better-auth better-auth
+pnpm add @boostkit/auth-better-auth better-auth
 ```
 
 ## Setup
@@ -15,8 +15,8 @@ pnpm add @forge/auth-better-auth better-auth
 ```ts
 // config/auth.ts
 import { PrismaClient } from '@prisma/client'
-import { Env } from '@forge/support'
-import type { BetterAuthConfig } from '@forge/auth-better-auth'
+import { Env } from '@boostkit/support'
+import type { BetterAuthConfig } from '@boostkit/auth-better-auth'
 
 export default {
   secret:   Env.get('AUTH_SECRET'),
@@ -33,7 +33,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@forge/auth-better-auth'
+import { betterAuth } from '@boostkit/auth-better-auth'
 import configs from '../config/index.js'
 
 export default [
@@ -72,8 +72,8 @@ Returns a Forge `ServiceProvider` class that:
 After the provider has booted, you can retrieve the raw better-auth instance from the DI container:
 
 ```ts
-import { app } from '@forge/core'
-import type { BetterAuthInstance } from '@forge/auth-better-auth'
+import { app } from '@boostkit/core'
+import type { BetterAuthInstance } from '@boostkit/auth-better-auth'
 
 const auth = app().make<BetterAuthInstance>('auth')
 ```

@@ -1,5 +1,5 @@
 {
-  "name": "@forge/schedule",
+  "name": "@boostkit/schedule",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/core": "workspace:*",
+    "@boostkit/core": "workspace:*",
     "croner": "^9.0.0"
   },
   "devDependencies": {

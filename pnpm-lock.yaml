@@ -18,7 +18,7 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  create-forge-app:
+  create-boostkit-app:
     dependencies:
       '@clack/prompts':
         specifier: ^1.0.0
@@ -58,7 +58,7 @@ importers:
 
   packages/auth:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -71,10 +71,10 @@ importers:
 
   packages/auth-better-auth:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
-      '@forge/router':
+      '@boostkit/router':
         specifier: workspace:*
         version: link:../router
       better-auth:
@@ -90,7 +90,7 @@ importers:
 
   packages/cache:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -106,7 +106,7 @@ importers:
 
   packages/cache-redis:
     dependencies:
-      '@forge/cache':
+      '@boostkit/cache':
         specifier: workspace:*
         version: link:../cache
       ioredis:
@@ -122,15 +122,15 @@ importers:
 
   packages/cli:
     dependencies:
+      '@boostkit/artisan':
+        specifier: workspace:*
+        version: link:../artisan
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
       '@clack/prompts':
         specifier: ^1.0.0
         version: 1.0.1
-      '@forge/artisan':
-        specifier: workspace:*
-        version: link:../artisan
-      '@forge/core':
-        specifier: workspace:*
-        version: link:../core
       cfonts:
         specifier: ^3.3.0
         version: 3.3.1
@@ -174,19 +174,19 @@ importers:
 
   packages/core:
     dependencies:
-      '@forge/artisan':
+      '@boostkit/artisan':
         specifier: workspace:*
         version: link:../artisan
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@forge/di':
+      '@boostkit/di':
         specifier: workspace:*
         version: link:../di
-      '@forge/router':
+      '@boostkit/router':
         specifier: workspace:*
         version: link:../router
-      '@forge/support':
+      '@boostkit/support':
         specifier: workspace:*
         version: link:../support
       reflect-metadata:
@@ -224,7 +224,7 @@ importers:
 
   packages/events:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -240,7 +240,7 @@ importers:
 
   packages/mail:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -256,7 +256,7 @@ importers:
 
   packages/mail-nodemailer:
     dependencies:
-      '@forge/mail':
+      '@boostkit/mail':
         specifier: workspace:*
         version: link:../mail
       nodemailer:
@@ -275,7 +275,7 @@ importers:
 
   packages/middleware:
     dependencies:
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -291,13 +291,13 @@ importers:
 
   packages/notification:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
-      '@forge/mail':
+      '@boostkit/mail':
         specifier: workspace:*
         version: link:../mail
-      '@forge/orm':
+      '@boostkit/orm':
         specifier: workspace:*
         version: link:../orm
     devDependencies:
@@ -313,7 +313,7 @@ importers:
 
   packages/orm:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -329,7 +329,7 @@ importers:
 
   packages/orm-drizzle:
     dependencies:
-      '@forge/orm':
+      '@boostkit/orm':
         specifier: workspace:*
         version: link:../orm
       drizzle-orm:
@@ -358,7 +358,7 @@ importers:
 
   packages/orm-prisma:
     dependencies:
-      '@forge/orm':
+      '@boostkit/orm':
         specifier: workspace:*
         version: link:../orm
       '@prisma/client':
@@ -402,10 +402,10 @@ importers:
 
   packages/queue:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
-      '@forge/router':
+      '@boostkit/router':
         specifier: workspace:*
         version: link:../router
     devDependencies:
@@ -418,7 +418,7 @@ importers:
 
   packages/queue-bullmq:
     dependencies:
-      '@forge/queue':
+      '@boostkit/queue':
         specifier: workspace:*
         version: link:../queue
       bullmq:
@@ -434,7 +434,7 @@ importers:
 
   packages/queue-inngest:
     dependencies:
-      '@forge/queue':
+      '@boostkit/queue':
         specifier: workspace:*
         version: link:../queue
       inngest:
@@ -450,10 +450,10 @@ importers:
 
   packages/rate-limit:
     dependencies:
-      '@forge/cache':
+      '@boostkit/cache':
         specifier: workspace:*
         version: link:../cache
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -466,7 +466,7 @@ importers:
 
   packages/router:
     dependencies:
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
       reflect-metadata:
@@ -488,7 +488,7 @@ importers:
 
   packages/schedule:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
       croner:
@@ -504,7 +504,7 @@ importers:
 
   packages/server-hono:
     dependencies:
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@hono/node-server':
@@ -526,7 +526,7 @@ importers:
 
   packages/storage:
     dependencies:
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -542,7 +542,7 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.0.0
         version: 3.1000.0
-      '@forge/storage':
+      '@boostkit/storage':
         specifier: workspace:*
         version: link:../storage
     devDependencies:
@@ -571,7 +571,7 @@ importers:
 
   packages/validation:
     dependencies:
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
       zod:
@@ -590,64 +590,64 @@ importers:
 
   playground:
     dependencies:
-      '@forge/artisan':
+      '@boostkit/artisan':
         specifier: workspace:*
         version: link:../packages/artisan
-      '@forge/auth-better-auth':
+      '@boostkit/auth-better-auth':
         specifier: workspace:*
         version: link:../packages/auth-better-auth
-      '@forge/cache':
+      '@boostkit/cache':
         specifier: workspace:*
         version: link:../packages/cache
-      '@forge/contracts':
+      '@boostkit/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
-      '@forge/core':
+      '@boostkit/core':
         specifier: workspace:*
         version: link:../packages/core
-      '@forge/events':
+      '@boostkit/events':
         specifier: workspace:*
         version: link:../packages/events
-      '@forge/mail':
+      '@boostkit/mail':
         specifier: workspace:*
         version: link:../packages/mail
-      '@forge/mail-nodemailer':
+      '@boostkit/mail-nodemailer':
         specifier: workspace:*
         version: link:../packages/mail-nodemailer
-      '@forge/middleware':
+      '@boostkit/middleware':
         specifier: workspace:*
         version: link:../packages/middleware
-      '@forge/notification':
+      '@boostkit/notification':
         specifier: workspace:*
         version: link:../packages/notification
-      '@forge/orm':
+      '@boostkit/orm':
         specifier: workspace:*
         version: link:../packages/orm
-      '@forge/orm-prisma':
+      '@boostkit/orm-prisma':
         specifier: workspace:*
         version: link:../packages/orm-prisma
-      '@forge/queue':
+      '@boostkit/queue':
         specifier: workspace:*
         version: link:../packages/queue
-      '@forge/queue-bullmq':
+      '@boostkit/queue-bullmq':
         specifier: workspace:*
         version: link:../packages/queue-bullmq
-      '@forge/rate-limit':
+      '@boostkit/rate-limit':
         specifier: workspace:*
         version: link:../packages/rate-limit
-      '@forge/router':
+      '@boostkit/router':
         specifier: workspace:*
         version: link:../packages/router
-      '@forge/schedule':
+      '@boostkit/schedule':
         specifier: workspace:*
         version: link:../packages/schedule
-      '@forge/server-hono':
+      '@boostkit/server-hono':
         specifier: workspace:*
         version: link:../packages/server-hono
-      '@forge/storage':
+      '@boostkit/storage':
         specifier: workspace:*
         version: link:../packages/storage
-      '@forge/validation':
+      '@boostkit/validation':
         specifier: workspace:*
         version: link:../packages/validation
       '@photonjs/hono':
@@ -732,7 +732,7 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
-      '@forge/cli':
+      '@boostkit/cli':
         specifier: workspace:*
         version: link:../packages/cli
       '@types/node':

@@ -1,5 +1,5 @@
-import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Middleware } from '@boostkit/middleware'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 /**
  * Example per-route middleware.

@@ -1,11 +1,11 @@
-# @forge/schedule
+# @boostkit/schedule
 
 Task scheduler with cron-based expressions and artisan integration.
 
 ## Installation
 
 ```bash
-pnpm add @forge/schedule
+pnpm add @boostkit/schedule
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ Register the scheduler provider in `bootstrap/providers.ts`:
 
 ```ts
 // bootstrap/providers.ts
-import { scheduler } from '@forge/schedule'
+import { scheduler } from '@boostkit/schedule'
 
 export default [
   // ...other providers
@@ -26,7 +26,7 @@ Define your scheduled tasks in a dedicated file (e.g., `routes/console.ts`) or i
 
 ```ts
 // routes/console.ts
-import { schedule } from '@forge/schedule'
+import { schedule } from '@boostkit/schedule'
 import { db } from '../app/Services/DatabaseSync.js'
 import { Reports } from '../app/Services/Reports.js'
 
@@ -42,7 +42,7 @@ schedule.command('db:seed').weekly()
 Schedules an async or sync callback function:
 
 ```ts
-import { schedule } from '@forge/schedule'
+import { schedule } from '@boostkit/schedule'
 
 // Run every minute
 schedule.call(async () => {
@@ -127,7 +127,7 @@ schedule
 
 ## Artisan Commands
 
-`@forge/schedule` registers three artisan commands automatically when `scheduler()` is included in providers:
+`@boostkit/schedule` registers three artisan commands automatically when `scheduler()` is included in providers:
 
 ### `schedule:run`
 
@@ -167,7 +167,7 @@ Example output:
 
 ## Notes
 
-- `@forge/schedule` uses [croner](https://github.com/hexagon/croner) under the hood for cron expression parsing and next-run calculation.
+- `@boostkit/schedule` uses [croner](https://github.com/hexagon/croner) under the hood for cron expression parsing and next-run calculation.
 - `schedule:work` is the recommended production approach — run it as a persistent process under a process manager such as PM2 or a container supervisor.
 - `schedule:run` is suited for deployments where an external platform cron (Kubernetes CronJob, Render cron service, etc.) fires every minute — the command evaluates due tasks and exits cleanly.
 - `withoutOverlapping()` uses an in-memory lock; if your process restarts, the lock resets.

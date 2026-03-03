@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string): string {
-  return `import { ServiceProvider } from '@forge/core'
+  return `import { ServiceProvider } from '@boostkit/core'
 
 export class ${className} extends ServiceProvider {
   register(): void {

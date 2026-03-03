@@ -1,7 +1,7 @@
-import { Container, container } from '@forge/di'
-import { Env, ConfigRepository, setConfigRepository } from '@forge/support'
-import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@forge/contracts'
-import { artisan, ArtisanRegistry } from '@forge/artisan'
+import { Container, container } from '@boostkit/di'
+import { Env, ConfigRepository, setConfigRepository } from '@boostkit/support'
+import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@boostkit/contracts'
+import { artisan, ArtisanRegistry } from '@boostkit/artisan'
 
 // ─── Service Provider ──────────────────────────────────────
 
@@ -85,7 +85,7 @@ export class Application {
     const g = globalThis as Record<string, unknown>
     const inst = (g['__forge_app__'] ?? Application.instance) as Application | undefined
     if (!inst) {
-      throw new Error('[Forge] Application has not been created yet. Call Application.create() first.')
+      throw new Error('[BoostKit] Application has not been created yet. Call Application.create() first.')
     }
     return inst
   }
@@ -268,19 +268,19 @@ export class Forge {
     this._suppressVikeNoise()
     if (this._app.isDevelopment()) {
       artisan.reset()
-      const { router } = await import('@forge/router') as { router: { reset(): void } }
+      const { router } = await import('@boostkit/router') as { router: { reset(): void } }
       router.reset()
     }
     await this._app.bootstrap()
     await Promise.all(this._loaders.map(l => l()))
-    console.log('[Forge] providers boot complete — routes loaded')
+    console.log('[BoostKit] providers boot complete — routes loaded')
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
   private async _createHandler(): Promise<void> {
     const mw = new MiddlewareConfigurator()
     this._mwFn?.(mw)
-    const { router } = await import('@forge/router') as { router: { mount(adapter: ServerAdapter): void } }
+    const { router } = await import('@boostkit/router') as { router: { mount(adapter: ServerAdapter): void } }
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       router.mount(adapter)
@@ -288,7 +288,7 @@ export class Forge {
 
     if (!this._handlerReadyLogged) {
       this._handlerReadyLogged = true
-      console.log('[Forge] handler ready — first request can be served')
+      console.log('[BoostKit] handler ready — first request can be served')
     }
   }
 
@@ -310,8 +310,8 @@ export class Forge {
 
 // ─── Re-export artisan ─────────────────────────────────────
 
-export { artisan, ArtisanRegistry, CommandBuilder, Command, parseSignature } from '@forge/artisan'
-export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@forge/artisan'
+export { artisan, ArtisanRegistry, CommandBuilder, Command, parseSignature } from '@boostkit/artisan'
+export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@boostkit/artisan'
 
 // ─── Global helpers ────────────────────────────────────────
 
@@ -324,9 +324,9 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 
 // ─── Re-exports ────────────────────────────────────────────
 
-export { Container, container, Injectable, Inject } from '@forge/di'
-export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer } from '@forge/support'
-export type { ForgeRequest, ForgeResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@forge/contracts'
+export { Container, container, Injectable, Inject } from '@boostkit/di'
+export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer } from '@boostkit/support'
+export type { ForgeRequest, ForgeResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@boostkit/contracts'
 
 // ─── Config helper ─────────────────────────────────────────
 

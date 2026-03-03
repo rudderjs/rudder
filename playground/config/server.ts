@@ -1,4 +1,4 @@
-import { Env } from '@forge/core'
+import { Env } from '@boostkit/core'
 
 export default {
   port:       Env.getNumber('PORT', 3000),

@@ -1,5 +1,5 @@
 {
-  "name": "@forge/storage-s3",
+  "name": "@boostkit/storage-s3",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/storage": "workspace:*",
+    "@boostkit/storage": "workspace:*",
     "@aws-sdk/client-s3": "^3.0.0"
   },
   "devDependencies": {

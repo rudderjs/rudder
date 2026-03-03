@@ -19,10 +19,10 @@ Each service provider has two lifecycle hooks:
 
 ## Creating a Provider
 
-Extend `ServiceProvider` from `@forge/core`:
+Extend `ServiceProvider` from `@boostkit/core`:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 import { MyService } from '../Services/MyService.js'
 import { MyDependency } from '../Services/MyDependency.js'
 
@@ -49,12 +49,12 @@ export class AppServiceProvider extends ServiceProvider {
 List provider classes (not instances) in `bootstrap/providers.ts`:
 
 ```ts
-import type { Application, ServiceProvider } from '@forge/core'
-import { betterAuth }              from '@forge/auth-better-auth'
-import { queue }                   from '@forge/queue'
-import { cache }                   from '@forge/cache'
-import { mail }                    from '@forge/mail'
-import { notifications }           from '@forge/notification'
+import type { Application, ServiceProvider } from '@boostkit/core'
+import { betterAuth }              from '@boostkit/auth-better-auth'
+import { queue }                   from '@boostkit/queue'
+import { cache }                   from '@boostkit/cache'
+import { mail }                    from '@boostkit/mail'
+import { notifications }           from '@boostkit/notification'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider }      from '../app/Providers/AppServiceProvider.js'
 import configs                     from '../config/index.js'
@@ -85,7 +85,7 @@ You can use them directly in the array — both class references and instantiate
 Inside providers (and anywhere after boot), use `app()` to retrieve the application container:
 
 ```ts
-import { app } from '@forge/core'
+import { app } from '@boostkit/core'
 
 const service = app().make(UserService)
 ```
@@ -94,23 +94,23 @@ const service = app().make(UserService)
 
 | Factory | Package | What it registers |
 |---------|---------|------------------|
-| `queue(config)` | `@forge/queue` | Queue adapter, `queue:work` command |
-| `cache(config)` | `@forge/cache` | Cache adapter |
-| `storage(config)` | `@forge/storage` | Storage adapter, `storage:link` command |
-| `mail(config)` | `@forge/mail` | Mail adapter |
-| `events(listenMap)` | `@forge/events` | Event dispatcher, listener registration |
-| `scheduler()` | `@forge/schedule` | Schedule instance, `schedule:*` commands |
-| `betterAuth(config)` | `@forge/auth-better-auth` | Auth instance, `/api/auth/*` routes |
-| `notifications()` | `@forge/notification` | Mail + database channels |
+| `queue(config)` | `@boostkit/queue` | Queue adapter, `queue:work` command |
+| `cache(config)` | `@boostkit/cache` | Cache adapter |
+| `storage(config)` | `@boostkit/storage` | Storage adapter, `storage:link` command |
+| `mail(config)` | `@boostkit/mail` | Mail adapter |
+| `events(listenMap)` | `@boostkit/events` | Event dispatcher, listener registration |
+| `scheduler()` | `@boostkit/schedule` | Schedule instance, `schedule:*` commands |
+| `betterAuth(config)` | `@boostkit/auth-better-auth` | Auth instance, `/api/auth/*` routes |
+| `notifications()` | `@boostkit/notification` | Mail + database channels |
 
 ## DatabaseServiceProvider Pattern
 
 The database provider follows a consistent pattern:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
-import { prisma } from '@forge/orm-prisma'
-import { ModelRegistry } from '@forge/orm'
+import { ServiceProvider } from '@boostkit/core'
+import { prisma } from '@boostkit/orm-prisma'
+import { ModelRegistry } from '@boostkit/orm'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   async boot(): Promise<void> {

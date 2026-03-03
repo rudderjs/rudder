@@ -27,12 +27,12 @@ export default defineConfig({
     // they are loaded from node_modules at runtime when the driver config requests them.
     external: [
       '@clack/core', '@clack/prompts',    // CLI interactive prompts — Node.js only
-      '@forge/queue-inngest',             // optional — only needed when driver=inngest
-      '@forge/queue-bullmq',              // optional — only needed when driver=bullmq
-      '@forge/mail-nodemailer',           // optional — only needed when mail driver=smtp
-      '@forge/cache-redis',               // optional — only needed when cache driver=redis
-      '@forge/storage-s3',               // optional — only needed when storage driver=s3
-      '@forge/orm-drizzle',              // optional ORM adapters
+      '@boostkit/queue-inngest',             // optional — only needed when driver=inngest
+      '@boostkit/queue-bullmq',              // optional — only needed when driver=bullmq
+      '@boostkit/mail-nodemailer',           // optional — only needed when mail driver=smtp
+      '@boostkit/cache-redis',               // optional — only needed when cache driver=redis
+      '@boostkit/storage-s3',               // optional — only needed when storage driver=s3
+      '@boostkit/orm-drizzle',              // optional ORM adapters
     ],
   },
   build: {
@@ -41,8 +41,8 @@ export default defineConfig({
       // CLI/server-only; they must never be bundled for the browser.
       external: (id) =>
         id.startsWith('@clack/') ||
-        ['@forge/queue-inngest', '@forge/queue-bullmq', '@forge/mail-nodemailer',
-         '@forge/cache-redis', '@forge/storage-s3', '@forge/orm-drizzle'].includes(id),
+        ['@boostkit/queue-inngest', '@boostkit/queue-bullmq', '@boostkit/mail-nodemailer',
+         '@boostkit/cache-redis', '@boostkit/storage-s3', '@boostkit/orm-drizzle'].includes(id),
     },
   },
 })

@@ -1,4 +1,4 @@
-import { Mailable } from '@forge/mail'
+import { Mailable } from '@boostkit/mail'
 
 export class WelcomeEmail extends Mailable {
   constructor(private readonly userName: string) {

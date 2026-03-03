@@ -1,19 +1,19 @@
 # Authentication
 
-This guide walks through setting up full user authentication in a Forge app using `@forge/auth-better-auth` and [better-auth](https://better-auth.com).
+This guide walks through setting up full user authentication in a Forge app using `@boostkit/auth-better-auth` and [better-auth](https://better-auth.com).
 
 ## Overview
 
 Forge's auth integration:
 
-1. **`@forge/auth`** — shared `AuthUser`, `AuthSession`, `AuthResult` types
-2. **`@forge/auth-better-auth`** — service provider factory that wires better-auth into Forge
+1. **`@boostkit/auth`** — shared `AuthUser`, `AuthSession`, `AuthResult` types
+2. **`@boostkit/auth-better-auth`** — service provider factory that wires better-auth into Forge
 3. **better-auth** — the underlying auth library (handles sessions, OAuth, etc.)
 
 ## Installation
 
 ```bash
-pnpm add @forge/auth-better-auth better-auth @prisma/client
+pnpm add @boostkit/auth-better-auth better-auth @prisma/client
 ```
 
 ## 1. Configure the Database
@@ -87,9 +87,9 @@ pnpm exec prisma db push
 Create `config/auth.ts`:
 
 ```ts
-import { Env } from '@forge/support'
+import { Env } from '@boostkit/support'
 import { PrismaClient } from '@prisma/client'
-import type { BetterAuthConfig } from '@forge/auth-better-auth'
+import type { BetterAuthConfig } from '@boostkit/auth-better-auth'
 
 export default {
   secret:   Env.get('AUTH_SECRET'),
@@ -121,7 +121,7 @@ In `bootstrap/providers.ts`, add `betterAuth()` before `DatabaseServiceProvider`
 
 ```ts
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
-import { betterAuth } from '@forge/auth-better-auth'
+import { betterAuth } from '@boostkit/auth-better-auth'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import configs from '../config/index.js'
 
@@ -185,10 +185,10 @@ Create an `AuthMiddleware` that validates the session:
 
 ```ts
 // app/Http/Middleware/AuthMiddleware.ts
-import { Middleware } from '@forge/middleware'
-import { app } from '@forge/core'
-import type { BetterAuthInstance } from '@forge/auth-better-auth'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Middleware } from '@boostkit/middleware'
+import { app } from '@boostkit/core'
+import type { BetterAuthInstance } from '@boostkit/auth-better-auth'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(req: ForgeRequest, res: ForgeResponse, next: () => Promise<void>) {
@@ -214,7 +214,7 @@ export class AuthMiddleware extends Middleware {
 Use it on protected routes:
 
 ```ts
-import { Controller, Get, Middleware } from '@forge/router'
+import { Controller, Get, Middleware } from '@boostkit/router'
 import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
 
 @Controller('/api/me')
@@ -232,8 +232,8 @@ class ProfileController {
 Anywhere after boot:
 
 ```ts
-import { app } from '@forge/core'
-import type { BetterAuthInstance } from '@forge/auth-better-auth'
+import { app } from '@boostkit/core'
+import type { BetterAuthInstance } from '@boostkit/auth-better-auth'
 
 const auth = app().make<BetterAuthInstance>('auth')
 

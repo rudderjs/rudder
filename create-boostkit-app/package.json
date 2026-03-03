@@ -1,11 +1,11 @@
 {
-  "name": "create-forge-app",
+  "name": "create-boostkit-app",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "description": "Create a new Forge application",
   "bin": {
-    "create-forge-app": "./dist/index.js"
+    "create-boostkit-app": "./dist/index.js"
   },
   "files": ["dist/"],
   "main": "./dist/index.js",

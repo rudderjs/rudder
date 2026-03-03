@@ -1,17 +1,17 @@
-# @forge/auth
+# @boostkit/auth
 
 Shared authentication result and entity types.
 
 ## Installation
 
 ```bash
-pnpm add @forge/auth
+pnpm add @boostkit/auth
 ```
 
 ## Usage
 
 ```ts
-import type { AuthUser, AuthSession, AuthResult } from '@forge/auth'
+import type { AuthUser, AuthSession, AuthResult } from '@boostkit/auth'
 
 const user: AuthUser = {
   id: '1',

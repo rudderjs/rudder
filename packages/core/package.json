@@ -1,5 +1,5 @@
 {
-  "name": "@forge/core",
+  "name": "@boostkit/core",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -23,11 +23,11 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
   },
   "dependencies": {
-    "@forge/artisan": "workspace:*",
-    "@forge/contracts": "workspace:*",
-    "@forge/di": "workspace:*",
-    "@forge/router": "workspace:*",
-    "@forge/support": "workspace:*",
+    "@boostkit/artisan": "workspace:*",
+    "@boostkit/contracts": "workspace:*",
+    "@boostkit/di": "workspace:*",
+    "@boostkit/router": "workspace:*",
+    "@boostkit/support": "workspace:*",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {

@@ -1,16 +1,16 @@
-# @forge/rate-limit
+# @boostkit/rate-limit
 
 Cache-backed rate limiting middleware with standard X-RateLimit-* headers.
 
 ## Installation
 
 ```bash
-pnpm add @forge/rate-limit
+pnpm add @boostkit/rate-limit
 ```
 
 ## Usage
 
-`@forge/rate-limit` requires `@forge/cache` to be registered in your providers first, as it uses the cache store to track request counts per key.
+`@boostkit/rate-limit` requires `@boostkit/cache` to be registered in your providers first, as it uses the cache store to track request counts per key.
 
 ### Global Middleware
 
@@ -18,9 +18,9 @@ Apply rate limiting to all API requests in `bootstrap/app.ts`:
 
 ```ts
 // bootstrap/app.ts
-import { Application } from '@forge/core'
-import { RateLimit } from '@forge/rate-limit'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { RateLimit } from '@boostkit/rate-limit'
+import { hono } from '@boostkit/server-hono'
 import configs from '../config/index.js'
 import providers from './providers.js'
 
@@ -44,8 +44,8 @@ export default Application.configure({
 Apply a stricter limit to a specific controller action:
 
 ```ts
-import { Controller, Post, Middleware } from '@forge/router'
-import { RateLimit } from '@forge/rate-limit'
+import { Controller, Post, Middleware } from '@boostkit/router'
+import { RateLimit } from '@boostkit/rate-limit'
 
 @Controller('/api/auth')
 export class AuthController {
@@ -60,8 +60,8 @@ export class AuthController {
 ### Per-Route with Fluent Router
 
 ```ts
-import { router } from '@forge/router'
-import { RateLimit } from '@forge/rate-limit'
+import { router } from '@boostkit/router'
+import { RateLimit } from '@boostkit/rate-limit'
 
 router.post(
   '/api/auth/login',
@@ -160,7 +160,7 @@ The `message` field reflects the value set via `.message()`, or the default show
 
 ## Notes
 
-- `@forge/cache` must be registered in `bootstrap/providers.ts` before rate limiting middleware is applied. The rate limiter uses the default cache store to track counters.
+- `@boostkit/cache` must be registered in `bootstrap/providers.ts` before rate limiting middleware is applied. The rate limiter uses the default cache store to track counters.
 - Static assets and Vite internals (HMR, `/@vite/`, `/__vite_ping`) are automatically excluded from rate limiting.
 - Counters are stored with a TTL matching the window duration — they expire automatically without manual cleanup.
-- In a multi-process or multi-instance deployment, use `@forge/cache-redis` as the cache backend so counters are shared across instances.
+- In a multi-process or multi-instance deployment, use `@boostkit/cache-redis` as the cache backend so counters are shared across instances.

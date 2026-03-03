@@ -1,5 +1,5 @@
 {
-  "name": "@forge/notification",
+  "name": "@boostkit/notification",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -19,9 +19,9 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
   },
   "dependencies": {
-    "@forge/core": "workspace:*",
-    "@forge/mail": "workspace:*",
-    "@forge/orm": "workspace:*"
+    "@boostkit/core": "workspace:*",
+    "@boostkit/mail": "workspace:*",
+    "@boostkit/orm": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

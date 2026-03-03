@@ -10,10 +10,10 @@ Laravel has earned its reputation for developer happiness. Forge takes the patte
 
 ### Modular by Design
 
-Every Forge feature lives in its own npm package under the `@forge/*` scope. Use only what you need:
+Every Forge feature lives in its own npm package under the `@boostkit/*` scope. Use only what you need:
 
 ```bash
-pnpm add @forge/core @forge/server-hono @forge/orm-prisma
+pnpm add @boostkit/core @boostkit/server-hono @boostkit/orm-prisma
 ```
 
 There is no monolithic "install everything" step. Queue support, caching, auth, notifications — all optional.
@@ -63,28 +63,28 @@ This means you can deploy to Node.js, Cloudflare Workers, Deno Deploy, Bun, or a
 Forge is structured as a clean DAG — no circular dependencies:
 
 ```
-@forge/contracts   (pure types, no runtime)
+@boostkit/contracts   (pure types, no runtime)
        │
-@forge/support     (Env, Collection, helpers)
-@forge/di          (Container, decorators)
-@forge/middleware  (Pipeline, built-ins)
-@forge/validation  (FormRequest, z)
+@boostkit/support     (Env, Collection, helpers)
+@boostkit/di          (Container, decorators)
+@boostkit/middleware  (Pipeline, built-ins)
+@boostkit/validation  (FormRequest, z)
        │
-@forge/router      @forge/server-hono
+@boostkit/router      @boostkit/server-hono
        │
-@forge/core        (Application, ServiceProvider, bootstrap)
+@boostkit/core        (Application, ServiceProvider, bootstrap)
        │
-@forge/orm         @forge/queue    @forge/cache    @forge/storage
+@boostkit/orm         @boostkit/queue    @boostkit/cache    @boostkit/storage
        │                │               │               │
  orm-prisma        queue-bullmq    cache-redis      storage-s3
  orm-drizzle       queue-inngest
        │
-@forge/auth   @forge/events   @forge/mail   @forge/schedule   @forge/rate-limit
+@boostkit/auth   @boostkit/events   @boostkit/mail   @boostkit/schedule   @boostkit/rate-limit
        │
-@forge/notification
+@boostkit/notification
 ```
 
-This means you can use `@forge/di` in isolation without pulling in the entire framework.
+This means you can use `@boostkit/di` in isolation without pulling in the entire framework.
 
 ## Status
 

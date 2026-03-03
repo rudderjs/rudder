@@ -8,7 +8,7 @@ import type {
   MiddlewareHandler,
   ForgeRequest,
   ForgeResponse,
-} from '@forge/contracts'
+} from '@boostkit/contracts'
 
 // ─── Hono Adapter Config ───────────────────────────────────
 
@@ -187,7 +187,7 @@ class HonoAdapter implements ServerAdapter {
   listen(port: number, callback?: () => void): void {
     serve({ fetch: this.app.fetch, port: port }, () => {
       callback?.()
-      console.log(`[Forge] Server running on http://localhost:${port}`)
+      console.log(`[BoostKit] Server running on http://localhost:${port}`)
     })
   }
 

@@ -1,17 +1,17 @@
-# @forge/cache-redis
+# @boostkit/cache-redis
 
-Redis cache adapter provider for `@forge/cache`.
+Redis cache adapter provider for `@boostkit/cache`.
 
 ## Installation
 
 ```bash
-pnpm add @forge/cache-redis
+pnpm add @boostkit/cache-redis
 ```
 
 ## Usage
 
 ```ts
-import { redis } from '@forge/cache-redis'
+import { redis } from '@boostkit/cache-redis'
 
 const provider = redis({
   driver: 'redis',
@@ -39,4 +39,4 @@ const adapter = provider.create()
 ## Notes
 
 - Uses `ioredis`.
-- The exported function name is `redis` (used by `@forge/cache` dynamic loading).
+- The exported function name is `redis` (used by `@boostkit/cache` dynamic loading).

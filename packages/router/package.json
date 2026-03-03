@@ -1,5 +1,5 @@
 {
-  "name": "@forge/router",
+  "name": "@boostkit/router",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -20,7 +20,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
   },
   "dependencies": {
-    "@forge/contracts": "workspace:*",
+    "@boostkit/contracts": "workspace:*",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {

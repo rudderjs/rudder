@@ -1,5 +1,5 @@
 import { Redis } from 'ioredis'
-import type { CacheAdapter, CacheAdapterProvider } from '@forge/cache'
+import type { CacheAdapter, CacheAdapterProvider } from '@boostkit/cache'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -73,8 +73,8 @@ class RedisAdapter implements CacheAdapter {
 // ─── Factory ───────────────────────────────────────────────
 
 /**
- * Named export used by @forge/cache's dynamic import:
- *   const { redis } = await import('@forge/cache-redis')
+ * Named export used by @boostkit/cache's dynamic import:
+ *   const { redis } = await import('@boostkit/cache-redis')
  */
 export function redis(config: RedisCacheConfig): CacheAdapterProvider {
   return {

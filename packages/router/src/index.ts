@@ -5,7 +5,7 @@ import type {
   RouteHandler,
   MiddlewareHandler,
   HttpMethod,
-} from '@forge/contracts'
+} from '@boostkit/contracts'
 
 // ─── Metadata Keys ─────────────────────────────────────────
 

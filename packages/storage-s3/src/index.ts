@@ -6,7 +6,7 @@ import {
   HeadObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
-import type { StorageAdapter, StorageAdapterProvider } from '@forge/storage'
+import type { StorageAdapter, StorageAdapterProvider } from '@boostkit/storage'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -90,15 +90,15 @@ class S3Adapter implements StorageAdapter {
   }
 
   path(_filePath: string): string {
-    throw new Error('[Forge Storage] path() is not available for S3 disks.')
+    throw new Error('[BoostKit Storage] path() is not available for S3 disks.')
   }
 }
 
 // ─── Factory ───────────────────────────────────────────────
 
 /**
- * Named export used by @forge/storage's dynamic import:
- *   const { s3 } = await import('@forge/storage-s3')
+ * Named export used by @boostkit/storage's dynamic import:
+ *   const { s3 } = await import('@boostkit/storage-s3')
  */
 export function s3(config: S3DiskConfig): StorageAdapterProvider {
   return {

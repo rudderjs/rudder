@@ -1,6 +1,6 @@
-import { Env } from '@forge/core'
-import type { BetterAuthConfig } from '@forge/auth-better-auth'
-import { dispatch } from '@forge/events'
+import { Env } from '@boostkit/core'
+import type { BetterAuthConfig } from '@boostkit/auth-better-auth'
+import { dispatch } from '@boostkit/events'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 
 async function createDatabase(): Promise<unknown> {

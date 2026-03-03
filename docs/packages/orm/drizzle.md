@@ -1,11 +1,11 @@
-# @forge/orm-drizzle
+# @boostkit/orm-drizzle
 
 Drizzle ORM adapter for Forge — schema-first, multi-driver.
 
 ## Installation
 
 ```bash
-pnpm add @forge/orm-drizzle drizzle-orm
+pnpm add @boostkit/orm-drizzle drizzle-orm
 ```
 
 Then install the driver package for your database:
@@ -49,9 +49,9 @@ export const users = pgTable('users', {
 Wire the adapter in your `DatabaseServiceProvider`:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
-import { drizzle } from '@forge/orm-drizzle'
-import { ModelRegistry } from '@forge/orm'
+import { ServiceProvider } from '@boostkit/core'
+import { drizzle } from '@boostkit/orm-drizzle'
+import { ModelRegistry } from '@boostkit/orm'
 import { users } from '../database/schema.js'
 
 export class DatabaseServiceProvider extends ServiceProvider {
@@ -74,7 +74,7 @@ export class DatabaseServiceProvider extends ServiceProvider {
 Set `static table` to match the key used in the `tables` object passed to `drizzle()`:
 
 ```ts
-import { Model } from '@forge/orm'
+import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   static table = 'user'   // must match the key in tables: { user: users }
@@ -91,7 +91,7 @@ export class User extends Model {
 If you already have a configured Drizzle database instance, you can pass it directly:
 
 ```ts
-import { drizzleDatabase } from '@forge/orm-drizzle'
+import { drizzleDatabase } from '@boostkit/orm-drizzle'
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3'
 import Database from 'better-sqlite3'
 import { users } from '../database/schema.js'
@@ -110,7 +110,7 @@ const adapter = await drizzleDatabase({
 `DrizzleTableRegistry` is a global alternative to passing `tables` inline. Register tables once (e.g. in a provider) and they will be available to the adapter:
 
 ```ts
-import { DrizzleTableRegistry } from '@forge/orm-drizzle'
+import { DrizzleTableRegistry } from '@boostkit/orm-drizzle'
 import { users } from '../database/schema.js'
 
 // Register globally — no need to pass tables: {} to drizzle()
@@ -188,4 +188,4 @@ The Drizzle adapter supports the same `OrmAdapter` interface as other Forge ORM 
 
 - The key used in the `tables: {}` object (e.g. `'user'`) must exactly match `static table` on the corresponding Model class.
 - `connect()` being a no-op means the adapter is always safe to call in `DatabaseServiceProvider.boot()` — no connection errors will be thrown at startup.
-- For migrations, use the Drizzle Kit CLI directly (`drizzle-kit push`, `drizzle-kit generate`) — `@forge/orm-drizzle` does not wrap migration tooling.
+- For migrations, use the Drizzle Kit CLI directly (`drizzle-kit push`, `drizzle-kit generate`) — `@boostkit/orm-drizzle` does not wrap migration tooling.

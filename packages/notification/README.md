@@ -1,18 +1,18 @@
-# @forge/notification
+# @boostkit/notification
 
 Multi-channel notification system — send notifications via mail, database, or custom channels using the Notifiable pattern.
 
 ## Installation
 
 ```bash
-pnpm add @forge/notification
+pnpm add @boostkit/notification
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/providers.ts
-import { notifications } from '@forge/notification'
+import { notifications } from '@boostkit/notification'
 
 export default [
   mail(configs.mail),  // required if using the mail channel
@@ -22,8 +22,8 @@ export default [
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification, type Notifiable } from '@forge/notification'
-import { Mailable } from '@forge/mail'
+import { Notification, type Notifiable } from '@boostkit/notification'
+import { Mailable } from '@boostkit/mail'
 
 class WelcomeMail extends Mailable {
   build() { return this.subject('Welcome!').text('Thanks for signing up.') }
@@ -46,7 +46,7 @@ export class WelcomeNotification extends Notification {
 
 ```ts
 // routes/api.ts
-import { notify } from '@forge/notification'
+import { notify } from '@boostkit/notification'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
 const user = { id: '1', email: 'alice@example.com', name: 'Alice' }
@@ -68,7 +68,7 @@ import {
   type NotificationChannel,
   type Notifiable,
   type Notification,
-} from '@forge/notification'
+} from '@boostkit/notification'
 
 class SmsChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
@@ -107,8 +107,8 @@ model Notification {
 - `Notification` — abstract base class; implement `via()`, optionally `toMail()`, `toDatabase()`
 - `NotificationChannel` — interface for custom channels (`send(notifiable, notification)`)
 - `ChannelRegistry` — static registry; `register(name, channel)`, `get(name)`, `has(name)`
-- `MailChannel` — built-in; delegates to `@forge/mail` adapter
-- `DatabaseChannel` — built-in; writes rows via `@forge/orm` adapter to the `notification` table
+- `MailChannel` — built-in; delegates to `@boostkit/mail` adapter
+- `DatabaseChannel` — built-in; writes rows via `@boostkit/orm` adapter to the `notification` table
 - `Notifier` — static facade; `Notifier.send(notifiables, notification)`
 - `notify(notifiables, notification)` — shorthand helper wrapping `Notifier.send()`
 - `notifications()` — service provider factory; registers `mail` and `database` channels

@@ -1,4 +1,4 @@
-import { ServiceProvider, type Application } from '@forge/core'
+import { ServiceProvider, type Application } from '@boostkit/core'
 
 // ─── Listener Contract ─────────────────────────────────────
 
@@ -53,7 +53,7 @@ export type ListenMap = Record<string, (new () => Listener<never>)[]>
  * into the global EventDispatcher on boot.
  *
  * Usage in bootstrap/providers.ts:
- *   import { events } from '@forge/events'
+ *   import { events } from '@boostkit/events'
  *   import { UserRegistered } from '../app/Events/UserRegistered.js'
  *   import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
  *

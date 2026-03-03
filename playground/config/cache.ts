@@ -1,5 +1,5 @@
-import { Env } from '@forge/core'
-import type { CacheConfig } from '@forge/cache'
+import { Env } from '@boostkit/core'
+import type { CacheConfig } from '@boostkit/cache'
 
 export default {
   default: Env.get('CACHE_STORE', 'memory'),

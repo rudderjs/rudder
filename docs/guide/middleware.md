@@ -1,14 +1,14 @@
 # Middleware
 
-Forge middleware provides a powerful pipeline for intercepting HTTP requests and responses. Built on `@forge/middleware`, the system supports class-based middleware, a pipeline runner, and several built-in implementations.
+Forge middleware provides a powerful pipeline for intercepting HTTP requests and responses. Built on `@boostkit/middleware`, the system supports class-based middleware, a pipeline runner, and several built-in implementations.
 
 ## Writing Middleware
 
 Extend the `Middleware` base class and implement the `handle()` method:
 
 ```ts
-import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Middleware } from '@boostkit/middleware'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
@@ -43,7 +43,7 @@ const authHandler = new AuthMiddleware().toHandler()
 Or use `fromClass()` for a one-liner:
 
 ```ts
-import { fromClass } from '@forge/middleware'
+import { fromClass } from '@boostkit/middleware'
 
 const authHandler = fromClass(AuthMiddleware)
 ```
@@ -53,8 +53,8 @@ const authHandler = fromClass(AuthMiddleware)
 Register middleware that runs on every request in `bootstrap/app.ts`:
 
 ```ts
-import { CorsMiddleware, LoggerMiddleware } from '@forge/middleware'
-import { RateLimit } from '@forge/rate-limit'
+import { CorsMiddleware, LoggerMiddleware } from '@boostkit/middleware'
+import { RateLimit } from '@boostkit/rate-limit'
 
 Application.configure({ ... })
   .withMiddleware((m) => {
@@ -69,7 +69,7 @@ Application.configure({ ... })
 Apply middleware to specific routes using the `@Middleware` decorator:
 
 ```ts
-import { Controller, Get, Middleware } from '@forge/router'
+import { Controller, Get, Middleware } from '@boostkit/router'
 import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
 
 @Controller('/api/admin')
@@ -87,7 +87,7 @@ class AdminController {
 Handles CORS preflight requests and adds CORS headers. Configure via `HonoConfig.cors` in `config/server.ts` for global CORS, or use this middleware directly for fine-grained control:
 
 ```ts
-import { CorsMiddleware } from '@forge/middleware'
+import { CorsMiddleware } from '@boostkit/middleware'
 
 const cors = new CorsMiddleware({
   origin: 'https://example.com',
@@ -105,7 +105,7 @@ Logs incoming requests with method, path, status, and duration:
 ```
 
 ```ts
-import { LoggerMiddleware } from '@forge/middleware'
+import { LoggerMiddleware } from '@boostkit/middleware'
 
 const logger = new LoggerMiddleware()
 ```
@@ -115,19 +115,19 @@ const logger = new LoggerMiddleware()
 In-memory rate limiter (per IP). Automatically skips static assets and Vite-internal paths.
 
 ```ts
-import { ThrottleMiddleware } from '@forge/middleware'
+import { ThrottleMiddleware } from '@boostkit/middleware'
 
 const throttle = new ThrottleMiddleware({ max: 60, windowMs: 60_000 })
 ```
 
-For production rate limiting with Redis persistence, use `@forge/rate-limit` instead.
+For production rate limiting with Redis persistence, use `@boostkit/rate-limit` instead.
 
 ## The Pipeline
 
 `Pipeline` lets you compose middleware programmatically:
 
 ```ts
-import { Pipeline } from '@forge/middleware'
+import { Pipeline } from '@boostkit/middleware'
 
 const pipeline = Pipeline.make().through([
   new LoggerMiddleware().toHandler(),

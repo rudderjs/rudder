@@ -1,17 +1,17 @@
-# @forge/validation
+# @boostkit/validation
 
 Zod-powered request validation primitives with form-request and middleware helpers.
 
 ## Installation
 
 ```bash
-pnpm add @forge/validation
+pnpm add @boostkit/validation
 ```
 
 ## Usage
 
 ```ts
-import { FormRequest, validateWith, z } from '@forge/validation'
+import { FormRequest, validateWith, z } from '@boostkit/validation'
 
 class CreateUserRequest extends FormRequest {
   rules() {

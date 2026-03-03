@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const argName = process.argv[2]
 
   console.log()
-  intro(' create-forge-app ')
+  intro(' create-boostkit-app ')
 
   // ── Project name ───────────────────────────────────────
 

@@ -1,18 +1,18 @@
-# @forge/events
+# @boostkit/events
 
 Event dispatcher, listener contract, and provider factory for listener registration.
 
 ## Installation
 
 ```bash
-pnpm add @forge/events
+pnpm add @boostkit/events
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/providers.ts
-import { events } from '@forge/events'
+import { events } from '@boostkit/events'
 
 class UserRegistered {}
 class SendWelcome {

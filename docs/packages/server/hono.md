@@ -1,11 +1,11 @@
-# @forge/server-hono
+# @boostkit/server-hono
 
 Hono-based HTTP server adapter for Forge applications.
 
 ## Installation
 
 ```bash
-pnpm add @forge/server-hono
+pnpm add @boostkit/server-hono
 ```
 
 ## Usage
@@ -13,8 +13,8 @@ pnpm add @forge/server-hono
 Pass the `hono()` adapter to `Application.configure()` in your `bootstrap/app.ts`:
 
 ```ts
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 import configs from '../config/index.js'
 import providers from './providers.js'
 
@@ -35,7 +35,7 @@ export default Application.configure({
 A typical `config/server.ts`:
 
 ```ts
-import { Env } from '@forge/core'
+import { Env } from '@boostkit/core'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -65,7 +65,7 @@ export default {
 Returns a `ServerAdapterProvider` that the application bootstrapper uses to create and start the HTTP server.
 
 ```ts
-import { hono } from '@forge/server-hono'
+import { hono } from '@boostkit/server-hono'
 
 const adapter = hono({
   port: 4000,
@@ -78,7 +78,7 @@ const adapter = hono({
 })
 ```
 
-The returned provider exposes three methods used internally by `@forge/core`:
+The returned provider exposes three methods used internally by `@boostkit/core`:
 
 | Method | Description |
 |---|---|

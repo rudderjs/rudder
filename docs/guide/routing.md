@@ -1,6 +1,6 @@
 # Routing
 
-Forge supports two routing styles: **fluent** (Laravel-style) and **decorator-based** (NestJS-style). Both use the same global `router` singleton from `@forge/router`.
+Forge supports two routing styles: **fluent** (Laravel-style) and **decorator-based** (NestJS-style). Both use the same global `router` singleton from `@boostkit/router`.
 
 ## Route Files
 
@@ -20,8 +20,8 @@ Application.configure({ ... })
 
 ```ts
 // routes/api.ts
-import { router } from '@forge/router'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { router } from '@boostkit/router'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -92,9 +92,9 @@ router.all('/api/*', (_req, res) => {
 For larger apps, group related routes into controller classes:
 
 ```ts
-import { Controller, Get, Post, Put, Delete, Middleware } from '@forge/router'
-import { Injectable } from '@forge/di'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Controller, Get, Post, Put, Delete, Middleware } from '@boostkit/router'
+import { Injectable } from '@boostkit/di'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
 import { UserService } from '../Services/UserService.js'
 
@@ -182,7 +182,7 @@ router.registerController(UserController)
 Apply middleware to specific routes using the fluent builder (coming soon) or the `@Middleware` decorator:
 
 ```ts
-import { fromClass } from '@forge/middleware'
+import { fromClass } from '@boostkit/middleware'
 import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
 
 // Decorator style

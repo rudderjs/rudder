@@ -1,18 +1,18 @@
-# @forge/core
+# @boostkit/core
 
 Application bootstrap, service provider lifecycle, and framework-level runtime orchestration.
 
 ## Installation
 
 ```bash
-pnpm add @forge/core
+pnpm add @boostkit/core
 ```
 
 ## Usage
 
 ```ts
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 
 export default Application.configure({
   server: hono({ port: 3000 }),
@@ -33,7 +33,7 @@ export default Application.configure({
 - `AppBuilder`, `Forge`
 - `app()`, `resolve()`
 - `defineConfig()`
-- Re-exports from `@forge/artisan`, `@forge/di`, `@forge/support`, and `@forge/contracts` types
+- Re-exports from `@boostkit/artisan`, `@boostkit/di`, `@boostkit/support`, and `@boostkit/contracts` types
 
 ## Configuration
 

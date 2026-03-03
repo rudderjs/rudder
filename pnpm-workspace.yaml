@@ -1,5 +1,5 @@
 packages:
   - 'packages/*'
-  - 'create-forge-app'
+  - 'create-boostkit-app'
   - 'playground'
   - 'docs'

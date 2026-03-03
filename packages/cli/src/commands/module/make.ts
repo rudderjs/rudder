@@ -27,7 +27,7 @@ export type ${name} = z.infer<typeof ${name}OutputSchema>
 }
 
 function serviceStub(name: string): string {
-  return `import { Injectable } from '@forge/core'
+  return `import { Injectable } from '@boostkit/core'
 import type { ${name}Input, ${name} } from './${name}Schema.js'
 
 @Injectable()
@@ -54,8 +54,8 @@ export class ${name}Service {
 
 function providerStub(name: string): string {
   const prefix = `/api/${name.replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`)).toLowerCase()}s`
-  return `import { ServiceProvider } from '@forge/core'
-import { router } from '@forge/router'
+  return `import { ServiceProvider } from '@boostkit/core'
+import { router } from '@boostkit/router'
 import { ${name}Service } from './${name}Service.js'
 import { ${name}InputSchema } from './${name}Schema.js'
 
@@ -123,8 +123,8 @@ async function autoRegisterProvider(name: string, cwd: string): Promise<void> {
   const importLine    = `import { ${name}ServiceProvider } from '../app/Modules/${name}/${name}ServiceProvider.js'`
   const pushLine      = `  ${name}ServiceProvider,`
 
-  const template = `import type { ServiceProvider } from '@forge/core'
-import type { Application } from '@forge/core'
+  const template = `import type { ServiceProvider } from '@boostkit/core'
+import type { Application } from '@boostkit/core'
 
 export const providers: (new (app: Application) => ServiceProvider)[] = []\n`
 

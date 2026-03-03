@@ -1,5 +1,5 @@
-import { CacheRegistry } from '@forge/cache'
-import type { ForgeRequest, ForgeResponse, MiddlewareHandler } from '@forge/contracts'
+import { CacheRegistry } from '@boostkit/cache'
+import type { ForgeRequest, ForgeResponse, MiddlewareHandler } from '@boostkit/contracts'
 
 // ─── Internal types ────────────────────────────────────────
 
@@ -118,7 +118,7 @@ export class RateLimitBuilder {
 /**
  * Cache-backed rate limiter middleware.
  *
- * Uses the active @forge/cache adapter — works with memory (dev) or Redis (prod).
+ * Uses the active @boostkit/cache adapter — works with memory (dev) or Redis (prod).
  * Respects X-Forwarded-For and sets standard X-RateLimit-* + Retry-After headers.
  *
  * Usage:

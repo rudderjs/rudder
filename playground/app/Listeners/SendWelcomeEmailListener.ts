@@ -1,5 +1,5 @@
-import { Mail } from '@forge/mail'
-import type { Listener } from '@forge/events'
+import { Mail } from '@boostkit/mail'
+import type { Listener } from '@boostkit/events'
 import type { UserRegistered } from '../Events/UserRegistered.js'
 import { WelcomeEmail } from '../Mail/WelcomeEmail.js'
 

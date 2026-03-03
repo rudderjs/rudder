@@ -1,18 +1,18 @@
-# @forge/orm-prisma
+# @boostkit/orm-prisma
 
-Prisma-backed `@forge/orm` adapter provider.
+Prisma-backed `@boostkit/orm` adapter provider.
 
 ## Installation
 
 ```bash
-pnpm add @forge/orm-prisma
+pnpm add @boostkit/orm-prisma
 ```
 
 ## Usage
 
 ```ts
-import { prisma } from '@forge/orm-prisma'
-import { ModelRegistry } from '@forge/orm'
+import { prisma } from '@boostkit/orm-prisma'
+import { ModelRegistry } from '@boostkit/orm'
 
 const adapter = await prisma({
   driver: 'sqlite',

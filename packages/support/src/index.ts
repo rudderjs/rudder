@@ -191,7 +191,7 @@ export class ConfigRepository {
 
 let _repo: ConfigRepository | null = null
 
-/** @internal — called by @forge/core Application */
+/** @internal — called by @boostkit/core Application */
 export function setConfigRepository(repo: ConfigRepository): void {
   _repo = repo
   ;(globalThis as Record<string, unknown>)['__forge_config__'] = repo
@@ -207,10 +207,10 @@ export function config<T = unknown>(key: string, fallback?: T): T {
 
 /**
  * Dynamically import an optional peer package installed in the user's app
- * (process.cwd()), not inside node_modules/@forge/*.
+ * (process.cwd()), not inside node_modules/@boostkit/*.
  *
  * Uses createRequire anchored to the app root so optional peers installed
- * in the user's project are resolvable regardless of where @forge/* lives.
+ * in the user's project are resolvable regardless of where @boostkit/* lives.
  *
  * All optional peer packages must include `"default": "./dist/index.js"`
  * in their exports field so the CJS resolver can find them.
@@ -236,7 +236,7 @@ export function defineEnv<T extends z.ZodRawShape>(
     const lines = parsed.error.issues
       .map(i => `  ${i.path.join('.')}: ${i.message}`)
       .join('\n')
-    throw new Error(`[Forge] Invalid environment configuration:\n${lines}`)
+    throw new Error(`[BoostKit] Invalid environment configuration:\n${lines}`)
   }
   return parsed.data
 }

@@ -1,6 +1,6 @@
-import { artisan } from '@forge/artisan'
-import { schedule } from '@forge/schedule'
-import { Cache } from '@forge/cache'
+import { artisan } from '@boostkit/artisan'
+import { schedule } from '@boostkit/schedule'
+import { Cache } from '@boostkit/cache'
 import { User } from '../app/Models/User.js'
 import { SendEmails } from '../app/Commands/SendEmails.js'
 

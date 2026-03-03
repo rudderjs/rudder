@@ -1,5 +1,5 @@
 import { z, ZodType, ZodError } from 'zod'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 // ─── Validation Error ──────────────────────────────────────
 

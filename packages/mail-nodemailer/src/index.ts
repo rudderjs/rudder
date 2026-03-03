@@ -1,5 +1,5 @@
 import * as _nm from 'nodemailer'
-import type { Mailable, MailAdapter, MailAdapterProvider, SendOptions } from '@forge/mail'
+import type { Mailable, MailAdapter, MailAdapterProvider, SendOptions } from '@boostkit/mail'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -52,8 +52,8 @@ class NodemailerAdapter implements MailAdapter {
 // ─── Factory ───────────────────────────────────────────────
 
 /**
- * Named export used by @forge/mail's dynamic import:
- *   const { nodemailer } = await import('@forge/mail-nodemailer')
+ * Named export used by @boostkit/mail's dynamic import:
+ *   const { nodemailer } = await import('@boostkit/mail-nodemailer')
  */
 export function nodemailer(
   config: NodemailerConfig,

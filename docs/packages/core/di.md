@@ -1,9 +1,9 @@
-# @forge/di
+# @boostkit/di
 
 Dependency injection container with decorators for constructor injection.
 
 ```bash
-pnpm add @forge/di
+pnpm add @boostkit/di
 ```
 
 > `reflect-metadata` must also be installed as a regular dependency and imported once at your application entry point.
@@ -22,7 +22,7 @@ Mark a class with `@Injectable()` to allow the container to auto-resolve it. Use
 
 ```ts
 import 'reflect-metadata'
-import { Injectable, Inject, container } from '@forge/di'
+import { Injectable, Inject, container } from '@boostkit/di'
 
 @Injectable()
 class DatabaseConnection {
@@ -57,7 +57,7 @@ const service = container.make(UserService)
 ### Manual Bindings
 
 ```ts
-import { container } from '@forge/di'
+import { container } from '@boostkit/di'
 import { PaymentService } from './PaymentService.js'
 import { StripePaymentService } from './StripePaymentService.js'
 
@@ -118,7 +118,7 @@ Overrides the resolution token for a specific constructor parameter. Use this wh
 
 ## container Global Singleton
 
-`container` is a module-level singleton stored on `globalThis.__forge_container__`. It is shared across the entire process, including dynamic imports and hot-module boundaries. All service providers and the `app()` / `resolve()` helpers from `@forge/core` use this same instance.
+`container` is a module-level singleton stored on `globalThis.__forge_container__`. It is shared across the entire process, including dynamic imports and hot-module boundaries. All service providers and the `app()` / `resolve()` helpers from `@boostkit/core` use this same instance.
 
 ---
 

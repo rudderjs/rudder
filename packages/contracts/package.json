@@ -1,5 +1,5 @@
 {
-  "name": "@forge/contracts",
+  "name": "@boostkit/contracts",
   "version": "0.0.1",
   "private": true,
   "type": "module",

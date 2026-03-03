@@ -1,9 +1,9 @@
-# @forge/router
+# @boostkit/router
 
 Fluent HTTP router and decorator-based controller support for Forge.
 
 ```bash
-pnpm add @forge/router
+pnpm add @boostkit/router
 ```
 
 ---
@@ -13,8 +13,8 @@ pnpm add @forge/router
 Register routes in `routes/api.ts` using the global `router` singleton:
 
 ```ts
-import { router } from '@forge/router'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { router } from '@boostkit/router'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 router.get('/api/users', async (_req: ForgeRequest, res: ForgeResponse) => {
   return res.json({ data: [] })
@@ -43,7 +43,7 @@ router.all('/api/*', (_req: ForgeRequest, res: ForgeResponse) => {
 Pass an optional middleware array as the third argument:
 
 ```ts
-import { RateLimit } from '@forge/rate-limit'
+import { RateLimit } from '@boostkit/rate-limit'
 
 const authLimit = RateLimit.perMinute(10).toHandler()
 
@@ -57,8 +57,8 @@ router.post('/api/auth/login', loginHandler, [authLimit])
 Use class decorators for controller-style routing. Controllers must be registered with `router.registerController()`.
 
 ```ts
-import { Controller, Get, Post, Patch, Delete, Middleware } from '@forge/router'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Controller, Get, Post, Patch, Delete, Middleware } from '@boostkit/router'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 @Controller('/api/users')
 export class UserController {
@@ -92,7 +92,7 @@ export class UserController {
 Register the controller in `routes/api.ts`:
 
 ```ts
-import { router } from '@forge/router'
+import { router } from '@boostkit/router'
 import { UserController } from '../app/Http/Controllers/UserController.ts'
 
 router.registerController(UserController)
@@ -103,7 +103,7 @@ router.registerController(UserController)
 Apply middleware to every route in a controller with `@Middleware` on the class:
 
 ```ts
-import { Controller, Get, Middleware } from '@forge/router'
+import { Controller, Get, Middleware } from '@boostkit/router'
 import { AuthMiddleware } from '../app/Http/Middleware/AuthMiddleware.ts'
 
 @Controller('/api/admin')
@@ -165,7 +165,7 @@ export class UserController {
 
 ## Notes
 
-- `@forge/router` is a **peer dependency** of `@forge/core` — it is loaded at runtime and never causes a circular dependency
+- `@boostkit/router` is a **peer dependency** of `@boostkit/core` — it is loaded at runtime and never causes a circular dependency
 - Decorator support requires `experimentalDecorators: true` and `emitDecoratorMetadata: true` in `tsconfig.json`, and `import 'reflect-metadata'` at the app entry point
 - Route files (`routes/api.ts`, `routes/web.ts`) are side-effect modules — they call `router.*` for their effect and do not need to export anything
 - `router.all()` matches every HTTP method and is typically used as a catch-all for 404 responses — register it last

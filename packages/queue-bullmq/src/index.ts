@@ -1,5 +1,5 @@
 import { Queue, Worker } from 'bullmq'
-import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@forge/queue'
+import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@boostkit/queue'
 
 // ─── Config ────────────────────────────────────────────────
 

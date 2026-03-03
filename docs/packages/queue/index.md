@@ -1,21 +1,21 @@
-# @forge/queue
+# @boostkit/queue
 
 Queue job abstractions, registry, and provider factory.
 
 ## Installation
 
 ```bash
-pnpm add @forge/queue
+pnpm add @boostkit/queue
 ```
 
-This package provides the `Job` base class, the `DispatchBuilder` fluent interface, the `QueueAdapter` contract, and the `queue()` provider factory. It does not include a driver — use it with `@forge/queue-bullmq` or `@forge/queue-inngest` for real background processing, or rely on the built-in `sync` driver for in-process execution.
+This package provides the `Job` base class, the `DispatchBuilder` fluent interface, the `QueueAdapter` contract, and the `queue()` provider factory. It does not include a driver — use it with `@boostkit/queue-bullmq` or `@boostkit/queue-inngest` for real background processing, or rely on the built-in `sync` driver for in-process execution.
 
 ## Defining a Job
 
 Extend `Job` and implement `handle()`:
 
 ```ts
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 
 export class SendEmailJob extends Job {
   static jobName = 'SendEmailJob'
@@ -61,7 +61,7 @@ await SendEmailJob.dispatch('bob@example.com', 'Reset password')
 Register the queue provider in `bootstrap/providers.ts` using the `queue()` factory:
 
 ```ts
-import { queue } from '@forge/queue'
+import { queue } from '@boostkit/queue'
 import configs from '../config/index.js'
 
 export default [
@@ -73,7 +73,7 @@ export default [
 Define the queue config in `config/queue.ts`:
 
 ```ts
-import { Env } from '@forge/support'
+import { Env } from '@boostkit/support'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'sync'),
@@ -133,6 +133,6 @@ The worker uses the adapter registered for the active connection. For `sync`, th
 
 - Register all Job classes in the adapter's `jobs[]` array (required by BullMQ and Inngest) so the worker can resolve jobs by name at runtime.
 - The built-in `sync` driver requires no additional packages and is always available.
-- For Redis-backed queuing, use `@forge/queue-bullmq`.
-- For serverless/event-driven queuing, use `@forge/queue-inngest`.
+- For Redis-backed queuing, use `@boostkit/queue-bullmq`.
+- For serverless/event-driven queuing, use `@boostkit/queue-inngest`.
 - Job payloads are serialized to JSON — ensure constructor arguments are JSON-serializable.

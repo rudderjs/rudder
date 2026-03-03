@@ -10,8 +10,8 @@
     "clean": "turbo run clean",
     "artisan": "tsx packages/cli/src/index.ts",
     "test": "turbo run test",
-    "docs:dev": "turbo run docs:dev --filter=@forge/docs",
-    "docs:build": "turbo run docs:build --filter=@forge/docs",
+    "docs:dev": "turbo run docs:dev --filter=@boostkit/docs",
+    "docs:build": "turbo run docs:build --filter=@boostkit/docs",
     "docs:preview": "cd docs && pnpm preview"
   },
   "pnpm": {

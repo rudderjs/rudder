@@ -22,8 +22,8 @@ pnpm artisan make:controller UserController
 Generated file:
 
 ```ts
-import { Controller, Get } from '@forge/router'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Controller, Get } from '@boostkit/router'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 @Controller('/user-controller')
 export class UserController {
@@ -46,7 +46,7 @@ pnpm artisan make:model Post
 Generated file:
 
 ```ts
-import { Model } from '@forge/orm'
+import { Model } from '@boostkit/orm'
 
 export class Post extends Model {
   static table = 'post'
@@ -67,7 +67,7 @@ pnpm artisan make:job SendWelcomeEmail
 Generated file:
 
 ```ts
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 
 export class SendWelcomeEmailJob extends Job {
   async handle(): Promise<void> {
@@ -88,8 +88,8 @@ pnpm artisan make:middleware Auth
 Generated file:
 
 ```ts
-import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { Middleware } from '@boostkit/middleware'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
@@ -114,7 +114,7 @@ pnpm artisan make:request CreateUser
 Generated file:
 
 ```ts
-import { FormRequest } from '@forge/validation'
+import { FormRequest } from '@boostkit/validation'
 import { z } from 'zod'
 
 export class CreateUserRequest extends FormRequest {
@@ -142,7 +142,7 @@ pnpm artisan make:provider App
 Generated file:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {
@@ -167,7 +167,7 @@ pnpm artisan make:command SendDigest
 Generated file:
 
 ```ts
-import { Command } from '@forge/artisan'
+import { Command } from '@boostkit/artisan'
 
 export class SendDigest extends Command {
   readonly signature   = 'send:digest {--force : Force the operation}'
@@ -189,7 +189,7 @@ export class SendDigest extends Command {
 Register it in `routes/console.ts`:
 
 ```ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 import { SendDigest } from '../app/Commands/SendDigest.ts'
 
 artisan.register(SendDigest)
@@ -226,7 +226,7 @@ pnpm artisan make:listener SendWelcomeEmail
 Generated file:
 
 ```ts
-import type { Listener } from '@forge/events'
+import type { Listener } from '@boostkit/events'
 
 export class SendWelcomeEmail implements Listener {
   async handle(event: unknown): Promise<void> {
@@ -247,7 +247,7 @@ pnpm artisan make:mail WelcomeMail
 Generated file:
 
 ```ts
-import { Mailable } from '@forge/mail'
+import { Mailable } from '@boostkit/mail'
 
 export class WelcomeMail extends Mailable {
   constructor(/* inject data here */) {

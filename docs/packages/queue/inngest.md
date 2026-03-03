@@ -1,11 +1,11 @@
-# @forge/queue-inngest
+# @boostkit/queue-inngest
 
 Inngest serverless queue adapter for Forge.
 
 ## Installation
 
 ```bash
-pnpm add @forge/queue-inngest inngest
+pnpm add @boostkit/queue-inngest inngest
 ```
 
 ## Configuration
@@ -13,7 +13,7 @@ pnpm add @forge/queue-inngest inngest
 Define the Inngest connection in `config/queue.ts`:
 
 ```ts
-import { Env } from '@forge/core'
+import { Env } from '@boostkit/core'
 import { SendEmailJob } from '../app/Jobs/SendEmailJob.js'
 import { ProcessImageJob } from '../app/Jobs/ProcessImageJob.js'
 
@@ -40,7 +40,7 @@ export default {
 Extend `Job` and optionally set a static `retries` property:
 
 ```ts
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 
 export class SendEmailJob extends Job {
   static jobName = 'SendEmailJob'
@@ -84,8 +84,8 @@ For example, `SendEmailJob` → `forge/job.SendEmailJob`. This is handled automa
 Inngest requires an HTTP endpoint where it can deliver job invocations. Use `serveHandler()` to mount it in your routes:
 
 ```ts
-import { router } from '@forge/router'
-import { serveHandler } from '@forge/queue-inngest'
+import { router } from '@boostkit/router'
+import { serveHandler } from '@boostkit/queue-inngest'
 import configs from '../config/index.js'
 
 router.post('/api/inngest', serveHandler(configs.queue.connections.inngest))
@@ -111,7 +111,7 @@ The handler verifies the Inngest signature on incoming requests and dispatches t
 Returns a `QueueAdapterProvider` that integrates with the `queue()` factory:
 
 ```ts
-import { inngest } from '@forge/queue-inngest'
+import { inngest } from '@boostkit/queue-inngest'
 
 const provider = inngest({
   appId: 'my-forge-app',
@@ -124,7 +124,7 @@ Normally you do not call `inngest()` directly — pass the connection config to 
 ## Bootstrap Integration
 
 ```ts
-import { queue } from '@forge/queue'
+import { queue } from '@boostkit/queue'
 import configs from '../config/index.js'
 
 export default [

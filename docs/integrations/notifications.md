@@ -1,6 +1,6 @@
 # Notifications
 
-This guide walks through setting up multi-channel notifications in a Forge application using `@forge/notification`. Notifications can be sent via email, stored in a database, or dispatched through custom channels (SMS, Slack, push notifications, etc.).
+This guide walks through setting up multi-channel notifications in a Forge application using `@boostkit/notification`. Notifications can be sent via email, stored in a database, or dispatched through custom channels (SMS, Slack, push notifications, etc.).
 
 ## Overview
 
@@ -14,7 +14,7 @@ The notification system consists of:
 ## Installation
 
 ```bash
-pnpm add @forge/notification @forge/mail
+pnpm add @boostkit/notification @boostkit/mail
 ```
 
 ## 1. Register the Provider
@@ -22,8 +22,8 @@ pnpm add @forge/notification @forge/mail
 In `bootstrap/providers.ts`, add `notifications()` **after** `mail()`:
 
 ```ts
-import { mail }          from '@forge/mail'
-import { notifications } from '@forge/notification'
+import { mail }          from '@boostkit/mail'
+import { notifications } from '@boostkit/notification'
 import configs           from '../config/index.js'
 
 export default [
@@ -66,8 +66,8 @@ Extend `Notification` and implement `via()` plus the appropriate `to*()` methods
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification, type Notifiable } from '@forge/notification'
-import { Mailable } from '@forge/mail'
+import { Notification, type Notifiable } from '@boostkit/notification'
+import { Mailable } from '@boostkit/mail'
 
 class WelcomeMail extends Mailable {
   build() {
@@ -104,7 +104,7 @@ export class WelcomeNotification extends Notification {
 Use the `notify()` helper from anywhere in your application:
 
 ```ts
-import { notify } from '@forge/notification'
+import { notify } from '@boostkit/notification'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
 // Single recipient
@@ -162,7 +162,7 @@ import {
   type NotificationChannel,
   type Notifiable,
   type Notification,
-} from '@forge/notification'
+} from '@boostkit/notification'
 
 interface SmsNotifiable extends Notifiable {
   phone: string
@@ -213,8 +213,8 @@ class OrderShippedNotification extends Notification {
 
 | Channel | Package | Description |
 |---------|---------|-------------|
-| `mail` | `@forge/mail` | Sends email via the configured mail adapter |
-| `database` | `@forge/orm` | Stores notification as a JSON row |
+| `mail` | `@boostkit/mail` | Sends email via the configured mail adapter |
+| `database` | `@boostkit/orm` | Stores notification as a JSON row |
 | Custom | Your code | Register any channel with `ChannelRegistry` |
 
 ## Notes

@@ -1,24 +1,24 @@
-# @forge/schedule
+# @boostkit/schedule
 
 Task scheduler primitives and provider factory with cron-based artisan commands.
 
 ## Installation
 
 ```bash
-pnpm add @forge/schedule
+pnpm add @boostkit/schedule
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/providers.ts
-import { scheduler } from '@forge/schedule'
+import { scheduler } from '@boostkit/schedule'
 
 export default [
   scheduler(),
 ]
 
-import { schedule } from '@forge/schedule'
+import { schedule } from '@boostkit/schedule'
 schedule.call(async () => {
   // task body
 }).everyFiveMinutes().description('Example task')

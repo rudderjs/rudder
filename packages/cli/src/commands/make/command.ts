@@ -10,7 +10,7 @@ function stub(name: string): string {
     .replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`))
     .toLowerCase()
 
-  return `import { Command } from '@forge/artisan'
+  return `import { Command } from '@boostkit/artisan'
 
 export class ${name} extends Command {
   readonly signature   = '${kebab} {--force : Force the operation}'

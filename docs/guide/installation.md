@@ -5,7 +5,7 @@
 - **Node.js** 18 or later
 - **pnpm** 8 or later (recommended; npm and yarn also work)
 
-## Option 1: create-forge-app (Recommended)
+## Option 1: create-boostkit-app (Recommended)
 
 The fastest way to start a new Forge project is with the official scaffolder:
 
@@ -16,7 +16,7 @@ pnpm create forge-app my-app
 Or with npx:
 
 ```bash
-npx create-forge-app my-app
+npx create-boostkit-app my-app
 ```
 
 The CLI will prompt you for:
@@ -43,7 +43,7 @@ If you prefer to set up manually or add Forge to an existing Vite project:
 ### 1. Install the core packages
 
 ```bash
-pnpm add @forge/core @forge/server-hono @forge/router
+pnpm add @boostkit/core @boostkit/server-hono @boostkit/router
 pnpm add -D vite vitepress typescript
 ```
 
@@ -52,14 +52,14 @@ pnpm add -D vite vitepress typescript
 For Prisma (recommended for new projects):
 
 ```bash
-pnpm add @forge/orm @forge/orm-prisma @prisma/client
+pnpm add @boostkit/orm @boostkit/orm-prisma @prisma/client
 pnpm add -D prisma
 ```
 
 For Drizzle:
 
 ```bash
-pnpm add @forge/orm @forge/orm-drizzle drizzle-orm better-sqlite3
+pnpm add @boostkit/orm @boostkit/orm-drizzle drizzle-orm better-sqlite3
 ```
 
 ### 3. Bootstrap the application
@@ -69,8 +69,8 @@ Create `bootstrap/app.ts`. This is both the bootstrap file **and** the applicati
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 import providers from './providers.ts'
 import configs from '../config/index.ts'
 
@@ -92,7 +92,7 @@ export default Application.configure({
 Create `bootstrap/providers.ts`:
 
 ```ts
-import type { Application, ServiceProvider } from '@forge/core'
+import type { Application, ServiceProvider } from '@boostkit/core'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 
@@ -125,7 +125,7 @@ This is the only wiring needed — `vike-photon` consumes the exported `Forge` i
 Create `config/server.ts`:
 
 ```ts
-import { Env } from '@forge/support'
+import { Env } from '@boostkit/support'
 
 export default {
   port: Env.getNumber('PORT', 3000),

@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import type { ServerAdapter, RouteDefinition, RouteHandler, MiddlewareHandler, HttpMethod } from '@forge/core/server';
+import type { ServerAdapter, RouteDefinition, RouteHandler, MiddlewareHandler, HttpMethod } from '@boostkit/core/server';
 /** Mark a class as a controller with an optional route prefix */
 export declare function Controller(prefix?: string): ClassDecorator;
 /** Attach middleware to a controller class or route method */

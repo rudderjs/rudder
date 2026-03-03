@@ -2,15 +2,15 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Fix the three broken stub packages (`@forge/auth`, `@forge/orm-drizzle`, `@forge/queue-bullmq`) so they follow monorepo conventions (proper `package.json`, `tsconfig.json`, and `src/index.ts`), and implement a real BullMQ queue adapter.
+**Goal:** Fix the three broken stub packages (`@boostkit/auth`, `@boostkit/orm-drizzle`, `@boostkit/queue-bullmq`) so they follow monorepo conventions (proper `package.json`, `tsconfig.json`, and `src/index.ts`), and implement a real BullMQ queue adapter.
 
-**Architecture:** Each stub currently has an incorrect `package.json` (missing `@forge/` npm scope, `type: "module"`, `exports`, build scripts) and an empty `src/index.ts`. The fix follows the exact same pattern used by `@forge/server-express`, `@forge/server-fastify`, and `@forge/server-h3`. `@forge/queue-bullmq` gets a real implementation; `@forge/orm-drizzle` and `@forge/auth` get `notImplemented()` stubs.
+**Architecture:** Each stub currently has an incorrect `package.json` (missing `@boostkit/` npm scope, `type: "module"`, `exports`, build scripts) and an empty `src/index.ts`. The fix follows the exact same pattern used by `@boostkit/server-express`, `@boostkit/server-fastify`, and `@boostkit/server-h3`. `@boostkit/queue-bullmq` gets a real implementation; `@boostkit/orm-drizzle` and `@boostkit/auth` get `notImplemented()` stubs.
 
-**Tech Stack:** TypeScript (ESM/NodeNext), BullMQ, `@forge/queue`, `@forge/orm`, pnpm workspaces, Turborepo
+**Tech Stack:** TypeScript (ESM/NodeNext), BullMQ, `@boostkit/queue`, `@boostkit/orm`, pnpm workspaces, Turborepo
 
 ---
 
-### Task 1: Fix `@forge/queue-bullmq`
+### Task 1: Fix `@boostkit/queue-bullmq`
 
 **Files:**
 - Modify: `packages/queue-bullmq/package.json`
@@ -23,7 +23,7 @@ Replace entire file with proper monorepo-compliant config:
 
 ```json
 {
-  "name": "@forge/queue-bullmq",
+  "name": "@boostkit/queue-bullmq",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -42,7 +42,7 @@ Replace entire file with proper monorepo-compliant config:
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/queue": "workspace:*",
+    "@boostkit/queue": "workspace:*",
     "bullmq": "^5.0.0"
   },
   "devDependencies": {
@@ -69,7 +69,7 @@ Replace empty file with proper config:
 
 **Step 3: Implement `src/index.ts`**
 
-Implement real BullMQ adapter following same pattern as `@forge/queue-inngest`:
+Implement real BullMQ adapter following same pattern as `@boostkit/queue-inngest`:
 
 ```typescript
 import { Queue, Worker, type ConnectionOptions } from 'bullmq'
@@ -78,7 +78,7 @@ import type {
   QueueAdapter,
   QueueAdapterProvider,
   DispatchOptions,
-} from '@forge/queue'
+} from '@boostkit/queue'
 
 // ─── BullMQ Adapter ────────────────────────────────────────
 
@@ -152,7 +152,7 @@ git commit -m "feat(queue-bullmq): implement BullMQ adapter with proper monorepo
 
 ---
 
-### Task 2: Fix `@forge/orm-drizzle`
+### Task 2: Fix `@boostkit/orm-drizzle`
 
 **Files:**
 - Modify: `packages/orm-drizzle/package.json`
@@ -163,7 +163,7 @@ git commit -m "feat(queue-bullmq): implement BullMQ adapter with proper monorepo
 
 ```json
 {
-  "name": "@forge/orm-drizzle",
+  "name": "@boostkit/orm-drizzle",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -182,7 +182,7 @@ git commit -m "feat(queue-bullmq): implement BullMQ adapter with proper monorepo
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/orm": "workspace:*"
+    "@boostkit/orm": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -207,12 +207,12 @@ git commit -m "feat(queue-bullmq): implement BullMQ adapter with proper monorepo
 **Step 3: Implement `src/index.ts`** (notImplemented stub)
 
 ```typescript
-import type { OrmAdapterProvider, OrmAdapter } from '@forge/orm'
+import type { OrmAdapterProvider, OrmAdapter } from '@boostkit/orm'
 
 function notImplemented(): never {
   throw new Error(
-    '[Forge] @forge/orm-drizzle is not yet implemented. ' +
-    'Use @forge/orm-prisma instead.'
+    '[Forge] @boostkit/orm-drizzle is not yet implemented. ' +
+    'Use @boostkit/orm-prisma instead.'
   )
 }
 
@@ -238,7 +238,7 @@ git commit -m "feat(orm-drizzle): scaffold Drizzle adapter stub with proper mono
 
 ---
 
-### Task 3: Fix `@forge/auth`
+### Task 3: Fix `@boostkit/auth`
 
 **Files:**
 - Modify: `packages/auth/package.json`
@@ -249,7 +249,7 @@ git commit -m "feat(orm-drizzle): scaffold Drizzle adapter stub with proper mono
 
 ```json
 {
-  "name": "@forge/auth",
+  "name": "@boostkit/auth",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -268,7 +268,7 @@ git commit -m "feat(orm-drizzle): scaffold Drizzle adapter stub with proper mono
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/core": "workspace:*"
+    "@boostkit/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -328,7 +328,7 @@ export interface GuardConfig {
 
 function notImplemented(): never {
   throw new Error(
-    '[Forge] @forge/auth is not yet implemented. ' +
+    '[Forge] @boostkit/auth is not yet implemented. ' +
     'Sessions, JWT, and guard support are coming in a future release.'
   )
 }
@@ -392,5 +392,5 @@ You should not need to restart `pnpm dev` after reordering providers or editing 
 If a workspace still appears stale after pulling changes, run once from repo root:
 
 ```bash
-pnpm --filter @forge/di build && pnpm --filter @forge/router build && pnpm --filter @forge/core build
+pnpm --filter @boostkit/di build && pnpm --filter @boostkit/router build && pnpm --filter @boostkit/core build
 ```

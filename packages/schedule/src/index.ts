@@ -1,4 +1,4 @@
-import { ServiceProvider, artisan, type Application } from '@forge/core'
+import { ServiceProvider, artisan, type Application } from '@boostkit/core'
 import { Cron } from 'croner'
 
 // ─── Scheduled Task ────────────────────────────────────────
@@ -95,7 +95,7 @@ export const schedule = new Scheduler()
  * `schedule:work` artisan commands.
  *
  * Define scheduled tasks in routes/console.ts:
- *   import { schedule } from '@forge/schedule'
+ *   import { schedule } from '@boostkit/schedule'
  *   schedule.call(() => Cache.forget('users:all')).everyFiveMinutes()
  *
  * Run via system cron (production):

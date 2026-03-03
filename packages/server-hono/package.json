@@ -1,5 +1,5 @@
 {
-  "name": "@forge/server-hono",
+  "name": "@boostkit/server-hono",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/contracts": "workspace:*",
+    "@boostkit/contracts": "workspace:*",
     "@hono/node-server": "^1.19.9",
     "@photonjs/hono": "^0.1.12",
     "hono": "^4.12.0"

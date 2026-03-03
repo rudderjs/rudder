@@ -1,4 +1,4 @@
-import { ServiceProvider, type Application } from '@forge/core'
+import { ServiceProvider, type Application } from '@boostkit/core'
 
 export interface BetterAuthConfig {
   /** 32+ character secret. Falls back to process.env.AUTH_SECRET */
@@ -27,7 +27,7 @@ export interface BetterAuthConfig {
  * using app().make('auth') to get the handler.
  *
  * Usage in bootstrap/providers.ts:
- *   import { betterAuth } from '@forge/auth-better-auth'
+ *   import { betterAuth } from '@boostkit/auth-better-auth'
  *   import configs from '../config/index.ts'
  *   export default [..., betterAuth(configs.auth), ...]
  */

@@ -10,7 +10,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
-} from '@forge/orm'
+} from '@boostkit/orm'
 
 // ─── Global Table Registry ─────────────────────────────────
 
@@ -248,7 +248,7 @@ class DrizzleAdapter implements OrmAdapter {
     const schema = this.tables[table] ?? DrizzleTableRegistry.get(table)
     if (!schema) {
       throw new Error(
-        `[Forge ORM Drizzle] No table schema registered for "${table}". ` +
+        `[BoostKit ORM Drizzle] No table schema registered for "${table}". ` +
         `Pass tables: { ${table}: myTable } in drizzle() config or call ` +
         `DrizzleTableRegistry.register("${table}", myTable).`
       )

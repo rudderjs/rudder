@@ -1,5 +1,5 @@
-import { ServiceProvider, artisan, type Application } from '@forge/core'
-import { resolveOptionalPeer } from '@forge/core'
+import { ServiceProvider, artisan, type Application } from '@boostkit/core'
+import { resolveOptionalPeer } from '@boostkit/core'
 
 // ─── Job Contract ──────────────────────────────────────────
 
@@ -52,7 +52,7 @@ export class DispatchBuilder<T extends Job> {
 
   async send(): Promise<void> {
     const adapter = QueueRegistry.get()
-    if (!adapter) throw new Error('[Forge Queue] No queue adapter registered')
+    if (!adapter) throw new Error('[BoostKit Queue] No queue adapter registered')
     await adapter.dispatch(this.job, { delay: this._delay, queue: this._queue })
   }
 
@@ -174,10 +174,10 @@ export interface QueueConfig {
  * Reads `config.default` to pick the driver, then boots the matching adapter.
  *
  * Built-in drivers:  sync
- * Plugin drivers:    inngest (@forge/queue-inngest), bullmq (@forge/queue-bullmq)
+ * Plugin drivers:    inngest (@boostkit/queue-inngest), bullmq (@boostkit/queue-bullmq)
  *
  * Usage in bootstrap/providers.ts:
- *   import { queue } from '@forge/queue'
+ *   import { queue } from '@boostkit/queue'
  *   import configs from '../config/index.js'
  *   export default [..., queue(configs.queue), ...]
  */
@@ -195,13 +195,13 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
       if (driver === 'sync') {
         adapter = new SyncAdapter()
       } else if (driver === 'inngest') {
-        const { inngest } = await resolveOptionalPeer<any>('@forge/queue-inngest')
+        const { inngest } = await resolveOptionalPeer<any>('@boostkit/queue-inngest')
         adapter = (inngest as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
       } else if (driver === 'bullmq') {
-        const { bullmq } = await resolveOptionalPeer<any>('@forge/queue-bullmq')
+        const { bullmq } = await resolveOptionalPeer<any>('@boostkit/queue-bullmq')
         adapter = (bullmq as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
       } else {
-        throw new Error(`[Forge Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
+        throw new Error(`[BoostKit Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
       }
 
       QueueRegistry.set(adapter)
@@ -211,8 +211,8 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
       // Fails gracefully when the active driver doesn't support workers (e.g. sync, inngest).
       artisan.command('queue:work', async (args) => {
         if (typeof adapter.work !== 'function') {
-          console.error(`[Forge Queue] Driver "${driver}" does not support workers.`)
-          console.error(`[Forge Queue] Switch to "bullmq" in config/queue.ts and set QUEUE_CONNECTION=bullmq in .env.`)
+          console.error(`[BoostKit Queue] Driver "${driver}" does not support workers.`)
+          console.error(`[BoostKit Queue] Switch to "bullmq" in config/queue.ts and set QUEUE_CONNECTION=bullmq in .env.`)
           process.exit(1)
         }
         const queues = args[0] ?? 'default'
@@ -221,7 +221,7 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       artisan.command('queue:status', async (args) => {
         if (typeof adapter.status !== 'function') {
-          console.error(`[Forge Queue] Driver "${driver}" does not support queue status.`)
+          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue status.`)
           process.exit(1)
         }
         const queueName = args[0] ?? 'default'
@@ -237,23 +237,23 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       artisan.command('queue:clear', async (args) => {
         if (typeof adapter.flush !== 'function') {
-          console.error(`[Forge Queue] Driver "${driver}" does not support queue:clear.`)
+          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue:clear.`)
           process.exit(1)
         }
         const queueName = args[0] ?? 'default'
         await adapter.flush(queueName)
-        console.log(`[Forge Queue] Queue "${queueName}" cleared (waiting + delayed jobs removed).`)
+        console.log(`[BoostKit Queue] Queue "${queueName}" cleared (waiting + delayed jobs removed).`)
       }).description('Drain waiting + delayed jobs — pnpm artisan queue:clear [queue=default]')
 
       artisan.command('queue:failed', async (args) => {
         if (typeof adapter.failures !== 'function') {
-          console.error(`[Forge Queue] Driver "${driver}" does not support queue:failed.`)
+          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue:failed.`)
           process.exit(1)
         }
         const queueName = args[0] ?? 'default'
         const jobs = await adapter.failures(queueName)
         if (jobs.length === 0) {
-          console.log(`[Forge Queue] No failed jobs in queue "${queueName}".`)
+          console.log(`[BoostKit Queue] No failed jobs in queue "${queueName}".`)
           return
         }
         console.log(`\nFailed jobs in queue "${queueName}" (${jobs.length}):\n`)
@@ -269,18 +269,18 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       artisan.command('queue:retry', async (args) => {
         if (typeof adapter.retryFailed !== 'function') {
-          console.error(`[Forge Queue] Driver "${driver}" does not support queue:retry.`)
+          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue:retry.`)
           process.exit(1)
         }
         const queueName = args[0] ?? 'default'
         const count = await adapter.retryFailed(queueName)
-        console.log(`[Forge Queue] Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
+        console.log(`[BoostKit Queue] Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
       }).description('Retry all failed jobs — pnpm artisan queue:retry [queue=default]')
 
       // Cloud adapters (Inngest etc.) expose a serve endpoint.
       // Mount it automatically — no user config needed.
       if (typeof adapter.serveHandler === 'function') {
-        const { router } = await import('@forge/router')
+        const { router } = await import('@boostkit/router')
         const handler = adapter.serveHandler()
         router.all('/api/inngest', (req) => handler(req.raw))
         console.log(`[QueueServiceProvider] mounted — /api/inngest`)

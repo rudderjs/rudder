@@ -1,18 +1,18 @@
-# @forge/di
+# @boostkit/di
 
 Dependency injection container with decorators for constructor injection.
 
 ## Installation
 
 ```bash
-pnpm add @forge/di
+pnpm add @boostkit/di
 ```
 
 ## Usage
 
 ```ts
 import 'reflect-metadata'
-import { Container, Injectable, Inject } from '@forge/di'
+import { Container, Injectable, Inject } from '@boostkit/di'
 
 @Injectable()
 class Logger {}

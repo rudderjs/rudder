@@ -1,17 +1,17 @@
-# @forge/queue-bullmq
+# @boostkit/queue-bullmq
 
-BullMQ adapter provider for `@forge/queue` with Redis-backed dispatch and workers.
+BullMQ adapter provider for `@boostkit/queue` with Redis-backed dispatch and workers.
 
 ## Installation
 
 ```bash
-pnpm add @forge/queue-bullmq
+pnpm add @boostkit/queue-bullmq
 ```
 
 ## Usage
 
 ```ts
-import { bullmq } from '@forge/queue-bullmq'
+import { bullmq } from '@boostkit/queue-bullmq'
 
 const provider = bullmq({
   host: '127.0.0.1',

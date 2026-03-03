@@ -1,11 +1,11 @@
-# @forge/notification
+# @boostkit/notification
 
 Multi-channel notification system — send notifications via mail, database, or custom channels.
 
 ## Installation
 
 ```bash
-pnpm add @forge/notification
+pnpm add @boostkit/notification
 ```
 
 ## Setup
@@ -14,8 +14,8 @@ The `notifications()` provider must be registered after the `mail()` provider in
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@forge/mail'
-import { notifications } from '@forge/notification'
+import { mail } from '@boostkit/mail'
+import { notifications } from '@boostkit/notification'
 import configs from '../config/index.js'
 
 export default [
@@ -57,8 +57,8 @@ Extend the `Notification` abstract base class and implement `via()`. Optionally 
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification, type MailMessage, type DatabaseMessage } from '@forge/notification'
-import type { Notifiable } from '@forge/notification'
+import { Notification, type MailMessage, type DatabaseMessage } from '@boostkit/notification'
+import type { Notifiable } from '@boostkit/notification'
 
 export class WelcomeNotification extends Notification {
   constructor(private readonly token: string) {
@@ -96,8 +96,8 @@ Use the `notify()` helper to send a notification to one or more notifiables:
 
 ```ts
 // routes/api.ts
-import { router } from '@forge/router'
-import { notify } from '@forge/notification'
+import { router } from '@boostkit/router'
+import { notify } from '@boostkit/notification'
 import { User } from '../app/Models/User.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
@@ -124,8 +124,8 @@ router.post('/api/notify/all', async (req, res) => {
 
 | Channel | Key | Requires |
 |---|---|---|
-| Mail | `'mail'` | `@forge/mail` registered + `notifiable.email` present |
-| Database | `'database'` | `@forge/orm` with a `notification` Prisma model |
+| Mail | `'mail'` | `@boostkit/mail` registered + `notifiable.email` present |
+| Database | `'database'` | `@boostkit/orm` with a `notification` Prisma model |
 
 ### Database Channel — Prisma Schema
 
@@ -161,7 +161,7 @@ Implement the `NotificationChannel` interface and register your channel with `Ch
 
 ```ts
 // app/Channels/SmsChannel.ts
-import type { NotificationChannel, Notifiable, Notification } from '@forge/notification'
+import type { NotificationChannel, Notifiable, Notification } from '@boostkit/notification'
 
 export class SmsChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
@@ -181,8 +181,8 @@ Register the custom channel in a service provider's `boot()` method:
 
 ```ts
 // app/Providers/AppServiceProvider.ts
-import { ServiceProvider } from '@forge/core'
-import { ChannelRegistry } from '@forge/notification'
+import { ServiceProvider } from '@boostkit/core'
+import { ChannelRegistry } from '@boostkit/notification'
 import { SmsChannel } from '../Channels/SmsChannel.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -208,8 +208,8 @@ via(notifiable: Notifiable): string[] {
 | `Notification` | Abstract base class — implement `via()`, optionally `toMail()`, `toDatabase()` |
 | `NotificationChannel` | Interface — `send(notifiable, notification): Promise<void>` — implement for custom channels |
 | `ChannelRegistry` | Global registry — `register(name, channel)`, `get(name)`, `has(name)` |
-| `MailChannel` | Built-in mail channel — delegates to `@forge/mail` adapter |
-| `DatabaseChannel` | Built-in database channel — inserts via `@forge/orm` Prisma adapter |
+| `MailChannel` | Built-in mail channel — delegates to `@boostkit/mail` adapter |
+| `DatabaseChannel` | Built-in database channel — inserts via `@boostkit/orm` Prisma adapter |
 | `Notifier` | Facade — `Notifier.send(notifiables, notification)` — fans out to all channels |
 | `notify(notifiables, notification)` | Convenience helper wrapping `Notifier.send()` |
 | `notifications()` | Provider factory — registers `MailChannel` and `DatabaseChannel` |

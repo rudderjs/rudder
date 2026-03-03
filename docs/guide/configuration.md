@@ -45,7 +45,7 @@ Each `config/*.ts` file exports a plain object that reads values from the enviro
 
 ```ts
 // config/server.ts
-import { Env } from '@forge/core/support'
+import { Env } from '@boostkit/core/support'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -72,7 +72,7 @@ export default {
 For critical environment variables, use `defineEnv` with a Zod schema to validate at startup:
 
 ```ts
-import { defineEnv } from '@forge/core/support'
+import { defineEnv } from '@boostkit/core/support'
 import { z } from 'zod'
 
 export const env = defineEnv(
@@ -118,7 +118,7 @@ Application.configure({
 Passing `config: configs` to `Application.configure()` binds each config object in the DI container, so you can retrieve it anywhere via:
 
 ```ts
-import { app } from '@forge/core'
+import { app } from '@boostkit/core'
 
 const serverConfig = app().make<typeof configs.server>('config.server')
 ```
@@ -130,8 +130,8 @@ This file wires the framework together. It should contain **only structural deci
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 import providers from './providers.ts'
 import configs from '../config/index.ts'
 

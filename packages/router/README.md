@@ -1,17 +1,17 @@
-# @forge/router
+# @boostkit/router
 
 Decorator-based and fluent HTTP router with mount support for server adapters.
 
 ## Installation
 
 ```bash
-pnpm add @forge/router
+pnpm add @boostkit/router
 ```
 
 ## Usage
 
 ```ts
-import { router, Controller, Get } from '@forge/router'
+import { router, Controller, Get } from '@boostkit/router'
 
 router.get('/health', () => new Response('ok'))
 

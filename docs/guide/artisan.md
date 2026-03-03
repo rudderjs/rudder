@@ -10,7 +10,7 @@ pnpm artisan db:seed         # Run a specific command
 pnpm artisan make:model Post # Generate a model stub
 ```
 
-In the playground (or any project that uses `@forge/cli`):
+In the playground (or any project that uses `@boostkit/cli`):
 
 ```bash
 cd my-app
@@ -24,7 +24,7 @@ The CLI **must be run from a directory containing `bootstrap/app.ts`** — it lo
 Register commands in `routes/console.ts` using the `artisan` singleton:
 
 ```ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 
 artisan.command('db:seed', async () => {
   const { User } = await import('../app/Models/User.js')
@@ -46,7 +46,7 @@ artisan.command('greet {name}', async (args) => {
 For more complex commands with output helpers and option parsing, extend `Command`:
 
 ```ts
-import { Command } from '@forge/core'
+import { Command } from '@boostkit/core'
 import { User } from '../app/Models/User.js'
 
 export class SeedCommand extends Command {
@@ -69,7 +69,7 @@ export class SeedCommand extends Command {
 Register it:
 
 ```ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 import { SeedCommand } from '../app/Commands/SeedCommand.js'
 
 artisan.register(SeedCommand)
@@ -136,10 +136,10 @@ These appear in `pnpm artisan --help` once the provider is registered.
 
 ## Scheduling Commands
 
-Use `@forge/schedule` to run artisan commands on a cron schedule:
+Use `@boostkit/schedule` to run artisan commands on a cron schedule:
 
 ```ts
-import { schedule } from '@forge/schedule'
+import { schedule } from '@boostkit/schedule'
 
 schedule.command('db:sync').daily().description('Sync data daily')
 schedule.call(async () => {
@@ -166,5 +166,5 @@ pnpm artisan make:middleware Auth
 
 - `artisan` singleton is stored on `globalThis.__forge_artisan__` — safe to import from multiple packages
 - Commands registered in `routes/console.ts` are loaded during `forge.boot()` before `program.parse()`
-- The CLI is a separate package (`@forge/cli`) — it orchestrates boot and command dispatch
+- The CLI is a separate package (`@boostkit/cli`) — it orchestrates boot and command dispatch
 - Use `--force` with `make:*` commands to overwrite existing files

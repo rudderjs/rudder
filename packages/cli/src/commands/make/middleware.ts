@@ -5,8 +5,8 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string): string {
-  return `import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+  return `import { Middleware } from '@boostkit/middleware'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 export class ${className} extends Middleware {
   async handle(

@@ -1,17 +1,17 @@
-# @forge/orm
+# @boostkit/orm
 
 ORM contracts and base model abstraction used by Forge ORM adapters.
 
 ## Installation
 
 ```bash
-pnpm add @forge/orm
+pnpm add @boostkit/orm
 ```
 
 ## Usage
 
 ```ts
-import { Model, ModelRegistry } from '@forge/orm'
+import { Model, ModelRegistry } from '@boostkit/orm'
 
 class User extends Model {
   static override table = 'user'

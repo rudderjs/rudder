@@ -1,4 +1,4 @@
-import { Env } from '@forge/core'
+import { Env } from '@boostkit/core'
 
 export default {
   name:  Env.get('APP_NAME',  'Forge'),

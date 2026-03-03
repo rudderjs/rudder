@@ -9,8 +9,8 @@ Forge apps use `vike-photon` to wire `bootstrap/app.ts` as the HTTP server, maki
 ```ts
 // bootstrap/app.ts
 import 'reflect-metadata'
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 // ...
 
 export default Application.configure({ ... }).create()

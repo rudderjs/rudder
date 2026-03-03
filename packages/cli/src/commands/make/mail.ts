@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string): string {
-  return `import { Mailable } from '@forge/mail'
+  return `import { Mailable } from '@boostkit/mail'
 
 export class ${className} extends Mailable {
   constructor(/* inject data here */) {

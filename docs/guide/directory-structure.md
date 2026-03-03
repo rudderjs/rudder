@@ -66,7 +66,7 @@ Named, typed configuration objects that read values from `.env` via `Env`. Think
 
 ```ts
 // config/server.ts
-import { Env } from '@forge/core/support'
+import { Env } from '@boostkit/core/support'
 
 export default {
   port: Env.getNumber('PORT', 3000),

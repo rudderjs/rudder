@@ -5,7 +5,7 @@ import type {
   QueueAdapter,
   QueueAdapterProvider,
   DispatchOptions,
-} from '@forge/queue'
+} from '@boostkit/queue'
 
 // ─── Config ────────────────────────────────────────────────
 

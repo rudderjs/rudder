@@ -1,21 +1,21 @@
-# @forge/orm
+# @boostkit/orm
 
 ORM contracts and base Model abstraction for Forge adapters.
 
 ## Installation
 
 ```bash
-pnpm add @forge/orm
+pnpm add @boostkit/orm
 ```
 
-This package provides the `Model` base class, `ModelRegistry`, `QueryBuilder`, and the `OrmAdapter` interface. It does not include a database driver — pair it with an adapter such as `@forge/orm-prisma` or `@forge/orm-drizzle`.
+This package provides the `Model` base class, `ModelRegistry`, `QueryBuilder`, and the `OrmAdapter` interface. It does not include a database driver — pair it with an adapter such as `@boostkit/orm-prisma` or `@boostkit/orm-drizzle`.
 
 ## Defining a Model
 
 Extend `Model` and set the static `table` property to the adapter-specific table or accessor name:
 
 ```ts
-import { Model } from '@forge/orm'
+import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   static table = 'user'
@@ -105,7 +105,7 @@ console.log(result.lastPage)  // 8
 `ModelRegistry` is the global registry that connects Model classes to a live adapter instance. It must be called in your `DatabaseServiceProvider` before any model queries run.
 
 ```ts
-import { ModelRegistry } from '@forge/orm'
+import { ModelRegistry } from '@boostkit/orm'
 
 // Register the adapter (called inside DatabaseServiceProvider.boot())
 ModelRegistry.set(adapter)
@@ -134,4 +134,4 @@ Adapters may extend this interface with driver-specific methods (e.g. raw query 
 
 - `ModelRegistry.set()` must be called before any `Model.*` static method is invoked. Place it in your `DatabaseServiceProvider.boot()` method.
 - `Model.getTable()` defaults to the lowercase class name followed by `s`. Override it with `static table` when the table name does not follow this convention (e.g. Prisma uses the lowercase model name without pluralisation).
-- `@forge/orm` contains no runtime database code. It is safe to list as a direct dependency alongside an adapter package.
+- `@boostkit/orm` contains no runtime database code. It is safe to list as a direct dependency alongside an adapter package.

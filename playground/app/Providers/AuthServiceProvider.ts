@@ -1,4 +1,4 @@
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 
 export class AuthServiceProvider extends ServiceProvider {
   register(): void {

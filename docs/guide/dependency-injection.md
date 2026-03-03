@@ -1,12 +1,12 @@
 # Dependency Injection
 
-Forge includes a lightweight but powerful DI container (`@forge/di`) with support for constructor injection using TypeScript decorators.
+Forge includes a lightweight but powerful DI container (`@boostkit/di`) with support for constructor injection using TypeScript decorators.
 
 ## Quick Start
 
 ```ts
 import 'reflect-metadata'
-import { Container, Injectable, Inject } from '@forge/di'
+import { Container, Injectable, Inject } from '@boostkit/di'
 
 @Injectable()
 class Logger {
@@ -130,7 +130,7 @@ container.reset()
 Forge exports a **global container singleton** that is the same instance used by the application. Use `app()` to access it anywhere after boot:
 
 ```ts
-import { app } from '@forge/core'
+import { app } from '@boostkit/core'
 
 const service = app().make(UserService)
 ```

@@ -1,18 +1,18 @@
-# @forge/server-hono
+# @boostkit/server-hono
 
 Hono-based server adapter provider implementing Forge server contracts.
 
 ## Installation
 
 ```bash
-pnpm add @forge/server-hono
+pnpm add @boostkit/server-hono
 ```
 
 ## Usage
 
 ```ts
-import { hono } from '@forge/server-hono'
-import { Application } from '@forge/core'
+import { hono } from '@boostkit/server-hono'
+import { Application } from '@boostkit/core'
 
 export default Application.configure({
   server: hono({

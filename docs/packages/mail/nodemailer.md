@@ -1,11 +1,11 @@
-# @forge/mail-nodemailer
+# @boostkit/mail-nodemailer
 
-Nodemailer SMTP adapter for `@forge/mail`.
+Nodemailer SMTP adapter for `@boostkit/mail`.
 
 ## Installation
 
 ```bash
-pnpm add @forge/mail-nodemailer nodemailer
+pnpm add @boostkit/mail-nodemailer nodemailer
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ Add an SMTP mailer to your mail configuration:
 
 ```ts
 // config/mail.ts
-import type { MailConfig } from '@forge/mail'
+import type { MailConfig } from '@boostkit/mail'
 
 export default {
   default: Env.get('MAIL_MAILER', 'smtp'),
@@ -38,7 +38,7 @@ export default {
 } satisfies MailConfig
 ```
 
-No changes are needed in `bootstrap/providers.ts` — `@forge/mail` dynamically loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
+No changes are needed in `bootstrap/providers.ts` — `@boostkit/mail` dynamically loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
 
 ## Configuration
 
@@ -58,9 +58,9 @@ No changes are needed in `bootstrap/providers.ts` — `@forge/mail` dynamically 
 `nodemailer(config, from)` returns a `MailAdapterProvider` that registers the Nodemailer adapter under the `'nodemailer'`/`'smtp'` driver name.
 
 ```ts
-import { nodemailer } from '@forge/mail-nodemailer'
+import { nodemailer } from '@boostkit/mail-nodemailer'
 
-// Registered automatically via @forge/mail dynamic loading.
+// Registered automatically via @boostkit/mail dynamic loading.
 const provider = nodemailer(smtpConfig, { address: 'hello@example.com', name: 'Forge App' })
 ```
 
@@ -79,8 +79,8 @@ The `from` parameter sets the default sender envelope for all messages delivered
 
 ## Notes
 
-- The adapter is exported as `'nodemailer'` and also matched by `@forge/mail` when `driver: 'smtp'` is set — no manual provider registration is required.
+- The adapter is exported as `'nodemailer'` and also matched by `@boostkit/mail` when `driver: 'smtp'` is set — no manual provider registration is required.
 - `encryption: 'tls'` enables STARTTLS and is the recommended setting for port `587`.
 - `encryption: 'ssl'` wraps the entire connection in TLS and is used with port `465`.
 - `encryption: 'none'` sends mail without transport encryption — only use this on trusted internal networks or for local development relays.
-- `nodemailer` (the npm package) is an optional peer dependency — you must install it explicitly alongside `@forge/mail-nodemailer`.
+- `nodemailer` (the npm package) is an optional peer dependency — you must install it explicitly alongside `@boostkit/mail-nodemailer`.

@@ -1,25 +1,25 @@
-# @forge/queue
+# @boostkit/queue
 
 Queue job abstractions, queue registry, and provider factory with sync and pluggable drivers.
 
 ## Installation
 
 ```bash
-pnpm add @forge/queue
+pnpm add @boostkit/queue
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/providers.ts
-import { queue } from '@forge/queue'
+import { queue } from '@boostkit/queue'
 import configs from '../config/index.js'
 
 export default [
   queue(configs.queue),
 ]
 
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 class SendEmailJob extends Job { async handle() {} }
 await SendEmailJob.dispatch().onQueue('default').send()
 ```

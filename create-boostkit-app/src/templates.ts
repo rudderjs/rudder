@@ -85,26 +85,26 @@ function packageJson(ctx: TemplateContext): string {
   }
 
   const deps = {
-    '@forge/artisan':          '^0.0.1',
-    '@forge/auth-better-auth': '^0.0.1',
-    '@forge/cache':            '^0.0.1',
-    '@forge/contracts':        '^0.0.1',
-    '@forge/core':             '^0.0.1',
-    '@forge/di':               '^0.0.1',
-    '@forge/middleware':       '^0.0.1',
-    '@forge/orm':              '^0.0.1',
-    '@forge/orm-prisma':       '^0.0.1',
-    '@forge/queue':            '^0.0.1',
-    '@forge/rate-limit':       '^0.0.1',
-    '@forge/router':           '^0.0.1',
-    '@forge/schedule':         '^0.0.1',
-    '@forge/server-hono':      '^0.0.1',
-    '@forge/storage':          '^0.0.1',
-    '@forge/support':          '^0.0.1',
-    '@forge/validation':       '^0.0.1',
-    '@forge/events':           '^0.0.1',
-    '@forge/mail':             '^0.0.1',
-    '@forge/notification':     '^0.0.1',
+    '@boostkit/artisan':          '^0.0.1',
+    '@boostkit/auth-better-auth': '^0.0.1',
+    '@boostkit/cache':            '^0.0.1',
+    '@boostkit/contracts':        '^0.0.1',
+    '@boostkit/core':             '^0.0.1',
+    '@boostkit/di':               '^0.0.1',
+    '@boostkit/middleware':       '^0.0.1',
+    '@boostkit/orm':              '^0.0.1',
+    '@boostkit/orm-prisma':       '^0.0.1',
+    '@boostkit/queue':            '^0.0.1',
+    '@boostkit/rate-limit':       '^0.0.1',
+    '@boostkit/router':           '^0.0.1',
+    '@boostkit/schedule':         '^0.0.1',
+    '@boostkit/server-hono':      '^0.0.1',
+    '@boostkit/storage':          '^0.0.1',
+    '@boostkit/support':          '^0.0.1',
+    '@boostkit/validation':       '^0.0.1',
+    '@boostkit/events':           '^0.0.1',
+    '@boostkit/mail':             '^0.0.1',
+    '@boostkit/notification':     '^0.0.1',
     '@photonjs/hono':          '^0.1.12',
     '@prisma/client':          '^7.0.0',
     '@tailwindcss/vite':       '^4.2.1',
@@ -127,7 +127,7 @@ function packageJson(ctx: TemplateContext): string {
   }
 
   const devDeps = {
-    '@forge/cli':          '^0.0.1',
+    '@boostkit/cli':          '^0.0.1',
     '@types/node':         '^20.0.0',
     '@types/react':        '^19.0.0',
     '@types/react-dom':    '^19.0.0',
@@ -152,7 +152,7 @@ function packageJson(ctx: TemplateContext): string {
       start:        'node ./dist/server/index.mjs',
       preview:      'node ./dist/server/index.mjs',
       typecheck:    'tsc --noEmit',
-      artisan:      'tsx node_modules/@forge/cli/src/index.ts',
+      artisan:      'tsx node_modules/@boostkit/cli/src/index.ts',
     },
     dependencies: deps,
     devDependencies: devDeps,
@@ -197,19 +197,19 @@ export default defineConfig({
   },
   ssr: {
     external: [
-      '@forge/queue-inngest',
-      '@forge/queue-bullmq',
-      '@forge/mail-nodemailer',
-      '@forge/cache-redis',
-      '@forge/storage-s3',
-      '@forge/orm-drizzle',
+      '@boostkit/queue-inngest',
+      '@boostkit/queue-bullmq',
+      '@boostkit/mail-nodemailer',
+      '@boostkit/cache-redis',
+      '@boostkit/storage-s3',
+      '@boostkit/orm-drizzle',
     ],
   },
   build: {
     rollupOptions: {
       external: (id) =>
-        ['@forge/queue-inngest', '@forge/queue-bullmq', '@forge/mail-nodemailer',
-         '@forge/cache-redis', '@forge/storage-s3', '@forge/orm-drizzle'].includes(id),
+        ['@boostkit/queue-inngest', '@boostkit/queue-bullmq', '@boostkit/mail-nodemailer',
+         '@boostkit/cache-redis', '@boostkit/storage-s3', '@boostkit/orm-drizzle'].includes(id),
     },
   },
 })
@@ -518,9 +518,9 @@ function indexCss(): string {
 function bootstrapApp(): string {
   return `import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
-import { RateLimit } from '@forge/rate-limit'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
+import { RateLimit } from '@boostkit/rate-limit'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
@@ -552,15 +552,15 @@ function bootstrapProviders(ctx: TemplateContext): string {
     : ''
   const todoProvider = ctx.withTodo ? `  TodoServiceProvider,\n` : ''
 
-  return `import type { Application, ServiceProvider } from '@forge/core'
-import { betterAuth } from '@forge/auth-better-auth'
-import { events } from '@forge/events'
-import { queue } from '@forge/queue'
-import { mail } from '@forge/mail'
-import { notifications } from '@forge/notification'
-import { cache } from '@forge/cache'
-import { storage } from '@forge/storage'
-import { scheduler } from '@forge/schedule'
+  return `import type { Application, ServiceProvider } from '@boostkit/core'
+import { betterAuth } from '@boostkit/auth-better-auth'
+import { events } from '@boostkit/events'
+import { queue } from '@boostkit/queue'
+import { mail } from '@boostkit/mail'
+import { notifications } from '@boostkit/notification'
+import { cache } from '@boostkit/cache'
+import { storage } from '@boostkit/storage'
+import { scheduler } from '@boostkit/schedule'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 ${todoImport}import configs from '../config/index.js'
@@ -583,7 +583,7 @@ ${todoProvider}] satisfies (new (app: Application) => ServiceProvider)[]
 // ─── config files ──────────────────────────────────────────
 
 function configApp(): string {
-  return `import { Env } from '@forge/support'
+  return `import { Env } from '@boostkit/support'
 
 export default {
   name:  Env.get('APP_NAME',  'Forge'),
@@ -595,7 +595,7 @@ export default {
 }
 
 function configServer(): string {
-  return `import { Env } from '@forge/support'
+  return `import { Env } from '@boostkit/support'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -626,7 +626,7 @@ function configDatabase(ctx: TemplateContext): string {
     },`,
   }
 
-  return `import { Env } from '@forge/support'
+  return `import { Env } from '@boostkit/support'
 
 export default {
   default: Env.get('DB_CONNECTION', '${defaultConn}'),
@@ -639,8 +639,8 @@ ${connections[ctx.db]}
 }
 
 function configQueue(): string {
-  return `import { Env } from '@forge/support'
-import type { QueueConfig } from '@forge/queue'
+  return `import { Env } from '@boostkit/support'
+import type { QueueConfig } from '@boostkit/queue'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'sync'),
@@ -663,7 +663,7 @@ export default {
 }
 
 function configMail(): string {
-  return `import { Env } from '@forge/support'
+  return `import { Env } from '@boostkit/support'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
@@ -692,8 +692,8 @@ export default {
 }
 
 function configCache(): string {
-  return `import { Env } from '@forge/support'
-import type { CacheConfig } from '@forge/cache'
+  return `import { Env } from '@boostkit/support'
+import type { CacheConfig } from '@boostkit/cache'
 
 export default {
   default: Env.get('CACHE_STORE', 'memory'),
@@ -718,8 +718,8 @@ export default {
 
 function configStorage(): string {
   return `import path from 'node:path'
-import { Env } from '@forge/support'
-import type { StorageConfig } from '@forge/storage'
+import { Env } from '@boostkit/support'
+import type { StorageConfig } from '@boostkit/storage'
 
 export default {
   default: Env.get('FILESYSTEM_DISK', 'local'),
@@ -782,8 +782,8 @@ function configAuth(ctx: TemplateContext): string {
     dbProvider = `  databaseProvider: 'mysql' as const,`
   }
 
-  return `import { Env } from '@forge/support'
-import type { BetterAuthConfig } from '@forge/auth-better-auth'
+  return `import { Env } from '@boostkit/support'
+import type { BetterAuthConfig } from '@boostkit/auth-better-auth'
 
 // Dedicated PrismaClient for better-auth's own tables.
 // The ORM adapter uses its own client in DatabaseServiceProvider — keep them separate.
@@ -818,7 +818,7 @@ export default { app, server, database, queue, mail, cache, storage, auth }
 // ─── app files ─────────────────────────────────────────────
 
 function userModel(): string {
-  return `import { Model } from '@forge/orm'
+  return `import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   // Prisma accessor is the model name lowercased
@@ -836,9 +836,9 @@ export class User extends Model {
 }
 
 function databaseServiceProvider(): string {
-  return `import { ServiceProvider } from '@forge/core'
-import { ModelRegistry } from '@forge/orm'
-import { prisma } from '@forge/orm-prisma'
+  return `import { ServiceProvider } from '@boostkit/core'
+import { ModelRegistry } from '@boostkit/orm'
+import { prisma } from '@boostkit/orm-prisma'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   register(): void {}
@@ -857,7 +857,7 @@ export class DatabaseServiceProvider extends ServiceProvider {
 }
 
 function appServiceProvider(): string {
-  return `import { ServiceProvider } from '@forge/core'
+  return `import { ServiceProvider } from '@boostkit/core'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {
@@ -873,8 +873,8 @@ export class AppServiceProvider extends ServiceProvider {
 }
 
 function requestIdMiddleware(): string {
-  return `import { Middleware } from '@forge/middleware'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+  return `import { Middleware } from '@boostkit/middleware'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 /**
  * Attaches a unique X-Request-Id header to every response.
@@ -900,10 +900,10 @@ function routesApi(ctx: TemplateContext): string {
     ? `\n// Todo routes are registered by TodoServiceProvider — see app/Modules/Todo/TodoServiceProvider.ts\n`
     : ''
 
-  return `import { router } from '@forge/router'
-import { app } from '@forge/core'
-import type { BetterAuthInstance } from '@forge/auth-better-auth'
-import { RateLimit } from '@forge/rate-limit'
+  return `import { router } from '@boostkit/router'
+import { app } from '@boostkit/core'
+import type { BetterAuthInstance } from '@boostkit/auth-better-auth'
+import { RateLimit } from '@boostkit/rate-limit'
 
 const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.').toHandler()
 
@@ -931,7 +931,7 @@ router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not f
 }
 
 function routesWeb(): string {
-  return `import { router } from '@forge/router'
+  return `import { router } from '@boostkit/router'
 
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
@@ -943,7 +943,7 @@ function routesWeb(): string {
 }
 
 function routesConsole(): string {
-  return `import { artisan } from '@forge/artisan'
+  return `import { artisan } from '@boostkit/artisan'
 
 artisan.command('inspire', () => {
   const quotes = [
@@ -990,8 +990,8 @@ export default {
 }
 
 function pagesIndexData(): string {
-  return `import { app } from '@forge/core'
-import type { BetterAuthInstance } from '@forge/auth-better-auth'
+  return `import { app } from '@boostkit/core'
+import type { BetterAuthInstance } from '@boostkit/auth-better-auth'
 
 export type Data = {
   user: { id: string; name: string; email: string } | null
@@ -1154,9 +1154,9 @@ export interface Todo {
 }
 
 function todoService(): string {
-  return `import { Injectable } from '@forge/di'
-import { resolve } from '@forge/core'
-import type { OrmAdapter } from '@forge/orm'
+  return `import { Injectable } from '@boostkit/di'
+import { resolve } from '@boostkit/core'
+import type { OrmAdapter } from '@boostkit/orm'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
 
 @Injectable()
@@ -1187,8 +1187,8 @@ export class TodoService {
 }
 
 function todoServiceProvider(): string {
-  return `import { ServiceProvider } from '@forge/core'
-import { router } from '@forge/router'
+  return `import { ServiceProvider } from '@boostkit/core'
+import { router } from '@boostkit/router'
 import { TodoService } from './TodoService.js'
 import { TodoInputSchema, TodoUpdateSchema } from './TodoSchema.js'
 
@@ -1245,7 +1245,7 @@ export default {
 }
 
 function todoPageData(): string {
-  return `import { resolve } from '@forge/core'
+  return `import { resolve } from '@boostkit/core'
 import { TodoService } from '../../app/Modules/Todo/TodoService.js'
 import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
 

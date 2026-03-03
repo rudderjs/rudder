@@ -1,4 +1,4 @@
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 
 export class WelcomeUserJob extends Job {
   static queue   = 'default'
@@ -12,7 +12,7 @@ export class WelcomeUserJob extends Job {
   }
 
   async handle(): Promise<void> {
-    // TODO: swap for real mail when @forge/mail lands
+    // TODO: swap for real mail when @boostkit/mail lands
     console.log(`[WelcomeUserJob] Sending welcome email to ${this.name} <${this.email}>`)
   }
 

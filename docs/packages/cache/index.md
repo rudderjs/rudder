@@ -1,11 +1,11 @@
-# @forge/cache
+# @boostkit/cache
 
 Cache facade, registry, and provider factory with in-memory built-in driver.
 
 ## Installation
 
 ```bash
-pnpm add @forge/cache
+pnpm add @boostkit/cache
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ pnpm add @forge/cache
 
 ```ts
 // config/cache.ts
-import type { CacheConfig } from '@forge/cache'
+import type { CacheConfig } from '@boostkit/cache'
 
 export default {
   default: Env.get('CACHE_DRIVER', 'memory'),
@@ -30,7 +30,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { cache } from '@forge/cache'
+import { cache } from '@boostkit/cache'
 import configs from '../config/index.js'
 
 export default [
@@ -45,7 +45,7 @@ export default [
 Import `Cache` and call methods directly — it operates on the configured `default` store.
 
 ```ts
-import { Cache } from '@forge/cache'
+import { Cache } from '@boostkit/cache'
 
 // Store a value
 await Cache.set('key', 'value')
@@ -85,7 +85,7 @@ await Cache.flush()
 ### Using a Named Store
 
 ```ts
-import { Cache } from '@forge/cache'
+import { Cache } from '@boostkit/cache'
 
 const redisCache = Cache.disk('redis')
 await redisCache.set('session:abc', data, 3600)
@@ -117,7 +117,7 @@ Each store entry must include a `driver` field. Additional fields depend on the 
   driver: 'memory'
 }
 
-// Redis store (requires @forge/cache-redis)
+// Redis store (requires @boostkit/cache-redis)
 {
   driver: 'redis',
   host: 'localhost',
@@ -130,7 +130,7 @@ Each store entry must include a `driver` field. Additional fields depend on the 
 `cache(config)` returns a Forge `ServiceProvider` class that registers the configured stores and binds the `Cache` facade during `boot()`.
 
 ```ts
-import { cache } from '@forge/cache'
+import { cache } from '@boostkit/cache'
 
 // In bootstrap/providers.ts
 cache(configs.cache)
@@ -150,7 +150,7 @@ The default built-in driver. Stores values in an in-process `Map`. Data does not
 
 ## Redis Driver
 
-For Redis-backed caching, install and configure `@forge/cache-redis`. See the [Redis adapter docs](./redis).
+For Redis-backed caching, install and configure `@boostkit/cache-redis`. See the [Redis adapter docs](./redis).
 
 ## Notes
 

@@ -1,5 +1,5 @@
-import { ServiceProvider, type Application } from '@forge/core'
-import { resolveOptionalPeer } from '@forge/core'
+import { ServiceProvider, type Application } from '@boostkit/core'
+import { resolveOptionalPeer } from '@boostkit/core'
 
 // ─── Adapter Contract ──────────────────────────────────────
 
@@ -29,7 +29,7 @@ export class CacheRegistry {
 export class Cache {
   private static store(): CacheAdapter {
     const a = CacheRegistry.get()
-    if (!a) throw new Error('[Forge Cache] No cache adapter registered. Add cache() to providers.')
+    if (!a) throw new Error('[BoostKit Cache] No cache adapter registered. Add cache() to providers.')
     return a
   }
 
@@ -127,10 +127,10 @@ export interface CacheConfig {
  * Returns a CacheServiceProvider class configured for the given cache config.
  *
  * Built-in drivers:  memory (in-process — resets on restart, great for dev)
- * Plugin drivers:    redis (@forge/cache-redis)
+ * Plugin drivers:    redis (@boostkit/cache-redis)
  *
  * Usage in bootstrap/providers.ts:
- *   import { cache } from '@forge/cache'
+ *   import { cache } from '@boostkit/cache'
  *   import configs from '../config/index.js'
  *   export default [..., cache(configs.cache), ...]
  */
@@ -148,10 +148,10 @@ export function cache(config: CacheConfig): new (app: Application) => ServicePro
       if (driver === 'memory') {
         adapter = new MemoryAdapter()
       } else if (driver === 'redis') {
-        const { redis } = await resolveOptionalPeer<any>('@forge/cache-redis')
+        const { redis } = await resolveOptionalPeer<any>('@boostkit/cache-redis')
         adapter = await (redis as (c: unknown) => CacheAdapterProvider)(storeConfig).create()
       } else {
-        throw new Error(`[Forge Cache] Unknown driver "${driver}". Available: memory, redis`)
+        throw new Error(`[BoostKit Cache] Unknown driver "${driver}". Available: memory, redis`)
       }
 
       CacheRegistry.set(adapter)

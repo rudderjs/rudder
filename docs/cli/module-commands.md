@@ -36,7 +36,7 @@ Additionally creates:
 **`BlogServiceProvider.ts`** — a service provider that registers the module's services:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 import { BlogService } from '../Services/BlogService.js'
 
 export class BlogServiceProvider extends ServiceProvider {

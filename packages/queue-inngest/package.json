@@ -1,5 +1,5 @@
 {
-  "name": "@forge/queue-inngest",
+  "name": "@boostkit/queue-inngest",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/queue": "workspace:*",
+    "@boostkit/queue": "workspace:*",
     "inngest": "^3.0.0"
   },
   "devDependencies": {

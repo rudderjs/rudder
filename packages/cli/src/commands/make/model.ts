@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string, table: string): string {
-  return `import { Model } from '@forge/orm'
+  return `import { Model } from '@boostkit/orm'
 
 export class ${className} extends Model {
   static table = '${table}'

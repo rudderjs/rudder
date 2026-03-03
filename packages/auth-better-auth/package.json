@@ -1,5 +1,5 @@
 {
-  "name": "@forge/auth-better-auth",
+  "name": "@boostkit/auth-better-auth",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/core": "workspace:*",
-    "@forge/router": "workspace:*",
+    "@boostkit/core": "workspace:*",
+    "@boostkit/router": "workspace:*",
     "better-auth": "^1.0.0"
   },
   "devDependencies": {

@@ -1,18 +1,18 @@
-# @forge/auth-better-auth
+# @boostkit/auth-better-auth
 
 better-auth service provider factory for Forge applications.
 
 ## Installation
 
 ```bash
-pnpm add @forge/auth-better-auth
+pnpm add @boostkit/auth-better-auth
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@forge/auth-better-auth'
+import { betterAuth } from '@boostkit/auth-better-auth'
 import configs from '../config/index.js'
 
 export default [

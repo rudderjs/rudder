@@ -1,11 +1,11 @@
-# @forge/storage
+# @boostkit/storage
 
 Storage facade, disk registry, and provider factory with local filesystem driver.
 
 ## Installation
 
 ```bash
-pnpm add @forge/storage
+pnpm add @boostkit/storage
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ pnpm add @forge/storage
 
 ```ts
 // config/storage.ts
-import type { StorageConfig } from '@forge/storage'
+import type { StorageConfig } from '@boostkit/storage'
 
 export default {
   default: Env.get('STORAGE_DRIVER', 'local'),
@@ -37,7 +37,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { storage } from '@forge/storage'
+import { storage } from '@boostkit/storage'
 import configs from '../config/index.js'
 
 export default [
@@ -50,7 +50,7 @@ export default [
 ## Storage Facade
 
 ```ts
-import { Storage } from '@forge/storage'
+import { Storage } from '@boostkit/storage'
 
 // Write a file
 await Storage.put('avatars/user-1.jpg', imageBuffer)
@@ -86,7 +86,7 @@ const url = Storage.url('avatars/user-1.jpg')
 ### Using a Named Disk
 
 ```ts
-import { Storage } from '@forge/storage'
+import { Storage } from '@boostkit/storage'
 
 const publicDisk = Storage.disk('public')
 await publicDisk.put('images/banner.png', buffer)
@@ -143,4 +143,4 @@ Configure the link targets in your storage config or use the defaults. The local
 
 - The `Storage` facade always operates on the `default` disk unless you call `Storage.disk(name)`.
 - `url()` prepends `baseUrl` when configured. If `baseUrl` is not set, it returns the relative file path.
-- For S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), use the [`@forge/storage-s3`](./s3) adapter.
+- For S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), use the [`@boostkit/storage-s3`](./s3) adapter.

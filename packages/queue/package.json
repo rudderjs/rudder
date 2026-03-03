@@ -1,5 +1,5 @@
 {
-  "name": "@forge/queue",
+  "name": "@boostkit/queue",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/core": "workspace:*",
-    "@forge/router": "workspace:*"
+    "@boostkit/core": "workspace:*",
+    "@boostkit/router": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

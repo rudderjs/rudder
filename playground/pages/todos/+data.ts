@@ -1,4 +1,4 @@
-import { resolve } from '@forge/core'
+import { resolve } from '@boostkit/core'
 import { TodoService } from '../../app/Modules/Todo/TodoService.js'
 import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
 

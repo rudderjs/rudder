@@ -5,8 +5,8 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string, prefix: string): string {
-  return `import { Controller, Get } from '@forge/router'
-import type { Context } from '@forge/core'
+  return `import { Controller, Get } from '@boostkit/router'
+import type { Context } from '@boostkit/core'
 
 @Controller('${prefix}')
 export class ${className} {

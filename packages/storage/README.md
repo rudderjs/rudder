@@ -1,25 +1,25 @@
-# @forge/storage
+# @boostkit/storage
 
 Storage facade, disk registry, and provider factory with a local filesystem driver.
 
 ## Installation
 
 ```bash
-pnpm add @forge/storage
+pnpm add @boostkit/storage
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/providers.ts
-import { storage } from '@forge/storage'
+import { storage } from '@boostkit/storage'
 import configs from '../config/index.js'
 
 export default [
   storage(configs.storage),
 ]
 
-import { Storage } from '@forge/storage'
+import { Storage } from '@boostkit/storage'
 await Storage.put('avatars/a.txt', 'hello')
 const text = await Storage.text('avatars/a.txt')
 ```
@@ -49,5 +49,5 @@ const text = await Storage.text('avatars/a.txt')
 ## Notes
 
 - Built-in driver: `local`.
-- Plugin driver supported by factory: `s3` (via `@forge/storage-s3`).
+- Plugin driver supported by factory: `s3` (via `@boostkit/storage-s3`).
 - Registers `storage:link` artisan command.

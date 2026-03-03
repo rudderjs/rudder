@@ -1,11 +1,11 @@
-# @forge/orm-prisma
+# @boostkit/orm-prisma
 
 Prisma-backed ORM adapter for Forge.
 
 ## Installation
 
 ```bash
-pnpm add @forge/orm-prisma @prisma/client
+pnpm add @boostkit/orm-prisma @prisma/client
 ```
 
 After adding Prisma, initialise the schema and generate the client:
@@ -21,9 +21,9 @@ pnpm exec prisma generate      # regenerate the Prisma client after schema chang
 Wire the adapter in your `DatabaseServiceProvider`:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
-import { prisma } from '@forge/orm-prisma'
-import { ModelRegistry } from '@forge/orm'
+import { ServiceProvider } from '@boostkit/core'
+import { prisma } from '@boostkit/orm-prisma'
+import { ModelRegistry } from '@boostkit/orm'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   async boot(): Promise<void> {
@@ -83,7 +83,7 @@ The adapter auto-detects the driver from the `DATABASE_URL` scheme (`file:` → 
 Returns an `OrmAdapterProvider` with a single `create()` method that resolves the Prisma client and returns a live `OrmAdapter`.
 
 ```ts
-import { prisma } from '@forge/orm-prisma'
+import { prisma } from '@boostkit/orm-prisma'
 
 const provider = prisma({ driver: 'sqlite', url: 'file:./dev.db' })
 const adapter  = await provider.create()
@@ -116,7 +116,7 @@ model User {
 The Forge `User` model sets `static table = 'user'` to match the Prisma accessor name (lowercase model name):
 
 ```ts
-import { Model } from '@forge/orm'
+import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   static table = 'user'   // matches Prisma accessor — prismaClient.user
@@ -131,7 +131,7 @@ export class User extends Model {
 
 ## Notes
 
-- `@prisma/client` is a required peer dependency — install it alongside `@forge/orm-prisma`.
+- `@prisma/client` is a required peer dependency — install it alongside `@boostkit/orm-prisma`.
 - Run `pnpm exec prisma generate` from the project root (or `playground/`) whenever you change `schema.prisma`.
 - Use `pnpm exec prisma db push` during development to sync schema changes to the database without creating migration files.
 - Use `pnpm exec prisma migrate dev` when you want tracked migration files for production deployments.

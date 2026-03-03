@@ -1,17 +1,17 @@
-# @forge/support
+# @boostkit/support
 
 Shared utility primitives for collections, env access, config lookup, and helper functions.
 
 ## Installation
 
 ```bash
-pnpm add @forge/support
+pnpm add @boostkit/support
 ```
 
 ## Usage
 
 ```ts
-import { Collection, Env, defineEnv, pick, omit } from '@forge/support'
+import { Collection, Env, defineEnv, pick, omit } from '@boostkit/support'
 import { z } from 'zod'
 
 const users = new Collection([{ id: 1 }, { id: 2 }])

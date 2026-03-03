@@ -1,5 +1,5 @@
-import { Notification, type Notifiable } from '@forge/notification'
-import { Mailable } from '@forge/mail'
+import { Notification, type Notifiable } from '@boostkit/notification'
+import { Mailable } from '@boostkit/mail'
 
 // ─── Welcome Mailable ──────────────────────────────────────
 

@@ -1,9 +1,9 @@
-# @forge/core
+# @boostkit/core
 
 Application bootstrap, service provider lifecycle, and framework-level runtime orchestration.
 
 ```bash
-pnpm add @forge/core
+pnpm add @boostkit/core
 ```
 
 ---
@@ -16,8 +16,8 @@ pnpm add @forge/core
 // bootstrap/app.ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -84,7 +84,7 @@ export default {
 Once the application has been booted, two global helpers are available anywhere in your codebase.
 
 ```ts
-import { app, resolve } from '@forge/core'
+import { app, resolve } from '@boostkit/core'
 
 // Retrieve the DI container
 const container = app()
@@ -106,7 +106,7 @@ Service providers are the primary way to bind services into the container and re
 
 ```ts
 // app/Providers/AppServiceProvider.ts
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 import { UserService } from '../Services/UserService.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -135,29 +135,29 @@ export default [
 
 ## Re-exports
 
-`@forge/core` re-exports the following packages so you do not need to install them separately for common usage.
+`@boostkit/core` re-exports the following packages so you do not need to install them separately for common usage.
 
 | Export | Source Package |
 |---|---|
-| `artisan`, `Command` | `@forge/artisan` |
-| `Container`, `Injectable`, `Inject` | `@forge/di` |
-| `Env`, `Collection`, `ConfigRepository`, `resolveOptionalPeer` | `@forge/support` |
-| `ForgeRequest`, `ForgeResponse`, `HttpMethod`, `ServerAdapter`, `FetchHandler` | `@forge/contracts` |
+| `artisan`, `Command` | `@boostkit/artisan` |
+| `Container`, `Injectable`, `Inject` | `@boostkit/di` |
+| `Env`, `Collection`, `ConfigRepository`, `resolveOptionalPeer` | `@boostkit/support` |
+| `ForgeRequest`, `ForgeResponse`, `HttpMethod`, `ServerAdapter`, `FetchHandler` | `@boostkit/contracts` |
 
 ---
 
 ## Subpath Exports
 
-`@forge/core` ships tree-shakable subpaths for environments where bundle size matters.
+`@boostkit/core` ships tree-shakable subpaths for environments where bundle size matters.
 
 | Import | Contents |
 |---|---|
-| `@forge/core` | Everything — Application, ServiceProvider, Forge, artisan, re-exports |
-| `@forge/core/support` | Env, Collection, ConfigRepository, resolveOptionalPeer, helpers |
-| `@forge/core/di` | Container, Injectable, Inject |
-| `@forge/core/server` | ServerAdapter, ForgeRequest, ForgeResponse, HttpMethod, FetchHandler |
-| `@forge/core/middleware` | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware |
-| `@forge/core/validation` | FormRequest, ValidationError, validate, z |
+| `@boostkit/core` | Everything — Application, ServiceProvider, Forge, artisan, re-exports |
+| `@boostkit/core/support` | Env, Collection, ConfigRepository, resolveOptionalPeer, helpers |
+| `@boostkit/core/di` | Container, Injectable, Inject |
+| `@boostkit/core/server` | ServerAdapter, ForgeRequest, ForgeResponse, HttpMethod, FetchHandler |
+| `@boostkit/core/middleware` | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware |
+| `@boostkit/core/validation` | FormRequest, ValidationError, validate, z |
 
 ---
 

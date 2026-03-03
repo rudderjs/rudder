@@ -1,11 +1,11 @@
-# @forge/contracts
+# @boostkit/contracts
 
 Framework-level TypeScript contracts for HTTP, routing, middleware, and server adapters.
 
 ## Installation
 
 ```bash
-pnpm add @forge/contracts
+pnpm add @boostkit/contracts
 ```
 
 ## Usage
@@ -17,7 +17,7 @@ import type {
   MiddlewareHandler,
   ServerAdapter,
   RouteDefinition,
-} from '@forge/contracts'
+} from '@boostkit/contracts'
 
 const auth: MiddlewareHandler = async (req: ForgeRequest, _res: ForgeResponse, next) => {
   if (!req.headers.authorization) throw new Error('Unauthorized')

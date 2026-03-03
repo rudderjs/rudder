@@ -1,17 +1,17 @@
-# @forge/rate-limit
+# @boostkit/rate-limit
 
 Cache-backed rate limit middleware builder with standard rate-limit headers.
 
 ## Installation
 
 ```bash
-pnpm add @forge/rate-limit
+pnpm add @boostkit/rate-limit
 ```
 
 ## Usage
 
 ```ts
-import { RateLimit } from '@forge/rate-limit'
+import { RateLimit } from '@boostkit/rate-limit'
 
 const limiter = RateLimit
   .perMinute(60)
@@ -37,5 +37,5 @@ This package has no runtime config object.
 
 ## Notes
 
-- Requires a cache adapter registered in `@forge/cache` (`memory` or `redis`).
+- Requires a cache adapter registered in `@boostkit/cache` (`memory` or `redis`).
 - Skips static assets and Vite internal paths automatically.

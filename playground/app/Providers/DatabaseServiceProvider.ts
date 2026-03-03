@@ -1,6 +1,6 @@
-import { ServiceProvider } from '@forge/core'
-import { ModelRegistry } from '@forge/orm'
-import { prisma } from '@forge/orm-prisma'
+import { ServiceProvider } from '@boostkit/core'
+import { ModelRegistry } from '@boostkit/orm'
+import { prisma } from '@boostkit/orm-prisma'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   register(): void {

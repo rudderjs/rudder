@@ -1,13 +1,13 @@
 # Forge CLI
 
-The Forge CLI (`@forge/cli`) provides code generators and artisan command dispatch. It is the bridge between the terminal and your Forge application.
+The Forge CLI (`@boostkit/cli`) provides code generators and artisan command dispatch. It is the bridge between the terminal and your Forge application.
 
 ## Installation
 
-The CLI is included when you scaffold a project with `create-forge-app`. For manual setup:
+The CLI is included when you scaffold a project with `create-boostkit-app`. For manual setup:
 
 ```bash
-pnpm add -D @forge/cli
+pnpm add -D @boostkit/cli
 ```
 
 Add the `artisan` script to `package.json`:
@@ -15,7 +15,7 @@ Add the `artisan` script to `package.json`:
 ```json
 {
   "scripts": {
-    "artisan": "tsx node_modules/@forge/cli/src/index.ts"
+    "artisan": "tsx node_modules/@boostkit/cli/src/index.ts"
   }
 }
 ```
@@ -57,7 +57,7 @@ This means your custom commands in `routes/console.ts` have full access to the D
 In `routes/console.ts`:
 
 ```ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 
 artisan.command('hello {name}', async (args) => {
   console.log(`Hello, ${args.name}!`)

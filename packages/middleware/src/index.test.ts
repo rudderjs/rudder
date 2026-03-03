@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 import { Middleware, Pipeline, CorsMiddleware, ThrottleMiddleware } from './index.js'
 
 function makeReq(overrides: Partial<ForgeRequest> = {}): ForgeRequest {

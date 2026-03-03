@@ -1,11 +1,11 @@
-# @forge/queue-bullmq
+# @boostkit/queue-bullmq
 
 BullMQ Redis-backed queue adapter for Forge.
 
 ## Installation
 
 ```bash
-pnpm add @forge/queue-bullmq bullmq ioredis
+pnpm add @boostkit/queue-bullmq bullmq ioredis
 ```
 
 ## Configuration
@@ -13,7 +13,7 @@ pnpm add @forge/queue-bullmq bullmq ioredis
 Define the BullMQ connection in `config/queue.ts`:
 
 ```ts
-import { Env } from '@forge/core'
+import { Env } from '@boostkit/core'
 import { SendEmailJob } from '../app/Jobs/SendEmailJob.js'
 import { ProcessImageJob } from '../app/Jobs/ProcessImageJob.js'
 
@@ -41,7 +41,7 @@ export default {
 Register the queue provider in `bootstrap/providers.ts`:
 
 ```ts
-import { queue } from '@forge/queue'
+import { queue } from '@boostkit/queue'
 import configs from '../config/index.js'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
@@ -56,7 +56,7 @@ export default [
 ## Defining a Job
 
 ```ts
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 
 export class SendEmailJob extends Job {
   static jobName = 'SendEmailJob'
@@ -106,7 +106,7 @@ await SendEmailJob.dispatch('alice@example.com', 'Welcome to Forge', '<p>Hello!<
 Returns a `QueueAdapterProvider` that integrates with the `queue()` factory:
 
 ```ts
-import { bullmq } from '@forge/queue-bullmq'
+import { bullmq } from '@boostkit/queue-bullmq'
 
 const provider = bullmq({
   host:   '127.0.0.1',

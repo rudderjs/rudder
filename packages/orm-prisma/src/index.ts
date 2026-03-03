@@ -9,7 +9,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
-} from '@forge/orm'
+} from '@boostkit/orm'
 
 // ─── Prisma Query Builder ──────────────────────────────────
 

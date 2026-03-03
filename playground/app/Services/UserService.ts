@@ -1,4 +1,4 @@
-import { Injectable } from '@forge/core'
+import { Injectable } from '@boostkit/core'
 import { User } from '../Models/User.js'
 
 @Injectable()

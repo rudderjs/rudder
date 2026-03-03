@@ -1,5 +1,5 @@
-import { Env } from '@forge/core'
-import type { QueueConfig } from '@forge/queue'
+import { Env } from '@boostkit/core'
+import type { QueueConfig } from '@boostkit/queue'
 import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
 
 export default {

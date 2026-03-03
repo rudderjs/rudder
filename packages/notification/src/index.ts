@@ -1,6 +1,6 @@
-import { ServiceProvider, type Application } from '@forge/core'
-import { MailRegistry, type Mailable } from '@forge/mail'
-import { ModelRegistry } from '@forge/orm'
+import { ServiceProvider, type Application } from '@boostkit/core'
+import { MailRegistry, type Mailable } from '@boostkit/mail'
+import { ModelRegistry } from '@boostkit/orm'
 
 // ─── Notifiable ────────────────────────────────────────────
 
@@ -63,18 +63,18 @@ export class MailChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toMail) {
       throw new Error(
-        `[Forge Notification] ${notification.constructor.name} uses the 'mail' channel but does not implement toMail().`
+        `[BoostKit Notification] ${notification.constructor.name} uses the 'mail' channel but does not implement toMail().`
       )
     }
 
     const adapter = MailRegistry.get()
     if (!adapter) {
-      throw new Error('[Forge Notification] No mail adapter registered. Add mail() to providers.')
+      throw new Error('[BoostKit Notification] No mail adapter registered. Add mail() to providers.')
     }
 
     if (!notifiable.email) {
       throw new Error(
-        `[Forge Notification] Notifiable (id=${notifiable.id}) has no email address for mail channel.`
+        `[BoostKit Notification] Notifiable (id=${notifiable.id}) has no email address for mail channel.`
       )
     }
 
@@ -93,7 +93,7 @@ export class DatabaseChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toDatabase) {
       throw new Error(
-        `[Forge Notification] ${notification.constructor.name} uses the 'database' channel but does not implement toDatabase().`
+        `[BoostKit Notification] ${notification.constructor.name} uses the 'database' channel but does not implement toDatabase().`
       )
     }
 
@@ -135,7 +135,7 @@ export class Notifier {
           const channel = ChannelRegistry.get(channelName)
           if (!channel) {
             throw new Error(
-              `[Forge Notification] Unknown channel "${channelName}". Register it with ChannelRegistry.register().`
+              `[BoostKit Notification] Unknown channel "${channelName}". Register it with ChannelRegistry.register().`
             )
           }
           await channel.send(notifiable, notification)
@@ -167,7 +167,7 @@ export const notify = (
  * (mail, database) into the ChannelRegistry.
  *
  * Usage in bootstrap/providers.ts:
- *   import { notifications } from '@forge/notification'
+ *   import { notifications } from '@boostkit/notification'
  *   export default [..., notifications(), ...]
  */
 export function notifications(): new (app: Application) => ServiceProvider {

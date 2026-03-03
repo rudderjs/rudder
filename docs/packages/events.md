@@ -1,11 +1,11 @@
-# @forge/events
+# @boostkit/events
 
 Event dispatcher, Listener contract, and provider factory for synchronous event-driven programming.
 
 ## Installation
 
 ```bash
-pnpm add @forge/events
+pnpm add @boostkit/events
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ Register the events provider in `bootstrap/providers.ts` by passing a listen map
 
 ```ts
 // bootstrap/providers.ts
-import { events } from '@forge/events'
+import { events } from '@boostkit/events'
 import { SendWelcomeEmail } from '../app/Listeners/SendWelcomeEmail.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 
@@ -43,7 +43,7 @@ Listeners implement the `Listener<T>` interface and define a `handle(event)` met
 
 ```ts
 // app/Listeners/SendWelcomeEmail.ts
-import type { Listener } from '@forge/events'
+import type { Listener } from '@boostkit/events'
 import type { UserRegistered } from '../Events/UserRegistered.js'
 
 export class SendWelcomeEmail implements Listener<UserRegistered> {
@@ -60,8 +60,8 @@ Use the `dispatch()` helper anywhere in your application — routes, services, c
 
 ```ts
 // routes/api.ts
-import { router } from '@forge/router'
-import { dispatch } from '@forge/events'
+import { router } from '@boostkit/router'
+import { dispatch } from '@boostkit/events'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 
 router.post('/api/users', async (req, res) => {
@@ -78,7 +78,7 @@ router.post('/api/users', async (req, res) => {
 The global `dispatcher` singleton is available for imperative registration and dispatch outside of the provider factory:
 
 ```ts
-import { dispatcher } from '@forge/events'
+import { dispatcher } from '@boostkit/events'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmail } from '../app/Listeners/SendWelcomeEmail.js'
 
@@ -106,7 +106,7 @@ Keys are event class names (matched via `event.constructor.name`). Values are ar
 Factory function that returns a `ServiceProvider` class. When registered in `bootstrap/providers.ts`, it iterates the listen map and calls `dispatcher.listen()` for each entry during the provider's `register` phase.
 
 ```ts
-import { events } from '@forge/events'
+import { events } from '@boostkit/events'
 
 events({
   UserRegistered: [SendWelcomeEmail, LogUserRegistration],
@@ -119,7 +119,7 @@ events({
 Convenience helper that delegates to `dispatcher.dispatch()`. Resolves each registered listener in order and awaits its `handle()` method before proceeding to the next.
 
 ```ts
-import { dispatch } from '@forge/events'
+import { dispatch } from '@boostkit/events'
 
 dispatch(new UserRegistered(user.id))
 ```
@@ -144,4 +144,4 @@ interface Listener<T = unknown> {
 - Listeners are resolved by matching `event.constructor.name` to the keys in the listen map — ensure minification does not mangle class names in production builds.
 - Handlers are awaited sequentially in the order they are registered.
 - Registering `events(listenMap)` in `bootstrap/providers.ts` is a side-effect: all listeners are wired up during provider registration before any HTTP request is handled.
-- For deferred or background processing, dispatch a job from within a listener using `@forge/queue`.
+- For deferred or background processing, dispatch a job from within a listener using `@boostkit/queue`.

@@ -1,12 +1,12 @@
 # Validation
 
-Forge provides Zod-powered request validation through `@forge/validation`. You can validate inline with `validate()`, use middleware factories with `validateWith()`, or extend `FormRequest` for class-based validation.
+Forge provides Zod-powered request validation through `@boostkit/validation`. You can validate inline with `validate()`, use middleware factories with `validateWith()`, or extend `FormRequest` for class-based validation.
 
 ## Quick Inline Validation
 
 ```ts
-import { validate, z } from '@forge/validation'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
+import { validate, z } from '@boostkit/validation'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 router.post('/api/users', async (req: ForgeRequest, res: ForgeResponse) => {
   const data = await validate(
@@ -30,7 +30,7 @@ router.post('/api/users', async (req: ForgeRequest, res: ForgeResponse) => {
 Create reusable validation middleware:
 
 ```ts
-import { validateWith, z } from '@forge/validation'
+import { validateWith, z } from '@boostkit/validation'
 
 const requireCreateUser = validateWith(
   z.object({
@@ -54,7 +54,7 @@ For complex validation with authorization logic, extend `FormRequest`:
 
 ```ts
 // app/Http/Requests/CreateUserRequest.ts
-import { FormRequest } from '@forge/validation'
+import { FormRequest } from '@boostkit/validation'
 import { z } from 'zod'
 
 export class CreateUserRequest extends FormRequest {
@@ -92,7 +92,7 @@ router.post('/api/users', async (req, res) => {
 `validate()` and `FormRequest.validate()` throw a `ValidationError` on failure. Catch it to return a structured error response:
 
 ```ts
-import { validate, ValidationError, z } from '@forge/validation'
+import { validate, ValidationError, z } from '@boostkit/validation'
 
 router.post('/api/users', async (req, res) => {
   try {
@@ -121,10 +121,10 @@ class ValidationError extends Error {
 
 ## Using Zod Directly
 
-`@forge/validation` re-exports `z` from Zod, so you don't need a separate Zod import:
+`@boostkit/validation` re-exports `z` from Zod, so you don't need a separate Zod import:
 
 ```ts
-import { z } from '@forge/validation'
+import { z } from '@boostkit/validation'
 
 const UserSchema = z.object({
   id:    z.string().cuid(),

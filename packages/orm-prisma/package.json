@@ -1,5 +1,5 @@
 {
-  "name": "@forge/orm-prisma",
+  "name": "@boostkit/orm-prisma",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/orm": "workspace:*",
+    "@boostkit/orm": "workspace:*",
     "@prisma/client": "^7.0.0"
   },
   "optionalDependencies": {

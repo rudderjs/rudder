@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, ForgeRequest, ForgeResponse } from '@forge/contracts'
+import type { MiddlewareHandler, ForgeRequest, ForgeResponse } from '@boostkit/contracts'
 
 // ─── Base Middleware Class ─────────────────────────────────
 
@@ -85,7 +85,7 @@ export class LoggerMiddleware extends Middleware {
     const start = Date.now()
     await next()
     const ms = Date.now() - start
-    console.log(`[Forge] ${req.method} ${req.path} — ${ms}ms`)
+    console.log(`[BoostKit] ${req.method} ${req.path} — ${ms}ms`)
   }
 }
 

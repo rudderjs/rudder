@@ -1,5 +1,5 @@
-import { ServiceProvider, artisan, type Application } from '@forge/core'
-import { resolveOptionalPeer } from '@forge/core'
+import { ServiceProvider, artisan, type Application } from '@boostkit/core'
+import { resolveOptionalPeer } from '@boostkit/core'
 import nodePath from 'node:path'
 import fs from 'node:fs/promises'
 
@@ -47,7 +47,7 @@ export class StorageRegistry {
   static get(name?: string): StorageAdapter {
     const key = name ?? this.defaultDisk
     const a   = this.adapters.get(key)
-    if (!a) throw new Error(`[Forge Storage] Disk "${key}" not found. Check your storage config.`)
+    if (!a) throw new Error(`[BoostKit Storage] Disk "${key}" not found. Check your storage config.`)
     return a
   }
 }
@@ -156,10 +156,10 @@ function makeUnavailableAdapter(msg: string): StorageAdapter {
  * Returns a StorageServiceProvider that boots all configured disks.
  *
  * Built-in drivers:  local (writes to filesystem)
- * Plugin drivers:    s3 (@forge/storage-s3) — AWS S3 + S3-compatible (MinIO, R2)
+ * Plugin drivers:    s3 (@boostkit/storage-s3) — AWS S3 + S3-compatible (MinIO, R2)
  *
  * Usage in bootstrap/providers.ts:
- *   import { storage } from '@forge/storage'
+ *   import { storage } from '@boostkit/storage'
  *   import configs from '../config/index.js'
  *   export default [..., storage(configs.storage), ...]
  */
@@ -179,18 +179,18 @@ export function storage(config: StorageConfig): new (app: Application) => Servic
         } else if (driver === 's3') {
           let s3Mod: any
           try {
-            s3Mod = await resolveOptionalPeer('@forge/storage-s3')
+            s3Mod = await resolveOptionalPeer('@boostkit/storage-s3')
           } catch {
-            // Any import failure means @forge/storage-s3 isn't available (not installed or not built).
+            // Any import failure means @boostkit/storage-s3 isn't available (not installed or not built).
             // Vite's module runner wraps ERR_MODULE_NOT_FOUND in a RunnerError without .code,
             // so we catch broadly and mark the disk as unavailable instead of crashing.
-            const msg = `[Forge Storage] Disk "${name}" requires @forge/storage-s3. Install it: pnpm add @forge/storage-s3`
+            const msg = `[BoostKit Storage] Disk "${name}" requires @boostkit/storage-s3. Install it: pnpm add @boostkit/storage-s3`
             StorageRegistry.set(name, makeUnavailableAdapter(msg))
             continue
           }
           adapter = await (s3Mod.s3 as (c: unknown) => StorageAdapterProvider)(diskConfig).create()
         } else {
-          throw new Error(`[Forge Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
+          throw new Error(`[BoostKit Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
         }
 
         StorageRegistry.set(name, adapter)

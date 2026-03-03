@@ -1,6 +1,6 @@
 import path from 'node:path'
-import { Env } from '@forge/core'
-import type { StorageConfig } from '@forge/storage'
+import { Env } from '@boostkit/core'
+import type { StorageConfig } from '@boostkit/storage'
 
 export default {
   default: Env.get('FILESYSTEM_DISK', 'local'),

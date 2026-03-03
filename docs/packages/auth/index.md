@@ -1,17 +1,17 @@
-# @forge/auth
+# @boostkit/auth
 
 Shared authentication types for Forge applications.
 
 ## Installation
 
 ```bash
-pnpm add @forge/auth
+pnpm add @boostkit/auth
 ```
 
 ## Usage
 
 ```ts
-import type { AuthUser, AuthSession, AuthResult } from '@forge/auth'
+import type { AuthUser, AuthSession, AuthResult } from '@boostkit/auth'
 ```
 
 ## Interfaces
@@ -79,6 +79,6 @@ interface AuthResult {
 
 ## Notes
 
-- `@forge/auth` contains **types and interfaces only** — there is no runtime code.
-- It is used by `@forge/auth-better-auth` as the shared contract between auth adapters and application code.
+- `@boostkit/auth` contains **types and interfaces only** — there is no runtime code.
+- It is used by `@boostkit/auth-better-auth` as the shared contract between auth adapters and application code.
 - When building a custom auth provider, implement your resolved user/session data against these interfaces to stay compatible with the Forge auth ecosystem.

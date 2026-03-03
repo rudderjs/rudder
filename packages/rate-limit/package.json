@@ -1,5 +1,5 @@
 {
-  "name": "@forge/rate-limit",
+  "name": "@boostkit/rate-limit",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@forge/cache":     "workspace:*",
-    "@forge/contracts": "workspace:*"
+    "@boostkit/cache":     "workspace:*",
+    "@boostkit/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -146,7 +146,7 @@ export class ModelRegistry {
 
   static getAdapter(): OrmAdapter {
     if (!this.adapter) {
-      throw new Error('[Forge ORM] No ORM adapter registered. Did you configure one in forge.config.ts?')
+      throw new Error('[BoostKit ORM] No ORM adapter registered. Did you configure one in forge.config.ts?')
     }
     return this.adapter
   }

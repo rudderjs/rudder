@@ -25,8 +25,8 @@
 | Language | TypeScript (strict, ESM, NodeNext) |
 | Runtime | Node.js 20+ / Bun |
 | HTTP server | Hono (default) / Express / Fastify / H3 (via adapter) |
-| ORM | Prisma adapter / Drizzle adapter (swappable via `@forge/orm-prisma`) |
-| Auth | better-auth (via `@forge/auth-better-auth`) |
+| ORM | Prisma adapter / Drizzle adapter (swappable via `@boostkit/orm-prisma`) |
+| Auth | better-auth (via `@boostkit/auth-better-auth`) |
 | Queues | BullMQ (default) / Inngest adapter |
 | Validation | Zod with a Laravel-style Form Request wrapper |
 | DI Container | Custom (inspired by tsyringe / InversifyJS — lighter) |
@@ -70,7 +70,7 @@ forge/
 │   ├── schedule/           # Task scheduler — schedule singleton, schedule:run/work/list
 │   ├── rate-limit/         # Cache-backed rate limiter — RateLimit.perMinute/Hour/Day
 │   └── cli/                # Artisan-style CLI (make:*, module:*, user commands)
-├── create-forge-app/       # Interactive CLI scaffolder (like create-next-app)
+├── create-boostkit-app/       # Interactive CLI scaffolder (like create-next-app)
 └── playground/             # Canonical demo app — primary integration reference
 ```
 
@@ -149,31 +149,31 @@ my-app/
 
 ```
 Level 1 (parallel — no framework deps):
-  @forge/contracts   @forge/support   @forge/di
+  @boostkit/contracts   @boostkit/support   @boostkit/di
           │                │               │
           └────────────────┴───────────────┘
                            │
           ┌────────────────┼──────────────────────────┐
           ▼                ▼                          ▼
-   @forge/router    @forge/middleware         @forge/server-hono
-   @forge/validation @forge/rate-limit
+   @boostkit/router    @boostkit/middleware         @boostkit/server-hono
+   @boostkit/validation @boostkit/rate-limit
           │
           └──────────────────┐
                              ▼
-                      @forge/core (+ support + di + middleware + validation + router)
+                      @boostkit/core (+ support + di + middleware + validation + router)
                              │
            ┌─────────────────┼──────────────────┐
            ▼                 ▼                  ▼
-    @forge/queue       @forge/cache       @forge/orm
-    @forge/mail        @forge/storage     @forge/events
-    @forge/schedule    @forge/auth        @forge/validation
-    @forge/auth-better-auth
+    @boostkit/queue       @boostkit/cache       @boostkit/orm
+    @boostkit/mail        @boostkit/storage     @boostkit/events
+    @boostkit/schedule    @boostkit/auth        @boostkit/validation
+    @boostkit/auth-better-auth
            │
     orm-prisma   queue-bullmq   queue-inngest
     cache-redis  storage-s3     mail-nodemailer
 ```
 
-**Clean DAG — no cycles**: `@forge/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@forge/router` and `@forge/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@forge/core` lists `@forge/router` as a regular dependency and imports it with a plain `await import('@forge/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
+**Clean DAG — no cycles**: `@boostkit/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@boostkit/router` and `@boostkit/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@boostkit/core` lists `@boostkit/router` as a regular dependency and imports it with a plain `await import('@boostkit/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
 
 ---
 
@@ -186,8 +186,8 @@ Level 1 (parallel — no framework deps):
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@forge/core'
-import { hono } from '@forge/server-hono'
+import { Application } from '@boostkit/core'
+import { hono } from '@boostkit/server-hono'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -209,7 +209,7 @@ export default Application.configure({
 
 `bootstrap/providers.ts`:
 ```ts
-import { betterAuth } from '@forge/auth-better-auth'
+import { betterAuth } from '@boostkit/auth-better-auth'
 import configs from '../config/index.ts'
 
 export default [
@@ -243,8 +243,8 @@ export default {
 
 Side-effect file — just import and register, no exports needed:
 ```ts
-import { router } from '@forge/router'
-import { resolve } from '@forge/core'
+import { router } from '@boostkit/router'
+import { resolve } from '@boostkit/core'
 import { UserService } from '../app/Services/UserService.js'
 
 router.get('/api/users', async (_req, res) => {
@@ -267,7 +267,7 @@ router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not f
 
 Side-effect file — register artisan commands, no exports needed:
 ```ts
-import { artisan } from '@forge/core'
+import { artisan } from '@boostkit/core'
 import { User } from '../app/Models/User.js'
 
 artisan.command('db:seed', async () => {
@@ -297,7 +297,7 @@ export class UserService {
 }
 ```
 
-Import from `@forge/core` or `@forge/core/di`.
+Import from `@boostkit/core` or `@boostkit/core/di`.
 
 ---
 
@@ -321,7 +321,7 @@ model User {
 
 `app/Models/User.ts`:
 ```ts
-import { Model } from '@forge/orm'
+import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   static table = 'user'   // matches Prisma's accessor (lowercase model name)
@@ -343,7 +343,7 @@ const paged   = await User.query().paginate(1, 15)
 
 ### Auth — better-auth
 
-`@forge/auth-better-auth` wraps [better-auth](https://better-auth.com) as a `ServiceProvider`:
+`@boostkit/auth-better-auth` wraps [better-auth](https://better-auth.com) as a `ServiceProvider`:
 
 ```ts
 // config/auth.ts
@@ -358,7 +358,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@forge/auth-better-auth'
+import { betterAuth } from '@boostkit/auth-better-auth'
 betterAuth(configs.auth)  // returns a ServiceProvider class
 ```
 
@@ -413,7 +413,7 @@ export class CreateUserRequest extends FormRequest {
 const data = await validate(z.object({ name: z.string() }), req)
 ```
 
-Import from `@forge/core` or `@forge/core/validation`.
+Import from `@boostkit/core` or `@boostkit/core/validation`.
 
 ---
 
@@ -441,7 +441,7 @@ pnpm artisan queue:work            # start BullMQ worker (graceful shutdown on S
 ### Cache
 
 ```ts
-import { cache } from '@forge/cache'
+import { cache } from '@boostkit/cache'
 
 await cache().put('key', value, 300)   // TTL in seconds
 const hit = await cache().get('key')
@@ -449,14 +449,14 @@ await cache().forget('key')
 await cache().remember('key', 60, () => expensiveQuery())
 ```
 
-Drivers: `memory` (built-in, default) and `redis` (via `@forge/cache-redis` optional peer).
+Drivers: `memory` (built-in, default) and `redis` (via `@boostkit/cache-redis` optional peer).
 
 ---
 
 ### Storage
 
 ```ts
-import { storage } from '@forge/storage'
+import { storage } from '@boostkit/storage'
 
 await storage().put('avatars/user-1.jpg', buffer)
 const url  = await storage().url('avatars/user-1.jpg')
@@ -464,7 +464,7 @@ const file = await storage().get('avatars/user-1.jpg')
 await storage().delete('avatars/user-1.jpg')
 ```
 
-Drivers: `local` (built-in, default) and `s3` (via `@forge/storage-s3` optional peer — supports S3, R2, MinIO).
+Drivers: `local` (built-in, default) and `s3` (via `@boostkit/storage-s3` optional peer — supports S3, R2, MinIO).
 
 ```bash
 pnpm artisan storage:link    # creates public/storage symlink → storage/app/public
@@ -475,7 +475,7 @@ pnpm artisan storage:link    # creates public/storage symlink → storage/app/pu
 ### Events
 
 ```ts
-import { dispatch, events } from '@forge/events'
+import { dispatch, events } from '@boostkit/events'
 
 // Register a listener
 events().listen('user.registered', async (payload) => {
@@ -491,7 +491,7 @@ await dispatch('user.registered', { user })
 ### Mail
 
 ```ts
-import { mail } from '@forge/mail'
+import { mail } from '@boostkit/mail'
 
 await mail().send({
   to:      'user@example.com',
@@ -500,14 +500,14 @@ await mail().send({
 })
 ```
 
-Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (via `@forge/mail-nodemailer` optional peer).
+Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (via `@boostkit/mail-nodemailer` optional peer).
 
 ---
 
 ### Schedule
 
 ```ts
-import { schedule } from '@forge/schedule'
+import { schedule } from '@boostkit/schedule'
 
 schedule().call(() => cleanupExpiredSessions())
   .everyHour()
@@ -528,7 +528,7 @@ pnpm artisan schedule:list    # show all scheduled tasks
 ### Rate Limiting
 
 ```ts
-import { RateLimit } from '@forge/rate-limit'
+import { RateLimit } from '@boostkit/rate-limit'
 
 const apiLimit = RateLimit.perMinute(60)
   .by(req => req.headers['x-forwarded-for'] ?? 'unknown')
@@ -576,10 +576,10 @@ pnpm artisan db:seed
 
 ### Optional Peer Packages
 
-Packages like `@forge/queue-bullmq`, `@forge/cache-redis`, `@forge/storage-s3`, `@forge/mail-nodemailer` are **optional peers** — the user installs only what they need.
+Packages like `@boostkit/queue-bullmq`, `@boostkit/cache-redis`, `@boostkit/storage-s3`, `@boostkit/mail-nodemailer` are **optional peers** — the user installs only what they need.
 
-They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@forge/core/support`. This helper:
-1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@forge/*`
+They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@boostkit/core/support`. This helper:
+1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@boostkit/*`
 2. Returns `import(resolvedAbsolutePath)` — an absolute path import that is opaque to Rollup/Vite static analysis
 
 All optional peer packages **must** include `"default": "./dist/index.js"` in their `exports` field — the CJS resolver used by `createRequire.resolve()` cannot see `"import"`-only entries.
@@ -594,7 +594,7 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | **v0.2** | ✅ ORM (Prisma), Validation, Middleware, Queue (Inngest) |
 | **v0.3** | ✅ Fluent bootstrap, artisan console routes, DB seeding, multi-provider |
 | **v0.4** | ✅ Auth (better-auth), Storage (S3), Cache (Redis), Events, Mail, Schedule, Rate Limiting, BullMQ |
-| **v0.5** | ✅ Package consolidation — support/di/server/middleware/validation merged into @forge/core subpaths; create-forge-app scaffolder |
-| **v0.6** | `@forge/notification` — multi-channel notifications (mail, database) |
+| **v0.5** | ✅ Package consolidation — support/di/server/middleware/validation merged into @boostkit/core subpaths; create-boostkit-app scaffolder |
+| **v0.6** | `@boostkit/notification` — multi-channel notifications (mail, database) |
 | **v0.7** | Drizzle adapter, BullMQ improvements, Vue + Solid adapters |
 | **v1.0** | Docs site, npm publish, public launch |

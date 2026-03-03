@@ -1,4 +1,4 @@
-import { resolve } from '@forge/core'
+import { resolve } from '@boostkit/core'
 import { UserService } from '../../app/Services/UserService.js'
 
 export type Data = Awaited<ReturnType<typeof data>>

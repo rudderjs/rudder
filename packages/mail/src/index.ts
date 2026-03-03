@@ -1,5 +1,5 @@
-import { ServiceProvider, type Application } from '@forge/core'
-import { resolveOptionalPeer } from '@forge/core'
+import { ServiceProvider, type Application } from '@boostkit/core'
+import { resolveOptionalPeer } from '@boostkit/core'
 
 // ─── Mail Message ──────────────────────────────────────────
 
@@ -80,7 +80,7 @@ export class MailPendingSend {
 
   async send(mailable: Mailable): Promise<void> {
     const adapter = MailRegistry.get()
-    if (!adapter) throw new Error('[Forge Mail] No mail adapter registered. Add mail() to providers.')
+    if (!adapter) throw new Error('[BoostKit Mail] No mail adapter registered. Add mail() to providers.')
     const from = MailRegistry.getFrom()
     await adapter.send(mailable, { to: this._to, from, cc: this._cc, bcc: this._bcc })
   }
@@ -118,13 +118,13 @@ class LogAdapter implements MailAdapter {
   async send(mailable: Mailable, options: SendOptions): Promise<void> {
     const msg  = await mailable.compile()
     const line = '─'.repeat(50)
-    console.log(`\n[Forge Mail] ${line}`)
-    console.log(`[Forge Mail]  To:      ${options.to.join(', ')}`)
-    console.log(`[Forge Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
-    console.log(`[Forge Mail]  Subject: ${msg.subject}`)
-    if (msg.html) console.log(`[Forge Mail]  HTML:    ${msg.html.replace(/<[^>]+>/g, '').trim().slice(0, 120)}`)
-    if (msg.text) console.log(`[Forge Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
-    console.log(`[Forge Mail] ${line}\n`)
+    console.log(`\n[BoostKit Mail] ${line}`)
+    console.log(`[BoostKit Mail]  To:      ${options.to.join(', ')}`)
+    console.log(`[BoostKit Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
+    console.log(`[BoostKit Mail]  Subject: ${msg.subject}`)
+    if (msg.html) console.log(`[BoostKit Mail]  HTML:    ${msg.html.replace(/<[^>]+>/g, '').trim().slice(0, 120)}`)
+    if (msg.text) console.log(`[BoostKit Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
+    console.log(`[BoostKit Mail] ${line}\n`)
   }
 }
 
@@ -134,10 +134,10 @@ class LogAdapter implements MailAdapter {
  * Returns a MailServiceProvider class configured for the given mail config.
  *
  * Built-in drivers:  log (prints to console — great for dev)
- * Plugin drivers:    smtp (@forge/mail-nodemailer), resend, mailgun …
+ * Plugin drivers:    smtp (@boostkit/mail-nodemailer), resend, mailgun …
  *
  * Usage in bootstrap/providers.ts:
- *   import { mail } from '@forge/mail'
+ *   import { mail } from '@boostkit/mail'
  *   import configs from '../config/index.js'
  *   export default [..., mail(configs.mail), ...]
  */
@@ -157,12 +157,12 @@ export function mail(config: MailConfig): new (app: Application) => ServiceProvi
       if (driver === 'log') {
         adapter = new LogAdapter(config.from)
       } else if (driver === 'smtp') {
-        const { nodemailer } = await resolveOptionalPeer<any>('@forge/mail-nodemailer')
+        const { nodemailer } = await resolveOptionalPeer<any>('@boostkit/mail-nodemailer')
         adapter = (nodemailer as (c: unknown, from: unknown) => MailAdapterProvider)(
           mailerConfig, config.from,
         ).create()
       } else {
-        throw new Error(`[Forge Mail] Unknown driver "${driver}". Available: log, smtp`)
+        throw new Error(`[BoostKit Mail] Unknown driver "${driver}". Available: log, smtp`)
       }
 
       MailRegistry.set(adapter)

@@ -1,17 +1,17 @@
-# @forge/mail-nodemailer
+# @boostkit/mail-nodemailer
 
-Nodemailer SMTP adapter provider for `@forge/mail`.
+Nodemailer SMTP adapter provider for `@boostkit/mail`.
 
 ## Installation
 
 ```bash
-pnpm add @forge/mail-nodemailer
+pnpm add @boostkit/mail-nodemailer
 ```
 
 ## Usage
 
 ```ts
-import { nodemailer } from '@forge/mail-nodemailer'
+import { nodemailer } from '@boostkit/mail-nodemailer'
 
 const provider = nodemailer(
   {
@@ -42,4 +42,4 @@ const provider = nodemailer(
 ## Notes
 
 - Uses `nodemailer`.
-- The exported function name is `nodemailer` (used by `@forge/mail` dynamic loading).
+- The exported function name is `nodemailer` (used by `@boostkit/mail` dynamic loading).

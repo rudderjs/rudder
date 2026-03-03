@@ -1,11 +1,11 @@
-# @forge/artisan
+# @boostkit/artisan
 
 Command registry and base class for defining and running Artisan commands.
 
 ## Installation
 
 ```bash
-pnpm add @forge/artisan
+pnpm add @boostkit/artisan
 ```
 
 ## Quick Start
@@ -14,7 +14,7 @@ Use the `artisan` singleton to define inline commands in `routes/console.ts`:
 
 ```ts
 // routes/console.ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 
 artisan.command('greet {name}', async (cmd) => {
   const name = cmd.argument('name')
@@ -41,7 +41,7 @@ For complex commands, extend the `Command` base class:
 
 ```ts
 // app/Commands/SendDigestCommand.ts
-import { Command } from '@forge/artisan'
+import { Command } from '@boostkit/artisan'
 
 export class SendDigestCommand extends Command {
   signature    = 'mail:digest {--dry-run} {--type=weekly}'
@@ -75,7 +75,7 @@ Register a class-based command with `artisan.register()`:
 
 ```ts
 // routes/console.ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 import { SendDigestCommand } from '../app/Commands/SendDigestCommand.js'
 
 artisan.register(SendDigestCommand)
@@ -162,7 +162,7 @@ The `artisan` singleton is an instance of `ArtisanRegistry`. It is stored on `gl
 Low-level utility that parses a signature string into structured argument and option definitions:
 
 ```ts
-import { parseSignature } from '@forge/artisan'
+import { parseSignature } from '@boostkit/artisan'
 
 const parsed = parseSignature('make:model {name} {--table=users}')
 // {
@@ -174,8 +174,8 @@ const parsed = parseSignature('make:model {name} {--table=users}')
 
 ## Notes
 
-- The `artisan` singleton is stored on `globalThis.__forge_artisan__` — it is shared across all imports regardless of how many times `@forge/artisan` is required, preventing duplicate registries across package boundaries.
+- The `artisan` singleton is stored on `globalThis.__forge_artisan__` — it is shared across all imports regardless of how many times `@boostkit/artisan` is required, preventing duplicate registries across package boundaries.
 - `parseSignature` supports the full set of Laravel-style argument and option syntaxes described in the table above. Short aliases (`{--N|name}`) are single-character only.
 - Command output helpers (`info`, `error`, `warn`, `line`) use ANSI escape codes for color. Colors are applied unconditionally — redirect output to a file if you need plain text.
-- The Forge CLI (`@forge/cli`) loads `bootstrap/app.ts` and calls `forge.boot()` before `program.parse()`, so providers (including the database) are fully initialized when any artisan command runs.
+- The Forge CLI (`@boostkit/cli`) loads `bootstrap/app.ts` and calls `forge.boot()` before `program.parse()`, so providers (including the database) are fully initialized when any artisan command runs.
 - Commands must be registered before `artisan.run()` is called. Commands in `routes/console.ts` are loaded by the CLI via the `withRouting({ commands })` loader in `bootstrap/app.ts`.

@@ -11,7 +11,7 @@ You should have a Forge project scaffolded already. If not, see [Installation](/
 Create `app/Models/User.ts`:
 
 ```ts
-import { Model } from '@forge/orm'
+import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   static table = 'user'   // Prisma accessor name (lowercase model name)
@@ -54,9 +54,9 @@ The service provider connects the database and makes services available to the D
 Create `app/Providers/DatabaseServiceProvider.ts`:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
-import { prisma } from '@forge/orm-prisma'
-import { ModelRegistry } from '@forge/orm'
+import { ServiceProvider } from '@boostkit/core'
+import { prisma } from '@boostkit/orm-prisma'
+import { ModelRegistry } from '@boostkit/orm'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   async boot(): Promise<void> {
@@ -105,7 +105,7 @@ export class UserService {
 Bind it in `app/Providers/AppServiceProvider.ts`:
 
 ```ts
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 import { UserService } from '../Services/UserService.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -120,9 +120,9 @@ export class AppServiceProvider extends ServiceProvider {
 Edit `routes/api.ts`:
 
 ```ts
-import { router } from '@forge/router'
-import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
-import { app } from '@forge/core'
+import { router } from '@boostkit/router'
+import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import { app } from '@boostkit/core'
 import { UserService } from '../app/Services/UserService.js'
 
 router.get('/api/users', async (_req: ForgeRequest, res: ForgeResponse) => {
@@ -176,7 +176,7 @@ curl http://localhost:3000/api/users/<id>
 Create a seed command in `routes/console.ts`:
 
 ```ts
-import { artisan } from '@forge/artisan'
+import { artisan } from '@boostkit/artisan'
 import { User } from '../app/Models/User.js'
 
 artisan.command('db:seed', async () => {

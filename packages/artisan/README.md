@@ -1,17 +1,17 @@
-# @forge/artisan
+# @boostkit/artisan
 
 Command registry and command primitives for defining and running CLI commands.
 
 ## Installation
 
 ```bash
-pnpm add @forge/artisan
+pnpm add @boostkit/artisan
 ```
 
 ## Usage
 
 ```ts
-import { artisan, Command } from '@forge/artisan'
+import { artisan, Command } from '@boostkit/artisan'
 
 artisan.command('greet {name}', () => {
   console.log('Hello!')

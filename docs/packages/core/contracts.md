@@ -1,16 +1,16 @@
-# @forge/contracts
+# @boostkit/contracts
 
 Framework-level TypeScript contracts for HTTP, routing, middleware, and server adapters.
 
 ```bash
-pnpm add @forge/contracts
+pnpm add @boostkit/contracts
 ```
 
 ---
 
 ## Overview
 
-`@forge/contracts` is a type-only package. It contains no runtime code — only TypeScript interfaces and type aliases. All other `@forge/*` packages depend on it as the shared language for HTTP primitives. Use `import type` when consuming these types in application code.
+`@boostkit/contracts` is a type-only package. It contains no runtime code — only TypeScript interfaces and type aliases. All other `@boostkit/*` packages depend on it as the shared language for HTTP primitives. Use `import type` when consuming these types in application code.
 
 ---
 
@@ -24,7 +24,7 @@ import type {
   RouteDefinition,
   ServerAdapter,
   FetchHandler,
-} from '@forge/contracts'
+} from '@boostkit/contracts'
 
 // Type a route handler
 const handler = async (req: ForgeRequest, res: ForgeResponse) => {
@@ -94,5 +94,5 @@ const myAdapter: ServerAdapterFactory = (config) => ({
 
 - This package contains no runtime code. Bundlers with `sideEffects: false` support will tree-shake it completely.
 - Prefer `import type` in application-level files to guarantee zero runtime cost.
-- Server adapters (e.g. `@forge/server-hono`) are responsible for mapping their native request/response objects to `ForgeRequest` / `ForgeResponse`.
+- Server adapters (e.g. `@boostkit/server-hono`) are responsible for mapping their native request/response objects to `ForgeRequest` / `ForgeResponse`.
 - The `raw` field on `ForgeRequest` gives escape-hatch access to adapter-specific APIs when needed (e.g. reading cookies from the Hono context).

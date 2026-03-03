@@ -1,4 +1,4 @@
-import { ServiceProvider } from '@forge/core'
+import { ServiceProvider } from '@boostkit/core'
 import { UserService } from '../Services/UserService.js'
 import { GreetingService } from '../Services/GreetingService.js'
 

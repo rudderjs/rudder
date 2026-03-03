@@ -1,5 +1,5 @@
 {
-  "name": "@forge/di",
+  "name": "@boostkit/di",
   "version": "0.0.1",
   "private": true,
   "type": "module",

@@ -80,7 +80,7 @@ export class Container {
       return this.autoResolve(token as Constructor<T>)
     }
 
-    throw new Error(`[Forge Container] No binding found for token: ${String(key)}`)
+    throw new Error(`[BoostKit Container] No binding found for token: ${String(key)}`)
   }
 
   has(token: string | symbol | Constructor): boolean {
@@ -98,7 +98,7 @@ export class Container {
   private autoResolve<T>(target: Constructor<T>): T {
     const isInjectable = Reflect.getMetadata(INJECTABLE_METADATA, target)
     if (!isInjectable) {
-      throw new Error(`[Forge Container] "${target.name}" is not decorated with @Injectable`)
+      throw new Error(`[BoostKit Container] "${target.name}" is not decorated with @Injectable`)
     }
 
     const paramTypes: Constructor[] =

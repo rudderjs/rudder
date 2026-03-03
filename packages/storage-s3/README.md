@@ -1,17 +1,17 @@
-# @forge/storage-s3
+# @boostkit/storage-s3
 
-S3-compatible storage adapter provider for `@forge/storage`.
+S3-compatible storage adapter provider for `@boostkit/storage`.
 
 ## Installation
 
 ```bash
-pnpm add @forge/storage-s3
+pnpm add @boostkit/storage-s3
 ```
 
 ## Usage
 
 ```ts
-import { s3 } from '@forge/storage-s3'
+import { s3 } from '@boostkit/storage-s3'
 
 const provider = s3({
   driver: 's3',

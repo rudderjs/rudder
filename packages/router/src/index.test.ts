@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@forge/contracts'
+import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@boostkit/contracts'
 import { Router, Controller, Get, Post, Middleware } from './index.js'
 
 class FakeServerAdapter implements ServerAdapter {

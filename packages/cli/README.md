@@ -1,13 +1,13 @@
-# @forge/cli
+# @boostkit/cli
 
 Forge CLI — code generators, module scaffolding, and artisan command dispatch.
 
 ## Installation
 
-The CLI is automatically included when you scaffold a project with `create-forge-app`. For manual setup:
+The CLI is automatically included when you scaffold a project with `create-boostkit-app`. For manual setup:
 
 ```bash
-pnpm add -D @forge/cli
+pnpm add -D @boostkit/cli
 ```
 
 Add to `package.json`:
@@ -15,7 +15,7 @@ Add to `package.json`:
 ```json
 {
   "scripts": {
-    "artisan": "tsx node_modules/@forge/cli/src/index.ts"
+    "artisan": "tsx node_modules/@boostkit/cli/src/index.ts"
   }
 }
 ```
@@ -64,7 +64,7 @@ All `make:*` commands support `--force` to overwrite existing files.
 Commands defined in `routes/console.ts` are auto-registered:
 
 ```ts
-import { artisan } from '@forge/core'
+import { artisan } from '@boostkit/core'
 
 artisan.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })
@@ -74,7 +74,7 @@ artisan.command('db:seed', async () => {
 Class-based commands:
 
 ```ts
-import { Command, artisan } from '@forge/core'
+import { Command, artisan } from '@boostkit/core'
 
 class SeedCommand extends Command {
   readonly signature = 'db:seed {--count=10}'

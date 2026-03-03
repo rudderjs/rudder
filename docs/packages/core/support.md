@@ -1,9 +1,9 @@
-# @forge/support
+# @boostkit/support
 
 Shared utility primitives — collections, env access, config lookup, and helper functions.
 
 ```bash
-pnpm add @forge/support
+pnpm add @boostkit/support
 ```
 
 ---
@@ -13,7 +13,7 @@ pnpm add @forge/support
 `Env` provides typed access to environment variables. It reads from `process.env` and supports optional fallback values.
 
 ```ts
-import { Env } from '@forge/support'
+import { Env } from '@boostkit/support'
 
 const port    = Env.getNumber('PORT', 3000)
 const debug   = Env.getBool('APP_DEBUG', false)
@@ -37,7 +37,7 @@ const appName = Env.get('APP_NAME', 'MyApp')
 `defineEnv` validates your environment variables at startup using a Zod schema. It throws an aggregated error listing all invalid or missing variables before the application boots.
 
 ```ts
-import { defineEnv } from '@forge/support'
+import { defineEnv } from '@boostkit/support'
 import { z } from 'zod'
 
 export const env = defineEnv({
@@ -58,7 +58,7 @@ export const env = defineEnv({
 `Collection<T>` is a typed wrapper around an array with a rich chainable API, inspired by Laravel Collections.
 
 ```ts
-import { Collection } from '@forge/support'
+import { Collection } from '@boostkit/support'
 
 const users = new Collection([
   { id: 1, name: 'Alice', role: 'admin' },
@@ -103,7 +103,7 @@ const chunks = users.chunk(2)
 `ConfigRepository` holds typed runtime configuration loaded from your `config/` files. It is set up automatically by `Application.configure()` and available via the `config()` helper.
 
 ```ts
-import { config } from '@forge/support'
+import { config } from '@boostkit/support'
 
 const port    = config<number>('server.port', 3000)
 const appName = config<string>('app.name', 'Forge')
@@ -123,21 +123,21 @@ const appName = config<string>('app.name', 'Forge')
 `resolveOptionalPeer` resolves an optional peer dependency at runtime without causing bundler errors when the package is absent.
 
 ```ts
-import { resolveOptionalPeer } from '@forge/support'
+import { resolveOptionalPeer } from '@boostkit/support'
 
-const router = await resolveOptionalPeer('@forge/router')
+const router = await resolveOptionalPeer('@boostkit/router')
 if (router) {
   // use router
 }
 ```
 
-This is used internally by `@forge/core` to load `@forge/router` at runtime without creating a static dependency that Turbo would see as a cycle.
+This is used internally by `@boostkit/core` to load `@boostkit/router` at runtime without creating a static dependency that Turbo would see as a cycle.
 
 ---
 
 ## Helper Functions
 
-General-purpose utility functions exported from `@forge/support`.
+General-purpose utility functions exported from `@boostkit/support`.
 
 | Function | Signature | Description |
 |---|---|---|

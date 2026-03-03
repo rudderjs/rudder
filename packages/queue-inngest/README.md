@@ -1,11 +1,11 @@
-# @forge/queue-inngest
+# @boostkit/queue-inngest
 
-Inngest serverless queue adapter for `@forge/queue`.
+Inngest serverless queue adapter for `@boostkit/queue`.
 
 ## Installation
 
 ```bash
-pnpm add @forge/queue-inngest inngest
+pnpm add @boostkit/queue-inngest inngest
 ```
 
 ## Usage
@@ -14,7 +14,7 @@ pnpm add @forge/queue-inngest inngest
 
 ```ts
 // config/queue.ts
-import { Env } from '@forge/core/support'
+import { Env } from '@boostkit/core/support'
 import { SendWelcomeEmailJob } from '../app/Jobs/SendWelcomeEmailJob.js'
 
 export default {
@@ -38,7 +38,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { queue } from '@forge/queue'
+import { queue } from '@boostkit/queue'
 import configs from '../config/index.js'
 
 export default [
@@ -52,8 +52,8 @@ Inngest requires an HTTP endpoint to receive function registration and event del
 
 ```ts
 // routes/api.ts
-import { router } from '@forge/router'
-import { inngest } from '@forge/queue-inngest'
+import { router } from '@boostkit/router'
+import { inngest } from '@boostkit/queue-inngest'
 import configs from '../config/index.js'
 
 // Mount the Inngest serve handler at /api/inngest
@@ -64,7 +64,7 @@ router.all('/api/inngest', inngest(configs.queue.connections.inngest).serveHandl
 
 ```ts
 // app/Jobs/SendWelcomeEmailJob.ts
-import { Job } from '@forge/queue'
+import { Job } from '@boostkit/queue'
 
 export class SendWelcomeEmailJob extends Job {
   static retries = 3   // Optional: override default retry count
