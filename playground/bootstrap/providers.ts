@@ -23,7 +23,7 @@ export default [
   storage(configs.storage),
   scheduler(),
   notifications(),
-  DatabaseServiceProvider,  // must boot first — sets up ModelRegistry
+  DatabaseServiceProvider,  // must boot before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
   TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]

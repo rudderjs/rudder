@@ -88,21 +88,25 @@ This throws at boot time if any required variable is missing or malformed — be
 
 ### Barrel Export
 
-`config/index.ts` re-exports all config files:
+`config/index.ts` collects all config files into a single default export:
 
 ```ts
-export { default as app }      from './app.js'
-export { default as server }   from './server.js'
-export { default as database } from './database.js'
-export { default as auth }     from './auth.js'
-export { default as queue }    from './queue.js'
-export { default as mail }     from './mail.js'
+import app      from './app.js'
+import server   from './server.js'
+import database from './database.js'
+import auth     from './auth.js'
+import queue    from './queue.js'
+import mail     from './mail.js'
+import cache    from './cache.js'
+import storage  from './storage.js'
+
+export default { app, server, database, auth, queue, mail, cache, storage }
 ```
 
-Then `bootstrap/app.ts` can import everything at once:
+Then `bootstrap/app.ts` imports it as a single object:
 
 ```ts
-import * as configs from '../config/index.js'
+import configs from '../config/index.ts'
 
 Application.configure({
   server: hono(configs.server),
@@ -124,10 +128,12 @@ const serverConfig = app().make<typeof configs.server>('config.server')
 This file wires the framework together. It should contain **only structural decisions** — not business logic or environment values.
 
 ```ts
+import 'reflect-metadata'
+import 'dotenv/config'
 import { Application } from '@forge/core'
 import { hono } from '@forge/server-hono'
-import providers from './providers.js'
-import * as configs from '../config/index.js'
+import providers from './providers.ts'
+import configs from '../config/index.ts'
 
 export default Application.configure({
   server:    hono(configs.server),
@@ -135,8 +141,9 @@ export default Application.configure({
   providers,
 })
   .withRouting({
-    api:      () => import('../routes/api.js'),
-    commands: () => import('../routes/console.js'),
+    web:      () => import('../routes/web.ts'),
+    api:      () => import('../routes/api.ts'),
+    commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
     // m.use(new CorsMiddleware().toHandler())
@@ -157,8 +164,9 @@ export default Application.configure({
 
 | Option | Description |
 |--------|-------------|
-| `api` | Async import of your routes file — loaded lazily on first HTTP request |
-| `commands` | Async import of your console routes — loaded at CLI boot |
+| `web` | Web routes (redirects, server guards) — loaded lazily on first HTTP request |
+| `api` | API routes — loaded lazily on first HTTP request |
+| `commands` | Artisan commands — loaded at CLI boot |
 
 ### `.withMiddleware()`
 
@@ -173,12 +181,16 @@ Receives a middleware configurator. Register global middleware here:
 
 ## Provider Boot Order
 
-Providers listed in `bootstrap/providers.ts` boot in order. `DatabaseServiceProvider` must come first so `ModelRegistry` is populated before any other provider calls model methods:
+Providers boot in array order. Most framework providers (betterAuth, queue, mail, cache, etc.) don't access the ORM during `boot()` — they only configure their own adapters. `DatabaseServiceProvider` just needs to appear **before `AppServiceProvider`** and any other provider whose `boot()` uses ORM models:
 
 ```ts
 export default [
-  DatabaseServiceProvider,   // boots first — sets up ModelRegistry
-  betterAuth(configs.auth),  // needs DB ready
-  AppServiceProvider,        // may query DB during boot
+  betterAuth(configs.auth),  // auth mounts /api/auth/* before routes load
+  queue(configs.queue),
+  mail(configs.mail),
+  notifications(),           // must come after mail()
+  cache(configs.cache),
+  DatabaseServiceProvider,   // sets ModelRegistry — must precede AppServiceProvider
+  AppServiceProvider,        // may use ORM models during boot
 ]
 ```

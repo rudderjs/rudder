@@ -336,7 +336,7 @@ playground/
 └── vite.config.ts      # Vite + Vike + React config
 ```
 
-**Provider boot order matters** — `DatabaseServiceProvider` must be first so `ModelRegistry` is set before other providers' `boot()` methods run.
+**Provider boot order matters** — `DatabaseServiceProvider` must appear before `AppServiceProvider` (and any provider that calls ORM models during `boot()`) so `ModelRegistry` is set in time.
 
 ---
 

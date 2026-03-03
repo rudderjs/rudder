@@ -574,7 +574,7 @@ export default [
   cache(configs.cache),
   storage(configs.storage),
   scheduler(),
-  DatabaseServiceProvider,
+  DatabaseServiceProvider,  // must appear before AppServiceProvider — sets up ModelRegistry
   AppServiceProvider,
 ${todoProvider}] satisfies (new (app: Application) => ServiceProvider)[]
 `

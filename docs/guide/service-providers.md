@@ -49,22 +49,25 @@ export class AppServiceProvider extends ServiceProvider {
 List provider classes (not instances) in `bootstrap/providers.ts`:
 
 ```ts
-import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
-import { AppServiceProvider }      from '../app/Providers/AppServiceProvider.js'
+import type { Application, ServiceProvider } from '@forge/core'
 import { betterAuth }              from '@forge/auth-better-auth'
 import { queue }                   from '@forge/queue'
 import { cache }                   from '@forge/cache'
 import { mail }                    from '@forge/mail'
-import * as configs                from '../config/index.js'
+import { notifications }           from '@forge/notification'
+import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
+import { AppServiceProvider }      from '../app/Providers/AppServiceProvider.js'
+import configs                     from '../config/index.js'
 
 export default [
-  DatabaseServiceProvider,        // 1. Must be first — sets up ModelRegistry
-  betterAuth(configs.auth),       // 2. Auth needs DB
-  queue(configs.queue),           // 3. Queue setup
-  cache(configs.cache),           // 4. Cache setup
-  mail(configs.mail),             // 5. Mail setup (before notifications)
-  AppServiceProvider,             // 6. App-specific bindings
-]
+  betterAuth(configs.auth),   // auth mounts /api/auth/* before routes/api.ts loads
+  queue(configs.queue),
+  mail(configs.mail),
+  notifications(),            // must come after mail()
+  cache(configs.cache),
+  DatabaseServiceProvider,    // must appear before AppServiceProvider — sets ModelRegistry
+  AppServiceProvider,
+] satisfies (new (app: Application) => ServiceProvider)[]
 ```
 
 Some packages export **provider factories** (functions that return a provider class) rather than plain classes. The factory takes config and returns a class:

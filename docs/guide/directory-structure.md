@@ -14,7 +14,7 @@ my-app/
 │   ├── auth.ts             # AUTH_SECRET, APP_URL, social providers
 │   ├── queue.ts            # Queue driver, connections
 │   ├── mail.ts             # Default mailer, from address
-│   └── index.ts            # Barrel re-export of all config files
+│   └── index.ts            # Collects all configs into a single default-exported object
 ├── app/
 │   ├── Models/
 │   │   └── User.ts         # ORM models — extends Model
@@ -23,6 +23,8 @@ my-app/
 │   ├── Providers/
 │   │   ├── DatabaseServiceProvider.ts  # Connects ORM adapter
 │   │   └── AppServiceProvider.ts       # Binds services and singletons
+│   ├── Middleware/
+│   │   └── RequestIdMiddleware.ts      # Attaches X-Request-Id to every response
 │   ├── Jobs/
 │   │   └── SendWelcomeEmail.ts         # Queue jobs — extends Job
 │   ├── Notifications/
@@ -32,17 +34,21 @@ my-app/
 │           └── CreateUserRequest.ts    # Form requests — extends FormRequest
 ├── routes/
 │   ├── api.ts              # router.get/post/all() — side-effect file, no exports
+│   ├── web.ts              # Non-API server routes (redirects, guards) — side-effect file
 │   └── console.ts          # artisan.command() — side-effect file, no exports
 ├── pages/                  # Vike file-based SSR pages
 │   ├── index/
 │   │   └── +Page.tsx       # Rendered at /
 │   └── +config.ts          # Vike renderer config
+├── src/
+│   └── index.css           # Global stylesheet (Tailwind + shadcn theme)
 ├── prisma/
 │   └── schema.prisma       # Prisma schema — models, relations, datasource
 ├── .env                    # Secrets and environment-specific values
 ├── .env.example            # Template for team members
 ├── package.json
 ├── tsconfig.json
+├── prisma.config.ts        # Prisma CLI config (schema path, datasource)
 └── vite.config.ts          # Vite + Vike + React/Vue config
 ```
 
@@ -52,7 +58,7 @@ my-app/
 
 The wiring layer. `app.ts` is the equivalent of Laravel's `bootstrap/app.php`. It configures the server adapter, registers providers, and declares route loaders. **Do not put business logic here.**
 
-`providers.ts` exports an ordered array of service provider classes. Provider **boot order matters** — `DatabaseServiceProvider` must come first so the ORM is ready when other providers boot.
+`providers.ts` exports an ordered array of service provider classes. Provider **boot order matters** — `DatabaseServiceProvider` must appear before `AppServiceProvider` (and any provider that uses ORM models during `boot()`) so `ModelRegistry` is set in time.
 
 ### `config/`
 
@@ -68,7 +74,7 @@ export default {
 }
 ```
 
-`config/index.ts` re-exports all of them so `bootstrap/app.ts` can import via `import * as configs from '../config/index.js'`.
+`config/index.ts` collects all of them into a single default export so `bootstrap/app.ts` can import via `import configs from '../config/index.ts'`.
 
 ### `app/`
 
@@ -86,6 +92,7 @@ Your application code. Structured by concern:
 Side-effect files — they run for their side effects (registering routes/commands) and export nothing.
 
 - `api.ts` — HTTP routes via `router.get/post/all()`
+- `web.ts` — Non-API server routes: redirects, server-side auth guards, download endpoints, sitemaps
 - `console.ts` — Artisan commands via `artisan.command()`
 
 These are loaded lazily by Forge via the `withRouting()` configuration.

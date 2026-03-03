@@ -68,10 +68,11 @@ Create `bootstrap/app.ts`. This is both the bootstrap file **and** the applicati
 
 ```ts
 import 'reflect-metadata'
+import 'dotenv/config'
 import { Application } from '@forge/core'
 import { hono } from '@forge/server-hono'
-import providers from './providers.js'
-import * as configs from '../config/index.js'
+import providers from './providers.ts'
+import configs from '../config/index.ts'
 
 export default Application.configure({
   server: hono(configs.server),
@@ -79,8 +80,9 @@ export default Application.configure({
   providers,
 })
   .withRouting({
-    api: () => import('../routes/api.js'),
-    commands: () => import('../routes/console.js'),
+    web:      () => import('../routes/web.ts'),
+    api:      () => import('../routes/api.ts'),
+    commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((_m) => {})
   .withExceptions((_e) => {})
@@ -90,13 +92,14 @@ export default Application.configure({
 Create `bootstrap/providers.ts`:
 
 ```ts
+import type { Application, ServiceProvider } from '@forge/core'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 
 export default [
-  DatabaseServiceProvider,
+  DatabaseServiceProvider,  // must precede AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
-]
+] satisfies (new (app: Application) => ServiceProvider)[]
 ```
 
 ### 4. Wire Vike to the app
@@ -122,7 +125,7 @@ This is the only wiring needed — `vike-photon` consumes the exported `Forge` i
 Create `config/server.ts`:
 
 ```ts
-import { Env } from '@forge/core/support'
+import { Env } from '@forge/support'
 
 export default {
   port: Env.getNumber('PORT', 3000),
@@ -134,12 +137,13 @@ export default {
 }
 ```
 
-Create `config/index.ts`:
+Create `config/index.ts` — collect all config files into a single default export:
 
 ```ts
-export { default as server } from './server.js'
-// export { default as database } from './database.js'
-// ...
+import server from './server.js'
+// import database from './database.js'
+
+export default { server }
 ```
 
 ### 6. Vite config

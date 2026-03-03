@@ -75,7 +75,7 @@ import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvide
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 
 export default [
-  DatabaseServiceProvider,   // must be first — sets up ModelRegistry
+  DatabaseServiceProvider,   // must appear before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
 ]
 ```
