@@ -9,7 +9,7 @@
   },
   "type": "module",
   "files": ["dist"],
-  "description": "Create a new Forge application",
+  "description": "Create a new BoostKit application",
   "bin": {
     "create-boostkit-app": "./dist/index.js"
   },

@@ -585,7 +585,7 @@ function configApp(): string {
   return `import { Env } from '@boostkit/support'
 
 export default {
-  name:  Env.get('APP_NAME',  'Forge'),
+  name:  Env.get('APP_NAME',  'BoostKit'),
   env:   Env.get('APP_ENV',   'development'),
   debug: Env.getBool('APP_DEBUG', false),
   url:   Env.get('APP_URL', 'http://localhost:3000'),
@@ -669,7 +669,7 @@ export default {
 
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME',    'Forge'),
+    name:    Env.get('MAIL_FROM_NAME',    'BoostKit'),
   },
 
   mailers: {
@@ -1033,7 +1033,7 @@ export default function Page() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
       <h1 className="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p className="text-muted-foreground">Built with Forge — Laravel-inspired Node.js framework.</p>
+      <p className="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
 
       {user ? (
         <div className="flex flex-col items-center gap-3">

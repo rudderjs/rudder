@@ -115,7 +115,7 @@ async function main(): Promise<void> {
   outro(
     `Done! Get started:\n\n` +
     nextSteps.join('\n') +
-    `\n\n  Docs: https://github.com/your-org/forge`
+    `\n\n  Docs: https://github.com/boostkitjs/boostkit`
   )
 }
 
