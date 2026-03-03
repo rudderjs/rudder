@@ -1,0 +1,45 @@
+:root {
+  --vp-c-brand-1: #f97316;
+  --vp-c-brand-2: #ea580c;
+  --vp-c-brand-3: #c2410c;
+  --vp-c-brand-soft: rgba(249, 115, 22, 0.14);
+}
+
+.dark {
+  --vp-c-brand-1: #fb923c;
+  --vp-c-brand-2: #f97316;
+  --vp-c-brand-3: #ea580c;
+  --vp-c-brand-soft: rgba(249, 115, 22, 0.16);
+}
+
+.VPHero .name .clip {
+  background: linear-gradient(120deg, #f97316 10%, #ef4444 90%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Slightly warmer code block background */
+.vp-code-group .tabs {
+  border-bottom-color: var(--vp-c-brand-soft);
+}
+
+/* Package badge */
+.package-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-family: var(--vp-font-family-mono);
+  text-decoration: none;
+}
+
+.package-badge:hover {
+  background: var(--vp-c-brand-2);
+  color: #fff;
+}

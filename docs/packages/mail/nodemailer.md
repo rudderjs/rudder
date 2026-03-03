@@ -1,0 +1,86 @@
+# @forge/mail-nodemailer
+
+Nodemailer SMTP adapter for `@forge/mail`.
+
+## Installation
+
+```bash
+pnpm add @forge/mail-nodemailer nodemailer
+```
+
+## Setup
+
+Add an SMTP mailer to your mail configuration:
+
+```ts
+// config/mail.ts
+import type { MailConfig } from '@forge/mail'
+
+export default {
+  default: Env.get('MAIL_MAILER', 'smtp'),
+  from: {
+    address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
+    name: Env.get('MAIL_FROM_NAME', 'Forge App'),
+  },
+  mailers: {
+    log: {
+      driver: 'log',
+    },
+    smtp: {
+      driver: 'smtp',
+      host: Env.get('MAIL_HOST', 'smtp.mailgun.org'),
+      port: Env.getNumber('MAIL_PORT', 587),
+      username: Env.get('MAIL_USERNAME'),
+      password: Env.get('MAIL_PASSWORD'),
+      encryption: Env.get('MAIL_ENCRYPTION', 'tls') as 'tls' | 'ssl' | 'none',
+    },
+  },
+} satisfies MailConfig
+```
+
+No changes are needed in `bootstrap/providers.ts` — `@forge/mail` dynamically loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
+
+## Configuration
+
+### `NodemailerConfig`
+
+| Option       | Type                      | Description                                                                 |
+|--------------|---------------------------|-----------------------------------------------------------------------------|
+| `driver`     | `'smtp'`                  | Must be `'smtp'` to select this adapter.                                    |
+| `host`       | `string`                  | SMTP server hostname.                                                       |
+| `port`       | `number`                  | SMTP server port.                                                           |
+| `username`   | `string?`                 | SMTP authentication username. Omit for unauthenticated relays.              |
+| `password`   | `string?`                 | SMTP authentication password. Omit for unauthenticated relays.              |
+| `encryption` | `'tls' \| 'ssl' \| 'none'` | Transport security. `'tls'` uses STARTTLS (port 587); `'ssl'` uses direct TLS (port 465); `'none'` sends in plaintext. |
+
+## `nodemailer(config, from)`
+
+`nodemailer(config, from)` returns a `MailAdapterProvider` that registers the Nodemailer adapter under the `'nodemailer'`/`'smtp'` driver name.
+
+```ts
+import { nodemailer } from '@forge/mail-nodemailer'
+
+// Registered automatically via @forge/mail dynamic loading.
+const provider = nodemailer(smtpConfig, { address: 'hello@example.com', name: 'Forge App' })
+```
+
+The `from` parameter sets the default sender envelope for all messages delivered through this adapter.
+
+## Common SMTP Providers
+
+| Provider    | Host                        | Port  | Encryption |
+|-------------|-----------------------------|-------|------------|
+| Gmail       | `smtp.gmail.com`            | `587` | `tls`      |
+| SendGrid    | `smtp.sendgrid.net`         | `587` | `tls`      |
+| Mailgun     | `smtp.mailgun.org`          | `587` | `tls`      |
+| Postmark    | `smtp.postmarkapp.com`      | `587` | `tls`      |
+| Amazon SES  | `email-smtp.<region>.amazonaws.com` | `587` | `tls` |
+| Mailtrap    | `live.smtp.mailtrap.io`     | `587` | `tls`      |
+
+## Notes
+
+- The adapter is exported as `'nodemailer'` and also matched by `@forge/mail` when `driver: 'smtp'` is set — no manual provider registration is required.
+- `encryption: 'tls'` enables STARTTLS and is the recommended setting for port `587`.
+- `encryption: 'ssl'` wraps the entire connection in TLS and is used with port `465`.
+- `encryption: 'none'` sends mail without transport encryption — only use this on trusted internal networks or for local development relays.
+- `nodemailer` (the npm package) is an optional peer dependency — you must install it explicitly alongside `@forge/mail-nodemailer`.

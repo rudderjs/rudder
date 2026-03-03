@@ -1,0 +1,17 @@
+{
+  "name": "@forge/docs",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "docs:dev": "vitepress dev",
+    "build": "vitepress build",
+    "docs:build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3",
+    "vue": "^3.5.29"
+  }
+}

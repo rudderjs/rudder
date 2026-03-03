@@ -2,3 +2,4 @@ packages:
   - 'packages/*'
   - 'create-forge-app'
   - 'playground'
+  - 'docs'
