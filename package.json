@@ -8,10 +8,17 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
-    "artisan": "tsx packages/cli/src/index.ts"
+    "artisan": "tsx packages/cli/src/index.ts",
+    "test": "turbo run test"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@prisma/engines", "prisma", "msgpackr-extract", "protobufjs", "better-sqlite3"]
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "prisma",
+      "msgpackr-extract",
+      "protobufjs",
+      "better-sqlite3"
+    ]
   },
   "devDependencies": {
     "tsx": "^4.21.0",

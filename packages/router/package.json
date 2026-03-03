@@ -17,7 +17,7 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "test": "TSX_TSCONFIG_PATH=./tsconfig.test.json node --import tsx/esm --test src/index.test.ts"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
   },
   "dependencies": {
     "@forge/contracts": "workspace:*",

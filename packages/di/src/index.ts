@@ -2,7 +2,7 @@ import 'reflect-metadata'
 
 // ─── Types ─────────────────────────────────────────────────
 
-type Constructor<T = unknown> = new (...args: unknown[]) => T
+type Constructor<T = unknown> = new (...args: any[]) => T
 type Factory<T = unknown> = (container: Container) => T
 type Binding<T = unknown> = { factory: Factory<T>; singleton: boolean }
 
