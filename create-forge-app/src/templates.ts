@@ -102,7 +102,9 @@ function packageJson(ctx: TemplateContext): string {
     '@forge/storage':          '^0.0.1',
     '@forge/support':          '^0.0.1',
     '@forge/validation':       '^0.0.1',
+    '@forge/events':           '^0.0.1',
     '@forge/mail':             '^0.0.1',
+    '@forge/notification':     '^0.0.1',
     '@photonjs/hono':          '^0.1.12',
     '@prisma/client':          '^7.0.0',
     '@tailwindcss/vite':       '^4.2.1',
@@ -365,6 +367,19 @@ model Verification {
   createdAt  DateTime?
   updatedAt  DateTime?
 }
+
+model Notification {
+  id              String  @id @default(cuid())
+  notifiable_id   String
+  notifiable_type String
+  type            String
+  data            String
+  read_at         String?
+  created_at      String
+  updated_at      String
+
+  @@index([notifiable_type, notifiable_id])
+}
 ${todoModel}`
 }
 
@@ -539,8 +554,10 @@ function bootstrapProviders(ctx: TemplateContext): string {
 
   return `import type { Application, ServiceProvider } from '@forge/core'
 import { betterAuth } from '@forge/auth-better-auth'
+import { events } from '@forge/events'
 import { queue } from '@forge/queue'
 import { mail } from '@forge/mail'
+import { notifications } from '@forge/notification'
 import { cache } from '@forge/cache'
 import { storage } from '@forge/storage'
 import { scheduler } from '@forge/schedule'
@@ -550,8 +567,10 @@ ${todoImport}import configs from '../config/index.js'
 
 export default [
   betterAuth(configs.auth),
+  events({}),
   queue(configs.queue),
   mail(configs.mail),
+  notifications(),
   cache(configs.cache),
   storage(configs.storage),
   scheduler(),
