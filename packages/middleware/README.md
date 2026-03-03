@@ -15,6 +15,7 @@ import { Middleware, Pipeline, CorsMiddleware } from '@forge/middleware'
 import type { ForgeRequest, ForgeResponse } from '@forge/contracts'
 
 class AuthMiddleware extends Middleware {
+  async handle(req: ForgeRequest, _res: ForgeResponse, next: () => Promise<void>) {
     if (!req.headers.authorization) throw new Error('Unauthorized')
     await next()
   }
