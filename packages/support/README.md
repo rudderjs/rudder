@@ -47,6 +47,19 @@ dd(req.body)
 
 ---
 
+## `env()`
+
+Simple helper for reading a string env variable — consistent with `config()` and `dd()`.
+
+```ts
+import { env } from '@boostkit/support'
+
+env('APP_NAME', 'BoostKit')   // → 'BoostKit'
+env('APP_ENV')                // throws if missing and no fallback
+```
+
+For typed access use `Env`:
+
 ## `Env`
 
 Type-safe access to `process.env`.

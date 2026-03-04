@@ -110,6 +110,10 @@ export const Env = {
   },
 }
 
+export function env(key: string, fallback?: string): string {
+  return Env.get(key, fallback as string)
+}
+
 // ─── Debug Helpers ─────────────────────────────────────────
 
 export function dump(...args: unknown[]): void {

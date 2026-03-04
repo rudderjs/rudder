@@ -328,7 +328,7 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 // ─── Re-exports ────────────────────────────────────────────
 
 export { Container, container, Injectable, Inject } from '@boostkit/di'
-export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer, dump, dd } from '@boostkit/support'
+export { Collection, Env, env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer, dump, dd } from '@boostkit/support'
 export type { AppRequest, AppResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@boostkit/contracts'
 
 // ─── Config helper ─────────────────────────────────────────
