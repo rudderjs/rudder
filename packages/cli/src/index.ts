@@ -115,12 +115,31 @@ async function main(): Promise<void> {
     .description('List all registered routes')
     .action(async () => {
       const { router } = await import('@boostkit/router') as { router: { list(): Array<{ method: string; path: string; middleware: unknown[] }> } }
-      const routes = router.list()
+      const apiRoutes = router.list()
 
-      if (routes.length === 0) {
-        console.log('No routes registered.')
-        return
-      }
+      // ── Scan Vike filesystem routes ──────────────────────
+      const vikeRoutes: Array<{ route: string; dir: string }> = []
+      const pagesDir = path.join(process.cwd(), 'pages')
+      try {
+        const scanPages = async (dir: string, base = ''): Promise<void> => {
+          const entries = await fs.readdir(dir, { withFileTypes: true })
+          const hasPage = entries.some(e => e.isFile() && e.name.startsWith('+Page.'))
+          if (hasPage) {
+            const segment = path.basename(dir)
+            const route   = base === '' ? '/' : base
+            const relDir  = path.relative(pagesDir, dir)
+            vikeRoutes.push({ route, dir: relDir })
+          }
+          for (const entry of entries) {
+            if (!entry.isDirectory() || entry.name.startsWith('_')) continue
+            const segment    = entry.name
+            const routeSegment = segment.startsWith('@') ? `:${segment.slice(1)}` : segment
+            const nextBase   = segment === 'index' ? '' : `${base}/${routeSegment}`
+            await scanPages(path.join(dir, segment), nextBase)
+          }
+        }
+        await scanPages(pagesDir)
+      } catch { /* no pages dir */ }
 
       const methodColor = (m: string): string => {
         const colors: Record<string, string> = {
@@ -130,16 +149,35 @@ async function main(): Promise<void> {
         return `${colors[m] ?? '\x1b[37m'}${m.padEnd(7)}\x1b[0m`
       }
 
-      const methodWidth = 7
-      const pathWidth   = Math.min(Math.max(...routes.map(r => r.path.length), 4), 60)
+      const allPaths  = [...apiRoutes.map(r => r.path), ...vikeRoutes.map(r => r.route)]
+      const pathWidth = Math.min(Math.max(...allPaths.map(p => p.length), 4), 60)
+      const mwWidth   = 12
 
-      console.log(`\n  ${'METHOD'.padEnd(methodWidth + 2)}  ${'PATH'.padEnd(pathWidth)}  MIDDLEWARE`)
-      console.log(`  ${'─'.repeat(methodWidth + 2)}  ${'─'.repeat(pathWidth)}  ${'─'.repeat(10)}`)
-
-      for (const route of routes) {
-        const mw = route.middleware.length > 0 ? `${route.middleware.length} handler(s)` : '—'
-        console.log(`  ${methodColor(route.method)}  ${route.path.padEnd(pathWidth)}  ${mw}`)
+      // ── API / Server routes ──────────────────────────────
+      if (apiRoutes.length > 0) {
+        console.log('\n  \x1b[1mAPI Routes\x1b[0m')
+        console.log(`  ${'METHOD'.padEnd(9)}  ${'PATH'.padEnd(pathWidth)}  MIDDLEWARE`)
+        console.log(`  ${'─'.repeat(9)}  ${'─'.repeat(pathWidth)}  ${'─'.repeat(mwWidth)}`)
+        for (const route of apiRoutes) {
+          const mw = route.middleware.length > 0 ? `${route.middleware.length} handler(s)` : '—'
+          console.log(`  ${methodColor(route.method)}  ${route.path.padEnd(pathWidth)}  ${mw}`)
+        }
       }
+
+      // ── Vike page routes ─────────────────────────────────
+      if (vikeRoutes.length > 0) {
+        console.log('\n  \x1b[1mPage Routes\x1b[0m  \x1b[2m(Vike filesystem routing)\x1b[0m')
+        console.log(`  ${'GET'.padEnd(9)}  ${'PATH'.padEnd(pathWidth)}  SOURCE`)
+        console.log(`  ${'─'.repeat(9)}  ${'─'.repeat(pathWidth)}  ${'─'.repeat(mwWidth)}`)
+        for (const { route, dir } of vikeRoutes) {
+          console.log(`  \x1b[32mGET    \x1b[0m  ${route.padEnd(pathWidth)}  pages/${dir}`)
+        }
+      }
+
+      if (apiRoutes.length === 0 && vikeRoutes.length === 0) {
+        console.log('No routes registered.')
+      }
+
       console.log()
     })
 
