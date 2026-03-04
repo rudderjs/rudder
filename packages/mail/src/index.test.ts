@@ -18,10 +18,10 @@ describe('Mail contract baseline', () => {
   it('MailRegistry set/get and setFrom/getFrom work as expected', () => {
     const adapter: MailAdapter = { send: async () => undefined }
     MailRegistry.set(adapter)
-    MailRegistry.setFrom({ address: 'from@example.com', name: 'Forge' })
+    MailRegistry.setFrom({ address: 'from@example.com', name: 'BoostKit' })
 
     assert.strictEqual(MailRegistry.get(), adapter)
-    assert.deepStrictEqual(MailRegistry.getFrom(), { address: 'from@example.com', name: 'Forge' })
+    assert.deepStrictEqual(MailRegistry.getFrom(), { address: 'from@example.com', name: 'BoostKit' })
   })
 
   it('Mailable.compile() builds subject/html/text from build()', async () => {
@@ -57,7 +57,7 @@ describe('Mail contract baseline', () => {
       send: async (_mailable, options) => { calls.push({ options }) },
     }
     MailRegistry.set(adapter)
-    MailRegistry.setFrom({ address: 'sender@example.com', name: 'Forge' })
+    MailRegistry.setFrom({ address: 'sender@example.com', name: 'BoostKit' })
 
     class TestMail extends Mailable {
       build() { return this.subject('Hello').text('World') }
@@ -67,7 +67,7 @@ describe('Mail contract baseline', () => {
 
     assert.deepStrictEqual(calls[0]?.options, {
       to: ['a@example.com', 'b@example.com'],
-      from: { address: 'sender@example.com', name: 'Forge' },
+      from: { address: 'sender@example.com', name: 'BoostKit' },
       cc: ['c@example.com'],
       bcc: ['d@example.com'],
     })

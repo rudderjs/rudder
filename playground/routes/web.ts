@@ -9,6 +9,7 @@ import { router } from '@boostkit/router'
 
 // Example: sitemap
 router.get('/test-get-route', (_req, res) => {
-  res.header('Content-Type', 'application/xml')
-  res.send(`1`)
+  // return 'sdsd';
+  // res.header('Content-Type', 'application/xml')
+  res.send(`test response`);
 })

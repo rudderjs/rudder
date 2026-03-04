@@ -1,7 +1,7 @@
 import { Env } from '@boostkit/core'
 
 export default {
-  name:  Env.get('APP_NAME',  'Forge'),
+  name:  Env.get('APP_NAME',  'BoostKit'),
   env:   Env.get('APP_ENV',   'development'),
   debug: Env.getBool('APP_DEBUG', false),
   url:   Env.get('APP_URL', 'http://localhost:3000'),

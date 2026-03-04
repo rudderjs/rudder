@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { BoostKitRequest, BoostKitResponse } from '@boostkit/contracts'
 import { Middleware, Pipeline, CorsMiddleware, ThrottleMiddleware } from './index.js'
 
-function makeReq(overrides: Partial<ForgeRequest> = {}): ForgeRequest {
+function makeReq(overrides: Partial<BoostKitRequest> = {}): BoostKitRequest {
   return {
     method: 'GET',
     url: '/',
@@ -21,7 +21,7 @@ function makeRes() {
   const headers = new Map<string, string>()
   let statusCode = 200
   let jsonBody: unknown
-  const res: ForgeResponse = {
+  const res: BoostKitResponse = {
     status(code) { statusCode = code; return res },
     header(key, value) { headers.set(key, value); return res },
     json(data) { jsonBody = data },
@@ -36,7 +36,7 @@ describe('Middleware contract baseline', () => {
   it('Middleware.toHandler() wires class handle()', async () => {
     let called = false
     class TestMiddleware extends Middleware {
-      async handle(_req: ForgeRequest, _res: ForgeResponse, next: () => Promise<void>): Promise<void> {
+      async handle(_req: BoostKitRequest, _res: BoostKitResponse, next: () => Promise<void>): Promise<void> {
         called = true
         await next()
       }

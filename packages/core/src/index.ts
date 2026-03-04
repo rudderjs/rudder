@@ -2,6 +2,7 @@ import { Container, container } from '@boostkit/di'
 import { Env, ConfigRepository, setConfigRepository } from '@boostkit/support'
 import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@boostkit/contracts'
 import { artisan, ArtisanRegistry } from '@boostkit/artisan'
+import { debug } from 'console'
 
 // ─── Service Provider ──────────────────────────────────────
 
@@ -70,20 +71,20 @@ export class Application {
 
     if (shouldRecreate) {
       container.reset()
-      g['__forge_app__'] = undefined
+      g['__boostkit_app__'] = undefined
     }
 
-    if (!g['__forge_app__']) {
-      g['__forge_app__'] = new Application(config)
+    if (!g['__boostkit_app__']) {
+      g['__boostkit_app__'] = new Application(config)
     }
-    Application.instance = g['__forge_app__'] as Application
+    Application.instance = g['__boostkit_app__'] as Application
     return Application.instance
   }
 
   /** Get the global app instance */
   static getInstance(): Application {
     const g = globalThis as Record<string, unknown>
-    const inst = (g['__forge_app__'] ?? Application.instance) as Application | undefined
+    const inst = (g['__boostkit_app__'] ?? Application.instance) as Application | undefined
     if (!inst) {
       throw new Error('[BoostKit] Application has not been created yet. Call Application.create() first.')
     }
@@ -213,18 +214,18 @@ export class AppBuilder {
     return this
   }
 
-  create(): Forge {
+  create(): BoostKit {
     const app = Application.create({
       ...(this._options.config    && { config:    this._options.config }),
       ...(this._options.providers && { providers: this._options.providers }),
     })
-    return new Forge(app, this._options.server, this._loaders, this._mwFn)
+    return new BoostKit(app, this._options.server, this._loaders, this._mwFn)
   }
 }
 
 // ─── BoostKit (Configured Application) ─────────────────────
 
-export class Forge {
+export class BoostKit {
   /** Phase 1: providers only — safe to await in CLI (no Vike virtual imports) */
   private _providerBoot: Promise<void>
   /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
@@ -245,6 +246,8 @@ export class Forge {
   /** Suppress Vike's informational console noise — runs once at boot, adapter-agnostic */
   private _suppressVikeNoise(): void {
     const isNoise = (args: unknown[]): boolean => {
+      // just for debug
+      return false;
       const msg = args.map(a => String(a ?? '')).join(' ')
       return msg.includes('[vike]') && (
         msg.includes('HTTP request')           ||
@@ -326,7 +329,7 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 
 export { Container, container, Injectable, Inject } from '@boostkit/di'
 export { Collection, Env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer } from '@boostkit/support'
-export type { ForgeRequest, ForgeResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@boostkit/contracts'
+export type { BoostKitRequest, BoostKitResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@boostkit/contracts'
 
 // ─── Config helper ─────────────────────────────────────────
 

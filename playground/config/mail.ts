@@ -5,7 +5,7 @@ export default {
 
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME',    'Forge'),
+    name:    Env.get('MAIL_FROM_NAME',    'BoostKit'),
   },
 
   mailers: {

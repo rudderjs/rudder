@@ -1,6 +1,6 @@
 // ─── Request & Response ────────────────────────────────────
 
-export interface ForgeRequest {
+export interface BoostKitRequest {
   method:  string
   url:     string
   path:    string
@@ -11,9 +11,9 @@ export interface ForgeRequest {
   raw:     unknown  // the original server-specific request object
 }
 
-export interface ForgeResponse {
-  status:  (code: number) => ForgeResponse
-  header:  (key: string, value: string) => ForgeResponse
+export interface BoostKitResponse {
+  status:  (code: number) => BoostKitResponse
+  header:  (key: string, value: string) => BoostKitResponse
   json:    (data: unknown) => void
   send:    (data: string) => void
   redirect:(url: string, code?: number) => void
@@ -23,13 +23,13 @@ export interface ForgeResponse {
 // ─── Handler & Middleware ──────────────────────────────────
 
 export type RouteHandler = (
-  req: ForgeRequest,
-  res: ForgeResponse
+  req: BoostKitRequest,
+  res: BoostKitResponse
 ) => unknown | Promise<unknown>
 
 export type MiddlewareHandler = (
-  req: ForgeRequest,
-  res: ForgeResponse,
+  req: BoostKitRequest,
+  res: BoostKitResponse,
   next: () => Promise<void>
 ) => void | Promise<void>
 
