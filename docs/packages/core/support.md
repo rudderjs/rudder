@@ -1,6 +1,8 @@
 # @boostkit/support
 
-Shared utility primitives — collections, env access, config lookup, and helper functions.
+Shared utility primitives — collections, environment access, config lookup, debug helpers, and general-purpose functions.
+
+All exports are also available from `@boostkit/core` for convenience.
 
 ```bash
 pnpm add @boostkit/support
@@ -8,153 +10,206 @@ pnpm add @boostkit/support
 
 ---
 
-## Env
+## `config()`
 
-`Env` provides typed access to environment variables. It reads from `process.env` and supports optional fallback values.
+Read values from the application's `ConfigRepository` using dot-notation keys. The config store is populated from your `config/` files at bootstrap time via `Application.configure({ config: configs })`.
+
+```ts
+import { config } from '@boostkit/core'
+
+config('app.name')              // → 'BoostKit'
+config('app.env')               // → 'development'
+config('app.debug')             // → false
+config('server.port', 3000)     // → number (with fallback)
+config('database.default')      // → 'sqlite'
+```
+
+Keys follow the `file.key` pattern — `app.name` reads `configs.app.name` from your `config/index.ts`.
+
+### Demo
+
+```ts
+// routes/api.ts
+import { config } from '@boostkit/core'
+
+router.get('/api/config', (_req, res) => res.json({
+  name:  config('app.name'),
+  env:   config('app.env'),
+  debug: config('app.debug'),
+  url:   config('app.url'),
+}))
+```
+
+### `ConfigRepository` API
+
+| Function | Signature | Description |
+|---|---|---|
+| `config` | `<T>(key: string, fallback?: T) => T` | Reads a value by dot-notation key from the global config store. |
+| `setConfigRepository` | `(repo: ConfigRepository) => void` | Sets the global config instance. Called internally by `Application.configure()`. |
+
+---
+
+## `dd()` / `dump()`
+
+Debug helpers inspired by Laravel. Both are importable from `@boostkit/core`.
+
+```ts
+import { dd, dump } from '@boostkit/core'
+
+// dump() — pretty-prints to the terminal, server keeps running
+dump({ user, session })
+dump(req.body, req.headers)   // accepts multiple arguments
+
+// dd() — pretty-prints then terminates the process (restart required)
+dd(req.body)
+```
+
+`dd` stands for *dump and die*. Both accept any number of arguments and format them with `JSON.stringify` at 2-space indent.
+
+::: warning
+`dd()` calls `process.exit(1)`. Use it only during local development — the server must be restarted after it fires.
+:::
+
+---
+
+## `Env`
+
+Type-safe access to `process.env`.
 
 ```ts
 import { Env } from '@boostkit/support'
 
-const port    = Env.getNumber('PORT', 3000)
-const debug   = Env.getBool('APP_DEBUG', false)
-const secret  = Env.require('AUTH_SECRET')      // throws if missing
-const appName = Env.get('APP_NAME', 'MyApp')
+Env.get('APP_NAME', 'BoostKit')    // string (throws if missing and no fallback)
+Env.getNumber('PORT', 3000)        // number
+Env.getBool('APP_DEBUG', false)    // boolean  ('true' | '1' → true)
+Env.has('REDIS_URL')               // boolean
 ```
 
-### Env Methods
+### `Env` Methods
 
-| Method | Signature | Description |
+| Method | Return | Description |
 |---|---|---|
-| `get` | `(key: string, fallback?: string) => string \| undefined` | Returns the env value or the fallback. Returns `undefined` if both are absent. |
-| `getNumber` | `(key: string, fallback?: number) => number` | Returns the env value coerced to a number, or the fallback. |
-| `getBool` | `(key: string, fallback?: boolean) => boolean` | Returns `true` for `'true'`, `'1'`, `'yes'`; `false` otherwise. Falls back to `fallback` if the variable is unset. |
-| `require` | `(key: string) => string` | Returns the env value or throws a descriptive error if the variable is missing. |
+| `get(key, fallback?)` | `string` | Returns the env value or the fallback. Throws if both are absent. |
+| `getNumber(key, fallback?)` | `number` | Coerces to number, or returns fallback. Throws if both absent or NaN. |
+| `getBool(key, fallback?)` | `boolean` | `'true'` / `'1'` → `true`; anything else → `false`. |
+| `has(key)` | `boolean` | Returns `true` if the variable is set. |
 
 ---
 
-## defineEnv
+## `defineEnv()`
 
-`defineEnv` validates your environment variables at startup using a Zod schema. It throws an aggregated error listing all invalid or missing variables before the application boots.
+Validate environment variables at startup using a Zod schema. Throws a clear error listing all missing or invalid keys before the application boots.
 
 ```ts
 import { defineEnv } from '@boostkit/support'
 import { z } from 'zod'
 
-export const env = defineEnv({
+export const env = defineEnv(z.object({
   APP_NAME:     z.string().min(1),
   APP_ENV:      z.enum(['development', 'production', 'test']).default('development'),
   PORT:         z.coerce.number().default(3000),
   DATABASE_URL: z.string().url(),
-  AUTH_SECRET:  z.string().min(32),
-})
+}))
 
-// env.APP_NAME, env.PORT, etc. are fully typed
+// env.APP_NAME  → string
+// env.PORT      → number
 ```
 
 ---
 
-## Collection
+## `Collection<T>`
 
-`Collection<T>` is a typed wrapper around an array with a rich chainable API, inspired by Laravel Collections.
+A typed, chainable wrapper around arrays — inspired by Laravel Collections.
 
 ```ts
 import { Collection } from '@boostkit/support'
 
-const users = new Collection([
+const users = Collection.of([
   { id: 1, name: 'Alice', role: 'admin' },
   { id: 2, name: 'Bob',   role: 'user' },
   { id: 3, name: 'Carol', role: 'admin' },
 ])
 
-const adminNames = users
-  .filter(u => u.role === 'admin')
-  .pluck('name')
-  .toArray()
-// ['Alice', 'Carol']
+users.filter(u => u.role === 'admin').pluck('name').toArray()
+// → ['Alice', 'Carol']
 
-const byRole = users.groupBy('role')
-// { admin: [...], user: [...] }
+users.groupBy('role')
+// → { admin: [...], user: [...] }
 
-const chunks = users.chunk(2)
-// [[{...}, {...}], [{...}]]
+users.first()   // { id: 1, name: 'Alice', role: 'admin' }
+users.count()   // 3
 ```
 
-### Collection Methods
+### `Collection` Methods
 
 | Method | Description |
 |---|---|
-| `map<U>(fn)` | Transforms each item and returns a new `Collection<U>`. |
-| `filter(fn)` | Keeps items matching the predicate. Returns a new `Collection<T>`. |
-| `find(fn)` | Returns the first item matching the predicate, or `undefined`. |
+| `map<U>(fn)` | Transforms each item, returns a new `Collection<U>`. |
+| `filter(fn)` | Keeps items matching the predicate. |
+| `find(fn)` | Returns the first matching item, or `undefined`. |
 | `first()` | Returns the first item, or `undefined`. |
 | `last()` | Returns the last item, or `undefined`. |
-| `chunk(size)` | Splits the collection into an array of `Collection<T>` chunks of the given size. |
-| `pluck(key)` | Extracts a single field from each item. Returns a new `Collection`. |
-| `unique(key?)` | Removes duplicate items. Optionally de-duplicates by a field key. |
-| `groupBy(key)` | Groups items into a `Record<string, T[]>` by the given field. |
-| `toArray()` | Returns the underlying array. |
+| `pluck(key)` | Extracts a single field from each item. |
+| `groupBy(key)` | Groups items into a `Record<string, T[]>` by field. |
+| `each(fn)` | Iterates over items; returns `this` for chaining. |
+| `contains(fn)` | Returns `true` if any item matches the predicate. |
+| `isEmpty()` | Returns `true` if the collection has no items. |
 | `count()` | Returns the number of items. |
-| `isEmpty()` | Returns `true` if the collection contains no items. |
-
----
-
-## ConfigRepository
-
-`ConfigRepository` holds typed runtime configuration loaded from your `config/` files. It is set up automatically by `Application.configure()` and available via the `config()` helper.
-
-```ts
-import { config } from '@boostkit/support'
-
-const port    = config<number>('server.port', 3000)
-const appName = config<string>('app.name', 'BoostKit')
-```
-
-### ConfigRepository API
-
-| Function | Signature | Description |
-|---|---|---|
-| `config` | `<T>(key: string, defaultValue?: T) => T` | Retrieves a value from the config repository using dot notation. |
-| `setConfigRepository` | `(repo: ConfigRepository) => void` | Sets the global config repository instance. Called internally by `Application.configure()`. |
-
----
-
-## resolveOptionalPeer
-
-`resolveOptionalPeer` resolves an optional peer dependency at runtime without causing bundler errors when the package is absent.
-
-```ts
-import { resolveOptionalPeer } from '@boostkit/support'
-
-const router = await resolveOptionalPeer('@boostkit/router')
-if (router) {
-  // use router
-}
-```
-
-This is used internally by `@boostkit/core` to load `@boostkit/router` at runtime without creating a static dependency that Turbo would see as a cycle.
+| `all()` | Returns the underlying array. |
+| `toArray()` | Returns a shallow copy of the underlying array. |
+| `toJSON()` | Returns the collection serialised as a JSON string. |
 
 ---
 
 ## Helper Functions
 
-General-purpose utility functions exported from `@boostkit/support`.
+```ts
+import { sleep, ucfirst, pick, omit, tap, deepClone, isObject, toSnakeCase, toCamelCase } from '@boostkit/support'
 
-| Function | Signature | Description |
-|---|---|---|
-| `sleep` | `(ms: number) => Promise<void>` | Resolves after `ms` milliseconds. |
-| `ucfirst` | `(str: string) => string` | Capitalises the first character of a string. |
-| `toSnakeCase` | `(str: string) => string` | Converts a camelCase or PascalCase string to `snake_case`. |
-| `toCamelCase` | `(str: string) => string` | Converts a snake_case string to `camelCase`. |
-| `isObject` | `(value: unknown) => boolean` | Returns `true` if the value is a plain object (not an array or null). |
-| `deepClone` | `<T>(value: T) => T` | Returns a deep clone using `structuredClone`. |
-| `pick` | `<T, K extends keyof T>(obj: T, keys: K[]) => Pick<T, K>` | Returns a new object with only the specified keys. |
-| `omit` | `<T, K extends keyof T>(obj: T, keys: K[]) => Omit<T, K>` | Returns a new object with the specified keys removed. |
-| `tap` | `<T>(value: T, fn: (v: T) => void) => T` | Calls `fn` with `value` then returns `value`. Useful for side effects in a chain. |
+await sleep(500)
+
+ucfirst('hello world')                                  // 'Hello world'
+toSnakeCase('fooBarBaz')                                // 'foo_bar_baz'
+toCamelCase('foo_bar_baz')                              // 'fooBarBaz'
+
+pick({ id: 1, name: 'A', secret: 'x' }, ['id', 'name'])  // { id: 1, name: 'A' }
+omit({ id: 1, secret: 'x' }, ['secret'])                  // { id: 1 }
+
+tap(new Map(), m => m.set('key', 1))  // returns the Map
+
+deepClone({ nested: { value: 1 } })   // deep copy via JSON parse/stringify
+isObject([])                           // false
+isObject({})                           // true
+```
+
+| Function | Description |
+|---|---|
+| `sleep(ms)` | Resolves after `ms` milliseconds. |
+| `ucfirst(str)` | Capitalises the first character. |
+| `toSnakeCase(str)` | `camelCase` / `PascalCase` → `snake_case`. |
+| `toCamelCase(str)` | `snake_case` → `camelCase`. |
+| `pick(obj, keys)` | Returns a new object with only the specified keys. |
+| `omit(obj, keys)` | Returns a new object with the specified keys removed. |
+| `tap(value, fn)` | Calls `fn(value)` then returns `value`. |
+| `deepClone(value)` | Returns a deep clone via JSON round-trip. |
+| `isObject(value)` | Returns `true` for plain objects (not arrays or null). |
+
+---
+
+## `resolveOptionalPeer`
+
+Dynamically resolves an optional peer dependency at runtime without bundler errors when the package is absent. Used internally by adapters.
+
+```ts
+import { resolveOptionalPeer } from '@boostkit/support'
+
+const mod = await resolveOptionalPeer('@boostkit/router')
+```
 
 ---
 
 ## Notes
 
-- `sideEffects: false` — this package is fully tree-shakable. Bundlers can eliminate any import that is not used.
-- `defineEnv` validates `process.env` eagerly at module evaluation time. If validation fails, it throws a `ZodError` (or a formatted aggregate error) before your application starts. This surfaces misconfigured environments at boot rather than at runtime.
-- `resolveOptionalPeer` uses a dynamic `await import('node:module')` internally. Do not hoist `createRequire` to the top of a module that is part of a browser bundle — the dynamic import keeps it tree-shakable.
+- All exports are re-exported from `@boostkit/core` — you rarely need to import `@boostkit/support` directly.
+- `defineEnv` validates eagerly at module evaluation time. Failures surface at boot, not at runtime.
+- `dd()` calls `process.exit(1)` — development use only.
