@@ -5,10 +5,16 @@ import { Cache } from '@boostkit/cache'
 import { Storage } from '@boostkit/storage'
 import { RateLimit } from '@boostkit/middleware'
 import { notify } from '@boostkit/notification'
+import { validate } from '@boostkit/validation'
 import { UserService } from '../app/Services/UserService.js'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
+import { CreateUserRequest } from '../app/Requests/CreateUserRequest.js'
+import { TestController } from '../app/Controllers/TestController.js'
+
+// Register decorator-based controllers
+router.registerController(TestController)
 
 // Per-route middleware instance — reused across protected routes
 const authMw = new AuthMiddleware().toHandler()
@@ -98,6 +104,13 @@ router.post('/api/notify/welcome', async (req, res) => {
   if (!id || !email) return res.status(422).json({ message: 'id and email are required.' })
   await notify({ id, email, name }, new WelcomeNotification())
   return res.json({ sent: true })
+})
+
+// ── Validation demo ───────────────────────────────────────
+// POST /api/validate/user  — validates body with FormRequest (returns errors on failure)
+router.post('/api/validate/user', async (req, res) => {
+  const data = await validate(req, CreateUserRequest)
+  return res.json({ valid: true, data })
 })
 
 // Auth routes — delegate all /api/auth/* requests to better-auth, with a stricter rate limit

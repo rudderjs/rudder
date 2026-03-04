@@ -135,7 +135,7 @@ class RedisAdapter implements CacheAdapter {
     flushdb(): Promise<unknown>
   }> {
     if (!this.client) {
-      const { Redis } = await import('ioredis') as typeof import('ioredis')
+      const { Redis } = await import('ioredis') as any
       this.client = this.config.url
         ? new Redis(this.config.url)
         : new Redis({
@@ -145,7 +145,7 @@ class RedisAdapter implements CacheAdapter {
             db:       this.config.db       ?? 0,
           })
     }
-    return this.client as ReturnType<RedisAdapter['getClient']> extends Promise<infer R> ? R : never
+    return this.client as Awaited<ReturnType<RedisAdapter['getClient']>>
   }
 
   private k(key: string): string { return `${this.prefix}${key}` }
