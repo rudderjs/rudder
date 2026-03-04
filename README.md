@@ -50,8 +50,7 @@ pnpm dev
 | `@boostkit/queue-bullmq` | BullMQ Redis-backed queue |
 | `@boostkit/queue-inngest` | Inngest serverless queue |
 | `@boostkit/cache` | Cache facade, memory + Redis drivers (Redis needs `ioredis`) |
-| `@boostkit/storage` | Storage facade, local filesystem adapter |
-| `@boostkit/storage` (s3 driver) | S3/R2/MinIO via `@aws-sdk/client-s3` |
+| `@boostkit/storage` | Storage facade, local filesystem adapter + (s3 driver) S3/R2/MinIO via `@aws-sdk/client-s3` |
 | `@boostkit/mail` | Mailable, Mail facade, log adapter |
 | `@boostkit/mail-nodemailer` | Nodemailer SMTP adapter |
 | `@boostkit/events` | EventDispatcher, Listener interface |
