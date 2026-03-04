@@ -72,14 +72,22 @@ dd(req.body)
 
 ---
 
-## `Env`
+## `env()`
 
-Type-safe access to `process.env`.
+Simple helper for reading a string environment variable — consistent with `config()` and `dd()`.
+
+```ts
+import { env } from '@boostkit/core'
+
+env('APP_NAME', 'BoostKit')   // → 'BoostKit'
+env('APP_ENV')                // throws if missing and no fallback
+```
+
+For typed access (numbers, booleans, existence checks) use the `Env` object:
 
 ```ts
 import { Env } from '@boostkit/support'
 
-Env.get('APP_NAME', 'BoostKit')    // string (throws if missing and no fallback)
 Env.getNumber('PORT', 3000)        // number
 Env.getBool('APP_DEBUG', false)    // boolean  ('true' | '1' → true)
 Env.has('REDIS_URL')               // boolean
