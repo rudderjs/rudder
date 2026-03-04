@@ -342,6 +342,9 @@ importers:
 
   packages/orm-prisma:
     dependencies:
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
       '@boostkit/orm':
         specifier: workspace:*
         version: link:../orm
