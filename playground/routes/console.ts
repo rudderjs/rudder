@@ -1,13 +1,13 @@
-import { artisan } from '@boostkit/artisan'
-import { schedule } from '@boostkit/schedule'
+import { Artisan } from '@boostkit/artisan'
+import { Schedule } from '@boostkit/schedule'
 import { Cache } from '@boostkit/cache'
 import { User } from '../app/Models/User.js'
 import { SendEmails } from '../app/Commands/SendEmails.js'
 
 // Class-based commands (Laravel-style)
-artisan.register(SendEmails)
+Artisan.register(SendEmails)
 
-artisan.command('inspire', () => {
+Artisan.command('inspire', () => {
   const quotes = [
     'The best way to predict the future is to create it.',
     'Build something people want.',
@@ -19,7 +19,7 @@ artisan.command('inspire', () => {
   console.log(`\n  "${quote}"\n`)
 }).description('Display an inspiring quote')
 
-artisan.command('db:seed', async () => {
+Artisan.command('db:seed', async () => {
   console.log('Seeding database...')
 
   await User.create({ name: 'Alice',   email: 'alice2@example.com',   role: 'admin' })
@@ -32,11 +32,11 @@ artisan.command('db:seed', async () => {
 // ─── Scheduled Tasks ───────────────────────────────────────
 
 // Flush the users query cache every 5 minutes so stale data doesn't linger
-schedule.call(async () => {
+Schedule.call(async () => {
   await Cache.forget('users:all')
 }).everyFiveMinutes().description('Flush users:all cache')
 
 // Log a heartbeat every minute (useful for confirming the scheduler is alive)
-schedule.call(() => {
+Schedule.call(() => {
   console.log('[Heartbeat] Scheduler is running —', new Date().toISOString())
 }).everySecond().description('Heartbeat log')

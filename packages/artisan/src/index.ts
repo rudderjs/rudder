@@ -224,3 +224,6 @@ if (!_g['__boostkit_artisan__']) _g['__boostkit_artisan__'] = new ArtisanRegistr
 
 /** Global Artisan command registry — import and call artisan.command() in routes/console.ts */
 export const artisan = _g['__boostkit_artisan__'] as ArtisanRegistry
+
+/** Alias for artisan — Laravel-style capitalised name */
+export const Artisan = artisan

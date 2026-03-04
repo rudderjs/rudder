@@ -313,7 +313,7 @@ export class BoostKit {
 
 // ─── Re-export artisan ─────────────────────────────────────
 
-export { artisan, ArtisanRegistry, CommandBuilder, Command, parseSignature } from '@boostkit/artisan'
+export { artisan, Artisan, ArtisanRegistry, CommandBuilder, Command, parseSignature } from '@boostkit/artisan'
 export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@boostkit/artisan'
 
 // ─── Global helpers ────────────────────────────────────────

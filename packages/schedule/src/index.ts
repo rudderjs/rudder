@@ -88,6 +88,9 @@ class Scheduler {
 /** Global schedule singleton — define tasks in routes/console.ts */
 export const schedule = new Scheduler()
 
+/** Alias for schedule — Laravel-style capitalised name */
+export const Schedule = schedule
+
 // ─── Service Provider Factory ──────────────────────────────
 
 /**
