@@ -45,6 +45,11 @@ router.get('/api/debug/dd', (req) => {
   dd({ note: 'This will terminate the server. Restart required.' })
 })
 
+// GET /api/debug/error  — triggers an unhandled error to test the error page
+router.get('/api/debug/error', () => {
+  throw new Error('Something went wrong in a route handler.')
+})
+
 // GET /api/me — returns current session (null if not logged in)
 router.get('/api/me', async (req) => {
   const auth = app().make<BetterAuthInstance>('auth')

@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono'
+import { renderErrorPage } from './error-page.js'
 import { serve } from '@hono/node-server'
 import type {
   ServerAdapter,
@@ -240,6 +241,18 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const status = (c.res as Response | undefined)?.status ?? 200
         console.log(`${dim(ts())} ${boldYellow('[boostkit]')}${dim(`[request-${n}]`)} HTTP response ${dim('←')} ${path} ${statusColor(status)}`)
       })
+
+      // Dev error page — only in non-production environments
+      const isProd = process.env['APP_ENV'] === 'production' || process.env['NODE_ENV'] === 'production'
+      if (!isProd) {
+        app.onError((err, c) => {
+          const url = c.req.url
+          const method = c.req.method
+          const headers = Object.fromEntries(Object.entries(c.req.header()))
+          const html = renderErrorPage(err instanceof Error ? err : new Error(String(err)), { method, url, headers })
+          return c.html(html, 500)
+        })
+      }
 
       setup?.(new HonoAdapter(app))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
