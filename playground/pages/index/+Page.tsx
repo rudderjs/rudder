@@ -30,12 +30,14 @@ export default function Page() {
           </p>
           <div className="flex gap-2">
             <a href="/todos"><Button>View Todos</Button></a>
+            <a href="/contact"><Button variant="outline">Contact demo</Button></a>
             <Button variant="outline" onClick={signOut}>Sign out</Button>
           </div>
         </div>
       ) : (
         <div className="flex gap-2">
           <a href="/todos"><Button>View Todos</Button></a>
+          <a href="/contact"><Button variant="outline">Contact demo</Button></a>
           <a href="/login"><Button variant="outline">Sign in</Button></a>
           <a href="/register"><Button variant="outline">Register</Button></a>
         </div>
