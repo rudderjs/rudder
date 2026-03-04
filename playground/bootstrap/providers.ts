@@ -7,7 +7,7 @@ import { cache } from '@boostkit/cache'
 import { storage } from '@boostkit/storage'
 import { scheduler } from '@boostkit/schedule'
 import { notifications } from '@boostkit/notification'
-import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
+import { prismaProvider } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
@@ -23,7 +23,7 @@ export default [
   storage(configs.storage),
   scheduler(),
   notifications(),
-  DatabaseServiceProvider,  // must boot before AppServiceProvider — sets ModelRegistry
+  prismaProvider(configs.database),  // must boot before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
   TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]

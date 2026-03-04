@@ -1,6 +1,6 @@
 {
   "name": "@boostkit/orm-prisma",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -24,6 +24,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@boostkit/core": "workspace:*",
     "@boostkit/orm": "workspace:*",
     "@prisma/client": "^7.0.0"
   },

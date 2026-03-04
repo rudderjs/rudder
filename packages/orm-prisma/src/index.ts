@@ -197,10 +197,48 @@ export interface PrismaConfig {
   url?: string
 }
 
+export interface DatabaseConnectionConfig {
+  driver: 'postgresql' | 'sqlite' | 'mysql'
+  url?: string
+}
+
+export interface DatabaseConfig {
+  default: string
+  connections: Record<string, DatabaseConnectionConfig>
+}
+
 export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
   return {
     async create(): Promise<OrmAdapter> {
       return PrismaAdapter.make(config)
     },
   }
+}
+
+// ─── PrismaProvider ────────────────────────────────────────
+
+import { ServiceProvider, type Application } from '@boostkit/core'
+import { ModelRegistry } from '@boostkit/orm'
+
+export function prismaProvider(config?: DatabaseConfig): new (app: Application) => ServiceProvider {
+  class PrismaServiceProvider extends ServiceProvider {
+    register(): void {}
+
+    async boot(): Promise<void> {
+      let prismaConfig: PrismaConfig = {}
+
+      if (config) {
+        const conn = config.connections[config.default]
+        if (conn) prismaConfig = { driver: conn.driver, ...(conn.url !== undefined && { url: conn.url }) }
+      }
+
+      const adapter = await PrismaAdapter.make(prismaConfig)
+      await adapter.connect()
+
+      ModelRegistry.set(adapter)
+      this.app.instance('db', adapter)
+    }
+  }
+
+  return PrismaServiceProvider
 }
