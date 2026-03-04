@@ -1,5 +1,5 @@
 import { router } from '@boostkit/router'
-import { resolve, app } from '@boostkit/core'
+import { resolve, app, dd, dump } from '@boostkit/core'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
 import { Storage } from '@boostkit/storage'
@@ -32,6 +32,18 @@ const authLimit = RateLimit.perMinute(10)
   .toHandler()
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+// ── dd / dump demo ─────────────────────────────────────────
+// GET /api/debug/dump  — prints to terminal, keeps server running
+router.get('/api/debug/dump', (req, res) => {
+  dump({ method: req.method, path: req.path, query: req.query, headers: req.headers })
+  return res.json({ note: 'Check your terminal for dump output.' })
+})
+
+// GET /api/debug/dd  — prints to terminal then kills the server (restart required)
+router.get('/api/debug/dd', (req) => {
+  dd({ method: req.method, path: req.path, query: req.query, headers: req.headers })
+})
 
 // GET /api/me — returns current session (null if not logged in)
 router.get('/api/me', async (req) => {
