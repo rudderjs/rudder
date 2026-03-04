@@ -1,6 +1,6 @@
 {
   "name": "@boostkit/middleware",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -8,7 +8,9 @@
     "directory": "packages/middleware"
   },
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
@@ -27,7 +29,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
   },
   "dependencies": {
-    "@boostkit/cache":     "workspace:*",
+    "@boostkit/cache": "workspace:*",
     "@boostkit/contracts": "workspace:*"
   },
   "devDependencies": {
