@@ -1,5 +1,5 @@
 import { router } from '@boostkit/router'
-import { resolve, app, dd, dump } from '@boostkit/core'
+import { resolve, app, dd, dump, config } from '@boostkit/core'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
 import { Storage } from '@boostkit/storage'
@@ -31,6 +31,14 @@ const authLimit = RateLimit.perMinute(10)
   .toHandler()
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+// GET /api/config — returns app config values via config() helper
+router.get('/api/config', (_req, res) => res.json({
+  name:  config('app.name'),
+  env:   config('app.env'),
+  debug: config('app.debug'),
+  url:   config('app.url'),
+}))
 
 // ── dd / dump demo ─────────────────────────────────────────
 // GET /api/debug/dump  — prints to terminal, keeps server running

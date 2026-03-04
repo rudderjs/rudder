@@ -117,6 +117,29 @@ export class User extends Model {
 
 ---
 
+## Helpers
+
+All helpers are importable from `@boostkit/core`:
+
+```ts
+import { config, dd, dump, app, resolve, Env } from '@boostkit/core'
+
+// Read config values with dot-notation
+config('app.name')          // → 'BoostKit'
+config('app.env')           // → 'development'
+config('cache.ttl', 60)     // → 60 (fallback)
+
+// Debug helpers (Laravel-style)
+dump({ user, session })     // pretty-prints to terminal, keeps server running
+dd(req.body)                // pretty-prints then terminates (restart required)
+
+// Get the application instance or resolve from the DI container
+const instance = app()
+const service  = resolve<UserService>(UserService)
+```
+
+---
+
 ## Tech Stack
 
 | Layer | Default | Alternatives |
