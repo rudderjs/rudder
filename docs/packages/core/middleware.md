@@ -16,13 +16,13 @@ Extend the `Middleware` base class and implement the `handle` method. Call `next
 
 ```ts
 import { Middleware } from '@boostkit/middleware'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
-    req: ForgeRequest,
-    res: ForgeResponse,
-    next: (req: ForgeRequest, res: ForgeResponse) => Promise<unknown>,
+    req: AppRequest,
+    res: AppResponse,
+    next: (req: AppRequest, res: AppResponse) => Promise<unknown>,
   ) {
     const token = req.headers['authorization']
 
@@ -121,9 +121,9 @@ const throttle = new ThrottleMiddleware({
 
 ```ts
 type MiddlewareHandler = (
-  req: ForgeRequest,
-  res: ForgeResponse,
-  next: (req: ForgeRequest, res: ForgeResponse) => Promise<unknown>,
+  req: AppRequest,
+  res: AppResponse,
+  next: (req: AppRequest, res: AppResponse) => Promise<unknown>,
 ) => unknown | Promise<unknown>
 ```
 

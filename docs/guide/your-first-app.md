@@ -121,31 +121,31 @@ Edit `routes/api.ts`:
 
 ```ts
 import { router } from '@boostkit/router'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 import { app } from '@boostkit/core'
 import { UserService } from '../app/Services/UserService.js'
 
-router.get('/api/users', async (_req: ForgeRequest, res: ForgeResponse) => {
+router.get('/api/users', async (_req: AppRequest, res: AppResponse) => {
   const service = app().make(UserService)
   const users = await service.all()
   return res.json({ data: users })
 })
 
-router.post('/api/users', async (req: ForgeRequest, res: ForgeResponse) => {
+router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
   const { name, email } = req.body as { name: string; email: string }
   const service = app().make(UserService)
   const user = await service.create({ name, email })
   return res.status(201).json({ data: user })
 })
 
-router.get('/api/users/:id', async (req: ForgeRequest, res: ForgeResponse) => {
+router.get('/api/users/:id', async (req: AppRequest, res: AppResponse) => {
   const service = app().make(UserService)
   const user = await service.find(req.params.id as string)
   if (!user) return res.status(404).json({ message: 'Not found' })
   return res.json({ data: user })
 })
 
-router.all('/api/*', (_req: ForgeRequest, res: ForgeResponse) => {
+router.all('/api/*', (_req: AppRequest, res: AppResponse) => {
   return res.status(404).json({ message: 'Route not found.' })
 })
 ```

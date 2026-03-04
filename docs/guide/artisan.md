@@ -164,7 +164,7 @@ pnpm artisan make:middleware Auth
 
 ## Notes
 
-- `artisan` singleton is stored on `globalThis.__forge_artisan__` — safe to import from multiple packages
+- `artisan` singleton is stored on `globalThis.__boostkit_artisan__` — safe to import from multiple packages
 - Commands registered in `routes/console.ts` are loaded during `forge.boot()` before `program.parse()`
 - The CLI is a separate package (`@boostkit/cli`) — it orchestrates boot and command dispatch
 - Use `--force` with `make:*` commands to overwrite existing files

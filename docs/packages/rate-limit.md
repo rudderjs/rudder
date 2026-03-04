@@ -131,7 +131,7 @@ Each factory method returns a `RateLimitBuilder` instance.
 |---|---|
 | `.byIp()` | Key requests by client IP address |
 | `.byRoute()` | Key requests by `${method}:${path}:${ip}` |
-| `.by(fn)` | Key requests by a custom function `(req: ForgeRequest) => string` |
+| `.by(fn)` | Key requests by a custom function `(req: AppRequest) => string` |
 | `.message(msg)` | Custom message included in the 429 response body |
 | `.skipIf(fn)` | Skip rate limiting when `fn(req)` returns `true` |
 | `.toHandler()` | Build and return a `MiddlewareHandler` ready for use |

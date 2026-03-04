@@ -20,7 +20,7 @@ export default defineConfig({
       { text: 'CLI', link: '/cli/', activeMatch: '/cli/' },
       { text: 'Integrations', link: '/integrations/', activeMatch: '/integrations/' },
       {
-        text: 'v0.0.1',
+        text: 'v0.0.2',
         items: [
           { text: 'Changelog', link: 'https://github.com/boostkitjs/boostkit/releases' },
           { text: 'Contributing', link: 'https://github.com/boostkitjs/boostkit/blob/main/CONTRIBUTING.md' },
@@ -63,6 +63,7 @@ export default defineConfig({
             { text: '@boostkit/support', link: '/packages/core/support' },
             { text: '@boostkit/di', link: '/packages/core/di' },
             { text: '@boostkit/middleware', link: '/packages/core/middleware' },
+            { text: 'Rate Limiting', link: '/packages/rate-limit' },
             { text: '@boostkit/validation', link: '/packages/core/validation' },
           ],
         },
@@ -93,7 +94,6 @@ export default defineConfig({
           text: 'Auth',
           items: [
             { text: '@boostkit/auth', link: '/packages/auth/' },
-            { text: '@boostkit/auth (better-auth)', link: '/packages/auth/better-auth' },
           ],
         },
         {
@@ -122,7 +122,6 @@ export default defineConfig({
           items: [
             { text: '@boostkit/events', link: '/packages/events' },
             { text: '@boostkit/schedule', link: '/packages/schedule' },
-            { text: 'Rate Limiting', link: '/packages/rate-limit' },
             { text: '@boostkit/notification', link: '/packages/notification' },
             { text: '@boostkit/artisan', link: '/packages/artisan' },
           ],

@@ -23,12 +23,12 @@ Generated file:
 
 ```ts
 import { Controller, Get } from '@boostkit/router'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 @Controller('/user-controller')
 export class UserController {
   @Get('/')
-  async index(_req: ForgeRequest, res: ForgeResponse) {
+  async index(_req: AppRequest, res: AppResponse) {
     return res.json({ message: 'ok' })
   }
 }
@@ -89,12 +89,12 @@ Generated file:
 
 ```ts
 import { Middleware } from '@boostkit/middleware'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
-    _req: ForgeRequest,
-    _res: ForgeResponse,
+    _req: AppRequest,
+    _res: AppResponse,
     next: () => Promise<void>
   ): Promise<void> {
     await next()

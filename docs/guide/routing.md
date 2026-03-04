@@ -21,11 +21,11 @@ Application.configure({ ... })
 ```ts
 // routes/api.ts
 import { router } from '@boostkit/router'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
-router.post('/api/users', async (req: ForgeRequest, res: ForgeResponse) => {
+router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
   const { name, email } = req.body as { name: string; email: string }
   // ... create user
   return res.status(201).json({ data: user })
@@ -94,7 +94,7 @@ For larger apps, group related routes into controller classes:
 ```ts
 import { Controller, Get, Post, Put, Delete, Middleware } from '@boostkit/router'
 import { Injectable } from '@boostkit/di'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
 import { UserService } from '../Services/UserService.js'
 
@@ -104,33 +104,33 @@ class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get('/')
-  async index(_req: ForgeRequest, res: ForgeResponse) {
+  async index(_req: AppRequest, res: AppResponse) {
     const users = await this.userService.all()
     return res.json({ data: users })
   }
 
   @Get('/:id')
   @Middleware([AuthMiddleware])
-  async show(req: ForgeRequest, res: ForgeResponse) {
+  async show(req: AppRequest, res: AppResponse) {
     const user = await this.userService.find(req.params.id as string)
     if (!user) return res.status(404).json({ message: 'Not found' })
     return res.json({ data: user })
   }
 
   @Post('/')
-  async store(req: ForgeRequest, res: ForgeResponse) {
+  async store(req: AppRequest, res: AppResponse) {
     const user = await this.userService.create(req.body as any)
     return res.status(201).json({ data: user })
   }
 
   @Put('/:id')
-  async update(req: ForgeRequest, res: ForgeResponse) {
+  async update(req: AppRequest, res: AppResponse) {
     const user = await this.userService.update(req.params.id as string, req.body as any)
     return res.json({ data: user })
   }
 
   @Delete('/:id')
-  async destroy(req: ForgeRequest, res: ForgeResponse) {
+  async destroy(req: AppRequest, res: AppResponse) {
     await this.userService.delete(req.params.id as string)
     return res.status(204).json({})
   }
@@ -153,9 +153,9 @@ router.registerController(UserController)
 | `@Options(path)` | OPTIONS method |
 | `@Middleware([...classes])` | Applies middleware to a route |
 
-## `ForgeRequest` and `ForgeResponse`
+## `AppRequest` and `AppResponse`
 
-### `ForgeRequest`
+### `AppRequest`
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -167,7 +167,7 @@ router.registerController(UserController)
 | `headers` | `Record<string, string>` | Request headers |
 | `raw` | `unknown` | Adapter-specific raw request |
 
-### `ForgeResponse`
+### `AppResponse`
 
 | Method | Description |
 |--------|-------------|

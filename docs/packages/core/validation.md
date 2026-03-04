@@ -60,7 +60,7 @@ router.post('/api/users', handler, [validateCreateUser])
 
 ```ts
 import { FormRequest, z } from '@boostkit/validation'
-import type { ForgeRequest } from '@boostkit/contracts'
+import type { AppRequest } from '@boostkit/contracts'
 
 export class CreateUserRequest extends FormRequest {
   rules() {
@@ -71,7 +71,7 @@ export class CreateUserRequest extends FormRequest {
     })
   }
 
-  async authorize(req: ForgeRequest): Promise<boolean> {
+  async authorize(req: AppRequest): Promise<boolean> {
     // Return false to reject the request with 403 before validation runs.
     // Defaults to true if not overridden.
     return true
@@ -98,7 +98,7 @@ router.post('/api/users', async (req, res) => {
 
 | Export | Kind | Description |
 |---|---|---|
-| `validate` | Function | `(schema: ZodSchema, req: ForgeRequest) => Promise<T>` — validates the merged request input and returns the parsed, typed data. |
+| `validate` | Function | `(schema: ZodSchema, req: AppRequest) => Promise<T>` — validates the merged request input and returns the parsed, typed data. |
 | `validateWith` | Function | `(schema: ZodSchema) => MiddlewareHandler` — returns a middleware that validates and attaches `req.body`. |
 | `FormRequest` | Abstract class | Base class for encapsulating validation rules and authorisation logic. |
 | `ValidationError` | Class | Thrown when validation fails. Contains the raw Zod issues and a `flatten()` helper. |

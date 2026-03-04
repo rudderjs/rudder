@@ -6,9 +6,9 @@ BoostKit provides Zod-powered request validation through `@boostkit/validation`.
 
 ```ts
 import { validate, z } from '@boostkit/validation'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
-router.post('/api/users', async (req: ForgeRequest, res: ForgeResponse) => {
+router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
   const data = await validate(
     z.object({
       name:  z.string().min(1),

@@ -118,7 +118,7 @@ Overrides the resolution token for a specific constructor parameter. Use this wh
 
 ## container Global Singleton
 
-`container` is a module-level singleton stored on `globalThis.__forge_container__`. It is shared across the entire process, including dynamic imports and hot-module boundaries. All service providers and the `app()` / `resolve()` helpers from `@boostkit/core` use this same instance.
+`container` is a module-level singleton stored on `globalThis.__boostkit_container__`. It is shared across the entire process, including dynamic imports and hot-module boundaries. All service providers and the `app()` / `resolve()` helpers from `@boostkit/core` use this same instance.
 
 ---
 

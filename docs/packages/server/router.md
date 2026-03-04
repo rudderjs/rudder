@@ -14,26 +14,26 @@ Register routes in `routes/api.ts` using the global `router` singleton:
 
 ```ts
 import { router } from '@boostkit/router'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
-router.get('/api/users', async (_req: ForgeRequest, res: ForgeResponse) => {
+router.get('/api/users', async (_req: AppRequest, res: AppResponse) => {
   return res.json({ data: [] })
 })
 
-router.post('/api/users', async (req: ForgeRequest, res: ForgeResponse) => {
+router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
   return res.status(201).json({ data: req.body })
 })
 
-router.put('/api/users/:id', async (req: ForgeRequest, res: ForgeResponse) => {
+router.put('/api/users/:id', async (req: AppRequest, res: AppResponse) => {
   return res.json({ id: req.params.id })
 })
 
-router.delete('/api/users/:id', async (_req: ForgeRequest, res: ForgeResponse) => {
+router.delete('/api/users/:id', async (_req: AppRequest, res: AppResponse) => {
   return res.status(204).json({})
 })
 
 // Catch-all — must be last
-router.all('/api/*', (_req: ForgeRequest, res: ForgeResponse) => {
+router.all('/api/*', (_req: AppRequest, res: AppResponse) => {
   return res.status(404).json({ message: 'Route not found.' })
 })
 ```
@@ -58,32 +58,32 @@ Use class decorators for controller-style routing. Controllers must be registere
 
 ```ts
 import { Controller, Get, Post, Patch, Delete, Middleware } from '@boostkit/router'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 @Controller('/api/users')
 export class UserController {
   @Get('/')
-  async index(_req: ForgeRequest, res: ForgeResponse) {
+  async index(_req: AppRequest, res: AppResponse) {
     return res.json({ data: [] })
   }
 
   @Get('/:id')
-  async show(req: ForgeRequest, res: ForgeResponse) {
+  async show(req: AppRequest, res: AppResponse) {
     return res.json({ id: req.params.id })
   }
 
   @Post('/')
-  async store(req: ForgeRequest, res: ForgeResponse) {
+  async store(req: AppRequest, res: AppResponse) {
     return res.status(201).json({ data: req.body })
   }
 
   @Patch('/:id')
-  async update(req: ForgeRequest, res: ForgeResponse) {
+  async update(req: AppRequest, res: AppResponse) {
     return res.json({ id: req.params.id })
   }
 
   @Delete('/:id')
-  async destroy(req: ForgeRequest, res: ForgeResponse) {
+  async destroy(req: AppRequest, res: AppResponse) {
     return res.status(204).json({})
   }
 }
@@ -110,7 +110,7 @@ import { AuthMiddleware } from '../app/Http/Middleware/AuthMiddleware.ts'
 @Middleware([new AuthMiddleware().toHandler()])
 export class AdminController {
   @Get('/stats')
-  async stats(_req: ForgeRequest, res: ForgeResponse) {
+  async stats(_req: AppRequest, res: AppResponse) {
     return res.json({ stats: {} })
   }
 }
@@ -125,7 +125,7 @@ Apply middleware to a single route handler:
 export class UserController {
   @Post('/')
   @Middleware([rateLimitHandler])
-  async store(req: ForgeRequest, res: ForgeResponse) { ... }
+  async store(req: AppRequest, res: AppResponse) { ... }
 }
 ```
 

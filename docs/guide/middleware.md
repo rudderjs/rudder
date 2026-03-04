@@ -8,12 +8,12 @@ Extend the `Middleware` base class and implement the `handle()` method:
 
 ```ts
 import { Middleware } from '@boostkit/middleware'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
-    req: ForgeRequest,
-    _res: ForgeResponse,
+    req: AppRequest,
+    _res: AppResponse,
     next: () => Promise<void>
   ): Promise<void> {
     const token = req.headers['authorization']?.replace('Bearer ', '')

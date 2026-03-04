@@ -188,10 +188,10 @@ Create an `AuthMiddleware` that validates the session:
 import { Middleware } from '@boostkit/middleware'
 import { app } from '@boostkit/core'
 import type { BetterAuthInstance } from '@boostkit/auth'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
-  async handle(req: ForgeRequest, res: ForgeResponse, next: () => Promise<void>) {
+  async handle(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
     const auth = app().make<BetterAuthInstance>('auth')
 
     // Pass the raw Hono request to better-auth
@@ -221,7 +221,7 @@ import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
 class ProfileController {
   @Get('/')
   @Middleware([AuthMiddleware])
-  async profile(req: ForgeRequest, res: ForgeResponse) {
+  async profile(req: AppRequest, res: AppResponse) {
     return res.json({ user: (req as any).user })
   }
 }

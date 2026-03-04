@@ -142,7 +142,7 @@ export default [
 | `artisan`, `Command` | `@boostkit/artisan` |
 | `Container`, `Injectable`, `Inject` | `@boostkit/di` |
 | `Env`, `Collection`, `ConfigRepository`, `resolveOptionalPeer` | `@boostkit/support` |
-| `ForgeRequest`, `ForgeResponse`, `HttpMethod`, `ServerAdapter`, `FetchHandler` | `@boostkit/contracts` |
+| `AppRequest`, `AppResponse`, `HttpMethod`, `ServerAdapter`, `FetchHandler` | `@boostkit/contracts` |
 
 ---
 
@@ -155,7 +155,7 @@ export default [
 | `@boostkit/core` | Everything — Application, ServiceProvider, BoostKit, artisan, re-exports |
 | `@boostkit/core/support` | Env, Collection, ConfigRepository, resolveOptionalPeer, helpers |
 | `@boostkit/core/di` | Container, Injectable, Inject |
-| `@boostkit/core/server` | ServerAdapter, ForgeRequest, ForgeResponse, HttpMethod, FetchHandler |
+| `@boostkit/core/server` | ServerAdapter, AppRequest, AppResponse, HttpMethod, FetchHandler |
 | `@boostkit/core/middleware` | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware |
 | `@boostkit/core/validation` | FormRequest, ValidationError, validate, z |
 
