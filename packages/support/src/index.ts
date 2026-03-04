@@ -110,6 +110,19 @@ export const Env = {
   },
 }
 
+// ─── Debug Helpers ─────────────────────────────────────────
+
+export function dump(...args: unknown[]): void {
+  for (const arg of args) {
+    console.log(JSON.stringify(arg, null, 2))
+  }
+}
+
+export function dd(...args: unknown[]): never {
+  dump(...args)
+  process.exit(1)
+}
+
 // ─── Helpers ───────────────────────────────────────────────
 
 export const sleep = (ms: number): Promise<void> =>
