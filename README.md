@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo.png" alt="BoostKit — Boot Your Node" width="480" />
+</p>
+
 # BoostKit
 
 **Laravel's developer experience, reimagined for the Node.js ecosystem.**
