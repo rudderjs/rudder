@@ -160,12 +160,13 @@ class PrismaAdapter implements OrmAdapter {
       const { Pool } = await import('pg') as any
       const { PrismaPg } = await import('@prisma/adapter-pg') as any
       opts['adapter'] = new PrismaPg(new Pool({ connectionString: config.url }))
-    } else if (config.driver === 'sqlite' && config.url) {
+    } else if (config.driver === 'libsql' && config.url) {
+      // Remote libSQL / Turso
       const { createClient } = await import('@libsql/client') as any
       const { PrismaLibSql } = await import('@prisma/adapter-libsql') as any
       opts['adapter'] = new PrismaLibSql(createClient({ url: config.url }))
     } else {
-      // Default: local SQLite via better-sqlite3 (Prisma 7 requires an adapter)
+      // Local SQLite via better-sqlite3 (driver: 'sqlite' or default)
       const dbUrl = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
       const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as any
       opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
@@ -193,12 +194,12 @@ class PrismaAdapter implements OrmAdapter {
 
 export interface PrismaConfig {
   client?: PrismaClient
-  driver?: 'postgresql' | 'sqlite' | 'mysql'
+  driver?: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'
   url?: string
 }
 
 export interface DatabaseConnectionConfig {
-  driver: 'postgresql' | 'sqlite' | 'mysql'
+  driver: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'
   url?: string
 }
 
