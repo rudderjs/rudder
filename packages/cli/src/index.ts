@@ -44,7 +44,7 @@ async function resolveAppRoot(): Promise<string | null> {
     dir = parent
   }
 
-  // 2. Check immediate subdirectories of cwd (monorepo: forge root → playground/)
+  // 2. Check immediate subdirectories of cwd (monorepo: boostkit root → playground/)
   const entries = await fs.readdir(process.cwd(), { withFileTypes: true }).catch(() => [])
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
@@ -75,8 +75,8 @@ async function bootApp(): Promise<void> {
   try {
     const appFile = await resolveAppRoot()
     if (appFile) {
-      const { default: forge } = await import(appFile) as { default: { boot(): Promise<void> } }
-      await forge.boot()
+      const { default: boostkit } = await import(appFile) as { default: { boot(): Promise<void> } }
+      await boostkit.boot()
     } else {
       // Fallback: try loading console routes directly (no full app context)
       for (const ext of ['ts', 'js']) {

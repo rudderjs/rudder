@@ -220,7 +220,7 @@ export abstract class Command {
 // ─── Global artisan singleton ──────────────────────────────
 
 const _g = globalThis as Record<string, unknown>
-if (!_g['__forge_artisan__']) _g['__forge_artisan__'] = new ArtisanRegistry()
+if (!_g['__boostkit_artisan__']) _g['__boostkit_artisan__'] = new ArtisanRegistry()
 
 /** Global Artisan command registry — import and call artisan.command() in routes/console.ts */
-export const artisan = _g['__forge_artisan__'] as ArtisanRegistry
+export const artisan = _g['__boostkit_artisan__'] as ArtisanRegistry

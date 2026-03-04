@@ -7,12 +7,12 @@ export class WelcomeEmail extends Mailable {
 
   build(): this {
     return this
-      .subject(`Welcome to Forge, ${this.userName}!`)
+      .subject(`Welcome to BoostKit, ${this.userName}!`)
       .html(`
         <h1>Welcome, ${this.userName}!</h1>
-        <p>Thanks for joining Forge. Your account is ready.</p>
-        <p>— The Forge Team</p>
+        <p>Thanks for joining BoostKit. Your account is ready.</p>
+        <p>— The BoostKit Team</p>
       `)
-      .text(`Welcome, ${this.userName}!\n\nThanks for joining Forge. Your account is ready.\n\n— The Forge Team`)
+      .text(`Welcome, ${this.userName}!\n\nThanks for joining BoostKit. Your account is ready.\n\n— The BoostKit Team`)
   }
 }

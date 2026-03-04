@@ -6,12 +6,12 @@ import chalk from 'chalk'
 
 function stub(className: string): string {
   return `import { Middleware } from '@boostkit/middleware'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { BoostKitRequest, BoostKitResponse } from '@boostkit/contracts'
 
 export class ${className} extends Middleware {
   async handle(
-    req: ForgeRequest,
-    res: ForgeResponse,
+    req: BoostKitRequest,
+    res: BoostKitResponse,
     next: () => Promise<void>
   ): Promise<void> {
     // TODO: implement middleware logic

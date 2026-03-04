@@ -1,5 +1,5 @@
 import { Middleware } from '@boostkit/middleware'
-import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
+import type { BoostKitRequest, BoostKitResponse } from '@boostkit/contracts'
 
 /**
  * Example per-route middleware.
@@ -12,7 +12,7 @@ import type { ForgeRequest, ForgeResponse } from '@boostkit/contracts'
  *   router.post('/api/posts', handler, [auth])
  */
 export class AuthMiddleware extends Middleware {
-  handle(req: ForgeRequest, res: ForgeResponse, next: () => Promise<void>): Promise<void> {
+  handle(req: BoostKitRequest, res: BoostKitResponse, next: () => Promise<void>): Promise<void> {
     console.log('auth middleware: checking Authorization header')
     
     const header = req.headers['authorization'] ?? ''

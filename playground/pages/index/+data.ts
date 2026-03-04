@@ -14,7 +14,7 @@ export async function data(pageContext: PageContextServer) {
   })
 
   return {
-    title:   'Welcome to Forge',
+    title:   'Welcome to BoostKit',
     message: greeter.greet('World'),
     user:    session?.user ?? null,
   }

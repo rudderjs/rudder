@@ -29,7 +29,7 @@ describe('DI contract baseline', () => {
   })
 
   it('instance() stores and returns a concrete instance', () => {
-    const service = { name: 'forge' }
+    const service = { name: 'boostkit' }
     container.instance('service', service)
 
     assert.strictEqual(container.make('service'), service)
@@ -72,9 +72,9 @@ describe('DI contract baseline', () => {
     Reflect.defineMetadata('design:paramtypes', [String], ConfigConsumer)
 
     const local = new Container()
-    local.instance('app.name', 'ForgeApp')
+    local.instance('app.name', 'BoostKitApp')
 
     const consumer = local.make(ConfigConsumer)
-    assert.strictEqual(consumer.name, 'ForgeApp')
+    assert.strictEqual(consumer.name, 'BoostKitApp')
   })
 })

@@ -5,7 +5,7 @@ import { Application, defineConfig, parseSignature, artisan, container } from '.
 
 function resetSingleton(): void {
   ;(Application as unknown as Record<string, unknown>)['instance'] = undefined
-  ;(globalThis as Record<string, unknown>)['__forge_app__'] = undefined
+  ;(globalThis as Record<string, unknown>)['__boostkit_app__'] = undefined
 }
 
 describe('Application', () => {

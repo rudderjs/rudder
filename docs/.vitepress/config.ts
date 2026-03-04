@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'Forge',
+  title: 'BoostKit',
   description: 'Laravel-inspired Node.js full-stack framework built on Vike + Vite',
   lang: 'en-US',
 
@@ -12,7 +12,7 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.svg',
-    siteTitle: 'Forge',
+    siteTitle: 'BoostKit',
 
     nav: [
       { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
@@ -33,7 +33,7 @@ export default defineConfig({
         {
           text: 'Getting Started',
           items: [
-            { text: 'What is Forge?', link: '/guide/' },
+            { text: 'What is BoostKit?', link: '/guide/' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Your First App', link: '/guide/your-first-app' },
             { text: 'Directory Structure', link: '/guide/directory-structure' },
@@ -131,7 +131,7 @@ export default defineConfig({
 
       '/cli/': [
         {
-          text: 'Forge CLI',
+          text: 'BoostKit CLI',
           items: [
             { text: 'Overview', link: '/cli/' },
             { text: 'make: Commands', link: '/cli/make-commands' },
@@ -162,7 +162,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2024-present Forge Framework',
+      copyright: 'Copyright © 2024-present BoostKit Framework',
     },
 
     editLink: {

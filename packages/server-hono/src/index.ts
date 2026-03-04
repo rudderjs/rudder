@@ -6,8 +6,8 @@ import type {
   FetchHandler,
   RouteDefinition,
   MiddlewareHandler,
-  ForgeRequest,
-  ForgeResponse,
+  BoostKitRequest,
+  BoostKitResponse,
 } from '@boostkit/contracts'
 
 // ─── Hono Adapter Config ───────────────────────────────────
@@ -27,7 +27,7 @@ export interface HonoConfig {
 
 // ─── Request Normalizer ────────────────────────────────────
 
-function normalizeRequest(c: any): ForgeRequest {
+function normalizeRequest(c: any): BoostKitRequest {
   const url = new URL(c.req.url)
   return {
     method:  c.req.method,
@@ -45,7 +45,7 @@ function normalizeRequest(c: any): ForgeRequest {
 
 // ─── Response Normalizer ───────────────────────────────────
 
-function normalizeResponse(c: any): ForgeResponse {
+function normalizeResponse(c: any): BoostKitResponse {
   let statusCode = 200
   const headers: Record<string, string> = {}
 
@@ -102,8 +102,8 @@ function statusColor(status: number): string {
 }
 
 function nextReqId(): number {
-  g['__forge_req_n__'] = ((g['__forge_req_n__'] as number | undefined) ?? 0) + 1
-  return g['__forge_req_n__'] as number
+  g['__boostkit_req_n__'] = ((g['__boostkit_req_n__'] as number | undefined) ?? 0) + 1
+  return g['__boostkit_req_n__'] as number
 }
 
 function ts(): string {

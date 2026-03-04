@@ -11,7 +11,7 @@ async function createDatabase(): Promise<unknown> {
 }
 
 // Dedicated PrismaClient for better-auth's own tables.
-// Forge's ORM uses its own client in DatabaseServiceProvider — keep them separate.
+// BoostKit's ORM uses its own client in DatabaseServiceProvider — keep them separate.
 const _prisma = createDatabase()
 
 export default {

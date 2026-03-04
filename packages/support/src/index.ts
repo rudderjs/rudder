@@ -194,12 +194,12 @@ let _repo: ConfigRepository | null = null
 /** @internal — called by @boostkit/core Application */
 export function setConfigRepository(repo: ConfigRepository): void {
   _repo = repo
-  ;(globalThis as Record<string, unknown>)['__forge_config__'] = repo
+  ;(globalThis as Record<string, unknown>)['__boostkit_config__'] = repo
 }
 
 export function config<T = unknown>(key: string, fallback?: T): T {
   const repo = _repo
-    ?? (globalThis as Record<string, unknown>)['__forge_config__'] as ConfigRepository | undefined
+    ?? (globalThis as Record<string, unknown>)['__boostkit_config__'] as ConfigRepository | undefined
   return (repo?.get(key, fallback) ?? fallback) as T
 }
 

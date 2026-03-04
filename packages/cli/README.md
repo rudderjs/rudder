@@ -28,12 +28,12 @@ pnpm artisan make:controller User # Generate a controller
 pnpm artisan db:seed              # Run a user-defined command
 ```
 
-**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the BoostKit application (`forge.boot()`) before dispatching commands — all service providers, DI bindings, and database connections are available.
+**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the BoostKit application (`boostkit.boot()`) before dispatching commands — all service providers, DI bindings, and database connections are available.
 
 ## How It Works
 
 1. The CLI imports `bootstrap/app.ts` from the current working directory
-2. It calls `forge.boot()` — boots all service providers
+2. It calls `boostkit.boot()` — boots all service providers
 3. Route loaders for `commands` are executed (registers commands from `routes/console.ts`)
 4. The CLI dispatches the matching command with parsed arguments and options
 
