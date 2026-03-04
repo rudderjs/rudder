@@ -27,11 +27,31 @@ function parseStack(stack: string): StackFrame[] {
   })
 }
 
-function sourceContext(file: string, errorLine: number): Array<{ n: number; code: string; isError: boolean }> | null {
+/**
+ * tsx source maps can report an off line number (e.g. an empty line).
+ * Scan forward from the reported line to find the actual throw/error statement.
+ */
+function resolveErrorLine(lines: string[], reported: number): number {
+  const reported0 = reported - 1 // 0-indexed
+  // If the reported line is non-empty, trust it
+  if (lines[reported0]?.trim()) return reported
+  // Scan forward up to 20 lines for a throw statement
+  for (let i = reported0 + 1; i < Math.min(lines.length, reported0 + 20); i++) {
+    if (lines[i]?.trimStart().startsWith('throw ')) return i + 1
+  }
+  // Fallback: first non-empty line
+  for (let i = reported0 + 1; i < Math.min(lines.length, reported0 + 20); i++) {
+    if (lines[i]?.trim()) return i + 1
+  }
+  return reported
+}
+
+function sourceContext(file: string, reportedLine: number): Array<{ n: number; code: string; isError: boolean }> | null {
   try {
-    const lines = fs.readFileSync(file, 'utf-8').split('\n')
-    const start = Math.max(0, errorLine - 6)
-    const end   = Math.min(lines.length, errorLine + 4)
+    const lines    = fs.readFileSync(file, 'utf-8').split('\n')
+    const errorLine = resolveErrorLine(lines, reportedLine)
+    const start    = Math.max(0, errorLine - 6)
+    const end      = Math.min(lines.length, errorLine + 4)
     return lines.slice(start, end).map((code, i) => ({
       n:       start + i + 1,
       code,

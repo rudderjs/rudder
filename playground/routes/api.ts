@@ -46,9 +46,10 @@ router.get('/api/debug/dd', (req) => {
 })
 
 // GET /api/debug/error  — triggers an unhandled error to test the error page
-router.get('/api/debug/error', () => {
+function debugThrow() {
   throw new Error('Something went wrong in a route handler.')
-})
+}
+router.get('/api/debug/error', debugThrow)
 
 // GET /api/me — returns current session (null if not logged in)
 router.get('/api/me', async (req) => {
