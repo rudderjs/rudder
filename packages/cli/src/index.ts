@@ -6,26 +6,11 @@ import { makeCommand } from './commands/make.js'
 import { moduleCommand } from './commands/module.js'
 import { artisan, parseSignature } from '@boostkit/artisan'
 
-async function renderBanner(): Promise<void> {
-  if (!process.stdout.isTTY) return
-  try {
-    const { default: cfonts } = await import('cfonts')
-    const stateFile = path.join(process.cwd(), '.boostkit-cli-state.json')
-    const pairs: [string, string][] = [
-      ['cyan', 'magenta'],
-      ['yellow', 'green'],
-      ['blue', 'cyan'],
-      ['magenta', 'red'],
-    ]
-    let idx = 0
-    try {
-      const raw = await fs.readFile(stateFile, 'utf8')
-      const state = JSON.parse(raw) as { lastColorPairIndex?: number }
-      idx = ((state.lastColorPairIndex ?? -1) + 1) % pairs.length
-    } catch { /* ignore */ }
-    cfonts.say('BoostKit', { font: 'block', colors: pairs[idx]!, space: false })
-    fs.writeFile(stateFile, JSON.stringify({ lastColorPairIndex: idx })).catch(() => {})
-  } catch { /* ignore */ }
+const C = {
+  green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  dim:    (s: string) => `\x1b[2m${s}\x1b[0m`,
+  bold:   (s: string) => `\x1b[1m${s}\x1b[0m`,
 }
 
 /**
@@ -92,15 +77,45 @@ async function bootApp(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  // Only show the banner for help / no-args — never for named command runs
-  const rawArgs = process.argv.slice(2)
-  const isHelpOrNoArgs = rawArgs.length === 0 || rawArgs.includes('--help') || rawArgs.includes('-h')
-  if (isHelpOrNoArgs) await renderBanner()
-
   program
-    .name('boostkit')
-    .description('⚡ BoostKit CLI')
-    .version('0.0.1')
+    .name('artisan')
+    .helpOption('-h, --help', 'Display help for the given command')
+    .version('0.0.2', '-V, --version', 'Display BoostKit version')
+
+  // Laravel-style custom help output
+  program.configureHelp({
+    formatHelp: (cmd, helper) => {
+      const cmds = helper.visibleCommands(cmd).filter(c => c.name() !== 'help')
+      const nameWidth = Math.max(...cmds.map(c => c.name().length), 8) + 4
+
+      // Group by namespace (the part before ':')
+      const root:   typeof cmds = []
+      const groups: Record<string, typeof cmds> = {}
+      for (const c of cmds) {
+        const ns = c.name().split(':')[0]!
+        if (!c.name().includes(':')) root.push(c)
+        else groups[ns] = [...(groups[ns] ?? []), c]
+      }
+
+      let out = `\n  BoostKit Framework ${C.yellow('0.0.2')}\n`
+      out += `\n  ${C.dim('Usage:')}\n`
+      out += `    command [options] [arguments]\n`
+      out += `\n  ${C.dim('Available commands:')}\n`
+
+      for (const c of root) {
+        out += `  ${C.green(c.name().padEnd(nameWidth))}  ${c.description()}\n`
+      }
+
+      for (const [ns, items] of Object.entries(groups).sort()) {
+        out += `\n ${C.dim(ns)}\n`
+        for (const c of items) {
+          out += `  ${C.green(c.name().padEnd(nameWidth))}  ${c.description()}\n`
+        }
+      }
+
+      return out + '\n'
+    },
+  })
 
   makeCommand(program)
   moduleCommand(program)
