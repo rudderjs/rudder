@@ -90,15 +90,14 @@ The returned provider exposes three methods used internally by `@boostkit/core`:
 
 ### Unified Request Logger
 
-Every incoming HTTP request is logged to stdout with the `[boostkit]` tag using ANSI colors. The log line includes the HTTP method, path, status code, and response time:
+Every API and page request is logged to stdout with the `[boostkit]` tag. Static assets and Vite internals are filtered out. Two lines per request — on entry and on response:
 
 ```
-[boostkit] GET /api/users 200 4ms
-[boostkit] POST /api/users 201 12ms
-[boostkit] GET /api/missing 404 1ms
+10:30:15 AM [boostkit][request-1] HTTP request  → /api/users
+10:30:15 AM [boostkit][request-1] HTTP response ← /api/users 200
 ```
 
-Colors are applied per status range: green for 2xx, yellow for 3xx, red for 4xx/5xx.
+Colors are applied per status range: 2xx → magenta, 3xx → cyan, 4xx → yellow, 5xx → red.
 
 ### CORS Middleware
 
