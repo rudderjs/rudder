@@ -513,10 +513,9 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    m.use(RateLimit.perMinute(60).toHandler())
+    m.use(RateLimit.perMinute(60))
     m.use(new RequestIdMiddleware().toHandler())
   })
-  .withExceptions((_e) => {})
   .create()
 `
 }
@@ -882,7 +881,7 @@ import { app } from '@boostkit/core'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { RateLimit } from '@boostkit/middleware'
 
-const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.').toHandler()
+const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
