@@ -5,7 +5,7 @@ import type { MiddlewareHandler } from '@boostkit/contracts'
 
 declare module '@boostkit/contracts' {
   interface AppRequest {
-    user: AuthUser
+    user?: AuthUser
   }
 }
 
