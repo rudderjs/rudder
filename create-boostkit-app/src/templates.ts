@@ -31,11 +31,11 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['config/cache.ts']    = configCache()
   files['config/storage.ts']  = configStorage()
   files['config/auth.ts']     = configAuth(ctx)
+  files['config/session.ts']  = configSession()
   files['config/index.ts']    = configIndex()
 
-  files['app/Models/User.ts']                         = userModel()
-  files['app/Providers/DatabaseServiceProvider.ts']   = databaseServiceProvider()
-  files['app/Providers/AppServiceProvider.ts']        = appServiceProvider()
+  files['app/Models/User.ts']                       = userModel()
+  files['app/Providers/AppServiceProvider.ts']      = appServiceProvider()
   files['app/Middleware/RequestIdMiddleware.ts']       = requestIdMiddleware()
 
   files['routes/api.ts']     = routesApi(ctx)
@@ -85,26 +85,27 @@ function packageJson(ctx: TemplateContext): string {
   }
 
   const deps = {
-    '@boostkit/artisan':          '^0.0.1',
-    '@boostkit/vite':             '^0.0.1',
-    '@boostkit/auth': '^0.0.1',
-    '@boostkit/cache':            '^0.0.1',
-    '@boostkit/contracts':        '^0.0.1',
-    '@boostkit/core':             '^0.0.1',
-    '@boostkit/di':               '^0.0.1',
-    '@boostkit/middleware':       '^0.0.1',
-    '@boostkit/orm':              '^0.0.1',
-    '@boostkit/orm-prisma':       '^0.0.1',
-    '@boostkit/queue':            '^0.0.1',
-    '@boostkit/router':           '^0.0.1',
-    '@boostkit/schedule':         '^0.0.1',
-    '@boostkit/server-hono':      '^0.0.1',
-    '@boostkit/storage':          '^0.0.1',
-    '@boostkit/support':          '^0.0.1',
-    '@boostkit/validation':       '^0.0.1',
-    '@boostkit/events':           '^0.0.1',
-    '@boostkit/mail':             '^0.0.1',
-    '@boostkit/notification':     '^0.0.1',
+    '@boostkit/artisan':          'latest',
+    '@boostkit/vite':             'latest',
+    '@boostkit/auth':             'latest',
+    '@boostkit/cache':            'latest',
+    '@boostkit/contracts':        'latest',
+    '@boostkit/core':             'latest',
+    '@boostkit/di':               'latest',
+    '@boostkit/middleware':       'latest',
+    '@boostkit/orm':              'latest',
+    '@boostkit/orm-prisma':       'latest',
+    '@boostkit/queue':            'latest',
+    '@boostkit/router':           'latest',
+    '@boostkit/schedule':         'latest',
+    '@boostkit/server-hono':      'latest',
+    '@boostkit/storage':          'latest',
+    '@boostkit/support':          'latest',
+    '@boostkit/validation':       'latest',
+    '@boostkit/events':           'latest',
+    '@boostkit/mail':             'latest',
+    '@boostkit/notification':     'latest',
+    '@better-auth/prisma-adapter': 'latest',
     '@photonjs/hono':          '^0.1.12',
     '@prisma/client':          '^7.0.0',
     '@tailwindcss/vite':       '^4.2.1',
@@ -127,7 +128,7 @@ function packageJson(ctx: TemplateContext): string {
   }
 
   const devDeps = {
-    '@boostkit/cli':          '^0.0.1',
+    '@boostkit/cli':          'latest',
     '@types/node':         '^20.0.0',
     '@types/react':        '^19.0.0',
     '@types/react-dom':    '^19.0.0',
@@ -154,6 +155,9 @@ function packageJson(ctx: TemplateContext): string {
       typecheck:    'tsc --noEmit',
       artisan:      'tsx node_modules/@boostkit/cli/src/index.ts',
     },
+    pnpm: {
+      onlyBuiltDependencies: ['better-sqlite3', '@prisma/engines', 'esbuild', 'prisma'],
+    },
     dependencies: deps,
     devDependencies: devDeps,
   }, null, 2) + '\n'
@@ -163,16 +167,21 @@ function packageJson(ctx: TemplateContext): string {
 
 function tsconfigJson(): string {
   return JSON.stringify({
-    extends: '../tsconfig.base.json',
     compilerOptions: {
-      baseUrl: '.',
-      paths: { '@/*': ['./src/*'] },
+      target: 'ES2022',
       module: 'ESNext',
       moduleResolution: 'bundler',
-      outDir: 'dist',
+      lib: ['ES2022', 'DOM', 'DOM.Iterable'],
+      strict: true,
+      exactOptionalPropertyTypes: true,
+      noUncheckedIndexedAccess: true,
+      experimentalDecorators: true,
+      emitDecoratorMetadata: true,
+      skipLibCheck: true,
       noEmit: true,
       jsx: 'react-jsx',
-      lib: ['ES2022', 'DOM', 'DOM.Iterable'],
+      baseUrl: '.',
+      paths: { '@/*': ['./src/*'] },
       allowImportingTsExtensions: true,
     },
     include: ['src/**/*', 'pages/**/*', 'app/**/*', 'bootstrap/**/*', 'routes/**/*', 'config/**/*', '*.ts', '*.tsx'],
@@ -497,7 +506,7 @@ function bootstrapApp(): string {
 import 'dotenv/config'
 import { Application } from '@boostkit/core'
 import { hono } from '@boostkit/server-hono'
-import { RateLimit } from '@boostkit/middleware'
+import { RateLimit, fromClass } from '@boostkit/middleware'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
@@ -514,7 +523,7 @@ export default Application.configure({
   })
   .withMiddleware((m) => {
     m.use(RateLimit.perMinute(60))
-    m.use(new RequestIdMiddleware().toHandler())
+    m.use(fromClass(RequestIdMiddleware))
   })
   .create()
 `
@@ -537,7 +546,8 @@ import { notifications } from '@boostkit/notification'
 import { cache } from '@boostkit/cache'
 import { storage } from '@boostkit/storage'
 import { scheduler } from '@boostkit/schedule'
-import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
+import { session } from '@boostkit/session'
+import { prismaProvider } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 ${todoImport}import configs from '../config/index.js'
 
@@ -549,8 +559,9 @@ export default [
   notifications(),
   cache(configs.cache),
   storage(configs.storage),
+  session(configs.session),
   scheduler(),
-  DatabaseServiceProvider,  // must appear before AppServiceProvider — sets up ModelRegistry
+  prismaProvider(configs.database),  // must boot before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
 ${todoProvider}] satisfies (new (app: Application) => ServiceProvider)[]
 `
@@ -785,9 +796,30 @@ import queue    from './queue.js'
 import mail     from './mail.js'
 import cache    from './cache.js'
 import storage  from './storage.js'
+import session  from './session.js'
 import auth     from './auth.js'
 
-export default { app, server, database, queue, mail, cache, storage, auth }
+export default { app, server, database, queue, mail, cache, storage, session, auth }
+`
+}
+
+function configSession(): string {
+  return `import { Env } from '@boostkit/support'
+import type { SessionConfig } from '@boostkit/session'
+
+export default {
+  driver:   Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis',
+  lifetime: 120,
+  secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
+  cookie: {
+    name:     'boostkit_session',
+    secure:   Env.getBool('SESSION_SECURE', false),
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    path:     '/',
+  },
+  redis: { prefix: 'session:', url: Env.get('REDIS_URL', '') },
+} satisfies SessionConfig
 `
 }
 

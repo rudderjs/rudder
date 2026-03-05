@@ -1,6 +1,6 @@
 {
   "name": "@boostkit/orm-drizzle",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "description": "Drizzle ORM adapter for BoostKit. Implements OrmAdapterProvider / OrmAdapter / QueryBuilder<T> using Drizzle's SQL-like fluent API.",
   "license": "MIT",
   "repository": {

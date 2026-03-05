@@ -1,5 +1,17 @@
 # @boostkit/queue-bullmq
 
+## 0.0.5
+
+### Patch Changes
+
+- @boostkit/queue@0.0.4
+
+## 0.0.4
+
+### Patch Changes
+
+- @boostkit/queue@0.0.3
+
 ## 0.0.3
 
 ### Patch Changes
