@@ -23,7 +23,7 @@ router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
 })
 ```
 
-`validate()` merges `req.body`, `req.query`, and `req.params` before parsing. It throws a `ValidationError` if the data is invalid.
+`validate()` merges `req.params`, `req.query`, and `req.body` (in that priority order — params wins ties) before parsing. It throws a `ValidationError` if the data is invalid.
 
 ## `validateWith()` Middleware
 
@@ -42,11 +42,14 @@ const requireCreateUser = validateWith(
 
 // Use as route middleware
 router.post('/api/users', requireCreateUser, async (req, res) => {
-  // req.body is already validated
-  const user = await User.create(req.body as any)
+  // Validation already passed — parse body again to get typed/coerced data
+  const data = await validate(schema, req)
+  const user = await User.create(data)
   return res.status(201).json({ data: user })
 })
 ```
+
+> `validateWith()` validates the request and throws `ValidationError` on failure. It does **not** attach parsed data to `req.body` — the original body is left unchanged.
 
 ## Class-Based `FormRequest`
 
@@ -66,7 +69,7 @@ export class CreateUserRequest extends FormRequest {
     })
   }
 
-  async authorize(): Promise<boolean> {
+  override authorize(): boolean {
     // Return false to reject with a 403-equivalent error
     const user = (this.req as any).user
     return user?.role === 'admin'
@@ -74,12 +77,11 @@ export class CreateUserRequest extends FormRequest {
 }
 ```
 
-Use it in a route:
+Use it in a route — pass `req` to `.validate()`:
 
 ```ts
 router.post('/api/users', async (req, res) => {
-  const formRequest = new CreateUserRequest(req)
-  const data = await formRequest.validate()
+  const data = await new CreateUserRequest().validate(req)
 
   // data: { name: string; email: string; role: 'admin' | 'user' }
   const user = await User.create(data)
@@ -100,10 +102,8 @@ router.post('/api/users', async (req, res) => {
     // ...
   } catch (err) {
     if (err instanceof ValidationError) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        errors: err.errors,  // ZodError issues array
-      })
+      return res.status(422).json(err.toJSON())
+      // → { message: 'Validation failed', errors: { email: ['Invalid email'] } }
     }
     throw err
   }
@@ -114,10 +114,15 @@ router.post('/api/users', async (req, res) => {
 
 ```ts
 class ValidationError extends Error {
-  errors: ZodIssue[]   // full Zod error issues
-  flatten(): { fieldErrors: Record<string, string[]> }
+  name:    'ValidationError'
+  message: 'Validation failed'
+  errors:  Record<string, string[]>  // field name → error messages
+
+  toJSON(): { message: string; errors: Record<string, string[]> }
 }
 ```
+
+Field paths from nested objects are joined with `.` (e.g. `address.city`). Top-level schema errors (when the schema isn't an object) use the key `'root'`. Authorization failures use `'auth'`.
 
 ## Using Zod Directly
 
@@ -147,14 +152,15 @@ pnpm artisan make:request CreateUser
 
 | Export | Description |
 |--------|-------------|
-| `validate(schema, req)` | Validates merged body/query/params, throws on failure |
-| `validateWith(schema)` | Returns a middleware handler that validates the request |
-| `FormRequest` | Base class for class-based validation with `rules()` and `authorize()` |
-| `ValidationError` | Error thrown when validation fails; contains Zod issues |
+| `validate(schema, req)` | Validates merged params/query/body, throws `ValidationError` on failure |
+| `validateWith(schema)` | Returns a middleware handler that validates the request; does not mutate `req.body` |
+| `FormRequest` | Base class with `rules()` (required) and `authorize()` (optional, sync) |
+| `ValidationError` | Error with `errors: Record<string, string[]>` and `toJSON()` |
 | `z` | Re-export of Zod's `z` namespace |
 
 ## Notes
 
-- `FormRequest.validate()` merges `body`, `query`, and `params` before parsing — you don't need to pick them manually
-- `authorize()` defaults to `true` — override it to implement per-request authorization
-- `ValidationError.errors` is the raw `ZodIssue[]` array; use `.flatten()` for field-keyed error maps
+- Merge priority: `params` > `query` > `body` — route params win key conflicts
+- `authorize()` is synchronous and returns `boolean`; defaults to `true`
+- `validateWith()` does **not** attach parsed/coerced data to `req.body`
+- `ValidationError.errors` is already a `Record<string, string[]>` — no transformation needed
