@@ -2,110 +2,364 @@ import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@boostkit/contracts'
-import { Router, Controller, Get, Post, Middleware } from './index.js'
+import {
+  Router, router, Route,
+  Controller, Middleware,
+  Get, Post, Put, Patch, Delete, Options,
+} from './index.js'
 
-class FakeServerAdapter implements ServerAdapter {
+// ─── Test helpers ───────────────────────────────────────────
+
+class FakeServer implements ServerAdapter {
   readonly routes: RouteDefinition[] = []
   readonly middleware: MiddlewareHandler[] = []
 
-  registerRoute(route: RouteDefinition): void {
-    this.routes.push(route)
-  }
-
-  applyMiddleware(middleware: MiddlewareHandler): void {
-    this.middleware.push(middleware)
-  }
-
-  listen(_port: number, callback?: () => void): void {
-    callback?.()
-  }
-
-  getNativeServer(): unknown {
-    return { kind: 'fake-server' }
-  }
+  registerRoute(route: RouteDefinition): void { this.routes.push(route) }
+  applyMiddleware(mw: MiddlewareHandler): void { this.middleware.push(mw) }
+  listen(_port: number, cb?: () => void): void { cb?.() }
+  getNativeServer(): unknown { return {} }
 }
 
-describe('Router contract baseline', () => {
-  let router: Router
+const noop: MiddlewareHandler = async () => {}
+const noop2: MiddlewareHandler = async () => {}
+const handler = () => {}
 
-  beforeEach(() => {
-    router = new Router()
-  })
+// ─── Router fluent methods ──────────────────────────────────
 
-  it('registers fluent routes with method and path', () => {
-    const handler = () => new Response('ok')
+describe('Router — fluent methods', () => {
+  let r: Router
 
-    router.get('/users', handler)
-    router.post('/users', handler)
+  beforeEach(() => { r = new Router() })
 
-    const routes = router.list()
-    assert.strictEqual(routes.length, 2)
+  it('get() registers GET route', () => {
+    r.get('/users', handler)
+    const routes = r.list()
+    assert.strictEqual(routes.length, 1)
     assert.strictEqual(routes[0]?.method, 'GET')
     assert.strictEqual(routes[0]?.path, '/users')
-    assert.strictEqual(routes[1]?.method, 'POST')
-    assert.strictEqual(routes[1]?.path, '/users')
   })
 
-  it('mount() applies global middleware before routes', () => {
-    const server = new FakeServerAdapter()
-    const middleware = (() => undefined) as MiddlewareHandler
-
-    router.use(middleware)
-    router.get('/health', () => new Response('ok'))
-    router.mount(server)
-
-    assert.strictEqual(server.middleware.length, 1)
-    assert.strictEqual(server.middleware[0], middleware)
-    assert.strictEqual(server.routes.length, 1)
-    assert.strictEqual(server.routes[0]?.path, '/health')
+  it('post() registers POST route', () => {
+    r.post('/users', handler)
+    assert.strictEqual(r.list()[0]?.method, 'POST')
   })
 
-  it('registerController() composes prefix + controller/method middleware', () => {
-    const classMiddleware = (() => undefined) as MiddlewareHandler
-    const methodMiddleware = (() => undefined) as MiddlewareHandler
-
-    @Controller('/api')
-    @Middleware([classMiddleware])
-    class UsersController {
-      @Get('/users')
-      index() {
-        return new Response('ok')
-      }
-
-      @Post('/users')
-      @Middleware([methodMiddleware])
-      create() {
-        return new Response('created')
-      }
-    }
-
-    router.registerController(UsersController)
-    const routes = router.list()
-
-    assert.strictEqual(routes.length, 2)
-
-    const getRoute = routes.find(r => r.method === 'GET')
-    assert.ok(getRoute)
-    assert.strictEqual(getRoute.path, '/api/users')
-    assert.deepStrictEqual(getRoute.middleware, [classMiddleware])
-
-    const postRoute = routes.find(r => r.method === 'POST')
-    assert.ok(postRoute)
-    assert.strictEqual(postRoute.path, '/api/users')
-    assert.deepStrictEqual(postRoute.middleware, [classMiddleware, methodMiddleware])
+  it('put() registers PUT route', () => {
+    r.put('/users/1', handler)
+    assert.strictEqual(r.list()[0]?.method, 'PUT')
   })
 
-  it('reset() clears routes and global middleware', () => {
-    const middleware = (() => undefined) as MiddlewareHandler
-    router.use(middleware)
-    router.get('/health', () => new Response('ok'))
+  it('patch() registers PATCH route', () => {
+    r.patch('/users/1', handler)
+    assert.strictEqual(r.list()[0]?.method, 'PATCH')
+  })
 
-    router.reset()
+  it('delete() registers DELETE route', () => {
+    r.delete('/users/1', handler)
+    assert.strictEqual(r.list()[0]?.method, 'DELETE')
+  })
 
-    const server = new FakeServerAdapter()
-    router.mount(server)
-    assert.strictEqual(router.list().length, 0)
-    assert.strictEqual(server.middleware.length, 0)
+  it('all() registers ALL method route', () => {
+    r.all('/api/*', handler)
+    assert.strictEqual(r.list()[0]?.method, 'ALL')
+  })
+
+  it('add() registers route with explicit method', () => {
+    r.add('OPTIONS', '/api/resource', handler)
+    assert.strictEqual(r.list()[0]?.method, 'OPTIONS')
+  })
+
+  it('routes preserve registration order', () => {
+    r.get('/a', handler)
+    r.post('/b', handler)
+    r.put('/c', handler)
+    const routes = r.list()
+    assert.strictEqual(routes[0]?.path, '/a')
+    assert.strictEqual(routes[1]?.path, '/b')
+    assert.strictEqual(routes[2]?.path, '/c')
+  })
+
+  it('fluent methods accept route-level middleware', () => {
+    r.get('/protected', handler, [noop])
+    assert.deepStrictEqual(r.list()[0]?.middleware, [noop])
+  })
+
+  it('fluent methods with no middleware default to empty array', () => {
+    r.get('/open', handler)
+    assert.deepStrictEqual(r.list()[0]?.middleware, [])
+  })
+
+  it('methods are chainable (return this)', () => {
+    const result = r.get('/a', handler).post('/b', handler).delete('/c', handler)
+    assert.strictEqual(result, r)
+    assert.strictEqual(r.list().length, 3)
+  })
+
+  it('list() returns a copy — mutations do not affect internal state', () => {
+    r.get('/a', handler)
+    const list = r.list()
+    list.push({ method: 'GET', path: '/injected', handler, middleware: [] })
+    assert.strictEqual(r.list().length, 1)
+  })
+})
+
+// ─── Router.use() and global middleware ────────────────────
+
+describe('Router — global middleware', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  it('use() registers global middleware', () => {
+    r.use(noop)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.deepStrictEqual(server.middleware, [noop])
+  })
+
+  it('multiple use() calls accumulate in order', () => {
+    r.use(noop)
+    r.use(noop2)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.strictEqual(server.middleware[0], noop)
+    assert.strictEqual(server.middleware[1], noop2)
+  })
+
+  it('use() is chainable', () => {
+    const result = r.use(noop).use(noop2)
+    assert.strictEqual(result, r)
+  })
+})
+
+// ─── Router.mount() ────────────────────────────────────────
+
+describe('Router — mount()', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  it('registers all routes on the server adapter', () => {
+    r.get('/a', handler)
+    r.post('/b', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.strictEqual(server.routes.length, 2)
+    assert.strictEqual(server.routes[0]?.path, '/a')
+    assert.strictEqual(server.routes[1]?.path, '/b')
+  })
+
+  it('applies global middleware before routes', () => {
+    r.use(noop)
+    r.get('/x', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.strictEqual(server.middleware[0], noop)
+    assert.strictEqual(server.routes[0]?.path, '/x')
+  })
+
+  it('works with no routes and no middleware', () => {
+    const server = new FakeServer()
+    r.mount(server)
     assert.strictEqual(server.routes.length, 0)
+    assert.strictEqual(server.middleware.length, 0)
+  })
+})
+
+// ─── Router.reset() ────────────────────────────────────────
+
+describe('Router — reset()', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  it('clears all routes', () => {
+    r.get('/a', handler)
+    r.reset()
+    assert.strictEqual(r.list().length, 0)
+  })
+
+  it('clears global middleware', () => {
+    r.use(noop)
+    r.reset()
+    const server = new FakeServer()
+    r.mount(server)
+    assert.strictEqual(server.middleware.length, 0)
+  })
+
+  it('is chainable', () => {
+    assert.strictEqual(r.reset(), r)
+  })
+})
+
+// ─── Decorator: @Controller ────────────────────────────────
+
+describe('@Controller', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  it('registers routes with the given prefix', () => {
+    @Controller('/api/users')
+    class UserCtrl {
+      @Get('/')
+      index() {}
+    }
+    r.registerController(UserCtrl)
+    assert.strictEqual(r.list()[0]?.path, '/api/users/')
+  })
+
+  it('normalises double slashes (prefix + path)', () => {
+    @Controller('/api')
+    class Ctrl {
+      @Get('/users')
+      index() {}
+    }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.path, '/api/users')
+  })
+
+  it('works without a prefix (empty string)', () => {
+    @Controller()
+    class Ctrl {
+      @Get('/health')
+      health() {}
+    }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.path, '/health')
+  })
+
+  it('binds handler to the controller instance', async () => {
+    let capturedThis: unknown
+    @Controller()
+    class Ctrl {
+      readonly tag = 'controller-instance'
+      @Get('/test')
+      doIt() { capturedThis = this }
+    }
+    r.registerController(Ctrl)
+    const route = r.list()[0]
+    assert.ok(route)
+    await route.handler({} as any, {} as any)
+    assert.ok((capturedThis as any)?.tag === 'controller-instance')
+  })
+})
+
+// ─── Decorator: HTTP method decorators ─────────────────────
+
+describe('HTTP method decorators', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  it('@Get registers GET', () => {
+    @Controller()
+    class Ctrl { @Get('/x') x() {} }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.method, 'GET')
+  })
+
+  it('@Post registers POST', () => {
+    @Controller()
+    class Ctrl { @Post('/x') x() {} }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.method, 'POST')
+  })
+
+  it('@Put registers PUT', () => {
+    @Controller()
+    class Ctrl { @Put('/x') x() {} }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.method, 'PUT')
+  })
+
+  it('@Patch registers PATCH', () => {
+    @Controller()
+    class Ctrl { @Patch('/x') x() {} }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.method, 'PATCH')
+  })
+
+  it('@Delete registers DELETE', () => {
+    @Controller()
+    class Ctrl { @Delete('/x') x() {} }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.method, 'DELETE')
+  })
+
+  it('@Options registers OPTIONS', () => {
+    @Controller()
+    class Ctrl { @Options('/x') x() {} }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list()[0]?.method, 'OPTIONS')
+  })
+
+  it('multiple route decorators on same controller register multiple routes', () => {
+    @Controller('/api')
+    class Ctrl {
+      @Get('/users') index() {}
+      @Post('/users') create() {}
+      @Delete('/users/:id') destroy() {}
+    }
+    r.registerController(Ctrl)
+    assert.strictEqual(r.list().length, 3)
+  })
+})
+
+// ─── Decorator: @Middleware ─────────────────────────────────
+
+describe('@Middleware', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  it('class-level @Middleware applies to every route', () => {
+    @Controller()
+    @Middleware([noop])
+    class Ctrl {
+      @Get('/a') a() {}
+      @Post('/b') b() {}
+    }
+    r.registerController(Ctrl)
+    const routes = r.list()
+    assert.ok(routes.every(rt => rt.middleware.includes(noop)))
+  })
+
+  it('method-level @Middleware applies only to that route', () => {
+    @Controller()
+    class Ctrl {
+      @Get('/open') open() {}
+      @Post('/protected') @Middleware([noop]) protected() {}
+    }
+    r.registerController(Ctrl)
+    const routes = r.list()
+    const open = routes.find(rt => rt.path === '/open')
+    const prot = routes.find(rt => rt.path === '/protected')
+    assert.deepStrictEqual(open?.middleware, [])
+    assert.ok(prot?.middleware.includes(noop))
+  })
+
+  it('class middleware comes before method middleware', () => {
+    @Controller()
+    @Middleware([noop])
+    class Ctrl {
+      @Get('/x') @Middleware([noop2]) x() {}
+    }
+    r.registerController(Ctrl)
+    const mw = r.list()[0]?.middleware ?? []
+    assert.strictEqual(mw[0], noop)
+    assert.strictEqual(mw[1], noop2)
+  })
+})
+
+// ─── Global router / Route alias ───────────────────────────
+
+describe('Global router and Route alias', () => {
+  it('router is a Router instance', () => {
+    assert.ok(router instanceof Router)
+  })
+
+  it('Route is the same object as router', () => {
+    assert.strictEqual(Route, router)
   })
 })

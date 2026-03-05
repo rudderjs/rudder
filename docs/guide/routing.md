@@ -79,23 +79,32 @@ router.all('/api/*', (_req, res) => {
 
 | Method | Description |
 |--------|-------------|
-| `router.get(path, handler)` | GET |
-| `router.post(path, handler)` | POST |
-| `router.put(path, handler)` | PUT |
-| `router.patch(path, handler)` | PATCH |
-| `router.delete(path, handler)` | DELETE |
-| `router.options(path, handler)` | OPTIONS |
-| `router.all(path, handler)` | Any method |
+| `router.get(path, handler, mw?)` | GET |
+| `router.post(path, handler, mw?)` | POST |
+| `router.put(path, handler, mw?)` | PUT |
+| `router.patch(path, handler, mw?)` | PATCH |
+| `router.delete(path, handler, mw?)` | DELETE |
+| `router.all(path, handler, mw?)` | Any method |
+| `router.add(method, path, handler, mw?)` | Explicit method string |
+
+### Middleware on Fluent Routes
+
+Pass middleware as the third argument:
+
+```ts
+router.get('/protected', handler, [authMiddleware])
+router.post('/admin', handler, [authMiddleware, adminMiddleware])
+```
 
 ## Decorator-Based Routing
 
 For larger apps, group related routes into controller classes:
 
 ```ts
-import { Controller, Get, Post, Put, Delete, Middleware } from '@boostkit/router'
+import { Controller, Get, Post, Put, Delete, Middleware, router } from '@boostkit/router'
 import { Injectable } from '@boostkit/di'
 import type { AppRequest, AppResponse } from '@boostkit/contracts'
-import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
+import { authMiddleware } from '../Http/Middleware/auth.js'
 import { UserService } from '../Services/UserService.js'
 
 @Controller('/api/users')
@@ -110,7 +119,7 @@ class UserController {
   }
 
   @Get('/:id')
-  @Middleware([AuthMiddleware])
+  @Middleware([authMiddleware])
   async show(req: AppRequest, res: AppResponse) {
     const user = await this.userService.find(req.params.id as string)
     if (!user) return res.status(404).json({ message: 'Not found' })
@@ -132,7 +141,7 @@ class UserController {
   @Delete('/:id')
   async destroy(req: AppRequest, res: AppResponse) {
     await this.userService.delete(req.params.id as string)
-    return res.status(204).json({})
+    return res.status(204).send('')
   }
 }
 
@@ -142,16 +151,30 @@ router.registerController(UserController)
 
 ### Available Decorators
 
-| Decorator | Description |
-|-----------|-------------|
-| `@Controller(prefix)` | Marks a class as a controller with a route prefix |
-| `@Get(path)` | GET method |
-| `@Post(path)` | POST method |
-| `@Put(path)` | PUT method |
-| `@Patch(path)` | PATCH method |
-| `@Delete(path)` | DELETE method |
-| `@Options(path)` | OPTIONS method |
-| `@Middleware([...classes])` | Applies middleware to a route |
+| Decorator | Target | Description |
+|-----------|--------|-------------|
+| `@Controller(prefix?)` | class | Marks a class as a controller with a route prefix |
+| `@Get(path)` | method | GET route |
+| `@Post(path)` | method | POST route |
+| `@Put(path)` | method | PUT route |
+| `@Patch(path)` | method | PATCH route |
+| `@Delete(path)` | method | DELETE route |
+| `@Options(path)` | method | OPTIONS route |
+| `@Middleware([...handlers])` | class or method | Apply middleware handlers |
+
+### Middleware Ordering
+
+When `@Middleware` is used on both the class and a method, class middleware runs first:
+
+```ts
+@Controller('/api')
+@Middleware([logMiddleware])        // runs first for every route
+class Ctrl {
+  @Get('/private')
+  @Middleware([authMiddleware])     // runs second, only for this route
+  private() {}
+}
+```
 
 ## `AppRequest` and `AppResponse`
 
@@ -177,25 +200,11 @@ router.registerController(UserController)
 | `res.redirect(url, code?)` | Redirect response |
 | `res.header(key, value)` | Set a response header (chainable) |
 
-## Middleware on Routes
-
-Apply middleware to specific routes using the fluent builder (coming soon) or the `@Middleware` decorator:
-
-```ts
-import { fromClass } from '@boostkit/middleware'
-import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
-
-// Decorator style
-@Get('/protected')
-@Middleware([AuthMiddleware])
-async protected(req, res) { ... }
-```
-
-See the [Middleware guide](/guide/middleware) for details on writing middleware classes.
-
 ## Notes
 
 - Routes are matched in registration order — put catch-alls last
 - `router.all('/api/*', ...)` should be the last route in your API file
+- `router` and `Route` are the same global singleton
 - Decorator controllers require `reflect-metadata` at the entry point
+- Double slashes in composed paths are normalised: `/api` + `/users` → `/api/users`
 - Controllers must be registered with `router.registerController(ControllerClass)`
