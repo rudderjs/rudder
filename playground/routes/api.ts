@@ -4,7 +4,7 @@ import type { BetterAuthInstance } from '@boostkit/auth'
 import { AuthMiddleware } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
 import { Storage } from '@boostkit/storage'
-import { RateLimit } from '@boostkit/middleware'
+import { RateLimit, CsrfMiddleware } from '@boostkit/middleware'
 import { notify } from '@boostkit/notification'
 import { UserService } from '../app/Services/UserService.js'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
@@ -132,7 +132,7 @@ Route.post('/api/validate/user', async (req, res) => {
 })
 
 // ── Contact form demo ─────────────────────────────────────
-// POST /api/contact — CSRF-protected globally, validates with zod
+// POST /api/contact — CSRF-protected, validates with zod
 import { z } from 'zod'
 
 const contactSchema = z.object({
@@ -148,7 +148,7 @@ Route.post('/api/contact', async (req, res) => {
     return res.status(422).json({ errors })
   }
   return res.json({ ok: true, message: `Thanks ${result.data.name}, your message has been received!` })
-})
+}, [CsrfMiddleware()])
 
 // Auth routes — delegate all /api/auth/* requests to better-auth, with a stricter rate limit
 Route.all('/api/auth/*', (req) => {
