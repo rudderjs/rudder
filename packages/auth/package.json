@@ -24,6 +24,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@boostkit/contracts": "workspace:*",
     "@boostkit/core": "workspace:*",
     "@boostkit/router": "workspace:*",
     "better-auth": "^1.0.0"

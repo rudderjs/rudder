@@ -1,4 +1,13 @@
-import { ServiceProvider, type Application } from '@boostkit/core'
+import { ServiceProvider, type Application, app } from '@boostkit/core'
+import type { MiddlewareHandler } from '@boostkit/contracts'
+
+// ─── Module Augmentation ───────────────────────────────────
+
+declare module '@boostkit/contracts' {
+  interface AppRequest {
+    user: AuthUser
+  }
+}
 
 // ─── Shared Auth Types ─────────────────────────────────────
 
@@ -112,3 +121,33 @@ export function betterAuth(config: BetterAuthConfig): new (app: Application) => 
 }
 
 export type BetterAuthInstance = Awaited<ReturnType<typeof import('better-auth').betterAuth>>
+
+// ─── Auth Middleware ───────────────────────────────────────
+
+/**
+ * Verifies the session via better-auth and attaches the authenticated user
+ * to the request as `req.user`. Returns 401 if no valid session exists.
+ *
+ * Requires betterAuth() provider to be registered in bootstrap/providers.ts.
+ *
+ * Usage in routes:
+ *   import { AuthMiddleware } from '@boostkit/auth'
+ *   const authMw = AuthMiddleware()
+ *   Route.post('/api/posts', handler, [authMw])
+ */
+export function AuthMiddleware(): MiddlewareHandler {
+  return async (req, res, next) => {
+    const auth    = app().make<BetterAuthInstance>('auth')
+    const session = await auth.api.getSession({
+      headers: new Headers(req.headers as Record<string, string>),
+    })
+
+    if (!session?.user) {
+      res.status(401).json({ message: 'Unauthorized.' })
+      return
+    }
+
+    ;(req.raw as Record<string, unknown>)['__bk_user'] = session.user
+    await next()
+  }
+}

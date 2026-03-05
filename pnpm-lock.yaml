@@ -61,6 +61,9 @@ importers:
 
   packages/auth:
     dependencies:
+      '@boostkit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@boostkit/core':
         specifier: workspace:*
         version: link:../core

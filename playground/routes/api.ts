@@ -1,12 +1,12 @@
 import { Route } from '@boostkit/router'
 import { resolve, app, dd, dump, config } from '@boostkit/core'
 import type { BetterAuthInstance } from '@boostkit/auth'
+import { AuthMiddleware } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
 import { Storage } from '@boostkit/storage'
 import { RateLimit } from '@boostkit/middleware'
 import { notify } from '@boostkit/notification'
 import { UserService } from '../app/Services/UserService.js'
-import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 import { CreateUserRequest } from '../app/Requests/CreateUserRequest.js'
@@ -16,7 +16,7 @@ import { TestController } from '../app/Controllers/TestController.js'
 Route.registerController(TestController)
 
 // Per-route middleware instance — reused across protected routes
-const authMw = new AuthMiddleware().toHandler()
+const authMw = AuthMiddleware()
 
 // Auth rate limit — keyed by IP + path so each endpoint (sign-in, sign-out, sign-up)
 // has its own counter per client. Prevents one action from exhausting another's budget.
@@ -77,19 +77,13 @@ Route.get('/api/users', async (_req, res) => {
      return resolve<UserService>(UserService).findAll();
   })
   return res.json({ data: users })
-})
+}, [authMw])
 
 Route.get('/api/users/:id', async (req, res) => {
   const user = await resolve<UserService>(UserService).findById(req.params['id']!)
   if (!user) return res.status(404).json({ message: 'User not found.' })
   return res.json({ data: user })
 })
-
-// Protected routes — require Authorization: Bearer <token>
-Route.post('/api/users', async (req, res) => {
-  const user = await resolve<UserService>(UserService).create(req.body as { name: string; email: string; role?: string })
-  return res.status(201).json({ data: user })
-}, [authMw])
 
 // ── File storage demo ──────────────────────────────────────
 // PUT /api/files/:filename  — write a text file (10 uploads/min per IP)
