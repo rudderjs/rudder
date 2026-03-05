@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@boostkit/core'
 import { hono } from '@boostkit/server-hono'
-import { RateLimit, CsrfMiddleware } from '@boostkit/middleware'
+import { RateLimit } from '@boostkit/middleware'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
@@ -18,12 +18,9 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    // Global rate limit — cache-backed, persists across restarts
+    // Truly global middleware — applied to every request regardless of route group
     m.use(RateLimit.perMinute(60).toHandler())
     m.use(new RequestIdMiddleware().toHandler())
-    // CSRF — sets cookie on GET, validates token on mutations
-    // Excludes auth routes (better-auth has its own CSRF) and webhooks
-    m.use(new CsrfMiddleware({ exclude: ['/api/auth/*'] }).toHandler())
   })
   .withExceptions((_e) => {
     // future: exception reporting and rendering

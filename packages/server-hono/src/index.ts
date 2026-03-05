@@ -30,7 +30,7 @@ export interface HonoConfig {
 
 function normalizeRequest(c: any): AppRequest {
   const url = new URL(c.req.url)
-  return {
+  const req: Record<string, unknown> = {
     method:  c.req.method,
     url:     c.req.url,
     path:    url.pathname,
@@ -42,6 +42,15 @@ function normalizeRequest(c: any): AppRequest {
     body:    null, // populated lazily per route
     raw:     c,
   }
+  // Forward per-request augmentations stored on c by middleware (e.g. session).
+  // Both applyMiddleware and registerRoute call normalizeRequest(c) with the same
+  // Hono context, so a getter ensures the route handler always sees what was set.
+  Object.defineProperty(req, 'session', {
+    get: () => (c as Record<string, unknown>)['__bk_session'],
+    enumerable: true,
+    configurable: true,
+  })
+  return req as unknown as AppRequest
 }
 
 // ─── Response Normalizer ───────────────────────────────────

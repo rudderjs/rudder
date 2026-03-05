@@ -7,6 +7,7 @@ import { cache } from '@boostkit/cache'
 import { storage } from '@boostkit/storage'
 import { scheduler } from '@boostkit/schedule'
 import { notifications } from '@boostkit/notification'
+import { session } from '@boostkit/session'
 import { prismaProvider } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
@@ -21,6 +22,7 @@ export default [
   mail(configs.mail),
   cache(configs.cache),
   storage(configs.storage),
+  session(configs.session),
   scheduler(),
   notifications(),
   prismaProvider(configs.database),  // must boot before AppServiceProvider — sets ModelRegistry

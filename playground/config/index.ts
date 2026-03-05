@@ -6,5 +6,6 @@ import mail     from './mail.js'
 import cache    from './cache.js'
 import storage  from './storage.js'
 import auth     from './auth.js'
+import session  from './session.js'
 
-export default { app, server, database, queue, mail, cache, storage, auth }
+export default { app, server, database, queue, mail, cache, storage, auth, session }

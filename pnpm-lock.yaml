@@ -495,6 +495,26 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/session:
+    dependencies:
+      '@boostkit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+    optionalDependencies:
+      ioredis:
+        specifier: ^5.3.0
+        version: 5.9.3
+
   packages/storage:
     dependencies:
       '@boostkit/core':
@@ -624,6 +644,9 @@ importers:
       '@boostkit/server-hono':
         specifier: workspace:*
         version: link:../packages/server-hono
+      '@boostkit/session':
+        specifier: workspace:*
+        version: link:../packages/session
       '@boostkit/storage':
         specifier: workspace:*
         version: link:../packages/storage
