@@ -1,16 +1,101 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { artisan, Command, parseSignature } from './index.js'
+import { artisan, Command, CommandBuilder, ArtisanRegistry, parseSignature, CancelledError } from './index.js'
 
-describe('Artisan contract baseline', () => {
+// ─── ArtisanRegistry ──────────────────────────────────────
+
+describe('ArtisanRegistry', () => {
+  let registry: ArtisanRegistry
+
   beforeEach(() => {
-    artisan.reset()
+    registry = new ArtisanRegistry()
+  })
+
+  it('command() registers and returns a CommandBuilder', () => {
+    const builder = registry.command('greet {name}', () => undefined)
+    assert.ok(builder instanceof CommandBuilder)
+    assert.strictEqual(builder.name, 'greet {name}')
+    assert.strictEqual(registry.getCommands().length, 1)
+  })
+
+  it('command() supports fluent description chaining', () => {
+    const builder = registry.command('ping', () => undefined)
+      .description('Ping the server')
+    assert.strictEqual(builder.getDescription(), 'Ping the server')
+  })
+
+  it('command() supports fluent purpose() chaining', () => {
+    const builder = registry.command('ping', () => undefined)
+      .purpose('Ping the server')
+    assert.strictEqual(builder.getDescription(), 'Ping the server')
+  })
+
+  it('register() stores class-based commands', () => {
+    class A extends Command {
+      readonly signature = 'a'
+      readonly description = 'a'
+      handle(): void {}
+    }
+    class B extends Command {
+      readonly signature = 'b'
+      readonly description = 'b'
+      handle(): void {}
+    }
+    registry.register(A, B)
+    assert.deepStrictEqual(registry.getClasses(), [A, B])
+  })
+
+  it('register() appends to existing classes', () => {
+    class A extends Command {
+      readonly signature = 'a'
+      readonly description = 'a'
+      handle(): void {}
+    }
+    class B extends Command {
+      readonly signature = 'b'
+      readonly description = 'b'
+      handle(): void {}
+    }
+    registry.register(A)
+    registry.register(B)
+    assert.strictEqual(registry.getClasses().length, 2)
+  })
+
+  it('reset() clears both commands and classes', () => {
+    class A extends Command {
+      readonly signature = 'a'
+      readonly description = 'a'
+      handle(): void {}
+    }
+    registry.command('x', () => undefined)
+    registry.register(A)
+    registry.reset()
+    assert.strictEqual(registry.getCommands().length, 0)
+    assert.strictEqual(registry.getClasses().length, 0)
+  })
+
+  it('getCommands() returns all registered functional commands', () => {
+    registry.command('a', () => undefined)
+    registry.command('b', () => undefined)
+    assert.strictEqual(registry.getCommands().length, 2)
+    assert.strictEqual(registry.getCommands()[0]!.name, 'a')
+    assert.strictEqual(registry.getCommands()[1]!.name, 'b')
+  })
+})
+
+// ─── Global artisan singleton ──────────────────────────────
+
+describe('global artisan singleton', () => {
+  beforeEach(() => artisan.reset())
+
+  it('artisan is the same instance across multiple imports', async () => {
+    const { artisan: artisan2 } = await import('./index.js')
+    assert.strictEqual(artisan, artisan2)
   })
 
   it('artisan.command() registers a command', () => {
-    const name = `test:hello:${Date.now()}`
+    const name = `test:${Date.now()}`
     artisan.command(name, () => undefined)
-
     const found = artisan.getCommands().find(c => c.name === name)
     assert.ok(found)
   })
@@ -21,9 +106,7 @@ describe('Artisan contract baseline', () => {
       readonly description = 'hello cmd'
       handle(): void {}
     }
-
     artisan.register(HelloCommand)
-
     assert.deepStrictEqual(artisan.getClasses(), [HelloCommand])
   })
 
@@ -33,39 +116,330 @@ describe('Artisan contract baseline', () => {
       readonly description = 'a'
       handle(): void {}
     }
-
     artisan.command('x', () => undefined)
     artisan.register(A)
     artisan.reset()
-
     assert.strictEqual(artisan.getCommands().length, 0)
     assert.strictEqual(artisan.getClasses().length, 0)
   })
+})
 
-  it('parseSignature parses required and optional arguments', () => {
-    const parsed = parseSignature('users:create {name} {email?}')
+// ─── parseSignature ────────────────────────────────────────
 
-    assert.strictEqual(parsed.name, 'users:create')
-    assert.deepStrictEqual(parsed.args, [
-      { name: 'name', required: true, variadic: false },
-      { name: 'email', required: false, variadic: false },
-    ])
+describe('parseSignature', () => {
+  describe('command name', () => {
+    it('parses a simple name', () => {
+      assert.strictEqual(parseSignature('greet').name, 'greet')
+    })
+
+    it('parses a colon-namespaced name', () => {
+      assert.strictEqual(parseSignature('users:create').name, 'users:create')
+    })
+
+    it('parses a name with dots and hyphens', () => {
+      assert.strictEqual(parseSignature('db.migrate-fresh').name, 'db.migrate-fresh')
+    })
+
+    it('throws on an empty or invalid signature', () => {
+      assert.throws(() => parseSignature(''), /Invalid command signature/)
+      assert.throws(() => parseSignature('{arg}'), /Invalid command signature/)
+    })
   })
 
-  it('parseSignature parses options with and without values', () => {
-    const parsed = parseSignature('users:create {--force} {--role=}')
+  describe('arguments', () => {
+    it('parses a required argument', () => {
+      const { args } = parseSignature('cmd {name}')
+      assert.deepStrictEqual(args, [{ name: 'name', required: true, variadic: false }])
+    })
 
-    assert.deepStrictEqual(parsed.opts, [
-      { name: 'force', hasValue: false },
-      { name: 'role', hasValue: true },
-    ])
+    it('parses an optional argument (trailing ?)', () => {
+      const { args } = parseSignature('cmd {name?}')
+      assert.deepStrictEqual(args, [{ name: 'name', required: false, variadic: false }])
+    })
+
+    it('parses a variadic argument (trailing *)', () => {
+      const { args } = parseSignature('cmd {files*}')
+      assert.deepStrictEqual(args, [{ name: 'files', required: false, variadic: true }])
+    })
+
+    it('parses an argument with a default value', () => {
+      const { args } = parseSignature('cmd {env=local}')
+      assert.deepStrictEqual(args, [
+        { name: 'env', required: false, variadic: false, defaultValue: 'local' },
+      ])
+    })
+
+    it('parses multiple arguments', () => {
+      const { args } = parseSignature('cmd {name} {email?} {role=user}')
+      assert.strictEqual(args.length, 3)
+      assert.strictEqual(args[0]!.required, true)
+      assert.strictEqual(args[1]!.required, false)
+      assert.strictEqual(args[2]!.defaultValue, 'user')
+    })
+
+    it('strips inline description from argument', () => {
+      const { args } = parseSignature('cmd {name : The user name}')
+      assert.strictEqual(args[0]!.name, 'name')
+      assert.strictEqual(args[0]!.required, true)
+    })
   })
 
-  it('parseSignature parses shorthand options', () => {
-    const parsed = parseSignature('users:create {--N|name=}')
+  describe('options', () => {
+    it('parses a boolean flag', () => {
+      const { opts } = parseSignature('cmd {--force}')
+      assert.deepStrictEqual(opts, [{ name: 'force', hasValue: false }])
+    })
 
-    assert.deepStrictEqual(parsed.opts, [
-      { name: 'name', shorthand: 'N', hasValue: true },
-    ])
+    it('parses an option that accepts a value', () => {
+      const { opts } = parseSignature('cmd {--role=}')
+      assert.deepStrictEqual(opts, [{ name: 'role', hasValue: true }])
+    })
+
+    it('parses an option with a default value', () => {
+      const { opts } = parseSignature('cmd {--env=local}')
+      assert.deepStrictEqual(opts, [{ name: 'env', hasValue: true, defaultValue: 'local' }])
+    })
+
+    it('parses shorthand option {--N|name=}', () => {
+      const { opts } = parseSignature('cmd {--N|name=}')
+      assert.deepStrictEqual(opts, [{ name: 'name', shorthand: 'N', hasValue: true }])
+    })
+
+    it('strips inline description from option', () => {
+      const { opts } = parseSignature('cmd {--force : Force overwrite}')
+      assert.strictEqual(opts[0]!.name, 'force')
+      assert.strictEqual(opts[0]!.hasValue, false)
+    })
+
+    it('parses a mix of args and options', () => {
+      const parsed = parseSignature('users:create {name} {email?} {--force} {--role=admin}')
+      assert.strictEqual(parsed.name, 'users:create')
+      assert.strictEqual(parsed.args.length, 2)
+      assert.strictEqual(parsed.opts.length, 2)
+      assert.strictEqual(parsed.opts[1]!.defaultValue, 'admin')
+    })
+  })
+})
+
+// ─── Command class ────────────────────────────────────────
+
+describe('Command', () => {
+  class TestCommand extends Command {
+    readonly signature = 'test {name} {--force}'
+    readonly description = 'Test command'
+    handle(): void {}
+  }
+
+  it('_setContext + argument() returns the argument value', () => {
+    const cmd = new TestCommand()
+    cmd._setContext({ name: 'Alice' }, {})
+    assert.strictEqual(cmd.argument('name'), 'Alice')
+  })
+
+  it('argument() returns empty string for missing keys', () => {
+    const cmd = new TestCommand()
+    cmd._setContext({}, {})
+    assert.strictEqual(cmd.argument('missing'), '')
+  })
+
+  it('arguments() returns a shallow copy of all args', () => {
+    const cmd = new TestCommand()
+    const original = { name: 'Alice' }
+    cmd._setContext(original, {})
+    const copy = cmd.arguments()
+    assert.deepStrictEqual(copy, { name: 'Alice' })
+    // Mutation of returned object doesn't affect internal state
+    copy['name'] = 'Bob'
+    assert.strictEqual(cmd.argument('name'), 'Alice')
+  })
+
+  it('option() returns the option value', () => {
+    const cmd = new TestCommand()
+    cmd._setContext({}, { force: true })
+    assert.strictEqual(cmd.option('force'), true)
+  })
+
+  it('option() returns undefined for missing options', () => {
+    const cmd = new TestCommand()
+    cmd._setContext({}, {})
+    assert.strictEqual(cmd.option('missing'), undefined)
+  })
+
+  it('options() returns a shallow copy of all opts', () => {
+    const cmd = new TestCommand()
+    const original = { force: true }
+    cmd._setContext({}, original)
+    const copy = cmd.options()
+    assert.deepStrictEqual(copy, { force: true })
+    copy['force'] = false
+    assert.strictEqual(cmd.option('force'), true)
+  })
+
+  describe('output helpers', () => {
+    it('info() calls console.log with green ANSI', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.info('Hello')
+        assert.ok(logs[0]!.includes('Hello'))
+        assert.ok(logs[0]!.includes('\x1b[32m'))
+      } finally {
+        console.log = originalLog
+      }
+    })
+
+    it('error() calls console.error with red ANSI', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalError = console.error
+      console.error = (msg: string) => logs.push(msg)
+      try {
+        cmd.error('Oops')
+        assert.ok(logs[0]!.includes('Oops'))
+        assert.ok(logs[0]!.includes('\x1b[31m'))
+      } finally {
+        console.error = originalError
+      }
+    })
+
+    it('warn() calls console.warn with yellow ANSI', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalWarn = console.warn
+      console.warn = (msg: string) => logs.push(msg)
+      try {
+        cmd.warn('Watch out')
+        assert.ok(logs[0]!.includes('Watch out'))
+        assert.ok(logs[0]!.includes('\x1b[33m'))
+      } finally {
+        console.warn = originalWarn
+      }
+    })
+
+    it('line() calls console.log with the raw message', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.line('plain text')
+        assert.strictEqual(logs[0], 'plain text')
+      } finally {
+        console.log = originalLog
+      }
+    })
+
+    it('line() defaults to empty string', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.line()
+        assert.strictEqual(logs[0], '')
+      } finally {
+        console.log = originalLog
+      }
+    })
+
+    it('comment() calls console.log with dim ANSI', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.comment('subtle note')
+        assert.ok(logs[0]!.includes('subtle note'))
+        assert.ok(logs[0]!.includes('\x1b[2m'))
+      } finally {
+        console.log = originalLog
+      }
+    })
+
+    it('newLine() logs an empty line by default', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.newLine()
+        // count-1 repetitions: newLine(1) → '\n'.repeat(0) = ''
+        assert.strictEqual(logs[0], '')
+      } finally {
+        console.log = originalLog
+      }
+    })
+  })
+
+  describe('table()', () => {
+    it('renders a separator + header + rows', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.table(['Name', 'Email'], [['Alice', 'alice@example.com'], ['Bob', 'bob@example.com']])
+        // sep, header, sep, row1, row2, sep
+        assert.strictEqual(logs.length, 6)
+        assert.ok(logs[1]!.includes('Name'))
+        assert.ok(logs[1]!.includes('Email'))
+        assert.ok(logs[3]!.includes('Alice'))
+        assert.ok(logs[4]!.includes('Bob'))
+      } finally {
+        console.log = originalLog
+      }
+    })
+
+    it('handles ragged rows (fewer columns than headers)', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.table(['A', 'B', 'C'], [['x'], ['y', 'z']])
+        // Should not throw; missing cells appear as empty strings
+        assert.ok(logs[3]!.includes('x'))
+        assert.ok(logs[4]!.includes('y'))
+        assert.ok(logs[4]!.includes('z'))
+      } finally {
+        console.log = originalLog
+      }
+    })
+
+    it('columns are padded to the width of the longest value', () => {
+      const cmd = new TestCommand()
+      const logs: string[] = []
+      const originalLog = console.log
+      console.log = (msg: string) => logs.push(msg)
+      try {
+        cmd.table(['ID'], [['1'], ['100']])
+        // Header row: " ID " padded to width 3 (length of '100')
+        assert.ok(logs[1]!.includes(' ID '))
+      } finally {
+        console.log = originalLog
+      }
+    })
+  })
+
+  describe('CancelledError', () => {
+    it('is an instance of Error', () => {
+      const err = new CancelledError()
+      assert.ok(err instanceof Error)
+      assert.ok(err instanceof CancelledError)
+    })
+
+    it('has name CancelledError', () => {
+      assert.strictEqual(new CancelledError().name, 'CancelledError')
+    })
+
+    it('accepts a custom message', () => {
+      assert.strictEqual(new CancelledError('User quit').message, 'User quit')
+    })
+
+    it('defaults to Cancelled.', () => {
+      assert.strictEqual(new CancelledError().message, 'Cancelled.')
+    })
   })
 })

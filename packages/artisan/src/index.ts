@@ -1,3 +1,13 @@
+// ─── Cancelled Error ───────────────────────────────────────
+
+/** Thrown when the user cancels an interactive prompt (Ctrl+C). */
+export class CancelledError extends Error {
+  constructor(message = 'Cancelled.') {
+    super(message)
+    this.name = 'CancelledError'
+  }
+}
+
 // ─── Artisan Registry ──────────────────────────────────────
 
 export type ConsoleHandler = (args: string[], opts: Record<string, unknown>) => void | Promise<void>
@@ -72,7 +82,10 @@ export interface ParsedSignature {
 
 export function parseSignature(signature: string): ParsedSignature {
   const nameMatch = signature.match(/^([\w:.-]+)/)
-  const name = nameMatch?.[1] ?? signature
+  if (!nameMatch?.[1]) {
+    throw new Error(`Invalid command signature: "${signature}". Must start with a valid command name (letters, digits, :, ., -).`)
+  }
+  const name = nameMatch[1]
   const args: CommandArgDef[] = []
   const opts: CommandOptDef[] = []
 
@@ -122,6 +135,14 @@ const ANSI = {
   dim:    (s: string) => `\x1b[2m${s}\x1b[0m`,
 }
 
+// Lazy singleton for @clack/prompts — loaded once on first prompt call
+let _clack: typeof import('@clack/prompts') | undefined
+
+async function clack(): Promise<typeof import('@clack/prompts')> {
+  if (!_clack) _clack = await import('@clack/prompts')
+  return _clack
+}
+
 export abstract class Command {
   abstract readonly signature:   string
   abstract readonly description: string
@@ -163,8 +184,13 @@ export abstract class Command {
   newLine(count = 1):       void { console.log('\n'.repeat(count - 1)) }
 
   table(headers: string[], rows: string[][]): void {
+    // Normalise ragged rows so every row has the same column count as headers
+    const cols = headers.length
+    const normalised = rows.map(r =>
+      Array.from({ length: cols }, (_, i) => r[i] ?? '')
+    )
     const widths = headers.map((h, i) =>
-      Math.max(h.length, ...rows.map(r => (r[i] ?? '').length))
+      Math.max(h.length, ...normalised.map(r => (r[i] ?? '').length))
     )
     const sep = widths.map(w => '-'.repeat(w + 2)).join('+')
     const fmt = (cells: string[]) =>
@@ -172,43 +198,59 @@ export abstract class Command {
     console.log(sep)
     console.log(fmt(headers))
     console.log(sep)
-    for (const row of rows) console.log(fmt(row))
+    for (const row of normalised) console.log(fmt(row))
     console.log(sep)
   }
 
   // ── Interactive prompts ───────────────────────────────────
 
+  /**
+   * Ask the user a text question.
+   * @throws {CancelledError} if the user presses Ctrl+C.
+   */
   async ask(message: string, defaultValue?: string): Promise<string> {
-    const { text, isCancel } = await import('@clack/prompts')
+    const { text, isCancel } = await clack()
     const opts: Parameters<typeof text>[0] = { message }
     if (defaultValue) { opts.defaultValue = defaultValue; opts.placeholder = defaultValue }
     const result = await text(opts)
-    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    if (isCancel(result)) throw new CancelledError()
     return result as string
   }
 
+  /**
+   * Ask the user a yes/no question.
+   * @throws {CancelledError} if the user presses Ctrl+C.
+   */
   async confirm(message: string, defaultValue = false): Promise<boolean> {
-    const { confirm, isCancel } = await import('@clack/prompts')
+    const { confirm, isCancel } = await clack()
     const result = await confirm({ message, initialValue: defaultValue })
-    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    if (isCancel(result)) throw new CancelledError()
     return result as boolean
   }
 
+  /**
+   * Present a list of choices to the user.
+   * @throws {CancelledError} if the user presses Ctrl+C.
+   */
   async choice(message: string, choices: string[], defaultValue?: string): Promise<string> {
-    const { select, isCancel } = await import('@clack/prompts')
+    const { select, isCancel } = await clack()
     const result = await select({
       message,
       options: choices.map(c => ({ value: c, label: c })),
       initialValue: defaultValue ?? choices[0],
     })
-    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    if (isCancel(result)) throw new CancelledError()
     return result as string
   }
 
+  /**
+   * Ask the user for a secret (input is hidden).
+   * @throws {CancelledError} if the user presses Ctrl+C.
+   */
   async secret(message: string): Promise<string> {
-    const { password, isCancel } = await import('@clack/prompts')
+    const { password, isCancel } = await clack()
     const result = await password({ message })
-    if (isCancel(result)) { this.warn('Cancelled.'); process.exit(0) }
+    if (isCancel(result)) throw new CancelledError()
     return result as string
   }
 

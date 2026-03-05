@@ -44,7 +44,7 @@ boostkit/
 │   │                       #   sideEffects: false — fully tree-shakeable
 │   ├── di/                 # DI container: Container, @Injectable, @Inject, reflect-metadata
 │   ├── middleware/         # Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
-│   │                       #   + RateLimit / RateLimitBuilder (cache-backed, merged from rate-limit)
+│   │                       #   + RateLimit callable handler (cache-backed), CsrfMiddleware() factory
 │   ├── validation/         # FormRequest, validate(), validateWith(), ValidationError, z re-export
 │   ├── core/               # Bootstrapper, Application, Forge, ServiceProvider, artisan registry
 │   │                       #   re-exports contracts · support · di · middleware · validation
@@ -56,8 +56,10 @@ boostkit/
 │   ├── queue/              # Queue contract + Job base class + queue:work artisan command
 │   ├── queue-inngest/      # Inngest adapter — events: boostkit/job.<ClassName>
 │   ├── queue-bullmq/       # BullMQ adapter — default prefix: 'boostkit'
-│   ├── auth/               # AuthUser/Session/Result types + betterAuth() factory
+│   ├── auth/               # AuthUser/Session/Result types + betterAuth() factory + AuthMiddleware()
 │   │                       #   (merged from auth-better-auth — single package)
+│   ├── session/            # HTTP session: SessionInstance, Session facade (AsyncLocalStorage)
+│   │                       #   CookieDriver (HMAC-SHA256) + RedisDriver, SessionMiddleware() factory
 │   ├── storage/            # Storage facade, LocalAdapter + S3Adapter (built-in)
 │   │                       #   S3 driver needs optional dep: @aws-sdk/client-s3
 │   ├── cache/              # Cache facade, MemoryAdapter + RedisAdapter (built-in)
@@ -122,6 +124,7 @@ my-app/
 │   ├── server.ts               # PORT, CORS_ORIGIN, TRUST_PROXY
 │   ├── database.ts             # DB_CONNECTION, DATABASE_URL
 │   ├── auth.ts                 # AUTH_SECRET, APP_URL, betterAuth config
+│   ├── session.ts              # SESSION_DRIVER, SESSION_SECRET, cookie/redis options
 │   ├── queue.ts                # Queue driver config
 │   ├── mail.ts                 # Mailer config
 │   └── index.ts                # Barrel re-export
@@ -195,11 +198,14 @@ export default Application.configure({
   providers,                        // ordered provider array
 })
   .withRouting({
-    api:      () => import('../routes/api.ts'),      // loads HTTP routes
-    commands: () => import('../routes/console.ts'),  // loads artisan commands
+    web:      () => import('../routes/web.ts'),       // page + web form routes
+    api:      () => import('../routes/api.ts'),       // JSON API routes
+    commands: () => import('../routes/console.ts'),   // artisan commands
   })
-  .withMiddleware((_m) => {
-    // _m.use(new CorsMiddleware().toHandler())
+  .withMiddleware((m) => {
+    // Truly global middleware — applies to all requests (web + API)
+    m.use(RateLimit.perMinute(60))
+    m.use(requestIdMiddleware)
   })
   .withExceptions((_e) => {})
   .create()                         // returns Forge instance
@@ -368,6 +374,13 @@ const session = await auth.api.getSession({ headers: new Headers(req.headers) })
 
 The provider must boot **before** `routes/api.ts` loads (place it before `AppServiceProvider` in `providers.ts`) so `/api/auth/*` routes are registered first and match before any `/api/*` catch-all.
 
+`AuthMiddleware()` from `@boostkit/auth` is a zero-config factory — it reads the `auth` binding from the DI container and uses `auth.api.getSession()` for real session verification:
+```ts
+import { AuthMiddleware } from '@boostkit/auth'
+const authMw = AuthMiddleware()
+Route.get('/api/me', handler, [authMw])  // req.user: AuthUser | undefined
+```
+
 ---
 
 ### Server Adapter
@@ -523,20 +536,56 @@ pnpm artisan schedule:list    # show all scheduled tasks
 
 ---
 
-### Rate Limiting
+### Middleware Patterns
+
+All built-in middleware are **callable factory functions** — no `new` keyword, no `.toHandler()`:
 
 ```ts
-import { RateLimit } from '@boostkit/middleware'
+import { RateLimit, CsrfMiddleware } from '@boostkit/middleware'
+import { AuthMiddleware } from '@boostkit/auth'
+import { SessionMiddleware } from '@boostkit/session'
 
-const apiLimit = RateLimit.perMinute(60)
-  .by(req => req.headers['x-forwarded-for'] ?? 'unknown')
-  .message('Too many requests.')
-  .toHandler()
+// Global (bootstrap/app.ts)
+m.use(RateLimit.perMinute(60))
 
-router.use('*', apiLimit)
+// Web routes (routes/web.ts) — session + CSRF like Laravel's 'web' group
+const webMw = [SessionMiddleware(), CsrfMiddleware()]
+Route.get('/dashboard', handler, webMw)
+
+// Protected API routes
+const authMw = AuthMiddleware()
+Route.get('/api/me', handler, [authMw])
+
+// Per-route rate limit with custom key
+const authLimit = RateLimit.perMinute(10)
+  .by(req => `${req.headers['x-forwarded-for']}:${req.path}`)
+  .message('Too many auth attempts.')
+Route.post('/api/login', handler, [authLimit])
 ```
 
-Uses the configured cache driver under the hood. Sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
+**`RateLimit`** uses the configured cache driver. Sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` response headers. Global + per-route limits stack independently (each has its own counter).
+
+**`SessionMiddleware()`** reads config from `'session.config'` in the DI container (registered by the `session()` provider). Sets `req.session` and the `Session` facade via `AsyncLocalStorage`.
+
+**`CsrfMiddleware()`** validates the `X-CSRF-Token` header on mutating requests (`POST/PUT/PATCH/DELETE`). Token is stored in the session.
+
+**`AuthMiddleware()`** calls `auth.api.getSession()` via better-auth and sets `req.user: AuthUser | undefined`. Returns `401` if no valid session exists.
+
+### Session
+
+```ts
+import { Session } from '@boostkit/session'
+
+// Via facade (ALS-based — works anywhere in the call stack)
+Session.put('visits', (Session.get<number>('visits') ?? 0) + 1)
+Session.flash('success', 'Saved!')
+
+// Via req.session (type-safe on AppRequest)
+req.session.get<string>('user_id')
+req.session.put('cart', items)
+```
+
+Drivers: `cookie` (HMAC-SHA256 signed, default) and `redis` (UUID session ID, needs `ioredis`).
 
 ---
 
@@ -594,4 +643,5 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | **v0.4** | ✅ Auth (better-auth), Storage (S3), Cache (Redis), Events, Mail, Schedule, Rate Limiting, BullMQ |
 | **v0.5** | ✅ Package consolidation — create-boostkit-app scaffolder, notifications, Drizzle adapter |
 | **v0.6** | ✅ Rename Forge → BoostKit, npm publish (25 packages), package merges, docs site, README |
+| **v0.7** | ✅ Session package, AuthMiddleware, callable middleware (no .toHandler()), artisan test suite |
 | **v1.0** | Deploy docs, GitHub Actions CI, stable API |
