@@ -68,6 +68,12 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Build',
+          items: [
+            { text: '@boostkit/vite', link: '/packages/vite/' },
+          ],
+        },
+        {
           text: 'Server',
           items: [
             { text: '@boostkit/router', link: '/packages/server/router' },

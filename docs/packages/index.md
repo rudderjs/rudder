@@ -15,6 +15,12 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 | [@boostkit/cli](/cli/) | Code generators (`make:*`, `make:module`) and artisan command dispatcher. Install as a dev dependency. | `pnpm add -D @boostkit/cli` |
 | [@boostkit/core](./core/) | Application bootstrap, service provider lifecycle, and framework-level runtime orchestration. | `pnpm add @boostkit/core` |
 
+## Build
+
+| Package | Description | Install |
+|---|---|---|
+| [@boostkit/vite](./vite/) | Vite plugin — registers Vike, sets the `@/` alias, and externalises SSR-incompatible packages. | `pnpm add @boostkit/vite` |
+
 ## Server
 
 | Package | Description | Install |

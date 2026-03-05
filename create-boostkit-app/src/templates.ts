@@ -86,6 +86,7 @@ function packageJson(ctx: TemplateContext): string {
 
   const deps = {
     '@boostkit/artisan':          '^0.0.1',
+    '@boostkit/vite':             '^0.0.1',
     '@boostkit/auth': '^0.0.1',
     '@boostkit/cache':            '^0.0.1',
     '@boostkit/contracts':        '^0.0.1',
@@ -181,34 +182,13 @@ function tsconfigJson(): string {
 // ─── vite.config.ts ────────────────────────────────────────
 
 function viteConfig(): string {
-  return `import path from 'path'
-import { defineConfig } from 'vite'
-import vike from 'vike/plugin'
-import react from '@vitejs/plugin-react'
+  return `import { defineConfig } from 'vite'
+import boostkit from '@boostkit/vite'
 import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [vike(), react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  ssr: {
-    external: [
-      '@boostkit/queue-inngest',
-      '@boostkit/queue-bullmq',
-      '@boostkit/mail-nodemailer',
-      '@boostkit/orm-drizzle',
-    ],
-  },
-  build: {
-    rollupOptions: {
-      external: (id) =>
-        ['@boostkit/queue-inngest', '@boostkit/queue-bullmq', '@boostkit/mail-nodemailer',
-         '@boostkit/orm-drizzle'].includes(id),
-    },
-  },
+  plugins: [boostkit(), tailwindcss(), react()],
 })
 `
 }
