@@ -31,7 +31,7 @@ export type MiddlewareHandler = (
   req: AppRequest,
   res: AppResponse,
   next: () => Promise<void>
-) => void | Promise<void>
+) => unknown | Promise<unknown>
 
 // ─── HTTP Methods ──────────────────────────────────────────
 

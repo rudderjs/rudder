@@ -6,93 +6,140 @@ Framework-level TypeScript contracts for HTTP, routing, middleware, and server a
 pnpm add @boostkit/contracts
 ```
 
+This package is **type-only** — it contains no runtime code. All `@boostkit/*` packages depend on it as the shared type language for HTTP primitives. Prefer `import type` in application code.
+
 ---
 
 ## Overview
 
-`@boostkit/contracts` is a type-only package. It contains no runtime code — only TypeScript interfaces and type aliases. All other `@boostkit/*` packages depend on it as the shared language for HTTP primitives. Use `import type` when consuming these types in application code.
+| Type | Kind | Description |
+|---|---|---|
+| `AppRequest` | Interface | Normalised incoming HTTP request passed to route handlers and middleware. |
+| `AppResponse` | Interface | Response builder — fluent methods for status, headers, JSON, text, and redirects. |
+| `RouteHandler` | Type alias | `(req: AppRequest, res: AppResponse) => unknown \| Promise<unknown>` |
+| `MiddlewareHandler` | Type alias | `(req: AppRequest, res: AppResponse, next: () => Promise<void>) => unknown \| Promise<unknown>` |
+| `HttpMethod` | Union type | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE' \| 'HEAD' \| 'OPTIONS' \| 'ALL'` |
+| `RouteDefinition` | Interface | Describes a registered route — `method`, `path`, `handler`, `middleware`. |
+| `ServerAdapter` | Interface | Implemented by server adapter packages — `registerRoute`, `applyMiddleware`, `listen`, `getNativeServer`. |
+| `ServerAdapterProvider` | Interface | Used internally by `Application.configure()` to wire a server adapter into bootstrap. |
+| `ServerAdapterFactory` | Type alias | `<TConfig>(config?: TConfig) => ServerAdapterProvider` — shape of `hono()`, etc. |
+| `FetchHandler` | Type alias | `(req: Request, env?, ctx?) => Promise<Response>` — WinterCG-compatible handler. |
 
 ---
 
-## Usage
+## `AppRequest`
 
 ```ts
-import type {
-  AppRequest,
-  AppResponse,
-  MiddlewareHandler,
-  RouteDefinition,
-  ServerAdapter,
-  FetchHandler,
-} from '@boostkit/contracts'
-
-// Type a route handler
-const handler = async (req: AppRequest, res: AppResponse) => {
-  const { id } = req.params
-  return res.json({ id })
+interface AppRequest {
+  method:  string
+  url:     string
+  path:    string
+  params:  Record<string, string>
+  query:   Record<string, string>
+  headers: Record<string, string>
+  body:    unknown
+  raw:     unknown
 }
+```
 
-// Type a middleware
-const auth: MiddlewareHandler = async (req, res, next) => {
-  const token = req.headers['authorization']
-  if (!token) return res.status(401).json({ message: 'Unauthorized' })
-  return next(req, res)
+| Field | Description |
+|---|---|
+| `method` | HTTP method in uppercase (`'GET'`, `'POST'`, etc.). |
+| `url` | Full request URL including query string. |
+| `path` | URL pathname without query string. |
+| `params` | Route parameters (e.g. `/users/:id` → `{ id: '1' }`). |
+| `query` | Parsed query string parameters. |
+| `headers` | Lowercased request headers. |
+| `body` | Parsed request body. JSON bodies are parsed by the server adapter. |
+| `raw` | Raw underlying request from the server adapter. Cast to access adapter-specific APIs. |
+
+---
+
+## `AppResponse`
+
+```ts
+interface AppResponse {
+  status(code: number): AppResponse
+  header(key: string, value: string): AppResponse
+  json(data: unknown): void
+  send(body: string): void
+  redirect(url: string, code?: number): void
+  raw: unknown
 }
+```
 
-// Type a server adapter factory
-const myAdapter: ServerAdapterFactory = (config) => ({
-  createServer: (handler) => { /* ... */ },
-})
+`status()` and `header()` return `this` for chaining. `json()`, `send()`, and `redirect()` are terminal — they send the response and return `void`.
+
+```ts
+res.status(422).header('X-Custom', 'value').json({ error: 'Invalid' })
 ```
 
 ---
 
-## API Reference
+## `RouteHandler` and `MiddlewareHandler`
 
-| Type | Kind | Description |
-|---|---|---|
-| `AppRequest` | Interface | Normalised incoming HTTP request passed to route handlers and middleware. |
-| `AppResponse` | Interface | Response builder passed alongside `AppRequest` — fluent methods for JSON, status, headers, and redirects. |
-| `RouteHandler` | Type alias | `(req: AppRequest, res: AppResponse) => unknown \| Promise<unknown>` |
-| `MiddlewareHandler` | Type alias | `(req: AppRequest, res: AppResponse, next: NextFn) => unknown \| Promise<unknown>` |
-| `HttpMethod` | Union type | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE' \| 'HEAD' \| 'OPTIONS'` |
-| `RouteDefinition` | Interface | Describes a registered route — `method`, `path`, `handler`, optional `middleware`. |
-| `ServerAdapter` | Interface | Runtime server adapter returned by an adapter factory — `createServer(handler)`, `listen(port)`, `close()`. |
-| `ServerAdapterFactory` | Type alias | `(config: unknown) => ServerAdapter` — the shape of `hono()`, `express()`, etc. |
-| `ServerAdapterProvider` | Interface | Used internally by `Application.configure()` to wire the adapter into the bootstrap. |
-| `FetchHandler` | Type alias | `(req: Request) => Promise<Response>` — WinterCG-compatible fetch handler, used by `BoostKit.handleRequest`. |
+```ts
+import type { RouteHandler, MiddlewareHandler } from '@boostkit/contracts'
 
----
+const handler: RouteHandler = async (req, res) => {
+  res.json({ id: req.params['id'] })
+}
 
-## AppRequest Fields
+const auth: MiddlewareHandler = async (req, res, next) => {
+  if (!req.headers['authorization']) {
+    return res.status(401).json({ message: 'Unauthorized' })
+  }
+  await next()
+}
+```
 
-| Field | Type | Description |
-|---|---|---|
-| `method` | `HttpMethod` | HTTP method in uppercase. |
-| `path` | `string` | URL pathname, without query string. |
-| `params` | `Record<string, string>` | Route parameters extracted from the path pattern (e.g. `/users/:id` → `{ id: '1' }`). |
-| `query` | `Record<string, string>` | Parsed query string parameters. |
-| `body` | `unknown` | Parsed request body. JSON bodies are parsed automatically by the server adapter. |
-| `headers` | `Record<string, string>` | Lowercased request headers. |
-| `raw` | `unknown` | The raw underlying request object from the server adapter (e.g. Hono `Context`). Cast as needed. |
+`next` takes no arguments — it advances the middleware pipeline.
 
 ---
 
-## AppResponse Methods
+## `HttpMethod`
 
-| Method | Signature | Description |
-|---|---|---|
-| `json` | `(data: unknown) => Response` | Serialises `data` as JSON and sets `Content-Type: application/json`. |
-| `status` | `(code: number) => AppResponse` | Sets the HTTP status code. Returns `this` for chaining. |
-| `send` | `(body: string) => Response` | Sends a plain text response. |
-| `redirect` | `(url: string, code?: number) => Response` | Issues an HTTP redirect. Defaults to `302`. |
-| `header` | `(key: string, value: string) => AppResponse` | Appends a response header. Returns `this` for chaining. |
+```ts
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
+```
+
+`'ALL'` is a BoostKit-specific wildcard used by the router to match any HTTP method.
+
+---
+
+## `ServerAdapter`
+
+Implemented by server adapter packages (e.g. `@boostkit/server-hono`). Not implemented directly in application code.
+
+```ts
+interface ServerAdapter {
+  registerRoute(route: RouteDefinition): void
+  applyMiddleware(middleware: MiddlewareHandler): void
+  listen(port: number, callback?: () => void): void
+  getNativeServer(): unknown
+}
+```
+
+---
+
+## `ServerAdapterProvider`
+
+The shape returned by adapter factory functions like `hono(config)`. Consumed by `Application.configure({ server })`.
+
+```ts
+interface ServerAdapterProvider {
+  type: string
+  create(): ServerAdapter
+  createApp(): unknown
+  createFetchHandler(setup?: (adapter: ServerAdapter) => void): Promise<FetchHandler>
+}
+```
 
 ---
 
 ## Notes
 
-- This package contains no runtime code. Bundlers with `sideEffects: false` support will tree-shake it completely.
-- Prefer `import type` in application-level files to guarantee zero runtime cost.
-- Server adapters (e.g. `@boostkit/server-hono`) are responsible for mapping their native request/response objects to `AppRequest` / `AppResponse`.
-- The `raw` field on `AppRequest` gives escape-hatch access to adapter-specific APIs when needed (e.g. reading cookies from the Hono context).
+- No runtime code — `sideEffects: false`, fully tree-shakable.
+- All types are re-exported from `@boostkit/core` — install `@boostkit/contracts` directly only when building adapters or packages that must not depend on `@boostkit/core`.
+- The `raw` field on both `AppRequest` and `AppResponse` provides escape-hatch access to adapter-specific APIs when needed.
+- Module augmentation on `AppRequest` (e.g. adding `session`) is supported — declare it in your package or app alongside the import.
