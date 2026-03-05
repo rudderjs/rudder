@@ -19,7 +19,11 @@ export abstract class Middleware {
 // ─── Pipeline ─────────────────────────────────────────────
 
 export class Pipeline {
-  private middleware: MiddlewareHandler[] = []
+  private middleware: MiddlewareHandler[]
+
+  constructor(middleware: MiddlewareHandler[] = []) {
+    this.middleware = middleware
+  }
 
   static make(): Pipeline {
     return new Pipeline()
@@ -240,17 +244,6 @@ export function CsrfMiddleware(options?: CsrfOptions): MiddlewareHandler {
   return new _CsrfMiddleware(options).toHandler()
 }
 
-/**
- * Read the CSRF token from the browser cookie.
- * Use this on the client side to get the token for request headers.
- *
- * @example
- * fetch('/api/contact', {
- *   method: 'POST',
- *   headers: { 'X-CSRF-Token': getCsrfToken(), 'Content-Type': 'application/json' },
- *   body: JSON.stringify(data),
- * })
- */
 /**
  * Read the CSRF token from the browser cookie (client-side only).
  * Safe to call in SSR — returns '' on the server.
