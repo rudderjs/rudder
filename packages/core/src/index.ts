@@ -241,8 +241,28 @@ export class BoostKit {
     this._providerBoot = this._bootstrapProviders()
   }
 
+  /** Suppress Vike's per-request console noise — we log those ourselves via [boostkit]. */
+  private _suppressVikeNoise(): void {
+    const isNoise = (args: unknown[]): boolean => {
+      const msg = args.map(a => String(a ?? '')).join(' ')
+      return msg.includes('[vike]') && (
+        msg.includes('HTTP request')            ||
+        msg.includes('HTTP response')           ||
+        msg.includes("doesn't match the route") ||
+        msg.includes('thrown by')
+      )
+    }
+    const _log  = console.log
+    const _warn = console.warn
+    const _info = console.info
+    console.log  = (...a: unknown[]) => { if (!isNoise(a)) _log(...a)  }
+    console.warn = (...a: unknown[]) => { if (!isNoise(a)) _warn(...a) }
+    console.info = (...a: unknown[]) => { if (!isNoise(a)) _info(...a) }
+  }
+
   /** Phase 1 — boot service providers then load routes. Safe in CLI (no Vike virtual URLs). */
   private async _bootstrapProviders(): Promise<void> {
+    this._suppressVikeNoise()
     if (this._app.isDevelopment()) {
       artisan.reset()
       const { router } = await import('@boostkit/router') as { router: { reset(): void } }
