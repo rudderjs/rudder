@@ -161,3 +161,6 @@ export class Router {
 // ─── Global router instance ────────────────────────────────
 
 export const router = new Router()
+
+/** Alias for router — Laravel-style capitalised name */
+export const Route = router
