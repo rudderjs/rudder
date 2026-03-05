@@ -1,27 +1,42 @@
 # @boostkit/di
 
-Dependency injection container with decorators for constructor injection.
+Dependency injection container with decorator-based constructor injection.
 
 ```bash
-pnpm add @boostkit/di
+pnpm add @boostkit/di reflect-metadata
 ```
 
-> `reflect-metadata` must also be installed as a regular dependency and imported once at your application entry point.
+> Install `reflect-metadata` as a regular dependency — it is required at runtime. Import it once at the top of your application entry point, before any other imports that use decorators.
 
-```bash
-pnpm add reflect-metadata
+---
+
+## Setup
+
+`tsconfig.json` must have:
+
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
+`bootstrap/app.ts` (or equivalent entry point):
+
+```ts
+import 'reflect-metadata'
+// all other imports follow
 ```
 
 ---
 
-## Usage
+## `@Injectable()` and `@Inject(token)`
 
-### @Injectable and @Inject
-
-Mark a class with `@Injectable()` to allow the container to auto-resolve it. Use `@Inject(token)` to override a specific constructor parameter's resolution token.
+Mark a class with `@Injectable()` to allow the container to auto-resolve it from constructor parameter types. Use `@Inject(token)` to override a specific parameter's resolution key.
 
 ```ts
-import 'reflect-metadata'
 import { Injectable, Inject, container } from '@boostkit/di'
 
 @Injectable()
@@ -32,11 +47,6 @@ class DatabaseConnection {
 @Injectable()
 class UserRepository {
   constructor(private db: DatabaseConnection) {}
-
-  findAll() {
-    this.db.connect()
-    // ...
-  }
 }
 
 @Injectable()
@@ -47,84 +57,91 @@ class UserService {
   ) {}
 }
 
-// Bind a plain value under a string token
 container.instance('config', { host: 'localhost' })
 
-// Auto-resolve — DatabaseConnection and UserRepository are injected automatically
+// DatabaseConnection and UserRepository are injected automatically
 const service = container.make(UserService)
 ```
 
-### Manual Bindings
+---
+
+## Manual Bindings
 
 ```ts
 import { container } from '@boostkit/di'
-import { PaymentService } from './PaymentService.js'
-import { StripePaymentService } from './StripePaymentService.js'
 
-// Factory binding — new instance every call
+// Factory — new instance on every make()
 container.bind(PaymentService, () => new StripePaymentService())
 
-// Singleton — same instance every call
-container.singleton(PaymentService, (c) => new StripePaymentService())
+// Singleton — created once, cached forever
+container.singleton('mailer', c => new Mailer(c.make('config')))
 
-// Pre-built instance
-container.instance(PaymentService, new StripePaymentService())
+// Pre-built value
+container.instance('app.name', 'BoostKit')
 
-// Alias — resolve 'payment' as PaymentService
+// Alias — make('payment') resolves PaymentService
 container.alias('payment', PaymentService)
-
-const svc = container.make<PaymentService>('payment')
+container.make<PaymentService>('payment')
 ```
 
 ---
 
 ## Container API
 
-The global `container` singleton (and any `Container` instance) exposes the following methods.
+All mutating methods return `this` for fluent chaining. Tokens can be a `string`, `symbol`, or `Constructor` (keyed by class name).
 
-| Method | Signature | Description |
-|---|---|---|
-| `bind` | `(token, factory: (c: Container) => T) => void` | Registers a factory. A new instance is created on every `make()` call. |
-| `singleton` | `(token, factory: (c: Container) => T) => void` | Registers a singleton factory. The instance is created once and cached. |
-| `instance` | `(token, value: T) => void` | Registers a pre-built value. Always returns the same object. |
-| `alias` | `(alias, target) => void` | Maps `alias` to `target`. `make(alias)` resolves `target`. |
-| `make<T>` | `(token) => T` | Resolves `token` from the container. If the token is an `@Injectable` class with no explicit binding, it is auto-resolved via constructor metadata. |
-| `has` | `(token) => boolean` | Returns `true` if `token` has a binding, instance, or alias registered. |
-| `forget` | `(token) => void` | Removes the binding for `token`. |
-| `reset` | `() => void` | Clears all bindings, instances, and aliases from the container. |
+| Method | Description |
+|---|---|
+| `bind(token, factory)` | Factory binding — new instance on every `make()`. Factory receives the `Container` as its argument. |
+| `singleton(token, factory)` | Singleton — factory runs once; result is cached for subsequent calls. |
+| `instance(token, value)` | Registers a pre-built value. Always returns the same object reference. |
+| `alias(from, to)` | Maps the string `from` to `to`. `make(from)` resolves `to`. |
+| `make<T>(token)` | Resolves the token. If the token is an `@Injectable` class with no explicit binding, auto-resolves via constructor metadata. Throws if no binding is found. |
+| `has(token)` | `true` if the token (or its alias target) has a binding or instance registered. |
+| `forget(token)` | Removes the binding and any cached singleton instance for the token. Returns `this`. |
+| `reset()` | Clears all bindings, instances, and aliases. Returns `this`. |
 
 ---
 
-## @Injectable()
+## `@Injectable()`
 
 ```ts
 @Injectable()
 class MyService { ... }
 ```
 
-Decorating a class with `@Injectable()` instructs the container to use TypeScript constructor metadata (emitted by `emitDecoratorMetadata`) for auto-resolution. Without this decorator, `container.make(MyService)` will throw if no explicit binding exists.
+Decorating a class with `@Injectable()` instructs the container to read TypeScript's emitted `design:paramtypes` metadata for auto-resolution. Without this decorator, `container.make(MyClass)` throws unless an explicit binding exists.
 
 ---
 
-## @Inject(token)
+## `@Inject(token)`
 
 ```ts
 constructor(@Inject('redis') private cache: CacheClient) {}
 ```
 
-Overrides the resolution token for a specific constructor parameter. Use this when the parameter type is an interface (erased at runtime), a primitive, or a string-keyed binding.
+Overrides the resolution token for a specific constructor parameter. Use this when the parameter type is an interface (erased at runtime), a primitive, or a string/symbol-keyed binding.
 
 ---
 
-## container Global Singleton
+## `container` Global Singleton
 
-`container` is a module-level singleton stored on `globalThis.__boostkit_container__`. It is shared across the entire process, including dynamic imports and hot-module boundaries. All service providers and the `app()` / `resolve()` helpers from `@boostkit/core` use this same instance.
+`container` is a module-level singleton exported from `@boostkit/di` and re-exported from `@boostkit/core`. All service providers, `app().make()`, and `resolve()` use this same instance.
+
+```ts
+import { container } from '@boostkit/core'
+
+const service = container.make(UserService)
+// equivalent to:
+import { resolve } from '@boostkit/core'
+const service = resolve(UserService)
+```
 
 ---
 
 ## Notes
 
-- `reflect-metadata` must be imported **once**, at the very top of your application entry point (e.g. `src/index.ts`), before any other imports that use decorators. Importing it in individual service files is not sufficient.
-- Install `reflect-metadata` as a regular dependency (`pnpm add reflect-metadata`), not a devDependency. It is required at runtime.
+- Import `reflect-metadata` **once at the entry point** before any decorated class is loaded. Importing it inside individual service files is not sufficient.
+- `reflect-metadata` must be a regular dependency (`pnpm add reflect-metadata`), not a devDependency. It is required at runtime.
 - Enable `experimentalDecorators: true` and `emitDecoratorMetadata: true` in your `tsconfig.json`.
-- This package has `sideEffects: ["./dist/index.js"]` — it registers decorator metadata at import time and cannot be fully tree-shaken.
+- `sideEffects: ["./dist/index.js"]` — this package registers metadata at import time and cannot be fully tree-shaken.
