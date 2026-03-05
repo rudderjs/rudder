@@ -99,7 +99,7 @@ Env.has('REDIS_URL')               // boolean
 |---|---|---|
 | `get(key, fallback?)` | `string` | Returns the env value or the fallback. Throws if both are absent. |
 | `getNumber(key, fallback?)` | `number` | Coerces to number, or returns fallback. Throws if both absent or NaN. |
-| `getBool(key, fallback?)` | `boolean` | `'true'` / `'1'` → `true`; anything else → `false`. |
+| `getBool(key, fallback?)` | `boolean` | Case-insensitive `'true'` / `'1'` → `true`; anything else → `false`. |
 | `has(key)` | `boolean` | Returns `true` if the variable is set. |
 
 ---
@@ -165,7 +165,7 @@ users.count()   // 3
 | `count()` | Returns the number of items. |
 | `all()` | Returns the underlying array. |
 | `toArray()` | Returns a shallow copy of the underlying array. |
-| `toJSON()` | Returns the collection serialised as a JSON string. |
+| `toJSON()` | Returns the underlying `T[]` — allows `JSON.stringify(collection)` to serialize correctly. |
 
 ---
 
@@ -200,7 +200,7 @@ isObject({})                           // true
 | `omit(obj, keys)` | Returns a new object with the specified keys removed. |
 | `tap(value, fn)` | Calls `fn(value)` then returns `value`. |
 | `deepClone(value)` | Returns a deep clone via JSON round-trip. |
-| `isObject(value)` | Returns `true` for plain objects (not arrays or null). |
+| `isObject(value)` | Returns `true` for plain objects only — `false` for arrays, `null`, `Date`, `Map`, `Set`, `RegExp`. |
 
 ---
 

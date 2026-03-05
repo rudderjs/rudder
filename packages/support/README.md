@@ -2,6 +2,8 @@
 
 Shared utility primitives for BoostKit: collections, environment access, config lookup, debug helpers, and general-purpose functions.
 
+All exports are also available from `@boostkit/core` — you rarely need to install this package directly.
+
 ## Installation
 
 ```bash
@@ -12,18 +14,34 @@ pnpm add @boostkit/support
 
 ## `config()`
 
-Read values from the application's `ConfigRepository` using dot-notation keys.
+Read values from the application's `ConfigRepository` using dot-notation keys. The store is populated from your `config/` files at bootstrap time.
 
 ```ts
-import { config } from '@boostkit/core' // re-exported for convenience
+import { config } from '@boostkit/core'
 
 config('app.name')           // → 'BoostKit'
-config('app.env')            // → 'development'
+config('app.debug')          // → false
 config('cache.ttl', 60)      // → number (with fallback)
-config('database.default')   // → 'sqlite'
 ```
 
-The config store is populated from your `config/index.ts` at bootstrap time via `Application.configure({ config: configs })`. Keys follow the `file.key` pattern — `app.name` reads `configs.app.name`.
+Keys follow the `file.key` pattern — `app.name` reads `configs.app.name` from `config/index.ts`.
+
+### `ConfigRepository` class
+
+```ts
+import { ConfigRepository } from '@boostkit/support'
+
+const repo = new ConfigRepository({ db: { host: 'localhost', port: 5432 } })
+
+repo.get('db.host')            // 'localhost'
+repo.get('db.port', 3306)      // 5432   (falsy-safe — 0, false, '' are returned as-is)
+repo.get('db.missing', 'n/a')  // 'n/a'
+repo.has('db.host')            // true
+repo.set('db.name', 'myapp')   // creates nested key
+repo.all()                     // entire data object
+```
+
+`set()` silently ignores keys containing `__proto__`, `constructor`, or `prototype`.
 
 ---
 
@@ -34,22 +52,21 @@ Debug helpers inspired by Laravel.
 ```ts
 import { dd, dump } from '@boostkit/core'
 
-// dump() — pretty-prints to the terminal and continues
+// dump() — pretty-prints and continues
 dump({ user, session })
+dump(req.body, req.headers)   // multiple args supported
 
-// dd() — pretty-prints then terminates the process (server restart required)
+// dd() — pretty-prints then terminates the process
 dd(req.body)
 ```
 
-`dd` stands for *dump and die*. Both accept multiple arguments and format them with `JSON.stringify` + 2-space indent.
-
-> In the playground, visit `GET /api/debug/dump` and `GET /api/debug/dd` to see these in action.
+Both format arguments with `JSON.stringify` at 2-space indent. `dd()` calls `process.exit(1)` — development use only.
 
 ---
 
 ## `env()`
 
-Simple helper for reading a string env variable — consistent with `config()` and `dd()`.
+Read a string environment variable.
 
 ```ts
 import { env } from '@boostkit/support'
@@ -58,7 +75,7 @@ env('APP_NAME', 'BoostKit')   // → 'BoostKit'
 env('APP_ENV')                // throws if missing and no fallback
 ```
 
-For typed access use `Env`:
+---
 
 ## `Env`
 
@@ -69,21 +86,28 @@ import { Env } from '@boostkit/support'
 
 Env.get('APP_NAME', 'BoostKit')       // string  (throws if missing and no fallback)
 Env.getNumber('PORT', 3000)           // number
-Env.getBool('APP_DEBUG', false)       // boolean
+Env.getBool('APP_DEBUG', false)       // boolean — case-insensitive 'true' | '1' → true
 Env.has('REDIS_URL')                  // boolean
 ```
+
+| Method | Return | Description |
+|---|---|---|
+| `get(key, fallback?)` | `string` | Returns the value or fallback. Throws if both are absent. |
+| `getNumber(key, fallback?)` | `number` | Coerces to number. Throws if absent or NaN. |
+| `getBool(key, fallback?)` | `boolean` | Case-insensitive `'true'` / `'1'` → `true`; everything else → `false`. |
+| `has(key)` | `boolean` | `true` if the variable is set in `process.env`. |
 
 ---
 
 ## `defineEnv()`
 
-Validate environment variables at startup using a Zod schema. Throws with a clear error listing all missing/invalid keys.
+Validate environment variables at startup using a Zod schema. Throws with a clear error listing all missing/invalid keys before the application boots.
 
 ```ts
 import { defineEnv } from '@boostkit/support'
 import { z } from 'zod'
 
-const env = defineEnv(z.object({
+export const env = defineEnv(z.object({
   DATABASE_URL: z.string().url(),
   PORT:         z.coerce.number().default(3000),
   APP_DEBUG:    z.enum(['true', 'false']).transform(v => v === 'true').default('false'),
@@ -97,39 +121,85 @@ env.APP_DEBUG // boolean
 
 ## `Collection<T>`
 
-Fluent wrapper around arrays.
+Fluent, typed wrapper around arrays — inspired by Laravel Collections.
 
 ```ts
 import { Collection } from '@boostkit/support'
 
-const users = Collection.of([{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }])
+const users = Collection.of([
+  { id: 1, name: 'Alice', role: 'admin' },
+  { id: 2, name: 'Bob',   role: 'user' },
+])
 
-users.count()                    // 2
-users.first()                    // { id: 1, name: 'Alice' }
-users.pluck('name').toArray()    // ['Alice', 'Bob']
-users.filter(u => u.id > 1).all() // [{ id: 2, name: 'Bob' }]
-users.groupBy('name')            // { Alice: [...], Bob: [...] }
+users.filter(u => u.role === 'admin').pluck('name').toArray()
+// → ['Alice']
+
+users.groupBy('role')   // → { admin: [...], user: [...] }
+users.first()           // { id: 1, name: 'Alice', role: 'admin' }
+users.count()           // 2
+
+JSON.stringify(users)   // '[{"id":1,...},{"id":2,...}]'  — no double-encoding
 ```
+
+| Method | Description |
+|---|---|
+| `map<U>(fn)` | Transforms each item; returns a new `Collection<U>`. |
+| `filter(fn)` | Keeps items matching the predicate. |
+| `find(fn)` | First matching item, or `undefined`. |
+| `first()` | First item, or `undefined`. |
+| `last()` | Last item, or `undefined`. |
+| `pluck(key)` | Extracts a single field from each item. |
+| `groupBy(key)` | Groups into `Record<string, T[]>`. |
+| `each(fn)` | Iterates; returns `this` for chaining. |
+| `contains(fn)` | `true` if any item matches the predicate. |
+| `isEmpty()` | `true` when the collection has no items. |
+| `count()` | Number of items. |
+| `all()` | The underlying array. |
+| `toArray()` | Shallow copy of the underlying array. |
+| `toJSON()` | Returns `T[]` — makes `JSON.stringify(collection)` produce correct output. |
 
 ---
 
-## General helpers
+## Helper Functions
 
 ```ts
 import { sleep, ucfirst, pick, omit, tap, deepClone, isObject, toSnakeCase, toCamelCase } from '@boostkit/support'
 
-await sleep(500)                                  // delay ms
-ucfirst('hello world')                            // 'Hello world'
+await sleep(500)
+
+ucfirst('hello world')                                    // 'Hello world'
+toSnakeCase('fooBarBaz')                                  // 'foo_bar_baz'
+toCamelCase('foo_bar_baz')                                // 'fooBarBaz'
+
 pick({ id: 1, name: 'A', secret: 'x' }, ['id', 'name'])  // { id: 1, name: 'A' }
-omit({ id: 1, secret: 'x' }, ['secret'])          // { id: 1 }
-tap(new Map(), m => m.set('key', 1))              // returns the Map after calling fn
-toSnakeCase('fooBarBaz')                          // 'foo_bar_baz'
-toCamelCase('foo_bar_baz')                        // 'fooBarBaz'
+omit({ id: 1, secret: 'x' }, ['secret'])                  // { id: 1 }
+
+tap(new Map(), m => m.set('key', 1))                      // returns the Map
+deepClone({ nested: { value: 1 } })                       // deep copy via JSON round-trip
+
+isObject({})          // true
+isObject(new Date())  // false — only plain objects pass
+isObject([])          // false
+isObject(null)        // false
 ```
+
+| Function | Description |
+|---|---|
+| `sleep(ms)` | Resolves after `ms` milliseconds. |
+| `ucfirst(str)` | Capitalises the first character. |
+| `toSnakeCase(str)` | `camelCase` / `PascalCase` → `snake_case`. |
+| `toCamelCase(str)` | `snake_case` → `camelCase`. |
+| `pick(obj, keys)` | New object with only the specified keys. |
+| `omit(obj, keys)` | New object with the specified keys removed. |
+| `tap(value, fn)` | Calls `fn(value)` and returns `value`. |
+| `deepClone(value)` | Deep clone via JSON round-trip. |
+| `isObject(value)` | `true` for plain objects only — `false` for `Date`, `Map`, arrays, `null`. |
 
 ---
 
 ## Notes
 
-- All helpers are also re-exported from `@boostkit/core` — you rarely need to import `@boostkit/support` directly.
-- `resolveOptionalPeer()` resolves optional package integrations from the app root (used internally by adapters).
+- All exports are re-exported from `@boostkit/core` — you rarely need to import `@boostkit/support` directly.
+- `defineEnv()` validates eagerly at module evaluation time — failures surface at boot.
+- `dd()` calls `process.exit(1)` — development use only.
+- `resolveOptionalPeer()` resolves optional peer packages from the app root — used internally by adapters.
