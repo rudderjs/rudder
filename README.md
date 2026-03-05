@@ -90,17 +90,32 @@ export default Application.configure({
 
 ```ts
 // routes/api.ts
-import { router } from '@boostkit/router'
+import { Route } from '@boostkit/router'
 
-router.get('/api/users', async (_req, res) => {
+Route.get('/api/users', async (_req, res) => {
   const users = await User.all()
   return res.json({ data: users })
 })
 
-router.post('/api/users', async (req, res) => {
+Route.post('/api/users', async (req, res) => {
   const user = await User.create(req.body)
   return res.status(201).json({ data: user })
 })
+```
+
+```ts
+// routes/console.ts
+import { Artisan }  from '@boostkit/artisan'
+import { Schedule } from '@boostkit/schedule'
+
+Artisan.command('db:seed', async () => {
+  await User.create({ name: 'Alice', email: 'alice@example.com' })
+  console.log('Done.')
+}).description('Seed the database')
+
+Schedule.call(async () => {
+  await Cache.forget('users:all')
+}).everyFiveMinutes().description('Flush users cache')
 ```
 
 ```ts
