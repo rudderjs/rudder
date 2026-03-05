@@ -68,8 +68,8 @@ export class Collection<T> {
     return [...this.items]
   }
 
-  toJSON(): string {
-    return JSON.stringify(this.items)
+  toJSON(): T[] {
+    return this.items
   }
 }
 
@@ -102,7 +102,7 @@ export const Env = {
       if (fallback !== undefined) return fallback
       throw new Error(`Missing environment variable: ${key}`)
     }
-    return val === 'true' || val === '1'
+    return val.toLowerCase() === 'true' || val === '1'
   },
 
   has(key: string): boolean {
@@ -111,7 +111,7 @@ export const Env = {
 }
 
 export function env(key: string, fallback?: string): string {
-  return Env.get(key, fallback as string)
+  return Env.get(key, fallback)
 }
 
 // ─── Debug Helpers ─────────────────────────────────────────
@@ -141,8 +141,11 @@ export const toSnakeCase = (str: string): string =>
 export const toCamelCase = (str: string): string =>
   str.replace(/_([a-z])/g, (_, l) => l.toUpperCase())
 
-export const isObject = (val: unknown): val is Record<string, unknown> =>
-  typeof val === 'object' && val !== null && !Array.isArray(val)
+export const isObject = (val: unknown): val is Record<string, unknown> => {
+  if (typeof val !== 'object' || val === null) return false
+  const proto = Object.getPrototypeOf(val) as unknown
+  return proto === Object.prototype || proto === null
+}
 
 export const deepClone = <T>(val: T): T =>
   JSON.parse(JSON.stringify(val))
@@ -181,11 +184,13 @@ export class ConfigRepository {
       }
       current = (current as Record<string, unknown>)[part]
     }
-    return (current ?? fallback) as T
+    return (current !== undefined ? current : fallback) as T
   }
 
   set(key: string, value: unknown): void {
     const parts = key.split('.')
+    const dangerous = new Set(['__proto__', 'constructor', 'prototype'])
+    if (parts.some(p => dangerous.has(p))) return
     let current = this.data
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i]!
