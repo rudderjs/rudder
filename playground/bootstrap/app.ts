@@ -3,7 +3,7 @@ import 'dotenv/config'
 import { Application } from '@boostkit/core'
 import { hono } from '@boostkit/server-hono'
 import { RateLimit } from '@boostkit/middleware'
-import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
+import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -20,7 +20,7 @@ export default Application.configure({
   .withMiddleware((m) => {
     // Truly global middleware — applied to every request regardless of route group
     m.use(RateLimit.perMinute(60).toHandler())
-    m.use(new RequestIdMiddleware().toHandler())
+    m.use(requestIdMiddleware)
   })
   .withExceptions((_e) => {
     // future: exception reporting and rendering

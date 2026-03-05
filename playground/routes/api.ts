@@ -7,7 +7,7 @@ import { RateLimit } from '@boostkit/middleware'
 import { notify } from '@boostkit/notification'
 import { UserService } from '../app/Services/UserService.js'
 import { AuthMiddleware } from '../app/Middleware/AuthMiddleware.js'
-import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
+import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 import { CreateUserRequest } from '../app/Requests/CreateUserRequest.js'
 import { TestController } from '../app/Controllers/TestController.js'
@@ -67,7 +67,7 @@ Route.get('/api/me', async (req) => {
   return Response.json(session ?? { user: null, session: null })
 })
 
-// Route.get('/id', (_req, res) => res.json({ id: res.header('X-Request-Id') }), [RequestIdMiddleware])  // example of using the RequestIdMiddleware on a specific route
+// Route.get('/id', (_req, res) => res.json({ id: res.header('X-Request-Id') }), [requestIdMiddleware])  // example of using requestIdMiddleware on a specific route
 
 // Public routes — no auth required
 // Results are cached for 60 s — subsequent calls skip the DB query
