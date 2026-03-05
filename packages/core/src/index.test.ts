@@ -1,19 +1,31 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Application, defineConfig, parseSignature, artisan, container } from './index.js'
+import {
+  Application,
+  AppBuilder,
+  MiddlewareConfigurator,
+  ServiceProvider,
+  defineConfig,
+  parseSignature,
+  Artisan,
+  artisan,
+  CancelledError,
+  app,
+  resolve,
+  container,
+} from './index.js'
 
-function resetSingleton(): void {
-  ;(Application as unknown as Record<string, unknown>)['instance'] = undefined
-  ;(globalThis as Record<string, unknown>)['__boostkit_app__'] = undefined
+function reset(): void {
+  Application.resetForTesting()
+  container.reset()
+  Artisan.reset()
 }
 
+// ─── Application ──────────────────────────────────────────
+
 describe('Application', () => {
-  beforeEach(() => {
-    resetSingleton()
-    container.reset()
-    artisan.reset()
-  })
+  beforeEach(reset)
 
   it('create() returns the same instance on a second call', () => {
     const app1 = Application.create({ name: 'TestApp', env: 'production' })
@@ -27,66 +39,255 @@ describe('Application', () => {
     assert.notStrictEqual(app1, app2)
   })
 
+  it('getInstance() throws when no instance has been created', () => {
+    assert.throws(() => Application.getInstance(), /Application has not been created yet/)
+  })
+
+  it('getInstance() returns the same instance after create()', () => {
+    const created = Application.create({ env: 'production' })
+    assert.strictEqual(Application.getInstance(), created)
+  })
+
+  it('name/env/debug are set from config', () => {
+    const a = Application.create({ name: 'MyApp', env: 'staging', debug: true })
+    assert.strictEqual(a.name, 'MyApp')
+    assert.strictEqual(a.env, 'staging')
+    assert.strictEqual(a.debug, true)
+  })
+
+  it('isProduction() returns true only for production env', () => {
+    assert.ok(Application.create({ env: 'production' }).isProduction())
+    reset()
+    assert.ok(!Application.create({ env: 'local' }).isProduction())
+  })
+
+  it('isDevelopment() returns true for local and development', () => {
+    assert.ok(Application.create({ env: 'local' }).isDevelopment())
+    reset()
+    assert.ok(Application.create({ env: 'development' }).isDevelopment())
+    reset()
+    assert.ok(!Application.create({ env: 'production' }).isDevelopment())
+  })
+
   it('bootstrap() runs register then boot in order', async () => {
     const order: string[] = []
 
-    class TestProvider {
-      constructor(_app: Application) {}
+    class TestProvider extends ServiceProvider {
       register() { order.push('register') }
-      async boot()   { order.push('boot') }
+      async boot() { order.push('boot') }
     }
 
-    const app = Application.create({ providers: [TestProvider as any] })
-    await app.bootstrap()
-
+    const a = Application.create({ providers: [TestProvider], env: 'production' })
+    await a.bootstrap()
     assert.deepStrictEqual(order, ['register', 'boot'])
   })
 
-  it('isBooted() is true after bootstrap()', async () => {
-    const app = Application.create()
-    assert.strictEqual(app.isBooted(), false)
-    await app.bootstrap()
-    assert.strictEqual(app.isBooted(), true)
+  it('bootstrap() runs all providers in registration order', async () => {
+    const order: string[] = []
+
+    class ProviderA extends ServiceProvider {
+      register() { order.push('A:register') }
+      async boot() { order.push('A:boot') }
+    }
+    class ProviderB extends ServiceProvider {
+      register() { order.push('B:register') }
+      async boot() { order.push('B:boot') }
+    }
+
+    const a = Application.create({ providers: [ProviderA, ProviderB], env: 'production' })
+    await a.bootstrap()
+    assert.deepStrictEqual(order, ['A:register', 'B:register', 'A:boot', 'B:boot'])
   })
 
-  it('defineConfig() returns the config object unchanged', () => {
-    const cfg = { server: 'hono', ui: 'react' }
-    assert.deepStrictEqual(defineConfig(cfg), cfg)
+  it('isBooted() is false before bootstrap, true after', async () => {
+    const a = Application.create()
+    assert.strictEqual(a.isBooted(), false)
+    await a.bootstrap()
+    assert.strictEqual(a.isBooted(), true)
+  })
+
+  it('bootstrap() is idempotent — second call is a no-op', async () => {
+    const order: string[] = []
+    class TestProvider extends ServiceProvider {
+      register() { order.push('register') }
+      async boot() { order.push('boot') }
+    }
+    const a = Application.create({ providers: [TestProvider], env: 'production' })
+    await a.bootstrap()
+    await a.bootstrap()
+    assert.deepStrictEqual(order, ['register', 'boot'])
   })
 })
 
-describe('Core contract baseline', () => {
-  beforeEach(() => {
-    artisan.reset()
+// ─── Container proxy methods ──────────────────────────────
+
+describe('Application container proxies', () => {
+  beforeEach(reset)
+
+  it('instance() binds a value and make() returns it', () => {
+    const a = Application.create({ env: 'production' })
+    a.instance('myKey', { value: 42 })
+    assert.deepStrictEqual(a.make('myKey'), { value: 42 })
   })
+
+  it('bind() registers a factory resolved fresh each call', () => {
+    const a = Application.create({ env: 'production' })
+    let count = 0
+    a.bind('counter', () => ++count)
+    assert.strictEqual(a.make('counter'), 1)
+    assert.strictEqual(a.make('counter'), 2)
+  })
+
+  it('singleton() resolves factory only once', () => {
+    const a = Application.create({ env: 'production' })
+    let count = 0
+    a.singleton('once', () => ++count)
+    assert.strictEqual(a.make('once'), 1)
+    assert.strictEqual(a.make('once'), 1)
+  })
+
+  it('instance/bind/singleton return this for chaining', () => {
+    const a = Application.create({ env: 'production' })
+    const result = a.instance('x', 1).bind('y', () => 2).singleton('z', () => 3)
+    assert.strictEqual(result, a)
+  })
+})
+
+// ─── Global helpers ───────────────────────────────────────
+
+describe('app() and resolve() helpers', () => {
+  beforeEach(reset)
+
+  it('app() throws when no instance exists', () => {
+    assert.throws(() => app(), /Application has not been created yet/)
+  })
+
+  it('app() returns the Application instance after create()', () => {
+    const a = Application.create({ env: 'production' })
+    assert.strictEqual(app(), a)
+  })
+
+  it('resolve() retrieves a binding from the container', () => {
+    const a = Application.create({ env: 'production' })
+    a.instance('greeting', 'hello')
+    assert.strictEqual(resolve('greeting'), 'hello')
+  })
+})
+
+// ─── Config binding ───────────────────────────────────────
+
+describe('Application config binding', () => {
+  beforeEach(reset)
+
+  it('binds ConfigRepository as "config" when config is provided', () => {
+    const a = Application.create({ config: { app: { name: 'Test' } }, env: 'production' })
+    const repo = a.make<{ get(key: string): unknown }>('config')
+    assert.strictEqual(repo.get('app.name'), 'Test')
+  })
+
+  it('config helper resolves nested keys', async () => {
+    const { config } = await import('./index.js')
+    Application.create({ config: { app: { env: 'test' } }, env: 'production' })
+    assert.strictEqual(config('app.env'), 'test')
+  })
+})
+
+// ─── MiddlewareConfigurator ───────────────────────────────
+
+describe('MiddlewareConfigurator', () => {
+  it('use() adds handlers and getHandlers() returns them in order', () => {
+    const m = new MiddlewareConfigurator()
+    const h1 = async () => {}
+    const h2 = async () => {}
+    m.use(h1).use(h2)
+    assert.deepStrictEqual(m.getHandlers(), [h1, h2])
+  })
+
+  it('starts with an empty handler list', () => {
+    assert.strictEqual(new MiddlewareConfigurator().getHandlers().length, 0)
+  })
+})
+
+// ─── AppBuilder ───────────────────────────────────────────
+
+describe('AppBuilder', () => {
+  beforeEach(reset)
+
+  it('Application.configure() returns an AppBuilder', () => {
+    const builder = Application.configure({
+      server: {} as never,
+    })
+    assert.ok(builder instanceof AppBuilder)
+  })
+
+  it('withRouting() returns the builder for chaining', () => {
+    const builder = Application.configure({ server: {} as never })
+    assert.strictEqual(builder.withRouting({}), builder)
+  })
+
+  it('withMiddleware() returns the builder for chaining', () => {
+    const builder = Application.configure({ server: {} as never })
+    assert.strictEqual(builder.withMiddleware(() => {}), builder)
+  })
+
+  it('withExceptions() returns the builder for chaining', () => {
+    const builder = Application.configure({ server: {} as never })
+    assert.strictEqual(builder.withExceptions(() => {}), builder)
+  })
+})
+
+// ─── defineConfig ─────────────────────────────────────────
+
+describe('defineConfig()', () => {
+  it('returns the config object unchanged', () => {
+    const cfg = { server: 'hono', ui: 'react' }
+    assert.deepStrictEqual(defineConfig(cfg), cfg)
+  })
+
+  it('preserves object identity', () => {
+    const cfg = { a: 1 }
+    assert.strictEqual(defineConfig(cfg), cfg)
+  })
+})
+
+// ─── Core contract baseline ───────────────────────────────
+
+describe('Core contract baseline', () => {
+  beforeEach(() => Artisan.reset())
 
   it('parseSignature() supports args, optional args, and options', () => {
     const parsed = parseSignature('users:create {name} {email?} {--admin} {--role=}')
 
     assert.strictEqual(parsed.name, 'users:create')
     assert.deepStrictEqual(parsed.args, [
-      { name: 'name', required: true, variadic: false },
+      { name: 'name',  required: true,  variadic: false },
       { name: 'email', required: false, variadic: false },
     ])
     assert.deepStrictEqual(parsed.opts, [
       { name: 'admin', hasValue: false },
-      { name: 'role', hasValue: true },
+      { name: 'role',  hasValue: true  },
     ])
   })
 
-  it('artisan registry stores commands with description metadata', () => {
+  it('Artisan registry stores commands with description metadata', () => {
     const unique = `test:contract:${Date.now()}`
     const cmd = artisan.command(unique, () => undefined).description('contract command')
 
-    const registered = artisan.getCommands().find(c => c.name === unique)
+    const registered = Artisan.getCommands().find(c => c.name === unique)
     assert.strictEqual(registered, cmd)
     assert.strictEqual(registered?.getDescription(), 'contract command')
   })
 
-  it('artisan.reset() clears registered commands', () => {
-    artisan.command(`test:reset:${Date.now()}`, () => undefined)
-    assert.ok(artisan.getCommands().length > 0)
-    artisan.reset()
-    assert.strictEqual(artisan.getCommands().length, 0)
+  it('Artisan.reset() clears registered commands', () => {
+    Artisan.command(`test:reset:${Date.now()}`, () => undefined)
+    assert.ok(Artisan.getCommands().length > 0)
+    Artisan.reset()
+    assert.strictEqual(Artisan.getCommands().length, 0)
+  })
+
+  it('CancelledError is re-exported from core', () => {
+    const err = new CancelledError()
+    assert.ok(err instanceof Error)
+    assert.strictEqual(err.name, 'CancelledError')
   })
 })

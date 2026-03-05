@@ -151,6 +151,16 @@ export class Application {
   static configure(options: ConfigureOptions): AppBuilder {
     return new AppBuilder(options)
   }
+
+  /**
+   * Reset the singleton for testing purposes.
+   * Do not call in production code.
+   * @internal
+   */
+  static resetForTesting(): void {
+    ;(Application as unknown as Record<string, unknown>)['instance'] = undefined
+    ;(globalThis as Record<string, unknown>)['__boostkit_app__'] = undefined
+  }
 }
 
 // ─── Configure Options ─────────────────────────────────────
@@ -307,7 +317,7 @@ export class BoostKit {
 
 // ─── Re-export artisan ─────────────────────────────────────
 
-export { artisan, Artisan, ArtisanRegistry, CommandBuilder, Command, parseSignature } from '@boostkit/artisan'
+export { artisan, Artisan, ArtisanRegistry, CommandBuilder, Command, CancelledError, parseSignature } from '@boostkit/artisan'
 export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@boostkit/artisan'
 
 // ─── Global helpers ────────────────────────────────────────
