@@ -526,7 +526,7 @@ function bootstrapProviders(ctx: TemplateContext): string {
   const todoProvider = ctx.withTodo ? `  TodoServiceProvider,\n` : ''
 
   return `import type { Application, ServiceProvider } from '@boostkit/core'
-import { betterAuth } from '@boostkit/auth'
+import { auth } from '@boostkit/auth'
 import { events } from '@boostkit/events'
 import { queue } from '@boostkit/queue'
 import { mail } from '@boostkit/mail'
@@ -540,7 +540,8 @@ import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 ${todoImport}import configs from '../config/index.js'
 
 export default [
-  betterAuth(configs.auth, configs.database.connections[configs.database.default as keyof typeof configs.database.connections]),
+  prismaProvider(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'
+  auth(configs.auth),                // auto-discovers 'prisma' from DI
   events({}),
   queue(configs.queue),
   mail(configs.mail),
@@ -549,7 +550,6 @@ export default [
   storage(configs.storage),
   session(configs.session),
   scheduler(),
-  prismaProvider(configs.database),  // must boot before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
 ${todoProvider}] satisfies (new (app: Application) => ServiceProvider)[]
 `

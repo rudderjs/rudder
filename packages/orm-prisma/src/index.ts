@@ -238,6 +238,7 @@ export function prismaProvider(config?: DatabaseConfig): new (app: Application) 
 
       ModelRegistry.set(adapter)
       this.app.instance('db', adapter)
+      this.app.instance('prisma', (adapter as any).prisma)
     }
   }
 

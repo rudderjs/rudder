@@ -11,6 +11,15 @@ const SSR_EXTERNALS = [
   '@boostkit/queue-bullmq',
   '@boostkit/mail-nodemailer',
   '@boostkit/orm-drizzle',
+  // Database drivers — Node.js-only, must not be bundled into the client
+  'pg',
+  'mysql2',
+  'better-sqlite3',
+  '@prisma/adapter-pg',
+  '@prisma/adapter-mysql2',
+  '@prisma/adapter-better-sqlite3',
+  '@prisma/adapter-libsql',
+  '@libsql/client',
 ]
 
 // ─── SSR no-externals ──────────────────────────────────────

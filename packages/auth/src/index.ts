@@ -103,7 +103,7 @@ function mapDriver(driver?: string): 'sqlite' | 'postgresql' | 'mysql' {
  *     ...
  *   ]
  */
-export function betterAuth(
+export function auth(
   config: BetterAuthConfig,
   dbConfig?: AuthDbConfig,
 ): new (app: Application) => ServiceProvider {
@@ -114,7 +114,14 @@ export function betterAuth(
       const { betterAuth: createAuth }  = await import('better-auth')
       const { prismaAdapter }           = await import('better-auth/adapters/prisma')
 
-      const prisma   = await createPrismaClient(dbConfig ?? {})
+      // Use prismaProvider's client if available (boot order: prismaProvider → betterAuth),
+      // otherwise create a dedicated client from dbConfig.
+      let prisma: unknown
+      try {
+        prisma = this.app.make('prisma')
+      } catch {
+        prisma = await createPrismaClient(dbConfig ?? {})
+      }
       const database = prismaAdapter(prisma as any, { provider: mapDriver(dbConfig?.driver) })
 
       const auth = createAuth({
@@ -149,6 +156,9 @@ export function betterAuth(
 
   return BetterAuthProvider
 }
+
+/** @deprecated use `auth()` instead */
+export const betterAuth = auth
 
 export type BetterAuthInstance = Awaited<ReturnType<typeof import('better-auth').betterAuth>>
 
