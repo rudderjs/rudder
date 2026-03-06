@@ -181,16 +181,17 @@ Receives a middleware configurator. Register global middleware here:
 
 ## Provider Boot Order
 
-Providers boot in array order. Most framework providers (betterAuth, queue, mail, cache, etc.) don't access the ORM during `boot()` — they only configure their own adapters. `DatabaseServiceProvider` just needs to appear **before `AppServiceProvider`** and any other provider whose `boot()` uses ORM models:
+Providers boot in array order. Most framework providers (auth, queue, mail, cache, etc.) don't access the ORM during `boot()` — they only configure their own adapters. `DatabaseServiceProvider` just needs to appear **before `AppServiceProvider`** and any other provider whose `boot()` uses ORM models:
 
 ```ts
 export default [
-  betterAuth(configs.auth),  // auth mounts /api/auth/* before routes load
+  prismaProvider(configs.database), // binds PrismaClient to DI as 'prisma'
+  auth(configs.auth),               // auto-discovers 'prisma' from DI
   queue(configs.queue),
   mail(configs.mail),
-  notifications(),           // must come after mail()
+  notifications(),                  // must come after mail()
   cache(configs.cache),
-  DatabaseServiceProvider,   // sets ModelRegistry — must precede AppServiceProvider
-  AppServiceProvider,        // may use ORM models during boot
+  DatabaseServiceProvider,          // sets ModelRegistry — must precede AppServiceProvider
+  AppServiceProvider,               // may use ORM models during boot
 ]
 ```

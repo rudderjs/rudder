@@ -50,23 +50,26 @@ List provider classes (not instances) in `bootstrap/providers.ts`:
 
 ```ts
 import type { Application, ServiceProvider } from '@boostkit/core'
-import { betterAuth }              from '@boostkit/auth'
+import { prismaProvider }          from '@boostkit/orm-prisma'
+import { auth }                    from '@boostkit/auth'
 import { queue }                   from '@boostkit/queue'
 import { cache }                   from '@boostkit/cache'
 import { mail }                    from '@boostkit/mail'
+import { session }                 from '@boostkit/session'
 import { notifications }           from '@boostkit/notification'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider }      from '../app/Providers/AppServiceProvider.js'
 import configs                     from '../config/index.js'
 
 export default [
-  betterAuth(configs.auth),   // auth mounts /api/auth/* before routes/api.ts loads
-  session(configs.session),   // must be registered before routes load
+  prismaProvider(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
+  auth(configs.auth),               // auto-discovers 'prisma' from DI
+  session(configs.session),
   queue(configs.queue),
   mail(configs.mail),
-  notifications(),            // must come after mail()
+  notifications(),                  // must come after mail()
   cache(configs.cache),
-  DatabaseServiceProvider,    // must appear before AppServiceProvider — sets ModelRegistry
+  DatabaseServiceProvider,          // must appear before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
 ```
@@ -74,8 +77,8 @@ export default [
 Some packages export **provider factories** (functions that return a provider class) rather than plain classes. The factory takes config and returns a class:
 
 ```ts
-// betterAuth(config) returns a class extending ServiceProvider
-const BetterAuthProvider = betterAuth(configs.auth)
+// auth(config) returns a class extending ServiceProvider
+const AuthProvider = auth(configs.auth)
 // → class BetterAuthProvider extends ServiceProvider { ... }
 ```
 
@@ -95,13 +98,14 @@ const service = app().make(UserService)
 
 | Factory | Package | What it registers |
 |---------|---------|------------------|
+| `prismaProvider(config)` | `@boostkit/orm-prisma` | PrismaClient bound to DI as `'prisma'` |
 | `queue(config)` | `@boostkit/queue` | Queue adapter, `queue:work` command |
 | `cache(config)` | `@boostkit/cache` | Cache adapter |
 | `storage(config)` | `@boostkit/storage` | Storage adapter, `storage:link` command |
 | `mail(config)` | `@boostkit/mail` | Mail adapter |
 | `events(listenMap)` | `@boostkit/events` | Event dispatcher, listener registration |
 | `scheduler()` | `@boostkit/schedule` | Schedule instance, `schedule:*` commands |
-| `betterAuth(config)` | `@boostkit/auth` | Auth instance, `/api/auth/*` routes |
+| `auth(config)` | `@boostkit/auth` | Auth instance, `/api/auth/*` routes |
 | `session(config)` | `@boostkit/session` | Session driver (cookie/redis), `SessionMiddleware()` factory |
 | `notifications()` | `@boostkit/notification` | Mail + database channels |
 

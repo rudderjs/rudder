@@ -100,6 +100,13 @@ export default defineConfig({
           text: 'Auth',
           items: [
             { text: '@boostkit/auth', link: '/packages/auth/' },
+            { text: 'Setup with better-auth', link: '/packages/auth/better-auth' },
+          ],
+        },
+        {
+          text: 'Session',
+          items: [
+            { text: '@boostkit/session', link: '/packages/session' },
           ],
         },
         {

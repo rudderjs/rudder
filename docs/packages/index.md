@@ -48,7 +48,7 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 
 | Package | Description | Install |
 |---|---|---|
-| [@boostkit/auth](./auth/) | Authentication types (AuthUser, AuthSession, AuthResult) + `betterAuth()` factory with Prisma wiring and `/api/auth/*` mount. | `pnpm add @boostkit/auth` |
+| [@boostkit/auth](./auth/) | Authentication types (AuthUser, AuthSession, AuthResult) + `auth()` factory with Prisma auto-discovery, `AuthMiddleware()`, and `/api/auth/*` mount. | `pnpm add @boostkit/auth` |
 
 ## Cache
 
@@ -68,6 +68,12 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 |---|---|---|
 | [@boostkit/mail](./mail/) | Mailable base class, Mail facade, built-in LogAdapter, and `mail()` factory. | `pnpm add @boostkit/mail` |
 | [@boostkit/mail-nodemailer](./mail/nodemailer) | Nodemailer SMTP adapter — optional peer for the `smtp` driver. | `pnpm add @boostkit/mail-nodemailer` |
+
+## Session
+
+| Package | Description | Install |
+|---|---|---|
+| [@boostkit/session](./session) | Cookie and Redis session drivers — `SessionMiddleware()`, `Session` facade, and `session()` factory. | `pnpm add @boostkit/session` |
 
 ## Features
 

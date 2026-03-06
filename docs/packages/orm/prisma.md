@@ -16,6 +16,38 @@ pnpm exec prisma db push       # sync schema to database (dev, no migration file
 pnpm exec prisma generate      # regenerate the Prisma client after schema changes
 ```
 
+## `prismaProvider()` (Recommended)
+
+The simplest way to wire Prisma is the `prismaProvider()` factory. It handles connection, ModelRegistry setup, and DI binding in one call:
+
+```ts
+// bootstrap/providers.ts
+import { prismaProvider } from '@boostkit/orm-prisma'
+import configs from '../config/index.js'
+
+export default [
+  prismaProvider(configs.database),  // connect + ModelRegistry.set() + bind 'prisma' to DI
+  // ...
+]
+```
+
+`prismaProvider` binds the raw `PrismaClient` to the DI container as `'prisma'`. This lets `auth()` from `@boostkit/auth` auto-discover it — no need to pass database config to `auth()` separately.
+
+A typical `config/database.ts`:
+
+```ts
+import { Env } from '@boostkit/support'
+
+export default {
+  default: Env.get('DB_DRIVER', 'sqlite') as 'sqlite' | 'postgresql' | 'libsql',
+  connections: {
+    sqlite:     { driver: 'sqlite'     as const, url: Env.get('DATABASE_URL', 'file:./dev.db') },
+    postgresql: { driver: 'postgresql' as const, url: Env.get('DATABASE_URL', '') },
+    libsql:     { driver: 'libsql'     as const, url: Env.get('DATABASE_URL', '') },
+  },
+}
+```
+
 ## DatabaseServiceProvider
 
 Wire the adapter in your `DatabaseServiceProvider`:
@@ -77,6 +109,23 @@ When no `client` is provided, the adapter constructs one automatically using the
 The adapter auto-detects the driver from the `DATABASE_URL` scheme (`file:` → sqlite, `postgresql:`/`postgres:` → postgresql, `libsql:` → libsql) unless you set `driver` explicitly.
 
 ## API
+
+### `prismaProvider(config)`
+
+The high-level factory for `bootstrap/providers.ts`. Accepts the same config shape as `prisma()` but returns a `ServiceProvider` class that handles the full lifecycle:
+
+```ts
+import { prismaProvider } from '@boostkit/orm-prisma'
+
+export default [
+  prismaProvider({ driver: 'sqlite', url: 'file:./dev.db' }),
+]
+```
+
+On `boot()`, it:
+1. Creates and connects a `PrismaClient`
+2. Calls `ModelRegistry.set(adapter)` so all `Model.*` static methods work
+3. Binds the raw `PrismaClient` to DI as `'prisma'` (used by `auth()`)
 
 ### `prisma(config?)`
 

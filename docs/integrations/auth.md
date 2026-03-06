@@ -6,23 +6,21 @@ This guide walks through setting up full user authentication in a BoostKit app u
 
 BoostKit's auth integration:
 
-1. **`@boostkit/auth`** — shared `AuthUser`, `AuthSession`, `AuthResult` types
-2. **`@boostkit/auth`** — service provider factory that wires better-auth into BoostKit
+1. **`@boostkit/auth`** — shared `AuthUser`, `AuthSession`, `AuthResult` types + `auth()` provider factory
+2. **`AuthMiddleware()`** — zero-config middleware that validates sessions and sets `req.user`
 3. **better-auth** — the underlying auth library (handles sessions, OAuth, etc.)
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/auth better-auth @prisma/client
+pnpm add @boostkit/auth better-auth
 ```
 
 ## 1. Configure the Database
 
-better-auth stores users, sessions, accounts, and verification tokens in your database. Add the required tables to your Prisma schema:
+better-auth stores users, sessions, accounts, and verification tokens in your database. Add the required models to `prisma/schema.prisma`:
 
 ```prisma
-// prisma/schema.prisma
-
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -88,23 +86,13 @@ Create `config/auth.ts`:
 
 ```ts
 import { Env } from '@boostkit/support'
-import { PrismaClient } from '@prisma/client'
 import type { BetterAuthConfig } from '@boostkit/auth'
 
 export default {
-  secret:   Env.get('AUTH_SECRET'),
-  baseUrl:  Env.get('APP_URL', 'http://localhost:3000'),
-
-  // Async factory — better-auth auto-detects and wraps PrismaClient
-  database: async () => new PrismaClient(),
-
-  emailAndPassword: {
-    enabled: true,
-  },
-
-  trustedOrigins: [
-    Env.get('APP_URL', 'http://localhost:3000'),
-  ],
+  secret:           Env.get('AUTH_SECRET', 'change-me-at-least-32-chars!!'),
+  baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
+  emailAndPassword: { enabled: true },
+  trustedOrigins:   [Env.get('APP_URL', 'http://localhost:3000')],
 } satisfies BetterAuthConfig
 ```
 
@@ -117,33 +105,32 @@ APP_URL=http://localhost:3000
 
 ## 3. Wire the Provider
 
-In `bootstrap/providers.ts`, add `betterAuth()` before `DatabaseServiceProvider` — it does not depend on the ORM and registers `/api/auth/*` routes during its own `boot()`:
+Register `prismaProvider` first — `auth()` auto-discovers the Prisma client from the DI container:
 
 ```ts
-import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
-import { betterAuth } from '@boostkit/auth'
-import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
+// bootstrap/providers.ts
+import { prismaProvider } from '@boostkit/orm-prisma'
+import { auth } from '@boostkit/auth'
 import configs from '../config/index.js'
 
 export default [
-  betterAuth(configs.auth),       // Registers auth + mounts /api/auth/*
+  prismaProvider(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'
+  auth(configs.auth),                // auto-discovers 'prisma' — no DB config needed
   // ...other providers
-  DatabaseServiceProvider,        // must appear before AppServiceProvider — sets ModelRegistry
-  AppServiceProvider,
 ]
 ```
 
-The `betterAuth()` provider automatically:
-- Wraps your Prisma client with better-auth's Prisma adapter
+The `auth()` provider automatically:
+- Wraps the Prisma client with better-auth's Prisma adapter
 - Mounts all auth routes at `/api/auth/*`
 - Binds the auth instance in the DI container under the `'auth'` token
 
 ## 4. Auth Routes
 
-better-auth exposes a suite of built-in routes at `/api/auth/*`. No manual route registration is needed.
+better-auth exposes built-in routes at `/api/auth/*` — no manual route registration needed.
 
 | Route | Method | Description |
-|-------|--------|-------------|
+|---|---|---|
 | `/api/auth/sign-up/email` | POST | Register with email + password |
 | `/api/auth/sign-in/email` | POST | Sign in with email + password |
 | `/api/auth/sign-out` | POST | Sign out (clears session) |
@@ -181,51 +168,21 @@ The response sets a session cookie automatically.
 
 ## 6. Protecting Routes
 
-Create an `AuthMiddleware` that validates the session:
+Use `AuthMiddleware()` from `@boostkit/auth` — it validates the session and attaches the user to `req.user`:
 
 ```ts
-// app/Http/Middleware/AuthMiddleware.ts
-import { Middleware } from '@boostkit/middleware'
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { AuthMiddleware } from '@boostkit/auth'
 
-export class AuthMiddleware extends Middleware {
-  async handle(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
-    const auth = app().make<BetterAuthInstance>('auth')
+const authMw = AuthMiddleware()
 
-    // Pass the raw Hono request to better-auth
-    const rawReq = (req.raw as any).req?.raw ?? req.raw
-    const session = await auth.api.getSession({ headers: rawReq.headers })
+Route.get('/api/me', (req, res) => {
+  res.json({ user: req.user })
+}, [authMw])
 
-    if (!session) {
-      return res.status(401).json({ message: 'Unauthenticated.' })
-    }
-
-    // Attach session and user to request for downstream handlers
-    ;(req as any).session = session.session
-    ;(req as any).user    = session.user
-
-    await next()
-  }
-}
+Route.get('/api/dashboard', handler, [authMw])
 ```
 
-Use it on protected routes:
-
-```ts
-import { Controller, Get, Middleware } from '@boostkit/router'
-import { AuthMiddleware } from '../Http/Middleware/AuthMiddleware.js'
-
-@Controller('/api/me')
-class ProfileController {
-  @Get('/')
-  @Middleware([AuthMiddleware])
-  async profile(req: AppRequest, res: AppResponse) {
-    return res.json({ user: (req as any).user })
-  }
-}
-```
+`req.user` is typed as `AuthUser | undefined` — no casting needed.
 
 ## 7. Accessing the Auth Instance
 
@@ -264,7 +221,7 @@ export default {
       clientSecret: Env.require('GOOGLE_CLIENT_SECRET'),
     },
   },
-}
+} satisfies BetterAuthConfig
 ```
 
 Then initiate OAuth from the client:
@@ -276,7 +233,7 @@ window.location.href = '/api/auth/sign-in/social?provider=github&callbackURL=/da
 
 ## Notes
 
-- `AUTH_SECRET` must be at least 32 characters for HMAC signing
-- better-auth sets `HttpOnly` cookies by default — no manual cookie handling needed
-- `trustedOrigins` must include your frontend's origin for cross-origin requests
-- The `database` config field accepts a `PrismaClient` (auto-adapted) or a pre-built better-auth adapter
+- `AUTH_SECRET` must be at least 32 characters for HMAC signing.
+- better-auth sets `HttpOnly` cookies by default — no manual cookie handling needed.
+- `trustedOrigins` must include your frontend's origin for cross-origin requests.
+- Auth routes are registered during provider `boot()` and always resolve before any `/api/*` catch-all you define in `routes/api.ts`.
