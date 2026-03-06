@@ -1,5 +1,11 @@
 # create-boostkit-app
 
+## 0.0.4
+
+### Patch Changes
+
+- Simplify generated app: remove unnecessary dependencies (`@better-auth/prisma-adapter`, `@photonjs/hono`, `@universal-middleware/core`, `hono`, `@prisma/adapter-*`, `pg`, `mysql2`). Simplify `config/auth.ts` — no more manual PrismaClient boilerplate. Update `bootstrap/providers.ts` to use `auth()` and put `prismaProvider` first.
+
 ## 0.0.3
 
 ### Patch Changes

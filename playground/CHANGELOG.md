@@ -1,5 +1,18 @@
 # forge-playground
 
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @boostkit/auth@0.1.0
+  - @boostkit/orm-prisma@0.0.8
+  - @boostkit/server-hono@0.0.5
+  - @boostkit/vite@0.0.4
+
 ## 0.0.6
 
 ### Patch Changes
