@@ -36,8 +36,7 @@ pnpm dev
 
 | Package | Description |
 |---|---|
-| `@boostkit/core` | Application bootstrap, ServiceProvider lifecycle |
-| `@boostkit/di` | DI container, `@Injectable`, `@Inject` decorators |
+| `@boostkit/core` | Application bootstrap, DI container, ServiceProvider lifecycle |
 | `@boostkit/router` | Fluent + decorator-based HTTP routing |
 | `@boostkit/middleware` | Middleware pipeline, CORS, logger, rate limiting |
 | `@boostkit/validation` | FormRequest, `validate()`, Zod re-export |
@@ -51,8 +50,7 @@ pnpm dev
 | `@boostkit/queue-inngest` | Inngest serverless queue |
 | `@boostkit/cache` | Cache facade, memory + Redis drivers (Redis needs `ioredis`) |
 | `@boostkit/storage` | Storage facade, local filesystem adapter + (s3 driver) S3/R2/MinIO via `@aws-sdk/client-s3` |
-| `@boostkit/mail` | Mailable, Mail facade, log adapter |
-| `@boostkit/mail-nodemailer` | Nodemailer SMTP adapter |
+| `@boostkit/mail` | Mailable, Mail facade, log + smtp drivers (smtp needs `nodemailer`) |
 | `@boostkit/events` | EventDispatcher, Listener interface |
 | `@boostkit/schedule` | Task scheduler, cron-based |
 | `@boostkit/notification` | Multi-channel notifications (mail, database) |

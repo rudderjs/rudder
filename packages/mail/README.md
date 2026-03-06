@@ -51,4 +51,5 @@ await Mail.to('user@example.com').send(new WelcomeMail())
 ## Notes
 
 - Built-in driver: `log`.
-- Plugin driver supported by factory: `smtp` (via `@boostkit/mail-nodemailer`).
+- Built-in drivers: `log` and `smtp`.
+- `smtp` requires optional dependency `nodemailer` (`pnpm add nodemailer`).

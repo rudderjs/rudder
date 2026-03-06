@@ -104,8 +104,7 @@ boostkit/
 │   ├── cache/          # Cache facade, MemoryAdapter + RedisAdapter (built-in)
 │   │                   #   Redis driver requires optional dep: ioredis
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper
-│   ├── mail/           # Mailable, Mail facade, LogAdapter, mail() factory
-│   ├── mail-nodemailer/ # Nodemailer SMTP adapter
+│   ├── mail/           # Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory
 │   ├── notification/   # Multi-channel notifications (mail, database)
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
 ├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm create boostkit-app)
@@ -122,11 +121,10 @@ boostkit/
 |---|---|---|
 | `@boostkit/contracts` | 0.0.1 | Pure TypeScript types: ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler |
 | `@boostkit/support` | 0.0.1 | Collection, Env, defineEnv, ConfigRepository, resolveOptionalPeer, helpers |
-| `@boostkit/di` | 0.0.2 | Container, @Injectable, @Inject — metadata keys: `boostkit:injectable/inject` |
 | `@boostkit/middleware` | 0.0.2 | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware, RateLimit |
 | `@boostkit/validation` | 0.0.1 | FormRequest, validate(), validateWith(), ValidationError, z re-export |
 | `@boostkit/artisan` | 0.0.1 | ArtisanRegistry, Command base, parseSignature, artisan singleton |
-| `@boostkit/core` | 0.0.2 | Application, ServiceProvider, Forge, AppBuilder |
+| `@boostkit/core` | 0.0.2 | Application, DI container, ServiceProvider, Forge, AppBuilder |
 | `@boostkit/server-hono` | 0.0.2 | Hono adapter, logger `[boostkit]` tag, CORS |
 | `@boostkit/router` | 0.0.2 | Fluent + decorator routing — metadata keys: `boostkit:controller:*/route:*` |
 | `@boostkit/queue` | 0.0.1 | Job, QueueAdapter interface, queue:work command |
@@ -141,15 +139,16 @@ boostkit/
 | `@boostkit/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
 | `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
 | `@boostkit/events` | 0.0.1 | EventDispatcher, Listener, dispatch(), events() factory |
-| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter, mail() factory |
-| `@boostkit/mail-nodemailer` | 0.0.1 | Nodemailer SMTP adapter |
+| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 
 **Merged/removed packages** (code absorbed, originals deleted):
 - `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
+- `@boostkit/di` → merged into `@boostkit/core`
 - `@boostkit/rate-limit` → merged into `@boostkit/middleware`
 - `@boostkit/storage-s3` → merged into `@boostkit/storage`
 - `@boostkit/cache-redis` → merged into `@boostkit/cache`
+- `@boostkit/mail-nodemailer` → merged into `@boostkit/mail`
 
 ---
 
@@ -161,13 +160,12 @@ boostkit/
 @boostkit/contracts   (pure types, no runtime)
        │
 @boostkit/support     (Env, Collection, helpers)
-@boostkit/di          (Container, decorators)
 @boostkit/middleware  (Pipeline, built-ins, RateLimit)
 @boostkit/validation  (FormRequest, z)
        │
 @boostkit/router      @boostkit/server-hono
        │
-@boostkit/core        (Application, ServiceProvider, bootstrap)
+@boostkit/core        (Application, Container, ServiceProvider, bootstrap)
        │
 @boostkit/orm    @boostkit/queue    @boostkit/cache    @boostkit/storage
        │              │              (redis built-in)   (s3 built-in)

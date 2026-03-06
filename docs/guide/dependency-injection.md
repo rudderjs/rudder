@@ -1,12 +1,12 @@
 # Dependency Injection
 
-BoostKit includes a lightweight but powerful DI container (`@boostkit/di`) with support for constructor injection using TypeScript decorators.
+BoostKit includes a lightweight but powerful DI container (part of `@boostkit/core`) with support for constructor injection using TypeScript decorators.
 
 ## Quick Start
 
 ```ts
 import 'reflect-metadata'
-import { Container, Injectable, Inject } from '@boostkit/di'
+import { Container, Injectable, Inject } from '@boostkit/core'
 
 @Injectable()
 class Logger {

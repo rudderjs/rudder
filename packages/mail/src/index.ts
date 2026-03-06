@@ -110,6 +110,44 @@ export interface MailConfig {
   mailers: Record<string, MailConnectionConfig>
 }
 
+export interface NodemailerConfig {
+  driver:      'smtp'
+  host:        string
+  port:        number
+  username?:   string
+  password?:   string
+  encryption?: 'tls' | 'ssl' | 'none'
+}
+
+interface NodemailerTransporter {
+  sendMail(message: {
+    from: string
+    to: string
+    cc?: string
+    bcc?: string
+    subject: string
+    html?: string
+    text?: string
+  }): Promise<unknown>
+}
+
+interface NodemailerModule {
+  createTransport(config: {
+    host: string
+    port: number
+    secure: boolean
+    auth?: { user: string; pass: string }
+  }): NodemailerTransporter
+}
+
+function isNodemailerConfig(config: MailConnectionConfig): config is MailConnectionConfig & NodemailerConfig {
+  return (
+    config.driver === 'smtp' &&
+    typeof config.host === 'string' &&
+    typeof config.port === 'number'
+  )
+}
+
 // ─── Built-in Log Adapter ──────────────────────────────────
 
 class LogAdapter implements MailAdapter {
@@ -128,13 +166,95 @@ class LogAdapter implements MailAdapter {
   }
 }
 
+class NodemailerAdapter implements MailAdapter {
+  private _transporter: Promise<NodemailerTransporter> | null = null
+
+  constructor(
+    private readonly config: NodemailerConfig,
+    private readonly from: { address: string; name?: string },
+  ) {}
+
+  private async transporter(): Promise<NodemailerTransporter> {
+    if (!this._transporter) {
+      this._transporter = (async () => {
+        let nodemailer: NodemailerModule
+        try {
+          nodemailer = await resolveOptionalPeer<NodemailerModule>('nodemailer')
+        } catch {
+          throw new Error('[BoostKit Mail] SMTP driver requires "nodemailer". Install it with: pnpm add nodemailer')
+        }
+
+        const secure = this.config.encryption === 'ssl'
+        const transportConfig: {
+          host: string
+          port: number
+          secure: boolean
+          auth?: { user: string; pass: string }
+        } = {
+          host: this.config.host,
+          port: this.config.port,
+          secure,
+        }
+
+        if (this.config.username) {
+          transportConfig.auth = { user: this.config.username, pass: this.config.password ?? '' }
+        }
+
+        return nodemailer.createTransport(transportConfig)
+      })()
+    }
+
+    return this._transporter
+  }
+
+  async send(mailable: Mailable, options: SendOptions): Promise<void> {
+    const msg = await mailable.compile()
+    const fromStr = this.from.name
+      ? `${this.from.name} <${this.from.address}>`
+      : this.from.address
+
+    const transporter = await this.transporter()
+    const message: {
+      from: string
+      to: string
+      cc?: string
+      bcc?: string
+      subject: string
+      html?: string
+      text?: string
+    } = {
+      from: fromStr,
+      to: options.to.join(', '),
+      subject: msg.subject,
+    }
+
+    if (options.cc && options.cc.length) message.cc = options.cc.join(', ')
+    if (options.bcc && options.bcc.length) message.bcc = options.bcc.join(', ')
+    if (msg.html !== undefined) message.html = msg.html
+    if (msg.text !== undefined) message.text = msg.text
+
+    await transporter.sendMail(message)
+  }
+}
+
+export function nodemailer(
+  config: NodemailerConfig,
+  from: { address: string; name?: string },
+): MailAdapterProvider {
+  return {
+    create(): MailAdapter {
+      return new NodemailerAdapter(config, from)
+    },
+  }
+}
+
 // ─── Service Provider Factory ──────────────────────────────
 
 /**
  * Returns a MailServiceProvider class configured for the given mail config.
  *
- * Built-in drivers:  log (prints to console — great for dev)
- * Plugin drivers:    smtp (@boostkit/mail-nodemailer), resend, mailgun …
+ * Built-in drivers:  log (prints to console — great for dev), smtp (Nodemailer)
+ * Plugin drivers:    resend, mailgun …
  *
  * Usage in bootstrap/providers.ts:
  *   import { mail } from '@boostkit/mail'
@@ -157,10 +277,10 @@ export function mail(config: MailConfig): new (app: Application) => ServiceProvi
       if (driver === 'log') {
         adapter = new LogAdapter(config.from)
       } else if (driver === 'smtp') {
-        const { nodemailer } = await resolveOptionalPeer<any>('@boostkit/mail-nodemailer')
-        adapter = (nodemailer as (c: unknown, from: unknown) => MailAdapterProvider)(
-          mailerConfig, config.from,
-        ).create()
+        if (!isNodemailerConfig(mailerConfig)) {
+          throw new Error('[BoostKit Mail] Invalid SMTP config. Expected fields: host (string), port (number).')
+        }
+        adapter = nodemailer(mailerConfig, config.from).create()
       } else {
         throw new Error(`[BoostKit Mail] Unknown driver "${driver}". Available: log, smtp`)
       }

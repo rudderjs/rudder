@@ -30,7 +30,7 @@ export default defineConfig({
 |---|---|
 | **Vike** | Registers `vike/plugin` from the app's own `node_modules` — guaranteed single instance, no double-registration |
 | **`@/` alias** | Resolves `@/` to `<root>/src` in both client and SSR builds |
-| **SSR externals** | Keeps optional BoostKit peers (`@boostkit/queue-bullmq`, `@boostkit/mail-nodemailer`, etc.) out of the SSR bundle |
+| **SSR externals** | Keeps optional BoostKit peers and Node-only drivers (`@boostkit/queue-bullmq`, `pg`, `mysql2`, etc.) out of the SSR bundle |
 
 ## UI frameworks
 

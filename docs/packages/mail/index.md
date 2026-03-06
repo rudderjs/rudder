@@ -130,7 +130,7 @@ Each mailer entry requires a `driver` field plus any driver-specific options.
 // Log driver (built-in)
 { driver: 'log' }
 
-// SMTP via @boostkit/mail-nodemailer
+// SMTP (built-in; requires nodemailer)
 {
   driver: 'smtp',
   host: 'smtp.mailgun.org',
@@ -159,7 +159,7 @@ The `log` driver prints all outgoing email to the console. It is the recommended
 
 ## SMTP Driver
 
-For production SMTP delivery, install `@boostkit/mail-nodemailer`. See the [Nodemailer adapter docs](./nodemailer).
+For production SMTP delivery, install `nodemailer`. See the [Nodemailer adapter docs](./nodemailer).
 
 ## Notes
 

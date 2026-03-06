@@ -9,7 +9,6 @@ const SSR_EXTERNALS = [
   '@clack/prompts',
   '@boostkit/queue-inngest',
   '@boostkit/queue-bullmq',
-  '@boostkit/mail-nodemailer',
   '@boostkit/orm-drizzle',
   // Database drivers — Node.js-only, must not be bundled into the client
   'pg',
