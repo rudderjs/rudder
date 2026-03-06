@@ -28,7 +28,6 @@
   "dependencies": {
     "@boostkit/contracts": "workspace:*",
     "@boostkit/core": "workspace:*",
-    "@boostkit/router": "workspace:*",
     "better-auth": "^1.0.0"
   },
   "optionalDependencies": {
@@ -36,7 +35,8 @@
     "@prisma/adapter-better-sqlite3": "^7.0.0",
     "@prisma/adapter-libsql": "^7.0.0",
     "@prisma/adapter-pg": "^7.0.0",
-    "@prisma/client": "^7.0.0"
+    "@prisma/client": "^7.0.0",
+    "pg": "^8.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

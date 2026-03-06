@@ -178,6 +178,21 @@ Level 1 (parallel — no framework deps):
 
 **Clean DAG — no cycles**: `@boostkit/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@boostkit/router` and `@boostkit/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@boostkit/core` lists `@boostkit/router` as a regular dependency and imports it with a plain `await import('@boostkit/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
 
+### Package Merge Policy (Tight-Coupling Only)
+
+Merge packages only when they are effectively one runtime unit.
+
+Use this checklist before any merge:
+
+1. **Always co-deployed**: both packages are always installed/booted together in real apps.
+2. **Shared lifecycle**: they register/boot together and one has no useful standalone runtime behavior.
+3. **No adapter boundary**: package is not an integration boundary for multiple drivers/backends.
+4. **No portability boundary**: package is not optional due to environment/runtime constraints.
+5. **Same release cadence**: changes almost always land together, with no independent versioning value.
+6. **Low blast radius**: merge will not force most consumers to change imports/dependencies.
+
+If any checklist item fails, keep the package separate.
+
 ---
 
 ## Key Concepts

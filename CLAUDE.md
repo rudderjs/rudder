@@ -179,6 +179,21 @@ boostkit/
 
 > **Cycle resolution**: `@boostkit/core` loads `@boostkit/router` at runtime via `resolveOptionalPeer('@boostkit/router')`. Never add `@boostkit/core` to router's `dependencies` or `devDependencies`.
 
+### Package Merge Policy (Tight-Coupling Only)
+
+Merge packages only when they are effectively one runtime unit.
+
+Checklist before merging:
+
+1. **Always co-deployed**: both packages are always installed/booted together.
+2. **Shared lifecycle**: they register/boot together and one has no meaningful standalone behavior.
+3. **No adapter boundary**: package is not a plugin/driver integration surface.
+4. **No portability boundary**: package is not optional due to runtime/environment constraints.
+5. **Same release cadence**: they nearly always change together.
+6. **Low blast radius**: merge does not force widespread import/dependency churn.
+
+If any item fails, keep packages separate.
+
 ### Core Abstractions
 
 #### Bootstrap Pattern (Laravel 11-style)
