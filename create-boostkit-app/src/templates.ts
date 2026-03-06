@@ -3,14 +3,22 @@ export interface TemplateContext {
   db:         'sqlite' | 'postgresql' | 'mysql'
   withTodo:   boolean
   authSecret: string
+  frameworks: ('react' | 'vue' | 'solid')[]
+  primary:    'react' | 'vue' | 'solid'
+  tailwind:   boolean
+  shadcn:     boolean
+}
+
+function pageExt(fw: 'react' | 'vue' | 'solid'): '.tsx' | '.vue' {
+  return fw === 'vue' ? '.vue' : '.tsx'
 }
 
 export function getTemplates(ctx: TemplateContext): Record<string, string> {
   const files: Record<string, string> = {}
 
   files['package.json']      = packageJson(ctx)
-  files['tsconfig.json']     = tsconfigJson()
-  files['vite.config.ts']    = viteConfig()
+  files['tsconfig.json']     = tsconfigJson(ctx)
+  files['vite.config.ts']    = viteConfig(ctx)
   files['prisma.config.ts']  = prismaConfig()
   files['.env']              = dotenv(ctx)
   files['.env.example']      = dotenvExample(ctx)
@@ -18,7 +26,9 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   files['prisma/schema.prisma'] = prismaSchema(ctx)
 
-  files['src/index.css'] = indexCss()
+  if (ctx.tailwind) {
+    files['src/index.css'] = indexCss(ctx)
+  }
 
   files['bootstrap/app.ts']       = bootstrapApp()
   files['bootstrap/providers.ts'] = bootstrapProviders(ctx)
@@ -36,26 +46,35 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   files['app/Models/User.ts']                       = userModel()
   files['app/Providers/AppServiceProvider.ts']      = appServiceProvider()
-  files['app/Middleware/RequestIdMiddleware.ts']       = requestIdMiddleware()
+  files['app/Middleware/RequestIdMiddleware.ts']     = requestIdMiddleware()
 
   files['routes/api.ts']     = routesApi(ctx)
   files['routes/web.ts']     = routesWeb()
   files['routes/console.ts'] = routesConsole()
 
-  files['pages/+config.ts']         = pagesRootConfig()
-  files['pages/index/+config.ts']   = pagesIndexConfig()
-  files['pages/index/+data.ts']     = pagesIndexData()
-  files['pages/index/+Page.tsx']    = pagesIndexPage(ctx)
-  files['pages/_error/+config.ts']  = pagesErrorConfig()
-  files['pages/_error/+Page.tsx']   = pagesErrorPage()
+  const ext = pageExt(ctx.primary)
+
+  files['pages/+config.ts']              = pagesRootConfig()
+  files['pages/index/+config.ts']        = pagesIndexConfig(ctx)
+  files['pages/index/+data.ts']          = pagesIndexData()
+  files[`pages/index/+Page${ext}`]       = pagesIndexPage(ctx)
+  files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
+  files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
 
   if (ctx.withTodo) {
     files['app/Modules/Todo/TodoSchema.ts']          = todoSchema()
     files['app/Modules/Todo/TodoService.ts']         = todoService()
     files['app/Modules/Todo/TodoServiceProvider.ts'] = todoServiceProvider()
-    files['pages/todos/+config.ts']                  = todoPageConfig()
+    files['pages/todos/+config.ts']                  = todoPageConfig(ctx)
     files['pages/todos/+data.ts']                    = todoPageData()
-    files['pages/todos/+Page.tsx']                   = todoPage()
+    files[`pages/todos/+Page${ext}`]                 = todoPage(ctx)
+  }
+
+  // Secondary framework demo pages
+  for (const fw of ctx.frameworks.filter(f => f !== ctx.primary)) {
+    const dext = pageExt(fw)
+    files[`pages/${fw}-demo/+config.ts`]   = demoPageConfig(fw)
+    files[`pages/${fw}-demo/+Page${dext}`] = demoPage(fw, ctx)
   }
 
   return files
@@ -64,6 +83,11 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 // ─── package.json ──────────────────────────────────────────
 
 function packageJson(ctx: TemplateContext): string {
+  const { frameworks, tailwind, shadcn, db } = ctx
+  const hasReact = frameworks.includes('react')
+  const hasVue   = frameworks.includes('vue')
+  const hasSolid = frameworks.includes('solid')
+
   const dbDeps: Record<string, Record<string, string>> = {
     sqlite:     { 'better-sqlite3': '^12.0.0' },
     postgresql: {},
@@ -75,59 +99,91 @@ function packageJson(ctx: TemplateContext): string {
     mysql:      {},
   }
 
-  const deps = {
-    '@boostkit/artisan':          'latest',
-    '@boostkit/vite':             'latest',
-    '@boostkit/auth':             'latest',
-    '@boostkit/cache':            'latest',
-    '@boostkit/contracts':        'latest',
-    '@boostkit/core':             'latest',
-    '@boostkit/di':               'latest',
-    '@boostkit/middleware':       'latest',
-    '@boostkit/orm':              'latest',
-    '@boostkit/orm-prisma':       'latest',
-    '@boostkit/queue':            'latest',
-    '@boostkit/router':           'latest',
-    '@boostkit/schedule':         'latest',
-    '@boostkit/server-hono':      'latest',
-    '@boostkit/storage':          'latest',
-    '@boostkit/support':          'latest',
-    '@boostkit/validation':       'latest',
-    '@boostkit/events':           'latest',
-    '@boostkit/mail':             'latest',
-    '@boostkit/notification':     'latest',
-    '@prisma/client':          '^7.0.0',
-    '@tailwindcss/vite':       '^4.2.1',
+  const frameworkDeps: Record<string, string> = {}
+  const frameworkDevDeps: Record<string, string> = {}
+
+  if (hasReact) {
+    frameworkDeps['react']      = '^19.0.0'
+    frameworkDeps['react-dom']  = '^19.0.0'
+    frameworkDeps['vike-react'] = '^0.6.20'
+    frameworkDevDeps['@vitejs/plugin-react'] = '^4.3.4'
+    frameworkDevDeps['@types/react']         = '^19.0.0'
+    frameworkDevDeps['@types/react-dom']     = '^19.0.0'
+  }
+  if (hasVue) {
+    frameworkDeps['vue']      = '^3.5.0'
+    frameworkDeps['vike-vue'] = 'latest'
+    frameworkDevDeps['@vitejs/plugin-vue'] = '^5.2.0'
+  }
+  if (hasSolid) {
+    frameworkDeps['solid-js']   = '^1.9.0'
+    frameworkDeps['vike-solid'] = 'latest'
+  }
+
+  const tailwindDeps: Record<string, string> = tailwind ? {
+    'tailwindcss':       '^4.2.1',
+    '@tailwindcss/vite': '^4.2.1',
+  } : {}
+  const tailwindDevDeps: Record<string, string> = tailwind ? {
+    'tw-animate-css': '^1.4.0',
+  } : {}
+
+  const shadcnDeps: Record<string, string> = shadcn ? {
+    'shadcn':                   'latest',
     'class-variance-authority': '^0.7.1',
-    'clsx':                    '^2.1.1',
-    'dotenv':                  '^16.4.0',
-    'lucide-react':            '^0.575.0',
-    'react':                   '^19.0.0',
-    'react-dom':               '^19.0.0',
-    'reflect-metadata':        '^0.2.2',
-    'shadcn':                  'latest',
-    'tailwind-merge':          '^3.5.0',
-    'tailwindcss':             '^4.2.1',
-    'vike':                    '^0.4.239',
-    'vike-photon':             '^0.1.24',
-    'vike-react':              '^0.6.20',
-    'zod':                     '^4.0.0',
-    ...dbDeps[ctx.db],
+    'clsx':                     '^2.1.1',
+    'tailwind-merge':           '^3.5.0',
+    'lucide-react':             '^0.575.0',
+  } : {}
+
+  const deps = {
+    '@boostkit/artisan':      'latest',
+    '@boostkit/vite':         'latest',
+    '@boostkit/auth':         'latest',
+    '@boostkit/cache':        'latest',
+    '@boostkit/contracts':    'latest',
+    '@boostkit/core':         'latest',
+    '@boostkit/di':           'latest',
+    '@boostkit/middleware':   'latest',
+    '@boostkit/orm':          'latest',
+    '@boostkit/orm-prisma':   'latest',
+    '@boostkit/queue':        'latest',
+    '@boostkit/router':       'latest',
+    '@boostkit/schedule':     'latest',
+    '@boostkit/server-hono':  'latest',
+    '@boostkit/session':      'latest',
+    '@boostkit/storage':      'latest',
+    '@boostkit/support':      'latest',
+    '@boostkit/validation':   'latest',
+    '@boostkit/events':       'latest',
+    '@boostkit/mail':         'latest',
+    '@boostkit/notification': 'latest',
+    '@prisma/client':         '^7.0.0',
+    'dotenv':                 '^16.4.0',
+    'reflect-metadata':       '^0.2.2',
+    'vike':                   '^0.4.239',
+    'vike-photon':            '^0.1.24',
+    'zod':                    '^4.0.0',
+    ...frameworkDeps,
+    ...tailwindDeps,
+    ...shadcnDeps,
+    ...dbDeps[db],
   }
 
   const devDeps = {
-    '@boostkit/cli':          'latest',
-    '@types/node':         '^20.0.0',
-    '@types/react':        '^19.0.0',
-    '@types/react-dom':    '^19.0.0',
-    '@vitejs/plugin-react': '^4.3.4',
-    'prisma':              '^7.0.0',
-    'tsx':                 '^4.21.0',
-    'tw-animate-css':      '^1.4.0',
-    'typescript':          '^5.4.0',
-    'vite':                '^7.1.0',
-    ...dbDevDeps[ctx.db],
+    '@boostkit/cli': 'latest',
+    '@types/node':   '^20.0.0',
+    'prisma':        '^7.0.0',
+    'tsx':           '^4.21.0',
+    'typescript':    '^5.4.0',
+    'vite':          '^7.1.0',
+    ...frameworkDevDeps,
+    ...tailwindDevDeps,
+    ...dbDevDeps[db],
   }
+
+  const onlyBuilt: string[] = ['@prisma/engines', 'esbuild', 'prisma']
+  if (db === 'sqlite') onlyBuilt.unshift('better-sqlite3')
 
   return JSON.stringify({
     name:    ctx.name,
@@ -144,48 +200,107 @@ function packageJson(ctx: TemplateContext): string {
       artisan:      'tsx node_modules/@boostkit/cli/src/index.ts',
     },
     pnpm: {
-      onlyBuiltDependencies: ['better-sqlite3', '@prisma/engines', 'esbuild', 'prisma'],
+      onlyBuiltDependencies: onlyBuilt,
     },
-    dependencies: deps,
+    dependencies:    deps,
     devDependencies: devDeps,
   }, null, 2) + '\n'
 }
 
 // ─── tsconfig.json ─────────────────────────────────────────
 
-function tsconfigJson(): string {
+function tsconfigJson(ctx: TemplateContext): string {
+  const hasReact = ctx.frameworks.includes('react')
+  const hasSolid = ctx.frameworks.includes('solid')
+
+  const compilerOptions: Record<string, unknown> = {
+    target:                     'ES2022',
+    module:                     'ESNext',
+    moduleResolution:           'bundler',
+    lib:                        ['ES2022', 'DOM', 'DOM.Iterable'],
+    strict:                     true,
+    exactOptionalPropertyTypes: true,
+    noUncheckedIndexedAccess:   true,
+    experimentalDecorators:     true,
+    emitDecoratorMetadata:      true,
+    skipLibCheck:               true,
+    noEmit:                     true,
+    baseUrl:                    '.',
+    paths:                      { '@/*': ['./src/*'] },
+    allowImportingTsExtensions: true,
+  }
+
+  if (hasReact) {
+    compilerOptions['jsx'] = 'react-jsx'
+  } else if (hasSolid) {
+    compilerOptions['jsx']             = 'preserve'
+    compilerOptions['jsxImportSource'] = 'solid-js'
+  }
+  // Vue only — no jsx field needed
+
   return JSON.stringify({
-    compilerOptions: {
-      target: 'ES2022',
-      module: 'ESNext',
-      moduleResolution: 'bundler',
-      lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-      strict: true,
-      exactOptionalPropertyTypes: true,
-      noUncheckedIndexedAccess: true,
-      experimentalDecorators: true,
-      emitDecoratorMetadata: true,
-      skipLibCheck: true,
-      noEmit: true,
-      jsx: 'react-jsx',
-      baseUrl: '.',
-      paths: { '@/*': ['./src/*'] },
-      allowImportingTsExtensions: true,
-    },
+    compilerOptions,
     include: ['src/**/*', 'pages/**/*', 'app/**/*', 'bootstrap/**/*', 'routes/**/*', 'config/**/*', '*.ts', '*.tsx'],
   }, null, 2) + '\n'
 }
 
 // ─── vite.config.ts ────────────────────────────────────────
 
-function viteConfig(): string {
-  return `import { defineConfig } from 'vite'
-import boostkit from '@boostkit/vite'
-import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
+function viteConfig(ctx: TemplateContext): string {
+  const { frameworks, primary, tailwind } = ctx
+  const hasReact = frameworks.includes('react')
+  const hasVue   = frameworks.includes('vue')
+  const hasSolid = frameworks.includes('solid')
+  const hasReactSolidConflict = hasReact && hasSolid
+
+  const imports: string[] = [
+    `import { defineConfig } from 'vite'`,
+    `import boostkit from '@boostkit/vite'`,
+  ]
+  if (tailwind) imports.push(`import tailwindcss from '@tailwindcss/vite'`)
+  if (hasReact)  imports.push(`import react from '@vitejs/plugin-react'`)
+  if (hasVue)    imports.push(`import vue from '@vitejs/plugin-vue'`)
+  if (hasSolid)  imports.push(`import solid from 'vike-solid/vite'`)
+
+  const plugins: string[] = ['boostkit()']
+  if (tailwind) plugins.push('tailwindcss()')
+
+  if (hasReact) {
+    if (hasReactSolidConflict) {
+      if (primary === 'react') {
+        plugins.push(`react({ exclude: ['**/pages/solid-demo/**'] })`)
+      } else {
+        plugins.push(`react({ include: ['**/pages/react-demo/**'] })`)
+      }
+    } else {
+      plugins.push('react()')
+    }
+  }
+
+  if (hasVue) {
+    plugins.push('vue()')
+  }
+
+  if (hasSolid) {
+    if (hasReactSolidConflict) {
+      if (primary === 'solid') {
+        plugins.push(`solid({ exclude: ['**/pages/react-demo/**'] })`)
+      } else {
+        plugins.push(`solid({ include: ['**/pages/solid-demo/**'] })`)
+      }
+    } else {
+      plugins.push('solid()')
+    }
+  }
+
+  const pluginsStr = plugins.map(p => `    ${p},`).join('\n')
+
+  return `${imports.join('\n')}
 
 export default defineConfig({
-  plugins: [boostkit(), tailwindcss(), react()],
+  plugins: [
+${pluginsStr}
+  ],
 })
 `
 }
@@ -359,7 +474,13 @@ ${todoModel}`
 
 // ─── src/index.css ─────────────────────────────────────────
 
-function indexCss(): string {
+function indexCss(ctx: TemplateContext): string {
+  if (!ctx.shadcn) {
+    return `@import "tailwindcss";
+@import "tw-animate-css";
+`
+  }
+
   return `@import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -793,27 +914,6 @@ export class User extends Model {
 `
 }
 
-function databaseServiceProvider(): string {
-  return `import { ServiceProvider } from '@boostkit/core'
-import { ModelRegistry } from '@boostkit/orm'
-import { prisma } from '@boostkit/orm-prisma'
-
-export class DatabaseServiceProvider extends ServiceProvider {
-  register(): void {}
-
-  async boot(): Promise<void> {
-    const adapter = await prisma().create()
-    await adapter.connect()
-
-    ModelRegistry.set(adapter)
-    this.app.instance('db', adapter)
-
-    console.log('[DatabaseServiceProvider] booted — connected to database')
-  }
-}
-`
-}
-
 function appServiceProvider(): string {
   return `import { ServiceProvider } from '@boostkit/core'
 
@@ -937,14 +1037,33 @@ export default {
 `
 }
 
-function pagesIndexConfig(): string {
-  return `import type { Config } from 'vike/types'
+function pagesIndexConfig(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':
+      return `import type { Config } from 'vike/types'
+import vikeVue from 'vike-vue/config'
+
+export default {
+  extends: vikeVue,
+} as unknown as Config
+`
+    case 'solid':
+      return `import type { Config } from 'vike/types'
+import vikeSolid from 'vike-solid/config'
+
+export default {
+  extends: vikeSolid,
+} as unknown as Config
+`
+    default: // react
+      return `import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 
 export default {
   extends: vikeReact,
 } as unknown as Config
 `
+  }
 }
 
 function pagesIndexData(): string {
@@ -967,12 +1086,20 @@ export async function data(pageContext: unknown): Promise<Data> {
 }
 
 function pagesIndexPage(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':   return pagesIndexPageVue(ctx)
+    case 'solid': return pagesIndexPageSolid(ctx)
+    default:      return pagesIndexPageReact(ctx)
+  }
+}
+
+function pagesIndexPageReact(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
   const todosLink = ctx.withTodo
     ? `          <a href="/todos" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
 
-  return `import '@/index.css'
-import { useState } from 'react'
+  return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
 import type { Data } from './+data.js'
 
@@ -1031,19 +1158,163 @@ ${todosLink}
 `
 }
 
-function pagesErrorConfig(): string {
-  return `import type { Config } from 'vike/types'
+function pagesIndexPageVue(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const todosLink = ctx.withTodo
+    ? `\n      <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    : ''
+
+  return `<script setup lang="ts">
+${cssImport}import { ref } from 'vue'
+import { useData } from 'vike-vue/useData'
+import type { Data } from './+data.js'
+
+const data = useData<Data>()
+const user = ref(data.user)
+
+async function signOut() {
+  await fetch('/api/auth/sign-out', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    '{}',
+  })
+  window.location.href = '/'
+}
+</script>
+
+<template>
+  <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+    <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
+    <p class="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
+
+    <div v-if="user" class="flex flex-col items-center gap-3">
+      <p class="text-sm text-muted-foreground">
+        Signed in as <span class="font-medium text-foreground">{{ user.name }}</span>
+      </p>
+      <div class="flex gap-2">${todosLink}
+        <button @click="signOut" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">
+          Sign out
+        </button>
+      </div>
+    </div>
+    <div v-else class="flex gap-2">${todosLink}
+      <a href="/api/auth/sign-in/email" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">
+        Sign in
+      </a>
+    </div>
+
+    <div class="mt-4 flex gap-3 text-xs text-muted-foreground">
+      <a href="/api/health" class="underline hover:text-foreground">API Health</a>
+      <a href="/api/me" class="underline hover:text-foreground">Session Info</a>
+    </div>
+  </div>
+</template>
+`
+}
+
+function pagesIndexPageSolid(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const todosLink = ctx.withTodo
+    ? `\n        <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    : ''
+
+  return `${cssImport}import { createSignal } from 'solid-js'
+import { useData } from 'vike-solid/useData'
+import type { Data } from './+data.js'
+
+export default function Page() {
+  const data = useData<Data>()
+  const [user, setUser] = createSignal(data.user)
+
+  async function signOut() {
+    await fetch('/api/auth/sign-out', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    '{}',
+    })
+    window.location.href = '/'
+  }
+
+  return (
+    <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+      <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
+      <p class="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
+
+      {user() ? (
+        <div class="flex flex-col items-center gap-3">
+          <p class="text-sm text-muted-foreground">
+            Signed in as <span class="font-medium text-foreground">{user()!.name}</span>
+          </p>
+          <div class="flex gap-2">${todosLink}
+            <button
+              onClick={signOut}
+              class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div class="flex gap-2">${todosLink}
+          <a
+            href="/api/auth/sign-in/email"
+            class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent"
+          >
+            Sign in
+          </a>
+        </div>
+      )}
+
+      <div class="mt-4 flex gap-3 text-xs text-muted-foreground">
+        <a href="/api/health" class="underline hover:text-foreground">API Health</a>
+        <a href="/api/me" class="underline hover:text-foreground">Session Info</a>
+      </div>
+    </div>
+  )
+}
+`
+}
+
+function pagesErrorConfig(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':
+      return `import type { Config } from 'vike/types'
+import vikeVue from 'vike-vue/config'
+
+export default {
+  extends: vikeVue,
+} as unknown as Config
+`
+    case 'solid':
+      return `import type { Config } from 'vike/types'
+import vikeSolid from 'vike-solid/config'
+
+export default {
+  extends: vikeSolid,
+} as unknown as Config
+`
+    default:
+      return `import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 
 export default {
   extends: vikeReact,
 } as unknown as Config
 `
+  }
 }
 
-function pagesErrorPage(): string {
-  return `import '@/index.css'
-import { usePageContext } from 'vike-react/usePageContext'
+function pagesErrorPage(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':   return pagesErrorPageVue(ctx)
+    case 'solid': return pagesErrorPageSolid(ctx)
+    default:      return pagesErrorPageReact(ctx)
+  }
+}
+
+function pagesErrorPageReact(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  return `${cssImport}import { usePageContext } from 'vike-react/usePageContext'
 
 export default function Page() {
   const { is404, abortReason, abortStatusCode } = usePageContext() as {
@@ -1078,6 +1349,79 @@ export default function Page() {
       <p className="text-muted-foreground">{abortReason ?? 'An unexpected error occurred.'}</p>
       <a href="/" className="mt-4 text-sm underline">Go home</a>
     </div>
+  )
+}
+`
+}
+
+function pagesErrorPageVue(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  return `<script setup lang="ts">
+${cssImport}import { usePageContext } from 'vike-vue/usePageContext'
+
+const pageContext = usePageContext() as {
+  is404: boolean
+  abortStatusCode?: number
+  abortReason?: string
+}
+</script>
+
+<template>
+  <div v-if="pageContext.is404" class="flex min-h-svh flex-col items-center justify-center gap-2">
+    <h1 class="text-2xl font-bold">404 — Page Not Found</h1>
+    <p class="text-muted-foreground">This page could not be found.</p>
+    <a href="/" class="mt-4 text-sm underline">Go home</a>
+  </div>
+  <div v-else-if="pageContext.abortStatusCode === 401" class="flex min-h-svh flex-col items-center justify-center gap-2">
+    <h1 class="text-2xl font-bold">401 — Unauthorized</h1>
+    <p class="text-muted-foreground">{{ pageContext.abortReason ?? 'You must be logged in to view this page.' }}</p>
+    <a href="/" class="mt-4 text-sm underline">Go home</a>
+  </div>
+  <div v-else class="flex min-h-svh flex-col items-center justify-center gap-2">
+    <h1 class="text-2xl font-bold">Something went wrong</h1>
+    <p class="text-muted-foreground">{{ pageContext.abortReason ?? 'An unexpected error occurred.' }}</p>
+    <a href="/" class="mt-4 text-sm underline">Go home</a>
+  </div>
+</template>
+`
+}
+
+function pagesErrorPageSolid(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  return `${cssImport}import { Switch, Match } from 'solid-js'
+import { usePageContext } from 'vike-solid/usePageContext'
+
+export default function Page() {
+  const pageContext = usePageContext() as {
+    is404: boolean
+    abortStatusCode?: number
+    abortReason?: string
+  }
+
+  return (
+    <Switch>
+      <Match when={pageContext.is404}>
+        <div class="flex min-h-svh flex-col items-center justify-center gap-2">
+          <h1 class="text-2xl font-bold">404 — Page Not Found</h1>
+          <p class="text-muted-foreground">This page could not be found.</p>
+          <a href="/" class="mt-4 text-sm underline">Go home</a>
+        </div>
+      </Match>
+      <Match when={pageContext.abortStatusCode === 401}>
+        <div class="flex min-h-svh flex-col items-center justify-center gap-2">
+          <h1 class="text-2xl font-bold">401 — Unauthorized</h1>
+          <p class="text-muted-foreground">{pageContext.abortReason ?? 'You must be logged in to view this page.'}</p>
+          <a href="/" class="mt-4 text-sm underline">Go home</a>
+        </div>
+      </Match>
+      <Match when={true}>
+        <div class="flex min-h-svh flex-col items-center justify-center gap-2">
+          <h1 class="text-2xl font-bold">Something went wrong</h1>
+          <p class="text-muted-foreground">{pageContext.abortReason ?? 'An unexpected error occurred.'}</p>
+          <a href="/" class="mt-4 text-sm underline">Go home</a>
+        </div>
+      </Match>
+    </Switch>
   )
 }
 `
@@ -1192,14 +1536,33 @@ export class TodoServiceProvider extends ServiceProvider {
 `
 }
 
-function todoPageConfig(): string {
-  return `import type { Config } from 'vike/types'
+function todoPageConfig(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':
+      return `import type { Config } from 'vike/types'
+import vikeVue from 'vike-vue/config'
+
+export default {
+  extends: vikeVue,
+} as unknown as Config
+`
+    case 'solid':
+      return `import type { Config } from 'vike/types'
+import vikeSolid from 'vike-solid/config'
+
+export default {
+  extends: vikeSolid,
+} as unknown as Config
+`
+    default:
+      return `import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 
 export default {
   extends: vikeReact,
 } as unknown as Config
 `
+  }
 }
 
 function todoPageData(): string {
@@ -1217,9 +1580,17 @@ export async function data(): Promise<Data> {
 `
 }
 
-function todoPage(): string {
-  return `import '@/index.css'
-import { useState } from 'react'
+function todoPage(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':   return todoPageVue(ctx)
+    case 'solid': return todoPageSolid(ctx)
+    default:      return todoPageReact(ctx)
+  }
+}
+
+function todoPageReact(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
 import type { Data } from './+data.js'
 import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
@@ -1309,4 +1680,286 @@ export default function Page() {
   )
 }
 `
+}
+
+function todoPageVue(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  return `<script setup lang="ts">
+${cssImport}import { ref } from 'vue'
+import { useData } from 'vike-vue/useData'
+import type { Data } from './+data.js'
+import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
+
+const data  = useData<Data>()
+const todos = ref<Todo[]>(data.todos)
+const input = ref('')
+
+async function addTodo(e: Event) {
+  e.preventDefault()
+  if (!input.value.trim()) return
+  const res  = await fetch('/api/todos', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ title: input.value }),
+  })
+  const json = await res.json() as { data: Todo }
+  todos.value = [json.data, ...todos.value]
+  input.value = ''
+}
+
+async function toggleTodo(id: string, completed: boolean) {
+  await fetch(\`/api/todos/\${id}\`, {
+    method:  'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ completed: !completed }),
+  })
+  todos.value = todos.value.map(t => t.id === id ? { ...t, completed: !completed } : t)
+}
+
+async function deleteTodo(id: string) {
+  await fetch(\`/api/todos/\${id}\`, { method: 'DELETE' })
+  todos.value = todos.value.filter(t => t.id !== id)
+}
+</script>
+
+<template>
+  <div class="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
+    <h1 class="text-3xl font-bold">Todos</h1>
+
+    <form @submit="addTodo" class="flex w-full max-w-md gap-2">
+      <input
+        v-model="input"
+        placeholder="Add a new todo..."
+        class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      />
+      <button
+        type="submit"
+        class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+      >
+        Add
+      </button>
+    </form>
+
+    <ul class="w-full max-w-md space-y-2">
+      <li v-for="todo in todos" :key="todo.id" class="flex items-center gap-3 rounded-lg border p-3">
+        <input
+          type="checkbox"
+          :checked="todo.completed"
+          @change="toggleTodo(todo.id, todo.completed)"
+          class="h-4 w-4 cursor-pointer"
+        />
+        <span :class="['flex-1 text-sm', todo.completed ? 'line-through text-muted-foreground' : '']">
+          {{ todo.title }}
+        </span>
+        <button @click="deleteTodo(todo.id)" class="text-xs text-destructive hover:underline">
+          Delete
+        </button>
+      </li>
+      <li v-if="todos.length === 0" class="py-8 text-center text-sm text-muted-foreground">
+        No todos yet. Add one above!
+      </li>
+    </ul>
+
+    <a href="/" class="text-sm text-muted-foreground underline hover:text-foreground">
+      ← Back to home
+    </a>
+  </div>
+</template>
+`
+}
+
+function todoPageSolid(ctx: TemplateContext): string {
+  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  return `${cssImport}import { createSignal } from 'solid-js'
+import { For, Show } from 'solid-js'
+import { useData } from 'vike-solid/useData'
+import type { Data } from './+data.js'
+import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
+
+export default function Page() {
+  const data = useData<Data>()
+  const [todos, setTodos] = createSignal<Todo[]>(data.todos)
+  const [input, setInput] = createSignal('')
+
+  async function addTodo(e: Event) {
+    e.preventDefault()
+    if (!input().trim()) return
+    const res  = await fetch('/api/todos', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ title: input() }),
+    })
+    const json = await res.json() as { data: Todo }
+    setTodos([json.data, ...todos()])
+    setInput('')
+  }
+
+  async function toggleTodo(id: string, completed: boolean) {
+    await fetch(\`/api/todos/\${id}\`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ completed: !completed }),
+    })
+    setTodos(todos().map(t => t.id === id ? { ...t, completed: !completed } : t))
+  }
+
+  async function deleteTodo(id: string) {
+    await fetch(\`/api/todos/\${id}\`, { method: 'DELETE' })
+    setTodos(todos().filter(t => t.id !== id))
+  }
+
+  return (
+    <div class="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
+      <h1 class="text-3xl font-bold">Todos</h1>
+
+      <form onSubmit={addTodo} class="flex w-full max-w-md gap-2">
+        <input
+          value={input()}
+          onInput={e => setInput(e.currentTarget.value)}
+          placeholder="Add a new todo..."
+          class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="submit"
+          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Add
+        </button>
+      </form>
+
+      <ul class="w-full max-w-md space-y-2">
+        <For each={todos()} fallback={
+          <li class="py-8 text-center text-sm text-muted-foreground">No todos yet. Add one above!</li>
+        }>
+          {(todo) => (
+            <li class="flex items-center gap-3 rounded-lg border p-3">
+              <input
+                type="checkbox"
+                checked={todo.completed}
+                onChange={() => toggleTodo(todo.id, todo.completed)}
+                class="h-4 w-4 cursor-pointer"
+              />
+              <span class={\`flex-1 text-sm \${todo.completed ? 'line-through text-muted-foreground' : ''}\`}>
+                {todo.title}
+              </span>
+              <button onClick={() => deleteTodo(todo.id)} class="text-xs text-destructive hover:underline">
+                Delete
+              </button>
+            </li>
+          )}
+        </For>
+      </ul>
+
+      <a href="/" class="text-sm text-muted-foreground underline hover:text-foreground">
+        ← Back to home
+      </a>
+    </div>
+  )
+}
+`
+}
+
+// ─── Demo pages (secondary frameworks) ─────────────────────
+
+function demoPageConfig(fw: 'react' | 'vue' | 'solid'): string {
+  switch (fw) {
+    case 'vue':
+      return `import type { Config } from 'vike/types'
+import vikeVue from 'vike-vue/config'
+
+export default {
+  extends: vikeVue,
+} as unknown as Config
+`
+    case 'solid':
+      return `import type { Config } from 'vike/types'
+import vikeSolid from 'vike-solid/config'
+
+export default {
+  extends: vikeSolid,
+} as unknown as Config
+`
+    default: // react
+      return `import type { Config } from 'vike/types'
+import vikeReact from 'vike-react/config'
+
+export default {
+  extends: vikeReact,
+} as unknown as Config
+`
+  }
+}
+
+function demoPage(fw: 'react' | 'vue' | 'solid', ctx: TemplateContext): string {
+  const { primary, tailwind } = ctx
+
+  switch (fw) {
+    case 'react':
+      if (tailwind) {
+        return `export default function Page() {
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+      <h1 className="text-2xl font-bold">Hello from React</h1>
+      <p className="text-muted-foreground">React demo page — running alongside ${primary}.</p>
+      <a href="/" className="text-sm underline">← Back to home</a>
+    </div>
+  )
+}
+`
+      }
+      return `export default function Page() {
+  return (
+    <div>
+      <h1>Hello from React</h1>
+      <p>React demo page — running alongside ${primary}.</p>
+      <a href="/">← Back to home</a>
+    </div>
+  )
+}
+`
+
+    case 'vue':
+      if (tailwind) {
+        return `<template>
+  <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+    <h1 class="text-2xl font-bold">Hello from Vue</h1>
+    <p class="text-muted-foreground">Vue demo page — running alongside ${primary}.</p>
+    <a href="/" class="text-sm underline">← Back to home</a>
+  </div>
+</template>
+`
+      }
+      return `<template>
+  <div>
+    <h1>Hello from Vue</h1>
+    <p>Vue demo page — running alongside ${primary}.</p>
+    <a href="/">← Back to home</a>
+  </div>
+</template>
+`
+
+    case 'solid':
+      if (tailwind) {
+        return `export default function Page() {
+  return (
+    <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+      <h1 class="text-2xl font-bold">Hello from Solid</h1>
+      <p class="text-muted-foreground">Solid demo page — running alongside ${primary}.</p>
+      <a href="/" class="text-sm underline">← Back to home</a>
+    </div>
+  )
+}
+`
+      }
+      return `export default function Page() {
+  return (
+    <div>
+      <h1>Hello from Solid</h1>
+      <p>Solid demo page — running alongside ${primary}.</p>
+      <a href="/">← Back to home</a>
+    </div>
+  )
+}
+`
+  }
 }
