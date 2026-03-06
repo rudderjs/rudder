@@ -186,9 +186,6 @@ importers:
       '@boostkit/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@boostkit/di':
-        specifier: workspace:*
-        version: link:../di
       '@boostkit/router':
         specifier: workspace:*
         version: link:../router
@@ -202,25 +199,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/di:
-    dependencies:
-      reflect-metadata:
-        specifier: ^0.2.2
-        version: 0.2.2
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/reflect-metadata':
-        specifier: ^0.1.0
-        version: 0.1.0
       tsx:
         specifier: ^4.0.0
         version: 4.21.0
@@ -259,25 +237,10 @@ importers:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
-
-  packages/mail-nodemailer:
-    dependencies:
-      '@boostkit/mail':
-        specifier: workspace:*
-        version: link:../mail
+    optionalDependencies:
       nodemailer:
         specifier: ^6.9.0
         version: 6.10.1
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/nodemailer':
-        specifier: ^6.4.0
-        version: 6.4.23
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
 
   packages/middleware:
     dependencies:
@@ -642,9 +605,6 @@ importers:
       '@boostkit/mail':
         specifier: workspace:*
         version: link:../packages/mail
-      '@boostkit/mail-nodemailer':
-        specifier: workspace:*
-        version: link:../packages/mail-nodemailer
       '@boostkit/middleware':
         specifier: workspace:*
         version: link:../packages/middleware
@@ -4036,9 +3996,6 @@ packages:
 
   '@types/node@22.19.13':
     resolution: {integrity: sha512-akNQMv0wW5uyRpD2v2IEyRSZiR+BeGuoB6L310EgGObO44HSMNT8z1xzio28V8qOrgYaopIDNA18YgdXd+qTiw==}
-
-  '@types/nodemailer@6.4.23':
-    resolution: {integrity: sha512-aFV3/NsYFLSx9mbb5gtirBSXJnAlrusoKNuPbxsASWc7vrKLmIrTQRpdcxNcSFL3VW2A2XpeLEavwb2qMi6nlQ==}
 
   '@types/oracledb@6.5.2':
     resolution: {integrity: sha512-kK1eBS/Adeyis+3OlBDMeQQuasIDLUYXsi2T15ccNJ0iyUpQ4xDF7svFu3+bGVrI0CMBUclPciz+lsQR3JX3TQ==}
@@ -11576,10 +11533,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/nodemailer@6.4.23':
-    dependencies:
-      '@types/node': 20.19.35
-
   '@types/oracledb@6.5.2':
     dependencies:
       '@types/node': 20.19.35
@@ -13499,7 +13452,8 @@ snapshots:
 
   node-releases@2.0.27: {}
 
-  nodemailer@6.10.1: {}
+  nodemailer@6.10.1:
+    optional: true
 
   nopt@8.1.0:
     dependencies:

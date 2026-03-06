@@ -513,7 +513,7 @@ await mail().send({
 })
 ```
 
-Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (via `@boostkit/mail-nodemailer` optional peer).
+Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (built-in adapter; requires optional `nodemailer` dependency).
 
 ---
 
@@ -625,7 +625,7 @@ pnpm artisan db:seed
 
 ### Optional Peer Packages
 
-Packages like `@boostkit/queue-bullmq`, `@boostkit/mail-nodemailer` are **optional peers** — the user installs only what they need.
+Packages like `@boostkit/queue-bullmq` are **optional peers** — the user installs only what they need.
 
 They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@boostkit/core/support`. This helper:
 1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@boostkit/*`

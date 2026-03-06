@@ -29,6 +29,9 @@
   "dependencies": {
     "@boostkit/core": "workspace:*"
   },
+  "optionalDependencies": {
+    "nodemailer": "^6.9.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0",

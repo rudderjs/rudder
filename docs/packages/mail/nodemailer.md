@@ -1,11 +1,11 @@
-# @boostkit/mail-nodemailer
+# SMTP (Nodemailer)
 
-Nodemailer SMTP adapter for `@boostkit/mail`.
+Nodemailer SMTP support built into `@boostkit/mail`.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/mail-nodemailer nodemailer
+pnpm add @boostkit/mail nodemailer
 ```
 
 ## Setup
@@ -38,7 +38,7 @@ export default {
 } satisfies MailConfig
 ```
 
-No changes are needed in `bootstrap/providers.ts` — `@boostkit/mail` dynamically loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
+No changes are needed in `bootstrap/providers.ts` — `@boostkit/mail` loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
 
 ## Configuration
 
@@ -55,12 +55,12 @@ No changes are needed in `bootstrap/providers.ts` — `@boostkit/mail` dynamical
 
 ## `nodemailer(config, from)`
 
-`nodemailer(config, from)` returns a `MailAdapterProvider` that registers the Nodemailer adapter under the `'nodemailer'`/`'smtp'` driver name.
+`nodemailer(config, from)` is exported from `@boostkit/mail` and returns a `MailAdapterProvider` for the `'smtp'` driver.
 
 ```ts
-import { nodemailer } from '@boostkit/mail-nodemailer'
+import { nodemailer } from '@boostkit/mail'
 
-// Registered automatically via @boostkit/mail dynamic loading.
+// Used internally by the mail() provider when driver='smtp'.
 const provider = nodemailer(smtpConfig, { address: 'hello@example.com', name: 'BoostKit App' })
 ```
 
@@ -83,4 +83,4 @@ The `from` parameter sets the default sender envelope for all messages delivered
 - `encryption: 'tls'` enables STARTTLS and is the recommended setting for port `587`.
 - `encryption: 'ssl'` wraps the entire connection in TLS and is used with port `465`.
 - `encryption: 'none'` sends mail without transport encryption — only use this on trusted internal networks or for local development relays.
-- `nodemailer` (the npm package) is an optional peer dependency — you must install it explicitly alongside `@boostkit/mail-nodemailer`.
+- `nodemailer` is an optional dependency for SMTP — install it explicitly in app projects that use `driver: 'smtp'`.

@@ -127,7 +127,7 @@ export default defineConfig({
           text: 'Mail',
           items: [
             { text: '@boostkit/mail', link: '/packages/mail/' },
-            { text: '@boostkit/mail-nodemailer', link: '/packages/mail/nodemailer' },
+            { text: 'SMTP (Nodemailer)', link: '/packages/mail/nodemailer' },
           ],
         },
         {

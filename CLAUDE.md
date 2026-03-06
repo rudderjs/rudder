@@ -104,8 +104,7 @@ boostkit/
 │   ├── cache/          # Cache facade, MemoryAdapter + RedisAdapter (built-in)
 │   │                   #   Redis driver requires optional dep: ioredis
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper
-│   ├── mail/           # Mailable, Mail facade, LogAdapter, mail() factory
-│   ├── mail-nodemailer/ # Nodemailer SMTP adapter
+│   ├── mail/           # Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory
 │   ├── notification/   # Multi-channel notifications (mail, database)
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
 ├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm create boostkit-app)
@@ -140,8 +139,7 @@ boostkit/
 | `@boostkit/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
 | `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
 | `@boostkit/events` | 0.0.1 | EventDispatcher, Listener, dispatch(), events() factory |
-| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter, mail() factory |
-| `@boostkit/mail-nodemailer` | 0.0.1 | Nodemailer SMTP adapter |
+| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 
 **Merged/removed packages** (code absorbed, originals deleted):
@@ -150,6 +148,7 @@ boostkit/
 - `@boostkit/rate-limit` → merged into `@boostkit/middleware`
 - `@boostkit/storage-s3` → merged into `@boostkit/storage`
 - `@boostkit/cache-redis` → merged into `@boostkit/cache`
+- `@boostkit/mail-nodemailer` → merged into `@boostkit/mail`
 
 ---
 

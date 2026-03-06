@@ -65,8 +65,7 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 
 | Package | Description | Install |
 |---|---|---|
-| [@boostkit/mail](./mail/) | Mailable base class, Mail facade, built-in LogAdapter, and `mail()` factory. | `pnpm add @boostkit/mail` |
-| [@boostkit/mail-nodemailer](./mail/nodemailer) | Nodemailer SMTP adapter — optional peer for the `smtp` driver. | `pnpm add @boostkit/mail-nodemailer` |
+| [@boostkit/mail](./mail/) | Mailable base class, Mail facade, built-in LogAdapter + SMTP (Nodemailer), and `mail()` factory. | `pnpm add @boostkit/mail` |
 
 ## Session
 
