@@ -1,5 +1,5 @@
 import type { Application, ServiceProvider } from '@boostkit/core'
-import { betterAuth } from '@boostkit/auth'
+import { auth } from '@boostkit/auth'
 import { queue } from '@boostkit/queue'
 import { events } from '@boostkit/events'
 import { mail } from '@boostkit/mail'
@@ -16,7 +16,8 @@ import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListe
 import configs from '../config/index.js'
 
 export default [
-  betterAuth(configs.auth, configs.database.connections[configs.database.default as keyof typeof configs.database.connections]),
+  prismaProvider(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
+  auth(configs.auth),       // auto-discovers 'prisma' from DI
   queue(configs.queue),
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
   mail(configs.mail),
@@ -25,7 +26,6 @@ export default [
   session(configs.session),
   scheduler(),
   notifications(),
-  prismaProvider(configs.database),  // must boot before AppServiceProvider — sets ModelRegistry
   AppServiceProvider,
   TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
