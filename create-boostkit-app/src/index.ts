@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {
-  intro, outro, text, select, confirm, spinner,
+  intro, outro, text, select, multiselect, confirm, spinner,
   isCancel, cancel,
 } from '@clack/prompts'
 import fs     from 'node:fs/promises'
@@ -53,6 +53,59 @@ async function main(): Promise<void> {
   if (isCancel(withTodoAnswer)) { cancel('Cancelled.'); process.exit(0) }
   const withTodo = withTodoAnswer as boolean
 
+  // ── Frontend frameworks ────────────────────────────────
+
+  const frameworksAnswer = await multiselect({
+    message:       'Frontend frameworks',
+    options: [
+      { value: 'react', label: 'React',   hint: 'recommended' },
+      { value: 'vue',   label: 'Vue' },
+      { value: 'solid', label: 'Solid' },
+    ],
+    initialValues: ['react'],
+    required:      true,
+  })
+  if (isCancel(frameworksAnswer)) { cancel('Cancelled.'); process.exit(0) }
+  const frameworks = frameworksAnswer as ('react' | 'vue' | 'solid')[]
+
+  // ── Primary framework (only when >1 selected) ──────────
+
+  let primary: 'react' | 'vue' | 'solid'
+  if (frameworks.length > 1) {
+    const primaryAnswer = await select({
+      message: 'Primary framework (drives main pages)',
+      options: frameworks.map(f => ({
+        value: f,
+        label: f.charAt(0).toUpperCase() + f.slice(1),
+      })),
+    })
+    if (isCancel(primaryAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    primary = primaryAnswer as 'react' | 'vue' | 'solid'
+  } else {
+    primary = frameworks[0]!
+  }
+
+  // ── Tailwind CSS ───────────────────────────────────────
+
+  const tailwindAnswer = await confirm({
+    message:      'Add Tailwind CSS?',
+    initialValue: true,
+  })
+  if (isCancel(tailwindAnswer)) { cancel('Cancelled.'); process.exit(0) }
+  const tailwind = tailwindAnswer as boolean
+
+  // ── shadcn/ui ──────────────────────────────────────────
+
+  let shadcn = false
+  if (frameworks.includes('react') && tailwind) {
+    const shadcnAnswer = await confirm({
+      message:      'Add shadcn/ui?',
+      initialValue: true,
+    })
+    if (isCancel(shadcnAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    shadcn = shadcnAnswer as boolean
+  }
+
   // ── Install dependencies ───────────────────────────────
 
   const installAnswer = await confirm({
@@ -79,7 +132,7 @@ async function main(): Promise<void> {
   const s = spinner()
   s.start('Scaffolding project files...')
 
-  const templates = getTemplates({ name, db, withTodo, authSecret })
+  const templates = getTemplates({ name, db, withTodo, authSecret, frameworks, primary, tailwind, shadcn })
 
   for (const [filePath, content] of Object.entries(templates)) {
     const abs = path.join(target, filePath)
