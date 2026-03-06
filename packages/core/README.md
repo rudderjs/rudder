@@ -33,7 +33,7 @@ export default Application.configure({
 - `AppBuilder`, `BoostKit`
 - `app()`, `resolve()`
 - `defineConfig()`
-- Re-exports from `@boostkit/artisan`, `@boostkit/di`, `@boostkit/support`, and `@boostkit/contracts` types
+- Re-exports from `@boostkit/artisan`, `@boostkit/support`, and `@boostkit/contracts` types
 
 ## Configuration
 

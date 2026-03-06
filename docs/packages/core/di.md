@@ -1,9 +1,9 @@
-# @boostkit/di
+# Dependency Injection (DI)
 
 Dependency injection container with decorator-based constructor injection.
 
 ```bash
-pnpm add @boostkit/di reflect-metadata
+pnpm add @boostkit/core reflect-metadata
 ```
 
 > Install `reflect-metadata` as a regular dependency — it is required at runtime. Import it once at the top of your application entry point, before any other imports that use decorators.
@@ -37,7 +37,7 @@ import 'reflect-metadata'
 Mark a class with `@Injectable()` to allow the container to auto-resolve it from constructor parameter types. Use `@Inject(token)` to override a specific parameter's resolution key.
 
 ```ts
-import { Injectable, Inject, container } from '@boostkit/di'
+import { Injectable, Inject, container } from '@boostkit/core'
 
 @Injectable()
 class DatabaseConnection {
@@ -68,7 +68,7 @@ const service = container.make(UserService)
 ## Manual Bindings
 
 ```ts
-import { container } from '@boostkit/di'
+import { container } from '@boostkit/core'
 
 // Factory — new instance on every make()
 container.bind(PaymentService, () => new StripePaymentService())
@@ -126,7 +126,7 @@ Overrides the resolution token for a specific constructor parameter. Use this wh
 
 ## `container` Global Singleton
 
-`container` is a module-level singleton exported from `@boostkit/di` and re-exported from `@boostkit/core`. All service providers, `app().make()`, and `resolve()` use this same instance.
+`container` is a module-level singleton exported from `@boostkit/core`. All service providers, `app().make()`, and `resolve()` use this same instance.
 
 ```ts
 import { container } from '@boostkit/core'

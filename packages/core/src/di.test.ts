@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Container, container, Inject, Injectable } from './index.js'
+import { Container, container, Inject, Injectable } from './di.js'
 
 // ─── Container bindings ────────────────────────────────────
 
@@ -330,7 +330,7 @@ describe('global container singleton', () => {
   beforeEach(() => container.reset())
 
   it('container is the same instance across imports', async () => {
-    const { container: container2 } = await import('./index.js')
+    const { container: container2 } = await import('./di.js')
     assert.strictEqual(container, container2)
   })
 

@@ -61,7 +61,7 @@ export default defineConfig({
             { text: '@boostkit/core', link: '/packages/core/' },
             { text: '@boostkit/contracts', link: '/packages/core/contracts' },
             { text: '@boostkit/support', link: '/packages/core/support' },
-            { text: '@boostkit/di', link: '/packages/core/di' },
+            { text: 'DI Container', link: '/packages/core/di' },
             { text: '@boostkit/middleware', link: '/packages/core/middleware' },
             { text: 'Rate Limiting & CSRF', link: '/packages/rate-limit' },
             { text: '@boostkit/validation', link: '/packages/core/validation' },

@@ -143,7 +143,6 @@ function packageJson(ctx: TemplateContext): string {
     '@boostkit/cache':        'latest',
     '@boostkit/contracts':    'latest',
     '@boostkit/core':         'latest',
-    '@boostkit/di':           'latest',
     '@boostkit/middleware':   'latest',
     '@boostkit/orm':          'latest',
     '@boostkit/orm-prisma':   'latest',
@@ -1456,7 +1455,7 @@ export interface Todo {
 }
 
 function todoService(): string {
-  return `import { Injectable } from '@boostkit/di'
+  return `import { Injectable } from '@boostkit/core'
 import { resolve } from '@boostkit/core'
 import type { OrmAdapter } from '@boostkit/orm'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
