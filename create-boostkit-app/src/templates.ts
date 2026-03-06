@@ -148,7 +148,6 @@ function packageJson(ctx: TemplateContext): string {
     '@boostkit/orm-prisma':   'latest',
     '@boostkit/queue':        'latest',
     '@boostkit/router':       'latest',
-    '@boostkit/schedule':     'latest',
     '@boostkit/server-hono':  'latest',
     '@boostkit/session':      'latest',
     '@boostkit/storage':      'latest',
@@ -652,7 +651,7 @@ import { mail } from '@boostkit/mail'
 import { notifications } from '@boostkit/notification'
 import { cache } from '@boostkit/cache'
 import { storage } from '@boostkit/storage'
-import { scheduler } from '@boostkit/schedule'
+import { scheduler } from '@boostkit/core'
 import { session } from '@boostkit/session'
 import { prismaProvider } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'

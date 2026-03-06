@@ -136,7 +136,6 @@ boostkit/
 | `@boostkit/cli` | 0.0.2 | make:*, module:*, module:publish — markers: `<boostkit:modules:start/end>` |
 | `@boostkit/auth` | 0.0.1 | AuthUser/Session/Result types + betterAuth() factory (merged from auth-better-auth) |
 | `@boostkit/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
-| `@boostkit/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
 | `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
 | `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
@@ -149,6 +148,7 @@ boostkit/
 - `@boostkit/cache-redis` → merged into `@boostkit/cache`
 - `@boostkit/mail-nodemailer` → merged into `@boostkit/mail`
 - `@boostkit/events` → merged into `@boostkit/core`
+- `@boostkit/schedule` → merged into `@boostkit/core`
 
 ---
 
@@ -172,7 +172,7 @@ boostkit/
  orm-prisma      queue-bullmq
  orm-drizzle     queue-inngest
        │
-@boostkit/auth                      @boostkit/mail   @boostkit/schedule
+@boostkit/auth                      @boostkit/mail
        │
 @boostkit/notification
 ```

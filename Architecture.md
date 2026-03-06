@@ -170,7 +170,7 @@ Level 1 (parallel — no framework deps):
            ▼                 ▼                  ▼
     @boostkit/queue       @boostkit/cache       @boostkit/orm
     @boostkit/mail        @boostkit/storage
-    @boostkit/schedule    @boostkit/auth        @boostkit/validation
+             @boostkit/auth        @boostkit/validation
            │
     orm-prisma   queue-bullmq   queue-inngest
     mail-nodemailer
@@ -520,7 +520,7 @@ Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (built
 ### Schedule
 
 ```ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@boostkit/core'
 
 schedule().call(() => cleanupExpiredSessions())
   .everyHour()

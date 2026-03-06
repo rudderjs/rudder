@@ -163,10 +163,10 @@ These appear in `pnpm artisan --help` once the provider is registered in `bootst
 
 ## Scheduling Commands
 
-Use `@boostkit/schedule` to run artisan commands on a cron schedule:
+Use core scheduling to run artisan commands on a cron schedule:
 
 ```ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@boostkit/core'
 
 schedule.command('db:sync').daily().description('Sync data daily')
 schedule.call(async () => {

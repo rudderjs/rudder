@@ -1,5 +1,5 @@
 import { Artisan } from '@boostkit/artisan'
-import { Schedule } from '@boostkit/schedule'
+import { Schedule } from '@boostkit/core'
 import { Cache } from '@boostkit/cache'
 import { User } from '../app/Models/User.js'
 import { SendEmails } from '../app/Commands/SendEmails.js'

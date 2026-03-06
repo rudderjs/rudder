@@ -28,13 +28,14 @@ export default Application.configure({
 
 - `ServiceProvider`
 - `Listener`, `EventDispatcher`, `dispatcher`, `dispatch()`, `events()`
+- `ScheduledTask`, `schedule`, `Schedule`, `scheduler()`
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
 - `AppBuilder`, `BoostKit`
 - `app()`, `resolve()`
 - `defineConfig()`
-- Re-exports from `@boostkit/artisan`, `@boostkit/support`, and `@boostkit/contracts` types plus built-in DI and Events primitives
+- Re-exports from `@boostkit/artisan`, `@boostkit/support`, and `@boostkit/contracts` types plus built-in DI, Events, and Scheduling primitives
 
 ## Configuration
 

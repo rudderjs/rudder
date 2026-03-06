@@ -27,7 +27,6 @@
     "@boostkit/queue": "workspace:*",
     "@boostkit/queue-bullmq": "workspace:*",
     "@boostkit/router": "workspace:*",
-    "@boostkit/schedule": "workspace:*",
     "@boostkit/session": "workspace:*",
     "@boostkit/server-hono": "workspace:*",
     "@boostkit/storage": "workspace:*",

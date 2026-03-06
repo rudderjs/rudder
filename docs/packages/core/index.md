@@ -145,6 +145,7 @@ export default [
 | `artisan`, `Artisan`, `ArtisanRegistry`, `Command`, `CommandBuilder`, `CancelledError`, `parseSignature` | `@boostkit/artisan` |
 | `Container`, `container`, `Injectable`, `Inject` | Built-in (core DI) |
 | `Listener`, `EventDispatcher`, `dispatcher`, `dispatch`, `events` | Built-in (core Events) |
+| `ScheduledTask`, `schedule`, `Schedule`, `scheduler` | Built-in (core Scheduling) |
 | `Env`, `env`, `Collection`, `ConfigRepository`, `config`, `resolveOptionalPeer`, `defineEnv`, `dump`, `dd`, `sleep`, `tap`, `pick`, `omit`, `ucfirst` | `@boostkit/support` |
 | `AppRequest`, `AppResponse`, `RouteHandler`, `MiddlewareHandler`, `HttpMethod`, `RouteDefinition`, `ServerAdapter`, `FetchHandler`, `ServerAdapterProvider` | `@boostkit/contracts` |
 

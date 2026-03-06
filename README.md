@@ -36,7 +36,7 @@ pnpm dev
 
 | Package | Description |
 |---|---|
-| `@boostkit/core` | Application bootstrap, DI + Events, ServiceProvider lifecycle |
+| `@boostkit/core` | Application bootstrap, DI + Events + Scheduling, ServiceProvider lifecycle |
 | `@boostkit/router` | Fluent + decorator-based HTTP routing |
 | `@boostkit/middleware` | Middleware pipeline, CORS, logger, rate limiting |
 | `@boostkit/validation` | FormRequest, `validate()`, Zod re-export |
@@ -51,7 +51,6 @@ pnpm dev
 | `@boostkit/cache` | Cache facade, memory + Redis drivers (Redis needs `ioredis`) |
 | `@boostkit/storage` | Storage facade, local filesystem adapter + (s3 driver) S3/R2/MinIO via `@aws-sdk/client-s3` |
 | `@boostkit/mail` | Mailable, Mail facade, log + smtp drivers (smtp needs `nodemailer`) |
-| `@boostkit/schedule` | Task scheduler, cron-based |
 | `@boostkit/notification` | Multi-channel notifications (mail, database) |
 | `@boostkit/artisan` | Artisan CLI registry, Command base class |
 | `@boostkit/support` | Env, Collection, ConfigRepository, helpers |
@@ -103,7 +102,7 @@ Route.post('/api/users', async (req, res) => {
 ```ts
 // routes/console.ts
 import { Artisan }  from '@boostkit/artisan'
-import { Schedule } from '@boostkit/schedule'
+import { Schedule } from '@boostkit/core'
 
 Artisan.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })

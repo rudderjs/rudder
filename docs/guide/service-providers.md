@@ -104,7 +104,7 @@ const service = app().make(UserService)
 | `storage(config)` | `@boostkit/storage` | Storage adapter, `storage:link` command |
 | `mail(config)` | `@boostkit/mail` | Mail adapter |
 | `events(listenMap)` | `@boostkit/core` | Event dispatcher, listener registration |
-| `scheduler()` | `@boostkit/schedule` | Schedule instance, `schedule:*` commands |
+| `scheduler()` | `@boostkit/core` | Schedule instance, `schedule:*` commands |
 | `auth(config)` | `@boostkit/auth` | Auth instance, `/api/auth/*` routes |
 | `session(config)` | `@boostkit/session` | Session driver (cookie/redis), `SessionMiddleware()` factory |
 | `notifications()` | `@boostkit/notification` | Mail + database channels |

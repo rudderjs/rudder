@@ -53,7 +53,7 @@ BoostKit exposes a standard [WinterCG Fetch handler](https://wintercg.org/) thro
 | Storage | `@boostkit/storage` | Local filesystem or S3/R2/MinIO |
 | Mail | `@boostkit/mail` / `mail-nodemailer` | Log (dev) or SMTP |
 | Events | `@boostkit/core` | In-process event dispatcher |
-| Scheduling | `@boostkit/schedule` | Cron-based task scheduler |
+| Scheduling | `@boostkit/core` | Cron-based task scheduler |
 | Notifications | `@boostkit/notification` | Multi-channel (mail, database) |
 | CLI | `@boostkit/artisan` / `cli` | `make:*` generators, custom commands |
 
@@ -78,7 +78,7 @@ BoostKit is structured as a clean DAG — no circular dependencies, so you can u
  orm-prisma       queue-bullmq
  orm-drizzle      queue-inngest
        │
-@boostkit/auth                      @boostkit/mail   @boostkit/schedule
+@boostkit/auth                      @boostkit/mail
        │
 @boostkit/notification
 ```

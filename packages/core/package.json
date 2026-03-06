@@ -35,6 +35,7 @@
     "@boostkit/contracts": "workspace:*",
     "@boostkit/router": "workspace:*",
     "@boostkit/support": "workspace:*",
+    "croner": "^9.0.0",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
