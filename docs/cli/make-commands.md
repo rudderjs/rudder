@@ -226,7 +226,7 @@ pnpm artisan make:listener SendWelcomeEmail
 Generated file:
 
 ```ts
-import type { Listener } from '@boostkit/events'
+import type { Listener } from '@boostkit/core'
 
 export class SendWelcomeEmail implements Listener {
   async handle(event: unknown): Promise<void> {

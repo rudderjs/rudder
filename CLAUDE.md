@@ -140,9 +140,7 @@ boostkit/
 | `@boostkit/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
 | `@boostkit/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
 | `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
-| `@boostkit/events` | 0.0.1 | EventDispatcher, Listener, dispatch(), events() factory |
-| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter, mail() factory |
-| `@boostkit/mail-nodemailer` | 0.0.1 | Nodemailer SMTP adapter |
+| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 
 **Merged/removed packages** (code absorbed, originals deleted):
@@ -150,6 +148,8 @@ boostkit/
 - `@boostkit/rate-limit` → merged into `@boostkit/middleware`
 - `@boostkit/storage-s3` → merged into `@boostkit/storage`
 - `@boostkit/cache-redis` → merged into `@boostkit/cache`
+- `@boostkit/mail-nodemailer` → merged into `@boostkit/mail`
+- `@boostkit/events` → merged into `@boostkit/core`
 
 ---
 
@@ -174,7 +174,7 @@ boostkit/
  orm-prisma      queue-bullmq
  orm-drizzle     queue-inngest
        │
-@boostkit/auth   @boostkit/events   @boostkit/mail   @boostkit/schedule
+@boostkit/auth                      @boostkit/mail   @boostkit/schedule
        │
 @boostkit/notification
 ```

@@ -133,7 +133,7 @@ export default defineConfig({
         {
           text: 'Features',
           items: [
-            { text: '@boostkit/events', link: '/packages/events' },
+            { text: 'Events (core)', link: '/packages/events' },
             { text: '@boostkit/schedule', link: '/packages/schedule' },
             { text: '@boostkit/notification', link: '/packages/notification' },
             { text: '@boostkit/artisan', link: '/packages/artisan' },

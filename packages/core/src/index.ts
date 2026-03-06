@@ -1,18 +1,8 @@
-import { Container, container } from '@boostkit/di'
+import { Container, container } from './di.js'
+import { ServiceProvider } from './service-provider.js'
 import { Env, ConfigRepository, setConfigRepository } from '@boostkit/support'
 import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@boostkit/contracts'
 import { artisan, ArtisanRegistry } from '@boostkit/artisan'
-// ─── Service Provider ──────────────────────────────────────
-
-export abstract class ServiceProvider {
-  constructor(protected app: Application) {}
-
-  /** Register bindings into the container */
-  abstract register(): void
-
-  /** Called after all providers are registered */
-  boot?(): void | Promise<void>
-}
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -319,6 +309,9 @@ export class BoostKit {
 
 export { artisan, Artisan, ArtisanRegistry, CommandBuilder, Command, CancelledError, parseSignature } from '@boostkit/artisan'
 export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@boostkit/artisan'
+export { ServiceProvider } from './service-provider.js'
+export { Listener, EventDispatcher, dispatcher, dispatch, events } from './events.js'
+export type { ListenMap } from './events.js'
 
 // ─── Global helpers ────────────────────────────────────────
 
@@ -331,7 +324,7 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 
 // ─── Re-exports ────────────────────────────────────────────
 
-export { Container, container, Injectable, Inject } from '@boostkit/di'
+export { Container, container, Injectable, Inject } from './di.js'
 export { Collection, Env, env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer, dump, dd } from '@boostkit/support'
 export type { AppRequest, AppResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@boostkit/contracts'
 

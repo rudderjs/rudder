@@ -169,7 +169,7 @@ Level 1 (parallel — no framework deps):
            ┌─────────────────┼──────────────────┐
            ▼                 ▼                  ▼
     @boostkit/queue       @boostkit/cache       @boostkit/orm
-    @boostkit/mail        @boostkit/storage     @boostkit/events
+    @boostkit/mail        @boostkit/storage
     @boostkit/schedule    @boostkit/auth        @boostkit/validation
            │
     orm-prisma   queue-bullmq   queue-inngest
@@ -488,7 +488,7 @@ pnpm artisan storage:link    # creates public/storage symlink → storage/app/pu
 ### Events
 
 ```ts
-import { dispatch, events } from '@boostkit/events'
+import { dispatch, events } from '@boostkit/core'
 
 // Register a listener
 events().listen('user.registered', async (payload) => {

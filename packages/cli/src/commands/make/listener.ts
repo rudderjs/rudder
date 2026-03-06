@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 function stub(className: string): string {
-  return `import type { Listener } from '@boostkit/events'
+  return `import type { Listener } from '@boostkit/core'
 
 export class ${className} implements Listener {
   async handle(event: unknown): Promise<void> {

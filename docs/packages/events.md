@@ -1,11 +1,11 @@
-# @boostkit/events
+# Events (Core)
 
 Event dispatcher, Listener contract, and provider factory for synchronous event-driven programming.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/events
+pnpm add @boostkit/core
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ Register the events provider in `bootstrap/providers.ts` by passing a listen map
 
 ```ts
 // bootstrap/providers.ts
-import { events } from '@boostkit/events'
+import { events } from '@boostkit/core'
 import { SendWelcomeEmail } from '../app/Listeners/SendWelcomeEmail.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 
@@ -43,7 +43,7 @@ Listeners implement the `Listener<T>` interface and define a `handle(event)` met
 
 ```ts
 // app/Listeners/SendWelcomeEmail.ts
-import type { Listener } from '@boostkit/events'
+import type { Listener } from '@boostkit/core'
 import type { UserRegistered } from '../Events/UserRegistered.js'
 
 export class SendWelcomeEmail implements Listener<UserRegistered> {
@@ -61,7 +61,7 @@ Use the `dispatch()` helper anywhere in your application — routes, services, c
 ```ts
 // routes/api.ts
 import { router } from '@boostkit/router'
-import { dispatch } from '@boostkit/events'
+import { dispatch } from '@boostkit/core'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 
 router.post('/api/users', async (req, res) => {
@@ -78,15 +78,15 @@ router.post('/api/users', async (req, res) => {
 The global `dispatcher` singleton is available for imperative registration and dispatch outside of the provider factory:
 
 ```ts
-import { dispatcher } from '@boostkit/events'
+import { dispatcher } from '@boostkit/core'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmail } from '../app/Listeners/SendWelcomeEmail.js'
 
 // Dispatch an event
 dispatcher.dispatch(new UserRegistered('user-123'))
 
-// Register a listener at runtime
-dispatcher.listen(UserRegistered, SendWelcomeEmail)
+// Register listeners at runtime
+dispatcher.register(UserRegistered.name, new SendWelcomeEmail())
 ```
 
 ## API Reference
@@ -103,10 +103,10 @@ Keys are event class names (matched via `event.constructor.name`). Values are ar
 
 ### `events(listenMap)`
 
-Factory function that returns a `ServiceProvider` class. When registered in `bootstrap/providers.ts`, it iterates the listen map and calls `dispatcher.listen()` for each entry during the provider's `register` phase.
+Factory function that returns a `ServiceProvider` class. When registered in `bootstrap/providers.ts`, it iterates the listen map and calls `dispatcher.register()` for each entry during the provider's `boot` phase.
 
 ```ts
-import { events } from '@boostkit/events'
+import { events } from '@boostkit/core'
 
 events({
   UserRegistered: [SendWelcomeEmail, LogUserRegistration],
@@ -119,7 +119,7 @@ events({
 Convenience helper that delegates to `dispatcher.dispatch()`. Resolves each registered listener in order and awaits its `handle()` method before proceeding to the next.
 
 ```ts
-import { dispatch } from '@boostkit/events'
+import { dispatch } from '@boostkit/core'
 
 dispatch(new UserRegistered(user.id))
 ```
@@ -137,7 +137,7 @@ interface Listener<T = unknown> {
 | Method | Description |
 |---|---|
 | `dispatch(event)` | Resolves listeners by `event.constructor.name` and invokes each `handle()` in order |
-| `listen(EventClass, ListenerClass)` | Registers a listener class for the given event class |
+| `register(eventName, ...listeners)` | Registers one or more listener instances for an event class name |
 
 ## Notes
 

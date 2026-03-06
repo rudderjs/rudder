@@ -1,7 +1,7 @@
 import type { Application, ServiceProvider } from '@boostkit/core'
+import { events } from '@boostkit/core'
 import { auth } from '@boostkit/auth'
 import { queue } from '@boostkit/queue'
-import { events } from '@boostkit/events'
 import { mail } from '@boostkit/mail'
 import { cache } from '@boostkit/cache'
 import { storage } from '@boostkit/storage'

@@ -27,13 +27,14 @@ export default Application.configure({
 ## API Reference
 
 - `ServiceProvider`
+- `Listener`, `EventDispatcher`, `dispatcher`, `dispatch()`, `events()`
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
 - `AppBuilder`, `BoostKit`
 - `app()`, `resolve()`
 - `defineConfig()`
-- Re-exports from `@boostkit/artisan`, `@boostkit/di`, `@boostkit/support`, and `@boostkit/contracts` types
+- Re-exports from `@boostkit/artisan`, `@boostkit/support`, and `@boostkit/contracts` types plus built-in DI and Events primitives
 
 ## Configuration
 

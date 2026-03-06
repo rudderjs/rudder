@@ -103,7 +103,7 @@ const service = app().make(UserService)
 | `cache(config)` | `@boostkit/cache` | Cache adapter |
 | `storage(config)` | `@boostkit/storage` | Storage adapter, `storage:link` command |
 | `mail(config)` | `@boostkit/mail` | Mail adapter |
-| `events(listenMap)` | `@boostkit/events` | Event dispatcher, listener registration |
+| `events(listenMap)` | `@boostkit/core` | Event dispatcher, listener registration |
 | `scheduler()` | `@boostkit/schedule` | Schedule instance, `schedule:*` commands |
 | `auth(config)` | `@boostkit/auth` | Auth instance, `/api/auth/*` routes |
 | `session(config)` | `@boostkit/session` | Session driver (cookie/redis), `SessionMiddleware()` factory |

@@ -1,4 +1,5 @@
-import { ServiceProvider, type Application } from '@boostkit/core'
+import type { Application } from './index.js'
+import { ServiceProvider } from './service-provider.js'
 
 // ─── Listener Contract ─────────────────────────────────────
 
@@ -51,15 +52,6 @@ export type ListenMap = Record<string, (new () => Listener<never>)[]>
 /**
  * Returns an EventServiceProvider class that registers the given listener map
  * into the global EventDispatcher on boot.
- *
- * Usage in bootstrap/providers.ts:
- *   import { events } from '@boostkit/events'
- *   import { UserRegistered } from '../app/Events/UserRegistered.js'
- *   import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
- *
- *   events({
- *     [UserRegistered.name]: [SendWelcomeEmailListener],
- *   })
  */
 export function events(listen: ListenMap): new (app: Application) => ServiceProvider {
   class EventServiceProvider extends ServiceProvider {

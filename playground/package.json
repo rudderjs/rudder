@@ -19,7 +19,6 @@
     "@boostkit/cache": "workspace:*",
     "@boostkit/contracts": "workspace:*",
     "@boostkit/core": "workspace:*",
-    "@boostkit/events": "workspace:*",
     "@boostkit/mail": "workspace:*",
     "@boostkit/mail-nodemailer": "workspace:*",
     "@boostkit/middleware": "workspace:*",

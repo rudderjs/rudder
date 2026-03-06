@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { EventDispatcher, dispatch, dispatcher, type Listener } from './index.js'
+import { EventDispatcher, dispatch, dispatcher, type Listener } from './events.js'
 
 describe('Events contract baseline', () => {
   beforeEach(() => {

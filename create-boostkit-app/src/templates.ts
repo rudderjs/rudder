@@ -155,7 +155,6 @@ function packageJson(ctx: TemplateContext): string {
     '@boostkit/storage':      'latest',
     '@boostkit/support':      'latest',
     '@boostkit/validation':   'latest',
-    '@boostkit/events':       'latest',
     '@boostkit/mail':         'latest',
     '@boostkit/notification': 'latest',
     '@prisma/client':         '^7.0.0',
@@ -648,7 +647,7 @@ function bootstrapProviders(ctx: TemplateContext): string {
 
   return `import type { Application, ServiceProvider } from '@boostkit/core'
 import { auth } from '@boostkit/auth'
-import { events } from '@boostkit/events'
+import { events } from '@boostkit/core'
 import { queue } from '@boostkit/queue'
 import { mail } from '@boostkit/mail'
 import { notifications } from '@boostkit/notification'

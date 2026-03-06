@@ -228,22 +228,6 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  packages/events:
-    dependencies:
-      '@boostkit/core':
-        specifier: workspace:*
-        version: link:../core
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   packages/mail:
     dependencies:
       '@boostkit/core':
@@ -636,9 +620,6 @@ importers:
       '@boostkit/core':
         specifier: workspace:*
         version: link:../packages/core
-      '@boostkit/events':
-        specifier: workspace:*
-        version: link:../packages/events
       '@boostkit/mail':
         specifier: workspace:*
         version: link:../packages/mail
