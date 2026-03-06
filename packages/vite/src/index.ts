@@ -68,18 +68,18 @@ export function boostkit(): Promise<Plugin[]> {
       ...vikePlugins,
       {
         name: 'boostkit:config',
-        onLog(level, log) {
+        configResolved(config) {
           // Suppress "Sourcemap points to missing source files" for @boostkit/* packages.
-          // These warnings fire because published dist/ has sourcemaps referencing the
-          // original .ts sources which are not shipped in the npm package.
-          if (
-            level === 'warn' &&
-            log.message.includes('Sourcemap') &&
-            log.message.includes('missing source files') &&
-            log.message.includes('@boostkit')
-          ) {
-            return false
-          }
+          // Vite emits these via logger.warnOnce() when published dist/ has sourcemaps
+          // referencing the original .ts sources not shipped in the npm package.
+          const filter = (msg: string) =>
+            msg.includes('Sourcemap') &&
+            msg.includes('missing source files') &&
+            msg.includes('@boostkit')
+          const origWarn     = config.logger.warn.bind(config.logger)
+          const origWarnOnce = config.logger.warnOnce.bind(config.logger)
+          config.logger.warn     = (msg, opts) => { if (!filter(msg)) origWarn(msg, opts) }
+          config.logger.warnOnce = (msg, opts) => { if (!filter(msg)) origWarnOnce(msg, opts) }
         },
         config() {
           return {

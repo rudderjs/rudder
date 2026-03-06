@@ -1,5 +1,11 @@
 # @boostkit/vite
 
+## 0.0.3
+
+### Patch Changes
+
+- Suppress "Sourcemap points to missing source files" warnings for @boostkit/\* packages in dev server output
+
 ## 0.0.2
 
 ### Patch Changes
