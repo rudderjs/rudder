@@ -19,22 +19,51 @@ Or with npx:
 npx create-boostkit-app my-app
 ```
 
-The CLI will prompt you for:
+The CLI walks you through 8 prompts:
 
-1. **Project name** — used as the directory name and `package.json` name
-2. **Database driver** — SQLite (default), PostgreSQL, or LibSQL/Turso
-3. **Include Todo module?** — scaffolds a full CRUD module as a reference
-4. **Run pnpm install?** — install dependencies immediately
+| # | Prompt | Options | Default |
+|---|--------|---------|---------|
+| 1 | **Project name** | any string | — |
+| 2 | **Database driver** | SQLite · PostgreSQL · MySQL | SQLite |
+| 3 | **Include Todo module?** | yes / no | yes |
+| 4 | **Frontend frameworks** | React · Vue · Solid *(multiselect)* | React |
+| 5 | **Primary framework** | one of the selected | *(only shown when >1 selected)* |
+| 6 | **Add Tailwind CSS?** | yes / no | yes |
+| 7 | **Add shadcn/ui?** | yes / no | yes *(only shown when React + Tailwind)* |
+| 8 | **Install dependencies?** | yes / no | yes |
 
 After scaffolding:
 
 ```bash
 cd my-app
-pnpm exec prisma db push     # Create the SQLite database
-pnpm dev                     # Start the dev server
+pnpm exec prisma generate    # generate Prisma client
+pnpm exec prisma db push     # create the database
+pnpm dev                     # start the dev server
 ```
 
 Your app will be running at `http://localhost:3000`.
+
+### Framework combinations
+
+The scaffolder supports all combinations of React, Vue, and Solid. The **primary framework** drives all main pages (`pages/index/`, `pages/_error/`, `pages/todos/`). Each **secondary framework** gets a minimal demo page at `pages/{fw}-demo/`.
+
+| Primary | Page extension | Notes |
+|---------|---------------|-------|
+| React | `.tsx` | `jsx: react-jsx` in tsconfig |
+| Vue | `.vue` | No jsx config needed |
+| Solid | `.tsx` | `jsx: preserve` + `jsxImportSource: solid-js` |
+
+When React and Solid are both selected, the Vite config automatically applies `include`/`exclude` rules to each plugin so `.tsx` files are processed by the correct framework.
+
+### CSS / UI options
+
+| Selection | What's generated |
+|-----------|-----------------|
+| Tailwind + shadcn | `src/index.css` with full shadcn CSS variables |
+| Tailwind only | `src/index.css` with `@import "tailwindcss"` |
+| Neither | No `src/index.css` |
+
+shadcn/ui is only offered when React and Tailwind are both selected.
 
 ## Option 2: Manual Installation
 
@@ -44,7 +73,7 @@ If you prefer to set up manually or add BoostKit to an existing Vite project:
 
 ```bash
 pnpm add @boostkit/core @boostkit/server-hono @boostkit/router
-pnpm add -D vite vitepress typescript
+pnpm add -D vite typescript
 ```
 
 ### 2. Add your chosen ORM
@@ -85,7 +114,6 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((_m) => {})
-  .withExceptions((_e) => {})
   .create()
 ```
 
@@ -93,11 +121,12 @@ Create `bootstrap/providers.ts`:
 
 ```ts
 import type { Application, ServiceProvider } from '@boostkit/core'
-import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
+import { prismaProvider } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
+import configs from '../config/index.js'
 
 export default [
-  DatabaseServiceProvider,  // must precede AppServiceProvider — sets ModelRegistry
+  prismaProvider(configs.database),  // binds PrismaClient to DI as 'prisma'
   AppServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
 ```
@@ -118,57 +147,45 @@ export default {
 } as unknown as Config
 ```
 
-This is the only wiring needed — `vike-photon` consumes the exported `BoostKit` instance directly as the HTTP server.
-
-### 5. Config files
-
-Create `config/server.ts`:
+Then create a per-page config that extends your chosen UI framework:
 
 ```ts
-import { Env } from '@boostkit/support'
+// pages/index/+config.ts (React)
+import vikeReact from 'vike-react/config'
+export default { extends: vikeReact } as unknown as Config
 
-export default {
-  port: Env.getNumber('PORT', 3000),
-  cors: {
-    origin:  Env.get('CORS_ORIGIN', '*'),
-    methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-    headers: 'Content-Type,Authorization',
-  },
-}
+// pages/index/+config.ts (Vue)
+import vikeVue from 'vike-vue/config'
+export default { extends: vikeVue } as unknown as Config
+
+// pages/index/+config.ts (Solid)
+import vikeSolid from 'vike-solid/config'
+export default { extends: vikeSolid } as unknown as Config
 ```
 
-Create `config/index.ts` — collect all config files into a single default export:
-
-```ts
-import server from './server.js'
-// import database from './database.js'
-
-export default { server }
-```
-
-### 6. Vite config
-
-Install `vike-photon`:
+### 5. Vite config
 
 ```bash
-pnpm add vike-photon vike
+pnpm add vike vike-photon
+# plus your framework plugin:
+pnpm add -D @vitejs/plugin-react    # React
+pnpm add    vike-vue                # Vue
+pnpm add    vike-solid              # Solid
 ```
 
-
-
-Create `vite.config.ts`:
+`vite.config.ts` — include only the plugins for your chosen frameworks:
 
 ```ts
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import vike from 'vike/plugin'
+import boostkit from '@boostkit/vite'
+import react from '@vitejs/plugin-react'   // React only
 
 export default defineConfig({
-  plugins: [vike(), react()],
+  plugins: [boostkit(), react()],
 })
 ```
 
-## Environment Variables
+### 6. Environment variables
 
 Create a `.env` file at the project root:
 
@@ -178,16 +195,8 @@ APP_ENV=local
 APP_DEBUG=true
 PORT=3000
 DATABASE_URL="file:./dev.db"
+AUTH_SECRET=your-32-char-secret-here
 ```
-
-## Verifying the Setup
-
-```bash
-pnpm build        # Compile TypeScript
-pnpm dev          # Start Vite dev server
-```
-
-Visit `http://localhost:3000` — you should see the Vike welcome page or your first route response.
 
 ## Next Steps
 

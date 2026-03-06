@@ -21,7 +21,6 @@ my-app/
 │   ├── Services/
 │   │   └── UserService.ts  # Business logic — bound in AppServiceProvider
 │   ├── Providers/
-│   │   ├── DatabaseServiceProvider.ts  # Connects ORM adapter
 │   │   └── AppServiceProvider.ts       # Binds services and singletons
 │   ├── Middleware/
 │   │   └── RequestIdMiddleware.ts      # Attaches X-Request-Id to every response
@@ -37,11 +36,17 @@ my-app/
 │   ├── web.ts              # Non-API server routes (redirects, guards) — side-effect file
 │   └── console.ts          # artisan.command() — side-effect file, no exports
 ├── pages/                  # Vike file-based SSR pages
+│   ├── +config.ts          # Root vike-photon config (points to bootstrap/app.ts)
 │   ├── index/
-│   │   └── +Page.tsx       # Rendered at /
-│   └── +config.ts          # Vike renderer config
+│   │   ├── +config.ts      # Framework config (extends vike-react / vike-vue / vike-solid)
+│   │   ├── +data.ts        # SSR data loader
+│   │   └── +Page.tsx|.vue  # Home page — extension depends on primary framework
+│   ├── _error/
+│   │   └── +Page.tsx|.vue  # Error page (404, 401, 500)
+│   └── {fw}-demo/          # Demo pages for secondary frameworks (when multiple selected)
+│       └── +Page.tsx|.vue
 ├── src/
-│   └── index.css           # Global stylesheet (Tailwind + shadcn theme)
+│   └── index.css           # Global stylesheet — only generated when Tailwind is selected
 ├── prisma/
 │   └── schema.prisma       # Prisma schema — models, relations, datasource
 ├── .env                    # Secrets and environment-specific values
@@ -49,7 +54,7 @@ my-app/
 ├── package.json
 ├── tsconfig.json
 ├── prisma.config.ts        # Prisma CLI config (schema path, datasource)
-└── vite.config.ts          # Vite + Vike + React/Vue config
+└── vite.config.ts          # Vite + framework plugins (react/vue/solid — conditional)
 ```
 
 ## Key Directories
@@ -58,7 +63,7 @@ my-app/
 
 The wiring layer. `app.ts` is the equivalent of Laravel's `bootstrap/app.php`. It configures the server adapter, registers providers, and declares route loaders. **Do not put business logic here.**
 
-`providers.ts` exports an ordered array of service provider classes. Provider **boot order matters** — `DatabaseServiceProvider` must appear before `AppServiceProvider` (and any provider that uses ORM models during `boot()`) so `ModelRegistry` is set in time.
+`providers.ts` exports an ordered array of service provider classes. Provider **boot order matters** — `prismaProvider(configs.database)` must appear first so `PrismaClient` is bound to the DI container before any other provider that needs it (auth, ORM models, etc.).
 
 ### `config/`
 
@@ -99,7 +104,9 @@ These are loaded lazily by BoostKit via the `withRouting()` configuration.
 
 ### `pages/`
 
-Vike file-based SSR pages. Files named `+Page.tsx` are rendered at the corresponding URL. This directory is optional — you can build a pure API app without any pages.
+Vike file-based SSR pages. The file extension depends on your primary framework — `.tsx` for React or Solid, `.vue` for Vue. Each page directory has a `+config.ts` that extends the appropriate vike framework config. This directory is optional — you can build a pure API app without any pages.
+
+When multiple frameworks are selected via the scaffolder, secondary frameworks get demo pages under `pages/{fw}-demo/`.
 
 ### `prisma/`
 

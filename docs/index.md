@@ -6,7 +6,7 @@ hero:
   text: "Node.js Full-Stack Framework"
   tagline: "Laravel's developer experience, reimagined for the Node.js ecosystem."
   image:
-    src: /logo.svg
+    src: /logo.png
     alt: BoostKit
   actions:
     - theme: brand

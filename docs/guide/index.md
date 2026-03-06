@@ -24,10 +24,13 @@ There is no monolithic "install everything" step. Queue support, caching, auth, 
 
 BoostKit uses [Vike](https://vike.dev) as its SSR and page-routing layer, which means you can pair it with any UI framework:
 
-- **React** — the playground default
-- **Vue** — first-class support
-- **Solid** — supported
+- **React** — full support via `vike-react`
+- **Vue** — full support via `vike-vue`
+- **Solid** — full support via `vike-solid`
+- **Multiple at once** — the scaffolder lets you select several frameworks; each gets its own pages
 - **No frontend** — pure API mode works out of the box
+
+The `create-boostkit-app` scaffolder asks which frameworks you want, which is primary (drives main pages), and whether to include Tailwind CSS and shadcn/ui. Secondary frameworks get minimal demo pages at `pages/{fw}-demo/`.
 
 ### Deploy Anywhere
 
