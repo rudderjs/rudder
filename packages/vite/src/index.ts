@@ -13,6 +13,17 @@ const SSR_EXTERNALS = [
   '@boostkit/orm-drizzle',
 ]
 
+// ─── SSR no-externals ──────────────────────────────────────
+// @boostkit/server-hono dynamically imports @photonjs/hono which contains
+// virtual module imports (virtual:photon:get-middlewares:*). When loaded
+// natively (as an externalized npm package), these virtual imports fail
+// with ERR_UNSUPPORTED_ESM_URL_SCHEME. Marking it non-external forces
+// Vite's runner to process it, so @photonjs/hono is also processed through
+// Vite's plugin system where virtual modules are properly resolved.
+const SSR_NO_EXTERNALS = [
+  '@boostkit/server-hono',
+]
+
 // ─── Helpers ───────────────────────────────────────────────
 
 // Resolve from the app root so we pick up the user's installed packages,
@@ -57,6 +68,19 @@ export function boostkit(): Promise<Plugin[]> {
       ...vikePlugins,
       {
         name: 'boostkit:config',
+        onLog(level, log) {
+          // Suppress "Sourcemap points to missing source files" for @boostkit/* packages.
+          // These warnings fire because published dist/ has sourcemaps referencing the
+          // original .ts sources which are not shipped in the npm package.
+          if (
+            level === 'warn' &&
+            log.message.includes('Sourcemap') &&
+            log.message.includes('missing source files') &&
+            log.message.includes('@boostkit')
+          ) {
+            return false
+          }
+        },
         config() {
           return {
             resolve: {
@@ -64,6 +88,7 @@ export function boostkit(): Promise<Plugin[]> {
             },
             ssr: {
               external: SSR_EXTERNALS,
+              noExternal: SSR_NO_EXTERNALS,
             },
             build: {
               rollupOptions: {

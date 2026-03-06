@@ -1,6 +1,6 @@
 {
   "name": "@boostkit/vite",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,9 +33,15 @@
     "vike-solid": ">=0.8.0"
   },
   "peerDependenciesMeta": {
-    "@vitejs/plugin-react": { "optional": true },
-    "@vitejs/plugin-vue": { "optional": true },
-    "vike-solid": { "optional": true }
+    "@vitejs/plugin-react": {
+      "optional": true
+    },
+    "@vitejs/plugin-vue": {
+      "optional": true
+    },
+    "vike-solid": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

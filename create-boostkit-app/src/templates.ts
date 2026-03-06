@@ -118,6 +118,7 @@ function packageJson(ctx: TemplateContext): string {
     'react':                   '^19.0.0',
     'react-dom':               '^19.0.0',
     'reflect-metadata':        '^0.2.2',
+    'shadcn':                  'latest',
     'tailwind-merge':          '^3.5.0',
     'tailwindcss':             '^4.2.1',
     'vike':                    '^0.4.239',
