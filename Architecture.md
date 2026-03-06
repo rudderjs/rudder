@@ -153,7 +153,7 @@ my-app/
 
 ```
 Level 1 (parallel — no framework deps):
-  @boostkit/contracts   @boostkit/support   @boostkit/di
+  @boostkit/contracts   @boostkit/support
           │                │               │
           └────────────────┴───────────────┘
                            │

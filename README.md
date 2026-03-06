@@ -36,8 +36,7 @@ pnpm dev
 
 | Package | Description |
 |---|---|
-| `@boostkit/core` | Application bootstrap, ServiceProvider lifecycle |
-| `@boostkit/di` | DI container, `@Injectable`, `@Inject` decorators |
+| `@boostkit/core` | Application bootstrap, DI container, ServiceProvider lifecycle |
 | `@boostkit/router` | Fluent + decorator-based HTTP routing |
 | `@boostkit/middleware` | Middleware pipeline, CORS, logger, rate limiting |
 | `@boostkit/validation` | FormRequest, `validate()`, Zod re-export |

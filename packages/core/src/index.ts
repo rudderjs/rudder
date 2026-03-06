@@ -1,4 +1,4 @@
-import { Container, container } from '@boostkit/di'
+import { Container, container } from './di.js'
 import { Env, ConfigRepository, setConfigRepository } from '@boostkit/support'
 import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@boostkit/contracts'
 import { artisan, ArtisanRegistry } from '@boostkit/artisan'
@@ -331,7 +331,7 @@ export const resolve = <T>(token: Parameters<Container['make']>[0]): T =>
 
 // ─── Re-exports ────────────────────────────────────────────
 
-export { Container, container, Injectable, Inject } from '@boostkit/di'
+export { Container, container, Injectable, Inject } from './di.js'
 export { Collection, Env, env, sleep, ucfirst, tap, pick, omit, defineEnv, ConfigRepository, config, resolveOptionalPeer, dump, dd } from '@boostkit/support'
 export type { AppRequest, AppResponse, RouteHandler, MiddlewareHandler, HttpMethod, RouteDefinition, ServerAdapter, ServerAdapterFactory, FetchHandler, ServerAdapterProvider } from '@boostkit/contracts'
 

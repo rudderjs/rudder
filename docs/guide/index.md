@@ -44,7 +44,7 @@ BoostKit exposes a standard [WinterCG Fetch handler](https://wintercg.org/) thro
 | Routing | `@boostkit/router` | Fluent + decorator-based, middleware support |
 | Middleware | `@boostkit/middleware` | Pipeline, CSRF, rate limiting, throttle, CORS |
 | Validation | `@boostkit/validation` | Zod-powered, `FormRequest`, `validate()`, `validateWith()` |
-| DI container | `@boostkit/di` | `Container`, `@Injectable`, `@Inject` |
+| DI container | `@boostkit/core` | `Container`, `@Injectable`, `@Inject` |
 | ORM | `@boostkit/orm-prisma` / `orm-drizzle` | Prisma or Drizzle adapters |
 | Auth | `@boostkit/auth` | better-auth integration + `AuthMiddleware` |
 | Sessions | `@boostkit/session` | Cookie (HMAC) or Redis driver |
@@ -65,7 +65,7 @@ BoostKit is structured as a clean DAG — no circular dependencies, so you can u
 @boostkit/contracts   (pure types, no runtime)
        │
 @boostkit/support     (Env, Collection, helpers)
-@boostkit/di          (Container, decorators)
+@boostkit/core        (Application, Container, decorators, service providers)
 @boostkit/middleware  (Pipeline, built-ins, RateLimit)
 @boostkit/validation  (FormRequest, z)
        │

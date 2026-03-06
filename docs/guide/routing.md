@@ -102,7 +102,7 @@ For larger apps, group related routes into controller classes:
 
 ```ts
 import { Controller, Get, Post, Put, Delete, Middleware, router } from '@boostkit/router'
-import { Injectable } from '@boostkit/di'
+import { Injectable } from '@boostkit/core'
 import type { AppRequest, AppResponse } from '@boostkit/contracts'
 import { authMiddleware } from '../Http/Middleware/auth.js'
 import { UserService } from '../Services/UserService.js'
