@@ -80,7 +80,11 @@ export class Container {
       return this.autoResolve(token as Constructor<T>)
     }
 
-    throw new Error(`[BoostKit Container] No binding found for token: ${String(key)}`)
+    const label = typeof key === 'symbol' ? key.toString() : `"${String(key)}"`
+    throw new Error(
+      `[BoostKit] Cannot resolve ${label} from the DI container.\n` +
+      `  Did you forget to add @Injectable() to the class, or register it in a ServiceProvider?`
+    )
   }
 
   has(token: string | symbol | Constructor): boolean {
@@ -96,9 +100,19 @@ export class Container {
   }
 
   private autoResolve<T>(target: Constructor<T>): T {
+    if (typeof Reflect === 'undefined' || typeof Reflect.getMetadata !== 'function') {
+      throw new Error(
+        `[BoostKit] reflect-metadata is not loaded.\n` +
+        `  Add: import 'reflect-metadata' at the top of your bootstrap/app.ts`
+      )
+    }
+
     const isInjectable = Reflect.getMetadata(INJECTABLE_METADATA, target)
     if (!isInjectable) {
-      throw new Error(`[BoostKit Container] "${target.name}" is not decorated with @Injectable`)
+      throw new Error(
+        `[BoostKit] "${target.name}" is not decorated with @Injectable().\n` +
+        `  Add @Injectable() above the class declaration to enable auto-resolution.`
+      )
     }
 
     const paramTypes: Constructor[] =

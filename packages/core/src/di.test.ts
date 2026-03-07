@@ -166,7 +166,7 @@ describe('Container.reset()', () => {
     c.instance('real', 1)
     c.alias('alias', 'real')
     c.reset()
-    assert.throws(() => c.make('alias'), /No binding found/)
+    assert.throws(() => c.make('alias'), /Cannot resolve/)
   })
 
   it('returns this for chaining', () => {
@@ -180,13 +180,13 @@ describe('Container.reset()', () => {
 describe('Container.make() error cases', () => {
   it('throws for an unknown string token', () => {
     const c = new Container()
-    assert.throws(() => c.make('nonexistent'), /No binding found for token/)
+    assert.throws(() => c.make('nonexistent'), /Cannot resolve/)
   })
 
   it('throws for an unknown symbol token', () => {
     const c = new Container()
     const KEY = Symbol('missing')
-    assert.throws(() => c.make(KEY), /No binding found for token/)
+    assert.throws(() => c.make(KEY), /Cannot resolve/)
   })
 })
 

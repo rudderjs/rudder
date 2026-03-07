@@ -105,7 +105,16 @@ export class Application {
 
   private async boot(): Promise<void> {
     for (const provider of this.providers) {
-      await provider.boot?.()
+      try {
+        await provider.boot?.()
+      } catch (err) {
+        const name  = provider.constructor.name
+        const cause = err instanceof Error ? err.message : String(err)
+        throw new Error(
+          `[BoostKit] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
+          { cause: err },
+        )
+      }
     }
     this.booted = true
   }
