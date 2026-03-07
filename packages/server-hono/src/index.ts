@@ -140,7 +140,7 @@ function duration(ms: number): string {
 
 // Fixed column widths (pad raw strings BEFORE coloring — ANSI codes must not affect padding)
 const COUNTER_WIDTH = 3   // " #1" "#10" "#100"
-const LOG_WIDTH     = 61  // path + dots + duration combined
+const LOG_WIDTH     = 50  // path + dots + duration combined
 
 function formatRequestLog(n: number, path: string, status: number, ms: number): string {
   const counterStr = `#${n}`.padStart(COUNTER_WIDTH)
