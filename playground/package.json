@@ -22,6 +22,7 @@
     "@boostkit/mail": "workspace:*",
     "@boostkit/middleware": "workspace:*",
     "@boostkit/notification": "workspace:*",
+    "@boostkit/orm": "workspace:*",
     "@boostkit/orm-prisma": "workspace:*",
     "@boostkit/queue": "workspace:*",
     "@boostkit/queue-bullmq": "workspace:*",

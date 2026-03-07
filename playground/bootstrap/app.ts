@@ -4,6 +4,7 @@ import { Application } from '@boostkit/core'
 import { hono } from '@boostkit/server-hono'
 import { RateLimit } from '@boostkit/middleware'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
+import { AppError } from '../app/Exceptions/AppError.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -22,7 +23,14 @@ export default Application.configure({
     m.use(RateLimit.perMinute(60))
     m.use(requestIdMiddleware)
   })
-  .withExceptions((_e) => {
-    // future: exception reporting and rendering
+  .withExceptions((e) => {
+    // AppError → JSON response using its statusCode and code fields.
+    // ValidationError is handled automatically (422) — no entry needed here.
+    e.render(AppError, (err) =>
+      new Response(JSON.stringify(err.toJSON()), {
+        status:  err.statusCode,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
   })
   .create()

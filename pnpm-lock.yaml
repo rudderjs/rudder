@@ -558,6 +558,9 @@ importers:
       '@boostkit/notification':
         specifier: workspace:*
         version: link:../packages/notification
+      '@boostkit/orm':
+        specifier: workspace:*
+        version: link:../packages/orm
       '@boostkit/orm-prisma':
         specifier: workspace:*
         version: link:../packages/orm-prisma

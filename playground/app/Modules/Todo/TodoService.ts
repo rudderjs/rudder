@@ -1,6 +1,6 @@
 import { Injectable } from '@boostkit/core'
 import { resolve } from '@boostkit/core'
-import type { OrmAdapter } from '@boostkit/core'
+import type { OrmAdapter } from '@boostkit/orm'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
 
 @Injectable()

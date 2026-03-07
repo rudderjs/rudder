@@ -1,4 +1,4 @@
-import { Model } from '@boostkit/core'
+import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   // Prisma accessor is the model name lowercased

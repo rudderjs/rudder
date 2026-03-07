@@ -1,5 +1,5 @@
 import { Route } from '@boostkit/router'
-import { resolve, app, dd, dump, config } from '@boostkit/core'
+import { resolve, app, dd, dump, config, validate } from '@boostkit/core'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { AuthMiddleware } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
@@ -11,6 +11,8 @@ import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 import { CreateUserRequest } from '../app/Requests/CreateUserRequest.js'
 import { TestController } from '../app/Controllers/TestController.js'
+import { AppError } from '../app/Exceptions/AppError.js'
+import { z } from 'zod'
 
 // Register decorator-based controllers
 Route.registerController(TestController)
@@ -56,6 +58,35 @@ function debugThrow() {
   throw new Error('Something went wrong in a route handler.')
 }
 Route.get('/api/debug/error', debugThrow)
+
+// ── Exception handling demos ──────────────────────────────
+//
+// These routes demonstrate global exception handling — no try/catch needed in routes.
+//
+// GET /api/debug/app-error?code=NOT_FOUND&status=404
+//   → throws AppError → caught by e.render(AppError, ...) in bootstrap/app.ts
+//   → returns { error, message } JSON with the given status code
+//
+// POST /api/debug/validate  body: { name, email }
+//   → validate() throws ValidationError on bad input
+//   → caught automatically → 422 { message, errors } — no try/catch needed
+//
+Route.get('/api/debug/app-error', (req) => {
+  const code   = (req.query['code']   as string | undefined) ?? 'DEMO_ERROR'
+  const status = Number(req.query['status'] ?? 400)
+  throw new AppError(`Demo AppError with code ${code}`, status, code)
+})
+
+const debugValidateSchema = z.object({
+  name:  z.string().min(2,  'Name must be at least 2 characters.'),
+  email: z.string().email('Must be a valid email address.'),
+})
+
+Route.post('/api/debug/validate', async (req) => {
+  // No try/catch — ValidationError is auto-converted to 422 by the global handler
+  const data = await validate(debugValidateSchema, req)
+  return Response.json({ valid: true, data })
+})
 
 // GET /api/me — returns current session (null if not logged in)
 Route.get('/api/me', async (req) => {
@@ -133,8 +164,6 @@ Route.post('/api/validate/user', async (req, res) => {
 
 // ── Contact form demo ─────────────────────────────────────
 // POST /api/contact — CSRF-protected, validates with zod
-import { z } from 'zod'
-
 const contactSchema = z.object({
   name:    z.string().min(2,  'Name must be at least 2 characters.'),
   email:   z.string().email('Please enter a valid email address.'),
