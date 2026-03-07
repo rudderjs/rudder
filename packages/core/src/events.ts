@@ -12,24 +12,53 @@ export interface Listener<T = unknown> {
 export class EventDispatcher {
   private readonly map = new Map<string, Listener<unknown>[]>()
 
-  /** Register one or more listeners for an event class name */
+  /**
+   * Register one or more listeners for an event class name.
+   * Use `'*'` to listen to every dispatched event.
+   */
   register(eventName: string, ...listeners: Listener<unknown>[]): void {
     const existing = this.map.get(eventName) ?? []
     this.map.set(eventName, [...existing, ...listeners])
   }
 
-  /** Dispatch an event to all registered listeners (in order, awaited) */
+  /**
+   * Dispatch an event to all matching listeners, then to wildcard (`'*'`) listeners.
+   * Listeners are awaited in registration order.
+   */
   async dispatch<T extends object>(event: T): Promise<void> {
     const name      = event.constructor.name
-    const listeners = this.map.get(name) ?? []
-    for (const listener of listeners) {
+    const specific  = this.map.get(name) ?? []
+    const wildcards = this.map.get('*')  ?? []
+    for (const listener of [...specific, ...wildcards]) {
       await listener.handle(event)
     }
   }
 
-  /** Check how many listeners are registered for an event */
+  /** Number of listeners registered for a given event name (or `'*'`). */
   count(eventName: string): number {
     return this.map.get(eventName)?.length ?? 0
+  }
+
+  /** Returns true if at least one listener is registered for the event name. */
+  hasListeners(eventName: string): boolean {
+    return this.count(eventName) > 0
+  }
+
+  /**
+   * Returns a snapshot of all registered event names and their listener counts.
+   * Useful for `event:list` commands and introspection.
+   */
+  list(): Record<string, number> {
+    const result: Record<string, number> = {}
+    for (const [name, listeners] of this.map.entries()) {
+      result[name] = listeners.length
+    }
+    return result
+  }
+
+  /** @internal — clears all listeners. Used for testing and hot-reload. */
+  reset(): void {
+    this.map.clear()
   }
 }
 

@@ -13,6 +13,10 @@ import {
   artisan,
   CancelledError,
   ValidationError,
+  EventDispatcher,
+  dispatcher,
+  dispatch,
+  events,
   app,
   resolve,
   container,
@@ -318,6 +322,183 @@ describe('ExceptionConfigurator', () => {
     const exc = new ExceptionConfigurator()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     assert.strictEqual(exc.ignore(Error as any), exc)
+  })
+})
+
+// ─── EventDispatcher ──────────────────────────────────────
+
+describe('EventDispatcher', () => {
+  let d: EventDispatcher
+
+  beforeEach(() => { d = new EventDispatcher() })
+
+  class UserCreated { constructor(public readonly id: number) {} }
+  class OrderPlaced { constructor(public readonly total: number) {} }
+
+  it('dispatches an event to a registered listener', async () => {
+    const received: number[] = []
+    d.register('UserCreated', { handle: (e) => { received.push((e as UserCreated).id) } })
+    await d.dispatch(new UserCreated(42))
+    assert.deepStrictEqual(received, [42])
+  })
+
+  it('dispatches to multiple listeners in registration order', async () => {
+    const order: string[] = []
+    d.register('UserCreated',
+      { handle: () => { order.push('first') } },
+      { handle: () => { order.push('second') } },
+    )
+    await d.dispatch(new UserCreated(1))
+    assert.deepStrictEqual(order, ['first', 'second'])
+  })
+
+  it('dispatches to multiple listeners added in separate register() calls', async () => {
+    const order: string[] = []
+    d.register('UserCreated', { handle: () => { order.push('a') } })
+    d.register('UserCreated', { handle: () => { order.push('b') } })
+    await d.dispatch(new UserCreated(1))
+    assert.deepStrictEqual(order, ['a', 'b'])
+  })
+
+  it('does not dispatch to listeners of a different event', async () => {
+    const received: number[] = []
+    d.register('OrderPlaced', { handle: (e) => { received.push((e as OrderPlaced).total) } })
+    await d.dispatch(new UserCreated(99))
+    assert.deepStrictEqual(received, [])
+  })
+
+  it('wildcard listener receives every dispatched event', async () => {
+    const names: string[] = []
+    d.register('*', { handle: (e) => { names.push((e as object).constructor.name) } })
+    await d.dispatch(new UserCreated(1))
+    await d.dispatch(new OrderPlaced(100))
+    assert.deepStrictEqual(names, ['UserCreated', 'OrderPlaced'])
+  })
+
+  it('wildcard listeners run after specific listeners', async () => {
+    const order: string[] = []
+    d.register('UserCreated', { handle: () => { order.push('specific') } })
+    d.register('*',           { handle: () => { order.push('wildcard') } })
+    await d.dispatch(new UserCreated(1))
+    assert.deepStrictEqual(order, ['specific', 'wildcard'])
+  })
+
+  it('awaits async listeners in order', async () => {
+    const order: string[] = []
+    d.register('UserCreated',
+      { handle: async () => { await Promise.resolve(); order.push('first') } },
+      { handle: async () => { await Promise.resolve(); order.push('second') } },
+    )
+    await d.dispatch(new UserCreated(1))
+    assert.deepStrictEqual(order, ['first', 'second'])
+  })
+
+  it('count() returns number of listeners for an event', () => {
+    d.register('UserCreated', { handle: () => {} }, { handle: () => {} })
+    assert.strictEqual(d.count('UserCreated'), 2)
+    assert.strictEqual(d.count('OrderPlaced'), 0)
+  })
+
+  it('hasListeners() returns true/false correctly', () => {
+    d.register('UserCreated', { handle: () => {} })
+    assert.strictEqual(d.hasListeners('UserCreated'), true)
+    assert.strictEqual(d.hasListeners('OrderPlaced'), false)
+  })
+
+  it('list() returns a snapshot of all event names and counts', () => {
+    d.register('UserCreated', { handle: () => {} }, { handle: () => {} })
+    d.register('OrderPlaced', { handle: () => {} })
+    const snap = d.list()
+    assert.strictEqual(snap['UserCreated'], 2)
+    assert.strictEqual(snap['OrderPlaced'], 1)
+  })
+
+  it('list() returns an empty object when no listeners are registered', () => {
+    assert.deepStrictEqual(d.list(), {})
+  })
+
+  it('reset() clears all listeners', async () => {
+    const received: number[] = []
+    d.register('UserCreated', { handle: (e) => { received.push((e as UserCreated).id) } })
+    d.reset()
+    await d.dispatch(new UserCreated(1))
+    assert.deepStrictEqual(received, [])
+    assert.deepStrictEqual(d.list(), {})
+  })
+
+  it('a listener error propagates and stops subsequent listeners', async () => {
+    const order: string[] = []
+    d.register('UserCreated',
+      { handle: () => { throw new Error('boom') } },
+      { handle: () => { order.push('should not run') } },
+    )
+    await assert.rejects(() => d.dispatch(new UserCreated(1)), /boom/)
+    assert.deepStrictEqual(order, [])
+  })
+})
+
+// ─── Global dispatcher + dispatch() ───────────────────────
+
+describe('global dispatcher and dispatch()', () => {
+  beforeEach(() => dispatcher.reset())
+
+  class PingEvent { readonly name = 'ping' }
+
+  it('dispatch() uses the global dispatcher singleton', async () => {
+    const received: string[] = []
+    dispatcher.register('PingEvent', { handle: (e) => { received.push((e as PingEvent).name) } })
+    await dispatch(new PingEvent())
+    assert.deepStrictEqual(received, ['ping'])
+  })
+
+  it('global dispatcher is the same object as dispatcher export', () => {
+    assert.ok(dispatcher instanceof EventDispatcher)
+  })
+})
+
+// ─── events() provider ────────────────────────────────────
+
+describe('events() provider', () => {
+  beforeEach(() => dispatcher.reset())
+
+  class ItemSaved { constructor(public id: number) {} }
+
+  it('boot() registers listeners from the ListenMap', () => {
+    class ItemSavedListener { handle(_e: unknown) {} }
+    const Provider = events({ ItemSaved: [ItemSavedListener as never] })
+    new Provider({} as never).boot?.()
+    assert.strictEqual(dispatcher.count('ItemSaved'), 1)
+  })
+
+  it('boot() dispatches to registered listeners', async () => {
+    const calls: number[] = []
+    class ItemSavedListener { handle(e: unknown) { calls.push((e as ItemSaved).id) } }
+    const Provider = events({ ItemSaved: [ItemSavedListener as never] })
+    new Provider({} as never).boot?.()
+    await dispatch(new ItemSaved(7))
+    assert.deepStrictEqual(calls, [7])
+  })
+
+  it('boot() supports multiple event types', () => {
+    class AListener { handle(_: unknown) {} }
+    class BListener { handle(_: unknown) {} }
+    const Provider = events({ EventA: [AListener as never], EventB: [BListener as never] })
+    new Provider({} as never).boot?.()
+    assert.strictEqual(dispatcher.count('EventA'), 1)
+    assert.strictEqual(dispatcher.count('EventB'), 1)
+  })
+
+  it('boot() supports multiple listeners per event', () => {
+    class L1 { handle(_: unknown) {} }
+    class L2 { handle(_: unknown) {} }
+    const Provider = events({ ItemSaved: [L1 as never, L2 as never] })
+    new Provider({} as never).boot?.()
+    assert.strictEqual(dispatcher.count('ItemSaved'), 2)
+  })
+
+  it('register() is a no-op (events has no bindings)', () => {
+    const Provider = events({})
+    assert.doesNotThrow(() => new Provider({} as never).register?.())
   })
 })
 
