@@ -125,11 +125,12 @@ export class AppServiceProvider extends ServiceProvider {
 
 ```ts
 // bootstrap/providers.ts
-import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
+import { database } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
+import configs from '../config/index.js'
 
 export default [
-  DatabaseServiceProvider,   // must appear before AppServiceProvider — sets ModelRegistry
+  database(configs.database),  // must appear before any provider that queries models
   AppServiceProvider,
 ]
 ```
@@ -145,6 +146,7 @@ export default [
 | `artisan`, `Artisan`, `ArtisanRegistry`, `Command`, `CommandBuilder`, `CancelledError`, `parseSignature` | `@boostkit/artisan` |
 | `Container`, `container`, `Injectable`, `Inject` | Built-in (core DI) |
 | `Listener`, `EventDispatcher`, `dispatcher`, `dispatch`, `events` | Built-in (core Events) |
+| `FormRequest`, `ValidationError`, `validate`, `validateWith`, `z` | Built-in (core Validation) |
 | `Env`, `env`, `Collection`, `ConfigRepository`, `config`, `resolveOptionalPeer`, `defineEnv`, `dump`, `dd`, `sleep`, `tap`, `pick`, `omit`, `ucfirst` | `@boostkit/support` |
 | `AppRequest`, `AppResponse`, `RouteHandler`, `MiddlewareHandler`, `HttpMethod`, `RouteDefinition`, `ServerAdapter`, `FetchHandler`, `ServerAdapterProvider` | `@boostkit/contracts` |
 
