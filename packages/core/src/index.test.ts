@@ -106,6 +106,18 @@ describe('Application', () => {
     assert.strictEqual(a.isBooted(), true)
   })
 
+  it('wraps provider boot errors with context', async () => {
+    class BrokenProvider extends ServiceProvider {
+      register() {}
+      async boot() { throw new Error('connection refused') }
+    }
+    const a = Application.create({ providers: [BrokenProvider], env: 'production' })
+    await assert.rejects(
+      () => a.bootstrap(),
+      /Provider "BrokenProvider" failed to boot/
+    )
+  })
+
   it('bootstrap() is idempotent — second call is a no-op', async () => {
     const order: string[] = []
     class TestProvider extends ServiceProvider {
