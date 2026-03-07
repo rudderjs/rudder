@@ -265,6 +265,8 @@ export function fromClass(MiddlewareClass: new () => Middleware): MiddlewareHand
 
 import { CacheRegistry } from '@boostkit/cache'
 
+let _rateLimitWarned = false
+
 type KeyExtractor = 'ip' | 'route' | ((req: AppRequest) => string)
 
 interface RateLimitOptions {
@@ -306,7 +308,16 @@ function makeRateLimitHandler(opts: RateLimitOptions): MiddlewareHandler {
     if (opts.skipIf?.(req))         return next()
 
     const cache = CacheRegistry.get()
-    if (!cache) return next()
+    if (!cache) {
+      if (!_rateLimitWarned) {
+        _rateLimitWarned = true
+        console.warn(
+          '[BoostKit] RateLimit is active but no cache adapter is registered — throttling disabled.\n' +
+          '  Add cache(configs.cache) to your providers list in bootstrap/providers.ts'
+        )
+      }
+      return next()
+    }
 
     const now    = Date.now()
     const cKey   = `boostkit:rl:${buildKey(opts.keyBy, req)}`
