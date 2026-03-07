@@ -150,7 +150,7 @@ export function auth(
       })
 
       this.app.instance('auth', auth)
-      console.log('[BetterAuthServiceProvider] booted — auth instance bound to DI container')
+      console.log('[AuthServiceProvider] booted — auth instance bound to DI container')
     }
   }
 

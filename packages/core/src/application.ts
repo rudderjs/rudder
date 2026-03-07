@@ -280,7 +280,6 @@ export class BoostKit {
   /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
   private _boot: Promise<void> | null = null
   private _handler: FetchHandler | null = null
-  private _handlerReadyLogged = false
 
   constructor(
     private readonly _app:     Application,
@@ -295,12 +294,17 @@ export class BoostKit {
   private _suppressVikeNoise(): void {
     const isNoise = (args: unknown[]): boolean => {
       const msg = args.map(a => String(a ?? '')).join(' ')
-      return msg.includes('[vike]') && (
+      // Suppress vike internal request/response chatter
+      if (msg.includes('[vike]') && (
         msg.includes('HTTP request')            ||
         msg.includes('HTTP response')           ||
         msg.includes("doesn't match the route") ||
         msg.includes('thrown by')
-      )
+      )) return true
+      // Suppress duplicate "Server running at ..." from @hono/node-server / photon
+      // (vike already prints the canonical "→ Listening on:" line)
+      if (msg.includes('Server running at ')) return true
+      return false
     }
     const _log  = console.log
     const _warn = console.warn
@@ -320,7 +324,7 @@ export class BoostKit {
     }
     await this._app.bootstrap()
     await Promise.all(this._loaders.map(l => l()))
-    console.log('[BoostKit] providers boot complete — routes loaded')
+    console.log('[BoostKit] ready')
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
@@ -336,10 +340,6 @@ export class BoostKit {
       router.mount(adapter)
       adapter.setErrorHandler?.(errorHandler)
     })
-    if (!this._handlerReadyLogged) {
-      this._handlerReadyLogged = true
-      console.log('[BoostKit] handler ready — first request can be served')
-    }
   }
 
   /** Boot providers without starting an HTTP server — used by the CLI */
