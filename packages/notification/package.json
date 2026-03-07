@@ -28,8 +28,7 @@
   },
   "dependencies": {
     "@boostkit/core": "workspace:*",
-    "@boostkit/mail": "workspace:*",
-    "@boostkit/orm": "workspace:*"
+    "@boostkit/mail": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

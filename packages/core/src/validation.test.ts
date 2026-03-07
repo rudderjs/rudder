@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AppRequest, AppResponse } from '@boostkit/contracts'
-import { z, validate, validateWith, FormRequest, ValidationError } from './index.js'
+import { z, validate, validateWith, FormRequest, ValidationError } from './validation.js'
 
 // ─── Test helpers ──────────────────────────────────────────
 
@@ -133,7 +133,6 @@ describe('validate()', () => {
 
   it('re-throws non-Zod errors', async () => {
     const schema = z.object({ x: z.string() })
-    // Force a non-Zod throw by overriding parse
     const badSchema = { ...schema, parse: () => { throw new TypeError('unexpected') } } as unknown as typeof schema
     await assert.rejects(
       async () => validate(badSchema, makeReq()),
@@ -194,7 +193,6 @@ describe('validateWith()', () => {
     const mw = validateWith(z.object({ age: z.coerce.number() }))
     const req = makeReq({ body: { age: '25' } })
     await mw(req, res, async () => {})
-    // body is not mutated — still the original string
     assert.strictEqual((req.body as Record<string, unknown>)['age'], '25')
   })
 })

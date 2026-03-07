@@ -1,3 +1,65 @@
+// ─── ORM Types ─────────────────────────────────────────────
+
+export type WhereOperator = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE' | 'IN' | 'NOT IN'
+
+export interface WhereClause {
+  column:   string
+  operator: WhereOperator
+  value:    unknown
+}
+
+export interface OrderClause {
+  column:    string
+  direction: 'ASC' | 'DESC'
+}
+
+export interface QueryState {
+  wheres:  WhereClause[]
+  orders:  OrderClause[]
+  limitN:  number | null
+  offsetN: number | null
+  withs:   string[]
+}
+
+export interface QueryBuilder<T> {
+  where(column: string, value: unknown): this
+  where(column: string, operator: WhereOperator, value: unknown): this
+  orWhere(column: string, value: unknown): this
+  orderBy(column: string, direction?: 'ASC' | 'DESC'): this
+  limit(n: number): this
+  offset(n: number): this
+  with(...relations: string[]): this
+  first(): Promise<T | null>
+  find(id: number | string): Promise<T | null>
+  get(): Promise<T[]>
+  all(): Promise<T[]>
+  count(): Promise<number>
+  create(data: Partial<T>): Promise<T>
+  update(id: number | string, data: Partial<T>): Promise<T>
+  delete(id: number | string): Promise<void>
+  paginate(page: number, perPage?: number): Promise<PaginatedResult<T>>
+}
+
+export interface PaginatedResult<T> {
+  data:        T[]
+  total:       number
+  perPage:     number
+  currentPage: number
+  lastPage:    number
+  from:        number
+  to:          number
+}
+
+export interface OrmAdapter {
+  query<T>(table: string): QueryBuilder<T>
+  connect(): Promise<void>
+  disconnect(): Promise<void>
+}
+
+export interface OrmAdapterProvider {
+  create(): OrmAdapter | Promise<OrmAdapter>
+}
+
 // ─── Request & Response ────────────────────────────────────
 
 export interface AppRequest {

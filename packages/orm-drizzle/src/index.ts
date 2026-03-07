@@ -10,7 +10,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
-} from '@boostkit/orm'
+} from '@boostkit/contracts'
 
 // ─── Global Table Registry ─────────────────────────────────
 
