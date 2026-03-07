@@ -117,6 +117,9 @@ export interface ServerAdapter {
   /** Apply a global middleware */
   applyMiddleware(middleware: MiddlewareHandler): void
 
+  /** Register a global error handler — called for any unhandled error thrown by a route */
+  setErrorHandler?(handler: (err: unknown, req: AppRequest) => Response | Promise<Response>): void
+
   /** Start listening on a port */
   listen(port: number, callback?: () => void): void
 

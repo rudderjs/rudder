@@ -5,12 +5,14 @@ import {
   Application,
   AppBuilder,
   MiddlewareConfigurator,
+  ExceptionConfigurator,
   ServiceProvider,
   defineConfig,
   parseSignature,
   Artisan,
   artisan,
   CancelledError,
+  ValidationError,
   app,
   resolve,
   container,
@@ -245,6 +247,77 @@ describe('AppBuilder', () => {
   it('withExceptions() returns the builder for chaining', () => {
     const builder = Application.configure({ server: {} as never })
     assert.strictEqual(builder.withExceptions(() => {}), builder)
+  })
+})
+
+// ─── ExceptionConfigurator ────────────────────────────────
+
+describe('ExceptionConfigurator', () => {
+  function makeReq() {
+    return {} as Parameters<ReturnType<ExceptionConfigurator['buildHandler']>>[1]
+  }
+
+  it('buildHandler() auto-handles ValidationError → 422 JSON', async () => {
+    const exc = new ExceptionConfigurator()
+    const handler = exc.buildHandler()
+    const err = new ValidationError({ email: ['Invalid email'] })
+    const res = await handler(err, makeReq())
+    assert.strictEqual(res.status, 422)
+    const body = await res.json() as { message: string; errors: Record<string, string[]> }
+    assert.strictEqual(body.message, 'Validation failed')
+    assert.deepStrictEqual(body.errors, { email: ['Invalid email'] })
+  })
+
+  it('buildHandler() calls user render() for matching error type', async () => {
+    class PaymentError extends Error { code = 402 }
+    const exc = new ExceptionConfigurator()
+    exc.render(PaymentError, (err) =>
+      new Response(JSON.stringify({ code: err.code }), { status: 402 })
+    )
+    const handler = exc.buildHandler()
+    const res = await handler(new PaymentError('failed'), makeReq())
+    assert.strictEqual(res.status, 402)
+    const body = await res.json() as { code: number }
+    assert.strictEqual(body.code, 402)
+  })
+
+  it('buildHandler() re-throws unhandled errors', async () => {
+    const exc = new ExceptionConfigurator()
+    const handler = exc.buildHandler()
+    const err = new Error('unhandled')
+    await assert.rejects(async () => handler(err, makeReq()), /unhandled/)
+  })
+
+  it('buildHandler() re-throws ignored error types', async () => {
+    class IgnoredError extends Error {}
+    const exc = new ExceptionConfigurator()
+    exc.ignore(IgnoredError)
+    const handler = exc.buildHandler()
+    await assert.rejects(async () => handler(new IgnoredError('go away'), makeReq()), /go away/)
+  })
+
+  it('render() takes precedence over the default 422 for ValidationError subclass', async () => {
+    class StrictValidationError extends ValidationError {}
+    const exc = new ExceptionConfigurator()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    exc.render(StrictValidationError as any, () =>
+      new Response(JSON.stringify({ message: 'custom' }), { status: 400 })
+    )
+    const handler = exc.buildHandler()
+    const res = await handler(new StrictValidationError({ x: ['bad'] }), makeReq())
+    assert.strictEqual(res.status, 400)
+  })
+
+  it('render() returns this for chaining', () => {
+    const exc = new ExceptionConfigurator()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.strictEqual(exc.render(Error as any, () => new Response(null, { status: 500 })), exc)
+  })
+
+  it('ignore() returns this for chaining', () => {
+    const exc = new ExceptionConfigurator()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.strictEqual(exc.ignore(Error as any), exc)
   })
 })
 

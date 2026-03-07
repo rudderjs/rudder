@@ -1,8 +1,9 @@
 import { Container, container } from './di.js'
 import { ServiceProvider } from './service-provider.js'
 import { Env, ConfigRepository, setConfigRepository } from '@boostkit/support'
-import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler } from '@boostkit/contracts'
+import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler, AppRequest } from '@boostkit/contracts'
 import { artisan } from '@boostkit/artisan'
+import { ValidationError } from './validation.js'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -170,8 +171,70 @@ export class MiddlewareConfigurator {
 
 // ─── Exception Configurator ────────────────────────────────
 
+export type ErrorRenderer = (err: unknown, req: AppRequest) => Response | Promise<Response>
+
 export class ExceptionConfigurator {
-  // reserved: report(), render(), ignore(), etc.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _renders: Array<{ type: new (...args: any[]) => unknown; fn: ErrorRenderer }> = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _ignored: Set<new (...args: any[]) => unknown> = new Set()
+
+  /**
+   * Register a custom renderer for a specific error type.
+   * Return a `Response` to short-circuit the default handling.
+   *
+   * @example
+   * e.render(PaymentError, (err, req) =>
+   *   new Response(JSON.stringify({ code: err.code }), { status: 402, headers: { 'Content-Type': 'application/json' } })
+   * )
+   */
+  render<T extends Error>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type: new (...args: any[]) => T,
+    fn: (err: T, req: AppRequest) => Response | Promise<Response>,
+  ): this {
+    this._renders.push({ type, fn: fn as ErrorRenderer })
+    return this
+  }
+
+  /**
+   * Ignore an error type — re-throws it so the server's fallback handler sees it.
+   * In development this surfaces the HTML error page; in production it becomes a 500.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ignore(type: new (...args: any[]) => unknown): this {
+    this._ignored.add(type)
+    return this
+  }
+
+  /** @internal — called by BoostKit to produce the combined error handler */
+  buildHandler(): ErrorRenderer {
+    const renders = this._renders.slice()
+    const ignored = new Set(this._ignored)
+
+    return async (err: unknown, req: AppRequest): Promise<Response> => {
+      // Explicitly ignored — re-throw to surface in dev error page / server fallback
+      for (const type of ignored) {
+        if (err instanceof type) throw err
+      }
+
+      // User-registered renderers take priority (including ValidationError subclasses)
+      for (const { type, fn } of renders) {
+        if (err instanceof type) return fn(err, req)
+      }
+
+      // ValidationError — built-in 422 JSON (no manual try/catch needed in routes)
+      if (err instanceof ValidationError) {
+        return new Response(JSON.stringify(err.toJSON()), {
+          status: 422,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      // Unhandled — re-throw so the server fallback can handle it
+      throw err
+    }
+  }
 }
 
 // ─── App Builder ───────────────────────────────────────────
@@ -205,7 +268,7 @@ export class AppBuilder {
       ...(this._options.config    && { config:    this._options.config }),
       ...(this._options.providers && { providers: this._options.providers }),
     })
-    return new BoostKit(app, this._options.server, this._loaders, this._mwFn)
+    return new BoostKit(app, this._options.server, this._loaders, this._mwFn, this._excFn)
   }
 }
 
@@ -224,6 +287,7 @@ export class BoostKit {
     private readonly _server:  ServerAdapterProvider,
     private readonly _loaders: Array<() => Promise<unknown>>,
     private readonly _mwFn?:   (m: MiddlewareConfigurator) => void,
+    private readonly _excFn?:  (e: ExceptionConfigurator) => void,
   ) {
     this._providerBoot = this._bootstrapProviders()
   }
@@ -263,10 +327,14 @@ export class BoostKit {
   private async _createHandler(): Promise<void> {
     const mw = new MiddlewareConfigurator()
     this._mwFn?.(mw)
+    const exc = new ExceptionConfigurator()
+    this._excFn?.(exc)
+    const errorHandler = exc.buildHandler()
     const { router } = await import('@boostkit/router') as { router: { mount(adapter: ServerAdapter): void } }
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       router.mount(adapter)
+      adapter.setErrorHandler?.(errorHandler)
     })
     if (!this._handlerReadyLogged) {
       this._handlerReadyLogged = true
