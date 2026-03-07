@@ -241,6 +241,9 @@ importers:
       '@boostkit/mail':
         specifier: workspace:*
         version: link:../mail
+      '@boostkit/orm':
+        specifier: workspace:*
+        version: link:../orm
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
