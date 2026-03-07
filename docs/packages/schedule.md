@@ -1,6 +1,6 @@
 # @boostkit/schedule
 
-Task scheduler with cron-based expressions and artisan integration.
+Task scheduler with cron-based expressions, fluent API, and artisan commands.
 
 ## Installation
 
@@ -22,116 +22,108 @@ export default [
 ]
 ```
 
-Define your scheduled tasks in a dedicated file (e.g., `routes/console.ts`) or inside a service provider's `boot()` method:
+Define scheduled tasks in `routes/console.ts` or inside a service provider's `boot()` method:
 
 ```ts
 // routes/console.ts
 import { schedule } from '@boostkit/schedule'
-import { db } from '../app/Services/DatabaseSync.js'
-import { Reports } from '../app/Services/Reports.js'
 
-schedule.call(() => db.sync()).everyFiveMinutes()
-schedule.call(() => Reports.generate()).daily()
-schedule.command('db:seed').weekly()
+schedule.call(async () => {
+  await syncExternalData()
+}).everyFiveMinutes().description('Sync external data')
+
+schedule.call(async () => {
+  await generateDailyReport()
+}).daily().description('Generate daily report')
+
+schedule.call(async () => {
+  await sendMorningDigest()
+}).weekdays().dailyAt('9:00').timezone('America/New_York').description('Morning digest')
 ```
 
 ## Scheduling Tasks
 
 ### `schedule.call(fn)`
 
-Schedules an async or sync callback function:
+Schedules an async or sync callback. Returns a `ScheduledTask` with a fluent configuration API:
 
 ```ts
 import { schedule } from '@boostkit/schedule'
 
-// Run every minute
 schedule.call(async () => {
   await pingHealthCheck()
-}).everyMinute()
+}).everyMinute().description('Health check')
 
-// Run every five minutes
+// Use a raw cron expression for full control
 schedule.call(async () => {
-  await syncExternalData()
-}).everyFiveMinutes()
-
-// Run hourly
-schedule.call(async () => {
-  await cleanExpiredSessions()
-}).hourly()
-
-// Run daily
-schedule.call(async () => {
-  await generateDailyReport()
-}).daily()
-
-// Run weekly
-schedule.call(async () => {
-  await archiveOldLogs()
-}).weekly()
-```
-
-### `schedule.cron(expression, fn)`
-
-Schedule a task using a raw cron expression for full control:
-
-```ts
-// Every hour at minute 0
-schedule.cron('0 * * * *', async () => {
   await processHourlyQueue()
-})
-
-// Every weekday at 9am
-schedule.cron('0 9 * * 1-5', async () => {
-  await sendMorningDigest()
-})
-```
-
-### `schedule.command(name)`
-
-Schedule a registered artisan command by name:
-
-```ts
-schedule.command('db:sync').daily()
-schedule.command('cache:prune').everyThirtyMinutes()
-schedule.command('reports:generate').weekly()
+}).cron('0 * * * *').description('Process queue')
 ```
 
 ## `ScheduledTask` API
 
-Each call to `schedule.call()`, `schedule.cron()`, or `schedule.command()` returns a `ScheduledTask` instance with a fluent configuration API:
+### Frequency helpers
 
-| Method | Cron Expression | Description |
-|---|---|---|
-| `.everyMinute()` | `* * * * *` | Run once per minute |
-| `.everyFiveMinutes()` | `*/5 * * * *` | Run every 5 minutes |
-| `.everyTenMinutes()` | `*/10 * * * *` | Run every 10 minutes |
-| `.everyFifteenMinutes()` | `*/15 * * * *` | Run every 15 minutes |
-| `.everyThirtyMinutes()` | `*/30 * * * *` | Run every 30 minutes |
-| `.hourly()` | `0 * * * *` | Run at the top of every hour |
-| `.daily()` | `0 0 * * *` | Run once per day at midnight |
-| `.weekly()` | `0 0 * * 0` | Run once per week on Sunday |
-| `.monthly()` | `0 0 1 * *` | Run once per month on the 1st |
-| `.cron(expr)` | custom | Set a raw cron expression |
-| `.description(text)` | — | Set a human-readable description shown in `schedule:list` |
-| `.withoutOverlapping()` | — | Skip execution if a previous run is still in progress |
+| Method | Cron | Description |
+|--------|------|-------------|
+| `.everySecond()` | `* * * * * *` | Every second |
+| `.everyMinute()` | `* * * * *` | Every minute |
+| `.everyTwoMinutes()` | `*/2 * * * *` | Every 2 minutes |
+| `.everyFiveMinutes()` | `*/5 * * * *` | Every 5 minutes |
+| `.everyTenMinutes()` | `*/10 * * * *` | Every 10 minutes |
+| `.everyFifteenMinutes()` | `*/15 * * * *` | Every 15 minutes |
+| `.everyThirtyMinutes()` | `*/30 * * * *` | Every 30 minutes |
+| `.hourly()` | `0 * * * *` | Top of every hour |
+| `.hourlyAt(minute)` | `M * * * *` | Specific minute each hour |
+| `.daily()` | `0 0 * * *` | Midnight daily |
+| `.dailyAt('H:M')` | `M H * * *` | Specific time daily |
+| `.twiceDaily(h1, h2)` | `0 H1,H2 * * *` | Twice a day (default 1am + 1pm) |
+| `.weekly()` | `0 0 * * 0` | Sunday midnight |
+| `.weeklyOn(day, 'H:M')` | custom | Specific weekday + time |
+| `.monthly()` | `0 0 1 * *` | 1st of each month at midnight |
+| `.monthlyOn(day, 'H:M')` | custom | Specific day of month + time |
+| `.yearly()` | `0 0 1 1 *` | Jan 1st at midnight |
+| `.cron(expr)` | custom | Raw 5 or 6-field cron expression |
 
-Example combining options:
+### Named-day helpers
+
+| Method | Runs at midnight on… |
+|--------|----------------------|
+| `.sundays()` | Every Sunday |
+| `.mondays()` | Every Monday |
+| `.tuesdays()` | Every Tuesday |
+| `.wednesdays()` | Every Wednesday |
+| `.thursdays()` | Every Thursday |
+| `.fridays()` | Every Friday |
+| `.saturdays()` | Every Saturday |
+| `.weekdays()` | Mon–Fri |
+| `.weekends()` | Sat + Sun |
+
+### Other options
+
+| Method | Description |
+|--------|-------------|
+| `.description(text)` | Human-readable label shown in `schedule:list` |
+| `.timezone(tz)` | IANA timezone (e.g. `'America/New_York'`, `'UTC'`) |
+
+### Introspection
 
 ```ts
-schedule
-  .call(async () => await processQueue())
-  .everyFiveMinutes()
-  .description('Process the background job queue')
-  .withoutOverlapping()
+const task = schedule.call(fn).everyFiveMinutes()
+
+task.nextRun()        // Date | null — next scheduled execution
+task.getCron()        // '*/5 * * * *'
+task.getDescription() // ''
+task.getTimezone()    // undefined
 ```
 
 ## Artisan Commands
 
-`@boostkit/schedule` registers three artisan commands automatically when `scheduler()` is included in providers:
+`@boostkit/schedule` registers three commands automatically when `scheduler()` is included in providers:
 
 ### `schedule:run`
 
-Evaluates all registered tasks and runs those that are due at the current time. Exits after all due tasks complete. Suitable for being triggered by an external cron job (e.g., a platform cron that fires every minute):
+Runs all tasks that are due at the current time, then exits. Designed to be triggered by an external cron job firing every minute:
 
 ```bash
 pnpm artisan schedule:run
@@ -139,7 +131,7 @@ pnpm artisan schedule:run
 
 ### `schedule:work`
 
-Long-running daemon that polls for due tasks every minute. The recommended approach for production environments where you manage the process lifecycle:
+Long-running in-process daemon — starts all tasks and keeps them running on their cron schedules. Press Ctrl+C to stop:
 
 ```bash
 pnpm artisan schedule:work
@@ -147,27 +139,24 @@ pnpm artisan schedule:work
 
 ### `schedule:list`
 
-Prints a table of all registered tasks, their cron expressions, descriptions, and the next scheduled run time:
+Prints all registered tasks with their cron expression, description, and next run time:
 
 ```bash
 pnpm artisan schedule:list
 ```
 
-Example output:
-
 ```
-┌─────────────────────────────┬───────────────┬──────────────────────────────┐
-│ Task                        │ Expression    │ Next Run                     │
-├─────────────────────────────┼───────────────┼──────────────────────────────┤
-│ Process the background queue│ */5 * * * *   │ 2026-03-03 14:15:00          │
-│ Generate daily report       │ 0 0 * * *     │ 2026-03-04 00:00:00          │
-│ db:sync                     │ 0 0 * * *     │ 2026-03-04 00:00:00          │
-└─────────────────────────────┴───────────────┴──────────────────────────────┘
+  Scheduled Tasks
+  ────────────────────── ──────────────────────────── ───────────────────
+  CRON                   DESCRIPTION                  NEXT RUN
+  ────────────────────── ──────────────────────────── ───────────────────
+  */5 * * * *            Sync external data           2026-03-08 01:05:00
+  0 0 * * *              Generate daily report        2026-03-09 00:00:00
+  0 9 * * 1-5            Morning digest               2026-03-09 09:00:00
 ```
 
 ## Notes
 
-- `@boostkit/schedule` uses [croner](https://github.com/hexagon/croner) under the hood for cron expression parsing and next-run calculation.
-- `schedule:work` is the recommended production approach — run it as a persistent process under a process manager such as PM2 or a container supervisor.
-- `schedule:run` is suited for deployments where an external platform cron (Kubernetes CronJob, Render cron service, etc.) fires every minute — the command evaluates due tasks and exits cleanly.
-- `withoutOverlapping()` uses an in-memory lock; if your process restarts, the lock resets.
+- Uses [croner](https://github.com/hexagon/croner) for cron parsing and scheduling.
+- `schedule:run` is suited for platform crons (Kubernetes CronJob, Render, etc.) firing every minute.
+- `schedule:work` is for environments where you manage the process (PM2, Docker, systemd).

@@ -71,14 +71,19 @@ The returned provider exposes:
 
 ### Request Logger
 
-Logs every API and page request (skips static assets and Vite internals) with the `[boostkit]` tag. Two lines per request — on entry and on response:
+Logs every request in a single line — skips static assets and Vite internals. Vike client-side navigation requests (`pageContext.json`) are shown as clean page paths with a `↩ nav` suffix:
 
 ```
-10:30:15 AM [boostkit][request-1] HTTP request  → /api/users
-10:30:15 AM [boostkit][request-1] HTTP response ← /api/users 200
+01:01:20  #1  / .................................................. ~216ms 200
+01:01:23  #2  /api/users .......................................... ~8.1ms 200
+01:01:37  #3  /todos ↩ nav ........................................ ~5ms   200
+01:01:42  #4  /api/contact .......................................  <1ms  429
 ```
 
-Status colors: 2xx → magenta, 3xx → cyan, 4xx → yellow, 5xx → red.
+- Counter (`#N`) — request sequence number
+- Dots fill the space so the duration and status always align
+- Duration — `<1ms`, `~8.1ms`, `~216ms`, `~1.23s`
+- Status color: 2xx → green, 3xx → cyan, 4xx → yellow, 5xx → red (24-bit truecolor, not affected by terminal themes)
 
 ### CORS
 

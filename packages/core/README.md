@@ -13,14 +13,30 @@ pnpm add @boostkit/core
 ```ts
 import { Application } from '@boostkit/core'
 import { hono } from '@boostkit/server-hono'
+import { RateLimit } from '@boostkit/middleware'
 
 export default Application.configure({
-  server: hono({ port: 3000 }),
-  providers: [],
+  server:    hono(configs.server),
+  config:    configs,
+  providers,
 })
-  .withRouting({ api: () => import('../routes/api.js') })
-  .withMiddleware(() => {})
-  .withExceptions(() => {})
+  .withRouting({
+    web:      () => import('../routes/web.js'),
+    api:      () => import('../routes/api.js'),
+    commands: () => import('../routes/console.js'),
+  })
+  .withMiddleware((m) => {
+    m.use(RateLimit.perMinute(60))
+  })
+  .withExceptions((e) => {
+    e.render(PaymentError, (err) =>
+      new Response(JSON.stringify({ code: err.code }), {
+        status: 402,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    // ValidationError → 422 JSON is handled automatically — no need to register it
+  })
   .create()
 ```
 
