@@ -43,6 +43,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['config/auth.ts']     = configAuth(ctx)
   files['config/session.ts']  = configSession()
   files['config/index.ts']    = configIndex()
+  files['env.d.ts']           = envDts()
 
   files['app/Models/User.ts']                       = userModel()
   files['app/Providers/AppServiceProvider.ts']      = appServiceProvider()
@@ -866,7 +867,20 @@ import storage  from './storage.js'
 import session  from './session.js'
 import auth     from './auth.js'
 
-export default { app, server, database, queue, mail, cache, storage, session, auth }
+const configs = { app, server, database, queue, mail, cache, storage, session, auth }
+
+export type Configs = typeof configs
+
+export default configs
+`
+}
+
+function envDts(): string {
+  return `import type { Configs } from './config/index.js'
+
+declare module '@boostkit/core' {
+  interface AppConfig extends Configs {}
+}
 `
 }
 

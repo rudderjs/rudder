@@ -6,7 +6,7 @@ import { artisan } from '@boostkit/artisan'
 
 // ─── Config ────────────────────────────────────────────────
 
-export interface AppConfig {
+export interface BootConfig {
   name?:      string
   env?:       string
   debug?:     boolean
@@ -27,7 +27,7 @@ export class Application {
   readonly env:   string
   readonly debug: boolean
 
-  private constructor(config: AppConfig = {}) {
+  private constructor(config: BootConfig = {}) {
     this.container = container
     this.name  = config.name  ?? Env.get('APP_NAME',  'BoostKit')
     this.env   = config.env   ?? Env.get('APP_ENV',   'production')
@@ -47,7 +47,7 @@ export class Application {
     }
   }
 
-  static create(config?: AppConfig): Application {
+  static create(config?: BootConfig): Application {
     const g = globalThis as Record<string, unknown>
     const env = config?.env ?? Env.get('APP_ENV', 'production')
     const isDev = env === 'development' || env === 'local'

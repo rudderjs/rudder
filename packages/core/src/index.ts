@@ -10,7 +10,7 @@ export {
   resolve,
   defineConfig,
 } from './application.js'
-export type { AppConfig, ConfigureOptions, RoutingOptions } from './application.js'
+export type { BootConfig, ConfigureOptions, RoutingOptions } from './application.js'
 
 // ─── DI ────────────────────────────────────────────────────
 
@@ -61,11 +61,17 @@ export {
   omit,
   defineEnv,
   ConfigRepository,
-  config,
   resolveOptionalPeer,
   dump,
   dd,
 } from '@boostkit/support'
+
+// ─── Typed config ──────────────────────────────────────────
+// Overrides the untyped config() from @boostkit/support with a version
+// that infers return types from the augmented AppConfig interface.
+
+export { config } from './config.js'
+export type { AppConfig } from './config.js'
 
 // ─── Contracts ─────────────────────────────────────────────
 

@@ -8,4 +8,8 @@ import storage  from './storage.js'
 import auth     from './auth.js'
 import session  from './session.js'
 
-export default { app, server, database, queue, mail, cache, storage, auth, session }
+const configs = { app, server, database, queue, mail, cache, storage, auth, session }
+
+export type Configs = typeof configs
+
+export default configs
