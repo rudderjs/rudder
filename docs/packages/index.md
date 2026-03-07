@@ -8,11 +8,10 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 |---|---|---|
 | [@boostkit/contracts](./core/contracts) | Framework-level TypeScript contracts for HTTP, routing, middleware, and server adapters. | `pnpm add @boostkit/contracts` |
 | [@boostkit/support](./core/support) | Shared utility primitives — collections, env access, config lookup, and helper functions. | `pnpm add @boostkit/support` |
-| [@boostkit/middleware](./core/middleware) | HTTP middleware base class, pipeline runner, and built-in implementations. | `pnpm add @boostkit/middleware` |
-| [@boostkit/validation](./core/validation) | Zod-powered request validation with FormRequest and middleware helpers. | `pnpm add @boostkit/validation` |
+| [@boostkit/middleware](./core/middleware) | HTTP middleware base class, pipeline runner, CSRF, rate limiting, and built-in implementations. | `pnpm add @boostkit/middleware` |
 | [@boostkit/artisan](./artisan) | CLI registry, Command base class, and the global `artisan` singleton. | `pnpm add @boostkit/artisan` |
 | [@boostkit/cli](/cli/) | Code generators (`make:*`, `make:module`) and artisan command dispatcher. Install as a dev dependency. | `pnpm add -D @boostkit/cli` |
-| [@boostkit/core](./core/) | Application bootstrap, DI container with decorators, service provider lifecycle, and framework-level runtime orchestration. | `pnpm add @boostkit/core` |
+| [@boostkit/core](./core/) | Application bootstrap, DI container with decorators, Events, FormRequest validation, Zod, service provider lifecycle. | `pnpm add @boostkit/core` |
 
 ## Build
 

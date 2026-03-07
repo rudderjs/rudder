@@ -36,21 +36,21 @@ pnpm dev
 
 | Package | Description |
 |---|---|
-| `@boostkit/core` | Application bootstrap, DI + Events, ServiceProvider lifecycle |
+| `@boostkit/core` | Application bootstrap, DI container, Events, FormRequest validation, ServiceProvider lifecycle |
 | `@boostkit/router` | Fluent + decorator-based HTTP routing |
-| `@boostkit/middleware` | Middleware pipeline, CORS, logger, rate limiting |
-| `@boostkit/validation` | FormRequest, `validate()`, Zod re-export |
+| `@boostkit/middleware` | Middleware pipeline, CORS, logger, CSRF, rate limiting |
 | `@boostkit/server-hono` | Hono HTTP adapter |
-| `@boostkit/orm` | Model base class, QueryBuilder |
+| `@boostkit/orm` | Model base class, ModelRegistry, QueryBuilder |
 | `@boostkit/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
 | `@boostkit/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
-| `@boostkit/auth` | better-auth service provider factory |
+| `@boostkit/auth` | better-auth service provider factory + `AuthMiddleware()` |
 | `@boostkit/queue` | Job base class, queue contract |
 | `@boostkit/queue-bullmq` | BullMQ Redis-backed queue |
 | `@boostkit/queue-inngest` | Inngest serverless queue |
 | `@boostkit/cache` | Cache facade, memory + Redis drivers (Redis needs `ioredis`) |
-| `@boostkit/storage` | Storage facade, local filesystem adapter + (s3 driver) S3/R2/MinIO via `@aws-sdk/client-s3` |
-| `@boostkit/mail` | Mailable, Mail facade, log + smtp drivers (smtp needs `nodemailer`) |
+| `@boostkit/storage` | Storage facade, local + S3/R2/MinIO drivers (S3 needs `@aws-sdk/client-s3`) |
+| `@boostkit/mail` | Mailable, Mail facade, log + SMTP drivers (SMTP needs `nodemailer`) |
+| `@boostkit/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
 | `@boostkit/schedule` | Task scheduler, cron-based |
 | `@boostkit/notification` | Multi-channel notifications (mail, database) |
 | `@boostkit/artisan` | Artisan CLI registry, Command base class |
@@ -80,7 +80,7 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    m.use(RateLimit.perMinute(60).toHandler())
+    m.use(RateLimit.perMinute(60))
   })
   .create()
 ```
@@ -170,7 +170,7 @@ const service  = resolve<UserService>(UserService)
 
 BoostKit is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 28 packages published to npm under `@boostkit/*`
+- 22 packages published to npm under `@boostkit/*`
 - Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, and scheduling end-to-end
 
 ---
