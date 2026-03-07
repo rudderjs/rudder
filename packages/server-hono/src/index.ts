@@ -98,15 +98,15 @@ function normalizeResponse(c: any): AppResponse {
 
 // ─── Request logger ────────────────────────────────────────
 
-const g    = globalThis as Record<string, unknown>
+const g     = globalThis as Record<string, unknown>
 const isTTY = process.stdout.isTTY ?? false
 
 function clr(code: string, s: string): string {
   return isTTY ? `\x1b[${code}m${s}\x1b[0m` : s
 }
 
-const dim        = (s: string) => clr('2',    s)
-const boldYellow = (s: string) => clr('1;33', s)
+const dim  = (s: string) => clr('2',    s)
+const cyan = (s: string) => clr('1;36', s)
 
 function statusColor(status: number): string {
   const s = String(status)
@@ -122,12 +122,27 @@ function nextReqId(): number {
 }
 
 function ts(): string {
-  return new Date().toLocaleTimeString('en-US', {
-    hour:   'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  })
+  const d = new Date()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  return `${hh}:${mm}:${ss}`
+}
+
+function duration(ms: number): string {
+  if (ms >= 1000) return `~${(ms / 1000).toFixed(2)}s`
+  return `~${ms}ms`
+}
+
+// Total display width for path + dots combined (terminal fill)
+const LOG_WIDTH = 60
+
+function formatRequestLog(n: number, path: string, status: number, ms: number): string {
+  const counter  = cyan(`#${n}`)
+  const dots     = dim('.'.repeat(Math.max(4, LOG_WIDTH - path.length)))
+  const dur      = dim(duration(ms))
+  const stat     = statusColor(status)
+  return `${dim(ts())}  ${counter}  ${path} ${dots} ${dur}  ${stat}`
 }
 
 /** Skip Vite internals and static asset requests — only log page/API routes */
@@ -252,17 +267,6 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         })
       }
 
-      // Unified request logger — runs for all requests before routes or Vike SSR.
-      // Filters out static assets and Vite internals so only page/API routes appear.
-      app.use('*', async (c, next) => {
-        const path = new URL(c.req.url).pathname
-        if (!shouldLog(path)) return next()
-        const n = nextReqId()
-        console.log(`${dim(ts())} ${boldYellow('[boostkit]')}${dim(`[request-${n}]`)} HTTP request  ${dim('→')} ${path}`)
-        await next()
-        const status = (c.res as Response | undefined)?.status ?? 200
-        console.log(`${dim(ts())} ${boldYellow('[boostkit]')}${dim(`[request-${n}]`)} HTTP response ${dim('←')} ${path} ${statusColor(status)}`)
-      })
 
       const isProd = process.env['APP_ENV'] === 'production' || process.env['NODE_ENV'] === 'production'
 
@@ -300,7 +304,18 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       apply(app as any)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const server = photonServe(app as any)
-      return async (request) => server.fetch(request)
+
+      // Logging at the outermost fetch level catches ALL requests — including Vike's
+      // client-side navigation data fetches, which bypass the Hono middleware chain.
+      return async (request) => {
+        const path = new URL(request.url).pathname
+        if (!shouldLog(path)) return server.fetch(request)
+        const n     = nextReqId()
+        const start = Date.now()
+        const res   = await server.fetch(request)
+        console.log(formatRequestLog(n, path, res.status, Date.now() - start))
+        return res
+      }
     },
   }
 }
