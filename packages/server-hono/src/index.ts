@@ -142,10 +142,18 @@ function shouldLog(path: string): boolean {
 
 class HonoAdapter implements ServerAdapter {
   private app: Hono
+  private _errorHandler?: (err: unknown, req: AppRequest) => Response | Promise<Response>
 
   constructor(app?: Hono) {
     this.app = app ?? new Hono()
   }
+
+  setErrorHandler(fn: (err: unknown, req: AppRequest) => Response | Promise<Response>): void {
+    this._errorHandler = fn
+  }
+
+  /** @internal — used by createFetchHandler after setup() runs */
+  getErrorHandler() { return this._errorHandler }
 
   registerRoute(route: RouteDefinition): void {
     const method = (route.method === 'ALL' ? 'all' : route.method.toLowerCase()) as
@@ -256,19 +264,38 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         console.log(`${dim(ts())} ${boldYellow('[boostkit]')}${dim(`[request-${n}]`)} HTTP response ${dim('←')} ${path} ${statusColor(status)}`)
       })
 
-      // Dev error page — only in non-production environments
       const isProd = process.env['APP_ENV'] === 'production' || process.env['NODE_ENV'] === 'production'
-      if (!isProd) {
+
+      const adapter = new HonoAdapter(app)
+      setup?.(adapter)
+
+      // Install error handler — setup() may have registered one via adapter.setErrorHandler().
+      // The registered handler auto-handles ValidationError → 422 and re-throws everything
+      // else, which falls through to the dev error page (dev) or a JSON 500 (prod).
+      const userHandler = adapter.getErrorHandler()
+      if (userHandler) {
+        app.onError(async (err, c) => {
+          try {
+            return await userHandler(err, normalizeRequest(c))
+          } catch (e2) {
+            const thrown = e2 instanceof Error ? e2 : new Error(String(e2))
+            if (!isProd) {
+              const html = renderErrorPage(thrown, { method: c.req.method, url: c.req.url, headers: Object.fromEntries(Object.entries(c.req.header())) })
+              return c.html(html, 500)
+            }
+            return new Response(JSON.stringify({ message: 'Internal Server Error' }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }
+        })
+      } else if (!isProd) {
         app.onError((err, c) => {
-          const url = c.req.url
-          const method = c.req.method
-          const headers = Object.fromEntries(Object.entries(c.req.header()))
-          const html = renderErrorPage(err instanceof Error ? err : new Error(String(err)), { method, url, headers })
+          const html = renderErrorPage(err instanceof Error ? err : new Error(String(err)), { method: c.req.method, url: c.req.url, headers: Object.fromEntries(Object.entries(c.req.header())) })
           return c.html(html, 500)
         })
       }
 
-      setup?.(new HonoAdapter(app))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       apply(app as any)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
