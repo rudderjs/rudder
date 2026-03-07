@@ -132,12 +132,30 @@ interface Listener<T = unknown> {
 }
 ```
 
+### Wildcard Listeners
+
+Register a listener under `'*'` to receive every dispatched event. Wildcard listeners run after all specific listeners:
+
+```ts
+import { dispatcher } from '@boostkit/core'
+
+dispatcher.register('*', {
+  handle(event) {
+    console.log(`[audit] ${event.constructor.name}`)
+  },
+})
+```
+
 ### `EventDispatcher`
 
 | Method | Description |
 |---|---|
-| `dispatch(event)` | Resolves listeners by `event.constructor.name` and invokes each `handle()` in order |
-| `register(eventName, ...listeners)` | Registers one or more listener instances for an event class name |
+| `register(eventName, ...listeners)` | Register listener instances. Use `'*'` for wildcard (all events). |
+| `dispatch(event)` | Invoke specific listeners then wildcard listeners, awaited in order. |
+| `count(eventName)` | Number of listeners registered for an event name. |
+| `hasListeners(eventName)` | `true` if at least one listener is registered. |
+| `list()` | `Record<string, number>` — all registered event names and their listener counts. |
+| `reset()` | Clear all listeners. Useful for testing and hot-reload. |
 
 ## Notes
 
