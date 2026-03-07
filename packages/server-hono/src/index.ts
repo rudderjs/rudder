@@ -133,7 +133,9 @@ function ts(): string {
 
 function duration(ms: number): string {
   if (ms >= 1000) return `~${(ms / 1000).toFixed(2)}s`
-  return `~${ms}ms`
+  if (ms < 1)     return `<1ms`
+  if (ms < 10)    return `~${ms.toFixed(1)}ms`
+  return `~${Math.round(ms)}ms`
 }
 
 // Fixed column widths (pad raw strings BEFORE coloring — ANSI codes must not affect padding)
@@ -332,9 +334,9 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         const display = logPath(new URL(request.url).pathname)
         if (display === null) return server.fetch(request)
         const n     = nextReqId()
-        const start = Date.now()
+        const start = performance.now()
         const res   = await server.fetch(request)
-        console.log(formatRequestLog(n, display, res.status, Date.now() - start))
+        console.log(formatRequestLog(n, display, res.status, performance.now() - start))
         return res
       }
     },
