@@ -144,7 +144,6 @@ function packageJson(ctx: TemplateContext): string {
     '@boostkit/contracts':    'latest',
     '@boostkit/core':         'latest',
     '@boostkit/middleware':   'latest',
-    '@boostkit/orm':          'latest',
     '@boostkit/orm-prisma':   'latest',
     '@boostkit/queue':        'latest',
     '@boostkit/router':       'latest',
@@ -153,7 +152,6 @@ function packageJson(ctx: TemplateContext): string {
     '@boostkit/session':      'latest',
     '@boostkit/storage':      'latest',
     '@boostkit/support':      'latest',
-    '@boostkit/validation':   'latest',
     '@boostkit/mail':         'latest',
     '@boostkit/notification': 'latest',
     '@prisma/client':         '^7.0.0',
@@ -654,12 +652,12 @@ import { cache } from '@boostkit/cache'
 import { storage } from '@boostkit/storage'
 import { scheduler } from '@boostkit/schedule'
 import { session } from '@boostkit/session'
-import { prismaProvider } from '@boostkit/orm-prisma'
+import { database } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 ${todoImport}import configs from '../config/index.js'
 
 export default [
-  prismaProvider(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'
+  database(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'
   auth(configs.auth),                // auto-discovers 'prisma' from DI
   events({}),
   queue(configs.queue),
@@ -895,7 +893,7 @@ export default {
 // ─── app files ─────────────────────────────────────────────
 
 function userModel(): string {
-  return `import { Model } from '@boostkit/orm'
+  return `import { Model } from '@boostkit/core'
 
 export class User extends Model {
   // Prisma accessor is the model name lowercased
@@ -1456,7 +1454,7 @@ export interface Todo {
 function todoService(): string {
   return `import { Injectable } from '@boostkit/core'
 import { resolve } from '@boostkit/core'
-import type { OrmAdapter } from '@boostkit/orm'
+import type { OrmAdapter } from '@boostkit/core'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
 
 @Injectable()
