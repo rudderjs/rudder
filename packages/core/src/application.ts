@@ -294,15 +294,8 @@ export class BoostKit {
   private _suppressVikeNoise(): void {
     const isNoise = (args: unknown[]): boolean => {
       const msg = args.map(a => String(a ?? '')).join(' ')
-      // Suppress vike internal request/response chatter
-      if (msg.includes('[vike]') && (
-        msg.includes('HTTP request')            ||
-        msg.includes('HTTP response')           ||
-        msg.includes("doesn't match the route") ||
-        msg.includes('thrown by')
-      )) return true
+      if (msg.includes('[vike]')) return true
       // Suppress duplicate "Server running at ..." from @hono/node-server / photon
-      // (vike already prints the canonical "→ Listening on:" line)
       if (msg.includes('Server running at ')) return true
       return false
     }

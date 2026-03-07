@@ -134,23 +134,42 @@ function duration(ms: number): string {
   return `~${ms}ms`
 }
 
-// Total display width for path + dots combined (terminal fill)
-const LOG_WIDTH = 60
+// Fixed column widths (pad raw strings BEFORE coloring — ANSI codes must not affect padding)
+const COUNTER_WIDTH = 4   // "#1  " "#10 " "#100"
+const DUR_WIDTH     = 8   // "~7ms    " "~706ms  " "~1.23s  "
+const LOG_WIDTH     = 55  // path + dots combined
 
 function formatRequestLog(n: number, path: string, status: number, ms: number): string {
-  const counter  = cyan(`#${n}`)
-  const dots     = dim('.'.repeat(Math.max(4, LOG_WIDTH - path.length)))
-  const dur      = dim(duration(ms))
-  const stat     = statusColor(status)
-  return `${dim(ts())}  ${counter}  ${path} ${dots} ${dur}  ${stat}`
+  const counterStr = `#${n}`.padEnd(COUNTER_WIDTH)
+  const durStr     = duration(ms).padEnd(DUR_WIDTH)
+  const dots       = dim('.'.repeat(Math.max(4, LOG_WIDTH - path.length)))
+  return `${dim(ts())}  ${cyan(counterStr)}  ${path} ${dots} ${dim(durStr)}  ${statusColor(status)}`
 }
 
-/** Skip Vite internals and static asset requests — only log page/API routes */
-function shouldLog(path: string): boolean {
-  if (path.startsWith('/@'))            return false  // Vite internals
-  if (path.startsWith('/node_modules')) return false
+/**
+ * Returns the display path to log, or null to skip the request entirely.
+ *
+ * - Vite internals / node_modules           → null (skip)
+ * - Vike client-side nav (pageContext.json) → clean page path + " ↩ nav"
+ * - Static assets (.js, .css, .ico, …)      → null (skip)
+ * - Everything else                          → path as-is
+ */
+function logPath(path: string): string | null {
+  if (path.startsWith('/@') || path.startsWith('/node_modules')) return null
+
+  // Vike client-side navigation: /todos/index.pageContext.json → /todos ↩ nav
+  if (path.endsWith('.pageContext.json')) {
+    const page = path
+      .replace(/\/index\.pageContext\.json$/, '')
+      .replace(/\.pageContext\.json$/, '')
+    return `${page || '/'} ↩ nav`
+  }
+
+  // Skip static assets — anything whose last segment has a file extension
   const last = path.split('/').pop() ?? ''
-  return !last.includes('.')                          // skip anything with a file extension
+  if (last.includes('.')) return null
+
+  return path
 }
 
 // ─── Hono Adapter ─────────────────────────────────────────
@@ -308,12 +327,12 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       // Logging at the outermost fetch level catches ALL requests — including Vike's
       // client-side navigation data fetches, which bypass the Hono middleware chain.
       return async (request) => {
-        const path = new URL(request.url).pathname
-        if (!shouldLog(path)) return server.fetch(request)
+        const display = logPath(new URL(request.url).pathname)
+        if (display === null) return server.fetch(request)
         const n     = nextReqId()
         const start = Date.now()
         const res   = await server.fetch(request)
-        console.log(formatRequestLog(n, path, res.status, Date.now() - start))
+        console.log(formatRequestLog(n, display, res.status, Date.now() - start))
         return res
       }
     },
