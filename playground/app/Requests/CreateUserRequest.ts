@@ -1,5 +1,4 @@
-import { FormRequest } from '@boostkit/validation'
-import { z } from '@boostkit/validation'
+import { FormRequest, z } from '@boostkit/core'
 
 const schema = z.object({
   name:  z.string().min(2, 'Name must be at least 2 characters.'),

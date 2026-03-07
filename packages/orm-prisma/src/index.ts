@@ -9,7 +9,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
-} from '@boostkit/orm'
+} from '@boostkit/contracts'
 
 // ─── Prisma Query Builder ──────────────────────────────────
 
@@ -219,7 +219,7 @@ export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
 // ─── PrismaProvider ────────────────────────────────────────
 
 import { ServiceProvider, type Application } from '@boostkit/core'
-import { ModelRegistry } from '@boostkit/orm'
+import { ModelRegistry } from '@boostkit/core'
 
 export function database(config?: DatabaseConfig): new (app: Application) => ServiceProvider {
   class PrismaServiceProvider extends ServiceProvider {

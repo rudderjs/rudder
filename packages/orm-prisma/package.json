@@ -27,8 +27,8 @@
   },
   "dependencies": {
     "@boostkit/core": "workspace:*",
-    "@boostkit/orm": "workspace:*",
-    "@prisma/client": "^7.0.0"
+    "@prisma/client": "^7.0.0",
+    "@boostkit/contracts": "workspace:*"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.0.0",

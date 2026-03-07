@@ -22,15 +22,12 @@ export class ValidationError extends Error {
 export abstract class FormRequest<T extends ZodType = ZodType> {
   protected req!: AppRequest
 
-  /** Define the Zod schema for this request */
   abstract rules(): T
 
-  /** Optional: authorization check */
   authorize(): boolean {
     return true
   }
 
-  /** Validate and return typed data */
   async validate(req: AppRequest): Promise<z.infer<T>> {
     this.req = req
 
@@ -60,7 +57,7 @@ export abstract class FormRequest<T extends ZodType = ZodType> {
   }
 }
 
-// ─── Validate helper (inline, no class needed) ─────────────
+// ─── validate helper ───────────────────────────────────────
 
 export async function validate<T extends ZodType>(
   schema: T,
@@ -87,11 +84,9 @@ export async function validate<T extends ZodType>(
   }
 }
 
-// ─── Validation Middleware ─────────────────────────────────
+// ─── validateWith middleware ───────────────────────────────
 
-export function validateWith<T extends ZodType>(
-  schema: T
-) {
+export function validateWith<T extends ZodType>(schema: T) {
   return async (
     req: AppRequest,
     _res: AppResponse,
@@ -101,7 +96,5 @@ export function validateWith<T extends ZodType>(
     await next()
   }
 }
-
-// ─── Re-export zod for convenience ────────────────────────
 
 export { z } from 'zod'

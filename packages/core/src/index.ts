@@ -313,6 +313,15 @@ export { ServiceProvider } from './service-provider.js'
 export { Listener, EventDispatcher, dispatcher, dispatch, events } from './events.js'
 export type { ListenMap } from './events.js'
 
+// ─── ORM ───────────────────────────────────────────────────
+
+export { Model, ModelRegistry } from './orm.js'
+export type { QueryBuilder, PaginatedResult, OrmAdapter, OrmAdapterProvider, WhereOperator, WhereClause, OrderClause, QueryState } from '@boostkit/contracts'
+
+// ─── Validation ────────────────────────────────────────────
+
+export { FormRequest, ValidationError, validate, validateWith, z } from './validation.js'
+
 // ─── Global helpers ────────────────────────────────────────
 
 /** Get the global application instance */

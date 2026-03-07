@@ -180,6 +180,9 @@ importers:
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -238,21 +241,6 @@ importers:
       '@boostkit/mail':
         specifier: workspace:*
         version: link:../mail
-      '@boostkit/orm':
-        specifier: workspace:*
-        version: link:../orm
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/orm:
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -266,9 +254,9 @@ importers:
 
   packages/orm-drizzle:
     dependencies:
-      '@boostkit/orm':
+      '@boostkit/contracts':
         specifier: workspace:*
-        version: link:../orm
+        version: link:../contracts
       drizzle-orm:
         specifier: ^0.38.0
         version: 0.38.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.15.15)(@opentelemetry/api@1.9.0)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3))(@types/better-sqlite3@7.6.13)(@types/pg@8.15.6)(@types/react@19.2.14)(better-sqlite3@12.6.2)(kysely@0.28.11)(mysql2@3.15.3)(pg@8.19.0)(postgres@3.4.7)(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(react@19.2.4)
@@ -295,12 +283,12 @@ importers:
 
   packages/orm-prisma:
     dependencies:
+      '@boostkit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@boostkit/core':
         specifier: workspace:*
         version: link:../core
-      '@boostkit/orm':
-        specifier: workspace:*
-        version: link:../orm
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
@@ -504,25 +492,6 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  packages/validation:
-    dependencies:
-      '@boostkit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   packages/vite:
     devDependencies:
       '@types/node':
@@ -573,9 +542,6 @@ importers:
       '@boostkit/notification':
         specifier: workspace:*
         version: link:../packages/notification
-      '@boostkit/orm':
-        specifier: workspace:*
-        version: link:../packages/orm
       '@boostkit/orm-prisma':
         specifier: workspace:*
         version: link:../packages/orm-prisma
@@ -600,9 +566,6 @@ importers:
       '@boostkit/storage':
         specifier: workspace:*
         version: link:../packages/storage
-      '@boostkit/validation':
-        specifier: workspace:*
-        version: link:../packages/validation
       '@boostkit/vite':
         specifier: workspace:*
         version: link:../packages/vite

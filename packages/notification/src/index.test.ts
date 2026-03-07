@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { MailRegistry, Mailable, type MailAdapter } from '@boostkit/mail'
-import { ModelRegistry, type OrmAdapter, type QueryBuilder } from '@boostkit/orm'
+import { ModelRegistry, type OrmAdapter, type QueryBuilder } from '@boostkit/core'
 import {
   ChannelRegistry,
   Notifier,
