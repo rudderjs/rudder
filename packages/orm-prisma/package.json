@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@boostkit/core": "workspace:*",
+    "@boostkit/orm": "workspace:*",
     "@prisma/client": "^7.0.0",
     "@boostkit/contracts": "workspace:*"
   },

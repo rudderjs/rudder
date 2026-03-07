@@ -252,6 +252,19 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/orm:
+    dependencies:
+      '@boostkit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/orm-drizzle:
     dependencies:
       '@boostkit/contracts':
@@ -289,6 +302,9 @@ importers:
       '@boostkit/core':
         specifier: workspace:*
         version: link:../core
+      '@boostkit/orm':
+        specifier: workspace:*
+        version: link:../orm
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)

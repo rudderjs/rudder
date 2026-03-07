@@ -20,6 +20,10 @@ describe('ORM contract baseline', () => {
     assert.strictEqual(ModelRegistry.getAdapter(), adapter)
   })
 
+  it('ModelRegistry.getAdapter() throws when no adapter is registered', () => {
+    assert.throws(() => ModelRegistry.getAdapter(), /No ORM adapter registered/)
+  })
+
   it('Model.getTable() uses custom table or inferred pluralized name', () => {
     class User extends Model {}
     class BlogPost extends Model { static override table = 'blog_posts' }
@@ -41,8 +45,8 @@ describe('ORM contract baseline', () => {
       get: async () => [],
       all: async () => [],
       count: async () => 0,
-      create: async (data) => ({ id: 1, ...(data as object) } as { id: number }),
-      update: async (id, data) => ({ id: Number(id), ...(data as object) } as { id: number }),
+      create: async (data: Partial<{ id: number }>) => ({ id: 1, ...(data as object) } as { id: number }),
+      update: async (id: number | string, data: Partial<{ id: number }>) => ({ id: Number(id), ...(data as object) } as { id: number }),
       delete: async () => undefined,
       paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     }
@@ -60,5 +64,17 @@ describe('ORM contract baseline', () => {
     for (const method of ['where', 'orWhere', 'orderBy', 'limit', 'offset', 'with', 'first', 'find', 'get', 'all', 'count', 'create', 'update', 'delete', 'paginate']) {
       assert.strictEqual(typeof (builder as unknown as Record<string, unknown>)[method], 'function')
     }
+  })
+
+  it('Model.toJSON() excludes hidden fields', () => {
+    class User extends Model {
+      static override hidden = ['password']
+      name = 'Alice'
+      password = 'secret'
+    }
+    const u = new User()
+    const json = u.toJSON()
+    assert.ok('name' in json)
+    assert.ok(!('password' in json))
   })
 })

@@ -145,6 +145,7 @@ function packageJson(ctx: TemplateContext): string {
     '@boostkit/contracts':    'latest',
     '@boostkit/core':         'latest',
     '@boostkit/middleware':   'latest',
+    '@boostkit/orm':          'latest',
     '@boostkit/orm-prisma':   'latest',
     '@boostkit/queue':        'latest',
     '@boostkit/router':       'latest',
@@ -907,7 +908,7 @@ export default {
 // ─── app files ─────────────────────────────────────────────
 
 function userModel(): string {
-  return `import { Model } from '@boostkit/core'
+  return `import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   // Prisma accessor is the model name lowercased
@@ -1468,7 +1469,7 @@ export interface Todo {
 function todoService(): string {
   return `import { Injectable } from '@boostkit/core'
 import { resolve } from '@boostkit/core'
-import type { OrmAdapter } from '@boostkit/core'
+import type { OrmAdapter } from '@boostkit/orm'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
 
 @Injectable()

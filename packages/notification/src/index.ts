@@ -1,6 +1,6 @@
 import { ServiceProvider, type Application } from '@boostkit/core'
 import { MailRegistry, type Mailable } from '@boostkit/mail'
-import { ModelRegistry } from '@boostkit/core'
+import { ModelRegistry } from '@boostkit/orm'
 
 // ─── Notifiable ────────────────────────────────────────────
 

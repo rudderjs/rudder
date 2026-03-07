@@ -219,7 +219,7 @@ export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
 // ─── PrismaProvider ────────────────────────────────────────
 
 import { ServiceProvider, type Application } from '@boostkit/core'
-import { ModelRegistry } from '@boostkit/core'
+import { ModelRegistry } from '@boostkit/orm'
 
 export function database(config?: DatabaseConfig): new (app: Application) => ServiceProvider {
   class PrismaServiceProvider extends ServiceProvider {

@@ -1,5 +1,7 @@
 import type { QueryBuilder, OrmAdapter } from '@boostkit/contracts'
 
+export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState } from '@boostkit/contracts'
+
 // ─── Global ORM Registry ───────────────────────────────────
 
 export class ModelRegistry {
