@@ -8,7 +8,7 @@ import { storage } from '@boostkit/storage'
 import { scheduler } from '@boostkit/schedule'
 import { notifications } from '@boostkit/notification'
 import { session } from '@boostkit/session'
-import { prismaProvider } from '@boostkit/orm-prisma'
+import { database } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
@@ -16,7 +16,7 @@ import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListe
 import configs from '../config/index.js'
 
 export default [
-  prismaProvider(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
+  database(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
   auth(configs.auth),       // auto-discovers 'prisma' from DI
   queue(configs.queue),
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
