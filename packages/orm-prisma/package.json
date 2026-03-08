@@ -46,5 +46,6 @@
     "@types/pg": "^8.0.0",
     "prisma": "^7.0.0",
     "typescript": "^5.4.0"
-  }
+  },
+  "author": "Suleiman Shahbari"
 }
