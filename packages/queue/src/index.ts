@@ -55,10 +55,6 @@ export class DispatchBuilder<T extends Job> {
     if (!adapter) throw new Error('[BoostKit Queue] No queue adapter registered')
     await adapter.dispatch(this.job, { delay: this._delay, queue: this._queue })
   }
-
-  then(resolve: () => void): Promise<void> {
-    return this.send().then(resolve)
-  }
 }
 
 // ─── Queue Adapter Contract ────────────────────────────────
@@ -138,16 +134,21 @@ export class QueueRegistry {
   static get(): QueueAdapter | null {
     return this.adapter
   }
+
+  /** @internal — clears the registered adapter. Used for testing. */
+  static reset(): void {
+    this.adapter = null
+  }
 }
 
 // ─── Sync Adapter ──────────────────────────────────────────
 
-class SyncAdapter implements QueueAdapter {
-  async dispatch(job: Job): Promise<void> {
+export class SyncAdapter implements QueueAdapter {
+  async dispatch(job: Job, _options?: DispatchOptions): Promise<void> {
     try {
       await job.handle()
     } catch (error) {
-      job.failed?.(error)
+      await job.failed?.(error)
       throw error
     }
   }
@@ -207,13 +208,9 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
       QueueRegistry.set(adapter)
       this.app.instance('queue', adapter)
 
-      // Always register queue:work so it appears in `pnpm artisan --help`.
-      // Fails gracefully when the active driver doesn't support workers (e.g. sync, inngest).
       artisan.command('queue:work', async (args) => {
         if (typeof adapter.work !== 'function') {
-          console.error(`[BoostKit Queue] Driver "${driver}" does not support workers.`)
-          console.error(`[BoostKit Queue] Switch to "bullmq" in config/queue.ts and set QUEUE_CONNECTION=bullmq in .env.`)
-          process.exit(1)
+          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support workers. Switch to "bullmq" in config/queue.ts.`)
         }
         const queues = args[0] ?? 'default'
         await adapter.work(queues)
@@ -221,8 +218,7 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       artisan.command('queue:status', async (args) => {
         if (typeof adapter.status !== 'function') {
-          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue status.`)
-          process.exit(1)
+          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:status.`)
         }
         const queueName = args[0] ?? 'default'
         const stats = await adapter.status(queueName)
@@ -237,23 +233,21 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       artisan.command('queue:clear', async (args) => {
         if (typeof adapter.flush !== 'function') {
-          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue:clear.`)
-          process.exit(1)
+          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:clear.`)
         }
         const queueName = args[0] ?? 'default'
         await adapter.flush(queueName)
-        console.log(`[BoostKit Queue] Queue "${queueName}" cleared (waiting + delayed jobs removed).`)
+        console.log(`Queue "${queueName}" cleared.`)
       }).description('Drain waiting + delayed jobs — pnpm artisan queue:clear [queue=default]')
 
       artisan.command('queue:failed', async (args) => {
         if (typeof adapter.failures !== 'function') {
-          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue:failed.`)
-          process.exit(1)
+          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:failed.`)
         }
         const queueName = args[0] ?? 'default'
         const jobs = await adapter.failures(queueName)
         if (jobs.length === 0) {
-          console.log(`[BoostKit Queue] No failed jobs in queue "${queueName}".`)
+          console.log(`No failed jobs in queue "${queueName}".`)
           return
         }
         console.log(`\nFailed jobs in queue "${queueName}" (${jobs.length}):\n`)
@@ -269,12 +263,11 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
       artisan.command('queue:retry', async (args) => {
         if (typeof adapter.retryFailed !== 'function') {
-          console.error(`[BoostKit Queue] Driver "${driver}" does not support queue:retry.`)
-          process.exit(1)
+          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:retry.`)
         }
         const queueName = args[0] ?? 'default'
         const count = await adapter.retryFailed(queueName)
-        console.log(`[BoostKit Queue] Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
+        console.log(`Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
       }).description('Retry all failed jobs — pnpm artisan queue:retry [queue=default]')
 
       // Cloud adapters (Inngest etc.) expose a serve endpoint.
@@ -283,10 +276,7 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
         const { router } = await import('@boostkit/router')
         const handler = adapter.serveHandler()
         router.all('/api/inngest', (req) => handler(req.raw))
-        console.log(`[QueueServiceProvider] mounted — /api/inngest`)
       }
-
-      console.log(`[QueueServiceProvider] booted — driver: ${driver}`)
     }
   }
 

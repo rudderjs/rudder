@@ -20,16 +20,25 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*",
+    "@boostkit/core": "workspace:*"
+  },
+  "peerDependencies": {
     "@boostkit/router": "workspace:*"
   },
+  "peerDependenciesMeta": {
+    "@boostkit/router": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@boostkit/router": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   }
