@@ -20,11 +20,11 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@boostkit/core": "workspace:*"
@@ -34,7 +34,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0",
-    "tsx": "^4.0.0"
+    "typescript": "^5.4.0"
   }
 }
