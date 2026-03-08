@@ -49,6 +49,12 @@ export class StorageRegistry {
     if (!a) throw new Error(`[BoostKit Storage] Disk "${key}" not found. Check your storage config.`)
     return a
   }
+
+  /** @internal — clears all registered disks. Used for testing. */
+  static reset(): void {
+    this.adapters.clear()
+    this.defaultDisk = 'local'
+  }
 }
 
 // ─── Storage Facade ────────────────────────────────────────
@@ -77,7 +83,7 @@ export interface LocalDiskConfig {
   baseUrl?: string    // public URL prefix, e.g. '/storage' or 'https://cdn.example.com'
 }
 
-class LocalAdapter implements StorageAdapter {
+export class LocalAdapter implements StorageAdapter {
   private readonly root:    string
   private readonly baseUrl: string
 
@@ -249,14 +255,6 @@ export interface StorageConfig {
   disks: Record<string, StorageDiskConfig>
 }
 
-// ─── Helpers ───────────────────────────────────────────────
-
-function makeUnavailableAdapter(msg: string): StorageAdapter {
-  const reject = (): Promise<never> => Promise.reject(new Error(msg))
-  const throws = (): never => { throw new Error(msg) }
-  return { put: reject, get: reject, text: reject, delete: reject, exists: reject, list: reject, url: throws, path: throws }
-}
-
 // ─── Service Provider Factory ──────────────────────────────
 
 /**
@@ -300,16 +298,13 @@ export function storage(config: StorageConfig): new (app: Application) => Servic
         await fs.mkdir(target, { recursive: true })
         try {
           await fs.symlink(target, link)
-          console.log(`[Storage] Linked: public/storage → storage/app/public`)
+          console.log(`Linked: public/storage → storage/app/public`)
         } catch (err: unknown) {
           const e = err as NodeJS.ErrnoException
-          if (e.code === 'EEXIST') console.log('[Storage] Link already exists.')
+          if (e.code === 'EEXIST') console.log('Link already exists.')
           else throw err
         }
       }).description('Create a symbolic link from public/storage to storage/app/public')
-
-      const diskNames = Object.keys(config.disks).join(', ')
-      console.log(`[StorageServiceProvider] booted — disks: ${diskNames}`)
     }
   }
 
