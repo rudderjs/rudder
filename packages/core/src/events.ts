@@ -87,15 +87,10 @@ export function events(listen: ListenMap): new (app: Application) => ServiceProv
     register(): void {}
 
     boot(): void {
-      let total = 0
       for (const [eventName, listenerClasses] of Object.entries(listen)) {
         const instances = listenerClasses.map((LC) => new LC()) as Listener<unknown>[]
         dispatcher.register(eventName, ...instances)
-        total += listenerClasses.length
       }
-      console.log(
-        `[EventServiceProvider] booted — ${Object.keys(listen).length} events, ${total} listeners`,
-      )
     }
   }
 
