@@ -59,7 +59,8 @@ export default [
 import { Job } from '@boostkit/queue'
 
 export class SendEmailJob extends Job {
-  static jobName = 'SendEmailJob'
+  static queue   = 'mail'
+  static retries = 3
 
   constructor(
     private readonly to:      string,
@@ -96,8 +97,11 @@ await SendEmailJob.dispatch('alice@example.com', 'Welcome to BoostKit', '<p>Hell
 | `host` | `string` | `'127.0.0.1'` | Redis host |
 | `port` | `number` | `6379` | Redis port |
 | `password` | `string` | `''` | Redis password (empty = no auth) |
-| `prefix` | `string` | `'boostkit' for all BullMQ keys in Redis |
-| `jobs` | `Job[]` | `[]` | Array of Job classes the worker can resolve by name |
+| `prefix` | `string` | `'boostkit'` | Prefixes all BullMQ keys in Redis |
+| `concurrency` | `number` | `1` | Number of jobs each worker processes in parallel |
+| `removeOnComplete` | `number` | `100` | Keep last N completed jobs in Redis |
+| `removeOnFail` | `number` | `500` | Keep last N failed jobs in Redis |
+| `jobs` | `Job[]` | `[]` | Job classes the worker can execute |
 
 ## API
 
@@ -124,8 +128,8 @@ Start the BullMQ worker with the `queue:work` artisan command:
 
 ```bash
 pnpm artisan queue:work
-pnpm artisan queue:work --queue=mail
-pnpm artisan queue:work --queue=default,mail,notifications
+pnpm artisan queue:work mail
+pnpm artisan queue:work default,mail,notifications
 ```
 
 The worker connects to Redis using the configured connection, registers all job handlers from the `jobs[]` array, and processes jobs as they arrive.
@@ -142,7 +146,7 @@ This ensures that in-flight jobs are never abandoned mid-execution during deploy
 
 ## Notes
 
-- All Job classes that the worker needs to execute must be listed in the `jobs[]` array of the BullMQ connection config. The worker resolves job handlers by matching `Job.jobName` — if a class is not in the array, the worker will fail to process that job type.
+- All Job classes that the worker needs to execute must be listed in the `jobs[]` array. The worker resolves handlers by the **JavaScript class name** (`JobClass.name`) — keep class names stable across deploys.
 - `url` takes precedence over `host`/`port` when both are set.
 - The `prefix` option namespaces all BullMQ keys in Redis, making it safe to share a single Redis instance across multiple applications or environments.
 - BullMQ requires Redis 5.0 or higher with Lua scripting enabled.

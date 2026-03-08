@@ -25,7 +25,6 @@ export default {
       appId:      Env.get('INNGEST_APP_ID', 'my-boostkit-app'),
       signingKey: Env.get('INNGEST_SIGNING_KEY', ''),
       eventKey:   Env.get('INNGEST_EVENT_KEY', ''),
-      baseUrl:    Env.get('APP_URL', 'http://localhost:3000'),
       jobs: [
         SendEmailJob,
         ProcessImageJob,
@@ -37,13 +36,12 @@ export default {
 
 ## Defining a Job
 
-Extend `Job` and optionally set a static `retries` property:
+Extend `Job` and optionally set `static retries`:
 
 ```ts
 import { Job } from '@boostkit/queue'
 
 export class SendEmailJob extends Job {
-  static jobName = 'SendEmailJob'
   static retries = 3   // Inngest will retry failed executions up to 3 times
 
   constructor(
@@ -67,31 +65,27 @@ await SendEmailJob.dispatch('alice@example.com', 'Welcome!')
   .send()
 ```
 
-Inngest receives a `forge/job.SendEmailJob` event and invokes the registered function handler.
-
 ## Event Naming Convention
 
 BoostKit maps each job class to an Inngest event using the pattern:
 
 ```
-forge/job.<JobName>
+boostkit/job.<ClassName>
 ```
 
-For example, `SendEmailJob` → `forge/job.SendEmailJob`. This is handled automatically — you do not need to define event names manually.
+For example, `SendEmailJob` → `boostkit/job.SendEmailJob`. This is handled automatically — you do not need to define event names manually.
 
-## Mounting the Serve Handler
+## Serve Handler
 
-Inngest requires an HTTP endpoint where it can deliver job invocations. Use `serveHandler()` to mount it in your routes:
+The Inngest adapter requires an HTTP endpoint (`/api/inngest`) where Inngest can deliver job invocations. The queue provider **mounts this route automatically** when it detects the Inngest adapter — no manual registration needed.
+
+The provider calls:
 
 ```ts
-import { router } from '@boostkit/router'
-import { serveHandler } from '@boostkit/queue-inngest'
-import configs from '../config/index.js'
-
-router.post('/api/inngest', serveHandler(configs.queue.connections.inngest))
+router.all('/api/inngest', (req) => handler(req.raw))
 ```
 
-The handler verifies the Inngest signature on incoming requests and dispatches the correct job function.
+This happens during `boot()` as part of `queue(configs.queue)`. Ensure the queue provider is registered before any route-level catch-all that might intercept `/api/inngest`.
 
 ## InngestConfig Options
 
@@ -101,7 +95,6 @@ The handler verifies the Inngest signature on incoming requests and dispatches t
 | `appId` | `string` | Yes | Unique identifier for this application in Inngest Cloud |
 | `signingKey` | `string` | No | Inngest signing key — required in production for request verification |
 | `eventKey` | `string` | No | Inngest event API key — required in production for sending events |
-| `baseUrl` | `string` | No | Public URL of your app where Inngest can reach `/api/inngest`; defaults to `APP_URL` |
 | `jobs` | `Job[]` | Yes | Array of Job classes to register as Inngest functions |
 
 ## API
@@ -154,7 +147,6 @@ In production, set the following environment variables:
 INNGEST_APP_ID=my-boostkit-app
 INNGEST_SIGNING_KEY=signkey-prod-xxxxxxxxxxxx
 INNGEST_EVENT_KEY=xxxxxxxxxxxxxxxxxx
-APP_URL=https://api.myapp.com
 ```
 
 Inngest Cloud will call your `/api/inngest` endpoint to register functions and deliver invocations. The `signingKey` is used to verify that requests genuinely originate from Inngest.
@@ -163,6 +155,6 @@ Inngest Cloud will call your `/api/inngest` endpoint to register functions and d
 
 - Every Job class in the `jobs[]` array is registered as a distinct Inngest function when the application boots. Functions not in the array cannot be invoked by Inngest.
 - In dev mode, the Inngest Dev Server at `localhost:8288` intercepts all events — you do not need cloud credentials.
-- Set `APP_URL` to your public-facing URL in production so Inngest Cloud can reach the serve handler.
 - Retries are configured per job via `static retries` on the Job class. If not set, Inngest applies its default retry policy.
-- The `delay()` option on `DispatchBuilder` is supported — Inngest schedules the event delivery accordingly.
+- The `delay()` option on `DispatchBuilder` is supported — Inngest schedules the event delivery accordingly via the `ts` field.
+- The `/api/inngest` route is registered by the queue provider automatically — do not mount it manually.
