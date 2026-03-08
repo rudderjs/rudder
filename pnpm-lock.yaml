@@ -338,6 +338,22 @@ importers:
         specifier: ^8.0.0
         version: 8.19.0
 
+  packages/panels:
+    dependencies:
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
+      '@boostkit/router':
+        specifier: workspace:*
+        version: link:../router
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/queue:
     dependencies:
       '@boostkit/core':
