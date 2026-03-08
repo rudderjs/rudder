@@ -233,6 +233,22 @@ function disconnect(state: WsState, id: string): void {
   state.upgradeReqs.delete(id)
 }
 
+// ─── Test helpers ───────────────────────────────────────────
+
+/** Reset all WebSocket state. For use in tests only. */
+export function resetWs(): void {
+  const state = g[KEY] as WsState | undefined
+  if (state) {
+    // Terminate all open client connections first so server.close() doesn't hang
+    for (const ws of state.sockets.values()) {
+      try { ws.terminate() } catch { /* ignore */ }
+    }
+    try { state.wss.close() } catch { /* ignore */ }
+  }
+  delete g[KEY]
+  delete g[AUTH_KEY]
+}
+
 // ─── Public API ─────────────────────────────────────────────
 
 /** Broadcast an event to all subscribers of a channel from anywhere on the server. */

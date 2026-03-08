@@ -243,6 +243,12 @@ describe('AppBuilder', () => {
     assert.strictEqual(builder.withRouting({}), builder)
   })
 
+  it('withRouting() accepts channels loader', () => {
+    const loader  = async () => ({})
+    const builder = Application.configure({ server: {} as never })
+    assert.strictEqual(builder.withRouting({ channels: loader }), builder)
+  })
+
   it('withMiddleware() returns the builder for chaining', () => {
     const builder = Application.configure({ server: {} as never })
     assert.strictEqual(builder.withMiddleware(() => {}), builder)

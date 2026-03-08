@@ -1,0 +1,1 @@
+{"version":3,"file":"channel.d.ts","sourceRoot":"","sources":["../src/channel.ts"],"names":[],"mappings":"AAEA,+DAA+D;AAC/D,qBAAa,OAAO;aACU,IAAI,EAAE,MAAM;gBAAZ,IAAI,EAAE,MAAM;CACzC;AAED,iEAAiE;AACjE,qBAAa,cAAe,SAAQ,OAAO;gBAC7B,IAAI,EAAE,MAAM;CAGzB;AAED,6FAA6F;AAC7F,qBAAa,eAAgB,SAAQ,OAAO;gBAC9B,IAAI,EAAE,MAAM;CAGzB"}
