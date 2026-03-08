@@ -21,6 +21,10 @@ export class ModelRegistry {
     }
     return this.adapter
   }
+
+  static reset(): void {
+    this.adapter = null
+  }
 }
 
 // ─── Model Base Class ──────────────────────────────────────
