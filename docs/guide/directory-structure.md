@@ -137,14 +137,12 @@ For larger apps, you can organize features into modules — cohesive folders tha
 
 ```
 app/
-└── Blog/
-    ├── Models/
-    │   └── Post.ts
-    ├── Services/
-    │   └── PostService.ts
-    ├── Providers/
-    │   └── BlogServiceProvider.ts
-    └── schema.prisma           # merged by module:publish
+└── Modules/
+    └── Blog/
+        ├── Blog.prisma             # merged by module:publish
+        ├── BlogSchema.ts
+        ├── BlogService.ts
+        └── BlogServiceProvider.ts
 ```
 
 Use `pnpm artisan make:module Blog` to scaffold a module, then `pnpm artisan module:publish` to merge Prisma shards.
