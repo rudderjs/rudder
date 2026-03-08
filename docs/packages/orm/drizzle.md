@@ -88,19 +88,19 @@ export class User extends Model {
 
 ## Pre-built Drizzle Instance
 
-If you already have a configured Drizzle database instance, you can pass it directly:
+If you already have a configured Drizzle database instance, pass it via the `client` option:
 
 ```ts
-import { drizzleDatabase } from '@boostkit/orm-drizzle'
+import { drizzle } from '@boostkit/orm-drizzle'
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3'
 import Database from 'better-sqlite3'
 import { users } from '../database/schema.js'
 
 const sqlite = new Database('./dev.db')
-const db     = drizzleSqlite(sqlite, { schema: { users } })
+const db     = drizzleSqlite(sqlite)
 
-const adapter = await drizzleDatabase({
-  db,
+const adapter = await drizzle({
+  client: db,
   tables: { user: users },
 }).create()
 ```

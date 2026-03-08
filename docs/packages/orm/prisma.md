@@ -93,7 +93,7 @@ prisma({
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `client` | `PrismaClient` | auto-created | Provide a pre-built `PrismaClient` instance |
-| `driver` | `'postgresql' \| 'sqlite' \| 'mysql'` | auto-detected from `DATABASE_URL` | Explicit driver hint |
+| `driver` | `'postgresql' \| 'sqlite' \| 'libsql'` | auto-detected from `DATABASE_URL` | Explicit driver hint |
 | `url` | `string` | `DATABASE_URL` env var | Database connection string |
 
 When no `client` is provided, the adapter constructs one automatically using the `url` and `driver` values.
@@ -184,4 +184,4 @@ export class User extends Model {
 - Run `pnpm exec prisma generate` from the project root (or `playground/`) whenever you change `schema.prisma`.
 - Use `pnpm exec prisma db push` during development to sync schema changes to the database without creating migration files.
 - Use `pnpm exec prisma migrate dev` when you want tracked migration files for production deployments.
-- The `static table` on a Model must match the Prisma accessor name, which is the lowercase version of the Prisma model name (e.g. model `User` → accessor `user`, model `BlogPost` → accessor `blogPost`).
+- The `static table` on a Model must match the Prisma accessor name. Single-word models are lowercase (e.g. model `User` → accessor `user`). Multi-word models use camelCase (e.g. model `BlogPost` → accessor `blogPost`). Always verify the accessor against the generated `PrismaClient` type.
