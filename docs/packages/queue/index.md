@@ -121,16 +121,28 @@ connections: {
 
 When `QUEUE_CONNECTION=sync`, calling `SendEmailJob.dispatch(...).send()` executes `handle()` inline before returning.
 
-## `queue:work` Command
+## Artisan Commands
 
-The `queue:work` artisan command starts a long-running worker process that polls the queue and executes jobs:
+The queue provider registers the following artisan commands. Commands that require adapter support (anything beyond `sync`) throw an error when invoked with an unsupported driver.
+
+| Command | Description |
+|---|---|
+| `queue:work [queue]` | Start a long-running worker. Defaults to `default` queue. |
+| `queue:status [queue]` | Show waiting/active/completed/failed/delayed/paused counts. |
+| `queue:clear [queue]` | Drain all waiting and delayed jobs from a queue. |
+| `queue:failed [queue]` | List recently failed jobs. |
+| `queue:retry [queue]` | Re-enqueue all failed jobs. |
 
 ```bash
 pnpm artisan queue:work
-pnpm artisan queue:work --queue=notifications
+pnpm artisan queue:work notifications
+
+pnpm artisan queue:status
+pnpm artisan queue:failed default
+pnpm artisan queue:retry default
 ```
 
-The worker uses the adapter registered for the active connection. For `sync`, this command is a no-op (the driver executes jobs inline at dispatch time).
+The `sync` driver does not support `queue:work` — it throws an error with a hint to switch to `bullmq`. The `sync` driver executes jobs inline at dispatch time, so no background worker is needed.
 
 ## Notes
 
@@ -138,4 +150,4 @@ The worker uses the adapter registered for the active connection. For `sync`, th
 - For Redis-backed queuing, use `@boostkit/queue-bullmq`.
 - For serverless/event-driven queuing, use `@boostkit/queue-inngest`.
 - Job payloads are passed as constructor arguments — ensure they are serializable if using an external driver.
-- `static queue` sets the default queue name for the job class; `static retries` sets the retry count.
+- `static queue` sets the default queue name for the job class; `static retries` sets the retry count; `static delay` sets the default dispatch delay in milliseconds (default `0`).
