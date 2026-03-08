@@ -37,6 +37,7 @@ export default defineConfig({
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Your First App', link: '/guide/your-first-app' },
             { text: 'Directory Structure', link: '/guide/directory-structure' },
+            { text: 'Coming from Next.js', link: '/guide/coming-from-nextjs' },
           ],
         },
         {
