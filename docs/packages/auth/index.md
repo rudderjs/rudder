@@ -26,17 +26,17 @@ export default {
 
 ### 2. Register the provider
 
-Register `prismaProvider` first — `auth()` will auto-discover the Prisma client from the DI container:
+Register `database()` first — `auth()` will auto-discover the Prisma client from the DI container:
 
 ```ts
 // bootstrap/providers.ts
-import { prismaProvider } from '@boostkit/orm-prisma'
+import { database } from '@boostkit/orm-prisma'
 import { auth } from '@boostkit/auth'
 import configs from '../config/index.js'
 
 export default [
-  prismaProvider(configs.database),  // binds PrismaClient to DI as 'prisma'
-  auth(configs.auth),                // auto-discovers 'prisma' — no DB config needed
+  database(configs.database),  // binds PrismaClient to DI as 'prisma'
+  auth(configs.auth),          // auto-discovers 'prisma' — no DB config needed
   // ...
 ]
 ```
@@ -75,11 +75,11 @@ export default [
 ```
 
 The provider:
-1. Tries `app().make('prisma')` first — works automatically when `prismaProvider` runs before it.
+1. Tries `app().make('prisma')` first — works automatically when `database()` runs before it.
 2. Falls back to creating its own `PrismaClient` using `dbConfig` if no `'prisma'` binding exists.
 3. Binds the better-auth instance to DI as `'auth'`.
 
-`dbConfig` is optional but required when `prismaProvider` is not registered:
+`dbConfig` is optional but required when `database()` is not registered:
 
 ```ts
 auth(configs.auth, {

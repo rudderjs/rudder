@@ -121,12 +121,12 @@ Create `bootstrap/providers.ts`:
 
 ```ts
 import type { Application, ServiceProvider } from '@boostkit/core'
-import { prismaProvider } from '@boostkit/orm-prisma'
+import { database } from '@boostkit/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import configs from '../config/index.js'
 
 export default [
-  prismaProvider(configs.database),  // binds PrismaClient to DI as 'prisma'
+  database(configs.database),  // binds PrismaClient to DI as 'prisma'
   AppServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
 ```

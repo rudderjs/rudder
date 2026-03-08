@@ -51,7 +51,7 @@ BoostKit exposes a standard [WinterCG Fetch handler](https://wintercg.org/) thro
 | Queue | `@boostkit/queue-bullmq` / `queue-inngest` | BullMQ (Redis) or Inngest |
 | Cache | `@boostkit/cache` | In-memory or Redis |
 | Storage | `@boostkit/storage` | Local filesystem or S3/R2/MinIO |
-| Mail | `@boostkit/mail` / `mail-nodemailer` | Log (dev) or SMTP |
+| Mail | `@boostkit/mail` | Log (dev) or SMTP (Nodemailer) built-in |
 | Events | `@boostkit/core` | In-process event dispatcher |
 | Scheduling | `@boostkit/schedule` | Cron-based task scheduler |
 | Notifications | `@boostkit/notification` | Multi-channel (mail, database) |

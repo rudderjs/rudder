@@ -20,7 +20,7 @@ export default defineConfig({
       { text: 'CLI', link: '/cli/', activeMatch: '/cli/' },
       { text: 'Integrations', link: '/integrations/', activeMatch: '/integrations/' },
       {
-        text: 'v0.0.2',
+        text: 'v0.1.0',
         items: [
           { text: 'Changelog', link: 'https://github.com/boostkitjs/boostkit/releases' },
           { text: 'Contributing', link: 'https://github.com/boostkitjs/boostkit/blob/main/CONTRIBUTING.md' },
