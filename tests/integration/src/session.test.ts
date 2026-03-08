@@ -15,6 +15,7 @@ import type { AppRequest, AppResponse } from '@boostkit/contracts'
 const config: SessionConfig = {
   driver:   'cookie',
   lifetime: 120,
+  secret:   'integration-test-secret-32-chars!!',
   cookie: { name: 'bk_session', httpOnly: true, sameSite: 'lax', secure: false, path: '/' },
 }
 
