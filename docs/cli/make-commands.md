@@ -15,28 +15,30 @@ pnpm artisan make:<type> <Name> [--force]
 Generates a controller class with decorator-based routing.
 
 ```bash
-pnpm artisan make:controller UserController
+pnpm artisan make:controller User
 # → app/Http/Controllers/UserController.ts
 ```
+
+The `Controller` suffix is appended automatically if not provided. The route prefix is derived from the class name in kebab-case + pluralised (`User` → `/users`, `BlogPost` → `/blog-posts`).
 
 Generated file:
 
 ```ts
 import { Controller, Get } from '@boostkit/router'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import type { Context } from '@boostkit/core'
 
-@Controller('/user-controller')
+@Controller('/users')
 export class UserController {
   @Get('/')
-  async index(_req: AppRequest, res: AppResponse) {
-    return res.json({ message: 'ok' })
+  async index(_ctx: Context) {
+    return []
   }
 }
 ```
 
 ### `make:model`
 
-Generates an ORM model class.
+Generates an ORM model class. The table name is derived automatically from the class name in snake_case + pluralised (`Post` → `posts`, `BlogPost` → `blog_posts`).
 
 ```bash
 pnpm artisan make:model Post
@@ -49,9 +51,11 @@ Generated file:
 import { Model } from '@boostkit/orm'
 
 export class Post extends Model {
-  static table = 'post'
+  static table = 'posts'
 
-  id!: string
+  static fillable: string[] = []
+
+  static hidden: string[] = []
 }
 ```
 
@@ -61,7 +65,7 @@ Generates a queue job class.
 
 ```bash
 pnpm artisan make:job SendWelcomeEmail
-# → app/Jobs/SendWelcomeEmailJob.ts
+# → app/Jobs/SendWelcomeEmail.ts
 ```
 
 Generated file:
@@ -69,16 +73,23 @@ Generated file:
 ```ts
 import { Job } from '@boostkit/queue'
 
-export class SendWelcomeEmailJob extends Job {
+export class SendWelcomeEmail extends Job {
+  static queue   = 'default'
+  static retries = 3
+
+  constructor(/* inject payload here */) {
+    super()
+  }
+
   async handle(): Promise<void> {
-    // implement job logic here
+    // TODO: implement job logic
   }
 }
 ```
 
 ### `make:middleware`
 
-Generates a middleware class.
+Generates a middleware class. The `Middleware` suffix is appended automatically if not provided.
 
 ```bash
 pnpm artisan make:middleware Auth
@@ -93,10 +104,11 @@ import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
-    _req: AppRequest,
-    _res: AppResponse,
+    req: AppRequest,
+    res: AppResponse,
     next: () => Promise<void>
   ): Promise<void> {
+    // TODO: implement middleware logic
     await next()
   }
 }
@@ -104,7 +116,7 @@ export class AuthMiddleware extends Middleware {
 
 ### `make:request`
 
-Generates a FormRequest class for input validation.
+Generates a FormRequest class for input validation. The `Request` suffix is appended automatically if not provided.
 
 ```bash
 pnpm artisan make:request CreateUser
@@ -114,25 +126,24 @@ pnpm artisan make:request CreateUser
 Generated file:
 
 ```ts
-import { FormRequest } from '@boostkit/validation'
-import { z } from 'zod'
+import { FormRequest, z } from '@boostkit/core'
 
 export class CreateUserRequest extends FormRequest {
-  rules() {
-    return z.object({
-      // define your validation schema here
-    })
+  authorize(): boolean {
+    return true
   }
 
-  async authorize(): Promise<boolean> {
-    return true
+  rules() {
+    return z.object({
+      // TODO: define validation rules
+    })
   }
 }
 ```
 
 ### `make:provider`
 
-Generates a service provider class.
+Generates a service provider class. The `ServiceProvider` suffix is appended automatically if not provided.
 
 ```bash
 pnpm artisan make:provider App
@@ -146,18 +157,19 @@ import { ServiceProvider } from '@boostkit/core'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {
-    // bind services here
+    // TODO: bind services into the container
+    // this.app.singleton(MyService, () => new MyService())
   }
 
   async boot(): Promise<void> {
-    // run setup that depends on other providers
+    // TODO: run logic after all providers are registered
   }
 }
 ```
 
 ### `make:command`
 
-Generates a class-based Artisan command.
+Generates a class-based Artisan command. The signature is auto-derived from the class name in kebab-case (`SendDigest` → `send-digest`).
 
 ```bash
 pnpm artisan make:command SendDigest
@@ -170,7 +182,7 @@ Generated file:
 import { Command } from '@boostkit/artisan'
 
 export class SendDigest extends Command {
-  readonly signature   = 'send:digest {--force : Force the operation}'
+  readonly signature   = 'send-digest {--force : Force the operation}'
   readonly description = 'Description of SendDigest'
 
   async handle(): Promise<void> {
@@ -190,7 +202,7 @@ Register it in `routes/console.ts`:
 
 ```ts
 import { artisan } from '@boostkit/artisan'
-import { SendDigest } from '../app/Commands/SendDigest.ts'
+import { SendDigest } from '../app/Commands/SendDigest.js'
 
 artisan.register(SendDigest)
 ```
@@ -269,7 +281,7 @@ export class WelcomeMail extends Mailable {
 |---------|--------|-------------|
 | `make:controller <Name>` | `app/Http/Controllers/<Name>Controller.ts` | Decorator-based controller |
 | `make:model <Name>` | `app/Models/<Name>.ts` | ORM Model class |
-| `make:job <Name>` | `app/Jobs/<Name>Job.ts` | Queue Job class |
+| `make:job <Name>` | `app/Jobs/<Name>.ts` | Queue Job class |
 | `make:middleware <Name>` | `app/Http/Middleware/<Name>Middleware.ts` | Middleware class |
 | `make:request <Name>` | `app/Http/Requests/<Name>Request.ts` | FormRequest class |
 | `make:provider <Name>` | `app/Providers/<Name>ServiceProvider.ts` | ServiceProvider class |

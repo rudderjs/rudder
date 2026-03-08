@@ -22,20 +22,20 @@ export default [
   // ...other providers
   mail(configs.mail),
   notifications(),           // must come after mail()
-  DatabaseServiceProvider,   // must appear before AppServiceProvider
+  DatabaseServiceProvider,
   AppServiceProvider,
 ]
 ```
 
 ## The `Notifiable` Interface
 
-Any object that can receive a notification must satisfy the `Notifiable` interface. Implement it on your user model or any entity:
+Any object that can receive a notification must satisfy the `Notifiable` interface:
 
 ```ts
 interface Notifiable {
-  id: string | number
-  email?: string
-  name?: string
+  readonly id:    string | number
+  readonly email?: string   // required for the mail channel
+  readonly name?:  string
 }
 ```
 
@@ -43,8 +43,8 @@ Your `User` model works out of the box if it has an `id` and `email`:
 
 ```ts
 // app/Models/User.ts
-export class User extends Model implements Notifiable {
-  static table = 'user'
+export class User extends Model {
+  static table = 'users'
   id!: string
   name!: string
   email!: string
@@ -53,39 +53,42 @@ export class User extends Model implements Notifiable {
 
 ## Defining Notifications
 
-Extend the `Notification` abstract base class and implement `via()`. Optionally add `toMail()` and/or `toDatabase()` for the respective channels:
+Extend the `Notification` abstract base class and implement `via()`. Add `toMail()` and/or `toDatabase()` for the respective channels:
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification, type MailMessage, type DatabaseMessage } from '@boostkit/notification'
+import { Notification } from '@boostkit/notification'
+import { Mailable } from '@boostkit/mail'
 import type { Notifiable } from '@boostkit/notification'
+
+class WelcomeMail extends Mailable {
+  constructor(private readonly name: string, private readonly token: string) {
+    super()
+  }
+
+  build() {
+    return this
+      .subject('Welcome to BoostKit')
+      .html(`<p>Hi ${this.name},</p><p><a href="/verify?token=${this.token}">Verify your email</a></p>`)
+      .text(`Hi ${this.name}, verify here: /verify?token=${this.token}`)
+  }
+}
 
 export class WelcomeNotification extends Notification {
   constructor(private readonly token: string) {
     super()
   }
 
-  via(notifiable: Notifiable): string[] {
+  via(_notifiable: Notifiable): string[] {
     return ['mail', 'database']
   }
 
-  toMail(notifiable: Notifiable): MailMessage {
-    return {
-      to:      notifiable.email!,
-      subject: 'Welcome to BoostKit',
-      text:    `Hi ${notifiable.name ?? 'there'}, your account is ready. Verify here: /verify?token=${this.token}`,
-      html:    `<p>Hi ${notifiable.name ?? 'there'},</p><p>Your account is ready.</p><p><a href="/verify?token=${this.token}">Verify your email</a></p>`,
-    }
+  toMail(notifiable: Notifiable): Mailable {
+    return new WelcomeMail(notifiable.name ?? 'there', this.token)
   }
 
-  toDatabase(notifiable: Notifiable): DatabaseMessage {
-    return {
-      type: 'welcome',
-      data: {
-        message: `Welcome, ${notifiable.name ?? 'there'}!`,
-        token:   this.token,
-      },
-    }
+  toDatabase(_notifiable: Notifiable): Record<string, unknown> {
+    return { message: 'Welcome to the app!', token: this.token }
   }
 }
 ```
@@ -125,7 +128,7 @@ router.post('/api/notify/all', async (req, res) => {
 | Channel | Key | Requires |
 |---|---|---|
 | Mail | `'mail'` | `@boostkit/mail` registered + `notifiable.email` present |
-| Database | `'database'` | `@boostkit/orm` with a `notification` Prisma model |
+| Database | `'database'` | `@boostkit/orm` adapter + `notifications` table in your schema |
 
 ### Database Channel — Prisma Schema
 
@@ -144,6 +147,7 @@ model Notification {
   created_at      String
   updated_at      String
 
+  @@map("notifications")
   @@index([notifiable_type, notifiable_id])
 }
 ```
@@ -154,6 +158,17 @@ After adding the model, regenerate the Prisma client and push the schema:
 pnpm exec prisma generate
 pnpm exec prisma db push
 ```
+
+Row shape written by `DatabaseChannel`:
+
+| Column | Value |
+|--------|-------|
+| `notifiable_id` | `String(notifiable.id)` |
+| `notifiable_type` | `'users'` |
+| `type` | Notification class name |
+| `data` | `JSON.stringify(toDatabase())` |
+| `read_at` | `null` |
+| `created_at` / `updated_at` | ISO timestamp |
 
 ## Custom Channels
 
@@ -170,8 +185,8 @@ export class SmsChannel implements NotificationChannel {
     const message = (notification as any).toSms(notifiable)
 
     await smsProvider.send({
-      to:   notifiable.phone,
-      body: message.text,
+      to:   (notifiable as any).phone,
+      body: message,
     })
   }
 }
@@ -207,17 +222,17 @@ via(notifiable: Notifiable): string[] {
 | `Notifiable` | Interface — `{ id, email?, name? }` — implement on any receivable entity |
 | `Notification` | Abstract base class — implement `via()`, optionally `toMail()`, `toDatabase()` |
 | `NotificationChannel` | Interface — `send(notifiable, notification): Promise<void>` — implement for custom channels |
-| `ChannelRegistry` | Global registry — `register(name, channel)`, `get(name)`, `has(name)` |
+| `ChannelRegistry` | Global registry — `register(name, channel)`, `get(name)`, `has(name)`, `reset()` |
 | `MailChannel` | Built-in mail channel — delegates to `@boostkit/mail` adapter |
-| `DatabaseChannel` | Built-in database channel — inserts via `@boostkit/orm` Prisma adapter |
+| `DatabaseChannel` | Built-in database channel — inserts via `@boostkit/orm` into the `notifications` table |
 | `Notifier` | Facade — `Notifier.send(notifiables, notification)` — fans out to all channels |
 | `notify(notifiables, notification)` | Convenience helper wrapping `Notifier.send()` |
 | `notifications()` | Provider factory — registers `MailChannel` and `DatabaseChannel` |
 
 ## Notes
 
-- `notifications()` must appear after `mail()` in `bootstrap/providers.ts` — the `MailChannel` resolves the mail adapter during provider registration.
+- `notifications()` must appear after `mail()` in `bootstrap/providers.ts` — the `MailChannel` resolves the mail adapter at boot time.
 - All channels for a given notification are dispatched concurrently via `Promise.all` — channel order in `via()` does not imply sequential execution.
-- `DatabaseChannel` writes to the `'notification'` Prisma accessor (the lowercase model name). Ensure the model is named `Notification` in your Prisma schema.
-- If a notifiable does not have an `email` property and `'mail'` is returned from `via()`, the `MailChannel` will skip the send silently.
-- Custom channels registered via `ChannelRegistry.register()` are available globally to all notifications — there is no per-notification channel registration.
+- `toMail()` returns a `Mailable` instance; `toDatabase()` returns a plain `Record<string, unknown>`. Both can be `async`.
+- If a notifiable has no `email` and `'mail'` is in `via()`, `MailChannel` throws — ensure all mail-targeted notifiables have an `email` field.
+- Custom channels registered via `ChannelRegistry.register()` are available globally to all notifications.

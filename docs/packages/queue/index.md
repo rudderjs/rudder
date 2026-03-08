@@ -18,9 +18,13 @@ Extend `Job` and implement `handle()`:
 import { Job } from '@boostkit/queue'
 
 export class SendEmailJob extends Job {
-  static jobName = 'SendEmailJob'
+  static queue   = 'default'
+  static retries = 3
 
-  constructor(private readonly to: string, private readonly subject: string) {
+  constructor(
+    private readonly to:      string,
+    private readonly subject: string,
+  ) {
     super()
   }
 
@@ -33,15 +37,15 @@ export class SendEmailJob extends Job {
 
 ## Dispatching a Job
 
-Use the fluent `DispatchBuilder` to dispatch jobs:
+Use the static `dispatch()` method which returns a fluent `DispatchBuilder`:
 
 ```ts
 import { SendEmailJob } from './app/Jobs/SendEmailJob.js'
 
-// basic dispatch (uses default queue)
+// Basic dispatch (uses default queue)
 await SendEmailJob.dispatch('alice@example.com', 'Welcome!').send()
 
-// specify queue name and delay
+// Specify queue name and delay
 await SendEmailJob.dispatch('bob@example.com', 'Reset password')
   .onQueue('notifications')
   .delay(5000)
@@ -89,7 +93,7 @@ export default {
 
 ```ts
 interface QueueConfig {
-  default:     string                              // name of the default connection
+  default:     string                                  // name of the default connection
   connections: Record<string, QueueConnectionConfig>  // named connection definitions
 }
 ```
@@ -98,7 +102,7 @@ interface QueueConfig {
 
 ```ts
 interface QueueConnectionConfig {
-  driver: string   // 'sync' | 'bullmq' | 'inngest' | any registered driver
+  driver: string           // 'sync' | 'bullmq' | 'inngest' | any registered driver
   [key: string]: unknown   // driver-specific options
 }
 ```
@@ -124,15 +128,14 @@ The `queue:work` artisan command starts a long-running worker process that polls
 ```bash
 pnpm artisan queue:work
 pnpm artisan queue:work --queue=notifications
-pnpm artisan queue:work --connection=bullmq
 ```
 
-The worker uses the adapter registered for the active connection. For `sync`, this command is a no-op.
+The worker uses the adapter registered for the active connection. For `sync`, this command is a no-op (the driver executes jobs inline at dispatch time).
 
 ## Notes
 
-- Register all Job classes in the adapter's `jobs[]` array (required by BullMQ and Inngest) so the worker can resolve jobs by name at runtime.
 - The built-in `sync` driver requires no additional packages and is always available.
 - For Redis-backed queuing, use `@boostkit/queue-bullmq`.
 - For serverless/event-driven queuing, use `@boostkit/queue-inngest`.
-- Job payloads are serialized to JSON — ensure constructor arguments are JSON-serializable.
+- Job payloads are passed as constructor arguments — ensure they are serializable if using an external driver.
+- `static queue` sets the default queue name for the job class; `static retries` sets the retry count.

@@ -15,12 +15,13 @@ pnpm add @boostkit/mail
 ```ts
 // config/mail.ts
 import type { MailConfig } from '@boostkit/mail'
+import { Env } from '@boostkit/support'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name: Env.get('MAIL_FROM_NAME', 'BoostKit App'),
+    name:    Env.get('MAIL_FROM_NAME', 'BoostKit App'),
   },
   mailers: {
     log: {
@@ -48,7 +49,7 @@ export default [
 
 ### Creating a Mailable
 
-Extend `Mailable` and implement the `build()` method. `build()` must return `this`.
+Extend `Mailable` and implement the `build()` method. Use the protected `subject()`, `html()`, and `text()` helpers inside `build()`.
 
 ```ts
 import { Mailable } from '@boostkit/mail'
@@ -62,17 +63,8 @@ export class WelcomeEmail extends Mailable {
     return this
       .subject(`Welcome, ${this.userName}!`)
       .html(`<h1>Hello, ${this.userName}!</h1><p>Thanks for joining us.</p>`)
+      .text(`Hello, ${this.userName}! Thanks for joining us.`)
   }
-}
-```
-
-For plain-text emails, use `.text()` instead of (or alongside) `.html()`:
-
-```ts
-build() {
-  return this
-    .subject('Welcome!')
-    .text('Thanks for joining us.')
 }
 ```
 
@@ -85,24 +77,23 @@ import { WelcomeEmail } from '../app/Mail/WelcomeEmail.js'
 // Send to a single recipient
 await Mail.to('user@example.com').send(new WelcomeEmail('Alice'))
 
-// Send to a recipient with a display name
-await Mail.to({ address: 'user@example.com', name: 'Alice' }).send(new WelcomeEmail('Alice'))
+// Send to multiple recipients
+await Mail.to('alice@example.com', 'bob@example.com').send(new WelcomeEmail('Team'))
 ```
 
 ### Fluent Recipient Chain
 
-You can chain `cc()`, `bcc()`, and `replyTo()` before calling `send()`:
+Chain `cc()` and `bcc()` before calling `send()`:
 
 ```ts
 await Mail
   .to('user@example.com')
   .cc('manager@example.com')
   .bcc('archive@example.com')
-  .replyTo('support@example.com')
   .send(new WelcomeEmail('Alice'))
 ```
 
-Each method accepts either a `string` (email address) or `{ address: string, name: string }`.
+`cc()` and `bcc()` each accept one or more email address strings.
 
 ## Configuration
 
@@ -111,16 +102,16 @@ Each method accepts either a `string` (email address) or `{ address: string, nam
 ```ts
 interface MailConfig {
   default: string
-  from: { address: string; name: string }
+  from: { address: string; name?: string }
   mailers: Record<string, MailConnectionConfig>
 }
 ```
 
-| Field     | Type                                   | Description                                     |
-|-----------|----------------------------------------|-------------------------------------------------|
-| `default` | `string`                               | Name of the default mailer to use.              |
-| `from`    | `{ address: string; name: string }`    | Global sender address used for all outgoing mail. |
-| `mailers` | `Record<string, MailConnectionConfig>` | Named mailer configurations.                    |
+| Field     | Type                                    | Description                                       |
+|-----------|-----------------------------------------|---------------------------------------------------|
+| `default` | `string`                                | Name of the default mailer to use.                |
+| `from`    | `{ address: string; name?: string }`    | Global sender address used for all outgoing mail. |
+| `mailers` | `Record<string, MailConnectionConfig>`  | Named mailer configurations.                      |
 
 ### `MailConnectionConfig`
 
@@ -130,13 +121,13 @@ Each mailer entry requires a `driver` field plus any driver-specific options.
 // Log driver (built-in)
 { driver: 'log' }
 
-// SMTP (built-in; requires nodemailer)
+// SMTP (built-in; requires nodemailer: pnpm add nodemailer)
 {
-  driver: 'smtp',
-  host: 'smtp.mailgun.org',
-  port: 587,
-  username: 'postmaster@mg.example.com',
-  password: 'secret',
+  driver:     'smtp',
+  host:       'smtp.mailgun.org',
+  port:       587,
+  username:   'postmaster@mg.example.com',
+  password:   'secret',
   encryption: 'tls',
 }
 ```
@@ -152,18 +143,28 @@ Each mailer entry requires a `driver` field plus any driver-specific options.
 The `log` driver prints all outgoing email to the console. It is the recommended driver for local development — no mail server or credentials needed.
 
 ```ts
-{
-  driver: 'log'
-}
+{ driver: 'log' }
 ```
 
-## SMTP Driver
+Output format:
 
-For production SMTP delivery, install `nodemailer`. See the [Nodemailer adapter docs](./nodemailer).
+```
+[BoostKit Mail] ──────────────────────────────────────────────────
+[BoostKit Mail]  To:      user@example.com
+[BoostKit Mail]  From:    BoostKit App <hello@example.com>
+[BoostKit Mail]  Subject: Welcome, Alice!
+[BoostKit Mail]  Text:    Hello, Alice! Thanks for joining us.
+[BoostKit Mail] ──────────────────────────────────────────────────
+```
+
+### `smtp`
+
+For production SMTP delivery, install `nodemailer` and configure the `smtp` driver. See the [Nodemailer adapter docs](./nodemailer).
 
 ## Notes
 
 - `Mailable.build()` **must return `this`** — all builder methods return `this` for chaining.
-- `Mail.to()` accepts a plain `string` (email address) or an object with `address` and `name` fields.
-- The `log` driver is the built-in development mailer — it outputs formatted email details to `stdout` and never actually sends mail.
-- The `from` address in config is used as the default sender for all messages. Individual Mailables can override it by calling `.from()` inside `build()`.
+- `subject()`, `html()`, and `text()` are **protected** — call them only inside `build()`.
+- `Mail.to()` accepts one or more plain email address strings.
+- The `from` address in config is used as the global sender for all messages.
+- `build()` can be `async` — useful for loading data before building the message.
