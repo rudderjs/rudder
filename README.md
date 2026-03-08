@@ -176,7 +176,88 @@ Route.registerController(UserController)
 
 Or use fluent routing for simpler cases — both styles work side by side.
 
-### 6. Debug helpers (the ones every Laravel dev misses)
+### 6. Service Providers & Dependency Injection
+
+```ts
+// app/Providers/AppServiceProvider.ts
+import { ServiceProvider } from '@boostkit/core'
+import { UserService } from '../Services/UserService.js'
+
+export class AppServiceProvider extends ServiceProvider {
+  register(): void {
+    // Bind once — resolve anywhere via resolve(UserService)
+    this.app.singleton(UserService, () => new UserService())
+  }
+}
+```
+
+```ts
+// Anywhere in your routes or services
+import { resolve } from '@boostkit/core'
+import { UserService } from '../app/Services/UserService.js'
+
+const users = await resolve(UserService).findAll()
+```
+
+Swap the entire implementation by changing one line in `register()` — your routes and controllers never change.
+
+### 7. Mail
+
+```ts
+// app/Mail/WelcomeEmail.ts
+import { Mailable } from '@boostkit/mail'
+
+export class WelcomeEmail extends Mailable {
+  constructor(private readonly userName: string) { super() }
+
+  build(): this {
+    return this
+      .subject(`Welcome to BoostKit, ${this.userName}!`)
+      .html(`<h1>Welcome, ${this.userName}!</h1><p>Your account is ready.</p>`)
+      .text(`Welcome, ${this.userName}! Your account is ready.`)
+  }
+}
+```
+
+```ts
+import { Mail } from '@boostkit/mail'
+
+await Mail.to(user.email).send(new WelcomeEmail(user.name))
+```
+
+### 8. Events
+
+```ts
+// app/Events/UserRegistered.ts
+export class UserRegistered {
+  constructor(
+    public readonly id:    string,
+    public readonly name:  string,
+    public readonly email: string,
+  ) {}
+}
+```
+
+```ts
+// bootstrap/providers.ts — register listeners
+import { events } from '@boostkit/core'
+import { UserRegistered } from '../app/Events/UserRegistered.js'
+import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
+
+export default [
+  events({ [UserRegistered.name]: [new SendWelcomeEmailListener()] }),
+  // ...other providers
+]
+```
+
+```ts
+// Dispatch from anywhere
+import { dispatch } from '@boostkit/core'
+
+await dispatch(new UserRegistered(user.id, user.name, user.email))
+```
+
+### 9. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
 import { config, dump, dd, app, resolve } from '@boostkit/core'
