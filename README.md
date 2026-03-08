@@ -1,23 +1,51 @@
 <p align="center">
-  <img src="./logo.png" alt="BoostKit — Boot Your Node" width="480" />
+  <img src="./logo.png" alt="BoostKit — Boost Your Node App" width="480" />
 </p>
 
-# BoostKit
+<p align="center">
+  <strong>Laravel's developer experience, reimagined for the Node.js ecosystem.</strong>
+</p>
 
-**Laravel's developer experience, reimagined for the Node.js ecosystem.**
-
-BoostKit is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, an Artisan CLI, queues, scheduling, and more — without the PHP runtime.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@boostkit/core"><img src="https://img.shields.io/npm/v/@boostkit/core?label=core&color=f5a623" alt="npm" /></a>
+  <a href="https://github.com/boostkitjs/boostkit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-powered-646cff" alt="Vite" />
+</p>
 
 ---
 
-## Features
+BoostKit is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, an Artisan CLI, queues, scheduling, and more — without the PHP runtime.
+
+## Why BoostKit?
+
+Modern web development forces a choice between **developer experience** and **architectural freedom**.
+
+- **Next.js** gives you great DX but locks you into React and a black-box architecture
+- **Express/Hono** gives you freedom but you spend weeks wiring up auth, ORMs, queues, and DI from scratch
+- **NestJS** is structured but heavy, Angular-style, and API-only
+
+BoostKit is the middle ground: a **batteries-included architecture that stays entirely modular and UI-agnostic**.
+
+| | Next.js | NestJS | BoostKit |
+|---|---|---|---|
+| **Philosophy** | Component-first | Angular-style DI | Laravel-style DX |
+| **Build tool** | Webpack / Turbopack | Webpack / esbuild | **Vite** |
+| **UI framework** | React only | API only | React, Vue, Solid, or none |
+| **DI container** | None | Class-based IoC | Service Providers |
+| **Backend pattern** | File-based API routes | Controllers + Modules | Routes + Service Providers |
+| **Modularity** | All-in | All-in | Pay-as-you-go |
+
+---
+
+## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Artisan CLI, FormRequest validation
-- **Modular by design** — every feature is an optional `@boostkit/*` package; use only what you need
+- **Pay-as-you-go** — 23 optional `@boostkit/*` packages; use only what you need
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
-- **Framework-agnostic UI** — pair with React, Vue, Solid, or run as a pure API server
+- **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
 - **TypeScript-first** — strict types, generics, and decorator support throughout
-- **WinterCG compatible** — deploys to Node.js, Cloudflare Workers, Deno, and Bun
+- **WinterCG compatible** — runs on Node.js, Cloudflare Workers, Deno, and Bun
 
 ---
 
@@ -32,38 +60,13 @@ pnpm exec prisma db push
 pnpm dev
 ```
 
----
-
-## Packages
-
-| Package | Description |
-|---|---|
-| `@boostkit/core` | Application bootstrap, DI container, Events, FormRequest validation, ServiceProvider lifecycle |
-| `@boostkit/router` | Fluent + decorator-based HTTP routing |
-| `@boostkit/middleware` | Middleware pipeline, CORS, logger, CSRF, rate limiting |
-| `@boostkit/server-hono` | Hono HTTP adapter |
-| `@boostkit/orm` | Model base class, ModelRegistry, QueryBuilder |
-| `@boostkit/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
-| `@boostkit/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
-| `@boostkit/auth` | better-auth service provider factory + `AuthMiddleware()` |
-| `@boostkit/queue` | Job base class, queue contract |
-| `@boostkit/queue-bullmq` | BullMQ Redis-backed queue |
-| `@boostkit/queue-inngest` | Inngest serverless queue |
-| `@boostkit/cache` | Cache facade, memory + Redis drivers (Redis needs `ioredis`) |
-| `@boostkit/storage` | Storage facade, local + S3/R2/MinIO drivers (S3 needs `@aws-sdk/client-s3`) |
-| `@boostkit/mail` | Mailable, Mail facade, log + SMTP drivers (SMTP needs `nodemailer`) |
-| `@boostkit/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
-| `@boostkit/schedule` | Task scheduler, cron-based |
-| `@boostkit/notification` | Multi-channel notifications (mail, database) |
-| `@boostkit/artisan` | Artisan CLI registry, Command base class |
-| `@boostkit/cli` | Artisan make:* generators (controller, model, job, middleware, module…) |
-| `@boostkit/vite` | Vite + Vike plugin with SSR externals and BoostKit integration |
-| `@boostkit/support` | Env, Collection, ConfigRepository, helpers |
-| `@boostkit/contracts` | Shared TypeScript types (no runtime) |
+The interactive installer asks you to choose your database, frontend framework (React / Vue / Solid), Tailwind, shadcn/ui, and authentication pages — then scaffolds a production-ready project.
 
 ---
 
-## Example
+## How It Works
+
+### 1. Bootstrap — one file wires everything
 
 ```ts
 // bootstrap/app.ts
@@ -80,6 +83,7 @@ export default Application.configure({
   providers,
 })
   .withRouting({
+    web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
     commands: () => import('../routes/console.ts'),
   })
@@ -88,6 +92,8 @@ export default Application.configure({
   })
   .create()
 ```
+
+### 2. Routes
 
 ```ts
 // routes/api.ts
@@ -104,20 +110,24 @@ Route.post('/api/users', async (req, res) => {
 })
 ```
 
+### 3. Artisan CLI + Scheduling
+
 ```ts
 // routes/console.ts
-import { Artisan }  from '@boostkit/artisan'
-import { Schedule } from '@boostkit/schedule'
+import { artisan }  from '@boostkit/artisan'
+import { schedule } from '@boostkit/schedule'
 
-Artisan.command('db:seed', async () => {
+artisan.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })
-  console.log('Done.')
+  console.log('Seeded.')
 }).description('Seed the database')
 
-Schedule.call(async () => {
+schedule.call(async () => {
   await Cache.forget('users:all')
 }).everyFiveMinutes().description('Flush users cache')
 ```
+
+### 4. Models
 
 ```ts
 // app/Models/User.ts
@@ -125,41 +135,78 @@ import { Model } from '@boostkit/orm'
 
 export class User extends Model {
   static table = 'user'
-  id!: string
-  name!: string
+  id!:    string
+  name!:  string
   email!: string
 }
 ```
 
----
-
-## Helpers
-
-All helpers are importable from `@boostkit/core`:
+### 5. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
-import { config, dd, dump, app, resolve, Env } from '@boostkit/core'
+import { config, dump, dd, app, resolve } from '@boostkit/core'
 
-// Read config values with dot-notation
-config('app.name')          // → 'BoostKit'
-config('app.env')           // → 'development'
-config('cache.ttl', 60)     // → 60 (fallback)
+config('app.name')       // → 'my-app'
+config('cache.ttl', 60)  // → 60 (with fallback)
 
-// Debug helpers (Laravel-style)
-dump({ user, session })     // pretty-prints to terminal, keeps server running
-dd(req.body)                // pretty-prints then terminates (restart required)
+dump({ user, session })  // pretty-prints, server keeps running
+dd(req.body)             // pretty-prints then stops (like Laravel's dd())
 
-// Get the application instance or resolve from the DI container
-const instance = app()
-const service  = resolve<UserService>(UserService)
+const svc = resolve<UserService>(UserService)
 ```
 
 ---
 
-## Tech Stack
+## Packages
 
-| Layer | Default | Alternatives |
-|-------|---------|--------------|
+### Foundation
+| Package | Description |
+|---|---|
+| `@boostkit/core` | Application bootstrap, DI container, Events, ServiceProvider lifecycle |
+| `@boostkit/router` | Fluent + decorator-based HTTP routing |
+| `@boostkit/middleware` | Pipeline, CORS, logger, CSRF, rate limiting |
+| `@boostkit/artisan` | Artisan CLI registry, Command base class |
+| `@boostkit/cli` | `make:*` generators — controller, model, job, middleware, module |
+| `@boostkit/support` | Env, Collection, ConfigRepository, helpers |
+| `@boostkit/contracts` | Shared TypeScript types (no runtime) |
+
+### HTTP & Frontend
+| Package | Description |
+|---|---|
+| `@boostkit/server-hono` | Hono HTTP adapter |
+| `@boostkit/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
+| `@boostkit/vite` | Vite + Vike plugin with SSR externals and BoostKit integration |
+
+### Database
+| Package | Description |
+|---|---|
+| `@boostkit/orm` | Model base class, ModelRegistry, QueryBuilder |
+| `@boostkit/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
+| `@boostkit/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
+
+### Auth
+| Package | Description |
+|---|---|
+| `@boostkit/auth` | better-auth service provider + `AuthMiddleware()` |
+
+### Infrastructure
+| Package | Description |
+|---|---|
+| `@boostkit/queue` | Job base class, queue contract |
+| `@boostkit/queue-bullmq` | BullMQ Redis-backed queue |
+| `@boostkit/queue-inngest` | Inngest serverless queue |
+| `@boostkit/cache` | Cache facade, memory + Redis drivers (`ioredis` optional) |
+| `@boostkit/storage` | Storage facade, local + S3/R2/MinIO (`@aws-sdk/client-s3` optional) |
+| `@boostkit/mail` | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
+| `@boostkit/notification` | Multi-channel notifications (mail, database) |
+| `@boostkit/schedule` | Task scheduler, cron-based |
+
+---
+
+## Default Stack
+
+| Layer | Default | Swap with |
+|-------|---------|-----------|
 | HTTP server | Hono | Express, Fastify, H3 |
 | ORM | Prisma | Drizzle |
 | Auth | better-auth | — |
