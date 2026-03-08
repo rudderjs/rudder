@@ -27,6 +27,8 @@ BoostKit is a modular, TypeScript-first Node.js meta-framework built on [Vike](h
 pnpm create boostkit-app my-app
 cd my-app
 pnpm install
+pnpm exec prisma generate
+pnpm exec prisma db push
 pnpm dev
 ```
 
@@ -54,6 +56,8 @@ pnpm dev
 | `@boostkit/schedule` | Task scheduler, cron-based |
 | `@boostkit/notification` | Multi-channel notifications (mail, database) |
 | `@boostkit/artisan` | Artisan CLI registry, Command base class |
+| `@boostkit/cli` | Artisan make:* generators (controller, model, job, middleware, module…) |
+| `@boostkit/vite` | Vite + Vike plugin with SSR externals and BoostKit integration |
 | `@boostkit/support` | Env, Collection, ConfigRepository, helpers |
 | `@boostkit/contracts` | Shared TypeScript types (no runtime) |
 
@@ -170,11 +174,11 @@ const service  = resolve<UserService>(UserService)
 
 BoostKit is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 22 packages published to npm under `@boostkit/*`
+- 23 packages published to npm under `@boostkit/*`
 - Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, and scheduling end-to-end
 
 ---
 
 ## License
 
-MIT © [BoostKit](https://github.com/boostkitjs/boostkit)
+MIT © [Suleiman Shahbari](https://github.com/boostkitjs/boostkit)

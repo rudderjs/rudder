@@ -51,5 +51,6 @@
     "vike": "^0.4.239",
     "vike-solid": "^0.8.1",
     "vite": "^7.1.0"
-  }
+  },
+  "author": "Suleiman Shahbari"
 }
