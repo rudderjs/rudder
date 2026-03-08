@@ -1,0 +1,25 @@
+{
+  "name": "@boostkit/integration-tests",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "tsc -p tsconfig.json && node --test dist/orm-drizzle.test.js dist/cache.test.js dist/events.test.js dist/session.test.js; rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@boostkit/cache": "workspace:*",
+    "@boostkit/contracts": "workspace:*",
+    "@boostkit/core": "workspace:*",
+    "@boostkit/orm": "workspace:*",
+    "@boostkit/orm-drizzle": "workspace:*",
+    "@boostkit/session": "workspace:*",
+    "better-sqlite3": "^12.0.0",
+    "drizzle-orm": "^0.38.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.0.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

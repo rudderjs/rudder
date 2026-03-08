@@ -1,5 +1,6 @@
 packages:
   - 'packages/*'
+  - 'tests/*'
   - 'create-boostkit-app'
   - 'playground'
   - 'docs'

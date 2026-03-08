@@ -144,9 +144,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
-      '@types/react':
-        specifier: ^18.0.0
-        version: 18.3.28
       tsx:
         specifier: ^4.0.0
         version: 4.21.0
@@ -203,9 +200,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -248,9 +242,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -352,10 +343,10 @@ importers:
       '@boostkit/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
       '@boostkit/router':
         specifier: workspace:*
         version: link:../router
-    devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
@@ -697,6 +688,43 @@ importers:
       vite:
         specifier: ^7.1.0
         version: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  tests/integration:
+    dependencies:
+      '@boostkit/cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
+      '@boostkit/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@boostkit/orm':
+        specifier: workspace:*
+        version: link:../../packages/orm
+      '@boostkit/orm-drizzle':
+        specifier: workspace:*
+        version: link:../../packages/orm-drizzle
+      '@boostkit/session':
+        specifier: workspace:*
+        version: link:../../packages/session
+      better-sqlite3:
+        specifier: ^12.0.0
+        version: 12.6.2
+      drizzle-orm:
+        specifier: ^0.38.0
+        version: 0.38.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.0)(@opentelemetry/api@1.9.0)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3))(@types/better-sqlite3@7.6.13)(@types/pg@8.15.6)(@types/react@19.2.14)(better-sqlite3@12.6.2)(kysely@0.28.11)(mysql2@3.15.3)(pg@8.19.0)(postgres@3.4.7)(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(react@19.2.4)
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.0.0
+        version: 7.6.13
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
 packages:
 
@@ -11332,7 +11360,8 @@ snapshots:
       pg-protocol: 1.12.0
       pg-types: 2.2.0
 
-  '@types/prop-types@15.7.15': {}
+  '@types/prop-types@15.7.15':
+    optional: true
 
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
@@ -11342,6 +11371,7 @@ snapshots:
     dependencies:
       '@types/prop-types': 15.7.15
       csstype: 3.2.3
+    optional: true
 
   '@types/react@19.2.14':
     dependencies:
@@ -12066,6 +12096,23 @@ snapshots:
     optionalDependencies:
       '@electric-sql/pglite': 0.3.15
       '@libsql/client': 0.15.15
+      '@opentelemetry/api': 1.9.0
+      '@prisma/client': 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@types/better-sqlite3': 7.6.13
+      '@types/pg': 8.15.6
+      '@types/react': 19.2.14
+      better-sqlite3: 12.6.2
+      kysely: 0.28.11
+      mysql2: 3.15.3
+      pg: 8.19.0
+      postgres: 3.4.7
+      prisma: 7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      react: 19.2.4
+
+  drizzle-orm@0.38.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.0)(@opentelemetry/api@1.9.0)(@prisma/client@7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3))(@types/better-sqlite3@7.6.13)(@types/pg@8.15.6)(@types/react@19.2.14)(better-sqlite3@12.6.2)(kysely@0.28.11)(mysql2@3.15.3)(pg@8.19.0)(postgres@3.4.7)(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(react@19.2.4):
+    optionalDependencies:
+      '@electric-sql/pglite': 0.3.15
+      '@libsql/client': 0.17.0
       '@opentelemetry/api': 1.9.0
       '@prisma/client': 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
       '@types/better-sqlite3': 7.6.13
