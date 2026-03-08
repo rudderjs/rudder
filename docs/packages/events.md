@@ -67,7 +67,7 @@ import { UserRegistered } from '../app/Events/UserRegistered.js'
 router.post('/api/users', async (req, res) => {
   const user = await User.create(req.body)
 
-  dispatch(new UserRegistered(user.id))
+  await dispatch(new UserRegistered(user.id))
 
   return res.json({ data: user })
 })
@@ -83,7 +83,7 @@ import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmail } from '../app/Listeners/SendWelcomeEmail.js'
 
 // Dispatch an event
-dispatcher.dispatch(new UserRegistered('user-123'))
+await dispatcher.dispatch(new UserRegistered('user-123'))
 
 // Register listeners at runtime
 dispatcher.register(UserRegistered.name, new SendWelcomeEmail())
@@ -96,7 +96,7 @@ dispatcher.register(UserRegistered.name, new SendWelcomeEmail())
 The type accepted by the `events()` factory:
 
 ```ts
-type ListenMap = Record<string, (typeof Listener)[]>
+type ListenMap = Record<string, (new () => Listener<never>)[]>
 ```
 
 Keys are event class names (matched via `event.constructor.name`). Values are arrays of listener classes to invoke when the event is dispatched.
