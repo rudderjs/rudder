@@ -355,7 +355,7 @@ There is **no `boostkit.config.ts`** — `bootstrap/app.ts` is the framework wir
 - `tsconfig.json` must be self-contained — no `extends: ../tsconfig.base.json` (monorepo-only)
 - All `@boostkit/*` deps use `'latest'` — pnpm double-zero semver (`^0.0.x`) pins to exact version
 - `pnpm.onlyBuiltDependencies` required for `better-sqlite3`, `@prisma/engines`, `esbuild`, `prisma`
-- Use `prismaProvider(configs.database)` not `DatabaseServiceProvider` in providers.ts
+- Use `database(configs.database)` from `@boostkit/orm-prisma` not `DatabaseServiceProvider` in providers.ts
 - `shadcn` dep only added when React + Tailwind are both selected
 - `src/index.css` not generated at all when Tailwind is not selected
 - React + Solid together: Vite plugins use `include`/`exclude` to disambiguate `.tsx` files
