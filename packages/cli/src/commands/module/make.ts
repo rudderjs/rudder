@@ -6,7 +6,7 @@ import { intro, outro, spinner, log } from '@clack/prompts'
 
 // ─── File stubs ────────────────────────────────────────────
 
-function schemaStub(name: string): string {
+export function schemaStub(name: string): string {
   return `import { z } from 'zod'
 
 export const ${name}InputSchema = z.object({
@@ -26,7 +26,7 @@ export type ${name} = z.infer<typeof ${name}OutputSchema>
 `
 }
 
-function serviceStub(name: string): string {
+export function serviceStub(name: string): string {
   return `import { Injectable } from '@boostkit/core'
 import type { ${name}Input, ${name} } from './${name}Schema.js'
 
@@ -52,7 +52,7 @@ export class ${name}Service {
 `
 }
 
-function providerStub(name: string): string {
+export function providerStub(name: string): string {
   const prefix = `/api/${name.replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`)).toLowerCase()}s`
   return `import { ServiceProvider } from '@boostkit/core'
 import { router } from '@boostkit/router'
@@ -87,7 +87,7 @@ export class ${name}ServiceProvider extends ServiceProvider {
 `
 }
 
-function testStub(name: string): string {
+export function testStub(name: string): string {
   return `import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { ${name}InputSchema } from './${name}Schema.js'
@@ -106,7 +106,7 @@ describe('${name}', () => {
 `
 }
 
-function prismaStub(name: string): string {
+export function prismaStub(name: string): string {
   return `model ${name} {
   id        String   @id @default(cuid())
   // TODO: add fields
@@ -118,7 +118,7 @@ function prismaStub(name: string): string {
 
 // ─── Auto-registration ─────────────────────────────────────
 
-async function autoRegisterProvider(name: string, cwd: string): Promise<void> {
+export async function autoRegisterProvider(name: string, cwd: string): Promise<void> {
   const bootstrapPath = resolve(cwd, 'bootstrap/providers.ts')
   const importLine    = `import { ${name}ServiceProvider } from '../app/Modules/${name}/${name}ServiceProvider.js'`
   const pushLine      = `  ${name}ServiceProvider,`
@@ -190,7 +190,7 @@ export function makeModule(program: Command): void {
         if (existsSync(file.path) && !opts.force) {
           s.stop('Aborted')
           log.error(`File already exists: ${file.path}\nUse --force to overwrite.`)
-          process.exit(1)
+          return
         }
         await writeFile(file.path, file.content)
         log.success(`Created ${file.path.replace(process.cwd() + '/', '')}`)

@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 
-function stub(className: string, table: string): string {
+export function stub(className: string, table: string): string {
   return `import { Model } from '@boostkit/orm'
 
 export class ${className} extends Model {
@@ -17,7 +17,7 @@ export class ${className} extends Model {
 `
 }
 
-function deriveTable(className: string): string {
+export function deriveTable(className: string): string {
   // PascalCase → snake_case, then pluralise
   return (
     className
@@ -40,7 +40,7 @@ export function makeModel(program: Command): void {
       if (existsSync(outPath) && !opts.force) {
         console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
         console.error(chalk.dim('    Use --force to overwrite.'))
-        process.exit(1)
+        return
       }
 
       await mkdir(dirname(outPath), { recursive: true })

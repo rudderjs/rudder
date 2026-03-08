@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 
-function stub(className: string): string {
+export function stub(className: string): string {
   return `import { Middleware } from '@boostkit/middleware'
 import type { AppRequest, AppResponse } from '@boostkit/contracts'
 
@@ -34,7 +34,7 @@ export function makeMiddleware(program: Command): void {
       if (existsSync(outPath) && !opts.force) {
         console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
         console.error(chalk.dim('    Use --force to overwrite.'))
-        process.exit(1)
+        return
       }
 
       await mkdir(dirname(outPath), { recursive: true })

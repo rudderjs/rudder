@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import type { Command } from 'commander'
 import { log } from '@clack/prompts'
 
-function stub(name: string): string {
+export function stub(name: string): string {
   // Convert PascalCase to kebab:case for default signature, e.g. SendEmails → send:emails
   const kebab = name
     .replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`))
@@ -40,7 +40,7 @@ export function makeCommandCmd(program: Command): void {
 
       if (existsSync(filePath) && !opts.force) {
         log.error(`File already exists: app/Commands/${name}.ts\nUse --force to overwrite.`)
-        process.exit(1)
+        return
       }
 
       await mkdir(resolve(process.cwd(), 'app/Commands'), { recursive: true })

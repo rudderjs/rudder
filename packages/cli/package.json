@@ -17,9 +17,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; rm -rf dist-test",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -31,7 +32,6 @@
   "devDependencies": {
     "@boostkit/router": "workspace:*",
     "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
     "typescript": "^5.4.0",
     "tsx": "^4.0.0"
   }

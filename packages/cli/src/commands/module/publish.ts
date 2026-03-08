@@ -5,11 +5,11 @@ import { spawn } from 'node:child_process'
 import type { Command } from 'commander'
 import { intro, outro, spinner, log } from '@clack/prompts'
 
-const MARKERS_RE = /\/\/ <boostkit:modules:start>[\s\S]*?\/\/ <boostkit:modules:end>/m
+export const MARKERS_RE = /\/\/ <boostkit:modules:start>[\s\S]*?\/\/ <boostkit:modules:end>/m
 
 // ─── Helpers ───────────────────────────────────────────────
 
-async function findPrismaFiles(modulesDir: string, moduleFilter?: string): Promise<Array<{ module: string; file: string; content: string }>> {
+export async function findPrismaFiles(modulesDir: string, moduleFilter?: string): Promise<Array<{ module: string; file: string; content: string }>> {
   const results: Array<{ module: string; file: string; content: string }> = []
 
   if (!existsSync(modulesDir)) return results
@@ -33,7 +33,7 @@ async function findPrismaFiles(modulesDir: string, moduleFilter?: string): Promi
   return results
 }
 
-function buildMergedBlock(shards: Array<{ module: string; file: string; content: string }>): string {
+export function buildMergedBlock(shards: Array<{ module: string; file: string; content: string }>): string {
   const inner = shards
     .map(s => `// module: ${s.module} (${s.file})\n${s.content.trim()}`)
     .join('\n\n')
@@ -78,7 +78,7 @@ export function publishModule(program: Command): void {
 
       if (shards.length === 0) {
         log.error('No .prisma files found in app/Modules/')
-        process.exit(1)
+        return
       }
 
       for (const shard of shards) {

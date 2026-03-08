@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 
-function stub(className: string): string {
+export function stub(className: string): string {
   return `import { FormRequest, z } from '@boostkit/core'
 
 export class ${className} extends FormRequest {
@@ -34,7 +34,7 @@ export function makeRequest(program: Command): void {
       if (existsSync(outPath) && !opts.force) {
         console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
         console.error(chalk.dim('    Use --force to overwrite.'))
-        process.exit(1)
+        return
       }
 
       await mkdir(dirname(outPath), { recursive: true })

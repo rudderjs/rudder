@@ -15,7 +15,7 @@ Add to `package.json`:
 ```json
 {
   "scripts": {
-    "artisan": "tsx node_modules/@boostkit/cli/src/index.ts"
+    "artisan": "node node_modules/@boostkit/cli/dist/index.js"
   }
 }
 ```
@@ -28,11 +28,11 @@ pnpm artisan make:controller User # Generate a controller
 pnpm artisan db:seed              # Run a user-defined command
 ```
 
-**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the BoostKit application (`boostkit.boot()`) before dispatching commands — all service providers, DI bindings, and database connections are available.
+**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the BoostKit application before dispatching commands — all service providers, DI bindings, and database connections are available.
 
 ## How It Works
 
-1. The CLI imports `bootstrap/app.ts` from the current working directory
+1. The CLI locates `bootstrap/app.ts` by walking up from the current directory
 2. It calls `boostkit.boot()` — boots all service providers
 3. Route loaders for `commands` are executed (registers commands from `routes/console.ts`)
 4. The CLI dispatches the matching command with parsed arguments and options
@@ -45,11 +45,15 @@ pnpm artisan db:seed              # Run a user-defined command
 |---------|--------|-------------|
 | `make:controller <Name>` | `app/Http/Controllers/<Name>Controller.ts` | Decorator-based controller |
 | `make:model <Name>` | `app/Models/<Name>.ts` | ORM Model |
-| `make:job <Name>` | `app/Jobs/<Name>Job.ts` | Queue Job |
+| `make:job <Name>` | `app/Jobs/<Name>.ts` | Queue Job |
 | `make:middleware <Name>` | `app/Http/Middleware/<Name>Middleware.ts` | Middleware class |
 | `make:request <Name>` | `app/Http/Requests/<Name>Request.ts` | FormRequest class |
 | `make:provider <Name>` | `app/Providers/<Name>ServiceProvider.ts` | ServiceProvider |
-| `make:module <Name>` | Full module scaffold | Models, services, providers, controller, Prisma shard |
+| `make:command <Name>` | `app/Commands/<Name>.ts` | Artisan command class |
+| `make:event <Name>` | `app/Events/<Name>.ts` | Event class |
+| `make:listener <Name>` | `app/Listeners/<Name>.ts` | Event listener class |
+| `make:mail <Name>` | `app/Mail/<Name>.ts` | Mailable class |
+| `make:module <Name>` | `app/Modules/<Name>/` | Full module scaffold |
 
 All `make:*` commands support `--force` to overwrite existing files.
 
@@ -57,7 +61,33 @@ All `make:*` commands support `--force` to overwrite existing files.
 
 | Command | Description |
 |---------|-------------|
-| `module:publish` | Merge all `app/**/schema.prisma` shards into `prisma/schema.prisma` |
+| `module:publish [module]` | Merge `*.prisma` shards from `app/Modules/` into `prisma/schema.prisma` |
+
+`module:publish` options:
+- `--generate` — run `prisma generate` after merging
+- `--migrate` — run `prisma migrate dev` after merging
+- `--name <name>` — migration name when using `--migrate` (default: `auto`)
+
+### `route:list`
+
+Lists all registered API routes (from `@boostkit/router`) and Vike filesystem page routes.
+
+## `make:module` Scaffold
+
+The `make:module Blog` command creates:
+
+```
+app/Modules/Blog/
+├── BlogSchema.ts          # Zod input/output schemas and types
+├── BlogService.ts         # @Injectable() service with CRUD stubs
+├── BlogServiceProvider.ts # ServiceProvider — registers DI + REST routes
+├── Blog.test.ts           # Basic schema validation tests
+└── Blog.prisma            # Prisma model shard
+```
+
+It also auto-registers `BlogServiceProvider` in `bootstrap/providers.ts`.
+
+After scaffolding, run `pnpm artisan module:publish --generate` to merge the Prisma shard and regenerate the client.
 
 ## User-Defined Commands
 
@@ -90,13 +120,10 @@ class SeedCommand extends Command {
 artisan.register(SeedCommand)
 ```
 
-## Configuration
-
-This package has no runtime config object.
-
 ## Notes
 
-- The CLI must be run from a directory containing `bootstrap/app.ts`
-- Commands are not available at the repo root — always run from the app directory
-- Built with [Commander.js](https://github.com/tj/commander.js) and [cfonts](https://github.com/dominikwilkowski/cfonts) for the banner
-- `--force` flag is supported by all `make:*` generators
+- The CLI must be run from (or below) a directory containing `bootstrap/app.ts`
+- All `make:*` generators use `--force` to overwrite existing files
+- `make:controller` appends `Controller` suffix if missing; `make:middleware` appends `Middleware`; `make:request` appends `Request`; `make:provider` appends `ServiceProvider`
+- `module:publish` uses `// <boostkit:modules:start>` / `// <boostkit:modules:end>` markers to replace previously merged content
+- Built with [Commander.js](https://github.com/tj/commander.js) and [@clack/prompts](https://github.com/bombshell-dev/clack)
