@@ -55,6 +55,11 @@ export class ChannelRegistry {
   static has(name: string): boolean {
     return this.channels.has(name)
   }
+
+  /** @internal — clears all registered channels. Used for testing. */
+  static reset(): void {
+    this.channels.clear()
+  }
 }
 
 // ─── Mail Channel ──────────────────────────────────────────
@@ -88,7 +93,7 @@ export class MailChannel implements NotificationChannel {
 
 export class DatabaseChannel implements NotificationChannel {
   /** Override to use a different table name */
-  protected table = 'notification'
+  protected table = 'notifications'
 
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toDatabase) {
@@ -126,8 +131,7 @@ export class Notifier {
     notifiables: Notifiable | Notifiable[],
     notification: Notification,
   ): Promise<void> {
-    const targets  = Array.isArray(notifiables) ? notifiables : [notifiables]
-    const channels = targets[0] ? notification.via(targets[0]) : []
+    const targets = Array.isArray(notifiables) ? notifiables : [notifiables]
 
     await Promise.all(
       targets.flatMap(notifiable =>
@@ -142,8 +146,6 @@ export class Notifier {
         })
       )
     )
-
-    void channels // suppress unused warning
   }
 }
 
@@ -177,7 +179,6 @@ export function notifications(): new (app: Application) => ServiceProvider {
     boot(): void {
       ChannelRegistry.register('mail',     new MailChannel())
       ChannelRegistry.register('database', new DatabaseChannel())
-      console.log('[NotificationServiceProvider] booted — channels: mail, database')
     }
   }
 
