@@ -54,6 +54,12 @@ export default defineConfig({
             { text: 'Artisan Console', link: '/guide/artisan' },
           ],
         },
+        {
+          text: 'Admin & Panels',
+          items: [
+            { text: 'Panels', link: '/guide/panels' },
+          ],
+        },
       ],
 
       '/packages/': [

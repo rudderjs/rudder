@@ -42,7 +42,9 @@ export default Application.configure({
 
 ## API Reference
 
-- `ServiceProvider`
+- `ServiceProvider` — `register()`, `boot()`, `publishes()`
+- `PublishGroup` — `{ from, to, tag? }`
+- `getPublishGroups()` — returns the global publish registry (used by `vendor:publish`)
 - `Listener`, `EventDispatcher`, `dispatcher`, `dispatch()`, `events()`
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
@@ -60,6 +62,43 @@ export default Application.configure({
   - `config?` (config object bound into the container)
 - `ConfigureOptions`
   - `server`, `config?`, `providers?`
+
+## Publishing Assets
+
+Service providers can declare publishable assets (pages, config files, migrations) that users copy into their app with `pnpm artisan vendor:publish`.
+
+```ts
+import { ServiceProvider } from '@boostkit/core'
+
+export class MyPackageServiceProvider extends ServiceProvider {
+  register(): void {}
+
+  async boot(): Promise<void> {
+    this.publishes({
+      from: new URL('../pages', import.meta.url).pathname,
+      to:   'pages/(panels)',
+      tag:  'my-package-pages',
+    })
+  }
+}
+```
+
+Multiple groups with different tags:
+
+```ts
+this.publishes([
+  { from: new URL('../pages', import.meta.url).pathname, to: 'pages/(panels)', tag: 'my-pages' },
+  { from: new URL('../config', import.meta.url).pathname, to: 'config',        tag: 'my-config' },
+])
+```
+
+Users publish with:
+
+```bash
+pnpm artisan vendor:publish --tag=my-package-pages
+pnpm artisan vendor:publish --provider=MyPackageServiceProvider
+pnpm artisan vendor:publish --list   # see all available assets
+```
 
 ## Events
 

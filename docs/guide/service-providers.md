@@ -132,6 +132,39 @@ export class DatabaseServiceProvider extends ServiceProvider {
 }
 ```
 
+## Publishing Assets
+
+Packages can declare files that users copy into their application with `pnpm artisan vendor:publish`. This is BoostKit's equivalent of Laravel's `vendor:publish`.
+
+Call `this.publishes()` inside `boot()`:
+
+```ts
+import { ServiceProvider } from '@boostkit/core'
+
+export class MyPackageServiceProvider extends ServiceProvider {
+  register(): void {}
+
+  async boot(): Promise<void> {
+    this.publishes({
+      from: new URL('../pages', import.meta.url).pathname, // absolute source path
+      to:   'pages/(panels)',                              // destination relative to app root
+      tag:  'my-package-pages',                           // optional tag for selective publishing
+    })
+  }
+}
+```
+
+Users then run:
+
+```bash
+pnpm artisan vendor:publish --list                               # see what's available
+pnpm artisan vendor:publish --tag=my-package-pages               # publish by tag
+pnpm artisan vendor:publish --provider=MyPackageServiceProvider  # publish by provider
+pnpm artisan vendor:publish --force                              # overwrite existing files
+```
+
+Published files are owned by the user — they can edit them freely. Re-running `vendor:publish` without `--force` skips files that already exist.
+
 ## Tips
 
 - Keep providers focused — one concern per provider
@@ -139,3 +172,4 @@ export class DatabaseServiceProvider extends ServiceProvider {
 - Generate a stub with `pnpm artisan make:provider Name`
 - The `register()` hook is synchronous; `boot()` can be `async`
 - Providers are classes — they can have constructor parameters injected if you instantiate them manually
+- Use `this.publishes()` in `boot()`, not `register()` — `register()` may be overridden by factory functions

@@ -68,6 +68,20 @@ All `make:*` commands support `--force` to overwrite existing files.
 - `--migrate` — run `prisma migrate dev` after merging
 - `--name <name>` — migration name when using `--migrate` (default: `auto`)
 
+### `vendor:publish`
+
+Copies publishable assets (pages, config, migrations) declared by service providers into your application.
+
+```bash
+pnpm artisan vendor:publish                              # publish all available assets
+pnpm artisan vendor:publish --list                       # list available assets without copying
+pnpm artisan vendor:publish --tag=panels-pages           # publish by tag
+pnpm artisan vendor:publish --provider=PanelServiceProvider  # publish by provider
+pnpm artisan vendor:publish --tag=panels-pages --force   # overwrite existing files
+```
+
+Assets are declared by packages in their service provider's `boot()` method via `this.publishes()`. See `@boostkit/core` for the `ServiceProvider` API.
+
 ### `route:list`
 
 Lists all registered API routes (from `@boostkit/router`) and Vike filesystem page routes.
