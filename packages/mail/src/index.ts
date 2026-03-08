@@ -65,6 +65,12 @@ export class MailRegistry {
   static get(): MailAdapter | null        { return this.adapter }
   static setFrom(from: { address: string; name?: string }): void { this._from = { ...from } }
   static getFrom(): { address: string; name?: string }           { return { ...this._from } }
+
+  /** @internal — clears the registered adapter and resets from. Used for testing. */
+  static reset(): void {
+    this.adapter = null
+    this._from   = { address: 'noreply@example.com' }
+  }
 }
 
 // ─── Pending Send (fluent builder) ─────────────────────────
@@ -150,9 +156,7 @@ function isNodemailerConfig(config: MailConnectionConfig): config is MailConnect
 
 // ─── Built-in Log Adapter ──────────────────────────────────
 
-class LogAdapter implements MailAdapter {
-  constructor(private readonly from: { address: string; name?: string }) {}
-
+export class LogAdapter implements MailAdapter {
   async send(mailable: Mailable, options: SendOptions): Promise<void> {
     const msg  = await mailable.compile()
     const line = '─'.repeat(50)
@@ -254,7 +258,6 @@ export function nodemailer(
  * Returns a MailServiceProvider class configured for the given mail config.
  *
  * Built-in drivers:  log (prints to console — great for dev), smtp (Nodemailer)
- * Plugin drivers:    resend, mailgun …
  *
  * Usage in bootstrap/providers.ts:
  *   import { mail } from '@boostkit/mail'
@@ -275,7 +278,7 @@ export function mail(config: MailConfig): new (app: Application) => ServiceProvi
       let adapter: MailAdapter
 
       if (driver === 'log') {
-        adapter = new LogAdapter(config.from)
+        adapter = new LogAdapter()
       } else if (driver === 'smtp') {
         if (!isNodemailerConfig(mailerConfig)) {
           throw new Error('[BoostKit Mail] Invalid SMTP config. Expected fields: host (string), port (number).')
@@ -287,8 +290,6 @@ export function mail(config: MailConfig): new (app: Application) => ServiceProvi
 
       MailRegistry.set(adapter)
       this.app.instance('mail', adapter)
-
-      console.log(`[MailServiceProvider] booted — driver: ${driver}`)
     }
   }
 
