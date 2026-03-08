@@ -50,6 +50,7 @@ export default defineConfig({
             { text: 'Middleware', link: '/guide/middleware' },
             { text: 'Validation', link: '/guide/validation' },
             { text: 'Database & Models', link: '/guide/database' },
+            { text: 'Frontend Pages & SSR', link: '/guide/frontend-pages' },
             { text: 'Artisan Console', link: '/guide/artisan' },
           ],
         },
@@ -176,7 +177,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2024-present BoostKit Framework',
+      copyright: 'Copyright © 2026-present Suleiman Shahbari',
     },
 
     editLink: {
