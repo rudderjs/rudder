@@ -5,7 +5,7 @@ import {
 } from '@clack/prompts'
 import fs     from 'node:fs/promises'
 import path   from 'node:path'
-import { execSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { getTemplates } from './templates.js'
 
@@ -147,12 +147,12 @@ async function main(): Promise<void> {
   if (install) {
     const s2 = spinner()
     s2.start('Installing dependencies with pnpm...')
-    try {
-      execSync('pnpm install', { cwd: target, stdio: 'pipe' })
-      s2.stop('Dependencies installed')
-    } catch {
-      s2.stop('pnpm install failed — run it manually')
-    }
+    const ok = await new Promise<boolean>((resolve) => {
+      const child = spawn('pnpm', ['install'], { cwd: target, stdio: 'pipe' })
+      child.on('close', (code) => resolve(code === 0))
+      child.on('error', () => resolve(false))
+    })
+    s2.stop(ok ? 'Dependencies installed' : 'pnpm install failed — run it manually')
   }
 
   // ── Done ───────────────────────────────────────────────
