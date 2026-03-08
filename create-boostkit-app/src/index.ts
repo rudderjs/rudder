@@ -106,6 +106,15 @@ async function main(): Promise<void> {
     shadcn = shadcnAnswer as boolean
   }
 
+  // ── Authentication pages ───────────────────────────────
+
+  const withAuthAnswer = await confirm({
+    message:      'Add authentication pages? (login + register)',
+    initialValue: true,
+  })
+  if (isCancel(withAuthAnswer)) { cancel('Cancelled.'); process.exit(0) }
+  const withAuth = withAuthAnswer as boolean
+
   // ── Install dependencies ───────────────────────────────
 
   const installAnswer = await confirm({
@@ -132,7 +141,7 @@ async function main(): Promise<void> {
   const s = spinner()
   s.start('Scaffolding project files...')
 
-  const templates = getTemplates({ name, db, withTodo, authSecret, frameworks, primary, tailwind, shadcn })
+  const templates = getTemplates({ name, db, withTodo, withAuth, authSecret, frameworks, primary, tailwind, shadcn })
 
   for (const [filePath, content] of Object.entries(templates)) {
     const abs = path.join(target, filePath)

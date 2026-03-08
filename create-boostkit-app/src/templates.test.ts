@@ -9,6 +9,7 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     name:       'my-app',
     db:         'sqlite',
     withTodo:   false,
+    withAuth:   false,
     authSecret: 'test-secret',
     frameworks: ['react'],
     primary:    'react',
@@ -138,6 +139,54 @@ describe('getTemplates() — secondary framework demo pages', () => {
     const files = getTemplates(ctx({ frameworks: ['react'], primary: 'react' }))
     assert.ok(!('pages/vue-demo/+Page.vue' in files))
     assert.ok(!('pages/solid-demo/+Page.tsx' in files))
+  })
+})
+
+// ─── Auth pages ────────────────────────────────────────────
+
+describe('getTemplates() — auth pages', () => {
+  it('generates login + register pages when withAuth=true', () => {
+    const files = getTemplates(ctx({ withAuth: true }))
+    assert.ok('pages/login/+Page.tsx' in files)
+    assert.ok('pages/login/+config.ts' in files)
+    assert.ok('pages/login/+guard.ts' in files)
+    assert.ok('pages/register/+Page.tsx' in files)
+    assert.ok('pages/register/+config.ts' in files)
+    assert.ok('pages/register/+guard.ts' in files)
+  })
+
+  it('does not generate auth pages when withAuth=false', () => {
+    const files = getTemplates(ctx({ withAuth: false }))
+    assert.ok(!('pages/login/+Page.tsx' in files))
+    assert.ok(!('pages/register/+Page.tsx' in files))
+  })
+
+  it('guard redirects if already logged in', () => {
+    const files = getTemplates(ctx({ withAuth: true }))
+    assert.ok(files['pages/login/+guard.ts']!.includes("throw redirect('/')"))
+    assert.ok(files['pages/register/+guard.ts']!.includes("throw redirect('/')"))
+  })
+
+  it('generates .vue login page for Vue primary', () => {
+    const files = getTemplates(ctx({ withAuth: true, frameworks: ['vue'], primary: 'vue' }))
+    assert.ok('pages/login/+Page.vue' in files)
+    assert.ok('pages/register/+Page.vue' in files)
+  })
+
+  it('generates .tsx login page for Solid primary', () => {
+    const files = getTemplates(ctx({ withAuth: true, frameworks: ['solid'], primary: 'solid' }))
+    assert.ok('pages/login/+Page.tsx' in files)
+    assert.ok(files['pages/login/+Page.tsx']!.includes('createSignal'))
+  })
+
+  it('login page uses tailwind classes when tailwind=true', () => {
+    const files = getTemplates(ctx({ withAuth: true, tailwind: true }))
+    assert.ok(files['pages/login/+Page.tsx']!.includes('className='))
+  })
+
+  it('login page uses inline styles when tailwind=false', () => {
+    const files = getTemplates(ctx({ withAuth: true, tailwind: false, shadcn: false }))
+    assert.ok(files['pages/login/+Page.tsx']!.includes('style={s.wrap}'))
   })
 })
 
