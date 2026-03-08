@@ -24,6 +24,7 @@ describe('getTemplates() — core files always present', () => {
   const files = getTemplates(ctx())
 
   it('generates package.json', () => assert.ok('package.json' in files))
+  it('generates pnpm-workspace.yaml', () => assert.ok('pnpm-workspace.yaml' in files))
   it('generates tsconfig.json', () => assert.ok('tsconfig.json' in files))
   it('generates vite.config.ts', () => assert.ok('vite.config.ts' in files))
   it('generates .env', () => assert.ok('.env' in files))

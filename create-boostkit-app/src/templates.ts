@@ -16,13 +16,14 @@ function pageExt(fw: 'react' | 'vue' | 'solid'): '.tsx' | '.vue' {
 export function getTemplates(ctx: TemplateContext): Record<string, string> {
   const files: Record<string, string> = {}
 
-  files['package.json']      = packageJson(ctx)
-  files['tsconfig.json']     = tsconfigJson(ctx)
-  files['vite.config.ts']    = viteConfig(ctx)
-  files['prisma.config.ts']  = prismaConfig()
-  files['.env']              = dotenv(ctx)
-  files['.env.example']      = dotenvExample(ctx)
-  files['.gitignore']        = gitignore()
+  files['package.json']         = packageJson(ctx)
+  files['pnpm-workspace.yaml']  = pnpmWorkspace()
+  files['tsconfig.json']        = tsconfigJson(ctx)
+  files['vite.config.ts']       = viteConfig(ctx)
+  files['prisma.config.ts']     = prismaConfig()
+  files['.env']                 = dotenv(ctx)
+  files['.env.example']         = dotenvExample(ctx)
+  files['.gitignore']           = gitignore()
 
   files['prisma/schema.prisma'] = prismaSchema(ctx)
 
@@ -371,6 +372,10 @@ dist/
 *.db-journal
 prisma/generated/
 `
+}
+
+function pnpmWorkspace(): string {
+  return `# Standalone project — prevents pnpm from merging with a parent workspace\npackages: []\n`
 }
 
 // ─── prisma/schema.prisma ──────────────────────────────────
