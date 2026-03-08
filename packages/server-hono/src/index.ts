@@ -245,10 +245,16 @@ class HonoAdapter implements ServerAdapter {
   }
 
   listen(port: number, callback?: () => void): void {
-    serve({ fetch: this.app.fetch, port: port }, () => {
+    const server = serve({ fetch: this.app.fetch, port: port }, () => {
       callback?.()
       console.log(`[BoostKit] Server running on http://localhost:${port}`)
     })
+    // Attach the @boostkit/ws upgrade handler if registered.
+    // Uses globalThis so there is no hard dependency on @boostkit/ws.
+    const wsHandler = (globalThis as Record<string, unknown>)['__boostkit_ws_upgrade__'] as
+      | ((req: unknown, socket: unknown, head: unknown) => void)
+      | undefined
+    if (wsHandler) (server as unknown as { on: (e: string, h: unknown) => void }).on('upgrade', wsHandler)
   }
 
   getNativeServer(): Hono {

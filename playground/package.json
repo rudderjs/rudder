@@ -25,6 +25,7 @@
     "@boostkit/orm": "workspace:*",
     "@boostkit/orm-prisma": "workspace:*",
     "@boostkit/panels": "workspace:*",
+    "@boostkit/ws": "workspace:*",
     "@boostkit/queue": "workspace:*",
     "@boostkit/queue-bullmq": "workspace:*",
     "@boostkit/router": "workspace:*",
