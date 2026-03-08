@@ -4,10 +4,10 @@ import type { PageContextServer } from 'vike/types'
 export type Data = Awaited<ReturnType<typeof data>>
 
 export async function data(pageContext: PageContextServer) {
-  const { resource: slug } = pageContext.routeParams as { resource: string }
+  const { panel: pathSegment, resource: slug } = pageContext.routeParams as { panel: string; resource: string }
 
-  const panel = PanelRegistry.get('admin')
-  if (!panel) throw new Error('Admin panel is not registered.')
+  const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
+  if (!panel) throw new Error(`Panel "/${pathSegment}" not found.`)
 
   const ResourceClass = panel.getResources().find((R) => R.getSlug() === slug)
   if (!ResourceClass) throw new Error(`Resource "${slug}" not found.`)
@@ -16,5 +16,5 @@ export async function data(pageContext: PageContextServer) {
   const resourceMeta = resource.toMeta()
   const panelMeta    = panel.toMeta()
 
-  return { panelMeta, resourceMeta, slug }
+  return { panelMeta, resourceMeta, pathSegment, slug }
 }

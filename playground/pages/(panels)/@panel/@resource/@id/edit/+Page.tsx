@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { useData } from 'vike-react/useData'
-import { AdminLayout } from '../../../_components/AdminLayout.js'
-import { FieldInput } from '../../../_components/FieldInput.js'
+import { AdminLayout } from '../../../../_components/AdminLayout.js'
+import { FieldInput } from '../../../../_components/FieldInput.js'
 import type { Data } from './+data.js'
 
 export default function EditPage() {
-  const { panelMeta, resourceMeta, record, slug, id } = useData<Data>()
+  const { panelMeta, resourceMeta, record, pathSegment, slug, id } = useData<Data>()
 
   if (!record) {
     return (
@@ -17,8 +17,7 @@ export default function EditPage() {
     )
   }
 
-  const formFields = resourceMeta.fields.filter((f) => !f.hidden.includes('edit'))
-
+  const formFields    = resourceMeta.fields.filter((f) => !f.hidden.includes('edit'))
   const initialValues = Object.fromEntries(
     formFields.map((f) => [f.name, (record as Record<string, unknown>)[f.name] ?? '']),
   )
@@ -35,23 +34,18 @@ export default function EditPage() {
     e.preventDefault()
     setSaving(true)
     setErrors({})
-
     try {
-      const res = await fetch(`/admin/api/${slug}/${id}`, {
+      const res = await fetch(`/${pathSegment}/api/${slug}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       })
-
       if (res.status === 422) {
         const body = await res.json() as { errors: Record<string, string[]> }
         setErrors(body.errors)
         return
       }
-
-      if (res.ok) {
-        window.location.href = `/admin/${slug}`
-      }
+      if (res.ok) window.location.href = `/${pathSegment}/${slug}`
     } finally {
       setSaving(false)
     }
@@ -59,15 +53,12 @@ export default function EditPage() {
 
   return (
     <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
-
-      {/* ── Header ────────────────────────────────────────── */}
       <div className="flex items-center gap-2 mb-6 text-sm text-slate-500">
-        <a href={`/admin/${slug}`} className="hover:text-slate-700">{resourceMeta.label}</a>
+        <a href={`/${pathSegment}/${slug}`} className="hover:text-slate-700">{resourceMeta.label}</a>
         <span>/</span>
         <span className="text-slate-900 font-medium">Edit {resourceMeta.labelSingular}</span>
       </div>
 
-      {/* ── Form ──────────────────────────────────────────── */}
       <div className="max-w-2xl">
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -79,17 +70,12 @@ export default function EditPage() {
                     {field.required && <span className="text-red-500 ml-0.5">*</span>}
                   </label>
                 )}
-                <FieldInput
-                  field={field}
-                  value={values[field.name]}
-                  onChange={(v: unknown) => setValue(field.name, v)}
-                />
+                <FieldInput field={field} value={values[field.name]} onChange={(v: unknown) => setValue(field.name, v)} />
                 {errors[field.name]?.map((e) => (
                   <p key={e} className="mt-1 text-xs text-red-600">{e}</p>
                 ))}
               </div>
             ))}
-
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
@@ -98,10 +84,7 @@ export default function EditPage() {
               >
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
-              <a
-                href={`/admin/${slug}`}
-                className="px-5 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors"
-              >
+              <a href={`/${pathSegment}/${slug}`} className="px-5 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors">
                 Cancel
               </a>
             </div>

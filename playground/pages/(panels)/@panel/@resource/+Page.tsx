@@ -4,12 +4,12 @@ import { useState } from 'react'
 import { useData } from 'vike-react/useData'
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { Menu } from '@base-ui-components/react/menu'
-import { AdminLayout } from '../_components/AdminLayout.js'
-import { ConfirmDialog } from '../_components/ConfirmDialog.js'
+import { AdminLayout } from '../../_components/AdminLayout.js'
+import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
 import type { Data } from './+data.js'
 
 export default function ResourceListPage() {
-  const { panelMeta, resourceMeta, records, pagination, slug } = useData<Data>()
+  const { panelMeta, resourceMeta, records, pagination, pathSegment, slug } = useData<Data>()
 
   const [selected,       setSelected]       = useState<string[]>([])
   const [confirm,        setConfirm]        = useState<{ action: typeof resourceMeta.actions[0]; records: unknown[] } | null>(null)
@@ -44,7 +44,7 @@ export default function ResourceListPage() {
   async function executeAction(action: typeof resourceMeta.actions[0]) {
     setActionPending(true)
     try {
-      await fetch(`/admin/api/${slug}/_action/${action.name}`, {
+      await fetch(`/${pathSegment}/api/${slug}/_action/${action.name}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selected }),
@@ -78,7 +78,7 @@ export default function ResourceListPage() {
           )}
         </div>
         <a
-          href={`/admin/${slug}/create`}
+          href={`/${pathSegment}/${slug}/create`}
           className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
         >
           <span>+</span> New {resourceMeta.labelSingular}
@@ -168,12 +168,12 @@ export default function ResourceListPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <a
-                        href={`/admin/${slug}/${id}/edit`}
+                        href={`/${pathSegment}/${slug}/${id}/edit`}
                         className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
                       >
                         Edit
                       </a>
-                      <DeleteRowButton slug={slug} id={id} />
+                      <DeleteRowButton slug={slug} id={id} pathSegment={pathSegment} />
                     </div>
                   </td>
                 </tr>
@@ -247,11 +247,11 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
   return <span>{String(value)}</span>
 }
 
-function DeleteRowButton({ slug, id }: { slug: string; id: string }) {
+function DeleteRowButton({ slug, id, pathSegment }: { slug: string; id: string; pathSegment: string }) {
   const [open, setOpen] = useState(false)
 
   async function handleDelete() {
-    await fetch(`/admin/api/${slug}/${id}`, { method: 'DELETE' })
+    await fetch(`/${pathSegment}/api/${slug}/${id}`, { method: 'DELETE' })
     setOpen(false)
     window.location.reload()
   }
