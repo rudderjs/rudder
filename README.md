@@ -114,15 +114,16 @@ Route.post('/api/users', async (req, res) => {
 
 ```ts
 // routes/console.ts
-import { artisan }  from '@boostkit/artisan'
-import { schedule } from '@boostkit/schedule'
+import { Cache } from '@boostkit/cache'
+import { Artisan }  from '@boostkit/artisan'
+import { Schedule } from '@boostkit/schedule'
 
-artisan.command('db:seed', async () => {
+Artisan.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })
   console.log('Seeded.')
 }).description('Seed the database')
 
-schedule.call(async () => {
+Schedule.call(async () => {
   await Cache.forget('users:all')
 }).everyFiveMinutes().description('Flush users cache')
 ```
