@@ -1124,6 +1124,10 @@ function pagesIndexPageReact(ctx: TemplateContext): string {
   const todosLink = ctx.withTodo
     ? `          <a href="/todos" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
+  const authLinks = ctx.withAuth
+    ? `          <a href="/register" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
+          <a href="/login" className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
+    : ''
 
   return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
@@ -1165,12 +1169,7 @@ ${todosLink}
       ) : (
         <div className="flex gap-2">
 ${todosLink}
-          <a
-            href="/api/auth/sign-in/email"
-            className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent"
-          >
-            Sign in
-          </a>
+${authLinks}
         </div>
       )}
 
@@ -1188,6 +1187,9 @@ function pagesIndexPageVue(ctx: TemplateContext): string {
   const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
   const todosLink = ctx.withTodo
     ? `\n      <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    : ''
+  const authLinks = ctx.withAuth
+    ? `\n      <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>\n      <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
     : ''
 
   return `<script setup lang="ts">
@@ -1223,10 +1225,7 @@ async function signOut() {
         </button>
       </div>
     </div>
-    <div v-else class="flex gap-2">${todosLink}
-      <a href="/api/auth/sign-in/email" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">
-        Sign in
-      </a>
+    <div v-else class="flex gap-2">${todosLink}${authLinks}
     </div>
 
     <div class="mt-4 flex gap-3 text-xs text-muted-foreground">
@@ -1242,6 +1241,9 @@ function pagesIndexPageSolid(ctx: TemplateContext): string {
   const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
   const todosLink = ctx.withTodo
     ? `\n        <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    : ''
+  const authLinks = ctx.withAuth
+    ? `\n        <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>\n        <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
     : ''
 
   return `${cssImport}import { createSignal } from 'solid-js'
@@ -1281,13 +1283,7 @@ export default function Page() {
           </div>
         </div>
       ) : (
-        <div class="flex gap-2">${todosLink}
-          <a
-            href="/api/auth/sign-in/email"
-            class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent"
-          >
-            Sign in
-          </a>
+        <div class="flex gap-2">${todosLink}${authLinks}
         </div>
       )}
 
