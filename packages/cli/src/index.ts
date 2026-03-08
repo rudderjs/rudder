@@ -131,8 +131,11 @@ async function main(): Promise<void> {
     .command('route:list')
     .description('List all registered routes')
     .action(async () => {
-      const { router } = await import('@boostkit/router') as { router: { list(): Array<{ method: string; path: string; middleware: unknown[] }> } }
-      const apiRoutes = router.list()
+      let apiRoutes: Array<{ method: string; path: string; middleware: unknown[] }> = []
+      try {
+        const { router } = await import('@boostkit/router') as { router: { list(): typeof apiRoutes } }
+        apiRoutes = router.list()
+      } catch { /* @boostkit/router not installed */ }
 
       // ── Scan Vike filesystem routes ──────────────────────
       const vikeRoutes: Array<{ route: string; dir: string }> = []
