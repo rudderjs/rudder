@@ -141,7 +141,42 @@ export class User extends Model {
 }
 ```
 
-### 5. Debug helpers (the ones every Laravel dev misses)
+### 5. Controllers (decorator routing)
+
+```ts
+// app/Controllers/UserController.ts
+import { Controller, Get, Post, Middleware } from '@boostkit/router'
+import { RateLimit } from '@boostkit/middleware'
+import type { AppRequest, AppResponse } from '@boostkit/contracts'
+
+@Controller('/api/users')
+export class UserController {
+  @Get('/')
+  index(_req: AppRequest, res: AppResponse) {
+    return res.json({ users: [] })
+  }
+
+  @Post('/')
+  @Middleware([RateLimit.perMinute(10)])
+  store(req: AppRequest, res: AppResponse) {
+    return res.json({ created: req.body })
+  }
+}
+```
+
+Register the controller once in your routes file:
+
+```ts
+// routes/api.ts
+import { Route } from '@boostkit/router'
+import { UserController } from '../app/Controllers/UserController.js'
+
+Route.registerController(UserController)
+```
+
+Or use fluent routing for simpler cases — both styles work side by side.
+
+### 6. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
 import { config, dump, dd, app, resolve } from '@boostkit/core'
