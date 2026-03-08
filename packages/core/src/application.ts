@@ -154,6 +154,7 @@ export interface RoutingOptions {
   web?:      () => Promise<unknown>
   api?:      () => Promise<unknown>
   commands?: () => Promise<unknown>
+  channels?: () => Promise<unknown>
 }
 
 // ─── Middleware Configurator ───────────────────────────────
@@ -250,6 +251,7 @@ export class AppBuilder {
     if (routes.web)      this._loaders.push(routes.web)
     if (routes.api)      this._loaders.push(routes.api)
     if (routes.commands) this._loaders.push(routes.commands)
+    if (routes.channels) this._loaders.push(routes.channels)
     return this
   }
 

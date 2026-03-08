@@ -17,6 +17,7 @@ export default Application.configure({
     web:      () => import('../routes/web.ts'),
     api:      () => import('../routes/api.ts'),
     commands: () => import('../routes/console.ts'),
+    channels: () => import('../routes/channels.ts'),
   })
   .withMiddleware((m) => {
     // Global middlewares

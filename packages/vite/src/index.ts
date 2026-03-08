@@ -77,6 +77,20 @@ export function boostkit(): Promise<Plugin[]> {
     return [
       ...vikePlugins,
       {
+        name: 'boostkit:ws',
+        configureServer(server) {
+          // Late-binding: check globalThis at upgrade time, not at configureServer time.
+          // The BoostKit app boots on the first HTTP request; by then __boostkit_ws_upgrade__
+          // is registered. Vite's own HMR WebSocket is on a different path, so no conflict.
+          server.httpServer?.on('upgrade', (req, socket, head) => {
+            const handler = (globalThis as Record<string, unknown>)['__boostkit_ws_upgrade__'] as
+              | ((req: unknown, socket: unknown, head: unknown) => void)
+              | undefined
+            handler?.(req, socket, head)
+          })
+        },
+      },
+      {
         name: 'boostkit:config',
         configResolved(config) {
           // Suppress "Sourcemap points to missing source files" for @boostkit/* packages.

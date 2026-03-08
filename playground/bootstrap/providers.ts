@@ -10,6 +10,7 @@ import { notifications } from '@boostkit/notification'
 import { session } from '@boostkit/session'
 import { database } from '@boostkit/orm-prisma'
 import { panels } from '@boostkit/panels'
+import { ws }     from '@boostkit/ws'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
@@ -29,6 +30,7 @@ export default [
   scheduler(),
   notifications(),
   panels([adminPanel]),
+  ws(),
   AppServiceProvider,
   TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
