@@ -104,8 +104,10 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   const ext = pageExt(ctx.primary)
 
-  files['pages/+config.ts']              = pagesRootConfig()
-  files['pages/index/+config.ts']        = pagesIndexConfig(ctx)
+  files['pages/+config.ts']              = pagesRootConfig(ctx)
+  if (ctx.frameworks.length > 1) {
+    files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
+  }
   files['pages/index/+data.ts']          = pagesIndexData()
   files[`pages/index/+Page${ext}`]       = pagesIndexPage(ctx)
   files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
@@ -1097,7 +1099,27 @@ artisan.command('db:seed', async () => {
 
 // ─── pages ─────────────────────────────────────────────────
 
-function pagesRootConfig(): string {
+function pagesRootConfig(ctx: TemplateContext): string {
+  if (ctx.frameworks.length === 1) {
+    const rendererImport = ctx.primary === 'vue'
+      ? `import vikeVue from 'vike-vue/config'`
+      : ctx.primary === 'solid'
+        ? `import vikeSolid from 'vike-solid/config'`
+        : `import vikeReact from 'vike-react/config'`
+    const rendererVar = ctx.primary === 'vue' ? 'vikeVue' : ctx.primary === 'solid' ? 'vikeSolid' : 'vikeReact'
+    return `import type { Config } from 'vike/types'
+import vikePhoton from 'vike-photon/config'
+${rendererImport}
+
+export default {
+  extends: [vikePhoton, ${rendererVar}],
+  photon: {
+    server: 'bootstrap/app.ts',
+  },
+} as unknown as Config
+`
+  }
+
   return `import type { Config } from 'vike/types'
 import vikePhoton from 'vike-photon/config'
 
