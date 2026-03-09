@@ -110,7 +110,7 @@ boostkit/
 │   ├── live/           # Real-time collaborative document sync via Yjs CRDT — /ws-live endpoint
 │   │                   #   Built-in: MemoryPersistence. Optional: livePrisma(), liveRedis()
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
-├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm create boostkit-app)
+├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm/npm/yarn/bun create boostkit-app)
 │                          #   Prompts: name · DB · Todo · frameworks · primary · Tailwind · shadcn
 ├── docs/               # VitePress documentation site
 └── playground/         # Demo app — primary integration reference
