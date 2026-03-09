@@ -79,15 +79,27 @@ export function boostkit(): Promise<Plugin[]> {
       {
         name: 'boostkit:ws',
         configureServer(server) {
-          // Late-binding: check globalThis at upgrade time, not at configureServer time.
-          // The BoostKit app boots on the first HTTP request; by then __boostkit_ws_upgrade__
-          // is registered. Vite's own HMR WebSocket is on a different path, so no conflict.
-          server.httpServer?.on('upgrade', (req, socket, head) => {
-            const handler = (globalThis as Record<string, unknown>)['__boostkit_ws_upgrade__'] as
-              | ((req: unknown, socket: unknown, head: unknown) => void)
-              | undefined
-            handler?.(req, socket, head)
-          })
+        configureServer() {
+          // cannot rely on server.httpServer. Instead, intercept http.createServer so we
+          // attach our upgrade handler to whatever Node.js HTTP server gets created next
+          // (srvx creates it when initializing the photon dev server entry).
+          //
+          // We use createRequire to get the mutable CJS http module — ESM named exports
+          // are read-only and cannot be reassigned.
+          const http = _require('http') as typeof import('http')
+          const orig = http.createServer.bind(http) as typeof http.createServer
+          http.createServer = ((...args: Parameters<typeof http.createServer>) => {
+            const srv = (orig as (...a: unknown[]) => import('node:http').Server)(...args)
+            srv.on('upgrade', (req, socket, head) => {
+              const handler = (globalThis as Record<string, unknown>)['__boostkit_ws_upgrade__'] as
+                | ((req: unknown, socket: unknown, head: unknown) => void)
+                | undefined
+              handler?.(req, socket, head)
+            })
+            // Restore immediately so we only intercept the first server (srvx's)
+            http.createServer = orig
+            return srv
+          }) as typeof http.createServer
         },
       },
       {
