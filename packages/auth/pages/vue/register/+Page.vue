@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import '@/index.css'
 import { ref } from 'vue'
 
 const name     = ref('')
