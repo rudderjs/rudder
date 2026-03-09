@@ -38,11 +38,11 @@ export default function Page() {
       setConnected(true)  // receiving presence.members means we're fully connected
     })
     room.on('presence.joined', (data) => {
-      const user = (data as { user: Member }).user
+      const user = data as Member
       setMembers((prev) => [...prev.filter(m => m.id !== user.id), user])
     })
     room.on('presence.left', (data) => {
-      const user = (data as { user: Member }).user
+      const user = data as Member
       setMembers((prev) => prev.filter(m => m.id !== user.id))
     })
 

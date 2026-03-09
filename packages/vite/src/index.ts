@@ -78,8 +78,8 @@ export function boostkit(): Promise<Plugin[]> {
       ...vikePlugins,
       {
         name: 'boostkit:ws',
-        configureServer(server) {
         configureServer() {
+          // vike-photon patches vite.httpServer with { on: () => {} } (a no-op), so we
           // cannot rely on server.httpServer. Instead, intercept http.createServer so we
           // attach our upgrade handler to whatever Node.js HTTP server gets created next
           // (srvx creates it when initializing the photon dev server entry).
