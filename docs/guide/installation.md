@@ -3,20 +3,20 @@
 ## Prerequisites
 
 - **Node.js** 18 or later
-- **pnpm** 8 or later (recommended; npm and yarn also work)
+- Any of: **pnpm**, **npm**, **yarn**, or **bun**
 
 ## Option 1: create-boostkit-app (Recommended)
 
-The fastest way to start a new BoostKit project is with the official scaffolder:
+The fastest way to start a new BoostKit project is with the official scaffolder. Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
 
 ```bash
 pnpm create boostkit-app my-app
-```
-
-Or with npx:
-
-```bash
-npx create-boostkit-app my-app
+# or
+npm create boostkit-app@latest my-app
+# or
+yarn create boostkit-app my-app
+# or
+bunx create-boostkit-app my-app
 ```
 
 The CLI walks you through 8 prompts:
@@ -32,14 +32,13 @@ The CLI walks you through 8 prompts:
 | 7 | **Add shadcn/ui?** | yes / no | yes *(only shown when React + Tailwind)* |
 | 8 | **Install dependencies?** | yes / no | yes |
 
-After scaffolding:
+After scaffolding, the CLI prints the exact commands for your package manager. For reference:
 
-```bash
-cd my-app
-pnpm exec prisma generate    # generate Prisma client
-pnpm exec prisma db push     # create the database
-pnpm dev                     # start the dev server
-```
+| Step | pnpm | npm | yarn | bun |
+|------|------|-----|------|-----|
+| Prisma generate | `pnpm exec prisma generate` | `npx prisma generate` | `yarn dlx prisma generate` | `bunx prisma generate` |
+| Prisma db push | `pnpm exec prisma db push` | `npx prisma db push` | `yarn dlx prisma db push` | `bunx prisma db push` |
+| Dev server | `pnpm dev` | `npm run dev` | `yarn dev` | `bun dev` |
 
 Your app will be running at `http://localhost:3000`.
 

@@ -51,16 +51,28 @@ BoostKit is the middle ground: a **batteries-included architecture that stays en
 
 ## Quick Start
 
+Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
+
 ```bash
 pnpm create boostkit-app my-app
+# or
+npm create boostkit-app@latest my-app
+# or
+yarn create boostkit-app my-app
+# or
+bunx create-boostkit-app my-app
+```
+
+The interactive installer asks you to choose your database, frontend framework (React / Vue / Solid), Tailwind, shadcn/ui, and authentication pages — then scaffolds a production-ready project.
+
+After scaffolding (pnpm example — the CLI prints the exact commands for your PM):
+
+```bash
 cd my-app
-pnpm install
 pnpm exec prisma generate
 pnpm exec prisma db push
 pnpm dev
 ```
-
-The interactive installer asks you to choose your database, frontend framework (React / Vue / Solid), Tailwind, shadcn/ui, and authentication pages — then scaffolds a production-ready project.
 
 ---
 
