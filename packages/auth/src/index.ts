@@ -108,7 +108,12 @@ export function auth(
   dbConfig?: AuthDbConfig,
 ): new (app: Application) => ServiceProvider {
   class BetterAuthProvider extends ServiceProvider {
-    register(): void {}
+    register(): void {
+      this.publishes({ from: new URL('../pages/react', import.meta.url).pathname, to: 'pages', tag: 'auth-pages' })
+      this.publishes({ from: new URL('../pages/react', import.meta.url).pathname, to: 'pages', tag: 'auth-pages-react' })
+      this.publishes({ from: new URL('../pages/vue',   import.meta.url).pathname, to: 'pages', tag: 'auth-pages-vue' })
+      this.publishes({ from: new URL('../pages/solid', import.meta.url).pathname, to: 'pages', tag: 'auth-pages-solid' })
+    }
 
     async boot(): Promise<void> {
       const { betterAuth: createAuth }  = await import('better-auth')
