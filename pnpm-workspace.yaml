@@ -3,4 +3,5 @@ packages:
   - 'tests/*'
   - 'create-boostkit-app'
   - 'playground'
+  - 'playground-multi'
   - 'docs'
