@@ -106,6 +106,7 @@ boostkit/
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper
 │   ├── mail/           # Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory
 │   ├── notification/   # Multi-channel notifications (mail, database)
+│   └── ws/             # Native WebSocket server — public, private, presence channels
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
 ├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm create boostkit-app)
 │                          #   Prompts: name · DB · Todo · frameworks · primary · Tailwind · shadcn
@@ -140,6 +141,7 @@ boostkit/
 | `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
 | `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
+| `@boostkit/ws` | 0.0.1 | Native WebSocket — ws(), broadcast(), ws.auth(), BKSocket client |
 
 **Merged/removed packages** (code absorbed, originals deleted):
 - `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
