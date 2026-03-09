@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useData } from 'vike-react/useData'
+import { navigate } from 'vike/client/router'
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { AdminLayout } from '../../_components/AdminLayout.js'
 import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
@@ -31,12 +32,12 @@ export default function ResourceListPage() {
 
   function applySearch(e: React.FormEvent) {
     e.preventDefault()
-    const q  = searchRef.current?.value ?? ''
+    const q   = searchRef.current?.value ?? ''
     const url = new URL(window.location.href)
     if (q) url.searchParams.set('search', q)
     else url.searchParams.delete('search')
     url.searchParams.delete('page')
-    window.location.href = url.toString()
+    void navigate(url.pathname + url.search)
   }
 
   // ── Sort ────────────────────────────────────────────────
@@ -49,7 +50,7 @@ export default function ResourceListPage() {
       url.searchParams.set('dir', 'ASC')
     }
     url.searchParams.delete('page')
-    window.location.href = url.toString()
+    void navigate(url.pathname + url.search)
   }
 
   // ── Filter ──────────────────────────────────────────────
@@ -58,7 +59,7 @@ export default function ResourceListPage() {
     if (value) url.searchParams.set(`filter[${name}]`, value)
     else url.searchParams.delete(`filter[${name}]`)
     url.searchParams.delete('page')
-    window.location.href = url.toString()
+    void navigate(url.pathname + url.search)
   }
 
   // ── Selection helpers ──────────────────────────────────
@@ -105,7 +106,7 @@ export default function ResourceListPage() {
   function goToPage(p: number) {
     const url = new URL(window.location.href)
     url.searchParams.set('page', String(p))
-    window.location.href = url.toString()
+    void navigate(url.pathname + url.search)
   }
 
   const bulkActions = resourceMeta.actions.filter((a) => a.bulk)
@@ -247,7 +248,7 @@ export default function ResourceListPage() {
                     <span className="inline-flex items-center gap-1">
                       {f.label}
                       {sortable && (
-                        <SortIcon active={isSorted} dir={isSorted ? currentDir as 'ASC' | 'DESC' : undefined} />
+                        <SortIcon active={isSorted} dir={currentDir as 'ASC' | 'DESC'} />
                       )}
                     </span>
                   </th>
@@ -365,7 +366,7 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
   return <span>{String(value)}</span>
 }
 
-function SortIcon({ active, dir }: { active: boolean; dir?: 'ASC' | 'DESC' }) {
+function SortIcon({ active, dir }: { active: boolean; dir: 'ASC' | 'DESC' }) {
   return (
     <svg
       width="10" height="12" viewBox="0 0 10 12" fill="none"

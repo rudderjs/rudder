@@ -7,15 +7,22 @@ interface Props {
   children:     React.ReactNode
 }
 
+interface InternalProps {
+  panelMeta:   PanelMeta
+  currentSlug: string
+  children:    React.ReactNode
+}
+
 export function AdminLayout({ panelMeta, currentSlug, children }: Props) {
+  const slug = currentSlug ?? ''
   return panelMeta.layout === 'topbar'
-    ? <TopbarLayout panelMeta={panelMeta} currentSlug={currentSlug}>{children}</TopbarLayout>
-    : <SidebarLayout panelMeta={panelMeta} currentSlug={currentSlug}>{children}</SidebarLayout>
+    ? <TopbarLayout panelMeta={panelMeta} currentSlug={slug}>{children}</TopbarLayout>
+    : <SidebarLayout panelMeta={panelMeta} currentSlug={slug}>{children}</SidebarLayout>
 }
 
 // ─── Sidebar Layout ─────────────────────────────────────────
 
-function SidebarLayout({ panelMeta, currentSlug, children }: Props) {
+function SidebarLayout({ panelMeta, currentSlug, children }: InternalProps) {
   const brand = panelMeta.branding?.title ?? panelMeta.name
   const path  = panelMeta.path
 
@@ -75,7 +82,7 @@ function SidebarLayout({ panelMeta, currentSlug, children }: Props) {
 
 // ─── Topbar Layout ──────────────────────────────────────────
 
-function TopbarLayout({ panelMeta, currentSlug, children }: Props) {
+function TopbarLayout({ panelMeta, currentSlug, children }: InternalProps) {
   const brand = panelMeta.branding?.title ?? panelMeta.name
   const path  = panelMeta.path
 
