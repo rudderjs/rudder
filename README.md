@@ -41,7 +41,7 @@ BoostKit is the middle ground: a **batteries-included architecture that stays en
 ## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Artisan CLI, FormRequest validation
-- **Pay-as-you-go** — 23 optional `@boostkit/*` packages; use only what you need
+- **Pay-as-you-go** — 27 optional `@boostkit/*` packages; use only what you need
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
 - **TypeScript-first** — strict types, generics, and decorator support throughout
@@ -258,7 +258,56 @@ import { dispatch } from '@boostkit/core'
 await dispatch(new UserRegistered(user.id, user.name, user.email))
 ```
 
-### 9. Debug helpers (the ones every Laravel dev misses)
+### 9. WebSocket — real-time channels
+
+```ts
+// bootstrap/providers.ts
+import { ws } from '@boostkit/ws'
+export default [ ws(), /* ...other providers */ ]
+```
+
+```ts
+// routes/channels.ts
+import { ws } from '@boostkit/ws'
+
+// Public — no auth needed
+// Private — return true/false
+ws.auth('private-orders.*', async (req) => {
+  return verifyToken(req.token)
+})
+
+// Presence — return member info to track who is online
+ws.auth('presence-room.*', async (req) => {
+  const user = await getUser(req.token)
+  return user ? { id: user.id, name: user.name } : false
+})
+```
+
+```ts
+// Broadcast from any route or job
+import { broadcast } from '@boostkit/ws'
+
+broadcast('chat', 'message', { user: 'Alice', text: 'Hello!' })
+broadcast('private-orders.42', 'status.updated', { status: 'shipped' })
+```
+
+```ts
+// Client (BKSocket — publish with: pnpm artisan vendor:publish --tag=ws-client)
+import { BKSocket } from './vendor/BKSocket'
+
+const socket = new BKSocket('ws://localhost:3000/ws')
+
+const chat = socket.channel('chat')
+chat.on('message', ({ user, text }) => console.log(`${user}: ${text}`))
+
+const room = socket.presence('room.lobby', token)
+room.on('presence.joined', ({ user }) => console.log(`${user.name} joined`))
+room.on('presence.members', (members) => setOnlineUsers(members))
+```
+
+HTTP and WebSocket share the same port — no separate process or proxy needed.
+
+### 10. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
 import { config, dump, dd, app, resolve } from '@boostkit/core'
@@ -317,6 +366,7 @@ const svc = resolve<UserService>(UserService)
 | `@boostkit/mail` | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
 | `@boostkit/notification` | Multi-channel notifications (mail, database) |
 | `@boostkit/schedule` | Task scheduler, cron-based |
+| `@boostkit/ws` | Native WebSocket — public, private, and presence channels |
 
 ---
 
@@ -338,8 +388,8 @@ const svc = resolve<UserService>(UserService)
 
 BoostKit is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 23 packages published to npm under `@boostkit/*`
-- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, and scheduling end-to-end
+- 27 packages published to npm under `@boostkit/*`
+- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, and real-time WebSockets end-to-end
 
 ---
 
