@@ -356,10 +356,22 @@ There is **no `boostkit.config.ts`** — `bootstrap/app.ts` is the framework wir
 7. Add shadcn/ui? — yes/no (default: yes), **only shown when React + Tailwind are both selected**
 8. Install dependencies? — yes/no
 
+### Package Manager Support
+PM is auto-detected from `npm_config_user_agent` (set by pnpm/npm/yarn/bun when invoking the installer).
+
+| | pnpm | npm | yarn | bun |
+|---|---|---|---|---|
+| `pnpm-workspace.yaml` | generated | no | no | no |
+| native-build field | `pnpm.onlyBuiltDependencies` | *(none needed)* | *(none needed)* | `trustedDependencies` |
+| exec | `pnpm exec <bin>` | `npx <bin>` | `yarn dlx <bin>` | `bunx <bin>` |
+| run | `pnpm <script>` | `npm run <script>` | `yarn <script>` | `bun <script>` |
+
+Helpers: `detectPackageManager()`, `pmExec(pm, bin)`, `pmRun(pm, script)`, `pmInstall(pm)` — all exported from `templates.ts`.
+
 ### Template Gotchas
 - `tsconfig.json` must be self-contained — no `extends: ../tsconfig.base.json` (monorepo-only)
 - All `@boostkit/*` deps use `'latest'` — pnpm double-zero semver (`^0.0.x`) pins to exact version
-- `pnpm.onlyBuiltDependencies` required for `better-sqlite3`, `@prisma/engines`, `esbuild`, `prisma`
+- Native-build field in `package.json` is PM-specific (see table above)
 - Use `database(configs.database)` from `@boostkit/orm-prisma` not `DatabaseServiceProvider` in providers.ts
 - `shadcn` dep only added when React + Tailwind are both selected
 - `src/index.css` not generated at all when Tailwind is not selected
