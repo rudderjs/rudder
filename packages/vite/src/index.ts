@@ -21,8 +21,6 @@ const SSR_EXTERNALS = [
   '@libsql/client',
   // Redis — server-only
   'ioredis',
-  // Yjs server packages — Node.js-only
-  'y-leveldb',
 ]
 
 // ─── SSR no-externals ──────────────────────────────────────

@@ -229,6 +229,12 @@ const syncStep1          = 0
 const syncStep2          = 1
 const syncUpdate         = 2
 
+// ── y-protocols binary format ──────────────────────────────
+// Messages follow the y-websocket wire format used by lib0/y-protocols:
+//   sync:      [msgType(varint), subType(varint), dataLen(varint), ...data]
+//   awareness: [msgType(varint), dataLen(varint), ...data]
+// There is NO extra outer length field — WebSocket frames provide their own framing.
+
 function readVarUint(buf: Uint8Array, pos: number): [number, number] {
   let result = 0, shift = 0
   while (true) {
@@ -247,14 +253,14 @@ function writeVarUint(val: number): Uint8Array {
   return new Uint8Array(buf)
 }
 
-function encodeMessage(type: number, ...payloads: Uint8Array[]): Uint8Array {
-  const totalLen = payloads.reduce((s, p) => s + p.length, 0)
-  const lenBytes = writeVarUint(totalLen)
-  const out      = new Uint8Array(1 + lenBytes.length + totalLen)
-  out[0] = type
-  out.set(lenBytes, 1)
-  let offset = 1 + lenBytes.length
-  for (const p of payloads) { out.set(p, offset); offset += p.length }
+/** Encode a sync sub-message: [messageSync, subType, dataLen, ...data] */
+function encodeSyncMsg(subType: number, data: Uint8Array): Uint8Array {
+  const lenBytes = writeVarUint(data.length)
+  const out      = new Uint8Array(2 + lenBytes.length + data.length)
+  out[0] = messageSync
+  out[1] = subType
+  out.set(lenBytes, 2)
+  out.set(data, 2 + lenBytes.length)
   return out
 }
 
@@ -270,47 +276,43 @@ async function handleConnection(
   room.clients.add(ws)
 
   // ── Step 1: send server state vector ──────────────────────
-  const sv       = Y.encodeStateVector(room.doc)
-  const svMsg    = new Uint8Array([syncStep1, ...sv])
-  const svFrame  = encodeMessage(messageSync, svMsg)
-  ws.send(svFrame)
+  ws.send(encodeSyncMsg(syncStep1, Y.encodeStateVector(room.doc)))
 
   // ── Message handler ───────────────────────────────────────
   ws.on('message', async (raw: Buffer) => {
-    const buf  = new Uint8Array(raw)
-    const type = buf[0] ?? 255
-    let   pos  = 1
-    const [, newPos] = readVarUint(buf, pos)
-    pos = newPos
+    const buf = new Uint8Array(raw)
+    let   pos = 0
+
+    const [type, pos1] = readVarUint(buf, pos)
+    pos = pos1
 
     if (type === messageSync) {
-      const subType = buf[pos++] ?? 255
+      const [subType, pos2] = readVarUint(buf, pos)
+      const [dataLen, pos3] = readVarUint(buf, pos2)
+      const data = buf.slice(pos3, pos3 + dataLen)
 
       if (subType === syncStep1) {
         // Client sent its state vector — reply with diff
-        const clientSv = buf.slice(pos)
-        const diff     = Y.encodeStateAsUpdate(room.doc, clientSv)
-        const reply    = new Uint8Array([syncStep2, ...diff])
-        ws.send(encodeMessage(messageSync, reply))
+        const diff = Y.encodeStateAsUpdate(room.doc, data)
+        ws.send(encodeSyncMsg(syncStep2, diff))
 
       } else if (subType === syncStep2 || subType === syncUpdate) {
         // Client sent an update — apply + broadcast + persist
-        const update = buf.slice(pos)
-        Y.applyUpdate(room.doc, update)
+        Y.applyUpdate(room.doc, data)
 
+        const fwd = encodeSyncMsg(syncUpdate, data)
         for (const client of room.clients) {
           if (client !== ws && client.readyState === 1 /* OPEN */) {
-            const fwd = new Uint8Array([syncUpdate, ...update])
-            client.send(encodeMessage(messageSync, fwd))
+            client.send(fwd)
           }
         }
 
-        await persistence.storeUpdate(docName, update)
-        onChange?.(docName, update)
+        await persistence.storeUpdate(docName, data)
+        onChange?.(docName, data)
       }
 
     } else if (type === messageAwareness) {
-      // Broadcast awareness (presence/cursors) to all other clients
+      // Broadcast awareness (presence/cursors) to all other clients as-is
       for (const client of room.clients) {
         if (client !== ws && client.readyState === 1) {
           client.send(buf)
