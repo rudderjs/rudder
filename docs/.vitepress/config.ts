@@ -55,6 +55,12 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Real-time',
+          items: [
+            { text: 'WebSockets', link: '/guide/websockets' },
+          ],
+        },
+        {
           text: 'Admin & Panels',
           items: [
             { text: 'Panels', link: '/guide/panels' },
@@ -137,6 +143,12 @@ export default defineConfig({
           items: [
             { text: '@boostkit/mail', link: '/packages/mail/' },
             { text: 'SMTP (Nodemailer)', link: '/packages/mail/nodemailer' },
+          ],
+        },
+        {
+          text: 'WebSockets',
+          items: [
+            { text: '@boostkit/ws', link: '/packages/ws' },
           ],
         },
         {

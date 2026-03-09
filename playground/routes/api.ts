@@ -1,5 +1,6 @@
 import { Route } from '@boostkit/router'
 import { resolve, app, dd, dump, config, validate } from '@boostkit/core'
+import { broadcast, wsStats } from '@boostkit/ws'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { AuthMiddleware } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
@@ -32,6 +33,15 @@ const authLimit = RateLimit.perMinute(10)
   .message('Too many auth attempts. Try again later.')
 
 Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+// WebSocket demo routes
+Route.post('/api/ws/broadcast', async (req, res) => {
+  const { user, text, ts } = req.body as { user: string; text: string; ts: number }
+  broadcast('chat', 'message', { user, text, ts })
+  return res.json({ ok: true })
+})
+
+Route.get('/api/ws/ping', (_req, res) => res.json(wsStats()))
 
 // GET /api/config — returns app config values via config() helper
 Route.get('/api/config', (_req, res) => res.json({

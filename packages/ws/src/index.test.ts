@@ -30,6 +30,7 @@ async function withServer<T>(fn: (port: number) => Promise<T>): Promise<T> {
 }
 
 type Msg = Record<string, unknown>
+
 /** Buffered message reader — never misses messages between awaits. */
 class MsgQueue {
   private buf:     Msg[]                = []

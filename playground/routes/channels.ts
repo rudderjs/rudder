@@ -1,16 +1,19 @@
 import { ws } from '@boostkit/ws'
 
 // Private channel — only the owner can subscribe.
-// The client sends a token (e.g. a JWT or session value) with the subscribe message.
-ws.auth('private-user.*', async (req, channel) => {
-  // Example: parse a userId from a cookie or Authorization header
-  // const userId = parseUserIdFromCookies(req.headers.cookie)
-  // return userId === channel.split('.')[1]
+ws.auth('private-user.*', async (_req, _channel) => {
   return true  // allow all for demo
 })
 
-// Presence channel — auth + member info for member tracking.
-ws.auth('presence-room.*', async (_req, _channel) => {
-  // Return false to deny, or a member-info object to allow
+// Presence channel used by the /ws-demo page.
+// Returns member info so the server tracks who is online.
+ws.auth('presence-lobby', async (_req) => {
+  const id   = `user-${Math.random().toString(36).slice(2, 7)}`
+  const name = `User-${id.slice(-3).toUpperCase()}`
+  return { id, name }
+})
+
+// Presence channel with wildcard for other presence channels.
+ws.auth('presence-room.*', async (_req) => {
   return { id: 'demo-user', name: 'Demo User' }
 })
