@@ -29,30 +29,45 @@ async function withServer<T>(fn: (port: number) => Promise<T>): Promise<T> {
   }
 }
 
-async function openWs(port: number): Promise<WebSocket> {
+type Msg = Record<string, unknown>
+/** Buffered message reader — never misses messages between awaits. */
+class MsgQueue {
+  private buf:     Msg[]                = []
+  private pending: ((m: Msg) => void)[] = []
+  private closed                        = false
+
+  constructor(ws: WebSocket) {
+    ws.on('message', (raw) => {
+      const msg  = JSON.parse(String(raw)) as Msg
+      const next = this.pending.shift()
+      if (next) next(msg)
+      else this.buf.push(msg)
+    })
+    ws.on('close', () => { this.closed = true })
+    ws.on('error', () => { this.closed = true })
+  }
+
+  next(): Promise<Msg> {
+    if (this.buf.length) return Promise.resolve(this.buf.shift()!)
+    return new Promise((resolve, reject) => {
+      if (this.closed) { reject(new Error('WebSocket closed')); return }
+      this.pending.push(resolve)
+    })
+  }
+}
+
+/** Open a connection, attach a MsgQueue before 'open' fires, consume 'connected'. */
+async function connect(port: number): Promise<{ ws: WebSocket; q: MsgQueue }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://localhost:${port}/ws`)
-    ws.once('open',  () => resolve(ws))
+    const q  = new MsgQueue(ws)  // buffering before 'open' — never miss first message
+    ws.once('open',  () => q.next().then(() => resolve({ ws, q })))  // consume 'connected'
     ws.once('error', reject)
   })
 }
 
-function nextMsg(ws: WebSocket): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    ws.once('message', (raw) => resolve(JSON.parse(String(raw)) as Record<string, unknown>))
-    ws.once('close',   () => reject(new Error('WebSocket closed before message')))
-    ws.once('error',   reject)
-  })
-}
-
-async function openAndConsume(port: number): Promise<WebSocket> {
-  const ws = await openWs(port)
-  await nextMsg(ws)  // consume 'connected'
-  return ws
-}
-
-async function send(ws: WebSocket, data: unknown): Promise<Record<string, unknown>> {
-  const p = nextMsg(ws)
+async function send(ws: WebSocket, q: MsgQueue, data: unknown): Promise<Msg> {
+  const p = q.next()
   ws.send(JSON.stringify(data))
   return p
 }
@@ -100,8 +115,10 @@ describe('@boostkit/ws', () => {
   describe('WebSocket connection', () => {
     it('connected message with socketId', () =>
       withServer(async (port) => {
-        const ws  = await openWs(port)
-        const msg = await nextMsg(ws)
+        const ws = new WebSocket(`ws://localhost:${port}/ws`)
+        const q  = new MsgQueue(ws)  // buffer BEFORE 'open' to catch 'connected'
+        await new Promise<void>((r, j) => { ws.once('open', r); ws.once('error', j) })
+        const msg = await q.next()
         assert.strictEqual(msg['type'], 'connected')
         assert.ok(typeof msg['socketId'] === 'string' && (msg['socketId'] as string).length > 0)
         ws.terminate()
@@ -110,8 +127,8 @@ describe('@boostkit/ws', () => {
 
     it('ping → pong', () =>
       withServer(async (port) => {
-        const ws  = await openAndConsume(port)
-        const msg = await send(ws, { type: 'ping' })
+        const { ws, q } = await connect(port)
+        const msg = await send(ws, q, { type: 'ping' })
         assert.strictEqual(msg['type'], 'pong')
         ws.terminate()
       })
@@ -119,17 +136,17 @@ describe('@boostkit/ws', () => {
 
     it('invalid JSON → error', () =>
       withServer(async (port) => {
-        const ws = await openAndConsume(port)
-        const p  = nextMsg(ws)
+        const { ws, q } = await connect(port)
         ws.send('not-json')
-        assert.strictEqual((await p)['type'], 'error')
+        const msg = await q.next()
+        assert.strictEqual(msg['type'], 'error')
         ws.terminate()
       })
     )
 
     it('wsStats reflects open connections', () =>
       withServer(async (port) => {
-        const ws = await openAndConsume(port)
+        const { ws } = await connect(port)
         assert.ok(wsStats().connections >= 1)
         ws.terminate()
       })
@@ -141,8 +158,8 @@ describe('@boostkit/ws', () => {
   describe('public channel', () => {
     it('subscribe returns subscribed confirmation', () =>
       withServer(async (port) => {
-        const ws  = await openAndConsume(port)
-        const msg = await send(ws, { type: 'subscribe', channel: 'chat' })
+        const { ws, q } = await connect(port)
+        const msg = await send(ws, q, { type: 'subscribe', channel: 'chat' })
         assert.strictEqual(msg['type'],    'subscribed')
         assert.strictEqual(msg['channel'], 'chat')
         ws.terminate()
@@ -151,12 +168,11 @@ describe('@boostkit/ws', () => {
 
     it('broadcast() delivers to subscriber', () =>
       withServer(async (port) => {
-        const ws = await openAndConsume(port)
-        await send(ws, { type: 'subscribe', channel: 'news' })
+        const { ws, q } = await connect(port)
+        await send(ws, q, { type: 'subscribe', channel: 'news' })
 
-        const p = nextMsg(ws)
         broadcast('news', 'article', { title: 'hello' })
-        const msg = await p
+        const msg = await q.next()
 
         assert.strictEqual(msg['type'],    'event')
         assert.strictEqual(msg['channel'], 'news')
@@ -168,13 +184,13 @@ describe('@boostkit/ws', () => {
 
     it('broadcast() does not reach non-subscribers', () =>
       withServer(async (port) => {
-        const sub   = await openAndConsume(port)
-        const other = await openAndConsume(port)
+        const { ws: sub,   q: subQ   } = await connect(port)
+        const { ws: other, q: otherQ } = await connect(port)
 
-        await send(sub, { type: 'subscribe', channel: 'zone' })
+        await send(sub, subQ, { type: 'subscribe', channel: 'zone' })
 
         let hit = false
-        other.on('message', () => { hit = true })
+        otherQ.next().then(() => { hit = true }).catch(() => {})
 
         broadcast('zone', 'ping', {})
         await new Promise((r) => setTimeout(r, 40))
@@ -186,12 +202,12 @@ describe('@boostkit/ws', () => {
 
     it('unsubscribe stops delivery', () =>
       withServer(async (port) => {
-        const ws = await openAndConsume(port)
-        await send(ws, { type: 'subscribe', channel: 'feed' })
-        await send(ws, { type: 'unsubscribe', channel: 'feed' })
+        const { ws, q } = await connect(port)
+        await send(ws, q, { type: 'subscribe', channel: 'feed' })
+        await send(ws, q, { type: 'unsubscribe', channel: 'feed' })
 
         let hit = false
-        ws.on('message', () => { hit = true })
+        const p = q.next(); p.then(() => { hit = true }).catch(() => {})
 
         broadcast('feed', 'ping', {})
         await new Promise((r) => setTimeout(r, 40))
@@ -202,8 +218,8 @@ describe('@boostkit/ws', () => {
 
     it('wsStats reflects active channels after subscribe', () =>
       withServer(async (port) => {
-        const ws = await openAndConsume(port)
-        await send(ws, { type: 'subscribe', channel: 'stats-test' })
+        const { ws, q } = await connect(port)
+        await send(ws, q, { type: 'subscribe', channel: 'stats-test' })
         assert.ok(wsStats().channels >= 1)
         ws.terminate()
       })
@@ -211,14 +227,13 @@ describe('@boostkit/ws', () => {
 
     it('client-event forwarded to other subscribers, not sender', () =>
       withServer(async (port) => {
-        const ws1 = await openAndConsume(port)
-        const ws2 = await openAndConsume(port)
-        await send(ws1, { type: 'subscribe', channel: 'room' })
-        await send(ws2, { type: 'subscribe', channel: 'room' })
+        const { ws: ws1, q: q1 } = await connect(port)
+        const { ws: ws2, q: q2 } = await connect(port)
+        await send(ws1, q1, { type: 'subscribe', channel: 'room' })
+        await send(ws2, q2, { type: 'subscribe', channel: 'room' })
 
-        const p = nextMsg(ws2)
         ws1.send(JSON.stringify({ type: 'client-event', channel: 'room', event: 'typing', data: { user: 'Alice' } }))
-        const msg = await p
+        const msg = await q2.next()
 
         assert.strictEqual(msg['type'],  'event')
         assert.strictEqual(msg['event'], 'typing')
@@ -229,8 +244,8 @@ describe('@boostkit/ws', () => {
 
     it('client-event to unsubscribed channel returns error', () =>
       withServer(async (port) => {
-        const ws  = await openAndConsume(port)
-        const msg = await send(ws, { type: 'client-event', channel: 'nope', event: 'x', data: {} })
+        const { ws, q } = await connect(port)
+        const msg = await send(ws, q, { type: 'client-event', channel: 'nope', event: 'x', data: {} })
         assert.strictEqual(msg['type'], 'error')
         ws.terminate()
       })
@@ -242,8 +257,8 @@ describe('@boostkit/ws', () => {
   describe('private channel', () => {
     it('denied when no auth handler registered', () =>
       withServer(async (port) => {
-        const ws  = await openAndConsume(port)
-        const msg = await send(ws, { type: 'subscribe', channel: 'private-orders' })
+        const { ws, q } = await connect(port)
+        const msg = await send(ws, q, { type: 'subscribe', channel: 'private-orders' })
         assert.strictEqual(msg['type'],    'error')
         assert.strictEqual(msg['channel'], 'private-orders')
         ws.terminate()
@@ -253,8 +268,8 @@ describe('@boostkit/ws', () => {
     it('denied when auth returns false', () =>
       withServer(async (port) => {
         registerAuth('private-denied.*', async () => false)
-        const ws  = await openAndConsume(port)
-        const msg = await send(ws, { type: 'subscribe', channel: 'private-denied.1' })
+        const { ws, q } = await connect(port)
+        const msg = await send(ws, q, { type: 'subscribe', channel: 'private-denied.1' })
         assert.strictEqual(msg['type'], 'error')
         ws.terminate()
       })
@@ -263,8 +278,8 @@ describe('@boostkit/ws', () => {
     it('allowed when auth returns true', () =>
       withServer(async (port) => {
         registerAuth('private-allowed.*', async () => true)
-        const ws  = await openAndConsume(port)
-        const msg = await send(ws, { type: 'subscribe', channel: 'private-allowed.1', token: 'tok' })
+        const { ws, q } = await connect(port)
+        const msg = await send(ws, q, { type: 'subscribe', channel: 'private-allowed.1', token: 'tok' })
         assert.strictEqual(msg['type'], 'subscribed')
         ws.terminate()
       })
@@ -274,8 +289,8 @@ describe('@boostkit/ws', () => {
       withServer(async (port) => {
         let got: string | undefined
         registerAuth('private-tok.*', async (req) => { got = req.token; return true })
-        const ws = await openAndConsume(port)
-        await send(ws, { type: 'subscribe', channel: 'private-tok.1', token: 'secret' })
+        const { ws, q } = await connect(port)
+        await send(ws, q, { type: 'subscribe', channel: 'private-tok.1', token: 'secret' })
         assert.strictEqual(got, 'secret')
         ws.terminate()
       })
@@ -284,9 +299,9 @@ describe('@boostkit/ws', () => {
     it('wildcard pattern matches multiple channels', () =>
       withServer(async (port) => {
         registerAuth('private-glob.*', async () => true)
-        const ws = await openAndConsume(port)
-        const m1 = await send(ws, { type: 'subscribe', channel: 'private-glob.a' })
-        const m2 = await send(ws, { type: 'subscribe', channel: 'private-glob.b' })
+        const { ws, q } = await connect(port)
+        const m1 = await send(ws, q, { type: 'subscribe', channel: 'private-glob.a' })
+        const m2 = await send(ws, q, { type: 'subscribe', channel: 'private-glob.b' })
         assert.strictEqual(m1['type'], 'subscribed')
         assert.strictEqual(m2['type'], 'subscribed')
         ws.terminate()
@@ -296,12 +311,11 @@ describe('@boostkit/ws', () => {
     it('broadcast reaches authenticated subscriber', () =>
       withServer(async (port) => {
         registerAuth('private-bcast.*', async () => true)
-        const ws = await openAndConsume(port)
-        await send(ws, { type: 'subscribe', channel: 'private-bcast.1' })
+        const { ws, q } = await connect(port)
+        await send(ws, q, { type: 'subscribe', channel: 'private-bcast.1' })
 
-        const p = nextMsg(ws)
         broadcast('private-bcast.1', 'updated', { ok: true })
-        const msg = await p
+        const msg = await q.next()
 
         assert.strictEqual(msg['type'],  'event')
         assert.strictEqual(msg['event'], 'updated')
@@ -315,10 +329,10 @@ describe('@boostkit/ws', () => {
   describe('presence channel', () => {
     it('joiner receives presence.members after subscribed', () =>
       withServer(async (port) => {
-        registerAuth('presence-*', async () => ({ id: '1', name: 'Alice' }))
-        const ws = await openAndConsume(port)
-        await send(ws, { type: 'subscribe', channel: 'presence-room.1' }) // subscribed
-        const msg = await nextMsg(ws) // presence.members
+        registerAuth('presence-lobby', async () => ({ id: '1', name: 'Alice' }))
+        const { ws, q } = await connect(port)
+        await send(ws, q, { type: 'subscribe', channel: 'presence-lobby' })  // → 'subscribed'
+        const msg = await q.next()  // → 'presence.members'
         assert.strictEqual(msg['type'], 'presence.members')
         assert.ok(Array.isArray(msg['members']))
         ws.terminate()
@@ -327,16 +341,15 @@ describe('@boostkit/ws', () => {
 
     it('existing member gets presence.joined when second joins', () =>
       withServer(async (port) => {
-        registerAuth('presence-*', async () => ({ id: '2', name: 'Bob' }))
-        const ws1 = await openAndConsume(port)
-        const ws2 = await openAndConsume(port)
+        registerAuth('presence-gameroom', async () => ({ id: '2', name: 'Bob' }))
+        const { ws: ws1, q: q1 } = await connect(port)
+        const { ws: ws2, q: q2 } = await connect(port)
 
-        await send(ws1, { type: 'subscribe', channel: 'presence-room.2' })
-        await nextMsg(ws1) // presence.members (ws1 alone)
+        await send(ws1, q1, { type: 'subscribe', channel: 'presence-gameroom' })
+        await q1.next()  // presence.members (ws1 alone)
 
-        const p = nextMsg(ws1)
-        ws2.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.2' }))
-        const msg = await p
+        ws2.send(JSON.stringify({ type: 'subscribe', channel: 'presence-gameroom' }))
+        const msg = await q1.next()  // presence.joined
 
         assert.strictEqual(msg['type'], 'presence.joined')
         assert.deepEqual(msg['user'],   { id: '2', name: 'Bob' })
@@ -347,21 +360,20 @@ describe('@boostkit/ws', () => {
 
     it('remaining member gets presence.left on disconnect', () =>
       withServer(async (port) => {
-        registerAuth('presence-*', async () => ({ id: '3', name: 'Eve' }))
-        const ws1 = await openAndConsume(port)
-        const ws2 = await openAndConsume(port)
+        registerAuth('presence-office', async () => ({ id: '3', name: 'Eve' }))
+        const { ws: ws1, q: q1 } = await connect(port)
+        const { ws: ws2, q: q2 } = await connect(port)
 
-        await send(ws1, { type: 'subscribe', channel: 'presence-room.3' })
-        await nextMsg(ws1) // presence.members
+        await send(ws1, q1, { type: 'subscribe', channel: 'presence-office' })
+        await q1.next()  // presence.members
 
-        ws2.send(JSON.stringify({ type: 'subscribe', channel: 'presence-room.3' }))
-        await nextMsg(ws1) // presence.joined for ws2
-        await nextMsg(ws2) // subscribed
-        await nextMsg(ws2) // presence.members
+        ws2.send(JSON.stringify({ type: 'subscribe', channel: 'presence-office' }))
+        await q1.next()  // presence.joined for ws2
+        await q2.next()  // subscribed
+        await q2.next()  // presence.members
 
-        const p = nextMsg(ws1)
         ws2.terminate()
-        const msg = await p
+        const msg = await q1.next()  // presence.left
 
         assert.strictEqual(msg['type'], 'presence.left')
         ws1.terminate()
