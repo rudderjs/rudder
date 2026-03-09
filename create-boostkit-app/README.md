@@ -4,11 +4,16 @@ Interactive CLI scaffolder for [BoostKit](https://github.com/boostkitjs/boostkit
 
 ## Usage
 
+The installer auto-detects your package manager from the command you use:
+
 ```bash
 pnpm create boostkit-app
-# or
 npm create boostkit-app@latest
+yarn create boostkit-app
+bunx create-boostkit-app
 ```
+
+All four package managers are fully supported — generated files, install commands, and next-step instructions adapt automatically.
 
 ## Prompts
 
@@ -88,10 +93,18 @@ node dist/index.js          # launches the interactive CLI
 
 ## After scaffolding
 
-```bash
-cd my-app
-pnpm install                 # if you skipped during scaffolding
-pnpm exec prisma generate
-pnpm exec prisma db push
-pnpm dev
-```
+The installer prints the exact commands for your package manager. For reference:
+
+| Step | pnpm | npm | yarn | bun |
+|------|------|-----|------|-----|
+| Install (if skipped) | `pnpm install` | `npm install` | `yarn install` | `bun install` |
+| Prisma generate | `pnpm exec prisma generate` | `npx prisma generate` | `yarn dlx prisma generate` | `bunx prisma generate` |
+| Prisma db push | `pnpm exec prisma db push` | `npx prisma db push` | `yarn dlx prisma db push` | `bunx prisma db push` |
+| Start dev server | `pnpm dev` | `npm run dev` | `yarn dev` | `bun dev` |
+
+## Package manager differences in generated files
+
+| File | pnpm | npm / yarn | bun |
+|------|------|-----------|-----|
+| `pnpm-workspace.yaml` | generated | not generated | not generated |
+| `package.json` native-build field | `pnpm.onlyBuiltDependencies` | *(not needed)* | `trustedDependencies` |
