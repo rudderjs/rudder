@@ -4,14 +4,14 @@ import http             from 'node:http'
 import { WebSocket }    from 'ws'
 import { Channel, PrivateChannel, PresenceChannel } from './channel.js'
 import {
-  initWsServer, resetWs, getUpgradeHandler,
-  broadcast, wsStats, registerAuth,
+  initWsServer, resetBroadcast, getUpgradeHandler,
+  broadcast, broadcastStats, registerAuth,
 } from './ws-server.js'
 
 // ─── Helpers ───────────────────────────────────────────────
 
 async function withServer<T>(fn: (port: number) => Promise<T>): Promise<T> {
-  resetWs()
+  resetBroadcast()
   initWsServer()
   const handler = getUpgradeHandler('/ws')
   const server  = http.createServer()
@@ -21,7 +21,7 @@ async function withServer<T>(fn: (port: number) => Promise<T>): Promise<T> {
   try {
     return await fn(port)
   } finally {
-    resetWs()  // terminates all WS clients
+    resetBroadcast()  // terminates all WS clients
     await new Promise<void>((r) => {
       try { (server as unknown as { closeAllConnections(): void }).closeAllConnections() } catch { /* node < 18.2 */ }
       server.close(() => r())
@@ -96,13 +96,13 @@ describe('@boostkit/ws', () => {
   // ─── Pre-init ────────────────────────────────────────────
 
   describe('before initWsServer', () => {
-    it('wsStats() returns zeros', () => {
-      resetWs()
-      assert.deepEqual(wsStats(), { connections: 0, channels: 0 })
+    it('broadcastStats() returns zeros', () => {
+      resetBroadcast()
+      assert.deepEqual(broadcastStats(), { connections: 0, channels: 0 })
     })
 
     it('broadcast() is a no-op (does not throw)', () => {
-      resetWs()
+      resetBroadcast()
       assert.doesNotThrow(() => broadcast('chan', 'event', {}))
     })
 
@@ -148,7 +148,7 @@ describe('@boostkit/ws', () => {
     it('wsStats reflects open connections', () =>
       withServer(async (port) => {
         const { ws } = await connect(port)
-        assert.ok(wsStats().connections >= 1)
+        assert.ok(broadcastStats().connections >= 1)
         ws.terminate()
       })
     )
@@ -221,7 +221,7 @@ describe('@boostkit/ws', () => {
       withServer(async (port) => {
         const { ws, q } = await connect(port)
         await send(ws, q, { type: 'subscribe', channel: 'stats-test' })
-        assert.ok(wsStats().channels >= 1)
+        assert.ok(broadcastStats().channels >= 1)
         ws.terminate()
       })
     )

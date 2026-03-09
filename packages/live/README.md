@@ -1,6 +1,6 @@
 # @boostkit/live
 
-Real-time collaborative document sync via [Yjs](https://yjs.dev) CRDT. Public, private, and presence channels for `@boostkit/ws` — live uses the same port and process, no separate server needed.
+Real-time collaborative document sync via [Yjs](https://yjs.dev) CRDT. Works alongside `@boostkit/broadcast` — live uses the same port and process, no separate server needed.
 
 ## Installation
 
@@ -12,12 +12,12 @@ pnpm add @boostkit/live
 
 ```ts
 // bootstrap/providers.ts
-import { ws }   from '@boostkit/ws'
-import { live } from '@boostkit/live'
+import { broadcasting } from '@boostkit/broadcast'
+import { live }         from '@boostkit/live'
 
 export default [
-  ws(),    // /ws  — pub/sub channels
-  live(),  // /ws-live — Yjs CRDT sync
+  broadcasting(),  // /ws  — pub/sub channels
+  live(),          // /ws-live — Yjs CRDT sync
 ]
 ```
 

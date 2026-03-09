@@ -106,7 +106,7 @@ boostkit/
 │   ├── events/         # EventDispatcher, Listener interface, dispatch() helper
 │   ├── mail/           # Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory
 │   ├── notification/   # Multi-channel notifications (mail, database)
-│   ├── ws/             # Native WebSocket server — public, private, presence channels
+│   ├── broadcast/      # WebSocket broadcasting — public, private, presence channels
 │   ├── live/           # Real-time collaborative document sync via Yjs CRDT — /ws-live endpoint
 │   │                   #   Built-in: MemoryPersistence. Optional: livePrisma(), liveRedis()
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
@@ -143,7 +143,7 @@ boostkit/
 | `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
 | `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
-| `@boostkit/ws` | 0.0.1 | Native WebSocket — ws(), broadcast(), ws.auth(), BKSocket client |
+| `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
 
 **Merged/removed packages** (code absorbed, originals deleted):

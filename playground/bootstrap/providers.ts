@@ -10,7 +10,7 @@ import { notifications } from '@boostkit/notification'
 import { session } from '@boostkit/session'
 import { database } from '@boostkit/orm-prisma'
 import { panels } from '@boostkit/panels'
-import { ws }     from '@boostkit/ws'
+import { broadcasting } from '@boostkit/broadcast'
 import { live }   from '@boostkit/live'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
@@ -31,7 +31,7 @@ export default [
   scheduler(),
   notifications(),
   panels([adminPanel]),
-  ws(),
+  broadcasting(),
   live(),   // /ws-live — Yjs CRDT sync (after ws so upgrade handler chains correctly)
   AppServiceProvider,
   TodoServiceProvider,
