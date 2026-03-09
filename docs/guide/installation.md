@@ -132,35 +132,25 @@ export default [
 
 ### 4. Wire Vike to the app
 
-Create `pages/+config.ts` to point Vike's `vike-photon` plugin at `bootstrap/app.ts`:
+Create `pages/+config.ts`. Include both `vike-photon` and your UI framework renderer here — this single file is all you need for a single-framework app:
 
 ```ts
+// pages/+config.ts (React)
 import type { Config } from 'vike/types'
 import vikePhoton from 'vike-photon/config'
+import vikeReact from 'vike-react/config'
 
 export default {
-  extends: [vikePhoton],
+  extends: [vikePhoton, vikeReact],
   photon: {
     server: 'bootstrap/app.ts',
   },
 } as unknown as Config
 ```
 
-Then create a per-page config that extends your chosen UI framework:
+For **Vue** replace `vike-react/config` with `vike-vue/config`, for **Solid** use `vike-solid/config`.
 
-```ts
-// pages/index/+config.ts (React)
-import vikeReact from 'vike-react/config'
-export default { extends: vikeReact } as unknown as Config
-
-// pages/index/+config.ts (Vue)
-import vikeVue from 'vike-vue/config'
-export default { extends: vikeVue } as unknown as Config
-
-// pages/index/+config.ts (Solid)
-import vikeSolid from 'vike-solid/config'
-export default { extends: vikeSolid } as unknown as Config
-```
+> **Multiple frameworks?** Keep the renderer out of the root `pages/+config.ts` and instead add a `+config.ts` inside each page folder extending its own renderer. See [Frontend Pages](/guide/frontend-pages) for details.
 
 ### 5. Vite config
 

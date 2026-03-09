@@ -23,29 +23,34 @@ Each page is a directory under `pages/` containing one or more `+` prefixed file
 
 ## Root Config
 
-`pages/+config.ts` is the root Vike config for the entire app. It wires `vike-photon` to your BoostKit server:
+`pages/+config.ts` is the root Vike config for the entire app. It wires `vike-photon` to your BoostKit server and — for single-framework apps — declares the UI renderer here too:
 
 ```ts
-// pages/+config.ts
+// pages/+config.ts — single framework (React)
 import type { Config } from 'vike/types'
 import vikePhoton from 'vike-photon/config'
+import vikeReact from 'vike-react/config'
 
 export default {
-  extends: [vikePhoton],
+  extends: [vikePhoton, vikeReact],
   photon: {
-    server: 'bootstrap/app.ts',  // points to your BoostKit entry point
+    server: 'bootstrap/app.ts',
   },
 } as unknown as Config
 ```
 
+With the renderer in the root config, no per-page `+config.ts` files are needed — all pages inherit React automatically.
+
+For **Vue** replace `vike-react/config` with `vike-vue/config`. For **Solid** use `vike-solid/config`.
+
 ---
 
-## Per-Page Config
+## Per-Page Config (multi-framework only)
 
-Each page directory needs its own `+config.ts` that extends the appropriate UI framework config:
+When mixing multiple UI frameworks, keep the renderer **out** of the root `pages/+config.ts` and instead add a `+config.ts` inside each page folder or subtree:
 
 ```ts
-// pages/index/+config.ts (React)
+// pages/index/+config.ts (React subtree)
 import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 
@@ -53,7 +58,7 @@ export default { extends: vikeReact } as unknown as Config
 ```
 
 ```ts
-// pages/dashboard/+config.ts (Vue)
+// pages/vue-demo/+config.ts
 import type { Config } from 'vike/types'
 import vikeVue from 'vike-vue/config'
 
@@ -61,14 +66,14 @@ export default { extends: vikeVue } as unknown as Config
 ```
 
 ```ts
-// pages/landing/+config.ts (Solid)
+// pages/solid-demo/+config.ts
 import type { Config } from 'vike/types'
 import vikeSolid from 'vike-solid/config'
 
 export default { extends: vikeSolid } as unknown as Config
 ```
 
-You can nest a shared `+config.ts` in a parent directory to apply a framework config to an entire subtree — you do not need a `+config.ts` in every single page directory.
+A `+config.ts` in a parent directory applies to the entire subtree — you do not need one in every single page directory.
 
 ---
 
@@ -278,18 +283,19 @@ export default function ErrorPage() {
 
 ## Multiple UI Frameworks
 
-When you select multiple frameworks in `create-boostkit-app`, the primary framework drives all main pages. Secondary frameworks get demo pages:
+When you select multiple frameworks in `create-boostkit-app`, the root `pages/+config.ts` has no renderer. Each page folder declares its own:
 
 ```
 pages/
+  +config.ts       ← vike-photon only (no renderer)
   index/
-    +config.ts   ← extends vikeReact (primary)
+    +config.ts     ← extends vikeReact (primary)
     +Page.tsx
   vue-demo/
-    +config.ts   ← extends vikeVue (secondary)
+    +config.ts     ← extends vikeVue
     +Page.vue
   solid-demo/
-    +config.ts   ← extends vikeSolid (secondary)
+    +config.ts     ← extends vikeSolid
     +Page.tsx
 ```
 
@@ -316,8 +322,8 @@ Pages are optional. If you only need a backend API, omit the `pages/` directory 
 
 | File | When to create |
 |------|---------------|
-| `pages/+config.ts` | Once — root config, always needed |
-| `pages/mypage/+config.ts` | Per page (or per subtree) — sets the UI framework |
+| `pages/+config.ts` | Always — include renderer here for single-framework apps |
+| `pages/mypage/+config.ts` | Multi-framework only — sets renderer per page/subtree |
 | `pages/mypage/+Page.tsx` | The page component |
 | `pages/mypage/+data.ts` | When the page needs server-fetched data |
 | `pages/mypage/+guard.ts` | When the page requires authentication or conditional access |
