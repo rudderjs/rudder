@@ -1,19 +1,19 @@
-import { broadcasting } from '@boostkit/broadcast'
+import { Broadcast } from '@boostkit/broadcast'
 
 // Private channel — only the owner can subscribe.
-broadcasting.auth('private-user.*', async (_req, _channel) => {
+Broadcast.channel('private-user.*', async (_req, _channel) => {
   return true  // allow all for demo
 })
 
 // Presence channel used by the /ws-demo page.
 // Returns member info so the server tracks who is online.
-broadcasting.auth('presence-lobby', async (_req) => {
+Broadcast.channel('presence-lobby', async (_req) => {
   const id   = `user-${Math.random().toString(36).slice(2, 7)}`
   const name = `User-${id.slice(-3).toUpperCase()}`
   return { id, name }
 })
 
 // Presence channel with wildcard for other presence channels.
-broadcasting.auth('presence-room.*', async (_req) => {
+Broadcast.channel('presence-room.*', async (_req) => {
   return { id: 'demo-user', name: 'Demo User' }
 })

@@ -18,10 +18,24 @@ export interface BroadcastConfig {
 
 export const UPGRADE_KEY = '__boostkit_ws_upgrade__'
 
-// ─── Factory ────────────────────────────────────────────────
+// ─── Broadcast facade ────────────────────────────────────────
 
-interface BroadcastingFactory {
-  (config?: BroadcastConfig): new (app: Application) => ServiceProvider
+/**
+ * Broadcast facade — register channel auth callbacks.
+ *
+ * @example
+ * // routes/channels.ts
+ * import { Broadcast } from '@boostkit/broadcast'
+ *
+ * Broadcast.channel('private-orders.*', async (req, channel) => {
+ *   return req.token === 'valid'
+ * })
+ *
+ * Broadcast.channel('presence-room.*', async (req) => {
+ *   return { id: 'user-1', name: 'Alice' }  // member info
+ * })
+ */
+export const Broadcast = {
   /**
    * Register a channel auth callback.
    *
@@ -31,10 +45,12 @@ interface BroadcastingFactory {
    * Return `true`/`false` for private channels.
    * Return a member-info object (or `false`) for presence channels.
    */
-  auth(pattern: string, callback: AuthCallback): void
+  channel: registerAuth as (pattern: string, callback: AuthCallback) => void,
 }
 
-function _broadcasting(config: BroadcastConfig = {}): new (app: Application) => ServiceProvider {
+// ─── Factory ────────────────────────────────────────────────
+
+export function broadcasting(config: BroadcastConfig = {}): new (app: Application) => ServiceProvider {
   const path = config.path ?? '/ws'
 
   return class BroadcastServiceProvider extends ServiceProvider {
@@ -62,7 +78,3 @@ function _broadcasting(config: BroadcastConfig = {}): new (app: Application) => 
     }
   }
 }
-
-_broadcasting.auth = registerAuth as (pattern: string, callback: AuthCallback) => void
-
-export const broadcasting = _broadcasting as BroadcastingFactory
