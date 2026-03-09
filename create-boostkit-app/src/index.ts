@@ -164,6 +164,17 @@ async function main(): Promise<void> {
       child.on('error', () => resolve(false))
     })
     s2.stop(ok ? 'Dependencies installed' : `${pmInstall(pm)} failed — run it manually`)
+
+    // Copy auth pages from @boostkit/auth after install
+    if (ok && withAuth) {
+      const authPagesDir = path.join(target, 'node_modules', '@boostkit', 'auth', 'pages', primary)
+      const destDir      = path.join(target, 'pages')
+      try {
+        await fs.cp(authPagesDir, destDir, { recursive: true })
+      } catch {
+        // Silently skip — user can publish manually
+      }
+    }
   }
 
   // ── Done ───────────────────────────────────────────────
@@ -173,6 +184,7 @@ async function main(): Promise<void> {
     ...(!install ? [`  ${pmInstall(pm)}`] : []),
     `  ${pmExec(pm, 'prisma generate')}`,
     `  ${pmExec(pm, 'prisma db push')}`,
+    ...(!install && withAuth ? [`  ${pmRun(pm, 'artisan')} vendor:publish --tag=auth-pages-${primary}`] : []),
     `  ${pmRun(pm, 'dev')}`,
   ]
 
