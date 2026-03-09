@@ -5,14 +5,14 @@ import { BKSocket } from '@/BKSocket'
 type Message = { user: string; text: string; ts: number }
 type Member  = { id: string; name: string }
 
-const ME = `User-${Math.floor(Math.random() * 1000)}`
-
 function getWsUrl() {
   if (typeof window === 'undefined') return ''
   return `ws://${window.location.host}/ws`
 }
 
 export default function Page() {
+  const [ME, setME]               = useState('')
+  useEffect(() => { setME(`User-${Math.floor(Math.random() * 1000)}`) }, [])
   const socketRef                 = useRef<BKSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const [messages,  setMessages]  = useState<Message[]>([])
@@ -32,9 +32,9 @@ export default function Page() {
     })
 
     // ── Presence channel — tracks who is online ──────────────
-    const room = socket.presence('presence-lobby', 'demo-token')
+    const room = socket.presence('lobby', 'demo-token')
     room.on('presence.members', (data) => {
-      setMembers((data as { members: Member[] }).members)
+      setMembers(data as Member[])
       setConnected(true)  // receiving presence.members means we're fully connected
     })
     room.on('presence.joined', (data) => {
