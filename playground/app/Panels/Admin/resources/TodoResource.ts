@@ -1,4 +1,4 @@
-import { Resource, TextField, BooleanField, DateField, Action } from '@boostkit/panels'
+import { Resource, TextField, BooleanField, DateField, Action, SelectFilter } from '@boostkit/panels'
 import { Todo } from '../../../Models/Todo.js'
 
 export class TodoResource extends Resource {
@@ -23,6 +23,17 @@ export class TodoResource extends Resource {
         .hideFromCreate()
         .hideFromEdit()
         .readonly(),
+    ]
+  }
+
+  filters() {
+    return [
+      SelectFilter.make('completed')
+        .label('Status')
+        .options([
+          { label: 'Completed',   value: '1' },
+          { label: 'Incomplete',  value: '0' },
+        ]),
     ]
   }
 

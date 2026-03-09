@@ -1,3 +1,7 @@
+// ─── Layout ────────────────────────────────────────────────
+
+export type PanelLayout = 'sidebar' | 'topbar'
+
 // ─── Policy ────────────────────────────────────────────────
 
 export type PolicyAction = 'viewAny' | 'view' | 'create' | 'update' | 'delete'

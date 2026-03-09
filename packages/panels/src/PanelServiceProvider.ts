@@ -92,7 +92,54 @@ export class PanelServiceProvider extends ServiceProvider {
 
       const page    = Number((req.query as Record<string, string>)['page']    ?? 1)
       const perPage = Number((req.query as Record<string, string>)['perPage'] ?? 15)
-      const result  = await Model.query().paginate(page, perPage)
+
+      const url    = new URL(req.url, 'http://localhost')
+      const sort   = url.searchParams.get('sort') ?? undefined
+      const dir    = (url.searchParams.get('dir') ?? 'ASC').toUpperCase() as 'ASC' | 'DESC'
+      const search = url.searchParams.get('search') ?? undefined
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = Model.query()
+
+      // Sort — only on fields marked sortable()
+      if (sort) {
+        const sortableFields = resource.fields().filter(f => f.isSortable()).map(f => f.getName())
+        if (sortableFields.includes(sort)) {
+          q = q.orderBy(sort, dir)
+        }
+      }
+
+      // Search — LIKE across all searchable fields (OR)
+      if (search) {
+        const searchableCols = resource.fields().filter(f => f.isSearchable()).map(f => f.getName())
+        if (searchableCols.length > 0) {
+          q = q.where(searchableCols[0]!, 'LIKE', `%${search}%`)
+          for (let i = 1; i < searchableCols.length; i++) {
+            q = q.orWhere(searchableCols[i]!, `%${search}%`)
+          }
+        }
+      }
+
+      // Filters — ?filter[field]=value
+      for (const filter of resource.filters()) {
+        const value = url.searchParams.get(`filter[${filter.getName()}]`)
+        if (value !== null && value !== '') {
+          const applied = filter.apply({}, value)
+          for (const [col, val] of Object.entries(applied)) {
+            if (col === '_search') {
+              const { value: sv, columns } = val as { value: string; columns: string[] }
+              if (columns[0]) q = q.where(columns[0], 'LIKE', `%${sv}%`)
+              for (let i = 1; i < columns.length; i++) {
+                q = q.orWhere(columns[i]!, `%${sv}%`)
+              }
+            } else {
+              q = q.where(col, val)
+            }
+          }
+        }
+      }
+
+      const result = await q.paginate(page, perPage)
 
       return res.json({
         data: result.data,

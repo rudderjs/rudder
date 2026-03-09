@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useData } from 'vike-react/useData'
 import { Checkbox } from '@base-ui-components/react/checkbox'
-import { Menu } from '@base-ui-components/react/menu'
 import { AdminLayout } from '../../_components/AdminLayout.js'
 import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
 import type { Data } from './+data.js'
@@ -15,10 +14,55 @@ export default function ResourceListPage() {
   const [confirm,        setConfirm]        = useState<{ action: typeof resourceMeta.actions[0]; records: unknown[] } | null>(null)
   const [actionPending,  setActionPending]  = useState(false)
 
-  const tableFields = resourceMeta.fields.filter((f) => !f.hidden.includes('table'))
+  const tableFields  = resourceMeta.fields.filter((f) => !f.hidden.includes('table'))
+  const sortFields   = resourceMeta.fields.filter((f) => f.sortable)
+  const searchFields = resourceMeta.fields.filter((f) => f.searchable)
+  const hasSearch    = searchFields.length > 0
+  const hasFilters   = resourceMeta.filters.length > 0
+
+  // ── Current URL params ─────────────────────────────────
+  const urlParams  = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  const currentSort   = urlParams.get('sort') ?? ''
+  const currentDir    = urlParams.get('dir') ?? 'ASC'
+  const currentSearch = urlParams.get('search') ?? ''
+
+  // ── Search state ────────────────────────────────────────
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  function applySearch(e: React.FormEvent) {
+    e.preventDefault()
+    const q  = searchRef.current?.value ?? ''
+    const url = new URL(window.location.href)
+    if (q) url.searchParams.set('search', q)
+    else url.searchParams.delete('search')
+    url.searchParams.delete('page')
+    window.location.href = url.toString()
+  }
+
+  // ── Sort ────────────────────────────────────────────────
+  function toggleSort(col: string) {
+    const url = new URL(window.location.href)
+    if (currentSort === col) {
+      url.searchParams.set('dir', currentDir === 'ASC' ? 'DESC' : 'ASC')
+    } else {
+      url.searchParams.set('sort', col)
+      url.searchParams.set('dir', 'ASC')
+    }
+    url.searchParams.delete('page')
+    window.location.href = url.toString()
+  }
+
+  // ── Filter ──────────────────────────────────────────────
+  function applyFilter(name: string, value: string) {
+    const url = new URL(window.location.href)
+    if (value) url.searchParams.set(`filter[${name}]`, value)
+    else url.searchParams.delete(`filter[${name}]`)
+    url.searchParams.delete('page')
+    window.location.href = url.toString()
+  }
 
   // ── Selection helpers ──────────────────────────────────
-  const allIds   = (records as Array<{ id: string }>).map((r) => r.id)
+  const allIds      = (records as Array<{ id: string }>).map((r) => r.id)
   const allSelected = allIds.length > 0 && allIds.every((id) => selected.includes(id))
 
   function toggleAll(checked: boolean) {
@@ -45,9 +89,9 @@ export default function ResourceListPage() {
     setActionPending(true)
     try {
       await fetch(`/${pathSegment}/api/${slug}/_action/${action.name}`, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selected }),
+        body:    JSON.stringify({ ids: selected }),
       })
       setSelected([])
       window.location.reload()
@@ -70,27 +114,82 @@ export default function ResourceListPage() {
     <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
 
       {/* ── Header ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between mb-5 gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">{resourceMeta.label}</h1>
+          <h1 className="text-xl font-semibold">{resourceMeta.label}</h1>
           {pagination && (
-            <p className="text-sm text-slate-500 mt-0.5">{pagination.total} records</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{pagination.total} records</p>
           )}
         </div>
         <a
           href={`/${pathSegment}/${slug}/create`}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0"
         >
-          <span>+</span> New {resourceMeta.labelSingular}
+          <span aria-hidden>+</span> New {resourceMeta.labelSingular}
         </a>
       </div>
 
-      {/* ── Bulk action bar ───────────────────────────────── */}
+      {/* ── Toolbar (search + filters) ─────────────────────── */}
+      {(hasSearch || hasFilters) && (
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+
+          {/* Search */}
+          {hasSearch && (
+            <form onSubmit={applySearch} className="flex gap-2">
+              <input
+                ref={searchRef}
+                type="search"
+                name="search"
+                defaultValue={currentSearch}
+                placeholder={`Search ${resourceMeta.label.toLowerCase()}…`}
+                className="h-9 px-3 text-sm rounded-md border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[220px]"
+              />
+              <button
+                type="submit"
+                className="h-9 px-3 text-sm rounded-md border bg-background hover:bg-accent transition-colors"
+              >
+                Search
+              </button>
+            </form>
+          )}
+
+          {/* Select filters */}
+          {resourceMeta.filters.map((filter) => {
+            if (filter.type !== 'select') return null
+            const options = (filter.extra['options'] ?? []) as Array<{ label: string; value: string | number | boolean }>
+            const current = urlParams.get(`filter[${filter.name}]`) ?? ''
+            return (
+              <select
+                key={filter.name}
+                value={current}
+                onChange={(e) => applyFilter(filter.name, e.target.value)}
+                className="h-9 px-3 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">{filter.label}: All</option>
+                {options.map((o) => (
+                  <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
+                ))}
+              </select>
+            )
+          })}
+
+          {/* Clear filters link */}
+          {(currentSearch || resourceMeta.filters.some(f => urlParams.has(`filter[${f.name}]`))) && (
+            <a
+              href={`/${pathSegment}/${slug}`}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Clear filters
+            </a>
+          )}
+
+        </div>
+      )}
+
+      {/* ── Bulk action bar ────────────────────────────────── */}
       {selected.length > 0 && bulkActions.length > 0 && (
-        <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
-          <span className="text-sm text-indigo-700 font-medium">
-            {selected.length} selected
-          </span>
+        <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg">
+          <span className="text-sm font-medium">{selected.length} selected</span>
           <div className="flex gap-2">
             {bulkActions.map((action) => (
               <button
@@ -100,8 +199,8 @@ export default function ResourceListPage() {
                 className={[
                   'px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50',
                   action.destructive
-                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200',
+                    ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                    : 'bg-primary/10 text-primary hover:bg-primary/20',
                 ].join(' ')}
               >
                 {action.label}
@@ -110,7 +209,7 @@ export default function ResourceListPage() {
           </div>
           <button
             onClick={() => setSelected([])}
-            className="ml-auto text-sm text-slate-500 hover:text-slate-700"
+            className="ml-auto text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Clear
           </button>
@@ -118,50 +217,69 @@ export default function ResourceListPage() {
       )}
 
       {/* ── Table ─────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="rounded-xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50">
+            <tr className="border-b bg-muted/40">
               <th className="w-10 px-4 py-3">
                 <Checkbox.Root
                   checked={allSelected}
                   onCheckedChange={toggleAll}
-                  className="h-4 w-4 rounded border-2 border-slate-300 bg-white flex items-center justify-center data-[checked]:bg-indigo-600 data-[checked]:border-indigo-600 focus:outline-none cursor-pointer"
+                  className="h-4 w-4 rounded border-2 border-input bg-background flex items-center justify-center data-[checked]:bg-primary data-[checked]:border-primary focus:outline-none cursor-pointer"
                 >
-                  <Checkbox.Indicator className="text-white">
+                  <Checkbox.Indicator className="text-primary-foreground">
                     <MiniCheckIcon />
                   </Checkbox.Indicator>
                 </Checkbox.Root>
               </th>
-              {tableFields.map((f) => (
-                <th key={f.name} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  {f.label}
-                </th>
-              ))}
-              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              {tableFields.map((f) => {
+                const sortable = sortFields.some(s => s.name === f.name)
+                const isSorted = currentSort === f.name
+                return (
+                  <th
+                    key={f.name}
+                    className={[
+                      'px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide',
+                      sortable ? 'cursor-pointer select-none hover:text-foreground transition-colors' : '',
+                    ].join(' ')}
+                    onClick={sortable ? () => toggleSort(f.name) : undefined}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {f.label}
+                      {sortable && (
+                        <SortIcon active={isSorted} dir={isSorted ? currentDir as 'ASC' | 'DESC' : undefined} />
+                      )}
+                    </span>
+                  </th>
+                )
+              })}
+              <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y">
             {(records as Array<Record<string, unknown>>).map((record) => {
               const id       = record['id'] as string
               const isChecked = selected.includes(id)
               return (
-                <tr key={id} className={`hover:bg-slate-50 transition-colors ${isChecked ? 'bg-indigo-50/50' : ''}`}>
+                <tr
+                  key={id}
+                  className={['transition-colors hover:bg-muted/30', isChecked ? 'bg-primary/5' : ''].join(' ')}
+                >
                   <td className="px-4 py-3">
                     <Checkbox.Root
                       checked={isChecked}
                       onCheckedChange={(checked) => toggleOne(id, !!checked)}
-                      className="h-4 w-4 rounded border-2 border-slate-300 bg-white flex items-center justify-center data-[checked]:bg-indigo-600 data-[checked]:border-indigo-600 focus:outline-none cursor-pointer"
+                      className="h-4 w-4 rounded border-2 border-input bg-background flex items-center justify-center data-[checked]:bg-primary data-[checked]:border-primary focus:outline-none cursor-pointer"
                     >
-                      <Checkbox.Indicator className="text-white">
+                      <Checkbox.Indicator className="text-primary-foreground">
                         <MiniCheckIcon />
                       </Checkbox.Indicator>
                     </Checkbox.Root>
                   </td>
                   {tableFields.map((f) => (
-                    <td key={f.name} className="px-4 py-3 text-slate-700">
+                    <td key={f.name} className="px-4 py-3 text-foreground">
                       <CellValue value={record[f.name]} type={f.type} />
                     </td>
                   ))}
@@ -169,7 +287,7 @@ export default function ResourceListPage() {
                     <div className="flex items-center justify-end gap-2">
                       <a
                         href={`/${pathSegment}/${slug}/${id}/edit`}
-                        className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+                        className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                       >
                         Edit
                       </a>
@@ -181,7 +299,7 @@ export default function ResourceListPage() {
             })}
             {records.length === 0 && (
               <tr>
-                <td colSpan={tableFields.length + 2} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={tableFields.length + 2} className="px-4 py-16 text-center text-muted-foreground">
                   No records found.
                 </td>
               </tr>
@@ -193,7 +311,7 @@ export default function ResourceListPage() {
       {/* ── Pagination ────────────────────────────────────── */}
       {pagination && pagination.lastPage > 1 && (
         <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Page {pagination.currentPage} of {pagination.lastPage}
           </p>
           <div className="flex gap-1">
@@ -204,8 +322,8 @@ export default function ResourceListPage() {
                 className={[
                   'w-8 h-8 text-sm rounded-md transition-colors',
                   p === pagination.currentPage
-                    ? 'bg-indigo-600 text-white'
-                    : 'border border-slate-200 text-slate-600 hover:bg-slate-50',
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                 ].join(' ')}
               >
                 {p}
@@ -233,18 +351,40 @@ export default function ResourceListPage() {
 // ── Sub-components ─────────────────────────────────────────
 
 function CellValue({ value, type }: { value: unknown; type: string }) {
-  if (value === null || value === undefined) return <span className="text-slate-300">—</span>
+  if (value === null || value === undefined) return <span className="text-muted-foreground/40">—</span>
   if (type === 'boolean') {
     return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${value ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${value ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
         {value ? 'Yes' : 'No'}
       </span>
     )
   }
   if (type === 'date' || type === 'datetime') {
-    return <span className="text-slate-500">{new Date(value as string).toLocaleDateString()}</span>
+    return <span className="text-muted-foreground">{new Date(value as string).toLocaleDateString()}</span>
   }
   return <span>{String(value)}</span>
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir?: 'ASC' | 'DESC' }) {
+  return (
+    <svg
+      width="10" height="12" viewBox="0 0 10 12" fill="none"
+      className={active ? 'opacity-100' : 'opacity-30'}
+    >
+      {/* Up arrow */}
+      <path
+        d="M5 1L2 4h6L5 1Z"
+        fill="currentColor"
+        opacity={!active || dir === 'ASC' ? 1 : 0.3}
+      />
+      {/* Down arrow */}
+      <path
+        d="M5 11L2 8h6L5 11Z"
+        fill="currentColor"
+        opacity={!active || dir === 'DESC' ? 1 : 0.3}
+      />
+    </svg>
+  )
 }
 
 function DeleteRowButton({ slug, id, pathSegment }: { slug: string; id: string; pathSegment: string }) {
@@ -260,7 +400,7 @@ function DeleteRowButton({ slug, id, pathSegment }: { slug: string; id: string; 
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+        className="text-xs px-2.5 py-1 rounded border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
       >
         Delete
       </button>

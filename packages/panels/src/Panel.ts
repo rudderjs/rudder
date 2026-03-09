@@ -1,4 +1,4 @@
-import type { PanelGuard, BrandingOptions } from './types.js'
+import type { PanelGuard, BrandingOptions, PanelLayout } from './types.js'
 import type { Resource, ResourceMeta } from './Resource.js'
 
 // ─── Panel meta (for UI / meta endpoint) ───────────────────
@@ -8,6 +8,7 @@ export interface PanelMeta {
   path:      string
   branding:  BrandingOptions
   resources: ResourceMeta[]
+  layout:    PanelLayout
 }
 
 // ─── Panel builder ─────────────────────────────────────────
@@ -18,6 +19,7 @@ export class Panel {
   protected _guard?:    PanelGuard
   protected _branding:  BrandingOptions = {}
   protected _resources: (typeof Resource)[] = []
+  protected _layout:    PanelLayout = 'sidebar'
 
   protected constructor(name: string) {
     this._name = name
@@ -55,6 +57,12 @@ export class Panel {
     return this
   }
 
+  /** Layout style for the panel UI. */
+  layout(type: PanelLayout): this {
+    this._layout = type
+    return this
+  }
+
   /** Resource classes to register in this panel. */
   resources(list: (typeof Resource)[]): this {
     this._resources = list
@@ -68,6 +76,7 @@ export class Panel {
   getGuard(): PanelGuard | undefined { return this._guard }
   getBranding(): BrandingOptions { return this._branding }
   getResources(): (typeof Resource)[] { return this._resources }
+  getLayout(): PanelLayout { return this._layout }
 
   /** Base path for the auto-generated API routes (e.g. '/admin/api'). */
   getApiBase(): string { return `${this._path}/api` }
@@ -79,6 +88,7 @@ export class Panel {
       path:      this._path,
       branding:  this._branding,
       resources: this._resources.map((R) => new R().toMeta()),
+      layout:    this._layout,
     }
   }
 }
