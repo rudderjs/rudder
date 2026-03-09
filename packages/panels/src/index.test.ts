@@ -2,6 +2,7 @@ import { describe, it, before, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { Panel } from './Panel.js'
+import { Page } from './Page.js'
 import { Resource } from './Resource.js'
 import { Field } from './Field.js'
 import { Filter, SelectFilter, SearchFilter } from './Filter.js'
@@ -417,6 +418,80 @@ describe('Panel', () => {
     const meta = Panel.make('blog').resources([R]).toMeta()
     assert.equal(meta.resources.length, 1)
     assert.equal(meta.resources[0]!.label, 'Posts')
+  })
+
+  it('pages() defaults to []', () => {
+    assert.deepEqual(Panel.make('x').getPages(), [])
+  })
+
+  it('pages() stores page classes', () => {
+    class DashboardPage extends Page { static label = 'Dashboard' }
+    const p = Panel.make('x').pages([DashboardPage])
+    assert.deepEqual(p.getPages(), [DashboardPage])
+  })
+
+  it('toMeta() includes pages', () => {
+    class DashboardPage extends Page { static label = 'Dashboard' }
+    class SettingsPage extends Page { static label = 'Settings' }
+    const meta = Panel.make('admin').pages([DashboardPage, SettingsPage]).toMeta()
+    assert.equal(meta.pages.length, 2)
+    assert.equal(meta.pages[0]!.slug, 'dashboard')
+    assert.equal(meta.pages[1]!.slug, 'settings')
+  })
+
+  it('toMeta() pages defaults to empty array', () => {
+    const meta = Panel.make('x').toMeta()
+    assert.deepEqual(meta.pages, [])
+  })
+})
+
+// ─── Page ───────────────────────────────────────────────────
+
+describe('Page', () => {
+  it('getSlug() strips Page suffix and lowercases', () => {
+    class DashboardPage extends Page {}
+    assert.equal(DashboardPage.getSlug(), 'dashboard')
+  })
+
+  it('getSlug() handles multi-word class names', () => {
+    class SalesReportPage extends Page {}
+    assert.equal(SalesReportPage.getSlug(), 'salesreport')
+  })
+
+  it('getSlug() uses static slug override', () => {
+    class X extends Page { static slug = 'my-custom-slug' }
+    assert.equal(X.getSlug(), 'my-custom-slug')
+  })
+
+  it('getLabel() derives from class name', () => {
+    class AnalyticsPage extends Page {}
+    assert.equal(AnalyticsPage.getLabel(), 'Analytics')
+  })
+
+  it('getLabel() handles multi-word class names', () => {
+    class SalesReportPage extends Page {}
+    assert.equal(SalesReportPage.getLabel(), 'Sales Report')
+  })
+
+  it('getLabel() uses static label override', () => {
+    class X extends Page { static label = 'My Page' }
+    assert.equal(X.getLabel(), 'My Page')
+  })
+
+  it('toMeta() returns correct shape', () => {
+    class DashboardPage extends Page {
+      static label = 'Dashboard'
+      static icon  = '📊'
+    }
+    const meta = DashboardPage.toMeta()
+    assert.equal(meta.slug, 'dashboard')
+    assert.equal(meta.label, 'Dashboard')
+    assert.equal(meta.icon, '📊')
+  })
+
+  it('toMeta() icon is undefined when not set', () => {
+    class X extends Page {}
+    assert.equal(X.toMeta().icon, undefined)
   })
 })
 

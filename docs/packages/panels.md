@@ -147,6 +147,61 @@ Both layouts are built with Tailwind CSS design tokens (`bg-primary`, `text-mute
 
 ---
 
+## Custom Pages
+
+Register custom pages alongside resources. They appear in the sidebar/topbar nav in the order defined — resources first, then pages.
+
+```ts
+// app/Panels/Admin/pages/DashboardPage.ts
+import { Page } from '@boostkit/panels'
+
+export class DashboardPage extends Page {
+  static slug  = 'dashboard'     // URL slug — defaults to class name sans "Page", lowercased
+  static label = 'Dashboard'    // nav label — defaults to class name sans "Page", title-cased
+  static icon  = '📊'           // optional emoji/icon shown in nav
+}
+```
+
+```ts
+// app/Panels/Admin/AdminPanel.ts
+export const adminPanel = Panel.make('admin')
+  .resources([UserResource, TodoResource])
+  .pages([DashboardPage, SettingsPage])
+```
+
+The `Page` class controls nav metadata only. The actual UI is a standard Vike page you create yourself after publishing:
+
+```tsx
+// pages/(panels)/admin/dashboard/+Page.tsx
+import { AdminLayout } from '../_components/AdminLayout.js'
+import { useData }     from 'vike-react/useData'
+import type { PanelMeta } from '@boostkit/panels'
+
+export default function DashboardPage() {
+  const { panelMeta } = useData<{ panelMeta: PanelMeta }>()
+  return (
+    <AdminLayout panelMeta={panelMeta} currentSlug="dashboard">
+      <h1>Dashboard</h1>
+      {/* your content */}
+    </AdminLayout>
+  )
+}
+```
+
+You'll need a `+data.ts` to fetch `panelMeta`. The simplest approach is to call the `/_meta` endpoint:
+
+```ts
+// pages/(panels)/admin/dashboard/+data.ts
+export async function data({ pageContext }: { pageContext: any }) {
+  const origin   = pageContext.urlParsed.origin ?? 'http://localhost:3000'
+  const response = await fetch(`${origin}/admin/api/_meta`)
+  const panelMeta = await response.json()
+  return { panelMeta }
+}
+```
+
+---
+
 ## Search
 
 Mark fields `.searchable()` to add a search bar to the list page. Submitting runs a `LIKE` query across all searchable columns (OR logic).

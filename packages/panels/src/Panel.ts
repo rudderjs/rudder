@@ -1,5 +1,6 @@
 import type { PanelGuard, BrandingOptions, PanelLayout } from './types.js'
 import type { Resource, ResourceMeta } from './Resource.js'
+import type { Page, PageMeta } from './Page.js'
 
 // ─── Panel meta (for UI / meta endpoint) ───────────────────
 
@@ -8,6 +9,7 @@ export interface PanelMeta {
   path:      string
   branding:  BrandingOptions
   resources: ResourceMeta[]
+  pages:     PageMeta[]
   layout:    PanelLayout
 }
 
@@ -19,6 +21,7 @@ export class Panel {
   protected _guard?:    PanelGuard
   protected _branding:  BrandingOptions = {}
   protected _resources: (typeof Resource)[] = []
+  protected _pages:     (typeof Page)[] = []
   protected _layout:    PanelLayout = 'sidebar'
 
   protected constructor(name: string) {
@@ -57,6 +60,12 @@ export class Panel {
     return this
   }
 
+  /** Custom pages to register in this panel (appear in sidebar/topbar nav). */
+  pages(list: (typeof Page)[]): this {
+    this._pages = list
+    return this
+  }
+
   /** Layout style for the panel UI. */
   layout(type: PanelLayout): this {
     this._layout = type
@@ -76,6 +85,7 @@ export class Panel {
   getGuard(): PanelGuard | undefined { return this._guard }
   getBranding(): BrandingOptions { return this._branding }
   getResources(): (typeof Resource)[] { return this._resources }
+  getPages(): (typeof Page)[] { return this._pages }
   getLayout(): PanelLayout { return this._layout }
 
   /** Base path for the auto-generated API routes (e.g. '/admin/api'). */
@@ -88,6 +98,7 @@ export class Panel {
       path:      this._path,
       branding:  this._branding,
       resources: this._resources.map((R) => new R().toMeta()),
+      pages:     this._pages.map((P) => P.toMeta()),
       layout:    this._layout,
     }
   }

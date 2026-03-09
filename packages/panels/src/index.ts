@@ -3,6 +3,11 @@
 export { Panel } from './Panel.js'
 export type { PanelMeta } from './Panel.js'
 
+// ─── Page ──────────────────────────────────────────────────
+
+export { Page } from './Page.js'
+export type { PageMeta } from './Page.js'
+
 // ─── Resource ──────────────────────────────────────────────
 
 export { Resource } from './Resource.js'

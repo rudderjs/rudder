@@ -131,6 +131,50 @@ Panel.make('admin').layout('topbar')    // horizontal top navigation
 
 ---
 
+## Custom Pages
+
+Register custom pages alongside resources. They appear in the sidebar/topbar nav and link to any URL you define.
+
+```ts
+// app/Panels/Admin/pages/DashboardPage.ts
+import { Page } from '@boostkit/panels'
+
+export class DashboardPage extends Page {
+  static slug  = 'dashboard'
+  static label = 'Dashboard'
+  static icon  = '📊'
+}
+```
+
+```ts
+// app/Panels/Admin/AdminPanel.ts
+export const adminPanel = Panel.make('admin')
+  .resources([UserResource, TodoResource])
+  .pages([DashboardPage, SettingsPage])
+```
+
+Resources appear first in the nav, then pages — in the order listed.
+
+The page class controls only nav metadata (slug, label, icon). The actual UI is a standard Vike page at `pages/(panels)/@panel/dashboard/+Page.tsx` — create it after publishing the panels pages:
+
+```tsx
+// pages/(panels)/admin/dashboard/+Page.tsx
+import { AdminLayout } from '../_components/AdminLayout.js'
+import { useData }     from 'vike-react/useData'
+
+export default function DashboardPage() {
+  const { panelMeta } = useData<{ panelMeta: PanelMeta }>()
+  return (
+    <AdminLayout panelMeta={panelMeta} currentSlug="dashboard">
+      <h1>Dashboard</h1>
+      {/* your content */}
+    </AdminLayout>
+  )
+}
+```
+
+---
+
 ## Filters
 
 ```ts
