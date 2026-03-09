@@ -613,6 +613,9 @@ importers:
       '@boostkit/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@boostkit/live':
+        specifier: workspace:*
+        version: link:../packages/live
       '@boostkit/mail':
         specifier: workspace:*
         version: link:../packages/mail
@@ -727,6 +730,12 @@ importers:
       vue:
         specifier: ^3.5.29
         version: 3.5.29(typescript@5.9.3)
+      y-websocket:
+        specifier: ^2.0.0
+        version: 2.1.0(yjs@13.6.29)
+      yjs:
+        specifier: ^13.6.0
+        version: 13.6.29
       zod:
         specifier: ^4.0.0
         version: 4.3.6
@@ -4291,6 +4300,16 @@ packages:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
     engines: {node: ^18.17.0 || >=20.5.0}
 
+  abstract-leveldown@6.2.3:
+    resolution: {integrity: sha512-BsLm5vFMRUrrLeCcRc+G0t2qOaTzpoJQLOubq2XM72eNpjF5UdU5o/5NvlNhx95XHcAvcl8OMXr4mlg/fRgUXQ==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
+  abstract-leveldown@6.3.0:
+    resolution: {integrity: sha512-TU5nlYgta8YrBMNpc9FwQzRbiXsj49gsALsXadbGHt9CROPzX5fB0rWDR5mtdpOOKa5XqRFpbj1QroPAoPzVjQ==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
@@ -4369,6 +4388,9 @@ packages:
   ast-types@0.16.1:
     resolution: {integrity: sha512-6t10qk83GOG8p0vKmaCr8eiilZwO171AvbROMtvvNiwrTly62t+7XkA8RdIIVbpMhCASAsxgAzdRSwh6nw/5Dg==}
     engines: {node: '>=4'}
+
+  async-limiter@1.0.1:
+    resolution: {integrity: sha512-csOlWGAcRFJaI6m+F2WKdnMKr4HhdhFVBk0H/QbJFMCr+uO2kwohwXQPxw/9OCxp05r5ghVBFSyioixx3gfkNQ==}
 
   async-mutex@0.5.0:
     resolution: {integrity: sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA==}
@@ -4789,6 +4811,11 @@ packages:
     resolution: {integrity: sha512-H9LMLr5zwIbSxrmvikGuI/5KGhZ8E2zH3stkMgM5LpOWDutGM2JZaj460Udnf1a+946zc7YBgrqEWwbk7zHvGw==}
     engines: {node: '>=18'}
 
+  deferred-leveldown@5.3.0:
+    resolution: {integrity: sha512-a59VOT+oDy7vtAbLRCZwWgxu2BaCfd5Hk7wxJd48ei7I+nsg8Orlb9CLG0PMZienk9BSUKgeAqkO2+Lw+1+Ukw==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
   define-lazy-prop@3.0.0:
     resolution: {integrity: sha512-N+MeXYoqr3pOgn8xfyRPREN7gHakLYjhsHhWGT3fWAiL4IkAt0iDw14QiiEm2bE30c5XX5q0FtAA3CK5f9/BUg==}
     engines: {node: '>=12'}
@@ -5069,6 +5096,11 @@ packages:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
     engines: {node: '>= 0.8'}
 
+  encoding-down@6.3.0:
+    resolution: {integrity: sha512-QKrV0iKR6MZVJV08QY0wp1e7vF6QbhnbQhb07bwpEyuz4uZiZgPlEGdkCROuFkUwdxlFaiPIhjyarH1ee/3vhw==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
@@ -5091,6 +5123,10 @@ packages:
   env-paths@2.2.1:
     resolution: {integrity: sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==}
     engines: {node: '>=6'}
+
+  errno@0.1.8:
+    resolution: {integrity: sha512-dJ6oBr5SQ1VSd9qkk7ByRgb/1SH4JZjCHSW/mr63/QcXO9zLVxvJ6Oy13nio03rxpSnVDDjFor75SjVeZWPW/A==}
+    hasBin: true
 
   error-ex@1.3.4:
     resolution: {integrity: sha512-sqQamAnR14VgCr1A618A3sGrygcpK+HEbenA/HiEAkkUwcZIIB/tgWqHFxWgOyDh4nB4JCRimh79dR5Ywc9MDQ==}
@@ -5454,6 +5490,9 @@ packages:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
 
+  immediate@3.3.0:
+    resolution: {integrity: sha512-HR7EVodfFUdQCTIeySw+WDRFJlPcLOJbXfwwZ7Oom6tjsvZ3bOkCDJHehQC3nxJrv7+f9XecwazynjU8e4Vw3Q==}
+
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
     engines: {node: '>=6'}
@@ -5698,6 +5737,52 @@ packages:
     resolution: {integrity: sha512-zpGIFg0HuoC893rIjYX1BETkVWdDnzTzF5e0kWXJFg5lE0k1/LfNWBejrcnOFu8Q2Rfq/hTDTU7XLUM8QOrpzg==}
     engines: {node: '>=20.0.0'}
 
+  level-codec@9.0.2:
+    resolution: {integrity: sha512-UyIwNb1lJBChJnGfjmO0OR+ezh2iVu1Kas3nvBS/BzGnx79dv6g7unpKIDNPMhfdTEGoc7mC8uAu51XEtX+FHQ==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by level-transcoder (https://github.com/Level/community#faq)
+
+  level-concat-iterator@2.0.1:
+    resolution: {integrity: sha512-OTKKOqeav2QWcERMJR7IS9CUo1sHnke2C0gkSmcR7QuEtFNLLzHQAvnMw8ykvEcv0Qtkg0p7FOwP1v9e5Smdcw==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
+  level-errors@2.0.1:
+    resolution: {integrity: sha512-UVprBJXite4gPS+3VznfgDSU8PTRuVX0NXwoWW50KLxd2yw4Y1t2JUR5In1itQnudZqRMT9DlAM3Q//9NCjCFw==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
+  level-iterator-stream@4.0.2:
+    resolution: {integrity: sha512-ZSthfEqzGSOMWoUGhTXdX9jv26d32XJuHz/5YnuHZzH6wldfWMOVwI9TBtKcya4BKTyTt3XVA0A3cF3q5CY30Q==}
+    engines: {node: '>=6'}
+
+  level-js@5.0.2:
+    resolution: {integrity: sha512-SnBIDo2pdO5VXh02ZmtAyPP6/+6YTJg2ibLtl9C34pWvmtMEmRTWpra+qO/hifkUtBTOtfx6S9vLDjBsBK4gRg==}
+    deprecated: Superseded by browser-level (https://github.com/Level/community#faq)
+
+  level-packager@5.1.1:
+    resolution: {integrity: sha512-HMwMaQPlTC1IlcwT3+swhqf/NUO+ZhXVz6TY1zZIIZlIR0YSn8GtAAWmIvKjNY16ZkEg/JcpAuQskxsXqC0yOQ==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
+  level-supports@1.0.1:
+    resolution: {integrity: sha512-rXM7GYnW8gsl1vedTJIbzOrRv85c/2uCMpiiCzO2fndd06U/kUXEEU9evYn4zFggBOg36IsBW8LzqIpETwwQzg==}
+    engines: {node: '>=6'}
+
+  level@6.0.1:
+    resolution: {integrity: sha512-psRSqJZCsC/irNhfHzrVZbmPYXDcEYhA5TVNwr+V92jF44rbf86hqGp8fiT702FyiArScYIlPSBTDUASCVNSpw==}
+    engines: {node: '>=8.6.0'}
+
+  leveldown@5.6.0:
+    resolution: {integrity: sha512-iB8O/7Db9lPaITU1aA2txU/cBEXAt4vWwKQRrrWuS6XDgbP4QZGj9BL2aNbwb002atoQ/lIotJkfyzz+ygQnUQ==}
+    engines: {node: '>=8.6.0'}
+    deprecated: Superseded by classic-level (https://github.com/Level/community#faq)
+
+  levelup@4.4.0:
+    resolution: {integrity: sha512-94++VFO3qN95cM/d6eBXvd894oJE0w3cInq9USsyQzzoJxmiYzPAocNcuGCPGGjoXqDVJcr3C1jzt1TSjyaiLQ==}
+    engines: {node: '>=6'}
+    deprecated: Superseded by abstract-level (https://github.com/Level/community#faq)
+
   lib0@0.2.117:
     resolution: {integrity: sha512-DeXj9X5xDCjgKLU/7RR+/HQEVzuuEUiwldwOGsHK/sfAfELGWEyTcf0x+uOvCvK3O2zPmZePXWL85vtia6GyZw==}
     engines: {node: '>=16'}
@@ -5796,6 +5881,9 @@ packages:
   lodash.camelcase@4.3.0:
     resolution: {integrity: sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA==}
 
+  lodash.debounce@4.0.8:
+    resolution: {integrity: sha512-FT1yDzDYEoYWhnSGnpE/4Kj1fLZkDFyqRb7fNt6FdYOSxlUWAtp42Eh6Wb0rGIv/m9Bgo7x4GhQbm5Ys4SG5ow==}
+
   lodash.defaults@4.2.0:
     resolution: {integrity: sha512-qjxPLHd3r5DnsdGacqOMU6pb/avJzdh9tFX2ymgoZE27BmjXrNy/y4LoaiTeAb+O3gL8AfpJGtqfX/ae2leYYQ==}
 
@@ -5828,6 +5916,9 @@ packages:
   lru.min@1.1.4:
     resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
     engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
+
+  ltgt@2.2.1:
+    resolution: {integrity: sha512-AI2r85+4MquTw9ZYqabu4nMwy9Oftlfa/e/52t9IjtfG+mGBbTNdAoZ3RQKLHR6r0wQnwZnPIEh/Ya6XTWAKNA==}
 
   lucide-react@0.575.0:
     resolution: {integrity: sha512-VuXgKZrk0uiDlWjGGXmKV6MSk9Yy4l10qgVvzGn2AWBx1Ylt0iBexKOAoA6I7JO3m+M9oeovJd3yYENfkUbOeg==}
@@ -6035,6 +6126,9 @@ packages:
   napi-build-utils@2.0.0:
     resolution: {integrity: sha512-GEbrYkbfF7MoNaoh2iGG84Mnf/WZfB0GdGEsM8wz7Expx/LlWf5U8t9nvJKXSp3qr5IsEbK04cBGhol/KwOsWA==}
 
+  napi-macros@2.0.0:
+    resolution: {integrity: sha512-A0xLykHtARfueITVDernsAWdtIMbOJgKgcluwENp3AlsKN/PloyO10HtmoqnFAQAcxPkgZN7wdfPfEd0zNGxbg==}
+
   negotiator@1.0.0:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
@@ -6069,6 +6163,10 @@ packages:
 
   node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
+    hasBin: true
+
+  node-gyp-build@4.1.1:
+    resolution: {integrity: sha512-dSq1xmcPDKPZ2EED2S6zw/b9NKsqzXRE6dVr8TVQnI3FJOTteUMuqF3Qqs6LZg+mLGYJWqQzMbIjMtJqTv87nQ==}
     hasBin: true
 
   node-gyp-build@4.8.4:
@@ -6392,6 +6490,9 @@ packages:
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
+
+  prr@1.0.1:
+    resolution: {integrity: sha512-yPw4Sng1gWghHQWj0B3ZggWUm4qVbPwPFcRG8KyxiU7J2OHFSoEHKS+EZ3fv5l1t9CyCiop6l/ZYeWbrgoQejw==}
 
   pump@3.0.4:
     resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
@@ -7335,6 +7436,17 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@6.2.3:
+    resolution: {integrity: sha512-jmTjYU0j60B+vHey6TfR3Z7RD61z/hmxBS3VMSGIrroOWXQEneK1zNuotOUrGyBHQj0yrpsLHPWtigEFd13ndA==}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: ^5.0.2
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   ws@8.19.0:
     resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
     engines: {node: '>=10.0.0'}
@@ -7354,6 +7466,24 @@ packages:
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
+
+  y-leveldb@0.1.2:
+    resolution: {integrity: sha512-6ulEn5AXfXJYi89rXPEg2mMHAyyw8+ZfeMMdOtBbV8FJpQ1NOrcgi6DTAcXof0dap84NjHPT2+9d0rb6cFsjEg==}
+    peerDependencies:
+      yjs: ^13.0.0
+
+  y-protocols@1.0.7:
+    resolution: {integrity: sha512-YSVsLoXxO67J6eE/nV4AtFtT3QEotZf5sK5BHxFBXso7VDUT3Tx07IfA6hsu5Q5OmBdMkQVmFZ9QOA7fikWvnw==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
+    peerDependencies:
+      yjs: ^13.0.0
+
+  y-websocket@2.1.0:
+    resolution: {integrity: sha512-WHYDRqomaGkkaujtowCDwL8KYk+t1zQCGIgKyvxvchhjTQlMgWXRHJK+FDEcWmHA7I7o/4fy0eniOrtmz0e4mA==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
+    hasBin: true
+    peerDependencies:
+      yjs: ^13.5.6
 
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
@@ -11763,6 +11893,24 @@ snapshots:
 
   abbrev@3.0.1: {}
 
+  abstract-leveldown@6.2.3:
+    dependencies:
+      buffer: 5.7.1
+      immediate: 3.3.0
+      level-concat-iterator: 2.0.1
+      level-supports: 1.0.1
+      xtend: 4.0.2
+    optional: true
+
+  abstract-leveldown@6.3.0:
+    dependencies:
+      buffer: 5.7.1
+      immediate: 3.3.0
+      level-concat-iterator: 2.0.1
+      level-supports: 1.0.1
+      xtend: 4.0.2
+    optional: true
+
   accepts@2.0.0:
     dependencies:
       mime-types: 3.0.2
@@ -11835,6 +11983,9 @@ snapshots:
   ast-types@0.16.1:
     dependencies:
       tslib: 2.8.1
+
+  async-limiter@1.0.1:
+    optional: true
 
   async-mutex@0.5.0:
     dependencies:
@@ -12195,6 +12346,12 @@ snapshots:
       bundle-name: 4.1.0
       default-browser-id: 5.0.1
 
+  deferred-leveldown@5.3.0:
+    dependencies:
+      abstract-leveldown: 6.2.3
+      inherits: 2.0.4
+    optional: true
+
   define-lazy-prop@3.0.0: {}
 
   defu@6.1.4: {}
@@ -12315,6 +12472,14 @@ snapshots:
 
   encodeurl@2.0.0: {}
 
+  encoding-down@6.3.0:
+    dependencies:
+      abstract-leveldown: 6.3.0
+      inherits: 2.0.4
+      level-codec: 9.0.2
+      level-errors: 2.0.1
+    optional: true
+
   end-of-stream@1.4.5:
     dependencies:
       once: 1.4.0
@@ -12334,6 +12499,11 @@ snapshots:
   entities@7.0.1: {}
 
   env-paths@2.2.1: {}
+
+  errno@0.1.8:
+    dependencies:
+      prr: 1.0.1
+    optional: true
 
   error-ex@1.3.4:
     dependencies:
@@ -12786,6 +12956,9 @@ snapshots:
 
   ignore@5.3.2: {}
 
+  immediate@3.3.0:
+    optional: true
+
   import-fresh@3.3.1:
     dependencies:
       parent-module: 1.0.1
@@ -12988,6 +13161,68 @@ snapshots:
 
   kysely@0.28.11: {}
 
+  level-codec@9.0.2:
+    dependencies:
+      buffer: 5.7.1
+    optional: true
+
+  level-concat-iterator@2.0.1:
+    optional: true
+
+  level-errors@2.0.1:
+    dependencies:
+      errno: 0.1.8
+    optional: true
+
+  level-iterator-stream@4.0.2:
+    dependencies:
+      inherits: 2.0.4
+      readable-stream: 3.6.2
+      xtend: 4.0.2
+    optional: true
+
+  level-js@5.0.2:
+    dependencies:
+      abstract-leveldown: 6.2.3
+      buffer: 5.7.1
+      inherits: 2.0.4
+      ltgt: 2.2.1
+    optional: true
+
+  level-packager@5.1.1:
+    dependencies:
+      encoding-down: 6.3.0
+      levelup: 4.4.0
+    optional: true
+
+  level-supports@1.0.1:
+    dependencies:
+      xtend: 4.0.2
+    optional: true
+
+  level@6.0.1:
+    dependencies:
+      level-js: 5.0.2
+      level-packager: 5.1.1
+      leveldown: 5.6.0
+    optional: true
+
+  leveldown@5.6.0:
+    dependencies:
+      abstract-leveldown: 6.2.3
+      napi-macros: 2.0.0
+      node-gyp-build: 4.1.1
+    optional: true
+
+  levelup@4.4.0:
+    dependencies:
+      deferred-leveldown: 5.3.0
+      level-errors: 2.0.1
+      level-iterator-stream: 4.0.2
+      level-supports: 1.0.1
+      xtend: 4.0.2
+    optional: true
+
   lib0@0.2.117:
     dependencies:
       isomorphic.js: 0.2.5
@@ -13067,6 +13302,8 @@ snapshots:
 
   lodash.camelcase@4.3.0: {}
 
+  lodash.debounce@4.0.8: {}
+
   lodash.defaults@4.2.0: {}
 
   lodash.isarguments@3.1.0: {}
@@ -13094,6 +13331,9 @@ snapshots:
       yallist: 3.1.1
 
   lru.min@1.1.4: {}
+
+  ltgt@2.2.1:
+    optional: true
 
   lucide-react@0.575.0(react@19.2.4):
     dependencies:
@@ -13294,6 +13534,9 @@ snapshots:
 
   napi-build-utils@2.0.0: {}
 
+  napi-macros@2.0.0:
+    optional: true
+
   negotiator@1.0.0: {}
 
   node-abi@3.87.0:
@@ -13319,6 +13562,9 @@ snapshots:
   node-gyp-build-optional-packages@5.2.2:
     dependencies:
       detect-libc: 2.1.2
+    optional: true
+
+  node-gyp-build@4.1.1:
     optional: true
 
   node-gyp-build@4.8.4: {}
@@ -13674,6 +13920,9 @@ snapshots:
     dependencies:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
+
+  prr@1.0.1:
+    optional: true
 
   pump@3.0.4:
     dependencies:
@@ -14750,6 +14999,11 @@ snapshots:
 
   wrappy@1.0.2: {}
 
+  ws@6.2.3:
+    dependencies:
+      async-limiter: 1.0.1
+    optional: true
+
   ws@8.19.0: {}
 
   wsl-utils@0.3.1:
@@ -14758,6 +15012,31 @@ snapshots:
       powershell-utils: 0.1.0
 
   xtend@4.0.2: {}
+
+  y-leveldb@0.1.2(yjs@13.6.29):
+    dependencies:
+      level: 6.0.1
+      lib0: 0.2.117
+      yjs: 13.6.29
+    optional: true
+
+  y-protocols@1.0.7(yjs@13.6.29):
+    dependencies:
+      lib0: 0.2.117
+      yjs: 13.6.29
+
+  y-websocket@2.1.0(yjs@13.6.29):
+    dependencies:
+      lib0: 0.2.117
+      lodash.debounce: 4.0.8
+      y-protocols: 1.0.7(yjs@13.6.29)
+      yjs: 13.6.29
+    optionalDependencies:
+      ws: 6.2.3
+      y-leveldb: 0.1.2(yjs@13.6.29)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   y18n@5.0.8: {}
 
