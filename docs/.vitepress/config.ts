@@ -57,7 +57,7 @@ export default defineConfig({
         {
           text: 'Real-time',
           items: [
-            { text: 'WebSockets', link: '/guide/websockets' },
+            { text: 'Broadcasting & Live', link: '/guide/websockets' },
           ],
         },
         {
@@ -146,9 +146,10 @@ export default defineConfig({
           ],
         },
         {
-          text: 'WebSockets',
+          text: 'Real-time',
           items: [
-            { text: '@boostkit/ws', link: '/packages/ws' },
+            { text: '@boostkit/broadcast', link: '/packages/broadcast' },
+            { text: '@boostkit/live', link: '/packages/live' },
           ],
         },
         {

@@ -41,7 +41,7 @@ BoostKit is the middle ground: a **batteries-included architecture that stays en
 ## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Artisan CLI, FormRequest validation
-- **Pay-as-you-go** — 27 optional `@boostkit/*` packages; use only what you need
+- **Pay-as-you-go** — 29 optional `@boostkit/*` packages; use only what you need
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
 - **TypeScript-first** — strict types, generics, and decorator support throughout
@@ -258,26 +258,25 @@ import { dispatch } from '@boostkit/core'
 await dispatch(new UserRegistered(user.id, user.name, user.email))
 ```
 
-### 9. WebSocket — real-time channels
+### 9. Broadcasting — real-time channels
 
 ```ts
 // bootstrap/providers.ts
-import { ws } from '@boostkit/ws'
-export default [ ws(), /* ...other providers */ ]
+import { broadcasting } from '@boostkit/broadcast'
+export default [ broadcasting(), /* ...other providers */ ]
 ```
 
 ```ts
 // routes/channels.ts
-import { ws } from '@boostkit/ws'
+import { Broadcast } from '@boostkit/broadcast'
 
-// Public — no auth needed
 // Private — return true/false
-ws.auth('private-orders.*', async (req) => {
+Broadcast.channel('private-orders.*', async (req) => {
   return verifyToken(req.token)
 })
 
 // Presence — return member info to track who is online
-ws.auth('presence-room.*', async (req) => {
+Broadcast.channel('presence-room.*', async (req) => {
   const user = await getUser(req.token)
   return user ? { id: user.id, name: user.name } : false
 })
@@ -285,14 +284,14 @@ ws.auth('presence-room.*', async (req) => {
 
 ```ts
 // Broadcast from any route or job
-import { broadcast } from '@boostkit/ws'
+import { broadcast } from '@boostkit/broadcast'
 
 broadcast('chat', 'message', { user: 'Alice', text: 'Hello!' })
 broadcast('private-orders.42', 'status.updated', { status: 'shipped' })
 ```
 
 ```ts
-// Client (BKSocket — publish with: pnpm artisan vendor:publish --tag=ws-client)
+// Client (BKSocket — publish with: pnpm artisan vendor:publish --tag=broadcast-client)
 import { BKSocket } from './vendor/BKSocket'
 
 const socket = new BKSocket('ws://localhost:3000/ws')
@@ -305,9 +304,37 @@ room.on('presence.joined', ({ user }) => console.log(`${user.name} joined`))
 room.on('presence.members', (members) => setOnlineUsers(members))
 ```
 
-HTTP and WebSocket share the same port — no separate process or proxy needed.
+### 10. Live collaboration — Yjs CRDT
 
-### 10. Debug helpers (the ones every Laravel dev misses)
+```ts
+// bootstrap/providers.ts
+import { broadcasting } from '@boostkit/broadcast'
+import { live }         from '@boostkit/live'
+export default [ broadcasting(), live() ]
+```
+
+```ts
+// Client — standard yjs + y-websocket (server-side is handled by @boostkit/live)
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+
+const doc      = new Y.Doc()
+const provider = new WebsocketProvider(`ws://${location.host}/ws-live`, 'my-doc', doc)
+const text     = doc.getText('content')
+
+text.observe(() => setContent(text.toString()))
+
+// Awareness — who is online
+provider.awareness.setLocalStateField('user', { name: 'Alice', color: '#f97316' })
+provider.awareness.on('change', () => {
+  const online = [...provider.awareness.getStates().values()].flatMap(s => s.user ? [s.user] : [])
+  setOnlineUsers(online)
+})
+```
+
+HTTP, WebSocket channels, and CRDT sync all share the same port — no separate process or proxy needed.
+
+### 11. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
 import { config, dump, dd, app, resolve } from '@boostkit/core'
@@ -366,7 +393,8 @@ const svc = resolve<UserService>(UserService)
 | `@boostkit/mail` | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
 | `@boostkit/notification` | Multi-channel notifications (mail, database) |
 | `@boostkit/schedule` | Task scheduler, cron-based |
-| `@boostkit/ws` | Native WebSocket — public, private, and presence channels |
+| `@boostkit/broadcast` | WebSocket channels — pub/sub, private, presence |
+| `@boostkit/live` | Yjs CRDT real-time document sync |
 
 ---
 
@@ -388,8 +416,8 @@ const svc = resolve<UserService>(UserService)
 
 BoostKit is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 27 packages published to npm under `@boostkit/*`
-- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, and real-time WebSockets end-to-end
+- 29 packages published to npm under `@boostkit/*`
+- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, and real-time Yjs CRDT collaboration end-to-end
 
 ---
 

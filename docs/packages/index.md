@@ -72,6 +72,13 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 |---|---|---|
 | [@boostkit/session](./session) | Cookie and Redis session drivers — `SessionMiddleware()`, `Session` facade, and `session()` factory. | `pnpm add @boostkit/session` |
 
+## Real-time
+
+| Package | Description | Install |
+|---|---|---|
+| [@boostkit/broadcast](./broadcast) | WebSocket broadcasting — `broadcasting()`, `Broadcast.channel()`, public/private/presence channels, BKSocket client. | `pnpm add @boostkit/broadcast` |
+| [@boostkit/live](./live) | Yjs CRDT real-time document sync — `live()`, `MemoryPersistence`, `liveRedis()`, `livePrisma()`. | `pnpm add @boostkit/live` |
+
 ## Features
 
 | Package | Description | Install |

@@ -1,24 +1,35 @@
-# WebSockets
+# Real-time
 
-BoostKit includes native WebSocket support via `@boostkit/ws` — channel-based pub/sub with public, private, and presence channels. It runs on the same port as your HTTP server. No Pusher, no Echo, no external service.
+BoostKit ships two real-time packages that share the same port and process as your HTTP server:
 
-## Installation
+| Package | Purpose |
+|---|---|
+| `@boostkit/broadcast` | Channel-based pub/sub — events, notifications, presence |
+| `@boostkit/live` | Yjs CRDT — collaborative editing, shared document state |
+
+---
+
+## Broadcasting (`@boostkit/broadcast`)
+
+Channel-based WebSocket pub/sub with public, private, and presence channels. No Pusher, no Echo, no external service.
+
+### Installation
 
 ```bash
-pnpm add @boostkit/ws
+pnpm add @boostkit/broadcast
 ```
 
-## Setup
+### Setup
 
 **1. Register the provider:**
 
 ```ts
 // bootstrap/providers.ts
-import { ws } from '@boostkit/ws'
+import { broadcasting } from '@boostkit/broadcast'
 
 export default [
   // ... other providers
-  ws(),
+  broadcasting(),
 ]
 ```
 
@@ -39,21 +50,21 @@ export default Application.configure({ ... })
 
 ```ts
 // routes/channels.ts
-import { ws } from '@boostkit/ws'
+import { Broadcast } from '@boostkit/broadcast'
 
-ws.auth('private-orders.*', async (req) => {
+Broadcast.channel('private-orders.*', async (req) => {
   const user = await getUserFromToken(req.token)
   return !!user
 })
 
-ws.auth('presence-room.*', async (req) => {
+Broadcast.channel('presence-room.*', async (req) => {
   const user = await getUserFromToken(req.token)
   if (!user) return false
   return { id: user.id, name: user.name }
 })
 ```
 
-## Channel Types
+### Channel Types
 
 | Type | Prefix | Auth |
 |---|---|---|
@@ -61,55 +72,53 @@ ws.auth('presence-room.*', async (req) => {
 | Private | `private-` | Auth callback must return `true` |
 | Presence | `presence-` | Auth callback returns member info object |
 
-## Broadcasting
+### Broadcasting Events
 
 Push events from anywhere on the server — route handlers, jobs, service classes:
 
 ```ts
-import { broadcast } from '@boostkit/ws'
+import { broadcast } from '@boostkit/broadcast'
 
 // Inside a route
-router.post('/orders/:id/ship', async (req) => {
+Route.post('/orders/:id/ship', async (req) => {
   await shipOrder(req.params.id)
   broadcast(`orders.${req.params.id}`, 'order.shipped', { id: req.params.id })
   return { ok: true }
 })
 ```
 
-## Auth Callbacks
+### Auth Callbacks
 
-Private and presence channels require an auth callback. Register them with `ws.auth(pattern, callback)`:
+Private and presence channels require an auth callback registered with `Broadcast.channel()`:
 
 ```ts
-import { ws } from '@boostkit/ws'
+import { Broadcast } from '@boostkit/broadcast'
 
-ws.auth('private-user.*', async (req, channel) => {
+// Private — return true/false
+Broadcast.channel('private-user.*', async (req, channel) => {
   // req.headers — HTTP headers from the WebSocket upgrade request
   // req.url     — upgrade request URL
   // req.token   — token from the client's subscribe message
   const user = await verifyToken(req.token)
   return !!user
 })
-```
 
-The pattern supports `*` as a wildcard (matches non-dot characters). Use `private-user.*` to match `private-user.1`, `private-user.42`, etc.
-
-For **presence channels**, return a member info object instead of `true`:
-
-```ts
-ws.auth('presence-room.*', async (req) => {
+// Presence — return a member info object
+Broadcast.channel('presence-room.*', async (req) => {
   const user = await verifyToken(req.token)
   if (!user) return false
   return { id: user.id, name: user.name, avatar: user.avatar }
 })
 ```
 
-## Client
+The pattern supports `*` as a wildcard (matches non-dot characters). Use `private-user.*` to match `private-user.1`, `private-user.42`, etc.
 
-Publish the BKSocket client to your project:
+### Client (BKSocket)
+
+Publish the client to your project:
 
 ```bash
-pnpm artisan vendor:publish --tag=ws-client
+pnpm artisan vendor:publish --tag=broadcast-client
 ```
 
 Then use it in your frontend pages:
@@ -152,27 +161,119 @@ orders.leave()
 
 BKSocket automatically reconnects after 3 seconds if the connection drops, and resubscribes to all active channels on reconnect.
 
-## Stats
+### Stats
 
 ```ts
-import { wsStats } from '@boostkit/ws'
+import { broadcastStats } from '@boostkit/broadcast'
 
-const { connections, channels } = wsStats()
+const { connections, channels } = broadcastStats()
 ```
-
-The built-in `ws:connections` artisan command shows live stats:
 
 ```bash
-pnpm artisan ws:connections
+pnpm artisan broadcast:connections
 ```
+
+---
+
+## Live Collaboration (`@boostkit/live`)
+
+Yjs CRDT document sync — every client always sees the same shared state, with conflict-free merging even when offline.
+
+### Installation
+
+```bash
+pnpm add @boostkit/live
+# Client side
+pnpm add yjs y-websocket
+```
+
+### Setup
+
+```ts
+// bootstrap/providers.ts
+import { broadcasting } from '@boostkit/broadcast'
+import { live }         from '@boostkit/live'
+
+export default [
+  broadcasting(),  // /ws       — pub/sub channels
+  live(),          // /ws-live  — Yjs CRDT sync
+]
+```
+
+### Persistence
+
+By default documents are kept in memory (resets on restart). For production, use a persistence adapter:
+
+```ts
+import { live, liveRedis, livePrisma } from '@boostkit/live'
+
+// Redis — append-only log per document
+live({ persistence: liveRedis({ url: process.env.REDIS_URL }) })
+
+// Prisma — store updates in a database table
+live({ persistence: livePrisma() })
+```
+
+### Auth
+
+```ts
+live({
+  onAuth: async (req, docName) => {
+    const token = req.headers['authorization']?.split(' ')[1]
+    return await verifyToken(token)
+  },
+})
+```
+
+### onChange
+
+Called whenever a document is updated — useful for indexing or webhooks:
+
+```ts
+live({
+  onChange: async (docName, update) => {
+    console.log(`Document "${docName}" updated`)
+  },
+})
+```
+
+### Client
+
+`@boostkit/live` is server-side only. On the client use standard Yjs packages:
+
+```ts
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+
+const doc      = new Y.Doc()
+const provider = new WebsocketProvider('ws://localhost:3000/ws-live', 'my-doc', doc)
+
+// Collaborative text
+const text = doc.getText('content')
+text.observe(() => console.log(text.toString()))
+
+// Awareness — who is online, cursor positions
+provider.awareness.setLocalStateField('user', { name: 'Alice', color: '#f00' })
+provider.awareness.on('change', () => {
+  const states = [...provider.awareness.getStates().values()]
+  console.log('Online:', states.map(s => s.user?.name))
+})
+```
+
+### Artisan Commands
+
+| Command | Description |
+|---|---|
+| `live:docs` | List active documents and connected client count |
+| `live:clear <doc>` | Clear a document from persistence |
+
+---
 
 ## How It Works
 
-WebSocket connections share the same TCP port as your HTTP application — no proxy or separate port needed.
+Both packages hook into Node.js HTTP `upgrade` events on your existing server — no separate port or process needed.
 
-Under the hood, the `ws` package intercepts Node.js HTTP `upgrade` events before they reach Hono:
+- **Dev (Vite):** `@boostkit/vite` monkey-patches `http.createServer` to intercept srvx's server and attach the upgrade handler
+- **Production:** `@boostkit/server-hono`'s `listen()` attaches the handler to the HTTP server after `serve()` starts
 
-- **Dev (Vite):** the `@boostkit/vite` plugin hooks `configureServer` to attach the handler to Vite's dev server
-- **Production:** `@boostkit/server-hono`'s `listen()` attaches the handler to the underlying HTTP server after `serve()` starts
-
-The WebSocket state (connections, subscriptions, presence) is stored on `globalThis` so it survives Vite HMR reloads during development.
+The chain: HTTP server → `@boostkit/broadcast` handles `/ws` → `@boostkit/live` handles `/ws-live` → Vite HMR handles the rest.
