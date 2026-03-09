@@ -51,6 +51,7 @@ export type {
   PanelUser,
   PanelGuard,
   BrandingOptions,
+  PanelLayout,
   PaginatedResult,
   ModelClass,
 } from './types.js'

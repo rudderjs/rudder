@@ -12,7 +12,7 @@ export default function EditPage() {
   if (!record) {
     return (
       <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
-        <p className="text-slate-500">Record not found.</p>
+        <p className="text-muted-foreground">Record not found.</p>
       </AdminLayout>
     )
   }
@@ -36,9 +36,9 @@ export default function EditPage() {
     setErrors({})
     try {
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}`, {
-        method: 'PUT',
+        method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body:    JSON.stringify(values),
       })
       if (res.status === 422) {
         const body = await res.json() as { errors: Record<string, string[]> }
@@ -53,26 +53,30 @@ export default function EditPage() {
 
   return (
     <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
-      <div className="flex items-center gap-2 mb-6 text-sm text-slate-500">
-        <a href={`/${pathSegment}/${slug}`} className="hover:text-slate-700">{resourceMeta.label}</a>
+
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 mb-6 text-sm text-muted-foreground">
+        <a href={`/${pathSegment}/${slug}`} className="hover:text-foreground transition-colors">
+          {resourceMeta.label}
+        </a>
         <span>/</span>
-        <span className="text-slate-900 font-medium">Edit {resourceMeta.labelSingular}</span>
+        <span className="text-foreground font-medium">Edit {resourceMeta.labelSingular}</span>
       </div>
 
       <div className="max-w-2xl">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="rounded-xl border bg-card p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             {formFields.map((field) => (
               <div key={field.name}>
                 {field.type !== 'boolean' && (
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  <label className="block text-sm font-medium mb-1.5">
                     {field.label}
-                    {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                    {field.required && <span className="text-destructive ml-0.5">*</span>}
                   </label>
                 )}
                 <FieldInput field={field} value={values[field.name]} onChange={(v: unknown) => setValue(field.name, v)} />
                 {errors[field.name]?.map((e) => (
-                  <p key={e} className="mt-1 text-xs text-red-600">{e}</p>
+                  <p key={e} className="mt-1 text-xs text-destructive">{e}</p>
                 ))}
               </div>
             ))}
@@ -80,17 +84,21 @@ export default function EditPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                className="px-5 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
-              <a href={`/${pathSegment}/${slug}`} className="px-5 py-2 text-sm text-slate-600 hover:text-slate-900 transition-colors">
+              <a
+                href={`/${pathSegment}/${slug}`}
+                className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
                 Cancel
               </a>
             </div>
           </form>
         </div>
       </div>
+
     </AdminLayout>
   )
 }

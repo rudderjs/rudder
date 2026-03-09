@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function FieldInput({ field, value, onChange }: Props) {
-  const inputCls = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-500'
+  const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
 
   // ── Boolean ─────────────────────────────────────────────
   if (field.type === 'boolean') {
@@ -18,13 +18,13 @@ export function FieldInput({ field, value, onChange }: Props) {
         <Checkbox.Root
           checked={!!value}
           onCheckedChange={(checked) => onChange(checked)}
-          className="h-5 w-5 rounded border-2 border-slate-300 bg-white flex items-center justify-center transition-colors data-[checked]:bg-indigo-600 data-[checked]:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer"
+          className="h-5 w-5 rounded border-2 border-input bg-background flex items-center justify-center transition-colors data-[checked]:bg-primary data-[checked]:border-primary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer"
         >
-          <Checkbox.Indicator className="text-white">
+          <Checkbox.Indicator className="text-primary-foreground">
             <CheckIcon />
           </Checkbox.Indicator>
         </Checkbox.Root>
-        <span className="text-sm text-slate-700">{field.label}</span>
+        <span className="text-sm">{field.label}</span>
       </div>
     )
   }
@@ -43,20 +43,20 @@ export function FieldInput({ field, value, onChange }: Props) {
       >
         <Select.Trigger className={`${inputCls} flex items-center justify-between`}>
           <Select.Value>{(value as string) || `Select ${field.label}…`}</Select.Value>
-          <Select.Icon className="text-slate-400">
+          <Select.Icon className="text-muted-foreground">
             <ChevronIcon />
           </Select.Icon>
         </Select.Trigger>
         <Select.Portal>
           <Select.Positioner>
-            <Select.Popup className="z-50 min-w-[180px] rounded-md border border-slate-200 bg-white shadow-lg py-1 outline-none">
+            <Select.Popup className="z-50 min-w-[180px] rounded-md border border-border bg-popover shadow-lg py-1 outline-none">
               {normalised.map((opt) => (
                 <Select.Item
                   key={opt.value}
                   value={opt.value}
-                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer text-slate-700 data-[highlighted]:bg-slate-100 outline-none"
+                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground outline-none"
                 >
-                  <Select.ItemIndicator className="text-indigo-600">
+                  <Select.ItemIndicator className="text-primary">
                     <CheckIcon />
                   </Select.ItemIndicator>
                   <Select.ItemText>{opt.label}</Select.ItemText>
