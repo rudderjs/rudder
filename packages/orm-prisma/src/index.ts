@@ -67,7 +67,24 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
         case '>=':     where[clause.column] = { gte: clause.value }; break
         case '<':      where[clause.column] = { lt: clause.value }; break
         case '<=':     where[clause.column] = { lte: clause.value }; break
-        case 'LIKE':   where[clause.column] = { contains: clause.value }; break
+        case 'LIKE': {
+          // Prisma's contains/startsWith/endsWith already add % internally.
+          // Strip the SQL % wildcards and map to the right Prisma filter.
+          const raw = String(clause.value)
+          const hasLeading  = raw.startsWith('%')
+          const hasTrailing = raw.endsWith('%')
+          const inner = raw.replace(/^%|%$/g, '')
+          if (hasLeading && hasTrailing) {
+            where[clause.column] = { contains: inner }
+          } else if (hasTrailing) {
+            where[clause.column] = { startsWith: inner }
+          } else if (hasLeading) {
+            where[clause.column] = { endsWith: inner }
+          } else {
+            where[clause.column] = { equals: raw }
+          }
+          break
+        }
         case 'IN':     where[clause.column] = { in: clause.value }; break
         case 'NOT IN': where[clause.column] = { notIn: clause.value }; break
       }

@@ -6,6 +6,94 @@ import { prisma, database, type PrismaConfig, type DatabaseConfig } from './inde
 // client and a running DB. These tests verify factory contracts and adapter
 // shapes without opening any connections.
 
+// ─── LIKE → Prisma filter mapping ──────────────────────────
+// PrismaQueryBuilder is not exported, so we test it via a fake PrismaClient
+// that captures the where object passed to findMany.
+
+function makeCapturingClient() {
+  let lastWhere: Record<string, unknown> = {}
+  const delegate = {
+    findMany:  (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return [] },
+    findFirst: (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return null },
+    count:     (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return 0 },
+    create:    () => ({}),
+    update:    () => ({}),
+    delete:    () => undefined,
+  }
+  const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
+  return { fakeClient, getLastWhere: () => lastWhere }
+}
+
+describe('PrismaQueryBuilder — LIKE operator mapping', () => {
+  async function buildWhere(pattern: string) {
+    const { fakeClient, getLastWhere } = makeCapturingClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await adapter.query('user').where('name', 'LIKE', pattern).get()
+    return getLastWhere()
+  }
+
+  it('%value% → contains (substring)', async () => {
+    const where = await buildWhere('%alice%')
+    assert.deepEqual(where['name'], { contains: 'alice' })
+  })
+
+  it('value% → startsWith', async () => {
+    const where = await buildWhere('ali%')
+    assert.deepEqual(where['name'], { startsWith: 'ali' })
+  })
+
+  it('%value → endsWith', async () => {
+    const where = await buildWhere('%alice')
+    assert.deepEqual(where['name'], { endsWith: 'alice' })
+  })
+
+  it('value (no %) → equals', async () => {
+    const where = await buildWhere('alice')
+    assert.deepEqual(where['name'], { equals: 'alice' })
+  })
+})
+
+describe('PrismaQueryBuilder — other operators', () => {
+  async function buildWhere(op: string, value: unknown) {
+    const { fakeClient, getLastWhere } = makeCapturingClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await (adapter.query('user') as any).where('age', op, value).get()
+    return getLastWhere()
+  }
+
+  it('= operator', async () => {
+    assert.deepEqual((await buildWhere('=', 30))['age'], 30)
+  })
+
+  it('!= operator → not', async () => {
+    assert.deepEqual((await buildWhere('!=', 30))['age'], { not: 30 })
+  })
+
+  it('> operator → gt', async () => {
+    assert.deepEqual((await buildWhere('>', 18))['age'], { gt: 18 })
+  })
+
+  it('>= operator → gte', async () => {
+    assert.deepEqual((await buildWhere('>=', 18))['age'], { gte: 18 })
+  })
+
+  it('< operator → lt', async () => {
+    assert.deepEqual((await buildWhere('<', 65))['age'], { lt: 65 })
+  })
+
+  it('<= operator → lte', async () => {
+    assert.deepEqual((await buildWhere('<=', 65))['age'], { lte: 65 })
+  })
+
+  it('IN operator → in', async () => {
+    assert.deepEqual((await buildWhere('IN', ['a', 'b']))['age'], { in: ['a', 'b'] })
+  })
+
+  it('NOT IN operator → notIn', async () => {
+    assert.deepEqual((await buildWhere('NOT IN', ['x']))['age'], { notIn: ['x'] })
+  })
+})
+
 describe('prisma() factory', () => {
   it('is a function', () => {
     assert.strictEqual(typeof prisma, 'function')
