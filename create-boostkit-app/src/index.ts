@@ -7,6 +7,7 @@ import fs     from 'node:fs/promises'
 import path   from 'node:path'
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { getTemplates, detectPackageManager, pmExec, pmRun, pmInstall } from './templates.js'
 
 async function main(): Promise<void> {
@@ -152,8 +153,10 @@ async function main(): Promise<void> {
 
   // Copy auth pages from installer's own @boostkit/auth dependency
   if (withAuth) {
-    const authPagesDir = new URL(`../node_modules/@boostkit/auth/pages/${primary}`, import.meta.url).pathname
     try {
+      const require      = createRequire(import.meta.url)
+      const authPkgPath  = require.resolve('@boostkit/auth/package.json')
+      const authPagesDir = path.join(path.dirname(authPkgPath), 'pages', primary)
       await fs.cp(authPagesDir, path.join(target, 'pages'), { recursive: true })
     } catch {
       // Package not found — user can publish manually after install
