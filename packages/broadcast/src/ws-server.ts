@@ -5,7 +5,7 @@ import type { Duplex }                             from 'node:stream'
 // ─── Public types ───────────────────────────────────────────
 
 /** The HTTP upgrade request context passed to auth callbacks. */
-export interface WsAuthRequest {
+export interface BroadcastAuthRequest {
   /** Raw HTTP headers from the upgrade request (includes cookies, Authorization, etc.) */
   headers: Record<string, string | string[] | undefined>
   /** Request URL (including query string) */
@@ -20,7 +20,7 @@ export interface WsAuthRequest {
  * - Return a member-info object (or `false`) for presence channels.
  */
 export type AuthCallback = (
-  req:     WsAuthRequest,
+  req:     BroadcastAuthRequest,
   channel: string,
 ) => Promise<boolean | Record<string, unknown>>
 
@@ -161,7 +161,7 @@ async function onMessage(
           send(ws, { type: 'error', channel, message: 'Unauthorized' })
           return
         }
-        const authReq: WsAuthRequest = {
+        const authReq: BroadcastAuthRequest = {
           headers: req.headers as Record<string, string | string[] | undefined>,
           url:     req.url ?? '/',
           ...(token !== undefined ? { token } : {}),
@@ -236,7 +236,7 @@ function disconnect(state: WsState, id: string): void {
 // ─── Test helpers ───────────────────────────────────────────
 
 /** Reset all WebSocket state. For use in tests only. */
-export function resetWs(): void {
+export function resetBroadcast(): void {
   const state = g[KEY] as WsState | undefined
   if (state) {
     // Terminate all open client connections first so server.close() doesn't hang
@@ -259,7 +259,7 @@ export function broadcast(channel: string, event: string, data: unknown): void {
 }
 
 /** Current connection stats. */
-export function wsStats(): { connections: number; channels: number } {
+export function broadcastStats(): { connections: number; channels: number } {
   const state = g[KEY] as WsState | undefined
   if (!state) return { connections: 0, channels: 0 }
   return { connections: state.sockets.size, channels: state.channels.size }

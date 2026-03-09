@@ -3,13 +3,13 @@ import {
   initWsServer,
   getUpgradeHandler,
   registerAuth,
-  wsStats,
+  broadcastStats,
   type AuthCallback,
 } from './ws-server.js'
 
 // ─── Config ─────────────────────────────────────────────────
 
-export interface WsConfig {
+export interface BroadcastConfig {
   /** URL path the WebSocket server listens on (default: `/ws`) */
   path?: string
 }
@@ -20,8 +20,8 @@ export const UPGRADE_KEY = '__boostkit_ws_upgrade__'
 
 // ─── Factory ────────────────────────────────────────────────
 
-interface WsFactory {
-  (config?: WsConfig): new (app: Application) => ServiceProvider
+interface BroadcastingFactory {
+  (config?: BroadcastConfig): new (app: Application) => ServiceProvider
   /**
    * Register a channel auth callback.
    *
@@ -34,10 +34,10 @@ interface WsFactory {
   auth(pattern: string, callback: AuthCallback): void
 }
 
-function _ws(config: WsConfig = {}): new (app: Application) => ServiceProvider {
+function _broadcasting(config: BroadcastConfig = {}): new (app: Application) => ServiceProvider {
   const path = config.path ?? '/ws'
 
-  return class WsServiceProvider extends ServiceProvider {
+  return class BroadcastServiceProvider extends ServiceProvider {
     register(): void {}
 
     async boot(): Promise<void> {
@@ -45,17 +45,17 @@ function _ws(config: WsConfig = {}): new (app: Application) => ServiceProvider {
 
       // Register upgrade handler on globalThis so @boostkit/vite and
       // @boostkit/server-hono can attach it to the http.Server without
-      // a hard dependency on @boostkit/ws.
+      // a hard dependency on @boostkit/broadcast.
       ;(globalThis as Record<string, unknown>)[UPGRADE_KEY] = getUpgradeHandler(path)
 
       this.publishes({
         from: new URL('../client', import.meta.url).pathname,
         to:   'src',
-        tag:  'ws-client',
+        tag:  'broadcast-client',
       })
 
-      artisan.command('ws:connections', () => {
-        const { connections, channels } = wsStats()
+      artisan.command('broadcast:connections', () => {
+        const { connections, channels } = broadcastStats()
         console.log(`\n  Active connections : ${connections}`)
         console.log(`  Active channels    : ${channels}\n`)
       }).description('Show active WebSocket connection stats')
@@ -63,6 +63,6 @@ function _ws(config: WsConfig = {}): new (app: Application) => ServiceProvider {
   }
 }
 
-_ws.auth = registerAuth as (pattern: string, callback: AuthCallback) => void
+_broadcasting.auth = registerAuth as (pattern: string, callback: AuthCallback) => void
 
-export const ws = _ws as WsFactory
+export const broadcasting = _broadcasting as BroadcastingFactory

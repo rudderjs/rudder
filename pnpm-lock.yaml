@@ -103,6 +103,25 @@ importers:
         specifier: ^8.0.0
         version: 8.19.0
 
+  packages/broadcast:
+    dependencies:
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
+      ws:
+        specifier: ^8.0.0
+        version: 8.19.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      '@types/ws':
+        specifier: ^8.0.0
+        version: 8.18.1
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/cache:
     dependencies:
       '@boostkit/core':
@@ -574,25 +593,6 @@ importers:
         specifier: ^7.1.0
         version: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/ws:
-    dependencies:
-      '@boostkit/core':
-        specifier: workspace:*
-        version: link:../core
-      ws:
-        specifier: ^8.0.0
-        version: 8.19.0
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/ws':
-        specifier: ^8.0.0
-        version: 8.18.1
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   playground:
     dependencies:
       '@base-ui-components/react':
@@ -604,6 +604,9 @@ importers:
       '@boostkit/auth':
         specifier: workspace:*
         version: link:../packages/auth
+      '@boostkit/broadcast':
+        specifier: workspace:*
+        version: link:../packages/broadcast
       '@boostkit/cache':
         specifier: workspace:*
         version: link:../packages/cache
@@ -658,9 +661,6 @@ importers:
       '@boostkit/vite':
         specifier: workspace:*
         version: link:../packages/vite
-      '@boostkit/ws':
-        specifier: workspace:*
-        version: link:../packages/ws
       '@prisma/adapter-better-sqlite3':
         specifier: ^7.0.0
         version: 7.4.2

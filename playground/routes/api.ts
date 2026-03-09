@@ -1,6 +1,6 @@
 import { Route } from '@boostkit/router'
 import { resolve, app, dd, dump, config, validate } from '@boostkit/core'
-import { broadcast, wsStats } from '@boostkit/ws'
+import { broadcast, broadcastStats } from '@boostkit/broadcast'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { AuthMiddleware } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
@@ -41,7 +41,7 @@ Route.post('/api/ws/broadcast', async (req, res) => {
   return res.json({ ok: true })
 })
 
-Route.get('/api/ws/ping', (_req, res) => res.json(wsStats()))
+Route.get('/api/ws/ping', (_req, res) => res.json(broadcastStats()))
 
 // GET /api/config — returns app config values via config() helper
 Route.get('/api/config', (_req, res) => res.json({

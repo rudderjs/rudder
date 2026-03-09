@@ -341,7 +341,7 @@ export const LIVE_UPGRADE_KEY = '__boostkit_live_upgrade__'
  * // bootstrap/providers.ts
  * import { live, liveRedis } from '@boostkit/live'
  * export default [
- *   ws(),
+ *   broadcasting(),
  *   live(),                              // memory (dev)
  *   live({ persistence: liveRedis() }),  // redis (production)
  * ]

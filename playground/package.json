@@ -25,7 +25,7 @@
     "@boostkit/orm": "workspace:*",
     "@boostkit/orm-prisma": "workspace:*",
     "@boostkit/panels": "workspace:*",
-    "@boostkit/ws": "workspace:*",
+    "@boostkit/broadcast": "workspace:*",
     "@boostkit/live": "workspace:*",
     "yjs": "^13.6.0",
     "y-websocket": "^2.0.0",
