@@ -1,11 +1,11 @@
-# @boostkit/ws
+# @boostkit/broadcast
 
 Native WebSocket server for BoostKit — channel-based pub/sub with public, private, and presence channels. Runs on the same port as your HTTP server. No Pusher, no Echo, no external service required.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/ws
+pnpm add @boostkit/broadcast
 ```
 
 ## Setup
@@ -13,11 +13,11 @@ pnpm add @boostkit/ws
 Register the provider in `bootstrap/providers.ts`:
 
 ```ts
-import { ws } from '@boostkit/ws'
+import { broadcasting } from '@boostkit/broadcast'
 
 export default [
   // ... other providers
-  ws(),
+  broadcasting(),
 ]
 ```
 
@@ -36,16 +36,16 @@ export default Application.configure({ ... })
 Create `routes/channels.ts` to register auth callbacks:
 
 ```ts
-import { ws } from '@boostkit/ws'
+import { broadcasting } from '@boostkit/broadcast'
 
 // Private channels — return true/false
-ws.auth('private-orders.*', async (req) => {
+broadcasting.auth('private-orders.*', async (req) => {
   const user = await getUserFromToken(req.token)
   return !!user
 })
 
 // Presence channels — return member info object or false
-ws.auth('presence-room.*', async (req) => {
+broadcasting.auth('presence-room.*', async (req) => {
   const user = await getUserFromToken(req.token)
   if (!user) return false
   return { id: user.id, name: user.name }
@@ -69,19 +69,19 @@ BoostKit WebSockets are organized into three types:
 Push an event to all subscribers of a channel from anywhere in your application:
 
 ```ts
-import { broadcast } from '@boostkit/ws'
+import { broadcast } from '@boostkit/broadcast'
 
 // In a route handler, job, or event listener
 broadcast('orders', 'order.shipped', { orderId: 123 })
 broadcast('private-orders.42', 'status.updated', { status: 'delivered' })
 ```
 
-### `ws.auth(pattern, callback)`
+### `broadcasting.auth(pattern, callback)`
 
 Register an auth callback for private/presence channels. The pattern supports `*` as a wildcard (matches non-dot characters):
 
 ```ts
-ws.auth('private-user.*', async (req, channel) => {
+broadcasting.auth('private-user.*', async (req, channel) => {
   // req.headers — HTTP headers from the upgrade request
   // req.token   — token sent in the subscribe message
   // req.url     — request URL
@@ -89,12 +89,12 @@ ws.auth('private-user.*', async (req, channel) => {
 })
 ```
 
-### `wsStats()`
+### `broadcastStats()`
 
 ```ts
-import { wsStats } from '@boostkit/ws'
+import { broadcastStats } from '@boostkit/broadcast'
 
-wsStats()  // → { connections: 5, channels: 3 }
+broadcastStats()  // → { connections: 5, channels: 3 }
 ```
 
 ## Client (BKSocket)
