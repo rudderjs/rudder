@@ -90,6 +90,7 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 | Package | Description | Install |
 |---|---|---|
 | [Events (core)](./events) | EventDispatcher, Listener interface, `dispatch()` helper, and `events()` factory (built into core). | `pnpm add @boostkit/core` |
+| [@boostkit/localization](./localization) | Laravel-style i18n with JSON files, `__()`, `trans()`, interpolation, pluralization, fallback locale, and per-request locale context. | `pnpm add @boostkit/localization` |
 | [@boostkit/schedule](./schedule) | Task scheduler — `schedule` singleton, `scheduler()` factory, and `schedule:run/work/list` commands. | `pnpm add @boostkit/schedule` |
 | [Rate Limiting](./rate-limit) | Cache-backed rate limiting via `@boostkit/middleware` — `RateLimit.perMinute/Hour/Day` and `X-RateLimit-*` headers. | `pnpm add @boostkit/middleware` |
 | [@boostkit/notification](./notification) | Multi-channel notifications (mail, database) — Notifiable, Notification, ChannelRegistry, `notify()`. | `pnpm add @boostkit/notification` |
