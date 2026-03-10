@@ -60,3 +60,8 @@ export type {
   PaginatedResult,
   ModelClass,
 } from './types.js'
+
+// ─── Data helpers ───────────────────────────────────────────
+
+export { resourceData } from './resourceData.js'
+export type { ResourceDataContext, ResourceDataResult } from './resourceData.js'

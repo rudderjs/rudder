@@ -1,4 +1,4 @@
-import { Resource, TextField, BooleanField, DateField, Action, SelectFilter } from '@boostkit/panels'
+import { Resource, TextField, BooleanField, DateField, NumberField, Action, SelectFilter } from '@boostkit/panels'
 import { Todo } from '../../../Models/Todo.js'
 
 export class TodoResource extends Resource {
@@ -23,6 +23,8 @@ export class TodoResource extends Resource {
         .hideFromCreate()
         .hideFromEdit()
         .readonly(),
+
+      NumberField.make('priority').label('Priority').component('rating'),
     ]
   }
 

@@ -89,6 +89,16 @@ describe('Field', () => {
     assert.equal(meta.searchable, false)
     assert.deepEqual(meta.hidden, [])
   })
+
+  it('component() stores a key on meta', () => {
+    const f = TextField.make('color').component('color-picker')
+    assert.equal(f.toMeta().component, 'color-picker')
+  })
+
+  it('component is undefined by default', () => {
+    const f = TextField.make('x')
+    assert.equal(f.toMeta().component, undefined)
+  })
 })
 
 // ─── Field types ────────────────────────────────────────────
@@ -659,5 +669,47 @@ describe('List query logic', () => {
     const search = applied['_search'] as { value: string; columns: string[] }
     assert.equal(search.value, 'hello')
     assert.deepEqual(search.columns, ['title', 'body'])
+  })
+})
+
+// ─── resourceData ────────────────────────────────────────────
+
+describe('resourceData', () => {
+  it('is exported from index', async () => {
+    const mod = await import('./index.js')
+    assert.equal(typeof mod.resourceData, 'function')
+  })
+
+  it('throws when panel not found', async () => {
+    const { resourceData, PanelRegistry } = await import('./index.js')
+    PanelRegistry.reset()
+    await assert.rejects(
+      () => resourceData({ panel: 'ghost', resource: 'x', url: '/ghost/x' }),
+      /Panel "\/ghost" not found/,
+    )
+  })
+
+  it('throws when resource not found', async () => {
+    const { resourceData, PanelRegistry, Panel } = await import('./index.js')
+    PanelRegistry.reset()
+    PanelRegistry.register(Panel.make('demo').path('/demo'))
+    await assert.rejects(
+      () => resourceData({ panel: 'demo', resource: 'missing', url: '/demo/missing' }),
+      /Resource "missing" not found/,
+    )
+  })
+
+  it('returns panelMeta + resourceMeta when model is undefined', async () => {
+    const { resourceData, PanelRegistry, Panel, Resource, TextField } = await import('./index.js')
+    PanelRegistry.reset()
+    class PostResource extends Resource {
+      fields() { return [TextField.make('title')] }
+    }
+    PanelRegistry.register(Panel.make('blog').path('/blog').resources([PostResource]))
+    const result = await resourceData({ panel: 'blog', resource: 'posts', url: '/blog/posts' })
+    assert.equal(result.panelMeta.name, 'blog')
+    assert.equal(result.resourceMeta.slug, 'posts')
+    assert.deepEqual(result.records, [])
+    assert.equal(result.pagination, null)
   })
 })

@@ -1,6 +1,7 @@
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { Select } from '@base-ui-components/react/select'
 import type { FieldMeta } from '@boostkit/panels'
+import { customFieldRenderers } from './CustomFieldRenderers.js'
 
 interface Props {
   field:    FieldMeta
@@ -82,6 +83,13 @@ export function FieldInput({ field, value, onChange }: Props) {
         className={inputCls}
       />
     )
+  }
+
+  // ── Custom renderer ──────────────────────────────────────
+  const customKey = field.component ?? field.type
+  const CustomRenderer = customFieldRenderers[customKey]
+  if (CustomRenderer) {
+    return <CustomRenderer field={field} value={value} onChange={onChange} />
   }
 
   // ── Text / Email / Number / Date / Datetime ───────────────
