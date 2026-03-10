@@ -170,11 +170,6 @@ export async function trans(key: string, params?: Record<string, unknown> | numb
 	return __(key, params)
 }
 
-export type SimpleMiddleware = (
-	req: { headers: Record<string, string | string[] | undefined> },
-	next: () => unknown,
-) => unknown
-
 export function LocalizationMiddleware() {
 	return async function localizationMiddleware(
 		req: { headers: Record<string, string | string[] | undefined> },
