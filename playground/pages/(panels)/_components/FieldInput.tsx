@@ -560,11 +560,27 @@ export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
   }
   const inputType = typeMap[field.type] ?? 'text'
 
+  function formatDateValue(v: unknown): string {
+    if (!v) return ''
+    const d = new Date(v as string)
+    if (isNaN(d.getTime())) return String(v)
+    if (field.type === 'datetime') {
+      // datetime-local expects "YYYY-MM-DDTHH:mm"
+      return d.toISOString().slice(0, 16)
+    }
+    // date expects "YYYY-MM-DD"
+    return d.toISOString().slice(0, 10)
+  }
+
+  const inputValue = (field.type === 'date' || field.type === 'datetime')
+    ? formatDateValue(value)
+    : (value as string) ?? ''
+
   return (
     <input
       type={inputType}
       name={field.name}
-      value={(value as string) ?? ''}
+      value={inputValue}
       onChange={(e) => onChange(e.target.value)}
       required={field.required}
       readOnly={field.readonly}

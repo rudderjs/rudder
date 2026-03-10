@@ -317,7 +317,12 @@ export class PanelServiceProvider extends ServiceProvider {
       } else if (type === 'number') {
         result[name] = (val === '' || val === null || val === undefined) ? null : Number(val)
       } else if (type === 'date' || type === 'datetime') {
-        result[name] = (val === '' || val === null || val === undefined) ? null : val
+        if (val === '' || val === null || val === undefined) {
+          result[name] = null
+        } else {
+          const d = new Date(String(val))
+          result[name] = isNaN(d.getTime()) ? null : d
+        }
       } else if (type === 'tags') {
         // UI submits an array; store as JSON string
         result[name] = Array.isArray(val) ? JSON.stringify(val) : (val ?? '[]')
