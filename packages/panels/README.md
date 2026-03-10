@@ -50,7 +50,7 @@ pnpm artisan vendor:publish --tag=panels-pages --force
 ## Defining Resources
 
 ```ts
-import { Resource, TextField, EmailField, SelectField, BooleanField, DateField, SelectFilter, Action } from '@boostkit/panels'
+import { Resource, TextField, EmailField, SelectField, DateField, SelectFilter, Action } from '@boostkit/panels'
 import { User } from '../../Models/User.js'
 
 export class UserResource extends Resource {
@@ -99,13 +99,24 @@ export class UserResource extends Resource {
 |---|---|
 | `TextField` | `<input type="text">` |
 | `EmailField` | `<input type="email">` |
+| `PasswordField` | `<input type="password">` |
 | `NumberField` | `<input type="number">` |
 | `TextareaField` | `<textarea>` |
-| `SelectField` | Dropdown |
+| `SelectField` | Dropdown (single or multi) |
 | `BooleanField` | Checkbox |
-| `DateField` | Date picker |
+| `ToggleField` | Toggle switch |
+| `DateField` | Date / datetime picker |
+| `SlugField` | Slug input with auto-generation from a source field |
+| `TagsField` | Multi-value tag input |
+| `ColorField` | Color picker |
+| `HiddenField` | Hidden form value |
+| `JsonField` | JSON code editor |
+| `FileField` | File upload |
+| `RelationField` | BelongsTo / hasMany relation |
+| `RepeaterField` | Repeating group of fields |
+| `BuilderField` | Block-based content builder |
 
-All field types support the same fluent methods:
+All field types share a fluent base API:
 
 ```ts
 TextField.make('name')
@@ -119,6 +130,109 @@ TextField.make('name')
   .hideFromCreate()
   .hideFromEdit()
 ```
+
+---
+
+## Layout Grouping
+
+Group fields into visual sections or tabs using `Section` and `Tabs`. Both can be mixed freely with plain fields in `fields()`.
+
+### Section
+
+A titled card — optionally collapsible and multi-column:
+
+```ts
+import { Section, TextField, TextareaField, FileField } from '@boostkit/panels'
+
+fields() {
+  return [
+    Section.make('Content')
+      .schema(
+        TextField.make('title').required(),
+        TextareaField.make('excerpt').rows(3),
+        FileField.make('coverImage').image().disk('public').directory('articles'),
+      ),
+
+    Section.make('SEO')
+      .description('Search engine optimization settings')
+      .collapsible()
+      .collapsed()           // starts collapsed
+      .schema(
+        TextField.make('metaTitle'),
+        TextareaField.make('metaDescription').rows(2),
+      ),
+
+    Section.make('Publishing')
+      .columns(2)            // 1 (default) | 2 | 3
+      .schema(
+        SelectField.make('status').options(['draft', 'published']),
+        DateField.make('publishedAt').withTime(),
+      ),
+  ]
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `Section.make(title)` | Create a section with the given title |
+| `.description(text)` | Subtitle shown below the title |
+| `.collapsible()` | Allow expanding / collapsing |
+| `.collapsed()` | Start collapsed (implies collapsible) |
+| `.columns(n)` | Field grid: `1` (default), `2`, or `3` columns |
+| `.schema(...fields)` | Fields in this section |
+
+### Tabs
+
+Divide fields into tabs within a single card:
+
+```ts
+import { Tabs, TextField, TextareaField } from '@boostkit/panels'
+
+fields() {
+  return [
+    Tabs.make()
+      .tab('General',
+        TextField.make('name').required(),
+        TextareaField.make('bio'),
+      )
+      .tab('Preferences',
+        SelectField.make('theme').options(['light', 'dark']),
+        BooleanField.make('newsletter'),
+      ),
+  ]
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `Tabs.make()` | Create a tabs group |
+| `.tab(label, ...fields)` | Add a tab with the given label and fields |
+
+---
+
+## File Uploads
+
+Use `FileField` to upload files directly from the admin form. Files are uploaded to the panel's `/_upload` endpoint (auto-mounted) and stored via `@boostkit/storage`.
+
+```ts
+import { FileField } from '@boostkit/panels'
+
+FileField.make('coverImage')
+  .label('Cover Image')
+  .image()               // shows thumbnail preview; sets type to 'image'
+  .accept('image/*')     // MIME type filter
+  .maxSize(5)            // max file size in MB (default: 10)
+  .disk('public')        // storage disk (default: 'local')
+  .directory('articles') // storage subdirectory (default: 'uploads')
+```
+
+**For public-facing files** (images, PDFs shown in the browser), use the `public` disk and set up the symlink once:
+
+```bash
+pnpm artisan storage:link
+```
+
+This links `public/storage → storage/app/public`. Vite serves it as static assets — no API route needed. See [`@boostkit/storage`](../storage) for full configuration.
 
 ---
 
@@ -199,27 +313,7 @@ export async function data(pageContext: PageContextServer) {
 }
 ```
 
-```tsx
-// pages/(panels)/@panel/users/+Page.tsx
-import { useData }     from 'vike-react/useData'
-import { AdminLayout } from '../../_components/AdminLayout.js'
-import type { Data }   from './+data.js'
-
-export default function UsersGridPage() {
-  const { panelMeta, resourceMeta, records } = useData<Data>()
-  return (
-    <AdminLayout panelMeta={panelMeta} currentSlug={resourceMeta.slug as string}>
-      <div className="grid grid-cols-3 gap-4">
-        {(records as any[]).map((r) => (
-          <div key={r.id} className="rounded-lg border p-4">{r.name}</div>
-        ))}
-      </div>
-    </AdminLayout>
-  )
-}
-```
-
-`resourceData()` applies the same sort / search / filter / pagination logic as the default table — search, sort, and filters all work out of the box.
+`resourceData()` applies the same sort / search / filter / pagination logic as the default table.
 
 ---
 
@@ -248,8 +342,6 @@ export const customFieldRenderers: Record<string, React.ComponentType<FieldInput
   rating: RatingInput,
 }
 ```
-
-Your custom component receives `{ field, value, onChange }` — the same props as built-in field renderers.
 
 > **Note:** `CustomFieldRenderers.tsx` is a published file you own. Re-publishing with `--force` will overwrite it — back it up or commit it before upgrading `@boostkit/panels`.
 
@@ -307,6 +399,17 @@ Panel.make('admin').guard(async (ctx) => {
 
 `ctx` contains `user`, `headers`, and `path`. Returning `false` responds with `401 Unauthorized`.
 
+Override `policy()` per resource for fine-grained access:
+
+```ts
+async policy(action: PolicyAction, ctx: PanelContext): Promise<boolean> {
+  if (action === 'delete') return ctx.user?.role === 'admin'
+  return true
+}
+```
+
+`PolicyAction`: `'viewAny' | 'view' | 'create' | 'update' | 'delete'`
+
 ---
 
 ## API Routes
@@ -315,12 +418,14 @@ For each resource, the following routes are automatically mounted:
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/{panel}/api/_meta` | Panel + resource schema |
 | `GET` | `/{panel}/api/{resource}` | List (paginated, searchable, sortable, filterable) |
 | `GET` | `/{panel}/api/{resource}/:id` | Show |
 | `POST` | `/{panel}/api/{resource}` | Create |
 | `PUT` | `/{panel}/api/{resource}/:id` | Update |
 | `DELETE` | `/{panel}/api/{resource}/:id` | Delete |
 | `POST` | `/{panel}/api/{resource}/_action/:action` | Bulk action |
+| `POST` | `/{panel}/api/_upload` | File upload (used by FileField) |
 
 The `GET` list endpoint supports:
 - `?page=1&perPage=15` — pagination
