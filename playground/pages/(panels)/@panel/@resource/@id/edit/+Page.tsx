@@ -52,7 +52,14 @@ export default function EditPage() {
   const formFields = flattenFormFields(schema, 'edit')
 
   const initialValues = Object.fromEntries(
-    formFields.map((f) => [f.name, (record as Record<string, unknown>)[f.name] ?? '']),
+    formFields.map((f) => {
+      const raw = (record as Record<string, unknown>)[f.name]
+      if (f.type === 'belongsToMany') {
+        const arr = Array.isArray(raw) ? (raw as Array<{ id?: string }>) : []
+        return [f.name, arr.map((r) => r.id ?? String(r)).filter(Boolean)]
+      }
+      return [f.name, raw ?? '']
+    }),
   )
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [errors, setErrors] = useState<Record<string, string[]>>({})

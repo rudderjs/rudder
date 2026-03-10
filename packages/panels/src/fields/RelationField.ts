@@ -1,7 +1,7 @@
 import { Field } from '../Field.js'
 
 export class RelationField extends Field {
-  protected _resourceName?: string
+  protected _resourceSlug?: string
   protected _displayField  = 'name'
   protected _multiple      = false
 
@@ -9,23 +9,28 @@ export class RelationField extends Field {
     return new RelationField(name)
   }
 
-  getType(): string { return this._multiple ? 'hasMany' : 'belongsTo' }
+  getType(): string { return this._multiple ? 'belongsToMany' : 'belongsTo' }
 
-  /** Name of the target Resource class (e.g. 'UserResource'). */
-  resource(resourceName: string): this {
-    this._resourceName = resourceName
-    this._extra['resource'] = resourceName
+  /** Slug of the target resource (e.g. 'categories'). */
+  resource(resourceSlug: string): this {
+    this._resourceSlug = resourceSlug
+    this._extra['resource'] = resourceSlug
     return this
   }
 
   /** Which field to display as the option label in the select (default: 'name'). */
-  displayField(field: string): this {
+  display(field: string): this {
     this._displayField = field
     this._extra['displayField'] = field
     return this
   }
 
-  /** Allow selecting multiple related records (hasMany). */
+  /** @deprecated Use display() */
+  displayField(field: string): this {
+    return this.display(field)
+  }
+
+  /** Allow selecting multiple related records (belongsToMany). */
   multiple(value = true): this {
     this._multiple = value
     this._extra['multiple'] = value

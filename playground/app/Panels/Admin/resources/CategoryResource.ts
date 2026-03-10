@@ -1,0 +1,29 @@
+import { Resource, TextField, SlugField, RelationField } from '@boostkit/panels'
+import { Category } from '../../../Models/Category.js'
+
+export class CategoryResource extends Resource {
+  static model         = Category
+  static label         = 'Categories'
+  static labelSingular = 'Category'
+  static defaultSort   = 'name'
+
+  fields() {
+    return [
+      TextField.make('name')
+        .label('Name')
+        .required()
+        .searchable()
+        .sortable(),
+
+      SlugField.make('slug')
+        .label('Slug')
+        .from('name')
+        .required(),
+
+      RelationField.make('parentId')
+        .label('Parent Category')
+        .resource('categories')
+        .display('name'),
+    ]
+  }
+}

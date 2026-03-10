@@ -11,6 +11,7 @@ import {
   ColorField,
   FileField,
   JsonField,
+  RelationField,
   SelectFilter,
   Action,
 } from '@boostkit/panels'
@@ -54,6 +55,13 @@ export class ArticleResource extends Resource {
         TagsField.make('tags')
           .label('Tags')
           .placeholder('Add a tag…'),
+
+        RelationField.make('categories')
+          .label('Categories')
+          .resource('categories')
+          .display('name')
+          .multiple()
+          .hideFromTable(),
       ),
 
       // ── Publishing ────────────────────────────────────────────

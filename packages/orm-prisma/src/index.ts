@@ -110,7 +110,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async find(id: number | string): Promise<T | null> {
-    return this.delegate.findUnique({ where: { id } }) ?? null
+    return this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) ?? null
   }
 
   async get(): Promise<T[]> {

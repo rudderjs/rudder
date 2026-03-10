@@ -82,19 +82,32 @@ model Todo {
 // <forge:modules:end>
 
 model Article {
-  id              String    @id @default(cuid())
+  id              String     @id @default(cuid())
   title           String
-  slug            String    @unique
+  slug            String     @unique
   excerpt         String?
   coverImage      String?
-  tags            String    @default("[]")  // JSON-encoded string[]
-  status          String    @default("draft")
-  featured        Boolean   @default(false)
+  tags            String     @default("[]")  // JSON-encoded string[]
+  status          String     @default("draft")
+  featured        Boolean    @default(false)
   publishedAt     DateTime?
   accentColor     String?
   metaTitle       String?
   metaDescription String?
-  metadata        String?   // JSON blob
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  metadata        String?    // JSON blob
+  categories      Category[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  articles  Article[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }

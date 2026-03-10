@@ -54,6 +54,8 @@ export default function CreatePage() {
     formFields.map((f) => {
       if (f.extra?.['default'] !== undefined) return [f.name, f.extra['default']]
       if (f.type === 'boolean' || f.type === 'toggle') return [f.name, false]
+      if (f.type === 'belongsToMany') return [f.name, []]
+      if (f.type === 'belongsTo') return [f.name, null]
       return [f.name, '']
     }),
   )

@@ -16,6 +16,7 @@ export class Article extends Model {
   metaTitle!:       string | null
   metaDescription!: string | null
   metadata!:        string | null
+  categories?:      Array<{ id: string; name: string; slug: string }>
   createdAt!:       Date
   updatedAt!:       Date
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
@@ -539,6 +539,84 @@ export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
           onChange={(e) => void handleFiles(e.target.files)}
         />
         {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
+      </div>
+    )
+  }
+
+  // ── BelongsTo (single select, async options) ─────────────
+  if (field.type === 'belongsTo') {
+    const resourceSlug = field.extra?.['resource'] as string | undefined
+    const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
+    const [opts, setOpts] = useState<Array<{ value: string; label: string }>>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+      if (!resourceSlug || !uploadBase) { setLoading(false); return }
+      fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
+        .then(r => r.json())
+        .then((data) => { setOpts(data as Array<{ value: string; label: string }>); setLoading(false) })
+        .catch(() => setLoading(false))
+    }, [resourceSlug, labelField, uploadBase])
+
+    return (
+      <select
+        name={field.name}
+        value={(value as string) ?? ''}
+        onChange={(e) => onChange(e.target.value || null)}
+        disabled={loading || field.readonly}
+        className={inputCls}
+      >
+        <option value="">{loading ? 'Loading…' : '— None —'}</option>
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    )
+  }
+
+  // ── BelongsToMany (multi-select pill picker) ──────────────
+  if (field.type === 'belongsToMany') {
+    const resourceSlug = field.extra?.['resource'] as string | undefined
+    const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
+    const selected     = Array.isArray(value) ? (value as string[]) : []
+    const [opts, setOpts] = useState<Array<{ value: string; label: string }>>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+      if (!resourceSlug || !uploadBase) { setLoading(false); return }
+      fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
+        .then(r => r.json())
+        .then((data) => { setOpts(data as Array<{ value: string; label: string }>); setLoading(false) })
+        .catch(() => setLoading(false))
+    }, [resourceSlug, labelField, uploadBase])
+
+    function toggle(id: string) {
+      const next = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]
+      onChange(next)
+    }
+
+    if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {opts.map((o) => {
+          const checked = selected.includes(o.value)
+          return (
+            <label
+              key={o.value}
+              className={[
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-colors select-none',
+                checked
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-foreground border-input hover:bg-accent',
+              ].join(' ')}
+            >
+              <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(o.value)} />
+              {o.label}
+            </label>
+          )
+        })}
+        {opts.length === 0 && <p className="text-sm text-muted-foreground">No options available.</p>}
       </div>
     )
   }

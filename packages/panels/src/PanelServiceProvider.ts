@@ -181,6 +181,22 @@ export class PanelServiceProvider extends ServiceProvider {
       })
     }, mw)
 
+    // ── GET /panel/api/resource/_options — relation select options ──
+    router.get(`${base}/_options`, async (req, res) => {
+      if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+      const url   = new URL(req.url, 'http://localhost')
+      const label = url.searchParams.get('label') ?? 'name'
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const records: any[] = await Model.query().all()
+      const options = records.map((r: any) => ({
+        value: String(r.id),
+        label: String(r[label] ?? r.id),
+      }))
+      return res.json(options)
+    }, mw)
+
     // ── GET /panel/api/resource/:id — show ────────────────
     router.get(`${base}/:id`, async (req, res) => {
       const resource = new ResourceClass()
@@ -188,8 +204,18 @@ export class PanelServiceProvider extends ServiceProvider {
       if (!await resource.policy('view', ctx)) return res.status(403).json({ message: 'Forbidden.' })
       if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
 
-      const id     = (req.params as Record<string, string>)['id']
-      const record = await Model.find(id)
+      const id = (req.params as Record<string, string>)['id']
+
+      // Include belongsToMany relations so the edit form can populate multi-selects
+      const manyRelations = flattenFields(new ResourceClass().fields())
+        .filter(f => f.getType() === 'belongsToMany')
+        .map(f => f.getName())
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = Model.query()
+      for (const rel of manyRelations) q = q.with(rel)
+      const record = await q.find(id)
+
       if (!record) return res.status(404).json({ message: 'Record not found.' })
 
       return res.json({ data: record })
@@ -315,6 +341,12 @@ export class PanelServiceProvider extends ServiceProvider {
       } else if (type === 'tags') {
         // UI submits an array; store as JSON string
         result[name] = Array.isArray(val) ? JSON.stringify(val) : (val ?? '[]')
+      } else if (type === 'belongsTo') {
+        result[name] = (val === '' || val === null || val === undefined) ? null : String(val)
+      } else if (type === 'belongsToMany') {
+        // Prisma implicit M2M: { set: [{ id }, ...] }
+        const ids = Array.isArray(val) ? (val as string[]) : []
+        result[name] = { set: ids.map((id) => ({ id: String(id) })) }
       }
     }
     return result
@@ -330,6 +362,7 @@ export class PanelServiceProvider extends ServiceProvider {
 
     for (const field of fields) {
       if (field.isReadonly()) continue
+      if (field.getType() === 'belongsTo' || field.getType() === 'belongsToMany') continue
       if (mode === 'create' && field.isHiddenFrom('create')) continue
       if (mode === 'update' && field.isHiddenFrom('edit')) continue
 
