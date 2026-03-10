@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useData } from 'vike-react/useData'
+import { useData }   from 'vike-react/useData'
+import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
 import { AdminLayout } from '../../../_components/AdminLayout.js'
@@ -40,7 +41,10 @@ function flattenFormFields(schema: SchemaItem[], mode: 'create' | 'edit'): Field
 }
 
 export default function CreatePage() {
+  const config = useConfig()
   const { panelMeta, resourceMeta, pathSegment, slug } = useData<Data>()
+  const panelName = panelMeta.branding?.title ?? panelMeta.name
+  config({ title: `New ${resourceMeta.labelSingular} — ${panelName}` })
 
   const uploadBase = `/${pathSegment}/api`
   const schema     = resourceMeta.fields as SchemaItem[]

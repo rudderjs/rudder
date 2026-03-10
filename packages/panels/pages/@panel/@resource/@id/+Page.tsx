@@ -1,6 +1,7 @@
 'use client'
 
 import { useData }     from 'vike-react/useData'
+import { useConfig }   from 'vike-react/useConfig'
 import { AdminLayout } from '../../../_components/AdminLayout.js'
 import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
 import type { FieldMeta, SectionMeta, TabsMeta } from '@boostkit/panels'
@@ -23,7 +24,10 @@ function flattenFields(schema: SchemaItem[]): FieldMeta[] {
 }
 
 export default function ShowPage() {
+  const config = useConfig()
   const { panelMeta, resourceMeta, record, pathSegment, slug, id } = useData<Data>()
+  const panelName = panelMeta.branding?.title ?? panelMeta.name
+  config({ title: `View ${resourceMeta.labelSingular} — ${panelName}` })
 
   const viewFields = flattenFields(resourceMeta.fields as SchemaItem[]).filter(
     (f) => !f.hidden.includes('view') && f.type !== 'password',
