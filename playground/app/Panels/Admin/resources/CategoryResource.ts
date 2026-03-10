@@ -3,6 +3,7 @@ import { Category } from '../../../Models/Category.js'
 
 export class CategoryResource extends Resource {
   static model         = Category
+  static slug          = 'categories'
   static label         = 'Categories'
   static labelSingular = 'Category'
   static defaultSort   = 'name'
