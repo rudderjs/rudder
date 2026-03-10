@@ -67,10 +67,10 @@ export default function ResourceListPage() {
   // ── Sort ────────────────────────────────────────────────
   function toggleSort(col: string) {
     const url = new URL(window.location.href)
+    url.searchParams.set('sort', col)
     if (currentSort === col) {
       url.searchParams.set('dir', currentDir === 'ASC' ? 'DESC' : 'ASC')
     } else {
-      url.searchParams.set('sort', col)
       url.searchParams.set('dir', 'ASC')
     }
     url.searchParams.delete('page')
