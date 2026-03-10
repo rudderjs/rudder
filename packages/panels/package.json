@@ -32,7 +32,14 @@
     "@boostkit/core": "workspace:*",
     "@boostkit/router": "workspace:*"
   },
+  "peerDependencies": {
+    "@boostkit/storage": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@boostkit/storage": { "optional": true }
+  },
   "devDependencies": {
+    "@boostkit/storage": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

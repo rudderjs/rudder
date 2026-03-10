@@ -7,7 +7,24 @@ import { toast } from 'sonner'
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { AdminLayout } from '../../_components/AdminLayout.js'
 import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
+import type { FieldMeta, SectionMeta, TabsMeta } from '@boostkit/panels'
 import type { Data } from './+data.js'
+
+type SchemaItem = FieldMeta | SectionMeta | TabsMeta
+
+function flattenFields(schema: SchemaItem[]): FieldMeta[] {
+  const result: FieldMeta[] = []
+  for (const item of schema) {
+    if (item.type === 'section') {
+      result.push(...(item as SectionMeta).fields)
+    } else if (item.type === 'tabs') {
+      for (const tab of (item as TabsMeta).tabs) result.push(...tab.fields)
+    } else {
+      result.push(item as FieldMeta)
+    }
+  }
+  return result
+}
 
 export default function ResourceListPage() {
   const { panelMeta, resourceMeta, records, pagination, pathSegment, slug } = useData<Data>()
@@ -16,9 +33,10 @@ export default function ResourceListPage() {
   const [confirm,        setConfirm]        = useState<{ action: typeof resourceMeta.actions[0]; records: unknown[] } | null>(null)
   const [actionPending,  setActionPending]  = useState(false)
 
-  const tableFields  = resourceMeta.fields.filter((f) => !f.hidden.includes('table'))
-  const sortFields   = resourceMeta.fields.filter((f) => f.sortable)
-  const searchFields = resourceMeta.fields.filter((f) => f.searchable)
+  const allFields    = flattenFields(resourceMeta.fields as SchemaItem[])
+  const tableFields  = allFields.filter((f) => !f.hidden.includes('table'))
+  const sortFields   = allFields.filter((f) => f.sortable)
+  const searchFields = allFields.filter((f) => f.searchable)
   const hasSearch    = searchFields.length > 0
   const hasFilters   = resourceMeta.filters.length > 0
 

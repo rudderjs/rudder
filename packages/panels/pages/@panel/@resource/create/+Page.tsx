@@ -7,7 +7,10 @@ import { toast } from 'sonner'
 import { AdminLayout } from '../../../_components/AdminLayout.js'
 import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
 import { FieldInput } from '../../../_components/FieldInput.js'
+import type { FieldMeta, SectionMeta, TabsMeta } from '@boostkit/panels'
 import type { Data } from './+data.js'
+
+type SchemaItem = FieldMeta | SectionMeta | TabsMeta
 
 function generateSlug(str: string): string {
   return str.toLowerCase().trim()
@@ -16,13 +19,36 @@ function generateSlug(str: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+function flattenFormFields(schema: SchemaItem[], mode: 'create' | 'edit'): FieldMeta[] {
+  const result: FieldMeta[] = []
+  function collect(fields: FieldMeta[]) {
+    for (const f of fields) {
+      if (!f.hidden.includes(mode)) result.push(f)
+    }
+  }
+  for (const item of schema) {
+    if (item.type === 'section') {
+      collect((item as SectionMeta).fields)
+    } else if (item.type === 'tabs') {
+      for (const tab of (item as TabsMeta).tabs) collect(tab.fields)
+    } else {
+      const f = item as FieldMeta
+      if (!f.hidden.includes(mode)) result.push(f)
+    }
+  }
+  return result
+}
+
 export default function CreatePage() {
   const { panelMeta, resourceMeta, pathSegment, slug } = useData<Data>()
 
-  const formFields = resourceMeta.fields.filter((f) => !f.hidden.includes('create'))
+  const uploadBase = `/${pathSegment}/api`
+  const schema     = resourceMeta.fields as SchemaItem[]
+  const formFields = flattenFormFields(schema, 'create')
+
   const initialValues: Record<string, unknown> = Object.fromEntries(formFields.map((f) => [f.name, '']))
   // Initialize hidden fields with their defaults
-  for (const hf of resourceMeta.fields.filter((f) => f.type === 'hidden')) {
+  for (const hf of formFields.filter((f) => f.type === 'hidden')) {
     if (initialValues[hf.name] === undefined && hf.extra?.['default'] !== undefined) {
       initialValues[hf.name] = hf.extra['default']
     }
@@ -30,6 +56,8 @@ export default function CreatePage() {
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [saving, setSaving] = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [activeTab, setActiveTab] = useState<Record<string, number>>({})
 
   function setValue(name: string, value: unknown) {
     setValues((prev) => ({ ...prev, [name]: value }))
@@ -38,7 +66,7 @@ export default function CreatePage() {
 
   // Auto-generate slug from source field
   useEffect(() => {
-    const slugFields = resourceMeta.fields.filter((f) => f.type === 'slug' && f.extra?.['from'])
+    const slugFields = formFields.filter((f) => f.type === 'slug' && f.extra?.['from'])
     for (const slugField of slugFields) {
       const sourceField = String(slugField.extra?.['from'] ?? '')
       const sourceValue = String(values[sourceField] ?? '')
@@ -77,6 +105,94 @@ export default function CreatePage() {
     }
   }
 
+  function renderField(field: FieldMeta) {
+    return (
+      <div key={field.name}>
+        {field.type !== 'boolean' && field.type !== 'toggle' && field.type !== 'hidden' && (
+          <label className="block text-sm font-medium mb-1.5">
+            {field.label}
+            {field.required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+        )}
+        <FieldInput field={field} value={values[field.name]} onChange={(v) => setValue(field.name, v)} uploadBase={uploadBase} />
+        {errors[field.name]?.map((e) => (
+          <p key={e} className="mt-1 text-xs text-destructive">{e}</p>
+        ))}
+      </div>
+    )
+  }
+
+  function renderSchemaItem(item: SchemaItem, index: number) {
+    // ── Section ───────────────────────────────────────────
+    if (item.type === 'section') {
+      const section  = item as SectionMeta
+      const key      = `section-${index}`
+      const fields   = section.fields.filter((f) => !f.hidden.includes('create'))
+      const open     = section.collapsible ? !(collapsedSections[key] ?? section.collapsed) : true
+
+      const gridCls = section.columns === 2 ? 'grid grid-cols-2 gap-4'
+                    : section.columns === 3 ? 'grid grid-cols-3 gap-4'
+                    : 'flex flex-col gap-4'
+
+      return (
+        <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+          <div
+            className={['flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border', section.collapsible ? 'cursor-pointer select-none' : ''].join(' ')}
+            onClick={() => section.collapsible && setCollapsedSections((p) => ({ ...p, [key]: !p[key] ?? !section.collapsed }))}
+          >
+            <div>
+              <p className="text-sm font-semibold">{section.title}</p>
+              {section.description && <p className="text-xs text-muted-foreground mt-0.5">{section.description}</p>}
+            </div>
+            {section.collapsible && (
+              <span className="text-muted-foreground text-sm">{open ? '▲' : '▼'}</span>
+            )}
+          </div>
+          {open && (
+            <div className={`p-5 ${gridCls}`}>
+              {fields.map((f) => renderField(f))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // ── Tabs ─────────────────────────────────────────────
+    if (item.type === 'tabs') {
+      const tabs = item as TabsMeta
+      const key  = `tabs-${index}`
+      const active = activeTab[key] ?? 0
+
+      return (
+        <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="flex border-b border-border bg-muted/40">
+            {tabs.tabs.map((tab, i) => (
+              <button
+                key={tab.label}
+                type="button"
+                onClick={() => setActiveTab((p) => ({ ...p, [key]: i }))}
+                className={[
+                  'px-5 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px',
+                  i === active
+                    ? 'border-primary text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                ].join(' ')}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="p-5 flex flex-col gap-4">
+            {(tabs.tabs[active]?.fields ?? []).filter((f) => !f.hidden.includes('create')).map((f) => renderField(f))}
+          </div>
+        </div>
+      )
+    }
+
+    // ── Regular field ─────────────────────────────────────
+    return renderField(item as FieldMeta)
+  }
+
   return (
     <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
 
@@ -87,39 +203,30 @@ export default function CreatePage() {
       ]} />
 
       <div className="max-w-2xl">
-        <div className="rounded-xl border bg-card p-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {formFields.map((field) => (
-              <div key={field.name}>
-                {field.type !== 'boolean' && field.type !== 'hidden' && (
-                  <label className="block text-sm font-medium mb-1.5">
-                    {field.label}
-                    {field.required && <span className="text-destructive ml-0.5">*</span>}
-                  </label>
-                )}
-                <FieldInput field={field} value={values[field.name]} onChange={(v) => setValue(field.name, v)} />
-                {errors[field.name]?.map((e) => (
-                  <p key={e} className="mt-1 text-xs text-destructive">{e}</p>
-                ))}
-              </div>
-            ))}
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : `Create ${resourceMeta.labelSingular}`}
-              </button>
-              <a
-                href={`/${pathSegment}/${slug}`}
-                className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </a>
-            </div>
-          </form>
-        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          {schema
+            .filter((item) => {
+              if (item.type === 'section' || item.type === 'tabs') return true
+              return !(item as FieldMeta).hidden.includes('create')
+            })
+            .map((item, i) => renderSchemaItem(item, i))
+          }
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : `Create ${resourceMeta.labelSingular}`}
+            </button>
+            <a
+              href={`/${pathSegment}/${slug}`}
+              className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </a>
+          </div>
+        </form>
       </div>
 
     </AdminLayout>
