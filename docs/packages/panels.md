@@ -202,6 +202,86 @@ export async function data({ pageContext }: { pageContext: any }) {
 
 ---
 
+## Custom Resource Views
+
+To replace the default table for a specific resource, create a Vike page at the resource's static path. Vike's route priority makes static segments win over dynamic ones — your page is served instead of the built-in table.
+
+```
+pages/(panels)/@panel/users/+Page.tsx    ← custom index for 'users'
+pages/(panels)/@panel/users/+data.ts
+```
+
+Use `resourceData()` to fetch panel data without duplicating the built-in query logic:
+
+```ts
+// pages/(panels)/@panel/users/+data.ts
+import { resourceData } from '@boostkit/panels'
+import type { PageContextServer } from 'vike/types'
+
+export type Data = Awaited<ReturnType<typeof resourceData>>
+
+export async function data(pageContext: PageContextServer) {
+  const { panel } = pageContext.routeParams as { panel: string }
+  return resourceData({ panel, resource: 'users', url: pageContext.urlOriginal })
+}
+```
+
+```tsx
+// pages/(panels)/@panel/users/+Page.tsx
+import { useData }     from 'vike-react/useData'
+import { AdminLayout } from '../../_components/AdminLayout.js'
+import type { Data }   from './+data.js'
+
+export default function UsersGridPage() {
+  const { panelMeta, resourceMeta, records } = useData<Data>()
+  return (
+    <AdminLayout panelMeta={panelMeta} currentSlug={resourceMeta.slug as string}>
+      <div className="grid grid-cols-3 gap-4">
+        {(records as any[]).map((r) => (
+          <div key={r.id} className="rounded-lg border p-4">{r.name}</div>
+        ))}
+      </div>
+    </AdminLayout>
+  )
+}
+```
+
+`resourceData()` applies the same sort / search / filter / pagination logic as the default table — search, sort, and filters all work out of the box.
+
+---
+
+## Custom Field Types
+
+Use `.component(key)` on any field to hand off form rendering to a custom React component.
+
+```ts
+// In your Resource
+NumberField.make('priority').label('Priority').component('rating')
+```
+
+Register the component in `pages/(panels)/_components/CustomFieldRenderers.tsx` (a published file — edit it directly):
+
+```tsx
+import type { FieldMeta } from '@boostkit/panels'
+import { RatingInput } from './fields/RatingInput.js'
+
+export interface FieldInputProps {
+  field:    FieldMeta
+  value:    unknown
+  onChange: (value: unknown) => void
+}
+
+export const customFieldRenderers: Record<string, React.ComponentType<FieldInputProps>> = {
+  rating: RatingInput,
+}
+```
+
+Your custom component receives `{ field, value, onChange }` — the same props as built-in field renderers.
+
+> **Note:** `CustomFieldRenderers.tsx` is a published file you own. Re-publishing with `--force` will overwrite it — back it up or commit it before upgrading `@boostkit/panels`.
+
+---
+
 ## Search
 
 Mark fields `.searchable()` to add a search bar to the list page. Submitting runs a `LIKE` query across all searchable columns (OR logic).

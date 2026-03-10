@@ -14,6 +14,7 @@ export interface FieldMeta {
   searchable: boolean
   hidden:     FieldVisibility[]
   extra:      Record<string, unknown>
+  component?: string
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -27,6 +28,7 @@ export abstract class Field {
   protected _searchable  = false
   protected _hidden:     Set<FieldVisibility> = new Set()
   protected _extra:      Record<string, unknown> = {}
+  protected _component?: string
 
   constructor(name: string) {
     this._name = name
@@ -87,6 +89,18 @@ export abstract class Field {
     return this.hideFrom('edit')
   }
 
+  /**
+   * Key for a custom React renderer registered in CustomFieldRenderers.tsx.
+   * Use when built-in field types don't cover your UI needs.
+   *
+   * @example
+   * NumberField.make('priority').component('rating')
+   */
+  component(key: string): this {
+    this._component = key
+    return this
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName():       string  { return this._name }
@@ -112,7 +126,7 @@ export abstract class Field {
   abstract getType(): string
 
   toMeta(): FieldMeta {
-    return {
+    const meta: FieldMeta = {
       name:       this._name,
       type:       this.getType(),
       label:      this.getLabel(),
@@ -123,5 +137,7 @@ export abstract class Field {
       hidden:     [...this._hidden],
       extra:      this._extra,
     }
+    if (this._component !== undefined) meta.component = this._component
+    return meta
   }
 }
