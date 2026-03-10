@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Checkbox } from '@base-ui-components/react/checkbox'
+import { Combobox } from '@base-ui-components/react/combobox'
+import { Dialog } from '@base-ui-components/react/dialog'
 import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
 import type { FieldMeta } from '@boostkit/panels'
@@ -574,50 +576,15 @@ export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
     )
   }
 
-  // ── BelongsToMany (multi-select pill picker) ──────────────
+  // ── BelongsToMany (combobox with chips + create) ──────────
   if (field.type === 'belongsToMany') {
-    const resourceSlug = field.extra?.['resource'] as string | undefined
-    const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
-    const selected     = Array.isArray(value) ? (value as string[]) : []
-    const [opts, setOpts] = useState<Array<{ value: string; label: string }>>([])
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-      if (!resourceSlug || !uploadBase) { setLoading(false); return }
-      fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
-        .then(r => r.json())
-        .then((data) => { setOpts(data as Array<{ value: string; label: string }>); setLoading(false) })
-        .catch(() => setLoading(false))
-    }, [resourceSlug, labelField, uploadBase])
-
-    function toggle(id: string) {
-      const next = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]
-      onChange(next)
-    }
-
-    if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>
-
     return (
-      <div className="flex flex-wrap gap-2">
-        {opts.map((o) => {
-          const checked = selected.includes(o.value)
-          return (
-            <label
-              key={o.value}
-              className={[
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-colors select-none',
-                checked
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background text-foreground border-input hover:bg-accent',
-              ].join(' ')}
-            >
-              <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(o.value)} />
-              {o.label}
-            </label>
-          )
-        })}
-        {opts.length === 0 && <p className="text-sm text-muted-foreground">No options available.</p>}
-      </div>
+      <BelongsToManyCombobox
+        field={field}
+        value={value}
+        onChange={onChange}
+        uploadBase={uploadBase}
+      />
     )
   }
 
@@ -666,6 +633,203 @@ export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
       placeholder={(field.extra?.placeholder as string) ?? ''}
       className={inputCls}
     />
+  )
+}
+
+// ── BelongsToMany Combobox ────────────────────────────────
+
+interface Opt { value: string; label: string }
+
+interface BelongsToManyComboboxProps {
+  field:       FieldMeta
+  value:       unknown
+  onChange:    (value: unknown) => void
+  uploadBase?: string
+}
+
+const CREATE_SENTINEL = '__create__'
+
+function BelongsToManyCombobox({ field, value, onChange, uploadBase = '' }: BelongsToManyComboboxProps) {
+  const resourceSlug = field.extra?.['resource'] as string | undefined
+  const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
+  const selected     = Array.isArray(value) ? (value as string[]) : []
+
+  const [opts, setOpts]             = useState<Opt[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [inputValue, setInputValue] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createName, setCreateName] = useState('')
+  const [creating, setCreating]     = useState(false)
+  const createInputRef              = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!resourceSlug || !uploadBase) { setLoading(false); return }
+    fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
+      .then(r => r.json())
+      .then((data) => { setOpts(data as Opt[]); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [resourceSlug, labelField, uploadBase])
+
+  const filtered = opts.filter(o =>
+    o.label.toLowerCase().includes(inputValue.toLowerCase()),
+  )
+  const exactMatch = opts.some(o => o.label.toLowerCase() === inputValue.trim().toLowerCase())
+  const showCreate = inputValue.trim().length > 0 && !exactMatch
+
+  function handleValueChange(newIds: string[]) {
+    // If the sentinel value was just added, open create dialog instead
+    if (newIds.includes(CREATE_SENTINEL)) {
+      setCreateName(inputValue.trim())
+      setCreateOpen(true)
+      // Remove the sentinel from selection
+      onChange(newIds.filter(id => id !== CREATE_SENTINEL))
+      return
+    }
+    onChange(newIds)
+    setInputValue('')
+  }
+
+  function removeChip(id: string) {
+    onChange(selected.filter(s => s !== id))
+  }
+
+  async function handleCreate() {
+    if (!createName.trim() || !resourceSlug || !uploadBase) return
+    setCreating(true)
+    try {
+      const res = await fetch(`${uploadBase}/${resourceSlug}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ [labelField]: createName.trim() }),
+      })
+      if (!res.ok) throw new Error('Create failed')
+      const record = await res.json() as { id: string } & Record<string, unknown>
+      const newOpt: Opt = { value: record.id, label: String(record[labelField] ?? createName) }
+      setOpts(prev => [...prev, newOpt])
+      onChange([...selected, record.id])
+      setCreateOpen(false)
+      setCreateName('')
+      setInputValue('')
+    } catch {
+      // creation failed — leave state unchanged
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Combobox.Root
+        value={selected}
+        onValueChange={(ids) => handleValueChange((ids ?? []) as string[])}
+        multiple
+        inputValue={inputValue}
+        onInputValueChange={(v) => setInputValue(v)}
+      >
+        <Combobox.Chips className="flex flex-wrap gap-1.5 p-1.5 min-h-[42px] rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
+          {selected.map((id) => {
+            const opt = opts.find(o => o.value === id)
+            return (
+              <Combobox.Chip
+                key={id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+              >
+                {opt?.label ?? id}
+                <Combobox.ChipRemove
+                  onClick={() => removeChip(id)}
+                  className="hover:text-destructive leading-none ml-0.5 cursor-pointer"
+                  aria-label={`Remove ${opt?.label ?? id}`}
+                >
+                  ×
+                </Combobox.ChipRemove>
+              </Combobox.Chip>
+            )
+          })}
+          <Combobox.Input
+            placeholder={loading ? 'Loading…' : selected.length > 0 ? 'Add more…' : `Search ${field.label}…`}
+            disabled={loading || field.readonly}
+            className="flex-1 min-w-[120px] px-1.5 py-1 text-sm bg-transparent outline-none"
+          />
+        </Combobox.Chips>
+
+        <Combobox.Portal>
+          <Combobox.Positioner>
+            <Combobox.Popup className="z-50 min-w-[220px] max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-lg py-1 outline-none">
+              {filtered.map((o) => (
+                <Combobox.Item
+                  key={o.value}
+                  value={o.value}
+                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground outline-none"
+                >
+                  <Combobox.ItemIndicator className="text-primary shrink-0">
+                    <CheckIcon />
+                  </Combobox.ItemIndicator>
+                  <Combobox.ItemText>{o.label}</Combobox.ItemText>
+                </Combobox.Item>
+              ))}
+
+              {showCreate && (
+                <Combobox.Item
+                  value={CREATE_SENTINEL}
+                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer text-primary data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground outline-none border-t border-border mt-1 pt-2"
+                >
+                  <span className="shrink-0 font-bold">+</span>
+                  <Combobox.ItemText>Create &ldquo;{inputValue.trim()}&rdquo;</Combobox.ItemText>
+                </Combobox.Item>
+              )}
+
+              {filtered.length === 0 && !showCreate && (
+                <Combobox.Empty className="px-3 py-2 text-sm text-muted-foreground">
+                  No results.
+                </Combobox.Empty>
+              )}
+            </Combobox.Popup>
+          </Combobox.Positioner>
+        </Combobox.Portal>
+      </Combobox.Root>
+
+      {/* Create dialog */}
+      <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-50" />
+          <Dialog.Popup
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm rounded-lg border border-border bg-popover shadow-xl p-6 flex flex-col gap-4"
+            onOpenAutoFocus={(e) => { e.preventDefault(); setTimeout(() => createInputRef.current?.focus(), 50) }}
+          >
+            <Dialog.Title className="text-base font-semibold">
+              Create new {field.label}
+            </Dialog.Title>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium capitalize">{labelField}</label>
+              <input
+                ref={createInputRef}
+                type="text"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreate() } }}
+                placeholder={`Enter ${labelField}…`}
+                className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Dialog.Close className="px-3 py-1.5 rounded-md text-sm border border-input hover:bg-accent transition-colors">
+                Cancel
+              </Dialog.Close>
+              <button
+                type="button"
+                onClick={() => void handleCreate()}
+                disabled={creating || !createName.trim()}
+                className="px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {creating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
   )
 }
 
