@@ -114,13 +114,22 @@ export class ArticleResource extends Resource {
 
   filters() {
     return [
-      SelectFilter.make('status')
-        .label('Status')
+      // SelectFilter.make('status')
+      //   .label('Status')
+      //   .options([
+      //     { label: 'Draft',     value: 'draft'     },
+      //     { label: 'Published', value: 'published' },
+      //     { label: 'Archived',  value: 'archived'  },
+      //   ]),
+
+    SelectFilter.make('status')
+      .label('Status')
         .options([
           { label: 'Draft',     value: 'draft'     },
           { label: 'Published', value: 'published' },
           { label: 'Archived',  value: 'archived'  },
-        ]),
+        ])
+      .query((q, value) => q.where('status', value)),
 
       SelectFilter.make('featured')
         .label('Featured')
