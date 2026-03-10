@@ -358,15 +358,42 @@ export const customFieldRenderers: Record<string, React.ComponentType<FieldInput
 ```ts
 import { SelectFilter } from '@boostkit/panels'
 
-// URL: /admin/api/users?filter[role]=admin
-SelectFilter.make('role')
-  .label('Role')
-  .column('role')       // column name (defaults to filter name)
+// Simple — default column=value equality
+SelectFilter.make('status')
+  .label('Status')
+  .column('status')     // column name (defaults to filter name)
   .options([
-    { label: 'Admin', value: 'admin' },
-    { label: 'User',  value: 'user' },
+    { label: 'Draft',     value: 'draft' },
+    { label: 'Published', value: 'published' },
   ])
 ```
+
+### Custom Query
+
+Use `.query(fn)` when the default equality check isn't enough. The callback receives the raw ORM query builder and the selected value:
+
+```ts
+SelectFilter.make('status')
+  .options([...])
+  .query((q, value) => {
+    q.where('status', value)
+    if (value === 'published') q.where('publishedAt', '!=', null)
+  })
+
+// Date range
+SelectFilter.make('period')
+  .label('Period')
+  .options([
+    { label: 'Last 7 days',  value: '7d' },
+    { label: 'Last 30 days', value: '30d' },
+  ])
+  .query((q, value) => {
+    const days = value === '7d' ? 7 : 30
+    q.where('createdAt', '>=', new Date(Date.now() - days * 86400000))
+  })
+```
+
+Without `.query()`, the filter applies `WHERE column = value` using the filter name (or `.column()`) as the column.
 
 ---
 
