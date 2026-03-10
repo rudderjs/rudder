@@ -282,7 +282,7 @@ public/storage
 
 ## Filters
 
-Filters appear above the resource table:
+Filters appear above the resource table as dropdowns. Each active filter appends `?filter[name]=value` to the URL.
 
 ```ts
 import { SelectFilter, SearchFilter } from '@boostkit/panels'
@@ -291,10 +291,11 @@ filters() {
   return [
     SelectFilter.make('status')
       .label('Status')
-      .column('status')
+      .column('status')     // column name (defaults to filter name)
       .options([
-        { label: 'Published', value: 'published' },
         { label: 'Draft',     value: 'draft' },
+        { label: 'Published', value: 'published' },
+        { label: 'Archived',  value: 'archived' },
       ]),
 
     SearchFilter.make('search')
@@ -303,6 +304,50 @@ filters() {
   ]
 }
 ```
+
+By default, `SelectFilter` applies `WHERE column = value` (simple equality). For anything more complex, use `.query()`.
+
+### Custom Filter Query
+
+`.query(fn)` gives you direct access to the ORM query builder so you can write any expression:
+
+```ts
+// Multi-condition filter
+SelectFilter.make('status')
+  .options([
+    { label: 'Published', value: 'published' },
+    { label: 'Draft',     value: 'draft' },
+  ])
+  .query((q, value) => {
+    q.where('status', value)
+    if (value === 'published') q.where('publishedAt', '!=', null)
+  })
+
+// Date range filter
+SelectFilter.make('period')
+  .label('Period')
+  .options([
+    { label: 'Last 7 days',  value: '7d' },
+    { label: 'Last 30 days', value: '30d' },
+  ])
+  .query((q, value) => {
+    const days = value === '7d' ? 7 : 30
+    q.where('createdAt', '>=', new Date(Date.now() - days * 86400000))
+  })
+
+// Boolean filter stored as 0/1 string
+SelectFilter.make('featured')
+  .label('Featured')
+  .options([
+    { label: 'Featured',     value: '1' },
+    { label: 'Not featured', value: '0' },
+  ])
+  .query((q, value) => q.where('featured', value === '1'))
+```
+
+The callback receives:
+- `q` — the ORM query builder (call `.where()`, `.orWhere()`, etc.)
+- `value` — the selected filter value as a string
 
 ---
 
