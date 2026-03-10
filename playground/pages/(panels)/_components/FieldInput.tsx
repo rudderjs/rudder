@@ -14,6 +14,13 @@ interface Props {
   uploadBase?: string
 }
 
+function generateSlug(str: string): string {
+  return str.toLowerCase().trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
 
@@ -696,6 +703,24 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '' }: Belo
     const el = listRef.current?.children[focusedIdx] as HTMLElement | undefined
     el?.scrollIntoView({ block: 'nearest' })
   }, [focusedIdx, open])
+
+  // Auto-generate slugs inside the create dialog
+  useEffect(() => {
+    if (!createOpen || createSchema.length === 0) return
+    const slugFields = createSchema.filter(f => f.type === 'slug' && f.extra?.['from'])
+    if (slugFields.length === 0) return
+    setCreateValues(prev => {
+      const next = { ...prev }
+      for (const sf of slugFields) {
+        const src     = String(sf.extra?.['from'] ?? '')
+        const srcVal  = String(prev[src] ?? '')
+        const current = String(prev[sf.name] ?? '')
+        const auto    = generateSlug(srcVal)
+        if (!current || current === generateSlug(current)) next[sf.name] = auto
+      }
+      return next
+    })
+  }, [createOpen, createSchema, JSON.stringify(createValues)])
 
   const filtered = useMemo(() =>
     opts.filter(o => o.label.toLowerCase().includes(query.toLowerCase())),

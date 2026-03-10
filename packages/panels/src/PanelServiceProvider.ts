@@ -250,7 +250,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
 
       const raw    = req.body as Record<string, unknown>
-      const body   = this.coercePayload(resource, raw)
+      const body   = this.coercePayload(resource, raw, 'create')
       const errors = this.validatePayload(resource, body, 'create')
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
@@ -270,7 +270,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (!exists) return res.status(404).json({ message: 'Record not found.' })
 
       const raw    = req.body as Record<string, unknown>
-      const body   = this.coercePayload(resource, raw)
+      const body   = this.coercePayload(resource, raw, 'update')
       const errors = this.validatePayload(resource, body, 'update')
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
@@ -341,6 +341,7 @@ export class PanelServiceProvider extends ServiceProvider {
   private coercePayload(
     resource: Resource,
     body: Record<string, unknown>,
+    mode: 'create' | 'update' = 'update',
   ): Record<string, unknown> {
     const result = { ...body }
     for (const field of flattenFields(resource.fields())) {
@@ -365,9 +366,10 @@ export class PanelServiceProvider extends ServiceProvider {
       } else if (type === 'belongsTo') {
         result[name] = (val === '' || val === null || val === undefined) ? null : String(val)
       } else if (type === 'belongsToMany') {
-        // Prisma implicit M2M: { set: [{ id }, ...] }
-        const ids = Array.isArray(val) ? (val as string[]) : []
-        result[name] = { set: ids.map((id) => ({ id: String(id) })) }
+        // Prisma implicit M2M: connect on create, set (replace) on update
+        const ids     = Array.isArray(val) ? (val as string[]) : []
+        const records = ids.map((id) => ({ id: String(id) }))
+        result[name]  = mode === 'create' ? { connect: records } : { set: records }
       }
     }
     return result

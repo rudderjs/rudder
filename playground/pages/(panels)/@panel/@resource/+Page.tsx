@@ -466,7 +466,7 @@ function resolveCellValue(record: Record<string, unknown>, f: { name: string; ty
 
 function CellValue({ value, type, extra, pathSegment }: { value: unknown; type: string; extra?: Record<string, unknown>; pathSegment?: string }) {
   if (type === 'belongsTo') {
-    const displayField   = (extra?.['displayField'] as string) ?? 'name'
+    const displayField  = (extra?.['displayField'] as string) ?? 'name'
     const targetResource = extra?.['resource'] as string | undefined
     const related = value as Record<string, unknown> | null | undefined
     if (related && typeof related === 'object') {

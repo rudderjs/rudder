@@ -1,4 +1,6 @@
+import type { Config } from 'vike/types'
+import vikeSolid from 'vike-solid/config'
+
 export default {
-  title:       'Sign In — BoostKit',
-  description: 'Sign in to your BoostKit account.',
-}
+  extends: vikeSolid,
+} as unknown as Config

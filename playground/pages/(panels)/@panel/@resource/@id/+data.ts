@@ -35,12 +35,16 @@ export async function data(pageContext: PageContextServer) {
   if (Model) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = Model.query()
-    // Include belongsTo relations for display on the show page
     for (const f of flattenFields(resource.fields())) {
-      if ((f as any).getType?.() === 'belongsTo') {
-        const name = (f as any).getName() as string
-        const rel  = ((f as any)._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
+      const type = (f as any).getType?.() as string | undefined
+      const name = (f as any).getName() as string
+      if (type === 'belongsTo') {
+        // parentId → parent (or explicit relationName)
+        const rel = ((f as any)._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
         q = q.with(rel)
+      } else if (type === 'belongsToMany') {
+        // field name IS the relation name (e.g. 'categories')
+        q = q.with(name)
       }
     }
     record = await q.find(id)

@@ -18,7 +18,33 @@ export async function data(pageContext: PageContextServer) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
-  const record = Model ? await Model.find(id) : null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function flattenFields(items: any[]): any[] {
+    const result: any[] = []
+    for (const item of items) {
+      if ('getFields' in item) result.push(...flattenFields(item.getFields()))
+      else result.push(item)
+    }
+    return result
+  }
+
+  let record = null
+  if (Model) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = Model.query()
+    for (const f of flattenFields(resource.fields())) {
+      const type = (f as any).getType?.() as string | undefined
+      const name = (f as any).getName() as string
+      if (type === 'belongsTo') {
+        const rel = ((f as any)._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
+        q = q.with(rel)
+      } else if (type === 'belongsToMany') {
+        q = q.with(name)
+      }
+    }
+    record = await q.find(id)
+  }
 
   return { panelMeta, resourceMeta, record, pathSegment, slug, id }
 }
