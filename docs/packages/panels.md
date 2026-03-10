@@ -68,9 +68,11 @@ import {
 import { User } from '../../Models/User.js'
 
 export class UserResource extends Resource {
-  static model         = User
-  static label         = 'Users'
-  static labelSingular = 'User'
+  static model           = User
+  static label           = 'Users'
+  static labelSingular   = 'User'
+  static defaultSort     = 'createdAt'       // default sort column
+  static defaultSortDir  = 'DESC' as const   // applied when no ?sort in URL
 
   fields() {
     return [
@@ -118,6 +120,16 @@ export class UserResource extends Resource {
 | `SelectField` | dropdown | Predefined options |
 | `BooleanField` | checkbox | True / false |
 | `DateField` | `date` | Date picker |
+| `PasswordField` | `password` | Masked input with optional confirm field |
+| `SlugField` | `text` | URL slug, auto-generated from a source field |
+| `TagsField` | chip input | Multi-value array of strings |
+| `HiddenField` | `hidden` | Hidden form value, never shown in UI |
+| `ToggleField` | switch | Boolean switch with on/off labels |
+| `ColorField` | `color` | Native color picker with hex swatch in table |
+| `JsonField` | textarea | JSON editor with inline validation |
+| `RepeaterField` | repeater | Repeatable group of sub-fields (same schema) |
+| `BuilderField` | block picker | Multiple block types each with own schema |
+| `Block` | — | Block type definition for use with `BuilderField` |
 
 ### Shared fluent methods
 
@@ -326,20 +338,38 @@ Multiple filters compose with AND logic.
 
 ---
 
-## Bulk Actions
+## Actions
+
+### Bulk actions
+
+Appear in the multi-select bar when one or more rows are checked.
 
 ```ts
 import { Action } from '@boostkit/panels'
 
 Action.make('markComplete')
   .label('Mark as Complete')
-  .bulk()                               // shows in selection bar
+  .bulk()                               // shows in selection bar (default: true)
   .destructive()                        // red button styling
   .confirm('Mark selected as done?')    // opens confirm dialog
   .handler(async (records) => {
     for (const r of records as Todo[]) {
       await Todo.query().update(r.id, { completed: true })
     }
+  })
+```
+
+### Row actions
+
+Appear as inline buttons on each table row.
+
+```ts
+Action.make('impersonate')
+  .label('Login as user')
+  .row()                                // appears per-row in the table
+  .handler(async (records) => {
+    const user = records[0] as User
+    // ... impersonate logic
   })
 ```
 
