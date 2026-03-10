@@ -490,6 +490,20 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
   if (type === 'json' || type === 'repeater' || type === 'builder') {
     return <span className="text-xs text-muted-foreground font-mono">[JSON]</span>
   }
+  if (type === 'image') {
+    return (
+      <img
+        src={String(value)}
+        alt=""
+        className="h-10 w-16 object-cover rounded"
+      />
+    )
+  }
+  if (type === 'file') {
+    const url = String(value)
+    const name = url.split('/').pop() ?? url
+    return <a href={url} target="_blank" rel="noreferrer" className="text-xs text-primary underline underline-offset-2 truncate max-w-[12rem] block">{name}</a>
+  }
   return <span>{String(value)}</span>
 }
 

@@ -368,6 +368,7 @@ import type { Application } from '@boostkit/core'
 export function panels(panelList: PanelType[]): new (app: Application) => PanelServiceProvider {
   return class extends PanelServiceProvider {
     register(): void {
+      PanelRegistry.reset()
       for (const panel of panelList) {
         PanelRegistry.register(panel)
       }
