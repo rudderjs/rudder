@@ -1,10 +1,13 @@
 import { beforeEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolve } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join as pathJoin } from 'node:path'
 
 import {
   LocalizationRegistry,
   __,
+  trans,
 } from './index.js'
 
 describe('interpolation', () => {
@@ -72,5 +75,49 @@ describe('pluralization', () => {
     LocalizationRegistry.seed('en', 'msg', { item: 'one item|many items' })
     assert.equal(__('msg.item', 1), 'one item')
     assert.equal(__('msg.item', 2), 'many items')
+  })
+})
+
+describe('file loading via trans()', () => {
+  let tmpDir = ''
+
+  beforeEach(async () => {
+    LocalizationRegistry.reset()
+    tmpDir = pathJoin(tmpdir(), `bk-i18n-test-${Date.now()}`)
+    await mkdir(pathJoin(tmpDir, 'en'), { recursive: true })
+    await mkdir(pathJoin(tmpDir, 'es'), { recursive: true })
+    await writeFile(
+      pathJoin(tmpDir, 'en', 'site.json'),
+      JSON.stringify({ title: 'My App', nav: { home: 'Home' } }),
+    )
+    await writeFile(
+      pathJoin(tmpDir, 'es', 'site.json'),
+      JSON.stringify({ title: 'Mi App' }),
+    )
+  })
+
+  it('loads and resolves a simple key from disk', async () => {
+    LocalizationRegistry.configure({ locale: 'en', fallback: 'en', path: tmpDir })
+    assert.equal(await trans('site.title'), 'My App')
+  })
+
+  it('loads and resolves a nested key', async () => {
+    LocalizationRegistry.configure({ locale: 'en', fallback: 'en', path: tmpDir })
+    assert.equal(await trans('site.nav.home'), 'Home')
+  })
+
+  it('falls back to fallback locale when key missing', async () => {
+    LocalizationRegistry.configure({ locale: 'es', fallback: 'en', path: tmpDir })
+    assert.equal(await trans('site.nav.home'), 'Home')
+  })
+
+  it('resolves key in current locale when available', async () => {
+    LocalizationRegistry.configure({ locale: 'es', fallback: 'en', path: tmpDir })
+    assert.equal(await trans('site.title'), 'Mi App')
+  })
+
+  it('returns key string when not found in any locale', async () => {
+    LocalizationRegistry.configure({ locale: 'es', fallback: 'en', path: tmpDir })
+    assert.equal(await trans('site.missing.key'), 'site.missing.key')
   })
 })

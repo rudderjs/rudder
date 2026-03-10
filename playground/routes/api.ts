@@ -1,6 +1,7 @@
 import { Route } from '@boostkit/router'
 import { resolve, app, dd, dump, config, validate } from '@boostkit/core'
 import { broadcast, broadcastStats } from '@boostkit/broadcast'
+import { getLocale, runWithLocale, setLocale, trans } from '@boostkit/localization'
 import type { BetterAuthInstance } from '@boostkit/auth'
 import { AuthMiddleware } from '@boostkit/auth'
 import { Cache } from '@boostkit/cache'
@@ -33,6 +34,21 @@ const authLimit = RateLimit.perMinute(10)
   .message('Too many auth attempts. Try again later.')
 
 Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+Route.get('/api/hello', async (req) => {
+  const q = req.query['lang']
+  const lang = typeof q === 'string' ? q : undefined
+  const locale = lang ?? getLocale()
+
+  return runWithLocale(locale, async () => {
+    if (lang) setLocale(lang)
+
+    const message = await trans('messages.greeting', { name: 'World' })
+    const items = await trans('messages.items', 3)
+
+    return Response.json({ message, items, locale: getLocale() })
+  })
+})
 
 // WebSocket demo routes
 Route.post('/api/ws/broadcast', async (req, res) => {

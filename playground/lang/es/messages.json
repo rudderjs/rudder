@@ -1,0 +1,5 @@
+{
+  "welcome": "Bienvenido a BoostKit!",
+  "greeting": "Hola, :name!",
+  "items": "{0} sin elementos|{1} un elemento|{n} :count elementos"
+}

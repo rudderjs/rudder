@@ -8,8 +8,9 @@ import storage  from './storage.js'
 import auth     from './auth.js'
 import session  from './session.js'
 import live     from './live.js'
+import localization from './localization.js'
 
-const configs = { app, server, database, queue, mail, cache, storage, auth, session, live }
+const configs = { app, server, database, queue, mail, cache, storage, auth, session, live, localization }
 
 export type Configs = typeof configs
 
