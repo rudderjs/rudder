@@ -195,6 +195,13 @@ export class PanelServiceProvider extends ServiceProvider {
       })
     }, mw)
 
+    // ── GET /panel/api/resource/_schema — field definitions for inline create ──
+    router.get(`${base}/_schema`, async (_req, res) => {
+      const resource     = new ResourceClass()
+      const resourceMeta = resource.toMeta()
+      return res.json({ resourceMeta })
+    }, mw)
+
     // ── GET /panel/api/resource/_options — relation select options ──
     router.get(`${base}/_options`, async (req, res) => {
       if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })

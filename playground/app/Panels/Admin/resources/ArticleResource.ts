@@ -62,6 +62,7 @@ export class ArticleResource extends Resource {
           .resource('categories')
           .display('name')
           .multiple()
+          .creatable()
           .hideFromTable(),
       ),
 
