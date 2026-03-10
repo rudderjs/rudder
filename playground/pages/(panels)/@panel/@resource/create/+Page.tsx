@@ -52,16 +52,11 @@ export default function CreatePage() {
 
   const initialValues: Record<string, unknown> = Object.fromEntries(
     formFields.map((f) => {
+      if (f.extra?.['default'] !== undefined) return [f.name, f.extra['default']]
       if (f.type === 'boolean' || f.type === 'toggle') return [f.name, false]
       return [f.name, '']
     }),
   )
-  // Initialize hidden fields with their defaults
-  for (const hf of formFields.filter((f) => f.type === 'hidden')) {
-    if (initialValues[hf.name] === undefined && hf.extra?.['default'] !== undefined) {
-      initialValues[hf.name] = hf.extra['default']
-    }
-  }
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [saving, setSaving] = useState(false)
