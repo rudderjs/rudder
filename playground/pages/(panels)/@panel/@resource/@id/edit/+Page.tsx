@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useData } from 'vike-react/useData'
+import { useData }   from 'vike-react/useData'
+import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
 import { AdminLayout } from '../../../../_components/AdminLayout.js'
@@ -33,7 +34,10 @@ function flattenFormFields(schema: SchemaItem[], mode: 'create' | 'edit'): Field
 }
 
 export default function EditPage() {
+  const config = useConfig()
   const { panelMeta, resourceMeta, record, pathSegment, slug, id } = useData<Data>()
+  const panelName = panelMeta.branding?.title ?? panelMeta.name
+  config({ title: `Edit ${resourceMeta.labelSingular} — ${panelName}` })
 
   if (!record) {
     return (

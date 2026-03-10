@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useData } from 'vike-react/useData'
+import { useData }   from 'vike-react/useData'
+import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
 import { Checkbox } from '@base-ui-components/react/checkbox'
@@ -27,7 +28,10 @@ function flattenFields(schema: SchemaItem[]): FieldMeta[] {
 }
 
 export default function ResourceListPage() {
+  const config = useConfig()
   const { panelMeta, resourceMeta, records, pagination, pathSegment, slug } = useData<Data>()
+  const panelName = panelMeta.branding?.title ?? panelMeta.name
+  config({ title: `${resourceMeta.label} — ${panelName}` })
 
   const [selected,       setSelected]       = useState<string[]>([])
   const [confirm,        setConfirm]        = useState<{ action: typeof resourceMeta.actions[0]; records: unknown[] } | null>(null)
