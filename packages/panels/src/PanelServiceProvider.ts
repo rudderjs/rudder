@@ -56,11 +56,12 @@ export class PanelServiceProvider extends ServiceProvider {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { Storage } = await import('@boostkit/storage') as any
+          // req.raw is the Hono Context (c); c.req.parseBody() parses multipart/form-data
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const formData  = await (req.raw as any).formData()
-          const file      = formData.get('file') as File
-          const disk      = String(formData.get('disk')      ?? 'local')
-          const directory = String(formData.get('directory') ?? 'uploads')
+          const body      = await (req.raw as any).req.parseBody() as Record<string, unknown>
+          const file      = body['file'] as File
+          const disk      = String(body['disk']      ?? 'local')
+          const directory = String(body['directory'] ?? 'uploads')
 
           const ext      = (file.name.split('.').pop() ?? 'bin').toLowerCase()
           const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
