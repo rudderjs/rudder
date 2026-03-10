@@ -195,6 +195,37 @@ export class PanelServiceProvider extends ServiceProvider {
       })
     }, mw)
 
+    // ── GET /panel/api/resource/_related — hasMany reverse relation records ──
+    router.get(`${base}/_related`, async (req, res) => {
+      if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+      const url  = new URL(req.url, 'http://localhost')
+      const fk   = url.searchParams.get('fk')
+      const id   = url.searchParams.get('id')
+      const page = Number(url.searchParams.get('page') ?? 1)
+
+      if (!fk || !id) return res.status(422).json({ message: 'fk and id query params are required.' })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = Model.query().where(fk, id)
+
+      // Include belongsTo relations so display names are available
+      for (const f of flattenFields(new ResourceClass().fields())) {
+        if (f.getType() === 'belongsTo') q = q.with(relationName(f))
+      }
+
+      const result = await q.paginate(page, 15)
+      return res.json({
+        data: result.data,
+        meta: {
+          total:       result.total,
+          currentPage: result.currentPage,
+          perPage:     result.perPage,
+          lastPage:    result.lastPage,
+        },
+      })
+    }, mw)
+
     // ── GET /panel/api/resource/_schema — field definitions for inline create ──
     router.get(`${base}/_schema`, async (_req, res) => {
       const resource     = new ResourceClass()

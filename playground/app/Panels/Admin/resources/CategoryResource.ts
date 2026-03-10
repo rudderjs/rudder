@@ -1,4 +1,4 @@
-import { Resource, TextField, SlugField, RelationField } from '@boostkit/panels'
+import { Resource, TextField, SlugField, RelationField, HasMany } from '@boostkit/panels'
 import { Category } from '../../../Models/Category.js'
 
 export class CategoryResource extends Resource {
@@ -26,6 +26,11 @@ export class CategoryResource extends Resource {
         .label('Parent Category')
         .resource('categories')
         .display('name'),
+
+      HasMany.make('children')
+        .label('Sub-categories')
+        .resource('categories')
+        .foreignKey('parentId'),
     ]
   }
 }
