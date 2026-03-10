@@ -47,6 +47,7 @@ export class ArticleResource extends Resource {
           .image()
           .accept('image/*')
           .maxSize(5)
+          .disk('public')
           .directory('articles'),
 
         TagsField.make('tags')

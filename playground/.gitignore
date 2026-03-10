@@ -16,3 +16,7 @@ node_modules/
 .turbo/
 *.log
 dev.db
+
+# Storage uploads
+storage/app/
+public/storage
