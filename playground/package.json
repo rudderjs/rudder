@@ -21,6 +21,7 @@
     "@boostkit/cache": "workspace:*",
     "@boostkit/contracts": "workspace:*",
     "@boostkit/core": "workspace:*",
+    "@boostkit/localization": "workspace:*",
     "@boostkit/live": "workspace:*",
     "@boostkit/mail": "workspace:*",
     "@boostkit/middleware": "workspace:*",

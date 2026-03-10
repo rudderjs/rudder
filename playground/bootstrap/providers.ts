@@ -8,6 +8,7 @@ import { storage } from '@boostkit/storage'
 import { scheduler } from '@boostkit/schedule'
 import { notifications } from '@boostkit/notification'
 import { session } from '@boostkit/session'
+import { localization } from '@boostkit/localization'
 import { database } from '@boostkit/orm-prisma'
 import { panels } from '@boostkit/panels'
 import { broadcasting } from '@boostkit/broadcast'
@@ -28,6 +29,7 @@ export default [
   cache(configs.cache),
   storage(configs.storage),
   session(configs.session),
+  localization(configs.localization),
   scheduler(),
   notifications(),
   panels([adminPanel]),
