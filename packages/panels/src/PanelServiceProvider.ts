@@ -318,6 +318,9 @@ export class PanelServiceProvider extends ServiceProvider {
         result[name] = (val === '' || val === null || val === undefined) ? null : Number(val)
       } else if (type === 'date' || type === 'datetime') {
         result[name] = (val === '' || val === null || val === undefined) ? null : val
+      } else if (type === 'tags') {
+        // UI submits an array; store as JSON string
+        result[name] = Array.isArray(val) ? JSON.stringify(val) : (val ?? '[]')
       }
     }
     return result

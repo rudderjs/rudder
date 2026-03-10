@@ -476,10 +476,14 @@ function CellValue({ value, type }: { value: unknown; type: string }) {
       </span>
     )
   }
-  if (type === 'tags' && Array.isArray(value)) {
+  if (type === 'tags') {
+    const tags: string[] = Array.isArray(value) ? (value as string[])
+      : typeof value === 'string' && value ? (() => { try { return JSON.parse(value) } catch { return value.split(',') } })()
+      : []
+    if (!tags.length) return <span className="text-muted-foreground/40">—</span>
     return (
       <span className="flex flex-wrap gap-1">
-        {(value as string[]).map((tag) => (
+        {tags.map((tag) => (
           <span key={tag} className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
             {tag}
           </span>
