@@ -46,8 +46,8 @@ export default function ResourceListPage() {
 
   // ── Current URL params ─────────────────────────────────
   const urlParams  = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
-  const currentSort   = urlParams.get('sort') ?? ''
-  const currentDir    = urlParams.get('dir') ?? 'ASC'
+  const currentSort   = urlParams.get('sort') ?? resourceMeta.defaultSort ?? ''
+  const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
   const currentSearch = urlParams.get('search') ?? ''
   const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
 
