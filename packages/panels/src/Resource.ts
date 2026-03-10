@@ -1,7 +1,14 @@
-import type { Field } from './Field.js'
+import type { Field, FieldMeta } from './Field.js'
 import type { Filter } from './Filter.js'
 import type { Action } from './Action.js'
+import type { Section, SectionMeta } from './Section.js'
+import type { Tabs, TabsMeta } from './Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
+
+// ─── Schema item — field, section, or tabs group ───────────
+
+export type FieldOrGrouping = Field | Section | Tabs
+export type SchemaItemMeta  = FieldMeta | SectionMeta | TabsMeta
 
 // ─── Resource meta (for UI / meta endpoint) ────────────────
 
@@ -10,7 +17,7 @@ export interface ResourceMeta {
   labelSingular:  string
   slug:           string
   icon:           string | undefined
-  fields:         ReturnType<Field['toMeta']>[]
+  fields:         SchemaItemMeta[]
   filters:        ReturnType<Filter['toMeta']>[]
   actions:        ReturnType<Action['toMeta']>[]
   defaultSort?:   string
@@ -45,8 +52,8 @@ export class Resource {
 
   // ── Abstract / overridable ──────────────────────────────
 
-  /** Define the fields for this resource. Required. */
-  fields(): Field[] {
+  /** Define the fields (and optional Section / Tabs groupings) for this resource. Required. */
+  fields(): FieldOrGrouping[] {
     throw new Error(`[BoostKit Panels] Resource "${this.constructor.name}" must implement fields().`)
   }
 
@@ -101,7 +108,7 @@ export class Resource {
       labelSingular: Cls.getLabelSingular(),
       slug:          Cls.getSlug(),
       icon:          Cls.icon,
-      fields:        this.fields().map((f) => f.toMeta()),
+      fields:        this.fields().map((f) => f.toMeta()) as SchemaItemMeta[],
       filters:       this.filters().map((f) => f.toMeta()),
       actions:       this.actions().map((a) => a.toMeta()),
     }

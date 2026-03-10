@@ -25,7 +25,10 @@ import { ColorField }    from './fields/ColorField.js'
 import { JsonField }     from './fields/JsonField.js'
 import { RepeaterField } from './fields/RepeaterField.js'
 import { BuilderField }  from './fields/BuilderField.js'
+import { FileField }     from './fields/FileField.js'
 import { Block }         from './Block.js'
+import { Section }       from './Section.js'
+import { Tabs }          from './Tabs.js'
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -360,7 +363,7 @@ describe('Resource', () => {
     const meta = new PostResource().toMeta()
     assert.equal(meta.label, 'Posts')
     assert.equal(meta.fields.length, 1)
-    assert.equal(meta.fields[0]!.name, 'title')
+    assert.equal((meta.fields[0] as any).name, 'title')
     assert.equal(meta.filters.length, 1)
     assert.equal(meta.filters[0]!.name, 'status')
     assert.equal(meta.actions.length, 1)
@@ -902,6 +905,180 @@ describe('BuilderField', () => {
 
   it('maxItems() sets max', () => {
     assert.equal(BuilderField.make('content').maxItems(10).toMeta().extra['maxItems'], 10)
+  })
+})
+
+// ─── FileField ───────────────────────────────────────────────
+
+describe('FileField', () => {
+  it('type is file by default', () => {
+    assert.equal(FileField.make('attachment').getType(), 'file')
+  })
+
+  it('image() changes type to image', () => {
+    assert.equal(FileField.make('photo').image().getType(), 'image')
+  })
+
+  it('accept() stores mime type', () => {
+    assert.equal(FileField.make('f').accept('image/*').toMeta().extra['accept'], 'image/*')
+  })
+
+  it('maxSize() stores size in MB', () => {
+    assert.equal(FileField.make('f').maxSize(5).toMeta().extra['maxSize'], 5)
+  })
+
+  it('maxSize defaults to 10', () => {
+    assert.equal(FileField.make('f').toMeta().extra['maxSize'], 10)
+  })
+
+  it('multiple() sets multiple flag', () => {
+    assert.equal(FileField.make('f').multiple().toMeta().extra['multiple'], true)
+  })
+
+  it('multiple defaults to false', () => {
+    assert.equal(FileField.make('f').toMeta().extra['multiple'], false)
+  })
+
+  it('disk() sets disk name', () => {
+    assert.equal(FileField.make('f').disk('s3').toMeta().extra['disk'], 's3')
+  })
+
+  it('disk defaults to local', () => {
+    assert.equal(FileField.make('f').toMeta().extra['disk'], 'local')
+  })
+
+  it('directory() sets upload directory', () => {
+    assert.equal(FileField.make('f').directory('images').toMeta().extra['directory'], 'images')
+  })
+})
+
+// ─── Section ─────────────────────────────────────────────────
+
+describe('Section', () => {
+  it('make() sets title', () => {
+    assert.equal(Section.make('Details').toMeta().title, 'Details')
+  })
+
+  it('type is section', () => {
+    assert.equal(Section.make('x').toMeta().type, 'section')
+  })
+
+  it('description() sets description', () => {
+    assert.equal(Section.make('x').description('Extra info').toMeta().description, 'Extra info')
+  })
+
+  it('description defaults to undefined', () => {
+    assert.equal(Section.make('x').toMeta().description, undefined)
+  })
+
+  it('collapsible defaults to false', () => {
+    assert.equal(Section.make('x').toMeta().collapsible, false)
+  })
+
+  it('collapsible() enables collapsing', () => {
+    assert.equal(Section.make('x').collapsible().toMeta().collapsible, true)
+  })
+
+  it('collapsed() sets initial state', () => {
+    assert.equal(Section.make('x').collapsible().collapsed().toMeta().collapsed, true)
+  })
+
+  it('columns defaults to 1', () => {
+    assert.equal(Section.make('x').toMeta().columns, 1)
+  })
+
+  it('columns() sets column count', () => {
+    assert.equal(Section.make('x').columns(2).toMeta().columns, 2)
+    assert.equal(Section.make('x').columns(3).toMeta().columns, 3)
+  })
+
+  it('schema() stores field metas', () => {
+    const s = Section.make('Info').schema(
+      TextField.make('name'),
+      EmailField.make('email'),
+    )
+    const meta = s.toMeta()
+    assert.equal(meta.fields.length, 2)
+    assert.equal(meta.fields[0]?.name, 'name')
+    assert.equal(meta.fields[1]?.name, 'email')
+  })
+
+  it('getFields() returns flat Field list', () => {
+    const name  = TextField.make('name')
+    const email = EmailField.make('email')
+    const s = Section.make('x').schema(name, email)
+    assert.deepEqual(s.getFields(), [name, email])
+  })
+})
+
+// ─── Tabs ─────────────────────────────────────────────────────
+
+describe('Tabs', () => {
+  it('type is tabs', () => {
+    assert.equal(Tabs.make().toMeta().type, 'tabs')
+  })
+
+  it('tab() adds a tab', () => {
+    const tabs = Tabs.make().tab('General', TextField.make('name'))
+    const meta = tabs.toMeta()
+    assert.equal(meta.tabs.length, 1)
+    assert.equal(meta.tabs[0]?.label, 'General')
+    assert.equal(meta.tabs[0]?.fields.length, 1)
+    assert.equal(meta.tabs[0]?.fields[0]?.name, 'name')
+  })
+
+  it('multiple tabs work', () => {
+    const tabs = Tabs.make()
+      .tab('General', TextField.make('name'))
+      .tab('Settings', BooleanField.make('active'))
+    const meta = tabs.toMeta()
+    assert.equal(meta.tabs.length, 2)
+    assert.equal(meta.tabs[1]?.label, 'Settings')
+  })
+
+  it('getFields() flattens all tab fields', () => {
+    const name   = TextField.make('name')
+    const active = BooleanField.make('active')
+    const tabs   = Tabs.make().tab('A', name).tab('B', active)
+    assert.deepEqual(tabs.getFields(), [name, active])
+  })
+
+  it('empty tabs returns empty getFields()', () => {
+    assert.deepEqual(Tabs.make().getFields(), [])
+  })
+})
+
+// ─── Resource with Section/Tabs ───────────────────────────────
+
+describe('Resource with Section/Tabs', () => {
+  it('toMeta() includes section metas in fields array', () => {
+    class R extends Resource {
+      fields() {
+        return [
+          Section.make('Info').schema(TextField.make('name'), EmailField.make('email')),
+        ]
+      }
+    }
+    const meta = new R().toMeta()
+    assert.equal(meta.fields.length, 1)
+    assert.equal((meta.fields[0] as any).type, 'section')
+    assert.equal((meta.fields[0] as any).title, 'Info')
+  })
+
+  it('toMeta() includes tabs metas in fields array', () => {
+    class R extends Resource {
+      fields() {
+        return [
+          Tabs.make()
+            .tab('A', TextField.make('x'))
+            .tab('B', BooleanField.make('y')),
+        ]
+      }
+    }
+    const meta = new R().toMeta()
+    assert.equal(meta.fields.length, 1)
+    assert.equal((meta.fields[0] as any).type, 'tabs')
+    assert.equal((meta.fields[0] as any).tabs.length, 2)
   })
 })
 

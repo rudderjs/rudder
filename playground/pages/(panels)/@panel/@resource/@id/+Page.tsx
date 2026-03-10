@@ -3,16 +3,33 @@
 import { useData }     from 'vike-react/useData'
 import { AdminLayout } from '../../../_components/AdminLayout.js'
 import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
+import type { FieldMeta, SectionMeta, TabsMeta } from '@boostkit/panels'
 import type { Data }   from './+data.js'
+
+type SchemaItem = FieldMeta | SectionMeta | TabsMeta
+
+function flattenFields(schema: SchemaItem[]): FieldMeta[] {
+  const result: FieldMeta[] = []
+  for (const item of schema) {
+    if (item.type === 'section') {
+      result.push(...(item as SectionMeta).fields)
+    } else if (item.type === 'tabs') {
+      for (const tab of (item as TabsMeta).tabs) result.push(...tab.fields)
+    } else {
+      result.push(item as FieldMeta)
+    }
+  }
+  return result
+}
 
 export default function ShowPage() {
   const { panelMeta, resourceMeta, record, pathSegment, slug, id } = useData<Data>()
 
-  const viewFields = resourceMeta.fields.filter(
+  const viewFields = flattenFields(resourceMeta.fields as SchemaItem[]).filter(
     (f) => !f.hidden.includes('view') && f.type !== 'password',
   )
 
-  function renderValue(field: typeof viewFields[number], value: unknown): string {
+  function renderValue(field: FieldMeta, value: unknown): string {
     if (value === null || value === undefined) return '—'
     if (field.type === 'boolean')  return value ? 'Yes' : 'No'
     if (field.type === 'date')     return new Date(String(value)).toLocaleDateString()

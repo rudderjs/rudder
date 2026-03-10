@@ -130,6 +130,93 @@ export class UserResource extends Resource {
 | `RepeaterField` | repeater | Repeatable group of sub-fields (same schema) |
 | `BuilderField` | block picker | Multiple block types each with own schema |
 | `Block` | — | Block type definition for use with `BuilderField` |
+| `FileField` | file input | Upload a file via `@boostkit/storage` |
+| `FileField.image()` | image upload | Upload an image — shows preview thumbnail |
+
+## Form Layout Groupings
+
+`Section` and `Tabs` group fields visually in create/edit forms. They are not fields — they don't appear in the table or the show view.
+
+### Section
+
+```ts
+import { Section } from '@boostkit/panels'
+
+Section.make('Personal Info')
+  .description('Basic contact details')   // optional subtitle
+  .collapsible()                          // allow user to collapse
+  .collapsed()                            // start collapsed
+  .columns(2)                             // 1 | 2 | 3 column grid
+  .schema(
+    TextField.make('firstName'),
+    TextField.make('lastName'),
+    EmailField.make('email'),
+  )
+```
+
+### Tabs
+
+```ts
+import { Tabs } from '@boostkit/panels'
+
+Tabs.make()
+  .tab('General',
+    TextField.make('title').required(),
+    SlugField.make('slug').from('title'),
+  )
+  .tab('SEO',
+    TextField.make('metaTitle'),
+    TextareaField.make('metaDescription'),
+  )
+  .tab('Media',
+    FileField.make('coverImage').image().disk('s3').directory('covers'),
+  )
+```
+
+### Usage in a Resource
+
+```ts
+fields() {
+  return [
+    Section.make('Basic Info').schema(
+      TextField.make('name').required(),
+      EmailField.make('email').required().searchable(),
+    ),
+    Tabs.make()
+      .tab('Settings', SelectField.make('role').options(['user', 'admin']))
+      .tab('Danger Zone', BooleanField.make('suspended')),
+  ]
+}
+```
+
+---
+
+## File Upload
+
+`FileField` connects to `@boostkit/storage` via a panel-mounted upload endpoint (`POST /{panel}/api/_upload`).
+
+```ts
+import { FileField } from '@boostkit/panels'
+
+FileField.make('avatar')
+  .image()                        // show preview; changes type to 'image'
+  .accept('image/*')             // MIME type filter
+  .maxSize(5)                    // max file size in MB (default: 10)
+  .disk('s3')                    // storage disk (default: 'local')
+  .directory('avatars')          // upload path prefix (default: 'uploads')
+
+FileField.make('resume')
+  .accept('application/pdf')
+  .maxSize(20)
+
+FileField.make('gallery')
+  .image()
+  .multiple()                    // allow multiple files — value is string[]
+```
+
+`@boostkit/storage` must be installed and configured for uploads to work.
+
+---
 
 ### Shared fluent methods
 

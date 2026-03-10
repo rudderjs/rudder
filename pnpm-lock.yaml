@@ -414,6 +414,9 @@ importers:
         specifier: workspace:*
         version: link:../router
     devDependencies:
+      '@boostkit/storage':
+        specifier: workspace:*
+        version: link:../storage
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35

@@ -1,6 +1,19 @@
 import { PanelRegistry } from './PanelRegistry.js'
 import type { PanelMeta } from './Panel.js'
-import type { ResourceMeta } from './Resource.js'
+import type { ResourceMeta, FieldOrGrouping } from './Resource.js'
+import type { Field } from './Field.js'
+
+function flattenFields(items: FieldOrGrouping[]): Field[] {
+  const result: Field[] = []
+  for (const item of items) {
+    if ('getFields' in item) {
+      result.push(...flattenFields(item.getFields()))
+    } else {
+      result.push(item as Field)
+    }
+  }
+  return result
+}
 
 export interface ResourceDataContext {
   /** Panel path segment (e.g. 'admin' for a panel at /admin). */
@@ -52,12 +65,12 @@ export async function resourceData(ctx: ResourceDataContext): Promise<ResourceDa
     let q: any = Model.query()
 
     if (sort) {
-      const sortableFields = resource.fields().filter((f: any) => f.isSortable()).map((f: any) => f.getName())
+      const sortableFields = flattenFields(resource.fields()).filter((f) => f.isSortable()).map((f) => f.getName())
       if (sortableFields.includes(sort)) q = q.orderBy(sort, dir)
     }
 
     if (search) {
-      const cols = resource.fields().filter((f: any) => f.isSearchable()).map((f: any) => f.getName())
+      const cols = flattenFields(resource.fields()).filter((f) => f.isSearchable()).map((f) => f.getName())
       if (cols.length > 0) {
         q = q.where(cols[0]!, 'LIKE', `%${search}%`)
         for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i]!, `%${search}%`)

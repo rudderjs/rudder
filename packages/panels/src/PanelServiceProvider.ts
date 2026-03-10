@@ -2,9 +2,25 @@ import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import { PanelRegistry } from './PanelRegistry.js'
 import type { Panel } from './Panel.js'
-import type { Resource } from './Resource.js'
+import type { Field } from './Field.js'
+import type { Resource, FieldOrGrouping } from './Resource.js'
 import type { Action } from './Action.js'
 import type { PanelContext } from './types.js'
+
+// ─── Helpers ───────────────────────────────────────────────
+
+/** Flatten Section / Tabs groupings to a plain Field array. */
+function flattenFields(items: FieldOrGrouping[]): Field[] {
+  const result: Field[] = []
+  for (const item of items) {
+    if ('getFields' in item) {
+      result.push(...flattenFields(item.getFields()))
+    } else {
+      result.push(item as Field)
+    }
+  }
+  return result
+}
 
 // ─── Panel Service Provider ────────────────────────────────
 
@@ -33,6 +49,29 @@ export class PanelServiceProvider extends ServiceProvider {
       // Meta endpoint — returns panel structure for UI consumers
       router.get(`${panel.getApiBase()}/_meta`, (_req, res) => {
         return res.json(panel.toMeta())
+      }, mw)
+
+      // Upload endpoint — used by FileField / ImageField
+      router.post(`${panel.getApiBase()}/_upload`, async (req, res) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { Storage } = await import('@boostkit/storage') as any
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const formData  = await (req.raw as any).formData()
+          const file      = formData.get('file') as File
+          const disk      = String(formData.get('disk')      ?? 'local')
+          const directory = String(formData.get('directory') ?? 'uploads')
+
+          const ext      = (file.name.split('.').pop() ?? 'bin').toLowerCase()
+          const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+          const path     = `${directory}/${filename}`
+
+          await Storage.disk(disk).put(path, Buffer.from(await file.arrayBuffer()))
+          const url = await Storage.disk(disk).url(path)
+          return res.json({ url, path })
+        } catch (err) {
+          return res.status(500).json({ message: 'Upload failed.', error: String(err) })
+        }
       }, mw)
 
       // Mount CRUD routes for each resource
@@ -103,7 +142,7 @@ export class PanelServiceProvider extends ServiceProvider {
 
       // Sort — only on fields marked sortable()
       if (sort) {
-        const sortableFields = resource.fields().filter(f => f.isSortable()).map(f => f.getName())
+        const sortableFields = flattenFields(resource.fields()).filter(f => f.isSortable()).map(f => f.getName())
         if (sortableFields.includes(sort)) {
           q = q.orderBy(sort, dir)
         }
@@ -111,7 +150,7 @@ export class PanelServiceProvider extends ServiceProvider {
 
       // Search — LIKE across all searchable fields (OR)
       if (search) {
-        const searchableCols = resource.fields().filter(f => f.isSearchable()).map(f => f.getName())
+        const searchableCols = flattenFields(resource.fields()).filter(f => f.isSearchable()).map(f => f.getName())
         if (searchableCols.length > 0) {
           q = q.where(searchableCols[0]!, 'LIKE', `%${search}%`)
           for (let i = 1; i < searchableCols.length; i++) {
@@ -258,7 +297,7 @@ export class PanelServiceProvider extends ServiceProvider {
     body: Record<string, unknown>,
     mode: 'create' | 'update',
   ): Record<string, string[]> | null {
-    const fields = resource.fields()
+    const fields = flattenFields(resource.fields())
     const errors: Record<string, string[]> = {}
 
     for (const field of fields) {

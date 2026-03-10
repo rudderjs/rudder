@@ -11,7 +11,14 @@ export type { PageMeta } from './Page.js'
 // ─── Resource ──────────────────────────────────────────────
 
 export { Resource } from './Resource.js'
-export type { ResourceMeta } from './Resource.js'
+export type { ResourceMeta, FieldOrGrouping, SchemaItemMeta } from './Resource.js'
+
+// ─── Groupings ─────────────────────────────────────────────
+
+export { Section } from './Section.js'
+export type { SectionMeta } from './Section.js'
+export { Tabs } from './Tabs.js'
+export type { TabsMeta, TabMeta } from './Tabs.js'
 
 // ─── Field ─────────────────────────────────────────────────
 
@@ -38,6 +45,7 @@ export { ColorField }    from './fields/ColorField.js'
 export { JsonField }     from './fields/JsonField.js'
 export { RepeaterField } from './fields/RepeaterField.js'
 export { BuilderField }  from './fields/BuilderField.js'
+export { FileField }     from './fields/FileField.js'
 export { Block }         from './Block.js'
 export type { BlockMeta } from './Block.js'
 
