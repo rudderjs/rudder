@@ -1,6 +1,6 @@
 {
   "name": "@boostkit/panels",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Multi-panel admin and user-facing dashboard builder for BoostKit",
   "license": "MIT",
   "repository": {
