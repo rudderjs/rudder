@@ -154,9 +154,9 @@ function HasManyTable({ field, parentId, pathSegment }: HasManyTableProps) {
     if (!resourceSlug) return
     fetch(`/${pathSegment}/api/${resourceSlug}/_schema`)
       .then(r => r.json())
-      .then((d: { resourceMeta: { fields: FieldMeta[]; titleField?: string } }) => {
-        // table columns: not hidden from table, not hasMany
-        setSchema(d.resourceMeta.fields.filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
+      .then((d: { resourceMeta: { fields: SchemaItem[] } }) => {
+        // table columns: flatten sections/tabs, then filter out hidden-from-table and hasMany
+        setSchema(flattenFields(d.resourceMeta.fields).filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
       })
       .catch(() => {})
   }, [resourceSlug, pathSegment])
