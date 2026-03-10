@@ -6,3 +6,4 @@ dist/
 .env.*
 !.env.example
 .forge-cli-state.json
+.worktrees/
