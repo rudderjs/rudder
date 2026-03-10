@@ -134,8 +134,8 @@ export class ArticleResource extends Resource {
       SelectFilter.make('featured')
         .label('Featured')
         .options([
-          { label: 'Featured',     value: '1' },
-          { label: 'Not featured', value: '0' },
+          { label: 'Featured',     value: true  },
+          { label: 'Not featured', value: false },
         ]),
     ]
   }

@@ -119,7 +119,9 @@ export class SelectFilter extends Filter {
 
   apply(query: Record<string, unknown>, value: unknown): Record<string, unknown> {
     const col = this._column ?? this._name
-    return { ...query, [col]: value }
+    // Coerce the URL string back to the typed option value (boolean, number, etc.)
+    const typedValue = this._options.find((o) => String(o.value) === String(value))?.value ?? value
+    return { ...query, [col]: typedValue }
   }
 }
 
