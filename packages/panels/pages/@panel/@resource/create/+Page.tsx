@@ -50,12 +50,22 @@ export default function CreatePage() {
   const schema     = resourceMeta.fields as SchemaItem[]
   const formFields = flattenFormFields(schema, 'create')
 
+  // Parse ?prefill[field]=value from the URL
+  const prefill: Record<string, string> = {}
+  if (typeof window !== 'undefined') {
+    new URLSearchParams(window.location.search).forEach((v, k) => {
+      const m = k.match(/^prefill\[(.+)\]$/)
+      if (m?.[1]) prefill[m[1]] = v
+    })
+  }
+
   const initialValues: Record<string, unknown> = Object.fromEntries(
     formFields.map((f) => {
-      if (f.extra?.['default'] !== undefined) return [f.name, f.extra['default']]
+      if (prefill[f.name] !== undefined)          return [f.name, prefill[f.name]]
+      if (f.extra?.['default'] !== undefined)     return [f.name, f.extra['default']]
       if (f.type === 'boolean' || f.type === 'toggle') return [f.name, false]
-      if (f.type === 'belongsToMany') return [f.name, []]
-      if (f.type === 'belongsTo') return [f.name, null]
+      if (f.type === 'belongsToMany')             return [f.name, []]
+      if (f.type === 'belongsTo')                 return [f.name, null]
       return [f.name, '']
     }),
   )
