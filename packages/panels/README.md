@@ -298,7 +298,7 @@ pages/(panels)/@panel/users/+Page.tsx    ← custom index for 'users'
 pages/(panels)/@panel/users/+data.ts
 ```
 
-Use `resourceData()` to fetch panel data without duplicating the built-in query logic:
+Use `resourceData()` in `+data.ts` to fetch the same data the default table uses:
 
 ```ts
 // pages/(panels)/@panel/users/+data.ts
@@ -308,12 +308,18 @@ import type { PageContextServer } from 'vike/types'
 export type Data = Awaited<ReturnType<typeof resourceData>>
 
 export async function data(pageContext: PageContextServer) {
-  const { panel } = pageContext.routeParams as { panel: string }
-  return resourceData({ panel, resource: 'users', url: pageContext.urlOriginal })
+  const { panel, resource } = pageContext.routeParams as { panel: string; resource: string }
+  return resourceData({
+    panel,                         // panel path segment, e.g. 'admin'
+    resource,                      // resource slug, e.g. 'users'
+    url: pageContext.urlOriginal,  // full URL — used to parse sort/search/filter/page
+  })
 }
 ```
 
-`resourceData()` applies the same sort / search / filter / pagination logic as the default table.
+**`ResourceDataResult`** fields: `panelMeta`, `resourceMeta`, `records`, `pagination`, `pathSegment`, `slug`.
+
+The URL query params `resourceData()` honours: `?page`, `?perPage`, `?sort`, `?dir`, `?search`, `?filter[field]` — identical to the default table. See the [full reference](https://boostkitjs.dev/guide/panels#resourcedata) in the docs.
 
 ---
 

@@ -403,6 +403,109 @@ export class PostResource extends Resource {
 
 ---
 
+## Custom Resource Views
+
+To replace the default table for a specific resource, create a Vike page at the resource's static path. Vike's route priority makes static segments win over dynamic ones — your page is served instead of the built-in table.
+
+```
+pages/(panels)/@panel/articles/+Page.tsx    ← custom view for 'articles'
+pages/(panels)/@panel/articles/+data.ts
+```
+
+### `resourceData(ctx)`
+
+Use `resourceData()` in your `+data.ts` to fetch the same data the default table uses — pagination, sort, search, and filters all work out of the box.
+
+```ts
+// pages/(panels)/@panel/articles/+data.ts
+import { resourceData } from '@boostkit/panels'
+import type { PageContextServer } from 'vike/types'
+
+export type Data = Awaited<ReturnType<typeof resourceData>>
+
+export async function data(pageContext: PageContextServer) {
+  const { panel, resource } = pageContext.routeParams as { panel: string; resource: string }
+  return resourceData({
+    panel,               // panel path segment, e.g. 'admin'
+    resource,            // resource slug, e.g. 'articles'
+    url: pageContext.urlOriginal,  // full URL — used to parse sort/search/filter/page
+  })
+}
+```
+
+**`ResourceDataContext`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `panel` | `string` | Panel path segment (e.g. `'admin'` for a panel at `/admin`) |
+| `resource` | `string` | Resource slug (e.g. `'articles'`) |
+| `url` | `string` | Full request URL including query string |
+
+**`ResourceDataResult`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `panelMeta` | `PanelMeta` | Panel name, branding, nav items |
+| `resourceMeta` | `ResourceMeta` | Field schema, filters, actions, labels |
+| `records` | `unknown[]` | Current page of records |
+| `pagination` | `{ total, currentPage, lastPage, perPage } \| null` | Pagination info; `null` if no model |
+| `pathSegment` | `string` | Panel path segment (same as `panel` input) |
+| `slug` | `string` | Resource slug (same as `resource` input) |
+
+The URL query params `resourceData()` reads:
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `?page=` | `1` | Page number |
+| `?perPage=` | `15` | Records per page (max 100) |
+| `?sort=` | `Resource.defaultSort` | Column to sort by (must be `.sortable()`) |
+| `?dir=` | `Resource.defaultSortDir \| 'ASC'` | Sort direction: `ASC` or `DESC` |
+| `?search=` | — | Search term applied across `.searchable()` fields |
+| `?filter[field]=` | — | Value for a named filter |
+
+### Example: card grid instead of table
+
+```tsx
+// pages/(panels)/@panel/articles/+Page.tsx
+'use client'
+
+import { useData }     from 'vike-react/useData'
+import { useConfig }   from 'vike-react/useConfig'
+import { AdminLayout } from '../../_components/AdminLayout.js'
+import type { Data }   from './+data.js'
+
+export default function ArticlesGridPage() {
+  const config = useConfig()
+  const { panelMeta, resourceMeta, records, pagination, pathSegment, slug } = useData<Data>()
+  const panelName = panelMeta.branding?.title ?? panelMeta.name
+  config({ title: `${resourceMeta.label} — ${panelName}` })
+
+  return (
+    <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
+      <div className="grid grid-cols-3 gap-4">
+        {(records as { id: string; title: string; coverImage: string | null }[]).map((article) => (
+          <a key={article.id} href={`/${pathSegment}/${slug}/${article.id}`}
+             className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow">
+            {article.coverImage && (
+              <img src={article.coverImage} alt={article.title}
+                   className="w-full h-40 object-cover rounded-md mb-3" />
+            )}
+            <p className="font-semibold text-sm">{article.title}</p>
+          </a>
+        ))}
+      </div>
+      {pagination && (
+        <p className="text-sm text-muted-foreground mt-4">
+          Page {pagination.currentPage} of {pagination.lastPage} — {pagination.total} total
+        </p>
+      )}
+    </AdminLayout>
+  )
+}
+```
+
+---
+
 ## Customizing the UI
 
 The published pages at `pages/(panels)/` are yours to edit. The UI is built with:
