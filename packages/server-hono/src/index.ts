@@ -200,9 +200,12 @@ class HonoAdapter implements ServerAdapter {
       const req = normalizeRequest(c)
       const res = normalizeResponse(c)
 
-      // Parse body for mutating methods
+      // Parse body for mutating methods — JSON only; leave multipart/form-data untouched
       if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
-        try { req.body = await c.req.json() } catch { req.body = {} }
+        const ct = c.req.header('content-type') ?? ''
+        if (ct.includes('application/json')) {
+          try { req.body = await c.req.json() } catch { req.body = {} }
+        }
       }
 
       // Run middleware chain with the handler as the final step.

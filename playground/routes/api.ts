@@ -157,12 +157,29 @@ Route.get('/api/files', async (_req, res) => {
   return res.json({ files })
 })
 
-// GET /api/files/:filename  — read a file
+// GET /api/files/:filename  — read a text file (demo route, single-segment)
 Route.get('/api/files/:filename', async (req, res) => {
   const { filename } = req.params as { filename: string }
   const content = await Storage.text(`uploads/${filename}`)
   if (content === null) return res.status(404).json({ message: 'File not found.' })
   return res.json({ filename, content })
+})
+
+// GET /api/files/*  — serve any stored file as binary (images, PDFs, etc.)
+Route.get('/api/files/*', async (req) => {
+  const filePath = req.path.slice('/api/files/'.length)
+  const buffer   = await Storage.disk('local').get(filePath)
+  if (!buffer) return new Response('Not Found', { status: 404 })
+
+  const ext  = filePath.split('.').pop()?.toLowerCase() ?? ''
+  const mime: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    pdf: 'application/pdf', txt: 'text/plain', json: 'application/json',
+  }
+  return new Response(buffer, {
+    headers: { 'Content-Type': mime[ext] ?? 'application/octet-stream' },
+  })
 })
 
 // DELETE /api/files/:filename  — delete a file
