@@ -78,11 +78,13 @@ export class Resource {
   static getSlug(): string {
     if (this.slug) return this.slug
     const name = this.name.replace(/Resource$/, '')
-    return (
-      name
-        .replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`)
-        .replace(/^-/, '') + 's'
-    )
+    const kebab = name
+      .replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`)
+      .replace(/^-/, '')
+    // Basic pluralisation: -y → -ies, else append -s
+    return kebab.endsWith('y')
+      ? kebab.slice(0, -1) + 'ies'
+      : kebab + 's'
   }
 
   static getLabel(): string {
