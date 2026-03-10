@@ -131,7 +131,7 @@ export default function EditPage() {
                     : 'flex flex-col gap-4'
 
       return (
-        <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+        <div key={key} className="rounded-xl border border-border bg-card">
           <div
             className={['flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border', section.collapsible ? 'cursor-pointer select-none' : ''].join(' ')}
             onClick={() => section.collapsible && setCollapsedSections((p) => ({ ...p, [key]: !(p[key] ?? section.collapsed) }))}
@@ -160,7 +160,7 @@ export default function EditPage() {
       const active = activeTab[key] ?? 0
 
       return (
-        <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+        <div key={key} className="rounded-xl border border-border bg-card">
           <div className="flex border-b border-border bg-muted/40">
             {tabs.tabs.map((tab, i) => (
               <button

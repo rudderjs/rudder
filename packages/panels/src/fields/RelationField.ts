@@ -49,4 +49,15 @@ export class RelationField extends Field {
     this._extra['multiple'] = value
     return this
   }
+
+  /**
+   * Allow inline creation of new related records from the relation field.
+   * When the user types a value that doesn't match any existing option, a
+   * "Create X" entry appears. Selecting it opens a dialog that renders the
+   * related resource's full create form.
+   */
+  creatable(value = true): this {
+    this._extra['creatable'] = value
+    return this
+  }
 }

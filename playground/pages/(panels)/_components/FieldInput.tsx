@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Checkbox } from '@base-ui-components/react/checkbox'
-import { Combobox } from '@base-ui-components/react/combobox'
 import { Dialog } from '@base-ui-components/react/dialog'
 import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
@@ -647,21 +646,30 @@ interface BelongsToManyComboboxProps {
   uploadBase?: string
 }
 
-const CREATE_SENTINEL = '__create__'
-
 function BelongsToManyCombobox({ field, value, onChange, uploadBase = '' }: BelongsToManyComboboxProps) {
   const resourceSlug = field.extra?.['resource'] as string | undefined
   const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
+  const creatable    = field.extra?.['creatable'] === true
   const selected     = Array.isArray(value) ? (value as string[]) : []
 
-  const [opts, setOpts]             = useState<Opt[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [inputValue, setInputValue] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
-  const [createName, setCreateName] = useState('')
-  const [creating, setCreating]     = useState(false)
-  const createInputRef              = useRef<HTMLInputElement>(null)
+  const [opts, setOpts]           = useState<Opt[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [query, setQuery]         = useState('')
+  const [open, setOpen]           = useState(false)
+  const [focusedIdx, setFocusedIdx] = useState(-1)
 
+  // Create dialog
+  const [createOpen, setCreateOpen]       = useState(false)
+  const [createSchema, setCreateSchema]   = useState<FieldMeta[]>([])
+  const [createValues, setCreateValues]   = useState<Record<string, unknown>>({})
+  const [creating, setCreating]           = useState(false)
+  const [schemaLoading, setSchemaLoading] = useState(false)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLInputElement>(null)
+  const listRef      = useRef<HTMLDivElement>(null)
+
+  // Load options
   useEffect(() => {
     if (!resourceSlug || !uploadBase) { setLoading(false); return }
     fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
@@ -670,158 +678,261 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '' }: Belo
       .catch(() => setLoading(false))
   }, [resourceSlug, labelField, uploadBase])
 
-  const filtered = opts.filter(o =>
-    o.label.toLowerCase().includes(inputValue.toLowerCase()),
-  )
-  const exactMatch = opts.some(o => o.label.toLowerCase() === inputValue.trim().toLowerCase())
-  const showCreate = inputValue.trim().length > 0 && !exactMatch
-
-  function handleValueChange(newIds: string[]) {
-    // If the sentinel value was just added, open create dialog instead
-    if (newIds.includes(CREATE_SENTINEL)) {
-      setCreateName(inputValue.trim())
-      setCreateOpen(true)
-      // Remove the sentinel from selection
-      onChange(newIds.filter(id => id !== CREATE_SENTINEL))
-      return
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setOpen(false)
+        setFocusedIdx(-1)
+      }
     }
-    onChange(newIds)
-    setInputValue('')
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // Scroll focused item into view
+  useEffect(() => {
+    if (!open || focusedIdx < 0) return
+    const el = listRef.current?.children[focusedIdx] as HTMLElement | undefined
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [focusedIdx, open])
+
+  const filtered = useMemo(() =>
+    opts.filter(o => o.label.toLowerCase().includes(query.toLowerCase())),
+    [opts, query],
+  )
+
+  const exactMatch  = opts.some(o => o.label.toLowerCase() === query.trim().toLowerCase())
+  const showCreate  = creatable && query.trim().length > 0 && !exactMatch
+  const totalItems  = filtered.length + (showCreate ? 1 : 0)
+
+  function toggle(id: string) {
+    const next = selected.includes(id)
+      ? selected.filter(s => s !== id)
+      : [...selected, id]
+    onChange(next)
   }
 
-  function removeChip(id: string) {
-    onChange(selected.filter(s => s !== id))
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setOpen(true)
+      setFocusedIdx(0)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setFocusedIdx(i => (i + 1) % totalItems)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setFocusedIdx(i => (i - 1 + totalItems) % totalItems)
+    } else if (e.key === 'Enter' && open) {
+      e.preventDefault()
+      if (focusedIdx >= 0 && focusedIdx < filtered.length) {
+        toggle(filtered[focusedIdx]!.value)
+      } else if (showCreate && focusedIdx === filtered.length) {
+        void openCreateDialog()
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setFocusedIdx(-1)
+      inputRef.current?.blur()
+    } else if (e.key === 'Backspace' && !query && selected.length > 0) {
+      onChange(selected.slice(0, -1))
+    }
+  }
+
+  async function openCreateDialog() {
+    setOpen(false)
+    setCreateOpen(true)
+    setSchemaLoading(true)
+    try {
+      const res  = await fetch(`${uploadBase}/${resourceSlug}/_schema`)
+      const data = await res.json() as { resourceMeta: { fields: FieldMeta[] } }
+      const fields = data.resourceMeta.fields.filter(f => !f.hidden.includes('create'))
+      setCreateSchema(fields)
+      const init: Record<string, unknown> = {}
+      for (const f of fields) {
+        if (f.extra?.['default'] !== undefined) { init[f.name] = f.extra['default']; continue }
+        if (f.type === 'boolean' || f.type === 'toggle') { init[f.name] = false; continue }
+        if (f.type === 'belongsToMany') { init[f.name] = []; continue }
+        if (f.type === 'belongsTo')     { init[f.name] = null; continue }
+        init[f.name] = f.type === 'number' ? null : ''
+      }
+      // Pre-fill the label field with what the user typed
+      if (query.trim()) init[labelField] = query.trim()
+      setCreateValues(init)
+    } catch {
+      // fallback: single-field dialog
+      setCreateSchema([])
+      setCreateValues({ [labelField]: query.trim() })
+    } finally {
+      setSchemaLoading(false)
+    }
   }
 
   async function handleCreate() {
-    if (!createName.trim() || !resourceSlug || !uploadBase) return
+    if (!resourceSlug || !uploadBase) return
     setCreating(true)
     try {
       const res = await fetch(`${uploadBase}/${resourceSlug}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ [labelField]: createName.trim() }),
+        body:    JSON.stringify(createValues),
       })
       if (!res.ok) throw new Error('Create failed')
-      const record = await res.json() as { id: string } & Record<string, unknown>
-      const newOpt: Opt = { value: record.id, label: String(record[labelField] ?? createName) }
+      const body   = await res.json() as { data: { id: string } & Record<string, unknown> }
+      const record = body.data
+      const newOpt: Opt = { value: String(record.id), label: String(record[labelField] ?? record.id) }
       setOpts(prev => [...prev, newOpt])
-      onChange([...selected, record.id])
+      onChange([...selected, String(record.id)])
       setCreateOpen(false)
-      setCreateName('')
-      setInputValue('')
+      setQuery('')
     } catch {
-      // creation failed — leave state unchanged
+      // failed — leave state unchanged
     } finally {
       setCreating(false)
     }
   }
 
+  const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
+
   return (
-    <div className="flex flex-col gap-2">
-      <Combobox.Root
-        value={selected}
-        onValueChange={(ids) => handleValueChange((ids ?? []) as string[])}
-        multiple
-        inputValue={inputValue}
-        onInputValueChange={(v) => setInputValue(v)}
+    <div ref={containerRef} className="flex flex-col gap-2 relative">
+      {/* Chips + search input */}
+      <div
+        className="flex flex-wrap gap-1.5 p-1.5 min-h-[42px] rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring cursor-text"
+        onClick={() => inputRef.current?.focus()}
       >
-        <Combobox.Chips className="flex flex-wrap gap-1.5 p-1.5 min-h-[42px] rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
-          {selected.map((id) => {
-            const opt = opts.find(o => o.value === id)
+        {selected.map((id) => {
+          const opt = opts.find(o => o.value === id)
+          return (
+            <span
+              key={id}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+            >
+              {opt?.label ?? id}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onChange(selected.filter(s => s !== id)) }}
+                className="hover:text-destructive leading-none ml-0.5 cursor-pointer"
+              >×</button>
+            </span>
+          )
+        })}
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          placeholder={loading ? 'Loading…' : selected.length > 0 ? 'Add more…' : `Search ${field.label}…`}
+          disabled={loading || field.readonly}
+          className="flex-1 min-w-[120px] px-1 py-1 text-sm bg-transparent outline-none"
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); setFocusedIdx(-1) }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+
+      {/* Dropdown */}
+      {open && totalItems > 0 && (
+        <div
+          ref={listRef}
+          className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-lg py-1"
+        >
+          {filtered.map((o, i) => {
+            const isSelected = selected.includes(o.value)
+            const isFocused  = i === focusedIdx
             return (
-              <Combobox.Chip
-                key={id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+              <div
+                key={o.value}
+                onMouseDown={(e) => { e.preventDefault(); toggle(o.value) }}
+                onMouseEnter={() => setFocusedIdx(i)}
+                className={[
+                  'flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none',
+                  isFocused ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground',
+                ].join(' ')}
               >
-                {opt?.label ?? id}
-                <Combobox.ChipRemove
-                  onClick={() => removeChip(id)}
-                  className="hover:text-destructive leading-none ml-0.5 cursor-pointer"
-                  aria-label={`Remove ${opt?.label ?? id}`}
-                >
-                  ×
-                </Combobox.ChipRemove>
-              </Combobox.Chip>
+                <span className={['w-4 shrink-0 text-primary', isSelected ? 'opacity-100' : 'opacity-0'].join(' ')}>
+                  <CheckIcon />
+                </span>
+                <span>{o.label}</span>
+              </div>
             )
           })}
-          <Combobox.Input
-            placeholder={loading ? 'Loading…' : selected.length > 0 ? 'Add more…' : `Search ${field.label}…`}
-            disabled={loading || field.readonly}
-            className="flex-1 min-w-[120px] px-1.5 py-1 text-sm bg-transparent outline-none"
-          />
-        </Combobox.Chips>
 
-        <Combobox.Portal>
-          <Combobox.Positioner>
-            <Combobox.Popup className="z-50 min-w-[220px] max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-lg py-1 outline-none">
-              {filtered.map((o) => (
-                <Combobox.Item
-                  key={o.value}
-                  value={o.value}
-                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground outline-none"
-                >
-                  <Combobox.ItemIndicator className="text-primary shrink-0">
-                    <CheckIcon />
-                  </Combobox.ItemIndicator>
-                  <Combobox.ItemText>{o.label}</Combobox.ItemText>
-                </Combobox.Item>
-              ))}
+          {showCreate && (
+            <div
+              onMouseDown={(e) => { e.preventDefault(); void openCreateDialog() }}
+              onMouseEnter={() => setFocusedIdx(filtered.length)}
+              className={[
+                'flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none text-primary border-t border-border mt-1 pt-2',
+                focusedIdx === filtered.length ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground',
+              ].join(' ')}
+            >
+              <span className="font-bold w-4 shrink-0">+</span>
+              <span>Create &ldquo;{query.trim()}&rdquo;</span>
+            </div>
+          )}
+        </div>
+      )}
 
-              {showCreate && (
-                <Combobox.Item
-                  value={CREATE_SENTINEL}
-                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer text-primary data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground outline-none border-t border-border mt-1 pt-2"
-                >
-                  <span className="shrink-0 font-bold">+</span>
-                  <Combobox.ItemText>Create &ldquo;{inputValue.trim()}&rdquo;</Combobox.ItemText>
-                </Combobox.Item>
-              )}
-
-              {filtered.length === 0 && !showCreate && (
-                <Combobox.Empty className="px-3 py-2 text-sm text-muted-foreground">
-                  No results.
-                </Combobox.Empty>
-              )}
-            </Combobox.Popup>
-          </Combobox.Positioner>
-        </Combobox.Portal>
-      </Combobox.Root>
-
-      {/* Create dialog */}
+      {/* Create dialog — full resource schema */}
       <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-50" />
-          <Dialog.Popup
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm rounded-lg border border-border bg-popover shadow-xl p-6 flex flex-col gap-4"
-            onOpenAutoFocus={(e) => { e.preventDefault(); setTimeout(() => createInputRef.current?.focus(), 50) }}
-          >
-            <Dialog.Title className="text-base font-semibold">
-              Create new {field.label}
-            </Dialog.Title>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium capitalize">{labelField}</label>
-              <input
-                ref={createInputRef}
-                type="text"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreate() } }}
-                placeholder={`Enter ${labelField}…`}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg rounded-lg border border-border bg-popover shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <Dialog.Title className="text-base font-semibold">
+                Create new {field.extra?.['labelSingular'] as string ?? field.label}
+              </Dialog.Title>
+              <Dialog.Close className="text-muted-foreground hover:text-foreground text-lg leading-none">×</Dialog.Close>
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Dialog.Close className="px-3 py-1.5 rounded-md text-sm border border-input hover:bg-accent transition-colors">
+            <div className="flex flex-col gap-4 p-6 overflow-y-auto">
+              {schemaLoading && <p className="text-sm text-muted-foreground">Loading form…</p>}
+
+              {!schemaLoading && createSchema.length > 0 && createSchema.map((f) => (
+                <div key={f.name}>
+                  {f.type !== 'boolean' && f.type !== 'toggle' && f.type !== 'hidden' && (
+                    <label className="block text-sm font-medium mb-1.5">
+                      {f.label}
+                      {f.required && <span className="text-destructive ml-0.5">*</span>}
+                    </label>
+                  )}
+                  <FieldInput
+                    field={f}
+                    value={createValues[f.name]}
+                    onChange={(v) => setCreateValues(prev => ({ ...prev, [f.name]: v }))}
+                    uploadBase={uploadBase}
+                  />
+                </div>
+              ))}
+
+              {/* Fallback: single field when schema couldn't load */}
+              {!schemaLoading && createSchema.length === 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 capitalize">{labelField}</label>
+                  <input
+                    type="text"
+                    value={String(createValues[labelField] ?? '')}
+                    onChange={(e) => setCreateValues(prev => ({ ...prev, [labelField]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreate() } }}
+                    className={inputCls}
+                    autoFocus
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
+              <Dialog.Close className="px-4 py-2 rounded-md text-sm border border-input hover:bg-accent transition-colors">
                 Cancel
               </Dialog.Close>
               <button
                 type="button"
                 onClick={() => void handleCreate()}
-                disabled={creating || !createName.trim()}
-                className="px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                disabled={creating}
+                className="px-4 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {creating ? 'Creating…' : 'Create'}
               </button>
