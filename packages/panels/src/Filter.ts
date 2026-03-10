@@ -40,6 +40,42 @@ export abstract class Filter {
   /** @internal — applied to query builder */
   abstract apply(query: Record<string, unknown>, value: unknown): Record<string, unknown>
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  protected _queryFn?: (q: any, value: unknown) => any
+
+  /**
+   * Custom query callback — receives the raw ORM query builder and the filter value.
+   * Use this when the default column=value equality isn't enough.
+   *
+   * @example
+   * SelectFilter.make('status')
+   *   .options([...])
+   *   .query((q, value) => q.where('status', value).where('deletedAt', null))
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query(fn: (q: any, value: unknown) => any): this {
+    this._queryFn = fn
+    return this
+  }
+
+  /** @internal — apply this filter to a query builder */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  applyToQuery(q: any, value: unknown): any {
+    if (this._queryFn) return this._queryFn(q, value)
+    // Default: translate apply() map → ORM where clauses
+    const clauses = this.apply({}, value)
+    for (const [col, val] of Object.entries(clauses)) {
+      if (col === '_search') {
+        const { value: sv, columns } = val as { value: string; columns: string[] }
+        if (columns[0]) q = q.where(columns[0], 'LIKE', `%${sv}%`)
+        for (let i = 1; i < columns.length; i++) q = q.orWhere(columns[i]!, `%${sv}%`)
+      } else {
+        q = q.where(col, val)
+      }
+    }
+    return q
+  }
+
   toMeta(): FilterMeta {
     return {
       name:  this._name,

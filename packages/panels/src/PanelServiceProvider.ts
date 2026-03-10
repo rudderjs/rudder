@@ -164,18 +164,7 @@ export class PanelServiceProvider extends ServiceProvider {
       for (const filter of resource.filters()) {
         const value = url.searchParams.get(`filter[${filter.getName()}]`)
         if (value !== null && value !== '') {
-          const applied = filter.apply({}, value)
-          for (const [col, val] of Object.entries(applied)) {
-            if (col === '_search') {
-              const { value: sv, columns } = val as { value: string; columns: string[] }
-              if (columns[0]) q = q.where(columns[0], 'LIKE', `%${sv}%`)
-              for (let i = 1; i < columns.length; i++) {
-                q = q.orWhere(columns[i]!, `%${sv}%`)
-              }
-            } else {
-              q = q.where(col, val)
-            }
-          }
+          q = filter.applyToQuery(q, value)
         }
       }
 
