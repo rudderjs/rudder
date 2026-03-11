@@ -12,7 +12,7 @@ import { User }       from '../../Models/User.js'
 export const adminPanel = Panel.make('admin')
   .path('/admin')
   .branding({
-    title: 'BoostKit Admin',
+    title: 'BoostKit',
   })
   .layout('sidebar')
   .guard(async (ctx) => ctx.user?.role === 'admin')
@@ -21,9 +21,6 @@ export const adminPanel = Panel.make('admin')
     CategoryResource,
     TodoResource,
     UserResource,
-  ])
-  .pages([
-    CustomPage,
   ])
   .schema(async (ctx) => [
     Heading.make(`Welcome back${ctx.user?.name ? `, ${ctx.user.name}` : ''}.`),
@@ -38,4 +35,7 @@ export const adminPanel = Panel.make('admin')
       .resource('articles')
       .columns(['title', 'status', 'createdAt'])
       .limit(5),
+  ])
+  .pages([
+    CustomPage,
   ])
