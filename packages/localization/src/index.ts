@@ -11,38 +11,44 @@ export interface LocalizationConfig {
 
 type TranslationMap = Record<string, unknown>
 
+const _G = globalThis as Record<string, unknown>
+const _DEFAULT_CONFIG: LocalizationConfig = { locale: 'en', fallback: 'en', path: './lang' }
+if (!_G['__boostkit_localization_cache__']) _G['__boostkit_localization_cache__'] = new Map<string, TranslationMap>()
+if (!_G['__boostkit_localization_als__']) _G['__boostkit_localization_als__'] = new AsyncLocalStorage<{ locale: string }>()
+
+function _cache(): Map<string, TranslationMap> {
+	return _G['__boostkit_localization_cache__'] as Map<string, TranslationMap>
+}
+
 export class LocalizationRegistry {
-	private static _config: LocalizationConfig = { locale: 'en', fallback: 'en', path: './lang' }
-	private static _cache = new Map<string, TranslationMap>()
-	private static _als = new AsyncLocalStorage<{ locale: string }>()
 
 	static configure(config: LocalizationConfig): void {
-		this._config = config
+		_G['__boostkit_localization_config__'] = config
 	}
 
 	static getConfig(): LocalizationConfig {
-		return this._config
+		return (_G['__boostkit_localization_config__'] as LocalizationConfig | undefined) ?? _DEFAULT_CONFIG
 	}
 
 	static getAls(): AsyncLocalStorage<{ locale: string }> {
-		return this._als
+		return _G['__boostkit_localization_als__'] as AsyncLocalStorage<{ locale: string }>
 	}
 
 	static seed(locale: string, namespace: string, data: TranslationMap): void {
-		this._cache.set(`${locale}:${namespace}`, data)
+		_cache().set(`${locale}:${namespace}`, data)
 	}
 
 	static getCached(locale: string, namespace: string): TranslationMap | undefined {
-		return this._cache.get(`${locale}:${namespace}`)
+		return _cache().get(`${locale}:${namespace}`)
 	}
 
 	static setCached(locale: string, namespace: string, data: TranslationMap): void {
-		this._cache.set(`${locale}:${namespace}`, data)
+		_cache().set(`${locale}:${namespace}`, data)
 	}
 
 	static reset(): void {
-		this._cache.clear()
-		this._config = { locale: 'en', fallback: 'en', path: './lang' }
+		_cache().clear()
+		_G['__boostkit_localization_config__'] = undefined
 	}
 }
 
