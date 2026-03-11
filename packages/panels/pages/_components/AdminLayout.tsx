@@ -39,6 +39,25 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   ]
 }
 
+/** Enhance nav hrefs with persisted query strings (client-only). */
+function useNavItemsWithPersistedState(panelMeta: PanelMeta): NavItem[] {
+  const base = buildNavItems(panelMeta)
+  const [items, setItems] = useState(base)
+
+  useEffect(() => {
+    const segment = panelMeta.path.replace(/^\//, '')
+    const enhanced = base.map((item) => {
+      const resource = panelMeta.resources.find((r) => r.slug === item.slug)
+      if (!resource?.persistFilters) return item
+      const saved = sessionStorage.getItem(`panels:${segment}:${item.slug}:tableState`)
+      return saved ? { ...item, href: item.href + saved } : item
+    })
+    setItems(enhanced)
+  }) // no deps — re-run on every render so hrefs stay up-to-date
+
+  return items
+}
+
 function useSessionUser(initial?: SessionUser): SessionUser | null {
   const [user, setUser] = useState<SessionUser | null>(initial ?? null)
   useEffect(() => {
@@ -126,7 +145,7 @@ function UserDropdown({ user, signOutLabel }: { user: SessionUser; signOutLabel:
 
 function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: InternalProps) {
   const brand    = panelMeta.branding?.title ?? panelMeta.name
-  const navItems = buildNavItems(panelMeta)
+  const navItems = useNavItemsWithPersistedState(panelMeta)
   const current  = navItems.find((n) => n.slug === currentSlug)
   const user     = useSessionUser(initialUser)
   const { i18n, dir } = panelMeta
@@ -193,7 +212,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Intern
 
 function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: InternalProps) {
   const brand    = panelMeta.branding?.title ?? panelMeta.name
-  const navItems = buildNavItems(panelMeta)
+  const navItems = useNavItemsWithPersistedState(panelMeta)
   const user     = useSessionUser(initialUser)
   const { i18n, dir } = panelMeta
 

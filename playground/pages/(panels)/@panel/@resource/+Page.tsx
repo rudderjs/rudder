@@ -46,9 +46,9 @@ export default function ResourceListPage() {
   // ── Load-more state ──────────────────────────────────
   const isLoadMore = resourceMeta.paginationType === 'loadMore'
   const [extraRecords,     setExtraRecords]     = useState<unknown[]>([])
-  const [loadMorePage,     setLoadMorePage]     = useState(pagination?.currentPage ?? 1)
   const [loadMorePending,  setLoadMorePending]  = useState(false)
   const allRecords = isLoadMore ? [...(records as unknown[]), ...extraRecords] : records as unknown[]
+  const hasMorePages = isLoadMore && pagination != null && allRecords.length < pagination.total
 
   const allFields    = flattenFields(resourceMeta.fields as SchemaItem[])
   const tableFields  = allFields.filter((f) => !f.hidden.includes('table'))
@@ -70,7 +70,9 @@ export default function ResourceListPage() {
     && !!sessionStorage.getItem(storageKey)
 
   // Save params to sessionStorage whenever URL has them
-  if (persist && typeof window !== 'undefined' && urlSearch) {
+  // In loadMore mode, once extra pages are loaded, handleLoadMore saves the updated URL directly
+  // — skip the render-time save to avoid overwriting with stale SSR urlSearch
+  if (persist && typeof window !== 'undefined' && urlSearch && !(isLoadMore && extraRecords.length > 0)) {
     sessionStorage.setItem(storageKey, '?' + urlSearch)
   }
 
@@ -97,7 +99,6 @@ export default function ResourceListPage() {
   useEffect(() => {
     setSelected([])
     setExtraRecords([])
-    setLoadMorePage(1)
     restoredRef.current = null  // allow restore for the new resource
   }, [slug])
 
@@ -112,13 +113,14 @@ export default function ResourceListPage() {
     if (recordsRef.current !== records) {
       recordsRef.current = records
       setExtraRecords([])
-      setLoadMorePage(pagination?.currentPage ?? 1)
     }
   }, [records, pagination?.currentPage])
 
   async function handleLoadMore() {
     if (!pagination || loadMorePending) return
-    const nextPage = loadMorePage + 1
+    // Compute next page from how many records we already have
+    const currentCount = (records as unknown[]).length + extraRecords.length
+    const nextPage = Math.floor(currentCount / pagination.perPage) + 1
     setLoadMorePending(true)
     try {
       const url = new URL(window.location.href)
@@ -127,11 +129,14 @@ export default function ResourceListPage() {
       if (res.ok) {
         const body = await res.json() as { data: unknown[] }
         setExtraRecords((prev) => [...prev, ...body.data])
-        setLoadMorePage(nextPage)
+        // Update URL without navigation so persistFilters can save the position
+        window.history.replaceState(null, '', url.pathname + url.search)
+        if (persist) sessionStorage.setItem(storageKey, url.search)
       }
     } catch { /* ignore */ }
     finally { setLoadMorePending(false) }
   }
+
 
   /** Navigate and persist query string to sessionStorage */
   function navigateAndPersist(url: URL) {
@@ -537,7 +542,7 @@ export default function ResourceListPage() {
           <p className="text-sm text-muted-foreground">
             {t(i18n.showing, { n: allRecords.length, total: pagination.total })}
           </p>
-          {loadMorePage < pagination.lastPage && (
+          {hasMorePages && (
             <button
               onClick={handleLoadMore}
               disabled={loadMorePending}

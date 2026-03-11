@@ -29,7 +29,9 @@ export async function data(pageContext: PageContextServer) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
   const params = new URLSearchParams(pageContext.urlOriginal.split('?')[1] ?? '')
-  const page   = Number(params.get('page') ?? 1)
+  const isLoadMore = (ResourceClass as any).paginationType === 'loadMore'
+  const loadMoreTarget = isLoadMore ? Number(params.get('page') ?? 1) : 1
+  const page   = isLoadMore ? 1 : Number(params.get('page') ?? 1)
   const sort   = params.get('sort') ?? undefined
   const dir    = (params.get('dir') ?? 'ASC').toUpperCase() as 'ASC' | 'DESC'
   const search = params.get('search') ?? undefined
@@ -71,7 +73,11 @@ export async function data(pageContext: PageContextServer) {
     }
 
     const perPage = Math.min(Number(params.get('perPage') ?? (ResourceClass as any).perPage ?? 15), 100)
-    const result = await q.paginate(page, perPage)
+
+    // In loadMore mode, fetch pages 1..N in a single query
+    const effectivePerPage = isLoadMore && loadMoreTarget > 1 ? perPage * loadMoreTarget : perPage
+    const result = await q.paginate(page, effectivePerPage)
+    const rawRecords: unknown[] = result.data
 
     // Apply display transforms + computed fields
     const allFields = flattenFields(resource.fields())
@@ -79,21 +85,24 @@ export async function data(pageContext: PageContextServer) {
     const displayFields  = allFields.filter((f: any) => typeof f.hasDisplay === 'function' && f.hasDisplay())
 
     if (computedFields.length || displayFields.length) {
-      records = (result.data as Record<string, unknown>[]).map((r: any) => {
+      records = (rawRecords as Record<string, unknown>[]).map((r: any) => {
         const rec = { ...r }
         for (const f of computedFields) rec[(f as any).getName()] = (f as any).apply(rec)
         for (const f of displayFields)  rec[(f as any).getName()] = (f as any).applyDisplay(rec[(f as any).getName()], rec)
         return rec
       })
     } else {
-      records = result.data
+      records = rawRecords
     }
 
+    // For loadMore, report pagination in terms of the original perPage batch size
+    const totalRecords = result.total
+    const actualLastPage = Math.ceil(totalRecords / perPage)
     pagination = {
-      total:       result.total,
-      currentPage: result.currentPage,
-      lastPage:    result.lastPage,
-      perPage:     result.perPage,
+      total:       totalRecords,
+      currentPage: isLoadMore ? loadMoreTarget : result.currentPage,
+      lastPage:    isLoadMore ? actualLastPage : result.lastPage,
+      perPage,
     }
   }
 
