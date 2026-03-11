@@ -320,6 +320,57 @@ This pre-selects `parentId` in the create form. Useful for the "create related" 
 
 ---
 
+## Panel Schema (Landing Page)
+
+By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with stats, headings, text, and data tables.
+
+```ts
+import { Panel, Heading, Text, Stats, Stat, Table } from '@boostkit/panels'
+
+export const adminPanel = Panel.make('admin')
+  .path('/admin')
+  .resources([UserResource, ArticleResource])
+  .schema(async (ctx) => [
+    Heading.make('Welcome back'),
+    Text.make(`Logged in as ${ctx.user?.email ?? 'guest'}`),
+
+    Stats.make([
+      Stat.make('Users').value(await User.query().count()),
+      Stat.make('Articles').value(await Article.query().count()),
+      Stat.make('Published').value(await Article.query().where('status', 'published').count()),
+    ]),
+
+    Table.make('Recent Articles')
+      .resource('articles')
+      .columns(['title', 'status', 'publishedAt'])
+      .sortBy('createdAt', 'DESC')
+      .limit(5),
+  ])
+```
+
+The schema function receives `PanelContext` (`{ user, headers, path }`) and can be async — safe to run ORM queries.
+
+**Static schema** (no context needed):
+
+```ts
+.schema([
+  Heading.make('Admin Panel'),
+  Text.make('Manage your application from the sidebar.'),
+])
+```
+
+### Schema Elements
+
+| Class | Description |
+|---|---|
+| `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `2`) |
+| `Text.make(content)` | Paragraph of text |
+| `Stats.make([...stats])` | Row of stat cards |
+| `Stat.make(label)` | Single stat — `.value(n)`, `.description(text)`, `.trend('up'\|'down'\|'neutral')` |
+| `Table.make(title)` | Data table — `.resource(slug)`, `.columns([...])`, `.limit(n)`, `.sortBy(col, dir)` |
+
+---
+
 ## Layout Options
 
 ```ts

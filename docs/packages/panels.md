@@ -565,6 +565,52 @@ export default {
 
 ---
 
+## Panel Schema (Landing Page)
+
+By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to render a custom landing page instead.
+
+```ts
+import { Panel, Heading, Text, Stats, Stat, Table } from '@boostkit/panels'
+
+Panel.make('admin')
+  .schema(async (ctx) => [
+    Heading.make('Welcome back'),
+    Text.make(`Logged in as ${ctx.user?.email ?? 'guest'}`),
+
+    Stats.make([
+      Stat.make('Users').value(await User.query().count()),
+      Stat.make('Articles').value(await Article.query().count()),
+    ]),
+
+    Table.make('Recent Articles')
+      .resource('articles')
+      .columns(['title', 'status', 'publishedAt'])
+      .sortBy('createdAt', 'DESC')
+      .limit(5),
+  ])
+```
+
+The function receives `PanelContext` (`{ user, headers, path }`) and can be `async`. For a static schema (no context needed), pass an array directly:
+
+```ts
+.schema([
+  Heading.make('Admin Panel'),
+  Text.make('Manage your application from the sidebar.'),
+])
+```
+
+### Schema Elements
+
+| Class | Description |
+|---|---|
+| `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `2`) |
+| `Text.make(content)` | Paragraph of text |
+| `Stats.make([...stats])` | Row of stat cards |
+| `Stat.make(label)` | Single stat — `.value(n)`, `.description(text)`, `.trend('up'\|'down'\|'neutral')` |
+| `Table.make(title)` | Data table — `.resource(slug)`, `.columns([...])`, `.limit(n)`, `.sortBy(col, dir)` |
+
+---
+
 ## Branding
 
 ```ts
@@ -589,6 +635,7 @@ For each resource, the following routes are mounted at boot:
 | `PUT` | `/{panel}/api/{resource}/:id` | Update |
 | `DELETE` | `/{panel}/api/{resource}/:id` | Delete |
 | `POST` | `/{panel}/api/{resource}/_action/:name` | Run bulk action |
+| `POST` | `/{panel}/api/_upload` | File upload (used by FileField) |
 | `GET` | `/{panel}/api/{resource}/_options` | Relation select options — used by RelationField |
 | `GET` | `/{panel}/api/{resource}/_schema` | Field definitions — used for inline create dialog |
 | `GET` | `/{panel}/api/{resource}/_related` | HasMany records — `?fk=col&id=val[&through=true]` |
