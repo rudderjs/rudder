@@ -214,9 +214,10 @@ export class PanelServiceProvider extends ServiceProvider {
         // FK:  WHERE foreignKey = parentId
         : Model.query().where(fk, id)
 
-      // Include belongsTo relations so display names are available
+      // Include belongsTo and belongsToMany relations so display values are available
       for (const f of flattenFields(new ResourceClass().fields())) {
-        if (f.getType() === 'belongsTo') q = q.with(relationName(f))
+        if (f.getType() === 'belongsTo')    q = q.with(relationName(f))
+        if (f.getType() === 'belongsToMany') q = q.with(f.getName())
       }
 
       const result = await q.paginate(page, 15)

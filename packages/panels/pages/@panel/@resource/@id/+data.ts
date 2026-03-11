@@ -76,12 +76,15 @@ export async function data(pageContext: PageContextServer) {
         ? RelModel.query().where(fk, { some: { id } })
         : RelModel.query().where(fk, id)
 
-      // Eager-load belongsTo relations so CellValue can display them
+      // Eager-load belongsTo and belongsToMany relations so CellValue can display them
       for (const rf of flattenFields(relResource.fields())) {
-        if ((rf as any).getType?.() === 'belongsTo') {
+        const rfType = (rf as any).getType?.() as string | undefined
+        if (rfType === 'belongsTo') {
           const rname = (rf as any).getName() as string
           const rel = ((rf as any)._extra?.['relationName'] as string) ?? (rname.endsWith('Id') ? rname.slice(0, -2) : rname)
           q = q.with(rel)
+        } else if (rfType === 'belongsToMany') {
+          q = q.with((rf as any).getName() as string)
         }
       }
 
