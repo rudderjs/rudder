@@ -71,6 +71,7 @@ export class UserResource extends Resource {
   static model           = User
   static label           = 'Users'
   static labelSingular   = 'User'
+  static titleField      = 'name'            // show page heading, breadcrumbs, and relation displays
   static defaultSort     = 'createdAt'       // default sort column
   static defaultSortDir  = 'DESC' as const   // applied when no ?sort in URL
 
@@ -132,6 +133,8 @@ export class UserResource extends Resource {
 | `Block` | — | Block type definition for use with `BuilderField` |
 | `FileField` | file input | Upload a file via `@boostkit/storage` |
 | `FileField.image()` | image upload | Upload an image — shows preview thumbnail |
+| `RelationField` | select / chip multi-select | BelongsTo / belongsToMany relation |
+| `HasMany` | — | Reverse relation table rendered on the show page |
 
 ## Form Layout Groupings
 
@@ -215,6 +218,88 @@ FileField.make('gallery')
 ```
 
 `@boostkit/storage` must be installed and configured for uploads to work.
+
+---
+
+## Relations
+
+Use `RelationField` to render belongs-to and belongs-to-many dropdowns in create/edit forms.
+
+```ts
+import { RelationField } from '@boostkit/panels'
+
+// BelongsTo — FK lives on this model (e.g. parentId → parent)
+RelationField.make('parentId')
+  .label('Parent Category')
+  .resource('categories')   // slug of the related resource
+  .display('name')          // field to show as label (default: 'name')
+  .as('parent')             // override Prisma relation name (default: strip 'Id' suffix)
+
+// BelongsToMany — Prisma implicit M2M join table
+RelationField.make('categories')
+  .label('Categories')
+  .resource('categories')
+  .display('name')
+  .multiple()               // enables M2M multi-select
+  .creatable()              // allow creating new related records inline
+  .hideFromTable()
+```
+
+**`.creatable()`** — when set on a `belongsToMany` field, the multi-select dropdown shows a "Create X" option when the typed value has no exact match. Selecting it opens a dialog that renders the related resource's full create form. The new record is created via POST and automatically added to the selection.
+
+**UI for `belongsTo`**: native `<select>` with options fetched from the related resource.
+
+**UI for `belongsToMany`**: searchable chip multi-select. Keyboard: `↑↓` navigate, `Enter` select, `Escape` close, `Backspace` removes last chip.
+
+**Options are fetched from** `GET /{panel}/api/{resource}/_options?label={displayField}`.
+
+**`static titleField`** on Resource sets which field is used as the record's display title in show page headers, breadcrumbs, and relation displays:
+
+```ts
+export class CategoryResource extends Resource {
+  static titleField = 'name'   // used as show page heading and in relation links
+  // ...
+}
+```
+
+---
+
+## Reverse Relations (HasMany)
+
+Use `HasMany` to render a paginated relation table below the record on the show page.
+
+```ts
+import { HasMany } from '@boostkit/panels'
+
+// FK-based hasMany (e.g. sub-categories where parentId = current id)
+HasMany.make('children')
+  .label('Sub-categories')
+  .resource('categories')   // related resource slug
+  .foreignKey('parentId')   // FK column on the related model
+
+// M2M reverse (e.g. articles linked via implicit join table)
+HasMany.make('articles')
+  .label('Articles')
+  .resource('articles')
+  .foreignKey('categories') // relation name on the related model
+  .throughMany()            // use Prisma { some: { id } } filter instead of FK equality
+```
+
+`HasMany` fields are automatically hidden from the table, create, and edit views — they only render on the **show page** as a paginated table below the record details.
+
+The table includes a **"+ New"** button that links to the related resource's create page with the FK pre-filled via `?prefill[{foreignKey}]={currentId}`.
+
+---
+
+## Create Page Prefill
+
+The create page reads `prefill[field]=value` query params and uses them as initial field values:
+
+```
+/admin/categories/create?prefill[parentId]=abc123
+```
+
+This pre-selects `parentId` in the create form. Useful for the "create related" flow from a HasMany table.
 
 ---
 
@@ -506,6 +591,9 @@ For each resource, the following routes are mounted at boot:
 | `PUT` | `/{panel}/api/{resource}/:id` | Update |
 | `DELETE` | `/{panel}/api/{resource}/:id` | Delete |
 | `POST` | `/{panel}/api/{resource}/_action/:name` | Run bulk action |
+| `GET` | `/{panel}/api/{resource}/_options` | Relation select options — used by RelationField |
+| `GET` | `/{panel}/api/{resource}/_schema` | Field definitions — used for inline create dialog |
+| `GET` | `/{panel}/api/{resource}/_related` | HasMany records — `?fk=col&id=val[&through=true]` |
 
 List query params:
 
