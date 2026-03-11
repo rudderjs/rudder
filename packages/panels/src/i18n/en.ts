@@ -61,6 +61,14 @@ export const en = {
   createError:     'Something went wrong. Please try again.',
   deleteError:     'Failed to delete. Please try again.',
 
+  // Duplicate
+  duplicate:           'Duplicate',
+
+  // Bulk delete
+  deleteSelected:      'Delete :n selected',
+  bulkDeleteConfirm:   'This will permanently delete :n records. This action cannot be undone.',
+  bulkDeletedToast:    ':n records deleted.',
+
   // Field UI
   none:            '\u2014 None \u2014',
   invalidJson:     'Invalid JSON',
