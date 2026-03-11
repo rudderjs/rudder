@@ -59,7 +59,7 @@ export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: P
 
 // ─── User Dropdown ───────────────────────────────────────────
 
-function UserDropdown({ user }: { user: SessionUser }) {
+function UserDropdown({ user, signOutLabel }: { user: SessionUser; signOutLabel: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -103,7 +103,7 @@ function UserDropdown({ user }: { user: SessionUser }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border bg-popover shadow-md z-50 py-1">
+        <div className="absolute rtl:left-0 rtl:right-auto right-0 top-full mt-1 w-52 rounded-lg border bg-popover shadow-md z-50 py-1">
           <div className="px-3 py-2 border-b">
             {user.name && <p className="text-sm font-medium truncate">{user.name}</p>}
             {user.email && <p className="text-xs text-muted-foreground truncate">{user.email}</p>}
@@ -111,9 +111,9 @@ function UserDropdown({ user }: { user: SessionUser }) {
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-accent transition-colors"
+            className="w-full text-start px-3 py-2 text-sm text-destructive hover:bg-accent transition-colors"
           >
-            Sign out
+            {signOutLabel}
           </button>
         </div>
       )}
@@ -128,12 +128,13 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Intern
   const navItems = buildNavItems(panelMeta)
   const current  = navItems.find((n) => n.slug === currentSlug)
   const user     = useSessionUser(initialUser)
+  const { i18n, dir } = panelMeta
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div dir={dir} className="flex h-screen bg-background overflow-hidden">
 
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 border-r bg-card flex flex-col">
+      <aside className="w-56 shrink-0 border-e bg-card flex flex-col">
 
         {/* Brand */}
         <div className="h-14 flex items-center gap-2 px-4 border-b">
@@ -173,7 +174,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Intern
           <span className="text-sm font-medium text-muted-foreground">
             {current?.label ?? brand}
           </span>
-          {user && <UserDropdown user={user} />}
+          {user && <UserDropdown user={user} signOutLabel={i18n.signOut} />}
         </header>
         <main className="flex-1 overflow-y-auto p-6">
           {children}
@@ -192,15 +193,16 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Interna
   const brand    = panelMeta.branding?.title ?? panelMeta.name
   const navItems = buildNavItems(panelMeta)
   const user     = useSessionUser(initialUser)
+  const { i18n, dir } = panelMeta
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div dir={dir} className="flex flex-col h-screen bg-background overflow-hidden">
 
       {/* Topbar */}
       <header className="h-14 shrink-0 border-b bg-card flex items-center gap-6 px-6">
 
         {/* Brand */}
-        <div className="flex items-center gap-2 mr-2">
+        <div className="flex items-center gap-2 me-2">
           {panelMeta.branding?.logo
             ? <img src={panelMeta.branding.logo} alt={brand} className="h-6 w-auto" />
             : <span className="font-semibold text-sm tracking-tight">{brand}</span>
@@ -229,7 +231,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Interna
           })}
         </nav>
 
-        {user && <UserDropdown user={user} />}
+        {user && <UserDropdown user={user} signOutLabel={i18n.signOut} />}
 
       </header>
 
