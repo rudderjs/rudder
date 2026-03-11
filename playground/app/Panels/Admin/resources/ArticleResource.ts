@@ -12,6 +12,7 @@ import {
   FileField,
   JsonField,
   RelationField,
+  ComputedField,
   SelectFilter,
   Action,
 } from '@boostkit/panels'
@@ -38,7 +39,13 @@ export class ArticleResource extends Resource {
         SlugField.make('slug')
           .label('Slug')
           .from('title')
-          .required(),
+          .required()
+          // Per-field validation: unique slug check
+          .validate(async (value, data) => {
+            const q = Article.query().where('slug', value as string)
+            if (data['id']) (q as any).where('id', '!=', data['id'])
+            return await (q as any).first() ? 'Slug already in use' : true
+          }),
 
         TextareaField.make('excerpt')
           .label('Excerpt')
@@ -87,7 +94,8 @@ export class ArticleResource extends Resource {
 
           DateField.make('publishedAt')
             .label('Publish Date')
-            .hideFromCreate(),
+            // Conditional: only show when status = published
+            .showWhen('status', 'published'),
 
           ColorField.make('accentColor')
             .label('Accent Color')
@@ -98,7 +106,11 @@ export class ArticleResource extends Resource {
             .sortable()
             .readonly()
             .hideFromCreate()
-            .hideFromEdit(),
+            .hideFromEdit()
+            // Display transformer: format date for table/show
+            .display((v) =>
+              v ? new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(v as string)) : '—'
+            ),
         ),
 
       // ── SEO & Metadata ────────────────────────────────────────
@@ -118,6 +130,15 @@ export class ArticleResource extends Resource {
             .label('Extra Metadata')
             .rows(4).hideFromTable(),
         ),
+
+      // Computed virtual field — word count derived from excerpt
+      ComputedField.make('wordCount')
+        .label('Words')
+        .compute((r) => {
+          const text = ((r as any).excerpt as string | undefined) ?? ''
+          return text.trim() ? text.trim().split(/\s+/).length : 0
+        })
+        .display((v) => `${v} words`),
 
     ]
   }
