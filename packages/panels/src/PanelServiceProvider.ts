@@ -399,6 +399,28 @@ export class PanelServiceProvider extends ServiceProvider {
       return res.json({ message: 'Deleted successfully.' })
     }, mw)
 
+    // ── DELETE /panel/api/resource — bulk delete ──────────
+    router.delete(base, async (req, res) => {
+      const resource = new ResourceClass()
+      const ctx      = this.buildContext(req)
+      if (!await resource.policy('delete', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+      if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+      const { ids } = req.body as { ids?: string[] }
+      if (!ids?.length) return res.status(422).json({ message: 'No records selected.' })
+
+      let deleted = 0
+      for (const id of ids) {
+        const exists = await Model.find(id)
+        if (exists) {
+          await Model.query().delete(id)
+          deleted++
+        }
+      }
+
+      return res.json({ message: `${deleted} records deleted.`, deleted })
+    }, mw)
+
     // ── POST /panel/api/resource/_action/:action — bulk action
     router.post(`${base}/_action/:action`, async (req, res) => {
       const resource = new ResourceClass()
