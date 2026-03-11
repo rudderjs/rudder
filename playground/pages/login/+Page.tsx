@@ -17,7 +17,9 @@ export default function LoginPage() {
       body:    JSON.stringify({ email, password }),
     })
     if (res.ok) {
-      window.location.href = '/'
+      const params   = new URLSearchParams(window.location.search)
+      const redirect = params.get('redirect')
+      window.location.href = redirect && redirect.startsWith('/') ? redirect : '/'
     } else {
       const body = await res.json().catch(() => ({})) as { message?: string }
       setError(body.message ?? 'Invalid email or password.')

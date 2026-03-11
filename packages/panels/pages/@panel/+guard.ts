@@ -35,6 +35,6 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
       path:    pageContext.urlPathname,
     })
 
-    if (!allowed) throw redirect('/login')
+    if (!allowed) throw redirect(`/login?redirect=${encodeURIComponent(pageContext.urlPathname)}`)
   }
 }
