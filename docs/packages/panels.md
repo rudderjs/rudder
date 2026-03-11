@@ -473,9 +473,38 @@ Your custom component receives `{ field, value, onChange }` — the same props a
 
 ---
 
-## Search
+## Global Search
 
-Mark fields `.searchable()` to add a search bar to the list page. Submitting runs a `LIKE` query across all searchable columns (OR logic).
+The panel header includes a keyboard-driven global search that searches **all resources** at once.
+
+- **Open**: click the search button or press `⌘K` / `Ctrl+K` from anywhere in the panel
+- **Results**: grouped by resource, up to 5 matches per resource
+- **Keyboard nav**: `↑` / `↓` to move, `Enter` to navigate, `Escape` to close
+- **Debounced**: 300 ms delay before querying
+
+Only resources that have a model and at least one `.searchable()` field are included. The `static titleField` controls which field is displayed in the results.
+
+```ts
+export class UserResource extends Resource {
+  static titleField = 'name'   // shown in global search results
+
+  fields() {
+    return [
+      TextField.make('name').searchable(),   // included in global search
+      EmailField.make('email').searchable(),  // included in global search
+      DateField.make('createdAt'),           // not searchable — excluded
+    ]
+  }
+}
+```
+
+The endpoint is `GET /{panel}/api/_search?q=query&limit=5` (max 20).
+
+---
+
+## Per-Resource Search
+
+Mark fields `.searchable()` to add a search bar to the **resource list page**. Submitting runs a `LIKE` query across all searchable columns (OR logic).
 
 ```ts
 // URL: /admin/api/users?search=alice
@@ -652,6 +681,8 @@ For each resource, the following routes are mounted at boot:
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/{panel}/api/_meta` | Panel structure — resources, fields, filters, actions, layout |
+| `GET` | `/{panel}/api/_search` | Global search across all resources — `?q=query&limit=5` (max 20) |
 | `GET` | `/{panel}/api/{resource}` | List — paginated, searchable, sortable, filterable |
 | `GET` | `/{panel}/api/{resource}/:id` | Show one record |
 | `POST` | `/{panel}/api/{resource}` | Create |
@@ -673,5 +704,3 @@ List query params:
 | `sort` | `?sort=name` | Sort column (must be `.sortable()`) |
 | `dir` | `?dir=DESC` | Sort direction — `ASC` or `DESC` (default: `ASC`) |
 | `filter[field]` | `?filter[role]=admin` | Apply a registered filter |
-
-A `GET /{panel}/api/_meta` endpoint returns the full panel structure (resources, fields, filters, actions, layout) — consumed by the published React pages.

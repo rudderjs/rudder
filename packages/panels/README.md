@@ -555,6 +555,21 @@ Without `.query()`, the filter applies `WHERE column = value` using the filter n
 
 ---
 
+## Global Search
+
+The panel header includes a keyboard-driven global search that searches **all resources** at once.
+
+- **Open**: click the search button or press `⌘K` / `Ctrl+K` from anywhere in the panel
+- **Results**: grouped by resource, up to 5 matches per resource
+- **Keyboard nav**: `↑` / `↓` to move, `Enter` to navigate, `Escape` to close
+- **Debounced**: 300 ms delay before querying
+
+Only resources that have a model and at least one `.searchable()` field are included. The `static titleField` controls which field is displayed in the results.
+
+The endpoint is `GET /{panel}/api/_search?q=query&limit=5` (max 20).
+
+---
+
 ## Search & Sort
 
 The list page sends `?search=foo` and `?sort=name&dir=ASC` query params automatically when:
@@ -624,6 +639,7 @@ For each resource, the following routes are automatically mounted:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/{panel}/api/_meta` | Panel + resource schema |
+| `GET` | `/{panel}/api/_search` | Global search across all resources — `?q=query&limit=5` |
 | `GET` | `/{panel}/api/{resource}` | List (paginated, searchable, sortable, filterable) |
 | `GET` | `/{panel}/api/{resource}/:id` | Show |
 | `POST` | `/{panel}/api/{resource}` | Create |

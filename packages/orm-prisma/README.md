@@ -92,6 +92,56 @@ ModelRegistry.set(adapter)
 
 ---
 
+## Query Builder
+
+All queries go through `Model.query()` which returns a `QueryBuilder`. Methods are chainable and the query is executed lazily on the terminal call.
+
+```ts
+// AND conditions
+const users = await User.query()
+  .where('role', 'admin')
+  .where('createdAt', '>=', new Date('2024-01-01'))
+  .orderBy('name', 'ASC')
+  .get()
+
+// OR conditions — orWhere adds to a separate OR clause
+const results = await Article.query()
+  .where('title', 'LIKE', '%typescript%')    // AND (title LIKE ...)
+  .orWhere('body', 'LIKE', '%typescript%')   // OR (body LIKE ...)
+  .limit(10)
+  .get()
+
+// Paginated
+const page = await User.query()
+  .where('role', 'admin')
+  .orderBy('createdAt', 'DESC')
+  .paginate(1, 15)
+// → { data, total, perPage, currentPage, lastPage, from, to }
+```
+
+| Method | Description |
+|---|---|
+| `.where(col, value)` | AND `col = value` |
+| `.where(col, op, value)` | AND `col op value` — operators: `=` `!=` `>` `>=` `<` `<=` `LIKE` `IN` `NOT IN` |
+| `.orWhere(col, value)` | OR `col = value` |
+| `.orWhere(col, op, value)` | OR `col op value` — same operators as `where` |
+| `.orderBy(col, dir?)` | `ORDER BY col ASC\|DESC` |
+| `.limit(n)` | Limit rows returned |
+| `.offset(n)` | Skip rows |
+| `.with(...relations)` | Eager-load Prisma relations |
+| `.get()` | Execute — returns `T[]` (applies WHERE, ORDER, LIMIT, OFFSET) |
+| `.all()` | Execute — returns `T[]` (applies WHERE, ORDER, LIMIT, OFFSET) |
+| `.first()` | Execute — returns first match or `null` |
+| `.find(id)` | Fetch by primary key — returns `T \| null` |
+| `.count()` | Returns `number` of matching rows |
+| `.paginate(page, perPage?)` | Returns `PaginatedResult<T>` |
+
+> **`LIKE` with Prisma**: pass SQL-style wildcards (`%value%`). The adapter strips them and maps to Prisma's `contains`, `startsWith`, or `endsWith` filter automatically.
+
+> **`orWhere` semantics**: multiple `orWhere` calls are combined as Prisma `OR: [...]`. `where` calls are combined as top-level AND conditions. The two compose naturally: `WHERE (and1 AND and2 AND ...) AND (OR: [or1, or2, ...])`.
+
+---
+
 ## Notes
 
 - Run `pnpm exec prisma generate` after any schema change. If you forget, BoostKit throws a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
