@@ -570,6 +570,152 @@ The endpoint is `GET /{panel}/api/_search?q=query&limit=5` (max 20).
 
 ---
 
+## Conditional Fields
+
+Show, hide, or disable form fields based on another field's current value.
+Conditions are evaluated live in create and edit forms — no page reload.
+
+```ts
+// Show only when status = "published"
+DateField.make('publishedAt').showWhen('status', 'published')
+
+// Show when one of multiple values
+TextareaField.make('archiveReason').showWhen('status', ['archived', 'rejected'])
+
+// Hide when featured is false
+TextField.make('featuredLabel').hideWhen('featured', false)
+
+// Show when views exceeds a threshold (operator overload)
+TextField.make('trendingBadge').showWhen('views', '>', 1000)
+
+// Show when a field has any value (non-empty)
+TextField.make('subtitle').showWhen('hasSubtitle', 'truthy')
+
+// Disable (show but readonly) when verified
+EmailField.make('email').disabledWhen('verified', true)
+```
+
+| Method | Description |
+|--------|-------------|
+| `.showWhen(field, value)` | Show when `field === value` |
+| `.showWhen(field, op, value)` | Show when `field {op} value` — ops: `=` `!=` `>` `>=` `<` `<=` |
+| `.showWhen(field, [values])` | Show when `field` is one of `[values]` |
+| `.showWhen(field, 'truthy')` | Show when field is non-empty / non-null / non-zero |
+| `.showWhen(field, 'falsy')` | Show when field is empty / null / zero / false |
+| `.hideWhen(...)` | Inverse of showWhen — same overloads |
+| `.disabledWhen(...)` | Show but make readonly — same overloads |
+
+Multiple conditions can be stacked — all must pass.
+Conditions only apply to **create and edit forms**. Use `.hideFromTable()` / `.hideFrom('view')` for table/show visibility.
+
+---
+
+## Field-Level Access Control
+
+Restrict individual fields based on the current user — independent of the resource-level `policy()`.
+Inspired by PayloadCMS's `access: { read, update }`.
+
+```ts
+// Only admins can see internal notes
+TextField.make('internalNotes')
+  .readableBy((ctx) => ctx.user?.role === 'admin')
+
+// Non-admins see the field but can't edit it
+EmailField.make('email')
+  .editableBy((ctx) => ctx.user?.role === 'admin')
+```
+
+| Method | Behavior when `fn` returns `false` |
+|--------|-------------------------------------|
+| `.readableBy(ctx => bool)` | Field stripped from list + show responses |
+| `.editableBy(ctx => bool)` | Field marked `readonly: true` in the form |
+
+`ctx` is `PanelContext` (`{ user, headers, path }`).
+
+---
+
+## Per-Field Validation
+
+Add async validators directly on a field — runs server-side alongside Zod validation.
+Inspired by PayloadCMS's `validate: async (value, { data }) => string | true`.
+
+```ts
+// Unique slug check (cross-field — receives full form data)
+SlugField.make('slug')
+  .validate(async (value, data) => {
+    const q = Article.query().where('slug', value as string)
+    if (data['id']) q.where('id', '!=', data['id'] as string)
+    return await q.first() ? 'Slug already in use' : true
+  })
+
+// Cross-field date validation
+TextField.make('endDate')
+  .validate((value, data) => {
+    if ((value as string) < (data['startDate'] as string))
+      return 'End date must be after start date'
+    return true
+  })
+```
+
+- Return `true` → passes
+- Return a string → shown as a field-level validation error (same UI as Zod errors)
+- `data` is the full request body — use it to compare with other fields
+
+---
+
+## Display Transformers + Computed Fields
+
+### `.display(fn)` — format a raw value for the table and show page
+
+Runs server-side before the response is sent. The pre-formatted value replaces the raw one.
+Inspired by FilamentPHP's `->formatStateUsing(fn)` and PayloadCMS's `hooks.afterRead`.
+
+```ts
+// Format cents as currency
+NumberField.make('price')
+  .display((v) => `$${((v as number) / 100).toFixed(2)}`)
+
+// Custom date format
+DateField.make('createdAt')
+  .display((v) => v
+    ? new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(v as string))
+    : '—'
+  )
+
+// Use the full record for context
+TextField.make('status')
+  .display((v, record) => {
+    const r = record as { status: string; publishedAt?: string }
+    return r.publishedAt ? `${v} on ${r.publishedAt}` : String(v)
+  })
+```
+
+### `ComputedField` — virtual column with no database backing
+
+Always readonly; hidden from create and edit forms.
+
+```ts
+import { ComputedField } from '@boostkit/panels'
+
+// Word count from excerpt
+ComputedField.make('wordCount')
+  .label('Words')
+  .compute((r) => (r as Article).excerpt?.split(/\s+/).length ?? 0)
+  .display((v) => `${v} words`)
+
+// Full name from parts
+ComputedField.make('fullName')
+  .label('Full Name')
+  .compute((r) => `${(r as User).firstName} ${(r as User).lastName}`)
+
+// Chain .compute() with .display() to both derive and format
+ComputedField.make('revenue')
+  .compute((r) => (r as any).orders?.reduce((s: number, o: any) => s + o.total, 0) ?? 0)
+  .display((v) => `$${((v as number) / 100).toFixed(2)}`)
+```
+
+---
+
 ## Search & Sort
 
 The list page sends `?search=foo` and `?sort=name&dir=ASC` query params automatically when:
