@@ -64,7 +64,36 @@ export default function ShowPage() {
       </span>
     )
     if (field.type === 'image' && value) return <img src={String(value)} alt="" className="max-h-24 w-auto rounded border" />
-    if (Array.isArray(value)) return value.join(', ')
+    if (field.type === 'belongsToMany') {
+      const display = (field.extra?.['displayField'] as string) ?? 'name'
+      const target  = field.extra?.['resource'] as string | undefined
+      const items   = Array.isArray(value) ? value as Record<string, unknown>[] : []
+      if (items.length === 0) return <span className="text-muted-foreground">—</span>
+      return (
+        <span className="flex flex-wrap gap-1">
+          {items.map((item, i) => {
+            const label = String(item[display] ?? item['name'] ?? item['id'] ?? '—')
+            return target
+              ? <a key={i} href={`/${pathSegment}/${target}/${item['id']}`} className="text-primary hover:underline">{label}</a>
+              : <span key={i}>{label}</span>
+          })}
+        </span>
+      )
+    }
+    if (field.type === 'tags') {
+      const arr = Array.isArray(value) ? value as string[]
+        : typeof value === 'string' ? (() => { try { return JSON.parse(value) as string[] } catch { return [value] } })()
+        : []
+      if (arr.length === 0) return <span className="text-muted-foreground">—</span>
+      return (
+        <span className="flex flex-wrap gap-1">
+          {arr.map((tag, i) => (
+            <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">{String(tag)}</span>
+          ))}
+        </span>
+      )
+    }
+    if (Array.isArray(value)) return <span>{value.join(', ')}</span>
     if (typeof value === 'object') return <span className="font-mono text-xs">{JSON.stringify(value, null, 2)}</span>
     return String(value)
   }
