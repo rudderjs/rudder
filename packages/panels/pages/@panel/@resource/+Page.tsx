@@ -75,13 +75,17 @@ export default function ResourceListPage() {
     }
   }) // no deps — runs every render but the ref guard prevents re-firing
 
-  // Reset selection + search input when navigating to a different resource
+  // Reset selection when navigating to a different resource
   const searchRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     setSelected([])
-    if (searchRef.current) searchRef.current.value = ''
     restoredRef.current = null  // allow restore for the new resource
   }, [slug])
+
+  // Sync search input value with URL (covers restore + navigation)
+  useEffect(() => {
+    if (searchRef.current) searchRef.current.value = currentSearch
+  }, [currentSearch])
 
   // ── Current URL params ─────────────────────────────────
   const urlParams  = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
