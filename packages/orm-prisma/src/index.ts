@@ -14,11 +14,12 @@ import type {
 // ─── Prisma Query Builder ──────────────────────────────────
 
 class PrismaQueryBuilder<T> implements QueryBuilder<T> {
-  private _wheres:  WhereClause[] = []
-  private _orders:  OrderClause[] = []
-  private _limitN:  number | null = null
-  private _offsetN: number | null = null
-  private _withs:   string[] = []
+  private _wheres:   WhereClause[] = []
+  private _orWheres: WhereClause[] = []
+  private _orders:   OrderClause[] = []
+  private _limitN:   number | null = null
+  private _offsetN:  number | null = null
+  private _withs:    string[] = []
 
   constructor(
     private prisma: PrismaClient,
@@ -43,8 +44,12 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
-  orWhere(column: string, value: unknown): this {
-    this._wheres.push({ column, operator: '=', value })
+  orWhere(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    if (value === undefined) {
+      this._orWheres.push({ column, operator: '=', value: operatorOrValue })
+    } else {
+      this._orWheres.push({ column, operator: operatorOrValue as WhereOperator, value })
+    }
     return this
   }
 
@@ -57,38 +62,44 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   offset(n: number): this { this._offsetN = n; return this }
   with(...relations: string[]): this { this._withs.push(...relations); return this }
 
-  private buildWhere(): Record<string, unknown> {
-    const where: Record<string, unknown> = {}
-    for (const clause of this._wheres) {
-      switch (clause.operator) {
-        case '=':      where[clause.column] = clause.value; break
-        case '!=':     where[clause.column] = { not: clause.value }; break
-        case '>':      where[clause.column] = { gt: clause.value }; break
-        case '>=':     where[clause.column] = { gte: clause.value }; break
-        case '<':      where[clause.column] = { lt: clause.value }; break
-        case '<=':     where[clause.column] = { lte: clause.value }; break
-        case 'LIKE': {
-          // Prisma's contains/startsWith/endsWith already add % internally.
-          // Strip the SQL % wildcards and map to the right Prisma filter.
-          const raw = String(clause.value)
-          const hasLeading  = raw.startsWith('%')
-          const hasTrailing = raw.endsWith('%')
-          const inner = raw.replace(/^%|%$/g, '')
-          if (hasLeading && hasTrailing) {
-            where[clause.column] = { contains: inner }
-          } else if (hasTrailing) {
-            where[clause.column] = { startsWith: inner }
-          } else if (hasLeading) {
-            where[clause.column] = { endsWith: inner }
-          } else {
-            where[clause.column] = { equals: raw }
-          }
-          break
+  private clauseToFilter(clause: WhereClause): Record<string, unknown> {
+    switch (clause.operator) {
+      case '=':      return { [clause.column]: clause.value }
+      case '!=':     return { [clause.column]: { not: clause.value } }
+      case '>':      return { [clause.column]: { gt: clause.value } }
+      case '>=':     return { [clause.column]: { gte: clause.value } }
+      case '<':      return { [clause.column]: { lt: clause.value } }
+      case '<=':     return { [clause.column]: { lte: clause.value } }
+      case 'LIKE': {
+        const raw = String(clause.value)
+        const hasLeading  = raw.startsWith('%')
+        const hasTrailing = raw.endsWith('%')
+        const inner = raw.replace(/^%|%$/g, '')
+        if (hasLeading && hasTrailing) {
+          return { [clause.column]: { contains: inner } }
+        } else if (hasTrailing) {
+          return { [clause.column]: { startsWith: inner } }
+        } else if (hasLeading) {
+          return { [clause.column]: { endsWith: inner } }
         }
-        case 'IN':     where[clause.column] = { in: clause.value }; break
-        case 'NOT IN': where[clause.column] = { notIn: clause.value }; break
+        return { [clause.column]: { equals: raw } }
       }
+      case 'IN':     return { [clause.column]: { in: clause.value } }
+      case 'NOT IN': return { [clause.column]: { notIn: clause.value } }
+      default:       return { [clause.column]: clause.value }
     }
+  }
+
+  private buildWhere(): Record<string, unknown> {
+    const andFilters = this._wheres.map(c => this.clauseToFilter(c))
+    const orFilters  = this._orWheres.map(c => this.clauseToFilter(c))
+
+    if (andFilters.length === 0 && orFilters.length === 0) return {}
+
+    const where: Record<string, unknown> = {}
+    if (andFilters.length > 0) Object.assign(where, ...andFilters)
+    if (orFilters.length > 0)  where['OR'] = orFilters
+
     return where
   }
 
@@ -124,7 +135,13 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async all(): Promise<T[]> {
-    return this.delegate.findMany({ include: this.buildInclude() })
+    return this.delegate.findMany({
+      where:   this.buildWhere(),
+      include: this.buildInclude(),
+      orderBy: this.buildOrderBy(),
+      take:    this._limitN  ?? undefined,
+      skip:    this._offsetN ?? undefined,
+    })
   }
 
   async count(): Promise<number> {

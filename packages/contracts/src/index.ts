@@ -25,6 +25,7 @@ export interface QueryBuilder<T> {
   where(column: string, value: unknown): this
   where(column: string, operator: WhereOperator, value: unknown): this
   orWhere(column: string, value: unknown): this
+  orWhere(column: string, operator: WhereOperator, value: unknown): this
   orderBy(column: string, direction?: 'ASC' | 'DESC'): this
   limit(n: number): this
   offset(n: number): this
