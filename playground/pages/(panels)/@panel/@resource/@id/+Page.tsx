@@ -145,7 +145,7 @@ export default function ShowPage() {
             parentId={id}
             parentSlug={slug}
             pathSegment={pathSegment}
-            initialData={hasManyData[field.name]}
+            {...(hasManyData[field.name] ? { initialData: hasManyData[field.name] } : {})}
           />
         ))}
 

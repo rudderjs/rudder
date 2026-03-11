@@ -6,13 +6,15 @@ import type { PanelMeta } from '@boostkit/panels'
 interface Props {
   panelMeta:    PanelMeta
   currentSlug?: string
+  initialUser?: SessionUser
   children:     React.ReactNode
 }
 
 interface InternalProps {
-  panelMeta:   PanelMeta
-  currentSlug: string
-  children:    React.ReactNode
+  panelMeta:    PanelMeta
+  currentSlug:  string
+  initialUser?: SessionUser
+  children:     React.ReactNode
 }
 
 interface NavItem {
@@ -36,9 +38,10 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   ]
 }
 
-function useSessionUser(): SessionUser | null {
-  const [user, setUser] = useState<SessionUser | null>(null)
+function useSessionUser(initial?: SessionUser): SessionUser | null {
+  const [user, setUser] = useState<SessionUser | null>(initial ?? null)
   useEffect(() => {
+    if (initial !== undefined) return  // SSR-provided — no client fetch needed
     fetch('/api/auth/get-session')
       .then(r => r.ok ? r.json() : null)
       .then((data: { user?: SessionUser } | null) => { if (data?.user) setUser(data.user) })
@@ -47,11 +50,11 @@ function useSessionUser(): SessionUser | null {
   return user
 }
 
-export function AdminLayout({ panelMeta, currentSlug, children }: Props) {
+export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: Props) {
   const slug = currentSlug ?? ''
   return panelMeta.layout === 'topbar'
-    ? <TopbarLayout panelMeta={panelMeta} currentSlug={slug}>{children}</TopbarLayout>
-    : <SidebarLayout panelMeta={panelMeta} currentSlug={slug}>{children}</SidebarLayout>
+    ? <TopbarLayout panelMeta={panelMeta} currentSlug={slug} {...(initialUser !== undefined ? { initialUser } : {})}>{children}</TopbarLayout>
+    : <SidebarLayout panelMeta={panelMeta} currentSlug={slug} {...(initialUser !== undefined ? { initialUser } : {})}>{children}</SidebarLayout>
 }
 
 // ─── User Dropdown ───────────────────────────────────────────
@@ -120,11 +123,11 @@ function UserDropdown({ user }: { user: SessionUser }) {
 
 // ─── Sidebar Layout ─────────────────────────────────────────
 
-function SidebarLayout({ panelMeta, currentSlug, children }: InternalProps) {
+function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: InternalProps) {
   const brand    = panelMeta.branding?.title ?? panelMeta.name
   const navItems = buildNavItems(panelMeta)
   const current  = navItems.find((n) => n.slug === currentSlug)
-  const user     = useSessionUser()
+  const user     = useSessionUser(initialUser)
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -185,10 +188,10 @@ function SidebarLayout({ panelMeta, currentSlug, children }: InternalProps) {
 
 // ─── Topbar Layout ──────────────────────────────────────────
 
-function TopbarLayout({ panelMeta, currentSlug, children }: InternalProps) {
+function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: InternalProps) {
   const brand    = panelMeta.branding?.title ?? panelMeta.name
   const navItems = buildNavItems(panelMeta)
-  const user     = useSessionUser()
+  const user     = useSessionUser(initialUser)
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">

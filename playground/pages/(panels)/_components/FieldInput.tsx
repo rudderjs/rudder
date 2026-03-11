@@ -111,7 +111,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
           autoComplete="new-password"
           className={inputCls}
         />
-        {field.extra?.confirm && (
+        {Boolean(field.extra?.confirm) && (
           <input
             type="password"
             name={`${field.name}_confirmation`}
@@ -145,7 +145,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '' }: Props) {
 
   // ── Tags ─────────────────────────────────────────────────
   if (field.type === 'tags') {
-    const tags = Array.isArray(value) ? (value as string[]) : (typeof value === 'string' && value ? (() => { try { return JSON.parse(value) } catch { return value.split(',') } })() : [])
+    const tags: string[] = Array.isArray(value) ? (value as string[]) : (typeof value === 'string' && value ? (() => { try { return JSON.parse(value) as string[] } catch { return value.split(',') } })() : [])
 
     function addTag(input: HTMLInputElement) {
       const tag = input.value.trim().replace(/,+$/, '')

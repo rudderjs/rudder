@@ -9,10 +9,12 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
 
   if (!panel) throw render(404)
 
-  // Redirect root panel path to first resource
+  // Redirect root panel path to first resource only if no schema is defined
   if (pageContext.urlPathname === `/${pathSegment}`) {
-    const first = panel.getResources()[0]
-    if (first) throw redirect(`/${pathSegment}/${first.getSlug()}`)
+    if (!panel.hasSchema()) {
+      const first = panel.getResources()[0]
+      if (first) throw redirect(`/${pathSegment}/${first.getSlug()}`)
+    }
   }
 
   // Run the panel's guard if defined

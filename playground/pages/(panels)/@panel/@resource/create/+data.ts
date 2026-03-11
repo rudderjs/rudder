@@ -1,4 +1,5 @@
 import { PanelRegistry } from '@boostkit/panels'
+import { getSessionUser } from '../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
@@ -16,5 +17,6 @@ export async function data(pageContext: PageContextServer) {
   const resourceMeta = resource.toMeta()
   const panelMeta    = panel.toMeta()
 
-  return { panelMeta, resourceMeta, pathSegment, slug }
+  const sessionUser = await getSessionUser(pageContext)
+  return { panelMeta, resourceMeta, pathSegment, slug, sessionUser }
 }

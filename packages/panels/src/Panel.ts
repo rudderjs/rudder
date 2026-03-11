@@ -1,6 +1,12 @@
-import type { PanelGuard, BrandingOptions, PanelLayout } from './types.js'
+import type { PanelGuard, BrandingOptions, PanelLayout, PanelContext } from './types.js'
 import type { Resource, ResourceMeta } from './Resource.js'
 import type { Page, PageMeta } from './Page.js'
+
+type PanelSchemaElement = { getType(): string }
+
+type PanelSchemaDefinition =
+  | PanelSchemaElement[]
+  | ((ctx: PanelContext) => PanelSchemaElement[] | Promise<PanelSchemaElement[]>)
 
 // ─── Panel meta (for UI / meta endpoint) ───────────────────
 
@@ -23,6 +29,7 @@ export class Panel {
   protected _resources: (typeof Resource)[] = []
   protected _pages:     (typeof Page)[] = []
   protected _layout:    PanelLayout = 'sidebar'
+  protected _schema?:   PanelSchemaDefinition
 
   protected constructor(name: string) {
     this._name = name
@@ -78,6 +85,27 @@ export class Panel {
     return this
   }
 
+  /**
+   * Define the panel landing page schema.
+   * Accepts a static array of elements or an async function receiving the
+   * PanelContext (includes the authenticated user).
+   *
+   * When a schema is defined, visiting the panel root renders it instead of
+   * redirecting to the first resource.
+   *
+   * @example
+   * .schema(async (ctx) => [
+   *   Heading.make(`Welcome, ${ctx.user?.name ?? 'Guest'}`),
+   *   Stats.make([
+   *     Stat.make('Articles').value(await Article.query().count()),
+   *   ]),
+   * ])
+   */
+  schema(def: PanelSchemaDefinition): this {
+    this._schema = def
+    return this
+  }
+
   // ── Getters ─────────────────────────────────────────────
 
   getName(): string { return this._name }
@@ -87,6 +115,8 @@ export class Panel {
   getResources(): (typeof Resource)[] { return this._resources }
   getPages(): (typeof Page)[] { return this._pages }
   getLayout(): PanelLayout { return this._layout }
+  getSchema(): PanelSchemaDefinition | undefined { return this._schema }
+  hasSchema(): boolean { return this._schema !== undefined }
 
   /** Base path for the auto-generated API routes (e.g. '/admin/api'). */
   getApiBase(): string { return `${this._path}/api` }
