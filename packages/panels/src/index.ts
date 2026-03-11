@@ -25,7 +25,7 @@ export type { TabsMeta, TabMeta } from './Tabs.js'
 // ─── Field ─────────────────────────────────────────────────
 
 export { Field } from './Field.js'
-export type { FieldMeta, FieldVisibility } from './Field.js'
+export type { FieldMeta, FieldVisibility, Condition, ConditionOp } from './Field.js'
 
 // ─── Fields ────────────────────────────────────────────────
 
