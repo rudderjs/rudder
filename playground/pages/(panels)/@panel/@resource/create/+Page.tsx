@@ -61,7 +61,13 @@ export default function CreatePage() {
 
   const initialValues: Record<string, unknown> = Object.fromEntries(
     formFields.map((f) => {
-      if (prefill[f.name] !== undefined)          return [f.name, prefill[f.name]]
+      if (prefill[f.name] !== undefined) {
+        if (f.type === 'belongsToMany') {
+          // prefill value is a single ID or comma-separated IDs → array
+          return [f.name, prefill[f.name].split(',').map(s => s.trim()).filter(Boolean)]
+        }
+        return [f.name, prefill[f.name]]
+      }
       if (f.extra?.['default'] !== undefined)     return [f.name, f.extra['default']]
       if (f.type === 'boolean' || f.type === 'toggle') return [f.name, false]
       if (f.type === 'belongsToMany')             return [f.name, []]
