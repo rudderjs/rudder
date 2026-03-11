@@ -353,34 +353,19 @@ export const adminPanel = Panel.make('admin')
   .pages([DashboardPage, SettingsPage])
 ```
 
-The `Page` class controls nav metadata only. The actual UI is a standard Vike page you create yourself after publishing:
+The `Page` class controls nav metadata only. The actual UI is a standard Vike page you create yourself after publishing.
+
+The panel layout (`AdminLayout`) is applied automatically — your page just returns its content:
 
 ```tsx
 // pages/(panels)/admin/dashboard/+Page.tsx
-import { AdminLayout } from '../_components/AdminLayout.js'
-import { useData }     from 'vike-react/useData'
-import type { PanelMeta } from '@boostkit/panels'
-
 export default function DashboardPage() {
-  const { panelMeta } = useData<{ panelMeta: PanelMeta }>()
   return (
-    <AdminLayout panelMeta={panelMeta} currentSlug="dashboard">
+    <>
       <h1>Dashboard</h1>
       {/* your content */}
-    </AdminLayout>
+    </>
   )
-}
-```
-
-You'll need a `+data.ts` to fetch `panelMeta`. The simplest approach is to call the `/_meta` endpoint:
-
-```ts
-// pages/(panels)/admin/dashboard/+data.ts
-export async function data({ pageContext }: { pageContext: any }) {
-  const origin   = pageContext.urlParsed.origin ?? 'http://localhost:3000'
-  const response = await fetch(`${origin}/admin/api/_meta`)
-  const panelMeta = await response.json()
-  return { panelMeta }
 }
 ```
 
@@ -394,6 +379,8 @@ To replace the default table for a specific resource, create a Vike page at the 
 pages/(panels)/@panel/users/+Page.tsx    ← custom index for 'users'
 pages/(panels)/@panel/users/+data.ts
 ```
+
+The panel layout (`AdminLayout`) is applied automatically — your page just returns its content.
 
 Use `resourceData()` to fetch panel data without duplicating the built-in query logic:
 
@@ -412,20 +399,17 @@ export async function data(pageContext: PageContextServer) {
 
 ```tsx
 // pages/(panels)/@panel/users/+Page.tsx
-import { useData }     from 'vike-react/useData'
-import { AdminLayout } from '../../_components/AdminLayout.js'
-import type { Data }   from './+data.js'
+import { useData } from 'vike-react/useData'
+import type { Data } from './+data.js'
 
 export default function UsersGridPage() {
-  const { panelMeta, resourceMeta, records } = useData<Data>()
+  const { resourceMeta, records } = useData<Data>()
   return (
-    <AdminLayout panelMeta={panelMeta} currentSlug={resourceMeta.slug as string}>
-      <div className="grid grid-cols-3 gap-4">
-        {(records as any[]).map((r) => (
-          <div key={r.id} className="rounded-lg border p-4">{r.name}</div>
-        ))}
-      </div>
-    </AdminLayout>
+    <div className="grid grid-cols-3 gap-4">
+      {(records as any[]).map((r) => (
+        <div key={r.id} className="rounded-lg border p-4">{r.name}</div>
+      ))}
+    </div>
   )
 }
 ```
@@ -563,7 +547,21 @@ Panel.make('admin').guard(async (ctx) => {
 | `headers` | `Record<string, string>` | Request headers |
 | `path` | `string` | Request path |
 
-Returning `false` responds with `401 Unauthorized`.
+Returning `false` redirects unauthenticated users to `/login?redirect=<encodedPath>` for UI requests, and responds with `401 Unauthorized` for API requests.
+
+**Accessing custom user fields** — if your guard references a custom field like `ctx.user?.role`, you must declare it in `user.additionalFields` in `config/auth.ts`. Without this declaration the field is `undefined` even if it exists in the database:
+
+```ts
+// config/auth.ts
+export default {
+  // ...
+  user: {
+    additionalFields: {
+      role: { type: 'string', defaultValue: 'user', input: false },
+    },
+  },
+} satisfies BetterAuthConfig
+```
 
 ---
 

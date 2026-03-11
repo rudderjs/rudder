@@ -353,20 +353,18 @@ export const adminPanel = Panel.make('admin')
 
 Resources appear first in the nav, then pages — in the order listed.
 
-The page class controls only nav metadata (slug, label, icon). The actual UI is a standard Vike page at `pages/(panels)/@panel/dashboard/+Page.tsx` — create it after publishing the panels pages:
+The page class controls only nav metadata (slug, label, icon). The actual UI is a standard Vike page at `pages/(panels)/@panel/dashboard/+Page.tsx` — create it after publishing the panels pages.
+
+The panel layout (`AdminLayout`) is applied automatically by the shared `+Layout.tsx` — your page just returns its content:
 
 ```tsx
 // pages/(panels)/admin/dashboard/+Page.tsx
-import { AdminLayout } from '../_components/AdminLayout.js'
-import { useData }     from 'vike-react/useData'
-
 export default function DashboardPage() {
-  const { panelMeta } = useData<{ panelMeta: PanelMeta }>()
   return (
-    <AdminLayout panelMeta={panelMeta} currentSlug="dashboard">
+    <>
       <h1>Dashboard</h1>
       {/* your content */}
-    </AdminLayout>
+    </>
   )
 }
 ```
@@ -381,6 +379,8 @@ To replace the default table for a specific resource, create a Vike page at the 
 pages/(panels)/@panel/users/+Page.tsx    ← custom index for 'users'
 pages/(panels)/@panel/users/+data.ts
 ```
+
+The panel layout (`AdminLayout`) is applied automatically — your page just returns its content.
 
 Use `resourceData()` in `+data.ts` to fetch the same data the default table uses:
 
@@ -514,7 +514,21 @@ Panel.make('admin').guard(async (ctx) => {
 })
 ```
 
-`ctx` contains `user`, `headers`, and `path`. Returning `false` responds with `401 Unauthorized`.
+`ctx` contains `user`, `headers`, and `path`. Returning `false` redirects unauthenticated users to `/login?redirect=<encodedPath>` for UI requests, and responds with `401 Unauthorized` for API requests.
+
+**Accessing custom user fields** — if your guard (or resource policy) references a custom field like `ctx.user?.role`, you must declare it in `user.additionalFields` in `config/auth.ts`. Without this declaration the field is `undefined` even if it exists in the database:
+
+```ts
+// config/auth.ts
+export default {
+  // ...
+  user: {
+    additionalFields: {
+      role: { type: 'string', defaultValue: 'user', input: false },
+    },
+  },
+} satisfies BetterAuthConfig
+```
 
 Override `policy()` per resource for fine-grained access:
 

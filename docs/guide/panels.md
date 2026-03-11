@@ -100,7 +100,21 @@ Panel.make('admin')
   .resources([UserResource, PostResource])
 ```
 
-The `guard` receives a `PanelContext` (`{ user, headers, path }`) and returns `true` to allow or `false` to reject with 401.
+The `guard` receives a `PanelContext` (`{ user, headers, path }`) and returns `true` to allow or `false` to reject. Unauthenticated UI requests are redirected to `/login?redirect=<encodedPath>`; API requests receive `401 Unauthorized`.
+
+**Accessing custom user fields** — if your guard references a custom field like `ctx.user?.role`, you must declare it in `user.additionalFields` in `config/auth.ts`. Without this declaration the field is `undefined` even if it exists in the database:
+
+```ts
+// config/auth.ts
+export default {
+  // ...
+  user: {
+    additionalFields: {
+      role: { type: 'string', defaultValue: 'user', input: false },
+    },
+  },
+} satisfies BetterAuthConfig
+```
 
 ---
 
@@ -452,6 +466,8 @@ export class PostResource extends Resource {
 
 To replace the default table for a specific resource, create a Vike page at the resource's static path. Vike's route priority makes static segments win over dynamic ones — your page is served instead of the built-in table.
 
+The panel layout (`AdminLayout`) is applied automatically — your page just returns its content.
+
 ```
 pages/(panels)/@panel/articles/+Page.tsx    ← custom view for 'articles'
 pages/(panels)/@panel/articles/+data.ts
@@ -514,10 +530,9 @@ The URL query params `resourceData()` reads:
 // pages/(panels)/@panel/articles/+Page.tsx
 'use client'
 
-import { useData }     from 'vike-react/useData'
-import { useConfig }   from 'vike-react/useConfig'
-import { AdminLayout } from '../../_components/AdminLayout.js'
-import type { Data }   from './+data.js'
+import { useData }   from 'vike-react/useData'
+import { useConfig } from 'vike-react/useConfig'
+import type { Data } from './+data.js'
 
 export default function ArticlesGridPage() {
   const config = useConfig()
@@ -526,7 +541,7 @@ export default function ArticlesGridPage() {
   config({ title: `${resourceMeta.label} — ${panelName}` })
 
   return (
-    <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
+    <>
       <div className="grid grid-cols-3 gap-4">
         {(records as { id: string; title: string; coverImage: string | null }[]).map((article) => (
           <a key={article.id} href={`/${pathSegment}/${slug}/${article.id}`}
@@ -544,7 +559,7 @@ export default function ArticlesGridPage() {
           Page {pagination.currentPage} of {pagination.lastPage} — {pagination.total} total
         </p>
       )}
-    </AdminLayout>
+    </>
   )
 }
 ```
