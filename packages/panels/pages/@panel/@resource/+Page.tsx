@@ -40,6 +40,8 @@ export default function ResourceListPage() {
   const [selected,       setSelected]       = useState<string[]>([])
   const [confirm,        setConfirm]        = useState<{ action: typeof resourceMeta.actions[0]; records: unknown[] } | null>(null)
   const [actionPending,  setActionPending]  = useState(false)
+  const [bulkDeletePending,     setBulkDeletePending]     = useState(false)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
 
   const allFields    = flattenFields(resourceMeta.fields as SchemaItem[])
   const tableFields  = allFields.filter((f) => !f.hidden.includes('table'))
@@ -137,6 +139,29 @@ export default function ResourceListPage() {
     }
   }
 
+  async function handleBulkDelete() {
+    setBulkDeletePending(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}`, {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ids: selected }),
+      })
+      if (res.ok) {
+        toast.success(t(i18n.bulkDeletedToast, { n: selected.length }))
+        setSelected([])
+        window.location.reload()
+      } else {
+        toast.error(i18n.deleteError)
+      }
+    } catch {
+      toast.error(i18n.deleteError)
+    } finally {
+      setBulkDeletePending(false)
+      setBulkDeleteConfirmOpen(false)
+    }
+  }
+
   // ── Pagination ─────────────────────────────────────────
   function goToPage(p: number) {
     const url = new URL(window.location.href)
@@ -224,7 +249,7 @@ export default function ResourceListPage() {
       )}
 
       {/* ── Bulk action bar ────────────────────────────────── */}
-      {selected.length > 0 && bulkActions.length > 0 && (
+      {selected.length > 0 && (
         <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg">
           <span className="text-sm font-medium">{t(i18n.selected, { n: selected.length })}</span>
           <div className="flex gap-2">
@@ -232,7 +257,7 @@ export default function ResourceListPage() {
               <button
                 key={action.name}
                 onClick={() => runAction(action)}
-                disabled={actionPending}
+                disabled={actionPending || bulkDeletePending}
                 className={[
                   'px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50',
                   action.destructive
@@ -243,6 +268,13 @@ export default function ResourceListPage() {
                 {action.label}
               </button>
             ))}
+            <button
+              onClick={() => setBulkDeleteConfirmOpen(true)}
+              disabled={actionPending || bulkDeletePending}
+              className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-destructive/10 text-destructive hover:bg-destructive/20"
+            >
+              {bulkDeletePending ? i18n.loading : t(i18n.deleteSelected, { n: selected.length })}
+            </button>
           </div>
           <button
             onClick={() => setSelected([])}
@@ -455,6 +487,18 @@ export default function ResourceListPage() {
           title={confirm.action.label}
           message={confirm.action.confirmMessage ?? i18n.areYouSure}
           danger={confirm.action.destructive}
+          confirmLabel={i18n.confirm}
+          cancelLabel={i18n.cancel}
+        />
+      )}
+      {bulkDeleteConfirmOpen && (
+        <ConfirmDialog
+          open
+          onClose={() => setBulkDeleteConfirmOpen(false)}
+          onConfirm={handleBulkDelete}
+          title={t(i18n.deleteSelected, { n: selected.length })}
+          message={t(i18n.bulkDeleteConfirm, { n: selected.length })}
+          danger
           confirmLabel={i18n.confirm}
           cancelLabel={i18n.cancel}
         />
