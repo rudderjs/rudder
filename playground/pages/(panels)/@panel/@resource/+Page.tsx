@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
@@ -42,6 +42,9 @@ export default function ResourceListPage() {
   const [actionPending,  setActionPending]  = useState(false)
   const [bulkDeletePending,     setBulkDeletePending]     = useState(false)
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
+
+  // Reset selection when navigating to a different resource
+  useEffect(() => { setSelected([]) }, [slug])
 
   const allFields    = flattenFields(resourceMeta.fields as SchemaItem[])
   const tableFields  = allFields.filter((f) => !f.hidden.includes('table'))
