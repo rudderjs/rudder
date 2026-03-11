@@ -39,6 +39,10 @@ export default function EditPage() {
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   config({ title: `Edit ${resourceMeta.labelSingular} — ${panelName}` })
 
+  const backHref = typeof window !== 'undefined'
+    ? (new URLSearchParams(window.location.search).get('back') ?? `/${pathSegment}/${slug}`)
+    : `/${pathSegment}/${slug}`
+
   if (!record) {
     return (
       <AdminLayout panelMeta={panelMeta} currentSlug={slug}>
@@ -90,7 +94,7 @@ export default function EditPage() {
       }
       if (res.ok) {
         toast.success('Changes saved.')
-        void navigate(`/${pathSegment}/${slug}`)
+        void navigate(backHref)
       } else {
         toast.error('Failed to save. Please try again.')
       }
@@ -216,7 +220,7 @@ export default function EditPage() {
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
             <a
-              href={`/${pathSegment}/${slug}`}
+              href={backHref}
               className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Cancel
