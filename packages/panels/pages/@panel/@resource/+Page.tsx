@@ -690,7 +690,7 @@ function DuplicateRowButton({ slug, id, pathSegment, schema, i18n }: {
         if (field.hidden.includes('create')) continue
         if (field.readonly) continue
         if (field.name === 'id') continue
-        if (field.type === 'password' || field.type === 'hidden') continue
+        if (field.type === 'password' || field.type === 'hidden' || field.type === 'slug') continue
 
         const val = record[field.name]
         if (val === null || val === undefined) continue
