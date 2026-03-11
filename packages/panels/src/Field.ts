@@ -49,6 +49,7 @@ export abstract class Field {
   protected _readableFn?: (ctx: unknown) => boolean
   protected _editableFn?: (ctx: unknown) => boolean
   protected _validateFn?: (value: unknown, data: Record<string, unknown>) => Promise<string | true> | string | true
+  protected _displayFn?: (value: unknown, record: unknown) => unknown
 
   constructor(name: string) {
     this._name = name
@@ -237,6 +238,28 @@ export abstract class Field {
   /** @internal */
   hasValidate(): boolean { return this._validateFn !== undefined }
 
+  /**
+   * Format a value for display in the table and show page.
+   * Runs server-side — the pre-formatted value is sent to the frontend.
+   * Inspired by FilamentPHP's `->formatStateUsing(fn)` and PayloadCMS's `hooks.afterRead`.
+   *
+   * @example
+   * NumberField.make('price').display((v) => `$${((v as number) / 100).toFixed(2)}`)
+   * DateField.make('createdAt').display((v) => new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(v as string)))
+   */
+  display(fn: (value: unknown, record: unknown) => unknown): this {
+    this._displayFn = fn
+    return this
+  }
+
+  /** @internal */
+  hasDisplay(): boolean { return this._displayFn !== undefined }
+
+  /** @internal */
+  applyDisplay(value: unknown, record: unknown): unknown {
+    return this._displayFn ? this._displayFn(value, record) : value
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName():       string  { return this._name }
@@ -275,6 +298,7 @@ export abstract class Field {
     }
     if (this._component !== undefined) meta.component = this._component
     if (this._conditions.length > 0)   meta.conditions = this._conditions
+    if (this._displayFn !== undefined) meta.displayTransformed = true
     return meta
   }
 }

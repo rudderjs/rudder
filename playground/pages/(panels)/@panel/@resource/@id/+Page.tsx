@@ -47,6 +47,9 @@ export default function ShowPage() {
   const hasManyFields = allFields.filter(f => f.type === 'hasMany')
 
   function renderValue(field: FieldMeta, value: unknown): React.ReactNode {
+    if (field.displayTransformed) {
+      return <span>{String(value ?? '')}</span>
+    }
     if (field.type === 'belongsTo') {
       const rel     = (field.extra?.['relationName'] as string) ?? (field.name.endsWith('Id') ? field.name.slice(0, -2) : field.name)
       const display = (field.extra?.['displayField'] as string) ?? 'name'

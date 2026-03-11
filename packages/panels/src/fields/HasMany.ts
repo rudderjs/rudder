@@ -41,7 +41,7 @@ export class HasMany extends Field {
   }
 
   /** Which field to use as the display label in the related table (default: 'name'). */
-  display(field: string): this {
+  displayField(field: string): this {
     this._extra['displayField'] = field
     return this
   }

@@ -60,7 +60,7 @@ export class ArticleResource extends Resource {
         RelationField.make('categories')
           .label('Categories')
           .resource('categories')
-          .display('name')
+          .displayField('name')
           .multiple()
           .creatable(),
           // .hideFromTable(),

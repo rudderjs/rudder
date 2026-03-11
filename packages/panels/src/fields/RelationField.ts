@@ -19,15 +19,10 @@ export class RelationField extends Field {
   }
 
   /** Which field to display as the option label in the select (default: 'name'). */
-  display(field: string): this {
+  displayField(field: string): this {
     this._displayField = field
     this._extra['displayField'] = field
     return this
-  }
-
-  /** @deprecated Use display() */
-  displayField(field: string): this {
-    return this.display(field)
   }
 
   /**

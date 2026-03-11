@@ -1155,7 +1155,7 @@ describe('HasMany', () => {
   })
 
   it('sets display field', () => {
-    const f = HasMany.make('comments').display('body').toMeta()
+    const f = HasMany.make('comments').displayField('body').toMeta()
     assert.equal(f.extra['displayField'], 'body')
   })
 
@@ -1514,6 +1514,29 @@ describe('conditional fields', () => {
   it('multiple conditions stack', () => {
     const f = TextField.make('x').showWhen('a', '1').hideWhen('b', '2')
     assert.equal(f.toMeta().conditions?.length, 2)
+  })
+})
+
+// ─── Display transformer ─────────────────────────────────────
+
+describe('display transformer', () => {
+  it('display() sets displayTransformed in meta', () => {
+    const f = NumberField.make('price').display((v) => `$${v}`)
+    assert.equal(f.toMeta().displayTransformed, true)
+  })
+
+  it('displayTransformed absent without display()', () => {
+    assert.equal(NumberField.make('price').toMeta().displayTransformed, undefined)
+  })
+
+  it('applyDisplay transforms value', () => {
+    const f = NumberField.make('price').display((v) => `$${((v as number) / 100).toFixed(2)}`)
+    assert.equal(f.applyDisplay(1999, {}), '$19.99')
+  })
+
+  it('applyDisplay receives the full record', () => {
+    const f = TextField.make('title').display((v, r) => `${v} (${(r as any).status})`)
+    assert.equal(f.applyDisplay('Hello', { status: 'draft' }), 'Hello (draft)')
   })
 })
 

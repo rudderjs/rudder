@@ -263,6 +263,8 @@ export class PanelServiceProvider extends ServiceProvider {
         Object.fromEntries(Object.entries(r).filter(([k]) => readableNames.has(k)))
       )
 
+      result.data = this.applyTransforms(resource, result.data as unknown[]) as typeof result.data
+
       return res.json({
         data: result.data,
         meta: {
@@ -364,7 +366,8 @@ export class PanelServiceProvider extends ServiceProvider {
       const filteredRecord = Object.fromEntries(
         Object.entries(record as Record<string, unknown>).filter(([k]) => readableNamesForShow.has(k))
       )
-      return res.json({ data: filteredRecord })
+      const [transformedRecord] = this.applyTransforms(resource, [filteredRecord])
+      return res.json({ data: transformedRecord })
     }, mw)
 
     // ── POST /panel/api/resource — create ─────────────────
@@ -468,6 +471,20 @@ export class PanelServiceProvider extends ServiceProvider {
   }
 
   // ── Helpers ────────────────────────────────────────────
+
+  private applyTransforms(resource: Resource, records: unknown[]): unknown[] {
+    const fields = flattenFields(resource.fields())
+    const displayFields = fields.filter(f => f.hasDisplay())
+    if (!displayFields.length) return records
+
+    return records.map((r) => {
+      const rec = { ...(r as Record<string, unknown>) }
+      for (const f of displayFields) {
+        rec[f.getName()] = f.applyDisplay(rec[f.getName()], rec)
+      }
+      return rec
+    })
+  }
 
   private buildContext(req: AppRequest): PanelContext {
     return {

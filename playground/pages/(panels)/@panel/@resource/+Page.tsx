@@ -355,10 +355,10 @@ export default function ResourceListPage() {
                             href={`/${pathSegment}/${slug}/${id}`}
                             className="font-medium hover:text-primary transition-colors"
                           >
-                            <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} pathSegment={pathSegment} i18n={i18n} />
+                            <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                           </a>
                         )
-                        : <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} pathSegment={pathSegment} i18n={i18n} />
+                        : <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                       }
                     </td>
                   ))}
@@ -527,7 +527,11 @@ function resolveCellValue(record: Record<string, unknown>, f: { name: string; ty
 
 // ── Sub-components ─────────────────────────────────────────
 
-function CellValue({ value, type, extra, pathSegment, i18n }: { value: unknown; type: string; extra?: Record<string, unknown>; pathSegment?: string; i18n: PanelI18n }) {
+function CellValue({ value, type, extra, displayTransformed, pathSegment, i18n }: { value: unknown; type: string; extra?: Record<string, unknown>; displayTransformed?: boolean; pathSegment?: string; i18n: PanelI18n }) {
+  // If server already formatted this value, render as plain text
+  if (displayTransformed) {
+    return <span>{String(value ?? '')}</span>
+  }
   if (type === 'belongsTo') {
     const displayField  = (extra?.['displayField'] as string) ?? 'name'
     const targetResource = extra?.['resource'] as string | undefined

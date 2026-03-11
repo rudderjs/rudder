@@ -25,7 +25,7 @@ export class CategoryResource extends Resource {
       RelationField.make('parentId')
         .label('Parent Category')
         .resource('categories')
-        .display('name'),
+        .displayField('name'),
 
       HasMany.make('children')
         .label('Sub-categories')
