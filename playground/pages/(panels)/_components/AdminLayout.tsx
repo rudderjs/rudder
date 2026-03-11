@@ -2,6 +2,7 @@ import '@/index.css'
 import { useState, useEffect, useRef } from 'react'
 import { Toaster } from 'sonner'
 import type { PanelMeta } from '@boostkit/panels'
+import { GlobalSearch } from './GlobalSearch.js'
 
 interface Props {
   panelMeta:    PanelMeta
@@ -170,10 +171,11 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Intern
 
       {/* Content area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-14 shrink-0 border-b flex items-center justify-between px-6">
-          <span className="text-sm font-medium text-muted-foreground">
+        <header className="h-14 shrink-0 border-b flex items-center gap-4 px-6">
+          <span className="text-sm font-medium text-muted-foreground flex-1">
             {current?.label ?? brand}
           </span>
+          <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
           {user && <UserDropdown user={user} signOutLabel={i18n.signOut} />}
         </header>
         <main className="flex-1 overflow-y-auto p-6">
@@ -231,6 +233,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Interna
           })}
         </nav>
 
+        <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
         {user && <UserDropdown user={user} signOutLabel={i18n.signOut} />}
 
       </header>

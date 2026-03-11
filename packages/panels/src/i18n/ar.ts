@@ -77,4 +77,9 @@ export const ar: PanelI18n = {
   confirmPassword: '\u062a\u0623\u0643\u064a\u062f \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631',
   createOption:    '\u0625\u0646\u0634\u0627\u0621 ":query"',
   createNew:       '\u0625\u0646\u0634\u0627\u0621 :singular \u062c\u062f\u064a\u062f',
+
+  // Global search
+  globalSearch:         '\u0627\u0644\u0628\u062d\u062b \u0641\u064a \u0643\u0644 \u0634\u064a\u0621\u2026',
+  globalSearchShortcut: '\u2318K',
+  globalSearchEmpty:    '\u0644\u0627 \u062a\u0648\u062c\u062f \u0646\u062a\u0627\u0626\u062c \u0644\u0640 ":query"',
 }

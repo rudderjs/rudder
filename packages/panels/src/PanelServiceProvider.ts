@@ -60,6 +60,58 @@ export class PanelServiceProvider extends ServiceProvider {
         return res.json(panel.toMeta())
       }, mw)
 
+      // Global search endpoint — queries all resources with searchable fields
+      router.get(`${panel.getApiBase()}/_search`, async (req, res) => {
+        const url   = new URL(req.url, 'http://localhost')
+        const q     = url.searchParams.get('q')?.trim() ?? ''
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? 5), 20)
+
+        if (!q) return res.json({ results: [] })
+
+        const results: Array<{
+          resource: string
+          label:    string
+          records:  Array<{ id: string; title: string }>
+        }> = []
+
+        for (const ResourceClass of panel.getResources()) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const Model = ResourceClass.model as any
+          if (!Model) continue
+
+          const resource       = new ResourceClass()
+          const searchableCols = flattenFields(resource.fields())
+            .filter(f => f.isSearchable())
+            .map(f => f.getName())
+
+          if (searchableCols.length === 0) continue
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let qb: any = Model.query()
+          qb = qb.where(searchableCols[0]!, 'LIKE', `%${q}%`)
+          for (let i = 1; i < searchableCols.length; i++) {
+            qb = qb.orWhere(searchableCols[i]!, `%${q}%`)
+          }
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows: any[] = await qb.limit(limit).all()
+          if (rows.length === 0) continue
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const titleField: string = (ResourceClass as any).titleField ?? 'id'
+          results.push({
+            resource: ResourceClass.getSlug(),
+            label:    ResourceClass.label ?? ResourceClass.getSlug(),
+            records:  rows.map((r: any) => ({
+              id:    String(r.id),
+              title: String(r[titleField] ?? r.id),
+            })),
+          })
+        }
+
+        return res.json({ results })
+      }, mw)
+
       // Upload endpoint — used by FileField / ImageField
       router.post(`${panel.getApiBase()}/_upload`, async (req, res) => {
         try {

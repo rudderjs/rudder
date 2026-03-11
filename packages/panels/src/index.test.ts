@@ -1358,3 +1358,82 @@ describe('Panel.locale()', () => {
     g['__boostkit_localization_config__'] = prev
   })
 })
+
+// ─── Global search — i18n keys ──────────────────────────────
+
+describe('globalSearch i18n keys', () => {
+  it('en has globalSearch key', () => {
+    const i18n = getPanelI18n('en')
+    assert.equal(typeof i18n.globalSearch, 'string')
+    assert.ok(i18n.globalSearch.length > 0)
+  })
+
+  it('en globalSearchEmpty contains :query placeholder', () => {
+    const i18n = getPanelI18n('en')
+    assert.ok(i18n.globalSearchEmpty.includes(':query'))
+  })
+
+  it('en globalSearchShortcut is non-empty', () => {
+    const i18n = getPanelI18n('en')
+    assert.ok(i18n.globalSearchShortcut.length > 0)
+  })
+
+  it('ar has globalSearch key (non-empty)', () => {
+    const i18n = getPanelI18n('ar')
+    assert.ok(i18n.globalSearch.length > 0)
+  })
+
+  it('ar globalSearchEmpty contains :query placeholder', () => {
+    const i18n = getPanelI18n('ar')
+    assert.ok(i18n.globalSearchEmpty.includes(':query'))
+  })
+})
+
+// ─── Search — searchable field detection ────────────────────
+
+describe('search — searchable field detection', () => {
+  it('identifies searchable fields correctly', () => {
+    const fields = [
+      TextField.make('name').searchable(),
+      EmailField.make('email').searchable(),
+      TextField.make('internal'),
+    ]
+    const searchable = fields.filter(f => f.isSearchable()).map(f => f.getName())
+    assert.deepEqual(searchable, ['name', 'email'])
+  })
+
+  it('non-searchable fields are excluded', () => {
+    const fields = [
+      NumberField.make('count'),
+      DateField.make('created_at'),
+    ]
+    const searchable = fields.filter(f => f.isSearchable())
+    assert.equal(searchable.length, 0)
+  })
+
+  it('resource with no searchable fields returns empty array', () => {
+    class NoSearchResource extends Resource {
+      fields() { return [TextField.make('title'), NumberField.make('count')] }
+    }
+    const resource = new NoSearchResource()
+    const cols = resource.fields().filter(f => (f as Field).isSearchable())
+    assert.equal(cols.length, 0)
+  })
+
+  it('resource with searchable fields returns them', () => {
+    class SearchResource extends Resource {
+      fields() {
+        return [
+          TextField.make('title').searchable(),
+          TextField.make('body').searchable(),
+          TextField.make('slug'),
+        ]
+      }
+    }
+    const resource = new SearchResource()
+    const cols = resource.fields()
+      .filter(f => (f as Field).isSearchable())
+      .map(f => (f as Field).getName())
+    assert.deepEqual(cols, ['title', 'body'])
+  })
+})

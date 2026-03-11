@@ -75,6 +75,11 @@ export const en = {
   confirmPassword: 'Confirm password',
   createOption:    'Create ":query"',
   createNew:       'Create new :singular',
+
+  // Global search
+  globalSearch:         'Search everything\u2026',
+  globalSearchShortcut: '\u2318K',
+  globalSearchEmpty:    'No results for ":query"',
 }
 
 export type PanelI18n = typeof en
