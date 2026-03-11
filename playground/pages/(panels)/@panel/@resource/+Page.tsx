@@ -75,6 +75,13 @@ export default function ResourceListPage() {
     }
   }) // no deps — runs every render but the ref guard prevents re-firing
 
+  // ── Current URL params ─────────────────────────────────
+  const urlParams  = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  const currentSort   = urlParams.get('sort') ?? resourceMeta.defaultSort ?? ''
+  const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
+  const currentSearch = urlParams.get('search') ?? ''
+  const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
+
   // Reset selection when navigating to a different resource
   const searchRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -86,13 +93,6 @@ export default function ResourceListPage() {
   useEffect(() => {
     if (searchRef.current) searchRef.current.value = currentSearch
   }, [currentSearch])
-
-  // ── Current URL params ─────────────────────────────────
-  const urlParams  = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
-  const currentSort   = urlParams.get('sort') ?? resourceMeta.defaultSort ?? ''
-  const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
-  const currentSearch = urlParams.get('search') ?? ''
-  const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
 
   /** Navigate and persist query string to sessionStorage */
   function navigateAndPersist(url: URL) {
