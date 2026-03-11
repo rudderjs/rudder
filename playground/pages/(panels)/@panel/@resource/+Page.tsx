@@ -686,14 +686,22 @@ function DuplicateRowButton({ slug, id, pathSegment, schema, i18n }: {
 
       const params = new URLSearchParams()
 
+      // Determine which fields auto-generate a slug, so we can suffix their value with " (copy)"
+      const slugSourceFields = new Set(
+        schema.filter((f) => f.type === 'slug' && f.extra?.['from']).map((f) => String(f.extra?.['from']))
+      )
+
       for (const field of schema) {
         if (field.hidden.includes('create')) continue
         if (field.readonly) continue
         if (field.name === 'id') continue
         if (field.type === 'password' || field.type === 'hidden' || field.type === 'slug') continue
 
-        const val = record[field.name]
+        let val = record[field.name]
         if (val === null || val === undefined) continue
+
+        // Append " (copy)" so the auto-generated slug won't collide with the original
+        if (slugSourceFields.has(field.name) && typeof val === 'string') val = `${val} (copy)`
 
         if (field.type === 'belongsToMany') {
           const items = Array.isArray(val) ? (val as Array<{ id?: string }>) : []

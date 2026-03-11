@@ -583,6 +583,38 @@ Action.make('impersonate')
 
 ---
 
+## Duplicate Record
+
+Each table row has a **Duplicate** button in the row actions (between Edit and Delete). Clicking it:
+
+1. Fetches the full record via `GET /{panel}/api/{resource}/{id}`
+2. Builds a prefill URL from all editable, non-slug fields
+3. Navigates to the create page with those values pre-filled
+
+The field that auto-generates a slug (via `SlugField.from()`) gets `" (copy)"` appended, ensuring the new slug is unique:
+
+| | Original | Duplicate |
+|---|---|---|
+| `title` | `"My Article"` | `"My Article (copy)"` |
+| `slug` | `"my-article"` | `"my-article-copy"` (auto-generated) |
+
+**Skipped fields**: `id`, readonly fields, `password`, `hidden`, `slug`.
+
+No configuration required — the button is always visible per row.
+
+---
+
+## Bulk Delete
+
+When one or more rows are checked, a selection bar appears at the bottom of the table containing:
+
+- A **"Delete N selected"** button — opens a confirmation dialog, then sends `DELETE /{panel}/api/{resource}` with `{ ids: string[] }`
+- Any custom bulk `Action` buttons defined on the resource
+
+The selection bar is visible whenever at least one row is selected, regardless of whether any custom actions are defined.
+
+---
+
 ## Guard
 
 ```ts
@@ -687,7 +719,8 @@ For each resource, the following routes are mounted at boot:
 | `GET` | `/{panel}/api/{resource}/:id` | Show one record |
 | `POST` | `/{panel}/api/{resource}` | Create |
 | `PUT` | `/{panel}/api/{resource}/:id` | Update |
-| `DELETE` | `/{panel}/api/{resource}/:id` | Delete |
+| `DELETE` | `/{panel}/api/{resource}/:id` | Delete one record |
+| `DELETE` | `/{panel}/api/{resource}` | Bulk delete — body: `{ ids: string[] }` |
 | `POST` | `/{panel}/api/{resource}/_action/:name` | Run bulk action |
 | `POST` | `/{panel}/api/_upload` | File upload (used by FileField) |
 | `GET` | `/{panel}/api/{resource}/_options` | Relation select options — used by RelationField |
