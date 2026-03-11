@@ -477,7 +477,8 @@ export class PanelServiceProvider extends ServiceProvider {
   private applyTransforms(resource: Resource, records: unknown[]): unknown[] {
     const fields = flattenFields(resource.fields())
     const displayFields  = fields.filter(f => f.hasDisplay())
-    const computedFields = fields.filter((f): f is ComputedField => f instanceof ComputedField)
+    // Duck-type instead of instanceof — Vite SSR may load separate class instances
+    const computedFields = fields.filter((f): f is ComputedField => f.getType() === 'computed' && 'apply' in f)
 
     if (!displayFields.length && !computedFields.length) return records
 
