@@ -114,6 +114,16 @@ export default function ResourceListPage() {
     else sessionStorage.removeItem(selectionStorageKey)
   }, [selected, persist, selectionStorageKey])
 
+  // In loadMore mode, handle browser back/forward by triggering a full Vike navigation
+  useEffect(() => {
+    if (!isLoadMore) return
+    function onPopState() {
+      void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [isLoadMore, pathSegment, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Sync search input value with URL (covers restore + navigation)
   useEffect(() => {
     if (searchRef.current) searchRef.current.value = currentSearch
@@ -142,7 +152,7 @@ export default function ResourceListPage() {
         const body = await res.json() as { data: unknown[] }
         setExtraRecords((prev) => [...prev, ...body.data])
         // Update URL without navigation so persistTableState can save the position
-        window.history.replaceState(null, '', url.pathname + url.search)
+        window.history.pushState(null, '', url.pathname + url.search)
         if (persist) sessionStorage.setItem(storageKey, url.search)
       }
     } catch { /* ignore */ }
