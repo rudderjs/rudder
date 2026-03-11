@@ -43,9 +43,6 @@ export default function ResourceListPage() {
   const [bulkDeletePending,     setBulkDeletePending]     = useState(false)
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
 
-  // Reset selection when navigating to a different resource
-  useEffect(() => { setSelected([]) }, [slug])
-
   const allFields    = flattenFields(resourceMeta.fields as SchemaItem[])
   const tableFields  = allFields.filter((f) => !f.hidden.includes('table'))
   const sortFields   = allFields.filter((f) => f.sortable)
@@ -56,19 +53,41 @@ export default function ResourceListPage() {
   // ── Persist table state (filters, sort, search) across navigation ──
   const storageKey = `panels:${pathSegment}:${slug}:tableState`
 
-  // On mount: if URL has no query params, restore from sessionStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  // Check synchronously: do we need to restore saved params?
+  const [restoring, setRestoring] = useState(() => {
+    if (typeof window === 'undefined') return false
     const search = window.location.search
     if (search && search !== '?') {
-      // Save current params
       sessionStorage.setItem(storageKey, search)
-    } else {
-      // Restore saved params
-      const saved = sessionStorage.getItem(storageKey)
-      if (saved) {
-        void navigate(`${window.location.pathname}${saved}`, { overwriteLastHistoryEntry: true })
+      return false
+    }
+    return !!sessionStorage.getItem(storageKey)
+  })
+
+  // Restore saved params (runs once on mount when restoring=true)
+  useEffect(() => {
+    if (!restoring) return
+    const saved = sessionStorage.getItem(storageKey)
+    if (saved) {
+      void navigate(`${window.location.pathname}${saved}`, { overwriteLastHistoryEntry: true })
+    }
+    setRestoring(false)
+  }, [restoring, storageKey])
+
+  // Reset selection + search input when navigating to a different resource
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    setSelected([])
+    if (searchRef.current) searchRef.current.value = ''
+    // Re-check if we need to restore saved params for this resource
+    const search = window.location.search
+    if (!search || search === '?') {
+      const key = `panels:${pathSegment}:${slug}:tableState`
+      if (sessionStorage.getItem(key)) {
+        setRestoring(true)
       }
+    } else {
+      sessionStorage.setItem(`panels:${pathSegment}:${slug}:tableState`, search)
     }
   }, [slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -78,9 +97,6 @@ export default function ResourceListPage() {
   const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
   const currentSearch = urlParams.get('search') ?? ''
   const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
-
-  // ── Search state ────────────────────────────────────────
-  const searchRef = useRef<HTMLInputElement>(null)
 
   /** Navigate and persist query string to sessionStorage */
   function navigateAndPersist(url: URL) {
@@ -363,6 +379,9 @@ export default function ResourceListPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
+            {restoring ? (
+              <tr><td colSpan={tableFields.length + 2} className="px-6 py-12 text-center text-muted-foreground text-sm">Loading…</td></tr>
+            ) : (<>
             {(records as Array<Record<string, unknown>>).map((record) => {
               const id       = record['id'] as string
               const isChecked = selected.includes(id)
@@ -470,6 +489,7 @@ export default function ResourceListPage() {
                 </td>
               </tr>
             )}
+            </>)}
           </tbody>
         </table>
       </div>
