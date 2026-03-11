@@ -53,43 +53,35 @@ export default function ResourceListPage() {
   // ── Persist table state (filters, sort, search) across navigation ──
   const storageKey = `panels:${pathSegment}:${slug}:tableState`
 
-  // Check synchronously: do we need to restore saved params?
-  const [restoring, setRestoring] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const search = window.location.search
-    if (search && search !== '?') {
-      sessionStorage.setItem(storageKey, search)
-      return false
-    }
-    return !!sessionStorage.getItem(storageKey)
-  })
+  // ── Persist table state (synchronous — no flash) ──────
+  // Compute on every render: does the URL lack params but sessionStorage has saved ones?
+  const needsRestore = typeof window !== 'undefined'
+    && (!window.location.search || window.location.search === '?')
+    && !!sessionStorage.getItem(storageKey)
 
-  // Restore saved params (runs once on mount when restoring=true)
+  // Save params to sessionStorage whenever URL has them
+  if (typeof window !== 'undefined' && window.location.search && window.location.search !== '?') {
+    sessionStorage.setItem(storageKey, window.location.search)
+  }
+
+  // Trigger the restore navigation (once per restore)
+  const restoredRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!restoring) return
+    if (!needsRestore) return
     const saved = sessionStorage.getItem(storageKey)
-    if (saved) {
+    if (saved && restoredRef.current !== storageKey) {
+      restoredRef.current = storageKey
       void navigate(`${window.location.pathname}${saved}`, { overwriteLastHistoryEntry: true })
     }
-    setRestoring(false)
-  }, [restoring, storageKey])
+  }) // no deps — runs every render but the ref guard prevents re-firing
 
   // Reset selection + search input when navigating to a different resource
   const searchRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     setSelected([])
     if (searchRef.current) searchRef.current.value = ''
-    // Re-check if we need to restore saved params for this resource
-    const search = window.location.search
-    if (!search || search === '?') {
-      const key = `panels:${pathSegment}:${slug}:tableState`
-      if (sessionStorage.getItem(key)) {
-        setRestoring(true)
-      }
-    } else {
-      sessionStorage.setItem(`panels:${pathSegment}:${slug}:tableState`, search)
-    }
-  }, [slug]) // eslint-disable-line react-hooks/exhaustive-deps
+    restoredRef.current = null  // allow restore for the new resource
+  }, [slug])
 
   // ── Current URL params ─────────────────────────────────
   const urlParams  = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
@@ -379,7 +371,7 @@ export default function ResourceListPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {restoring ? (
+            {needsRestore ? (
               <tr><td colSpan={tableFields.length + 2} className="px-6 py-12 text-center text-muted-foreground text-sm">Loading…</td></tr>
             ) : (<>
             {(records as Array<Record<string, unknown>>).map((record) => {
