@@ -16,6 +16,7 @@ import { SelectField }  from './fields/SelectField.js'
 import { BooleanField } from './fields/BooleanField.js'
 import { DateField }    from './fields/DateField.js'
 import { RelationField } from './fields/RelationField.js'
+import { HasMany }       from './fields/HasMany.js'
 import { PasswordField } from './fields/PasswordField.js'
 import { SlugField }     from './fields/SlugField.js'
 import { TagsField }     from './fields/TagsField.js'
@@ -29,6 +30,11 @@ import { FileField }     from './fields/FileField.js'
 import { Block }         from './Block.js'
 import { Section }       from './Section.js'
 import { Tabs }          from './Tabs.js'
+import { Text }    from './schema/Text.js'
+import { Heading } from './schema/Heading.js'
+import { Stats, Stat } from './schema/Stats.js'
+import { Table }   from './schema/Table.js'
+import { getPanelI18n, getPanelDir, getActiveLocale } from './i18n/index.js'
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -180,7 +186,7 @@ describe('SelectField', () => {
 
 describe('RelationField', () => {
   it('type is belongsTo by default', () => assert.equal(RelationField.make('author').getType(), 'belongsTo'))
-  it('type is hasMany when multiple()', () => assert.equal(RelationField.make('tags').multiple().getType(), 'hasMany'))
+  it('type is belongsToMany when multiple()', () => assert.equal(RelationField.make('tags').multiple().getType(), 'belongsToMany'))
 
   it('resource/displayField stored in extra', () => {
     const meta = RelationField.make('author')
@@ -1121,5 +1127,234 @@ describe('resourceData', () => {
     assert.equal(result.resourceMeta.slug, 'posts')
     assert.deepEqual(result.records, [])
     assert.equal(result.pagination, null)
+  })
+})
+
+// ─── HasMany ─────────────────────────────────────────────────
+
+describe('HasMany', () => {
+  it('type is hasMany', () => {
+    assert.equal(HasMany.make('comments').getType(), 'hasMany')
+  })
+
+  it('is hidden from table, create, and edit by default', () => {
+    const f = HasMany.make('comments').toMeta()
+    assert.ok(f.hidden.includes('table'))
+    assert.ok(f.hidden.includes('create'))
+    assert.ok(f.hidden.includes('edit'))
+  })
+
+  it('sets resource slug', () => {
+    const f = HasMany.make('comments').resource('comments').toMeta()
+    assert.equal(f.extra['resource'], 'comments')
+  })
+
+  it('sets foreignKey', () => {
+    const f = HasMany.make('comments').foreignKey('postId').toMeta()
+    assert.equal(f.extra['foreignKey'], 'postId')
+  })
+
+  it('sets display field', () => {
+    const f = HasMany.make('comments').display('body').toMeta()
+    assert.equal(f.extra['displayField'], 'body')
+  })
+
+  it('throughMany sets flag', () => {
+    const f = HasMany.make('tags').throughMany().toMeta()
+    assert.equal(f.extra['throughMany'], true)
+  })
+})
+
+// ─── Schema elements ─────────────────────────────────────────
+
+describe('Text', () => {
+  it('type is text', () => {
+    assert.equal(Text.make('hello').getType(), 'text')
+  })
+
+  it('toMeta returns content', () => {
+    const m = Text.make('Hello world').toMeta()
+    assert.equal(m.type, 'text')
+    assert.equal(m.content, 'Hello world')
+  })
+})
+
+describe('Heading', () => {
+  it('type is heading', () => {
+    assert.equal(Heading.make('Title').getType(), 'heading')
+  })
+
+  it('defaults to level 1', () => {
+    const m = Heading.make('Title').toMeta()
+    assert.equal(m.level, 1)
+  })
+
+  it('respects explicit level', () => {
+    const m = Heading.make('Subtitle').level(2).toMeta()
+    assert.equal(m.level, 2)
+  })
+
+  it('toMeta includes content', () => {
+    const m = Heading.make('Dashboard').toMeta()
+    assert.equal(m.content, 'Dashboard')
+    assert.equal(m.type, 'heading')
+  })
+})
+
+describe('Stat', () => {
+  it('toMeta returns label and value', () => {
+    const m = Stat.make('Users').value(42).toMeta()
+    assert.equal(m.label, 'Users')
+    assert.equal(m.value, 42)
+  })
+
+  it('description is optional', () => {
+    const m = Stat.make('Users').value(0).toMeta()
+    assert.equal('description' in m, false)
+  })
+
+  it('includes description when set', () => {
+    const m = Stat.make('Users').value(10).description('Active users').toMeta()
+    assert.equal(m.description, 'Active users')
+  })
+
+  it('includes trend when set', () => {
+    const m = Stat.make('Revenue').value(100).trend(5).toMeta()
+    assert.equal(m.trend, 5)
+  })
+})
+
+describe('Stats', () => {
+  it('type is stats', () => {
+    assert.equal(Stats.make([]).getType(), 'stats')
+  })
+
+  it('toMeta maps stats to meta', () => {
+    const m = Stats.make([Stat.make('A').value(1), Stat.make('B').value(2)]).toMeta()
+    assert.equal(m.type, 'stats')
+    assert.equal(m.stats.length, 2)
+    assert.equal(m.stats[0]!.label, 'A')
+    assert.equal(m.stats[1]!.label, 'B')
+  })
+})
+
+describe('Table', () => {
+  it('type is table', () => {
+    assert.equal(Table.make('Recent Posts').getType(), 'table')
+  })
+
+  it('getConfig returns title', () => {
+    const c = Table.make('Recent Posts').getConfig()
+    assert.equal(c.title, 'Recent Posts')
+  })
+
+  it('defaults: limit 5, sortDir DESC, no resource', () => {
+    const c = Table.make('T').getConfig()
+    assert.equal(c.limit, 5)
+    assert.equal(c.sortDir, 'DESC')
+    assert.equal(c.resource, undefined)
+  })
+
+  it('sets resource and columns', () => {
+    const c = Table.make('T').resource('posts').columns(['title', 'status']).getConfig()
+    assert.equal(c.resource, 'posts')
+    assert.deepEqual(c.columns, ['title', 'status'])
+  })
+
+  it('sets limit', () => {
+    const c = Table.make('T').limit(10).getConfig()
+    assert.equal(c.limit, 10)
+  })
+
+  it('sets sortBy and sortDir', () => {
+    const c = Table.make('T').sortBy('createdAt', 'ASC').getConfig()
+    assert.equal(c.sortBy, 'createdAt')
+    assert.equal(c.sortDir, 'ASC')
+  })
+})
+
+// ─── i18n ─────────────────────────────────────────────────────
+
+describe('getPanelI18n', () => {
+  it('returns English strings for "en"', () => {
+    const i18n = getPanelI18n('en')
+    assert.equal(i18n.signOut, 'Sign out')
+    assert.equal(i18n.yes, 'Yes')
+    assert.equal(i18n.no, 'No')
+    assert.equal(i18n.cancel, 'Cancel')
+  })
+
+  it('returns Arabic strings for "ar"', () => {
+    const i18n = getPanelI18n('ar')
+    assert.equal(i18n.yes, 'نعم')
+    assert.equal(i18n.no, 'لا')
+  })
+
+  it('falls back to English for unknown locale', () => {
+    const i18n = getPanelI18n('zh')
+    assert.equal(i18n.yes, 'Yes')
+  })
+
+  it('resolves base locale from full tag (e.g. "ar-SA")', () => {
+    const i18n = getPanelI18n('ar-SA')
+    assert.equal(i18n.yes, 'نعم')
+  })
+})
+
+describe('getPanelDir', () => {
+  it('returns ltr for en', () => assert.equal(getPanelDir('en'), 'ltr'))
+  it('returns rtl for ar', () => assert.equal(getPanelDir('ar'), 'rtl'))
+  it('returns rtl for he', () => assert.equal(getPanelDir('he'), 'rtl'))
+  it('returns rtl for fa', () => assert.equal(getPanelDir('fa'), 'rtl'))
+  it('returns rtl for ar-SA', () => assert.equal(getPanelDir('ar-SA'), 'rtl'))
+  it('returns ltr for fr', () => assert.equal(getPanelDir('fr'), 'ltr'))
+  it('returns ltr for unknown locale', () => assert.equal(getPanelDir('xyz'), 'ltr'))
+})
+
+describe('getActiveLocale', () => {
+  it('returns "en" when no global config set', () => {
+    const g = globalThis as Record<string, unknown>
+    const prev = g['__boostkit_localization_config__']
+    delete g['__boostkit_localization_config__']
+    assert.equal(getActiveLocale(), 'en')
+    g['__boostkit_localization_config__'] = prev
+  })
+
+  it('returns locale from global config', () => {
+    const g = globalThis as Record<string, unknown>
+    g['__boostkit_localization_config__'] = { locale: 'ar' }
+    assert.equal(getActiveLocale(), 'ar')
+    delete g['__boostkit_localization_config__']
+  })
+})
+
+describe('Panel.locale()', () => {
+  it('overrides locale in toMeta()', () => {
+    const meta = Panel.make('x').path('/x').locale('ar').toMeta()
+    assert.equal(meta.locale, 'ar')
+  })
+
+  it('sets dir to rtl for Arabic', () => {
+    const meta = Panel.make('x').path('/x').locale('ar').toMeta()
+    assert.equal(meta.dir, 'rtl')
+  })
+
+  it('sets dir to ltr for English', () => {
+    const meta = Panel.make('x').path('/x').locale('en').toMeta()
+    assert.equal(meta.dir, 'ltr')
+  })
+
+  it('i18n in toMeta() matches the set locale', () => {
+    const meta = Panel.make('x').path('/x').locale('ar').toMeta()
+    assert.equal(meta.i18n.yes, 'نعم')
+  })
+
+  it('falls back to getActiveLocale() when not set', () => {
+    const g = globalThis as Record<string, unknown>
+    const prev = g['__boostkit_localization_config__']
+    delete g['__boostkit_localization_config__']
+    const meta = Panel.make('x').path('/x').toMeta()
+    assert.equal(meta.locale, 'en')
+    g['__boostkit_localization_config__'] = prev
   })
 })

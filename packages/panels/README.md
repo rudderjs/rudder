@@ -363,7 +363,7 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 
 | Class | Description |
 |---|---|
-| `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `2`) |
+| `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `1`) |
 | `Text.make(content)` | Paragraph of text |
 | `Stats.make([...stats])` | Row of stat cards |
 | `Stat.make(label)` | Single stat — `.value(n)`, `.description(text)`, `.trend('up'\|'down'\|'neutral')` |
@@ -377,6 +377,29 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 Panel.make('admin').layout('sidebar')   // vertical sidebar (default)
 Panel.make('admin').layout('topbar')    // horizontal top navigation
 ```
+
+---
+
+## Internationalization (i18n) and RTL
+
+The panel UI is fully internationalized. By default the locale is inherited from `@boostkit/localization` (read from `globalThis`). Override it per panel with `.locale()`:
+
+```ts
+Panel.make('admin')
+  .path('/admin')
+  .locale('ar')   // Arabic + RTL layout
+```
+
+Built-in translations: **`en`** (English) and **`ar`** (Arabic).
+
+When a locale is set, the panel automatically:
+- Applies the correct UI strings (buttons, labels, toasts, empty states)
+- Sets `dir="rtl"` on the layout root for RTL languages
+- Uses CSS logical properties so padding, borders, and alignment flip correctly
+
+**RTL languages detected automatically**: `ar`, `he`, `fa`, `ur`, `ps`, `sd`, `ug`
+
+If `.locale()` is not called, the panel reads the active locale from `@boostkit/localization`. This means all panels in a multilingual app will use the right locale without any extra config.
 
 ---
 
