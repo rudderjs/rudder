@@ -400,7 +400,8 @@ export class PanelServiceProvider extends ServiceProvider {
 
       const raw    = req.body as Record<string, unknown>
       const body   = this.coercePayload(resource, raw, 'update')
-      const errors = await this.validatePayload(resource, body, 'update')
+      // Inject id so per-field validators can exclude the current record (e.g. unique slug)
+      const errors = await this.validatePayload(resource, { ...body, id }, 'update')
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
       const record = await Model.query().update(id, body)
