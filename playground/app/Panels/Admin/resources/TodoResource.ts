@@ -32,8 +32,8 @@ export class TodoResource extends Resource {
       SelectFilter.make('completed')
         .label('Status')
         .options([
-          { label: 'Completed',   value: '1' },
-          { label: 'Incomplete',  value: '0' },
+          { label: 'Completed',   value: true  },
+          { label: 'Incomplete',  value: false },
         ]),
     ]
   }
