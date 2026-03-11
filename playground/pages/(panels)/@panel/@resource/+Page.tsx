@@ -349,12 +349,16 @@ export default function ResourceListPage() {
                           {action.label}
                         </button>
                       ))}
-                      <a
-                        href={`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : `/${pathSegment}/${slug}`)}`}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const back = window.location.pathname + window.location.search
+                          void navigate(`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
+                        }}
                         className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                       >
                         Edit
-                      </a>
+                      </button>
                       <DeleteRowButton slug={slug} id={id} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} />
                     </div>
                   </td>

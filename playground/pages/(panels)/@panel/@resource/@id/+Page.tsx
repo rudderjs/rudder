@@ -4,6 +4,7 @@ import type React from 'react'
 import { useState, useEffect } from 'react'
 import { useData }     from 'vike-react/useData'
 import { useConfig }   from 'vike-react/useConfig'
+import { navigate }    from 'vike/client/router'
 import { AdminLayout } from '../../../_components/AdminLayout.js'
 import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
 import type { FieldMeta, SectionMeta, TabsMeta } from '@boostkit/panels'
@@ -109,12 +110,16 @@ export default function ShowPage() {
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">{recordTitle}</h1>
-          <a
-            href={`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : `/${pathSegment}/${slug}/${id}`)}`}
+          <button
+            type="button"
+            onClick={() => {
+              const back = window.location.pathname + window.location.search
+              void navigate(`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
+            }}
             className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
           >
             Edit
-          </a>
+          </button>
         </div>
 
         {/* Main record fields */}
