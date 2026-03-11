@@ -71,7 +71,23 @@ export async function data(pageContext: PageContextServer) {
     }
 
     const result = await q.paginate(page, 15)
-    records    = result.data
+
+    // Apply display transforms + computed fields
+    const allFields = flattenFields(resource.fields())
+    const computedFields = allFields.filter((f: any) => f.getType?.() === 'computed' && typeof f.apply === 'function')
+    const displayFields  = allFields.filter((f: any) => typeof f.hasDisplay === 'function' && f.hasDisplay())
+
+    if (computedFields.length || displayFields.length) {
+      records = (result.data as Record<string, unknown>[]).map((r: any) => {
+        const rec = { ...r }
+        for (const f of computedFields) rec[(f as any).getName()] = (f as any).apply(rec)
+        for (const f of displayFields)  rec[(f as any).getName()] = (f as any).applyDisplay(rec[(f as any).getName()], rec)
+        return rec
+      })
+    } else {
+      records = result.data
+    }
+
     pagination = {
       total:       result.total,
       currentPage: result.currentPage,

@@ -49,6 +49,20 @@ export async function data(pageContext: PageContextServer) {
       }
     }
     record = await q.find(id)
+
+    // Apply display transforms + computed fields (same as API endpoint)
+    if (record) {
+      const allFields = flattenFields(resource.fields())
+      const computedFields = allFields.filter((f: any) => f.getType?.() === 'computed' && typeof f.apply === 'function')
+      const displayFields  = allFields.filter((f: any) => typeof f.hasDisplay === 'function' && f.hasDisplay())
+
+      if (computedFields.length || displayFields.length) {
+        const rec = { ...record } as Record<string, unknown>
+        for (const f of computedFields) rec[(f as any).getName()] = (f as any).apply(rec)
+        for (const f of displayFields)  rec[(f as any).getName()] = (f as any).applyDisplay(rec[(f as any).getName()], rec)
+        record = rec
+      }
+    }
   }
 
   // ── SSR HasMany relation data ──────────────────────────────
