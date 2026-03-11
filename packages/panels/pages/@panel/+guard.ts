@@ -18,22 +18,18 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
   // Run the panel's guard if defined
   const panelGuard = panel.getGuard()
   if (panelGuard) {
-    let user: Record<string, unknown> | undefined
-    try {
-      const { app } = await import('@boostkit/core')
+    const { app } = await import('@boostkit/core')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const auth    = app().make<any>('auth')
+    const session = await auth.api.getSession({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const auth    = app().make<any>('auth')
-      const session = await auth.api.getSession({
-        headers: new Headers((pageContext as any).headers ?? {}),
-      })
-      user = session?.user ?? undefined
-    } catch {
-      // auth not configured — deny access
-    }
+      headers: new Headers((pageContext as any).headers ?? {}),
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const user = session?.user as any
 
     const allowed = await panelGuard({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      user:    user as any,
+      user,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       headers: (pageContext as any).headers ?? {},
       path:    pageContext.urlPathname,

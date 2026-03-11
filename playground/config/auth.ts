@@ -8,6 +8,12 @@ export default {
   baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
   emailAndPassword: { enabled: true },
 
+  user: {
+    additionalFields: {
+      role: { type: 'string', defaultValue: 'user', input: false },
+    },
+  },
+
   onUserCreated: async (user) => {
     await dispatch(new UserRegistered(user.id, user.name, user.email))
   },

@@ -39,6 +39,14 @@ export interface AuthResult {
 
 // ─── Config ────────────────────────────────────────────────
 
+export interface BetterAuthAdditionalField {
+  type: 'string' | 'number' | 'boolean' | 'date'
+  required?: boolean
+  defaultValue?: string | number | boolean | null
+  /** Prevent users from setting this field on sign-up/update (e.g. role) */
+  input?: boolean
+}
+
 export interface BetterAuthConfig {
   /** 32+ character secret. Falls back to process.env.AUTH_SECRET */
   secret?: string
@@ -47,6 +55,23 @@ export interface BetterAuthConfig {
   emailAndPassword?: { enabled?: boolean; requireEmailVerification?: boolean }
   socialProviders?: Record<string, { clientId: string; clientSecret: string }>
   trustedOrigins?: string[]
+  /**
+   * Additional fields to include on the user object in sessions.
+   * Fields must exist in the database (Prisma schema) and be declared here
+   * to be returned by `auth.api.getSession()`.
+   *
+   * Example:
+   * ```ts
+   * user: {
+   *   additionalFields: {
+   *     role: { type: 'string', defaultValue: 'user', input: false },
+   *   }
+   * }
+   * ```
+   */
+  user?: {
+    additionalFields?: Record<string, BetterAuthAdditionalField>
+  }
   /** Called after a new user is successfully created — ideal for dispatching jobs or events */
   onUserCreated?: (user: { id: string; name: string; email: string }) => void | Promise<void>
 }
@@ -141,6 +166,9 @@ export function auth(
         },
         ...(config.socialProviders && { socialProviders: config.socialProviders }),
         ...(config.trustedOrigins  && { trustedOrigins:  config.trustedOrigins  }),
+        ...(config.user?.additionalFields && {
+          user: { additionalFields: config.user.additionalFields },
+        }),
         ...(config.onUserCreated && {
           databaseHooks: {
             user: {
