@@ -140,6 +140,7 @@ export default function ShowPage() {
             key={field.name}
             field={field}
             parentId={id}
+            parentSlug={slug}
             pathSegment={pathSegment}
             initialData={hasManyData[field.name]}
           />
@@ -167,11 +168,12 @@ interface HasManyInitialData { records: RelatedRecord[]; schema: FieldMeta[]; pa
 interface HasManyTableProps {
   field:        FieldMeta
   parentId:     string
+  parentSlug:   string
   pathSegment:  string
   initialData?: HasManyInitialData
 }
 
-function HasManyTable({ field, parentId, pathSegment, initialData }: HasManyTableProps) {
+function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData }: HasManyTableProps) {
   const resourceSlug = field.extra?.['resource'] as string | undefined
   const foreignKey   = field.extra?.['foreignKey'] as string | undefined
 
@@ -211,10 +213,11 @@ function HasManyTable({ field, parentId, pathSegment, initialData }: HasManyTabl
 
   if (!resourceSlug) return null
 
-  // Create URL: pre-fill the FK so new record links back to this parent
+  // Create URL: pre-fill the FK and pass back URL so cancel/save return to this record
+  const backUrl  = `/${pathSegment}/${parentSlug}/${parentId}`
   const createHref = foreignKey
-    ? `/${pathSegment}/${resourceSlug}/create?prefill[${foreignKey}]=${parentId}`
-    : `/${pathSegment}/${resourceSlug}/create`
+    ? `/${pathSegment}/${resourceSlug}/create?prefill[${foreignKey}]=${parentId}&back=${encodeURIComponent(backUrl)}`
+    : `/${pathSegment}/${resourceSlug}/create?back=${encodeURIComponent(backUrl)}`
 
   return (
     <div className="mt-6">
@@ -319,6 +322,35 @@ function CellValue({ col, row, pathSegment, resourceSlug }: { col: FieldMeta; ro
       {String(raw)}
     </span>
   )
-  if (Array.isArray(raw)) return <span>{raw.join(', ')}</span>
+  if (col.type === 'tags') {
+    const arr = Array.isArray(raw) ? raw as string[]
+      : typeof raw === 'string' ? (() => { try { return JSON.parse(raw) as string[] } catch { return [raw] } })()
+      : []
+    if (arr.length === 0) return <span className="text-muted-foreground">—</span>
+    return (
+      <span className="flex flex-wrap gap-1">
+        {arr.map((tag, i) => (
+          <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">{String(tag)}</span>
+        ))}
+      </span>
+    )
+  }
+  if (col.type === 'belongsToMany') {
+    const display = (col.extra?.['displayField'] as string) ?? 'name'
+    const target  = col.extra?.['resource'] as string | undefined
+    const items   = Array.isArray(raw) ? raw as Record<string, unknown>[] : []
+    if (items.length === 0) return <span className="text-muted-foreground">—</span>
+    return (
+      <span className="flex flex-wrap gap-1">
+        {items.map((item, i) => {
+          const label = String(item[display] ?? item['name'] ?? item['id'] ?? '—')
+          return target
+            ? <a key={i} href={`/${pathSegment}/${target}/${item['id']}`} className="text-xs text-primary hover:underline">{label}</a>
+            : <span key={i}>{label}</span>
+        })}
+      </span>
+    )
+  }
+  if (Array.isArray(raw)) return <span>{(raw as unknown[]).map(String).join(', ')}</span>
   return <span>{String(raw)}</span>
 }

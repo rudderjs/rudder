@@ -50,12 +50,14 @@ export default function CreatePage() {
   const schema     = resourceMeta.fields as SchemaItem[]
   const formFields = flattenFormFields(schema, 'create')
 
-  // Parse ?prefill[field]=value from the URL
+  // Parse ?prefill[field]=value and ?back= from the URL
   const prefill: Record<string, string> = {}
+  let backHref = `/${pathSegment}/${slug}`
   if (typeof window !== 'undefined') {
     new URLSearchParams(window.location.search).forEach((v, k) => {
       const m = k.match(/^prefill\[(.+)\]$/)
       if (m?.[1]) prefill[m[1]] = v
+      else if (k === 'back') backHref = v
     })
   }
 
@@ -116,7 +118,7 @@ export default function CreatePage() {
       }
       if (res.ok) {
         toast.success(`${resourceMeta.labelSingular} created successfully.`)
-        void navigate(`/${pathSegment}/${slug}`)
+        void navigate(backHref)
       } else {
         toast.error('Something went wrong. Please try again.')
       }
@@ -242,7 +244,7 @@ export default function CreatePage() {
               {saving ? 'Saving…' : `Create ${resourceMeta.labelSingular}`}
             </button>
             <a
-              href={`/${pathSegment}/${slug}`}
+              href={backHref}
               className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Cancel
