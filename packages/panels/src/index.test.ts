@@ -1437,3 +1437,42 @@ describe('search — searchable field detection', () => {
     assert.deepEqual(cols, ['title', 'body'])
   })
 })
+
+// ─── Bulk delete — i18n keys ────────────────────────────────
+
+describe('bulk delete i18n keys', () => {
+  it('en has deleteSelected key with :n placeholder', () => {
+    const i18n = getPanelI18n('en')
+    assert.ok(i18n.deleteSelected.includes(':n'))
+  })
+
+  it('en has bulkDeleteConfirm key with :n placeholder', () => {
+    const i18n = getPanelI18n('en')
+    assert.ok(i18n.bulkDeleteConfirm.includes(':n'))
+  })
+
+  it('en has bulkDeletedToast key with :n placeholder', () => {
+    const i18n = getPanelI18n('en')
+    assert.ok(i18n.bulkDeletedToast.includes(':n'))
+  })
+
+  it('ar has deleteSelected key (non-empty)', () => {
+    const i18n = getPanelI18n('ar')
+    assert.ok(i18n.deleteSelected.length > 0)
+  })
+})
+
+// ─── Duplicate — i18n keys ───────────────────────────────────
+
+describe('duplicate i18n keys', () => {
+  it('en has duplicate key', () => {
+    const i18n = getPanelI18n('en')
+    assert.equal(typeof i18n.duplicate, 'string')
+    assert.ok(i18n.duplicate.length > 0)
+  })
+
+  it('ar has duplicate key (non-empty)', () => {
+    const i18n = getPanelI18n('ar')
+    assert.ok(i18n.duplicate.length > 0)
+  })
+})
