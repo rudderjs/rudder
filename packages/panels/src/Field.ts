@@ -2,19 +2,35 @@
 
 export type FieldVisibility = 'table' | 'create' | 'edit' | 'view'
 
+// ─── Conditions ────────────────────────────────────────────
+
+export type ConditionOp =
+  | '=' | '!=' | '>' | '>=' | '<' | '<='
+  | 'in' | 'not_in'
+  | 'truthy' | 'falsy'
+
+export interface Condition {
+  type:  'show' | 'hide' | 'disabled'
+  field: string
+  op:    ConditionOp
+  value: unknown   // null for truthy/falsy
+}
+
 // ─── Field serialized (for meta endpoint / UI) ─────────────
 
 export interface FieldMeta {
-  name:       string
-  type:       string
-  label:      string
-  required:   boolean
-  readonly:   boolean
-  sortable:   boolean
-  searchable: boolean
-  hidden:     FieldVisibility[]
-  extra:      Record<string, unknown>
-  component?: string
+  name:                string
+  type:                string
+  label:               string
+  required:            boolean
+  readonly:            boolean
+  sortable:            boolean
+  searchable:          boolean
+  hidden:              FieldVisibility[]
+  extra:               Record<string, unknown>
+  component?:          string
+  conditions?:         Condition[]
+  displayTransformed?: boolean
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -29,6 +45,7 @@ export abstract class Field {
   protected _hidden:     Set<FieldVisibility> = new Set()
   protected _extra:      Record<string, unknown> = {}
   protected _component?: string
+  protected _conditions: Condition[] = []
 
   constructor(name: string) {
     this._name = name
@@ -101,6 +118,54 @@ export abstract class Field {
     return this
   }
 
+  /**
+   * Show this field only when a condition on another field is met.
+   *
+   * @example
+   * .showWhen('status', 'published')           // equality shorthand
+   * .showWhen('views', '>', 100)               // comparison operator
+   * .showWhen('status', ['draft', 'review'])   // one of (array → 'in' op)
+   * .showWhen('name', 'truthy')                // non-empty / non-null
+   */
+  showWhen(field: string, opOrValue: ConditionOp | unknown, value?: unknown): this {
+    return this._addCondition('show', field, opOrValue, value)
+  }
+
+  /**
+   * Hide this field when a condition on another field is met.
+   */
+  hideWhen(field: string, opOrValue: ConditionOp | unknown, value?: unknown): this {
+    return this._addCondition('hide', field, opOrValue, value)
+  }
+
+  /**
+   * Show the field but make it readonly (disabled) when the condition is met.
+   * Inspired by FilamentPHP's `.disabled(fn)`.
+   */
+  disabledWhen(field: string, opOrValue: ConditionOp | unknown, value?: unknown): this {
+    return this._addCondition('disabled', field, opOrValue, value)
+  }
+
+  private _addCondition(
+    type: 'show' | 'hide' | 'disabled',
+    field: string,
+    opOrValue: ConditionOp | unknown,
+    value?: unknown,
+  ): this {
+    const ops: ConditionOp[] = ['=','!=','>','>=','<','<=','in','not_in','truthy','falsy']
+    if (Array.isArray(opOrValue)) {
+      this._conditions.push({ type, field, op: 'in', value: opOrValue })
+    } else if (opOrValue === 'truthy' || opOrValue === 'falsy') {
+      this._conditions.push({ type, field, op: opOrValue, value: null })
+    } else if (typeof opOrValue === 'string' && (ops as string[]).includes(opOrValue) && value !== undefined) {
+      this._conditions.push({ type, field, op: opOrValue as ConditionOp, value })
+    } else {
+      // shorthand: .showWhen('status', 'published')  → op='='
+      this._conditions.push({ type, field, op: '=', value: opOrValue })
+    }
+    return this
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName():       string  { return this._name }
@@ -138,6 +203,7 @@ export abstract class Field {
       extra:      this._extra,
     }
     if (this._component !== undefined) meta.component = this._component
+    if (this._conditions.length > 0)   meta.conditions = this._conditions
     return meta
   }
 }

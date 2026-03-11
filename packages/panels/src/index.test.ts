@@ -1462,6 +1462,61 @@ describe('bulk delete i18n keys', () => {
   })
 })
 
+// ─── Conditional fields ──────────────────────────────────────
+
+describe('conditional fields', () => {
+  it('showWhen equality condition', () => {
+    const f = TextField.make('x').showWhen('status', 'published')
+    assert.deepEqual(f.toMeta().conditions, [
+      { type: 'show', field: 'status', op: '=', value: 'published' },
+    ])
+  })
+
+  it('showWhen with explicit operator', () => {
+    const f = TextField.make('x').showWhen('views', '>', 100)
+    assert.deepEqual(f.toMeta().conditions, [
+      { type: 'show', field: 'views', op: '>', value: 100 },
+    ])
+  })
+
+  it('showWhen with array uses "in"', () => {
+    const f = TextField.make('x').showWhen('status', ['draft', 'review'])
+    assert.deepEqual(f.toMeta().conditions, [
+      { type: 'show', field: 'status', op: 'in', value: ['draft', 'review'] },
+    ])
+  })
+
+  it('hideWhen stores hide condition', () => {
+    const f = TextField.make('x').hideWhen('featured', true)
+    assert.deepEqual(f.toMeta().conditions, [
+      { type: 'hide', field: 'featured', op: '=', value: true },
+    ])
+  })
+
+  it('disabledWhen stores disabled condition', () => {
+    const f = TextField.make('x').disabledWhen('verified', true)
+    assert.deepEqual(f.toMeta().conditions, [
+      { type: 'disabled', field: 'verified', op: '=', value: true },
+    ])
+  })
+
+  it('truthy/falsy operators', () => {
+    const f = TextField.make('x').showWhen('name', 'truthy')
+    assert.deepEqual(f.toMeta().conditions, [
+      { type: 'show', field: 'name', op: 'truthy', value: null },
+    ])
+  })
+
+  it('no conditions → conditions absent from meta', () => {
+    assert.equal(TextField.make('x').toMeta().conditions, undefined)
+  })
+
+  it('multiple conditions stack', () => {
+    const f = TextField.make('x').showWhen('a', '1').hideWhen('b', '2')
+    assert.equal(f.toMeta().conditions?.length, 2)
+  })
+})
+
 // ─── Duplicate — i18n keys ───────────────────────────────────
 
 describe('duplicate i18n keys', () => {
