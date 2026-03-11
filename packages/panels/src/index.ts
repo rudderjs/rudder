@@ -60,6 +60,26 @@ export type { FilterMeta, FilterOption } from './Filter.js'
 export { Action } from './Action.js'
 export type { ActionMeta, ActionHandler } from './Action.js'
 
+// ─── Schema elements ───────────────────────────────────────
+
+export { Text }    from './schema/Text.js'
+export { Heading } from './schema/Heading.js'
+export { Stats, Stat } from './schema/Stats.js'
+export { Table }   from './schema/Table.js'
+export type {
+  TextElementMeta,
+  HeadingElementMeta,
+  StatsElementMeta,
+  PanelStatMeta,
+  TableElementMeta,
+  PanelColumnMeta,
+} from './schema/index.js'
+
+// ─── Schema resolver ────────────────────────────────────────
+
+export { resolveSchema } from './resolveSchema.js'
+export type { PanelSchemaElementMeta } from './resolveSchema.js'
+
 // ─── Registry ──────────────────────────────────────────────
 
 export { PanelRegistry } from './PanelRegistry.js'

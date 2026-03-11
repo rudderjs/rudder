@@ -177,7 +177,7 @@ Route.get('/api/files/*', async (req) => {
     gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
     pdf: 'application/pdf', txt: 'text/plain', json: 'application/json',
   }
-  return new Response(buffer, {
+  return new Response(buffer as unknown as BodyInit, {
     headers: { 'Content-Type': mime[ext] ?? 'application/octet-stream' },
   })
 })

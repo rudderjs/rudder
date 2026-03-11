@@ -1,4 +1,5 @@
 import { PanelRegistry } from '@boostkit/panels'
+import { getSessionUser } from '../../_lib/getSessionUser.js'
 
 function flattenFields(items: any[]): any[] {
   const result: any[] = []
@@ -79,5 +80,6 @@ export async function data(pageContext: PageContextServer) {
     }
   }
 
-  return { panelMeta, resourceMeta, records, pagination, pathSegment, slug }
+  const sessionUser = await getSessionUser(pageContext)
+  return { panelMeta, resourceMeta, records, pagination, pathSegment, slug, sessionUser }
 }

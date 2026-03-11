@@ -7,9 +7,9 @@ import type { PanelMeta } from '@boostkit/panels'
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = usePageContext() as { data: { panelMeta: PanelMeta; slug?: string } }
+  const { data } = usePageContext() as { data: { panelMeta: PanelMeta; slug?: string; sessionUser?: { name?: string; email?: string; image?: string } } }
   return (
-    <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug}>
+    <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
       {children}
     </AdminLayout>
   )
