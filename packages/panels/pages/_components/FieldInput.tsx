@@ -13,6 +13,7 @@ interface Props {
   /** API base URL for the active panel (e.g. '/admin/api'). Required for FileField / ImageField. */
   uploadBase?: string
   i18n:        PanelI18n
+  disabled?:   boolean
 }
 
 function generateSlug(str: string): string {
@@ -26,8 +27,9 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
-export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Props) {
+export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
+  const isDisabled = disabled || field.readonly
 
   // ── Boolean ─────────────────────────────────────────────
   if (field.type === 'boolean') {
@@ -35,8 +37,9 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
       <div className="flex items-center gap-3">
         <Checkbox.Root
           checked={!!value}
-          onCheckedChange={(checked) => onChange(checked)}
-          className="h-5 w-5 rounded border-2 border-input bg-background flex items-center justify-center transition-colors data-[checked]:bg-primary data-[checked]:border-primary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer"
+          onCheckedChange={(checked) => !isDisabled && onChange(checked)}
+          disabled={isDisabled}
+          className="h-5 w-5 rounded border-2 border-input bg-background flex items-center justify-center transition-colors data-[checked]:bg-primary data-[checked]:border-primary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Checkbox.Indicator className="text-primary-foreground">
             <CheckIcon />
@@ -56,8 +59,9 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
     return (
       <Select.Root
         value={value as string}
-        onValueChange={(v) => onChange(v)}
+        onValueChange={(v) => !isDisabled && onChange(v)}
         name={field.name}
+        disabled={isDisabled}
       >
         <Select.Trigger className={`${inputCls} flex items-center justify-between`}>
           <Select.Value>{(value as string) || `Select ${field.label}…`}</Select.Value>
@@ -97,6 +101,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
         rows={(field.extra?.rows as number) ?? 4}
         required={field.required}
         readOnly={field.readonly}
+        disabled={isDisabled}
         className={inputCls}
       />
     )
@@ -112,6 +117,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
           required={field.required}
+          disabled={isDisabled}
           placeholder="••••••••"
           autoComplete="new-password"
           className={inputCls}
@@ -141,8 +147,9 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
           onChange={(e) => onChange(e.target.value)}
           required={field.required}
           readOnly={field.readonly}
+          disabled={isDisabled}
           placeholder="my-slug"
-          className="flex-1 px-3 py-2 text-sm bg-background focus:outline-none"
+          className="flex-1 px-3 py-2 text-sm bg-background focus:outline-none disabled:bg-muted disabled:text-muted-foreground"
         />
       </div>
     )
@@ -215,11 +222,13 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
       <div className="flex items-center gap-3">
         <Switch.Root
           checked={checked}
-          onCheckedChange={(c) => onChange(c)}
+          onCheckedChange={(c) => !isDisabled && onChange(c)}
+          disabled={isDisabled}
           className={[
             'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
             'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
             checked ? 'bg-primary' : 'bg-muted',
+            isDisabled ? 'opacity-50 cursor-not-allowed' : '',
           ].join(' ')}
         >
           <Switch.Thumb
@@ -245,7 +254,8 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
           name={field.name}
           value={(value as string) ?? '#000000'}
           onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-14 cursor-pointer rounded border border-input bg-background p-0.5"
+          disabled={isDisabled}
+          className="h-9 w-14 cursor-pointer rounded border border-input bg-background p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <span className="text-sm text-muted-foreground font-mono">
           {(value as string) ?? '#000000'}
@@ -268,6 +278,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
           defaultValue={rawValue}
           rows={(field.extra?.rows as number) ?? 6}
           spellCheck={false}
+          disabled={isDisabled}
           className={[inputCls, 'font-mono text-xs', jsonError ? 'border-destructive' : ''].join(' ')}
           onChange={(e) => {
             try {
@@ -549,7 +560,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
           type="file"
           accept={accept}
           multiple={multiple}
-          disabled={uploading || field.readonly}
+          disabled={uploading || isDisabled}
           className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:text-sm file:bg-background file:text-foreground hover:file:bg-accent cursor-pointer disabled:opacity-50"
           onChange={(e) => void handleFiles(e.target.files)}
         />
@@ -578,7 +589,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
         name={field.name}
         value={(value as string) ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
-        disabled={loading || field.readonly}
+        disabled={loading || isDisabled}
         className={inputCls}
       >
         <option value="">{loading ? i18n.loading : i18n.none}</option>
@@ -598,6 +609,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
         onChange={onChange}
         uploadBase={uploadBase}
         i18n={i18n}
+        disabled={isDisabled}
       />
     )
   }
@@ -643,7 +655,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n }: Pr
       onChange={(e) => onChange(e.target.value)}
       required={field.required}
       readOnly={field.readonly}
-      disabled={field.readonly}
+      disabled={isDisabled}
       placeholder={(field.extra?.placeholder as string) ?? ''}
       className={inputCls}
     />
@@ -660,9 +672,10 @@ interface BelongsToManyComboboxProps {
   onChange:    (value: unknown) => void
   uploadBase?: string
   i18n:        PanelI18n
+  disabled?:   boolean
 }
 
-function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n }: BelongsToManyComboboxProps) {
+function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, disabled = false }: BelongsToManyComboboxProps) {
   const resourceSlug = field.extra?.['resource'] as string | undefined
   const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
   const creatable    = field.extra?.['creatable'] === true
@@ -859,7 +872,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n }
           type="text"
           value={query}
           placeholder={loading ? i18n.loading : selected.length > 0 ? i18n.addMore : t(i18n.search, { label: field.label })}
-          disabled={loading || field.readonly}
+          disabled={loading || field.readonly || disabled}
           className="flex-1 min-w-[120px] px-1 py-1 text-sm bg-transparent outline-none"
           onChange={(e) => { setQuery(e.target.value); setOpen(true); setFocusedIdx(-1) }}
           onFocus={() => setOpen(true)}

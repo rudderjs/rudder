@@ -14,6 +14,49 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k: string) => String(vars[k] ?? `:${k}`))
 }
 
+type ConditionOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'not_in' | 'truthy' | 'falsy'
+
+interface Condition {
+  type:  'show' | 'hide' | 'disabled'
+  field: string
+  op:    ConditionOp
+  value: unknown
+}
+
+function evalCondition(cond: Condition, values: Record<string, unknown>): boolean {
+  const val = values[cond.field]
+  switch (cond.op) {
+    case '=':       return val === cond.value
+    case '!=':      return val !== cond.value
+    case '>':       return (val as number)  >  (cond.value as number)
+    case '>=':      return (val as number)  >= (cond.value as number)
+    case '<':       return (val as number)  <  (cond.value as number)
+    case '<=':      return (val as number)  <= (cond.value as number)
+    case 'in':      return (cond.value as unknown[]).includes(val)
+    case 'not_in':  return !(cond.value as unknown[]).includes(val)
+    case 'truthy':  return !!val
+    case 'falsy':   return !val
+    default:        return true
+  }
+}
+
+function isFieldVisible(field: { conditions?: Condition[] }, values: Record<string, unknown>): boolean {
+  if (!field.conditions?.length) return true
+  for (const cond of field.conditions) {
+    const match = evalCondition(cond, values)
+    if (cond.type === 'show' && !match) return false
+    if (cond.type === 'hide' &&  match) return false
+  }
+  return true
+}
+
+function isFieldDisabled(field: { conditions?: Condition[] }, values: Record<string, unknown>): boolean {
+  if (!field.conditions?.length) return false
+  return field.conditions
+    .filter(c => c.type === 'disabled')
+    .some(c => evalCondition(c, values))
+}
+
 type SchemaItem = FieldMeta | SectionMeta | TabsMeta
 
 function generateSlug(str: string): string {
@@ -135,6 +178,8 @@ export default function CreatePage() {
   }
 
   function renderField(field: FieldMeta) {
+    if (!isFieldVisible(field as { conditions?: Condition[] }, values)) return null
+    const fieldDisabled = isFieldDisabled(field as { conditions?: Condition[] }, values)
     return (
       <div key={field.name}>
         {field.type !== 'boolean' && field.type !== 'toggle' && field.type !== 'hidden' && (
@@ -143,7 +188,7 @@ export default function CreatePage() {
             {field.required && <span className="text-destructive ml-0.5">*</span>}
           </label>
         )}
-        <FieldInput field={field} value={values[field.name]} onChange={(v) => setValue(field.name, v)} uploadBase={uploadBase} i18n={i18n} />
+        <FieldInput field={field} value={values[field.name]} onChange={(v) => setValue(field.name, v)} uploadBase={uploadBase} i18n={i18n} disabled={fieldDisabled} />
         {errors[field.name]?.map((e) => (
           <p key={e} className="mt-1 text-xs text-destructive">{e}</p>
         ))}
@@ -156,7 +201,8 @@ export default function CreatePage() {
     if (item.type === 'section') {
       const section  = item as SectionMeta
       const key      = `section-${index}`
-      const fields   = section.fields.filter((f) => !f.hidden.includes('create'))
+      const fields   = section.fields.filter((f) => !f.hidden.includes('create') && isFieldVisible(f as { conditions?: Condition[] }, values))
+      if (fields.length === 0) return null
       const open     = section.collapsible ? !(collapsedSections[key] ?? section.collapsed) : true
 
       const gridCls = section.columns === 2 ? 'grid grid-cols-2 gap-4'
@@ -212,7 +258,7 @@ export default function CreatePage() {
             ))}
           </div>
           <div className="p-5 flex flex-col gap-4">
-            {(tabs.tabs[active]?.fields ?? []).filter((f) => !f.hidden.includes('create')).map((f) => renderField(f))}
+            {(tabs.tabs[active]?.fields ?? []).filter((f) => !f.hidden.includes('create') && isFieldVisible(f as { conditions?: Condition[] }, values)).map((f) => renderField(f))}
           </div>
         </div>
       )
