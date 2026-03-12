@@ -80,27 +80,35 @@ export interface PrismaPersistenceConfig {
    * Default: 'liveDocument'
    */
   model?: string
+  /** Pass an existing PrismaClient to avoid creating a new one per operation. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client?: any
 }
 
 export function livePrisma(config: PrismaPersistenceConfig = {}): LivePersistence {
   const modelName = config.model ?? 'liveDocument'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let cachedClient: any = config.client ?? null
+
+  async function getClient() {
+    if (cachedClient) return cachedClient
+    const { PrismaClient } = await import('@prisma/client') as any
+    cachedClient = new PrismaClient()
+    return cachedClient
+  }
 
   return {
     async getYDoc(docName: string): Promise<Y.Doc> {
-      const { PrismaClient } = await import('@prisma/client') as any
-      const prisma = new PrismaClient()
+      const prisma = await getClient()
       const doc    = new Y.Doc()
-      const rows   = await (prisma[modelName] as any).findMany({ where: { docName } })
+      const rows   = await prisma[modelName].findMany({ where: { docName } })
       for (const row of rows) Y.applyUpdate(doc, row.update)
-      await prisma.$disconnect()
       return doc
     },
 
     async storeUpdate(docName: string, update: Uint8Array): Promise<void> {
-      const { PrismaClient } = await import('@prisma/client') as any
-      const prisma = new PrismaClient()
-      await (prisma[modelName] as any).create({ data: { docName, update } })
-      await prisma.$disconnect()
+      const prisma = await getClient()
+      await prisma[modelName].create({ data: { docName, update } })
     },
 
     async getStateVector(docName: string): Promise<Uint8Array> {
@@ -114,13 +122,15 @@ export function livePrisma(config: PrismaPersistenceConfig = {}): LivePersistenc
     },
 
     async clearDocument(docName: string): Promise<void> {
-      const { PrismaClient } = await import('@prisma/client') as any
-      const prisma = new PrismaClient()
-      await (prisma[modelName] as any).deleteMany({ where: { docName } })
-      await prisma.$disconnect()
+      const prisma = await getClient()
+      await prisma[modelName].deleteMany({ where: { docName } })
     },
 
-    async destroy(): Promise<void> {},
+    async destroy(): Promise<void> {
+      if (!config.client && cachedClient) {
+        await cachedClient.$disconnect?.()
+      }
+    },
   }
 }
 
@@ -195,25 +205,27 @@ export function liveRedis(config: RedisLivePersistenceConfig = {}): LivePersiste
 // ─── Live room manager ───────────────────────────────────────
 
 interface Room {
-  doc:       Y.Doc
-  clients:   Set<import('ws').WebSocket>
+  doc:     Y.Doc
+  clients: Set<import('ws').WebSocket>
+  /** Resolves when persisted state has been loaded into the doc. */
+  ready:   Promise<void>
 }
 
 const g       = globalThis as Record<string, unknown>
 const KEY     = '__boostkit_live__'
+const PERSIST_KEY = '__boostkit_live_persistence__'
 
 function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
   const rooms = g[KEY] as Map<string, Room> ?? new Map<string, Room>()
   g[KEY] = rooms
   if (!rooms.has(docName)) {
     const doc = new Y.Doc()
-    // Load persisted state asynchronously
-    persistence.getYDoc(docName).then(persisted => {
+    const ready = persistence.getYDoc(docName).then(persisted => {
       const sv     = Y.encodeStateVector(doc)
       const update = Y.encodeStateAsUpdate(persisted, sv)
       if (update.length > 2) Y.applyUpdate(doc, update)
     }).catch(() => {})
-    rooms.set(docName, { doc, clients: new Set() })
+    rooms.set(docName, { doc, clients: new Set(), ready })
   }
   return rooms.get(docName)!
 }
@@ -353,9 +365,13 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
   const persistence = config.persistence ?? new MemoryPersistence()
 
   return class LiveServiceProvider extends ServiceProvider {
-    register(): void {}
+    register(): void {
+      this.app.bind('live.persistence', () => persistence)
+    }
 
     async boot(): Promise<void> {
+      g[PERSIST_KEY] = persistence
+
       const wss = new WebSocketServer({ noServer: true })
 
       wss.on('connection', (ws, req) => {
@@ -403,4 +419,74 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
       }).description('Clear a Live document from persistence')
     }
   }
+}
+
+// ─── Live facade ──────────────────────────────────────────
+
+/**
+ * Live facade — programmatic access to Yjs documents from server-side code.
+ *
+ * Mirrors @boostkit/broadcast's `Broadcast` facade pattern.
+ * Resolves persistence automatically — no manual threading required.
+ *
+ * @example
+ * import { Live } from '@boostkit/live'
+ *
+ * await Live.seed('panel:articles:42', { title: 'Hello', body: '' })
+ * const snapshot = Live.snapshot('panel:articles:42')
+ * const fields   = Live.readMap('panel:articles:42', 'fields')
+ */
+export const Live = {
+  /** Get the configured persistence adapter. */
+  persistence(): LivePersistence {
+    const p = g[PERSIST_KEY] as LivePersistence | undefined
+    if (!p) throw new Error('[Live] Not initialised — register live() in providers.')
+    return p
+  },
+
+  /**
+   * Seed a ydoc with initial data (e.g. from a DB record).
+   * Safe to call multiple times — only seeds when the ydoc is empty.
+   */
+  async seed(docName: string, data: Record<string, unknown>): Promise<void> {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    await room.ready  // wait for persisted state to load
+
+    const sv = Y.encodeStateVector(room.doc)
+    if (sv.length > 1) return  // already has content
+
+    const fields = room.doc.getMap('fields')
+    room.doc.transact(() => {
+      for (const [key, val] of Object.entries(data)) {
+        fields.set(key, val ?? null)
+      }
+    })
+  },
+
+  /**
+   * Return the current full state of a ydoc as a snapshot (Uint8Array).
+   * Purely a read operation — does not modify persistence.
+   */
+  snapshot(docName: string): Uint8Array {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    return Y.encodeStateAsUpdate(room.doc)
+  },
+
+  /**
+   * Read a Y.Map from a ydoc as a plain JS object.
+   *
+   * @example
+   * const fields = Live.readMap('panel:articles:42', 'fields')
+   * // { title: 'Hello', body: 'World' }
+   */
+  readMap(docName: string, mapName: string): Record<string, unknown> {
+    const persistence = this.persistence()
+    const room   = getOrCreateRoom(docName, persistence)
+    const ymap   = room.doc.getMap(mapName)
+    const result: Record<string, unknown> = {}
+    ymap.forEach((val, key) => { result[key] = val })
+    return result
+  },
 }
