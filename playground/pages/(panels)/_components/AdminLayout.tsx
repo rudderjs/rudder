@@ -42,20 +42,19 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
 /** Enhance nav hrefs with persisted query strings (client-only). */
 function useNavItemsWithPersistedState(panelMeta: PanelMeta): NavItem[] {
   const base = buildNavItems(panelMeta)
-  const [items, setItems] = useState(base)
+  // Start with base items (matches SSR), then enhance once mounted
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
-  useEffect(() => {
-    const segment = panelMeta.path.replace(/^\//, '')
-    const enhanced = base.map((item) => {
-      const resource = panelMeta.resources.find((r) => r.slug === item.slug)
-      if (!resource?.persistTableState) return item
-      const saved = sessionStorage.getItem(`panels:${segment}:${item.slug}:tableState`)
-      return saved ? { ...item, href: item.href + saved } : item
-    })
-    setItems(enhanced)
-  }) // no deps — re-run on every render so hrefs stay up-to-date
+  if (!mounted) return base
 
-  return items
+  const segment = panelMeta.path.replace(/^\//, '')
+  return base.map((item) => {
+    const resource = panelMeta.resources.find((r) => r.slug === item.slug)
+    if (!resource?.persistTableState) return item
+    const saved = sessionStorage.getItem(`panels:${segment}:${item.slug}:tableState`)
+    return saved ? { ...item, href: item.href + saved } : item
+  })
 }
 
 function useSessionUser(initial?: SessionUser): SessionUser | null {

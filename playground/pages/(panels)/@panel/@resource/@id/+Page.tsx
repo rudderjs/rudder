@@ -63,8 +63,8 @@ export default function ShowPage() {
     }
     if (value === null || value === undefined) return <span className="text-muted-foreground">—</span>
     if (field.type === 'boolean')  return value ? i18n.yes : i18n.no
-    if (field.type === 'date')     return new Date(String(value)).toLocaleDateString()
-    if (field.type === 'datetime') return new Date(String(value)).toLocaleString()
+    if (field.type === 'date')     return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(String(value)))
+    if (field.type === 'datetime') return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(String(value)))
     if (field.type === 'color') return (
       <span className="flex items-center gap-2">
         <span className="inline-block h-4 w-4 rounded-full border" style={{ backgroundColor: String(value) }} />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
@@ -94,9 +94,12 @@ export default function EditPage() {
   const i18n = panelMeta.i18n as Data['panelMeta']['i18n'] & Record<string, string>
   config({ title: `${i18n.edit} ${resourceMeta.labelSingular} — ${panelName}` })
 
-  const backHref = typeof window !== 'undefined'
-    ? (new URLSearchParams(window.location.search).get('back') ?? `/${pathSegment}/${slug}`)
-    : `/${pathSegment}/${slug}`
+  const defaultBack = `/${pathSegment}/${slug}`
+  const [backHref, setBackHref] = useState(defaultBack)
+  useEffect(() => {
+    const fromQs = new URLSearchParams(window.location.search).get('back')
+    if (fromQs) setBackHref(fromQs)
+  }, [])
 
   if (!record) {
     return <p className="text-muted-foreground">{i18n.recordNotFound}</p>
