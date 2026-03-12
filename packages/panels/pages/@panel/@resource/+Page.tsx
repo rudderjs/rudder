@@ -16,12 +16,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table.js'
-import { Badge } from '@/components/ui/badge.js'
+import { CellValue, resolveCellValue } from '../../_components/CellValue.js'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip.js'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select.js'
 import { useLiveTable } from '../../_hooks/useLiveTable.js'
 import type { Data } from './+data.js'
 
@@ -349,17 +356,21 @@ export default function ResourceListPage() {
             const options = (filter.extra['options'] ?? []) as Array<{ label: string; value: string | number | boolean }>
             const current = urlParams.get(`filter[${filter.name}]`) ?? ''
             return (
-              <select
+              <Select
                 key={filter.name}
-                value={current}
-                onChange={(e) => applyFilter(filter.name, e.target.value)}
-                className="h-9 px-3 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                value={current || null}
+                onValueChange={(val) => applyFilter(filter.name, val ?? '')}
               >
-                <option value="">{filter.label}</option>
-                {options.map((o) => (
-                  <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
-                ))}
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder={filter.label} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">{filter.label}</SelectItem>
+                  {options.map((o) => (
+                    <SelectItem key={String(o.value)} value={String(o.value)}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )
           })}
 
@@ -604,20 +615,25 @@ export default function ResourceListPage() {
                 : t(i18n.records, { n: pagination.total })}
             </p>
             {/* Per-page selector */}
-            <select
-              value={pagination.perPage}
-              onChange={(e) => {
+            <Select
+              value={String(pagination.perPage)}
+              onValueChange={(val) => {
+                if (!val) return
                 const url = new URL(window.location.href)
-                url.searchParams.set('perPage', e.target.value)
+                url.searchParams.set('perPage', val)
                 url.searchParams.delete('page')
                 void navigate(url.pathname + url.search)
               }}
-              className="text-sm border border-input rounded-md px-2 py-1 bg-background"
             >
-              {resourceMeta.perPageOptions.map((n) => (
-                <option key={n} value={n}>{t(i18n.perPage, { n })}</option>
-              ))}
-            </select>
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {resourceMeta.perPageOptions.map((n) => (
+                  <SelectItem key={n} value={String(n)}>{t(i18n.perPage, { n })}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {pagination.lastPage > 1 && (
             <div className="flex gap-1">
@@ -669,107 +685,7 @@ export default function ResourceListPage() {
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────
-
-/** For belongsTo fields, resolve the included relation object instead of raw FK value. */
-function resolveCellValue(record: Record<string, unknown>, f: { name: string; type: string; extra?: Record<string, unknown> }): unknown {
-  if (f.type === 'belongsTo') {
-    const rel = (f.extra?.['relationName'] as string) ?? (f.name.endsWith('Id') ? f.name.slice(0, -2) : f.name)
-    return record[rel]
-  }
-  if (f.type === 'belongsToMany') {
-    return record[f.name]
-  }
-  return record[f.name]
-}
-
 // ── Sub-components ─────────────────────────────────────────
-
-function CellValue({ value, type, extra, displayTransformed, pathSegment, i18n }: { value: unknown; type: string; extra?: Record<string, unknown>; displayTransformed?: boolean; pathSegment?: string; i18n: PanelI18n }) {
-  // If server already formatted this value, render as plain text
-  if (displayTransformed) {
-    return <span>{String(value ?? '')}</span>
-  }
-  if (type === 'belongsTo') {
-    const displayField  = (extra?.['displayField'] as string) ?? 'name'
-    const targetResource = extra?.['resource'] as string | undefined
-    const related = value as Record<string, unknown> | null | undefined
-    if (related && typeof related === 'object') {
-      const label = String(related[displayField] ?? '—')
-      return (targetResource && pathSegment && related['id'])
-        ? <a href={`/${pathSegment}/${targetResource}/${related['id']}`} className="text-primary hover:underline">{label}</a>
-        : <span>{label}</span>
-    }
-    return <span className="text-muted-foreground/40">—</span>
-  }
-  if (type === 'belongsToMany') {
-    const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
-    if (!items.length) return <span className="text-muted-foreground/40">—</span>
-    const displayField  = (extra?.['displayField'] as string) ?? 'name'
-    const targetResource = extra?.['resource'] as string | undefined
-    return (
-      <span className="flex flex-wrap gap-1">
-        {items.map((item) => {
-          const label = String(item[displayField] ?? item['name'] ?? item['id'] ?? '?')
-          return targetResource && pathSegment && item['id']
-            ? <Badge key={String(item['id'])} variant="outline"><a href={`/${pathSegment}/${targetResource}/${item['id']}`} className="hover:underline">{label}</a></Badge>
-            : <Badge key={String(item['id'] ?? label)} variant="outline">{label}</Badge>
-        })}
-      </span>
-    )
-  }
-  if (value === null || value === undefined) return <span className="text-muted-foreground/40">—</span>
-  if (type === 'boolean' || type === 'toggle') {
-    return <Badge variant={value ? 'default' : 'secondary'}>{value ? i18n.yes : i18n.no}</Badge>
-  }
-  if (type === 'date' || type === 'datetime') {
-    return <span className="text-muted-foreground">{new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(value as string))}</span>
-  }
-  if (type === 'color') {
-    return (
-      <span className="flex items-center gap-2">
-        <span
-          className="inline-block h-4 w-4 rounded-full border"
-          style={{ backgroundColor: String(value) }}
-        />
-        <span className="font-mono text-xs">{String(value)}</span>
-      </span>
-    )
-  }
-  if (type === 'tags') {
-    const tags: string[] = Array.isArray(value) ? (value as string[])
-      : typeof value === 'string' && value ? (() => { try { return JSON.parse(value) } catch { return value.split(',') } })()
-      : []
-    if (!tags.length) return <span className="text-muted-foreground/40">—</span>
-    return (
-      <span className="flex flex-wrap gap-1">
-        {tags.map((tag) => (
-          <Badge key={tag} variant="outline">{tag}</Badge>
-        ))}
-      </span>
-    )
-  }
-  if (type === 'json' || type === 'repeater' || type === 'builder') {
-    return <span className="text-xs text-muted-foreground font-mono">[JSON]</span>
-  }
-  if (type === 'image') {
-    const src = String(value)
-    if (!src) return <span className="text-muted-foreground/40">—</span>
-    return (
-      <img
-        src={src}
-        alt=""
-        className="h-10 w-16 object-cover rounded"
-      />
-    )
-  }
-  if (type === 'file') {
-    const url = String(value)
-    const name = url.split('/').pop() ?? url
-    return <a href={url} target="_blank" rel="noreferrer" className="text-xs text-primary underline underline-offset-2 truncate max-w-[12rem] block">{name}</a>
-  }
-  return <span>{String(value)}</span>
-}
 
 function SortIcon({ active, dir }: { active: boolean; dir: 'ASC' | 'DESC' }) {
   return (

@@ -1,12 +1,21 @@
 'use client'
 
-import type React from 'react'
 import { useState, useEffect } from 'react'
 import { useData }     from 'vike-react/useData'
 import { useConfig }   from 'vike-react/useConfig'
 import { navigate }    from 'vike/client/router'
 import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
+import { CellValue, resolveCellValue } from '../../../_components/CellValue.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table.js'
+import { Badge } from '@/components/ui/badge.js'
 import type { Data }   from './+data.js'
 
 function t(template: string, vars: Record<string, string | number>): string {
@@ -46,66 +55,6 @@ export default function ShowPage() {
   const viewFields = allFields.filter(f => !f.hidden.includes('view') && f.type !== 'password' && f.type !== 'hasMany')
   const hasManyFields = allFields.filter(f => f.type === 'hasMany')
 
-  function renderValue(field: FieldMeta, value: unknown): React.ReactNode {
-    if (field.displayTransformed) {
-      return <span>{String(value ?? '')}</span>
-    }
-    if (field.type === 'belongsTo') {
-      const rel     = (field.extra?.['relationName'] as string) ?? (field.name.endsWith('Id') ? field.name.slice(0, -2) : field.name)
-      const display = (field.extra?.['displayField'] as string) ?? 'name'
-      const target  = field.extra?.['resource'] as string | undefined
-      const related = rec ? rec[rel] as Record<string, unknown> | null : null
-      if (!related) return <span className="text-muted-foreground">—</span>
-      const label = String(related[display] ?? '—')
-      return target
-        ? <a href={`/${pathSegment}/${target}/${related['id']}`} className="text-primary hover:underline">{label}</a>
-        : <span>{label}</span>
-    }
-    if (value === null || value === undefined) return <span className="text-muted-foreground">—</span>
-    if (field.type === 'boolean')  return value ? i18n.yes : i18n.no
-    if (field.type === 'date')     return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(String(value)))
-    if (field.type === 'datetime') return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(String(value)))
-    if (field.type === 'color') return (
-      <span className="flex items-center gap-2">
-        <span className="inline-block h-4 w-4 rounded-full border" style={{ backgroundColor: String(value) }} />
-        {String(value)}
-      </span>
-    )
-    if (field.type === 'image' && value) return <img src={String(value)} alt="" className="max-h-24 w-auto rounded border" />
-    if (field.type === 'belongsToMany') {
-      const display = (field.extra?.['displayField'] as string) ?? 'name'
-      const target  = field.extra?.['resource'] as string | undefined
-      const items   = Array.isArray(value) ? value as Record<string, unknown>[] : []
-      if (items.length === 0) return <span className="text-muted-foreground">—</span>
-      return (
-        <span className="flex flex-wrap gap-1">
-          {items.map((item, i) => {
-            const label = String(item[display] ?? item['name'] ?? item['id'] ?? '—')
-            return target
-              ? <a key={i} href={`/${pathSegment}/${target}/${item['id']}`} className="text-primary hover:underline">{label}</a>
-              : <span key={i}>{label}</span>
-          })}
-        </span>
-      )
-    }
-    if (field.type === 'tags') {
-      const arr = Array.isArray(value) ? value as string[]
-        : typeof value === 'string' ? (() => { try { return JSON.parse(value) as string[] } catch { return [value] } })()
-        : []
-      if (arr.length === 0) return <span className="text-muted-foreground">—</span>
-      return (
-        <span className="flex flex-wrap gap-1">
-          {arr.map((tag, i) => (
-            <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">{String(tag)}</span>
-          ))}
-        </span>
-      )
-    }
-    if (Array.isArray(value)) return <span>{value.join(', ')}</span>
-    if (typeof value === 'object') return <span className="font-mono text-xs">{JSON.stringify(value, null, 2)}</span>
-    return String(value)
-  }
-
   return (
     <div className="max-w-4xl">
         <Breadcrumbs crumbs={[
@@ -132,12 +81,12 @@ export default function ShowPage() {
         <div className="rounded-lg border bg-card">
           <dl className="divide-y">
             {viewFields.map((field) => {
-              const value = record ? (record as Record<string, unknown>)[field.name] : undefined
+              const value = rec ? resolveCellValue(rec, field) : undefined
               return (
                 <div key={field.name} className="grid grid-cols-3 gap-4 px-6 py-4">
                   <dt className="text-sm font-medium text-muted-foreground">{field.label}</dt>
                   <dd className="col-span-2 text-sm">
-                    {renderValue(field, value)}
+                    <CellValue value={value} type={field.type} extra={field.extra} displayTransformed={field.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                   </dd>
                 </div>
               )
@@ -234,7 +183,12 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-base font-semibold">{field.label}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold">{field.label}</h2>
+          {pagination && (
+            <Badge variant="secondary" className="text-xs">{pagination.total}</Badge>
+          )}
+        </div>
         <a
           href={createHref}
           className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
@@ -243,43 +197,50 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
         </a>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="rounded-xl border overflow-hidden">
         {loading ? (
           <p className="px-6 py-8 text-sm text-muted-foreground text-center">{i18n.loading}</p>
         ) : records.length === 0 ? (
           <p className="px-6 py-8 text-sm text-muted-foreground text-center">{i18n.noRecordsFound}</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
                 {schema.map(col => (
-                  <th key={col.name} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  <TableHead key={col.name} className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     {col.label}
-                  </th>
+                  </TableHead>
                 ))}
-                <th className="px-4 py-3 w-16" />
-              </tr>
-            </thead>
-            <tbody className="divide-y">
+                <TableHead className="px-4 py-3 w-16" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {records.map(row => (
-                <tr key={row.id} className="hover:bg-muted/30 transition-colors">
-                  {schema.map(col => (
-                    <td key={col.name} className="px-4 py-3 text-sm">
-                      <CellValue col={col} row={row} pathSegment={pathSegment} resourceSlug={resourceSlug} i18n={i18n} />
-                    </td>
+                <TableRow key={row.id} className="transition-colors hover:bg-muted/30">
+                  {schema.map((col, ci) => (
+                    <TableCell key={col.name} className="px-4 py-3 text-foreground">
+                      {ci === 0
+                        ? (
+                          <a href={`/${pathSegment}/${resourceSlug}/${row.id}`} className="font-medium hover:text-primary transition-colors">
+                            <CellValue value={resolveCellValue(row, col)} type={col.type} extra={col.extra} displayTransformed={col.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
+                          </a>
+                        )
+                        : <CellValue value={resolveCellValue(row, col)} type={col.type} extra={col.extra} displayTransformed={col.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
+                      }
+                    </TableCell>
                   ))}
-                  <td className="px-4 py-3 text-end">
+                  <TableCell className="px-4 py-3 text-end">
                     <a
                       href={`/${pathSegment}/${resourceSlug}/${row.id}`}
                       className="text-xs text-primary hover:underline"
                     >
                       {i18n.view}
                     </a>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
 
@@ -294,10 +255,10 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
                 type="button"
                 onClick={() => setPage(p)}
                 className={[
-                  'px-2.5 py-1 rounded text-xs',
+                  'w-8 h-8 text-sm rounded-md transition-colors',
                   p === pagination.currentPage
                     ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-accent',
+                    : 'border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                 ].join(' ')}
               >
                 {p}
@@ -308,61 +269,4 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
       )}
     </div>
   )
-}
-
-function CellValue({ col, row, pathSegment, resourceSlug, i18n }: { col: FieldMeta; row: RelatedRecord; pathSegment: string; resourceSlug: string; i18n: PanelI18n }) {
-  const raw = row[col.name]
-
-  if (col.type === 'belongsTo') {
-    const rel     = (col.extra?.['relationName'] as string) ?? (col.name.endsWith('Id') ? col.name.slice(0, -2) : col.name)
-    const display = (col.extra?.['displayField'] as string) ?? 'name'
-    const target  = col.extra?.['resource'] as string | undefined
-    const related = row[rel] as Record<string, unknown> | null | undefined
-    if (!related) return <span className="text-muted-foreground">—</span>
-    const label = String(related[display] ?? '—')
-    return target
-      ? <a href={`/${pathSegment}/${target}/${related['id']}`} className="text-primary hover:underline">{label}</a>
-      : <span>{label}</span>
-  }
-
-  if (raw === null || raw === undefined || raw === '') return <span className="text-muted-foreground">—</span>
-  if (col.type === 'boolean') return raw ? i18n.yes : i18n.no
-  if (col.type === 'image')   return <img src={String(raw)} alt="" className="h-8 w-8 rounded object-cover" />
-  if (col.type === 'color')   return (
-    <span className="flex items-center gap-1.5">
-      <span className="h-3 w-3 rounded-full border shrink-0" style={{ backgroundColor: String(raw) }} />
-      {String(raw)}
-    </span>
-  )
-  if (col.type === 'tags') {
-    const arr = Array.isArray(raw) ? raw as string[]
-      : typeof raw === 'string' ? (() => { try { return JSON.parse(raw) as string[] } catch { return [raw] } })()
-      : []
-    if (arr.length === 0) return <span className="text-muted-foreground">—</span>
-    return (
-      <span className="flex flex-wrap gap-1">
-        {arr.map((tag, i) => (
-          <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs">{String(tag)}</span>
-        ))}
-      </span>
-    )
-  }
-  if (col.type === 'belongsToMany') {
-    const display = (col.extra?.['displayField'] as string) ?? 'name'
-    const target  = col.extra?.['resource'] as string | undefined
-    const items   = Array.isArray(raw) ? raw as Record<string, unknown>[] : []
-    if (items.length === 0) return <span className="text-muted-foreground">—</span>
-    return (
-      <span className="flex flex-wrap gap-1">
-        {items.map((item, i) => {
-          const label = String(item[display] ?? item['name'] ?? item['id'] ?? '—')
-          return target
-            ? <a key={i} href={`/${pathSegment}/${target}/${item['id']}`} className="text-xs text-primary hover:underline">{label}</a>
-            : <span key={i}>{label}</span>
-        })}
-      </span>
-    )
-  }
-  if (Array.isArray(raw)) return <span>{(raw as unknown[]).map(String).join(', ')}</span>
-  return <span>{String(raw)}</span>
 }
