@@ -1,3 +1,4 @@
+import React from 'react'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,13 +22,15 @@ export function Breadcrumbs({ crumbs }: Props) {
     <Breadcrumb className="mb-6">
       <BreadcrumbList>
         {crumbs.map((crumb, i) => (
-          <BreadcrumbItem key={i}>
+          <React.Fragment key={i}>
             {i > 0 && <BreadcrumbSeparator />}
-            {crumb.href
-              ? <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
-              : <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-            }
-          </BreadcrumbItem>
+            <BreadcrumbItem>
+              {crumb.href
+                ? <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+                : <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+              }
+            </BreadcrumbItem>
+          </React.Fragment>
         ))}
       </BreadcrumbList>
     </Breadcrumb>

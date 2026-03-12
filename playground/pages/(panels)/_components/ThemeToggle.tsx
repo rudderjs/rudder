@@ -1,9 +1,24 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useTheme } from './ThemeProvider.js'
 
 export function ThemeToggle() {
   const { resolved, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  // Render a static placeholder during SSR / before hydration to avoid mismatch
+  if (!mounted) {
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+      >
+        <span className="size-4" />
+      </button>
+    )
+  }
 
   return (
     <button
