@@ -45,6 +45,25 @@ pnpm artisan vendor:publish --tag=panels-pages
 pnpm artisan vendor:publish --tag=panels-pages --force
 ```
 
+The panel UI uses [shadcn/ui](https://ui.shadcn.com) components. Install them after publishing:
+
+```bash
+npx shadcn@latest add sidebar dropdown-menu alert-dialog table breadcrumb tooltip tabs badge separator avatar sheet switch dialog
+```
+
+---
+
+## Dark Mode
+
+A light/dark/system theme toggle is built in. Theme persists to `localStorage` (`panels-theme` key). An inline script prevents flash on page load.
+
+Customize colors via CSS variables in `src/index.css`:
+
+```css
+:root { --primary: oklch(0.5 0.2 250); }
+.dark { --primary: oklch(0.7 0.15 250); }
+```
+
 ---
 
 ## Defining Resources

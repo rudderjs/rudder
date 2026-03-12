@@ -358,6 +358,44 @@ If `.locale()` is not called, the panel reads the active locale from `@boostkit/
 
 ---
 
+## Dark Mode
+
+The panel UI supports light, dark, and system-based themes. A toggle button appears in the header.
+
+Theme is persisted to `localStorage` under the key `panels-theme`.
+
+The theme system uses class-based toggling (`.dark` on `<html>`) which works with Tailwind CSS v4's built-in dark mode support. All panel components respect the current theme automatically. An inline `<script>` in `<head>` applies the saved theme before React hydrates, preventing flash.
+
+### Customizing Colors
+
+Override CSS variables in your `src/index.css` to customize both light and dark themes:
+
+```css
+:root {
+  --primary: oklch(0.5 0.2 250);
+  --sidebar: oklch(0.97 0 0);
+}
+
+.dark {
+  --primary: oklch(0.7 0.15 250);
+  --sidebar: oklch(0.15 0 0);
+}
+```
+
+---
+
+## shadcn/ui Components
+
+The panel UI uses [shadcn/ui](https://ui.shadcn.com) components (v4, base-nova style). After publishing panel pages, install the required shadcn components in your app:
+
+```bash
+npx shadcn@latest add sidebar dropdown-menu alert-dialog table breadcrumb tooltip tabs badge separator avatar sheet switch dialog
+```
+
+> **Note:** shadcn v4 uses `@base-ui/react` (not Radix). Components use the `render` prop pattern instead of `asChild`.
+
+---
+
 ## Custom Pages
 
 Register custom pages alongside resources. They appear in the sidebar/topbar nav in the order defined — resources first, then pages.
