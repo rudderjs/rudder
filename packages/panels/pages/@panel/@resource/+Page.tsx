@@ -8,6 +8,20 @@ import { toast } from 'sonner'
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table.js'
+import { Badge } from '@/components/ui/badge.js'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip.js'
 import { useLiveTable } from '../../_hooks/useLiveTable.js'
 import type { Data } from './+data.js'
 
@@ -406,10 +420,10 @@ export default function ResourceListPage() {
 
       {/* ── Table ─────────────────────────────────────────── */}
       <div className="rounded-xl border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/40">
-              <th className="w-10 px-4 py-3">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40">
+              <TableHead className="w-10 px-4 py-3">
                 <Checkbox.Root
                   checked={allSelected}
                   onCheckedChange={toggleAll}
@@ -419,15 +433,15 @@ export default function ResourceListPage() {
                     <MiniCheckIcon />
                   </Checkbox.Indicator>
                 </Checkbox.Root>
-              </th>
+              </TableHead>
               {tableFields.map((f) => {
                 const sortable = sortFields.some(s => s.name === f.name)
                 const isSorted = currentSort === f.name
                 return (
-                  <th
+                  <TableHead
                     key={f.name}
                     className={[
-                      'px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide',
+                      'px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide',
                       sortable ? 'cursor-pointer select-none hover:text-foreground transition-colors' : '',
                     ].join(' ')}
                     onClick={sortable ? () => toggleSort(f.name) : undefined}
@@ -438,27 +452,27 @@ export default function ResourceListPage() {
                         <SortIcon active={isSorted} dir={currentDir as 'ASC' | 'DESC'} />
                       )}
                     </span>
-                  </th>
+                  </TableHead>
                 )
               })}
-              <th className="px-4 py-3 text-end text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <TableHead className="px-4 py-3 text-end text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 {i18n.actions}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {needsRestore ? (
-              <tr><td colSpan={tableFields.length + 2} className="px-6 py-12 text-center text-muted-foreground text-sm">Loading…</td></tr>
+              <TableRow><TableCell colSpan={tableFields.length + 2} className="px-6 py-12 text-center text-muted-foreground text-sm">Loading…</TableCell></TableRow>
             ) : (<>
             {(allRecords as Array<Record<string, unknown>>).map((record) => {
               const id       = record['id'] as string
               const isChecked = selected.includes(id)
               return (
-                <tr
+                <TableRow
                   key={id}
                   className={['transition-colors hover:bg-muted/30', isChecked ? 'bg-primary/5' : ''].join(' ')}
                 >
-                  <td className="px-4 py-3">
+                  <TableCell className="px-4 py-3">
                     <Checkbox.Root
                       checked={isChecked}
                       onCheckedChange={(checked) => toggleOne(id, !!checked)}
@@ -468,9 +482,9 @@ export default function ResourceListPage() {
                         <MiniCheckIcon />
                       </Checkbox.Indicator>
                     </Checkbox.Root>
-                  </td>
+                  </TableCell>
                   {tableFields.map((f, fi) => (
-                    <td key={f.name} className="px-4 py-3 text-foreground">
+                    <TableCell key={f.name} className="px-4 py-3 text-foreground">
                       {fi === 0
                         ? (
                           <a
@@ -482,30 +496,34 @@ export default function ResourceListPage() {
                         )
                         : <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                       }
-                    </td>
+                    </TableCell>
                   ))}
-                  <td className="px-4 py-3 text-end">
+                  <TableCell className="px-4 py-3 text-end">
                     <div className="flex items-center justify-end gap-2">
                       {rowActions.map((action) => (
-                        <button
-                          key={action.name}
-                          onClick={() => {
-                            if (action.requiresConfirm) {
-                              setConfirm({ action, records: [(record as { id: string })] })
-                            } else {
-                              void executeAction(action, [id])
-                            }
-                          }}
-                          className={[
-                            'px-2 py-1 rounded text-xs font-medium transition-colors',
-                            action.destructive
-                              ? 'text-destructive hover:bg-destructive/10'
-                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                          ].join(' ')}
-                        >
-                          {action.icon && <span className="me-1">{action.icon}</span>}
-                          {action.label}
-                        </button>
+                        <Tooltip key={action.name}>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => {
+                                if (action.requiresConfirm) {
+                                  setConfirm({ action, records: [(record as { id: string })] })
+                                } else {
+                                  void executeAction(action, [id])
+                                }
+                              }}
+                              className={[
+                                'px-2 py-1 rounded text-xs font-medium transition-colors',
+                                action.destructive
+                                  ? 'text-destructive hover:bg-destructive/10'
+                                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                              ].join(' ')}
+                            >
+                              {action.icon && <span className="me-1">{action.icon}</span>}
+                              {action.label}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>{action.label}</TooltipContent>
+                        </Tooltip>
                       ))}
                       <button
                         type="button"
@@ -526,13 +544,13 @@ export default function ResourceListPage() {
                       />
                       <DeleteRowButton slug={slug} id={id} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )
             })}
             {allRecords.length === 0 && (
-              <tr>
-                <td colSpan={tableFields.length + 2} className="py-16 text-center">
+              <TableRow>
+                <TableCell colSpan={tableFields.length + 2} className="py-16 text-center">
                   {hasActiveFilters
                     ? (
                       <div className="flex flex-col items-center gap-2">
@@ -554,12 +572,12 @@ export default function ResourceListPage() {
                       </div>
                     )
                   }
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             </>)}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* ── Pagination ────────────────────────────────────── */}
@@ -685,11 +703,7 @@ function CellValue({ value, type, extra, displayTransformed, pathSegment, i18n }
   }
   if (value === null || value === undefined) return <span className="text-muted-foreground/40">—</span>
   if (type === 'boolean' || type === 'toggle') {
-    return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${value ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
-        {value ? i18n.yes : i18n.no}
-      </span>
-    )
+    return <Badge variant={value ? 'default' : 'secondary'}>{value ? i18n.yes : i18n.no}</Badge>
   }
   if (type === 'date' || type === 'datetime') {
     return <span className="text-muted-foreground">{new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(value as string))}</span>
@@ -713,9 +727,7 @@ function CellValue({ value, type, extra, displayTransformed, pathSegment, i18n }
     return (
       <span className="flex flex-wrap gap-1">
         {tags.map((tag) => (
-          <span key={tag} className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
-            {tag}
-          </span>
+          <Badge key={tag} variant="outline">{tag}</Badge>
         ))}
       </span>
     )
