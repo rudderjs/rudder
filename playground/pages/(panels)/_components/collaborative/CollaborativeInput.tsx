@@ -24,31 +24,72 @@ export function CollaborativeInput({
   const inputRef  = useRef<HTMLInputElement>(null)
   const mirrorRef = useRef<HTMLSpanElement>(null)
   const hasFocusRef = useRef(false)
+  /** Selection stored as Y.RelativePositions — survives remote inserts/deletes */
+  const relSelRef = useRef<{ anchor: any; focus: any } | null>(null)
+  const yRef = useRef<any>(null)
+
+  // Keep Yjs module ref for sync access
+  useEffect(() => {
+    import('yjs').then(mod => { yRef.current = mod })
+  }, [])
+
+  /** Convert absolute index → Y.RelativePosition (survives remote edits) */
+  const toRelPos = useCallback((index: number) => {
+    const Y = yRef.current
+    if (!Y || !yText) return null
+    return Y.createRelativePositionFromTypeIndex(yText, index)
+  }, [yText])
+
+  /** Convert Y.RelativePosition → absolute index */
+  const fromRelPos = useCallback((relPos: any): number | null => {
+    const Y = yRef.current
+    if (!Y || !yText || !relPos) return null
+    const abs = Y.createAbsolutePositionFromRelativePosition(relPos, yText.doc)
+    return abs ? abs.index : null
+  }, [yText])
+
+  /** Save current selection as relative positions */
+  const saveSelection = useCallback(() => {
+    const el = inputRef.current
+    if (!el || !hasFocusRef.current) return
+    const anchor = toRelPos(el.selectionStart ?? 0)
+    const focus  = toRelPos(el.selectionEnd   ?? 0)
+    if (anchor && focus) {
+      relSelRef.current = { anchor, focus }
+    }
+  }, [toRelPos])
 
   /**
-   * Remote change handler — when this input has focus, update the DOM directly
-   * to avoid React re-render which would reset the native selection and cause flashing.
-   * When unfocused, go through React state normally.
+   * Remote change handler — update DOM directly to avoid React re-render.
+   * Restore selection using Y.RelativePosition so it shifts correctly
+   * when text is inserted/deleted before the cursor.
    */
   const handleRemoteChange = useCallback((newValue: string) => {
     const el = inputRef.current
     if (el && hasFocusRef.current) {
-      // Save selection
-      const start = el.selectionStart ?? 0
-      const end   = el.selectionEnd   ?? 0
+      // Save selection as relative positions BEFORE applying the change
+      // (already saved via selectionchange, but ensure it's current)
+      saveSelection()
 
-      // Update DOM directly — no React re-render
+      // Update DOM directly
       el.value = newValue
 
-      // Restore selection (clamped to new length)
-      el.setSelectionRange(
-        Math.min(start, newValue.length),
-        Math.min(end,   newValue.length),
-      )
+      // Restore selection from relative positions (now adjusted for the remote edit)
+      const saved = relSelRef.current
+      if (saved) {
+        const start = fromRelPos(saved.anchor)
+        const end   = fromRelPos(saved.focus)
+        if (start !== null && end !== null) {
+          el.setSelectionRange(
+            Math.min(start, newValue.length),
+            Math.min(end,   newValue.length),
+          )
+        }
+      }
       return
     }
     onChange(newValue)
-  }, [onChange])
+  }, [onChange, saveSelection, fromRelPos])
 
   const { applyLocalChange } = useYTextSync(yText, handleRemoteChange)
   const { remoteCursors, broadcastCursor, clearCursor } = useYTextCursors({ yText, awareness, fieldName })
@@ -62,8 +103,10 @@ export function CollaborativeInput({
   const handleSelect = useCallback(() => {
     const el = inputRef.current
     if (!el) return
+    // Save as relative positions for remote edit adjustment
+    saveSelection()
     broadcastCursor(el.selectionStart ?? 0, el.selectionEnd ?? 0)
-  }, [broadcastCursor])
+  }, [broadcastCursor, saveSelection])
 
   const handleFocus = useCallback(() => {
     hasFocusRef.current = true
@@ -72,14 +115,13 @@ export function CollaborativeInput({
 
   const handleBlur = useCallback(() => {
     hasFocusRef.current = false
-    // Sync DOM value back to React state in case remote changes were applied directly
+    relSelRef.current = null
     const el = inputRef.current
     if (el) onChange(el.value)
     clearCursor()
   }, [clearCursor, onChange])
 
-  // Use document selectionchange for live selection updates (fires during mouse drag)
-  // Also clears cursor when focus moves to another element
+  // Use document selectionchange for live updates + focus-loss detection
   useEffect(() => {
     function onSelectionChange() {
       if (document.activeElement === inputRef.current) {
@@ -87,6 +129,7 @@ export function CollaborativeInput({
         handleSelect()
       } else if (hasFocusRef.current) {
         hasFocusRef.current = false
+        relSelRef.current = null
         clearCursor()
       }
     }
@@ -126,7 +169,6 @@ export function CollaborativeInput({
           cursor={cursor}
           inputRef={inputRef}
           mirrorRef={mirrorRef}
-          value={value}
         />
       ))}
     </div>
@@ -134,12 +176,11 @@ export function CollaborativeInput({
 }
 
 function CursorIndicator({
-  cursor, inputRef, mirrorRef, value,
+  cursor, inputRef, mirrorRef,
 }: {
   cursor: { clientId: number; name: string; color: string; anchor: number; focus: number }
   inputRef: React.RefObject<HTMLInputElement | null>
   mirrorRef: React.RefObject<HTMLSpanElement | null>
-  value: string
 }) {
   const [pos, setPos] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
 
@@ -148,7 +189,6 @@ function CursorIndicator({
     const mirror = mirrorRef.current
     if (!input || !mirror) return
 
-    // Use the actual DOM value (may differ from React value during direct updates)
     const text = input.value
 
     const styles = window.getComputedStyle(input)
@@ -175,7 +215,7 @@ function CursorIndicator({
       const selWidth = Math.abs(endLeft - left)
       setPos({ left: selLeft, top: 4, width: Math.max(selWidth, 2), height })
     }
-  }, [cursor.anchor, cursor.focus, value, inputRef, mirrorRef])
+  }, [cursor.anchor, cursor.focus, inputRef, mirrorRef])
 
   if (!pos) return null
 

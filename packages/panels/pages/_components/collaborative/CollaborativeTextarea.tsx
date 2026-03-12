@@ -24,27 +24,57 @@ export function CollaborativeTextarea({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mirrorRef   = useRef<HTMLDivElement>(null)
   const hasFocusRef = useRef(false)
+  const relSelRef   = useRef<{ anchor: any; focus: any } | null>(null)
+  const yRef        = useRef<any>(null)
 
-  /**
-   * Remote change handler — when focused, update DOM directly to avoid
-   * React re-render which resets native selection and causes flashing.
-   */
+  useEffect(() => {
+    import('yjs').then(mod => { yRef.current = mod })
+  }, [])
+
+  const toRelPos = useCallback((index: number) => {
+    const Y = yRef.current
+    if (!Y || !yText) return null
+    return Y.createRelativePositionFromTypeIndex(yText, index)
+  }, [yText])
+
+  const fromRelPos = useCallback((relPos: any): number | null => {
+    const Y = yRef.current
+    if (!Y || !yText || !relPos) return null
+    const abs = Y.createAbsolutePositionFromRelativePosition(relPos, yText.doc)
+    return abs ? abs.index : null
+  }, [yText])
+
+  const saveSelection = useCallback(() => {
+    const el = textareaRef.current
+    if (!el || !hasFocusRef.current) return
+    const anchor = toRelPos(el.selectionStart ?? 0)
+    const focus  = toRelPos(el.selectionEnd   ?? 0)
+    if (anchor && focus) {
+      relSelRef.current = { anchor, focus }
+    }
+  }, [toRelPos])
+
   const handleRemoteChange = useCallback((newValue: string) => {
     const el = textareaRef.current
     if (el && hasFocusRef.current) {
-      const start = el.selectionStart ?? 0
-      const end   = el.selectionEnd   ?? 0
-
+      saveSelection()
       el.value = newValue
 
-      el.setSelectionRange(
-        Math.min(start, newValue.length),
-        Math.min(end,   newValue.length),
-      )
+      const saved = relSelRef.current
+      if (saved) {
+        const start = fromRelPos(saved.anchor)
+        const end   = fromRelPos(saved.focus)
+        if (start !== null && end !== null) {
+          el.setSelectionRange(
+            Math.min(start, newValue.length),
+            Math.min(end,   newValue.length),
+          )
+        }
+      }
       return
     }
     onChange(newValue)
-  }, [onChange])
+  }, [onChange, saveSelection, fromRelPos])
 
   const { applyLocalChange } = useYTextSync(yText, handleRemoteChange)
   const { remoteCursors, broadcastCursor, clearCursor } = useYTextCursors({ yText, awareness, fieldName })
@@ -58,8 +88,9 @@ export function CollaborativeTextarea({
   const handleSelect = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
+    saveSelection()
     broadcastCursor(el.selectionStart ?? 0, el.selectionEnd ?? 0)
-  }, [broadcastCursor])
+  }, [broadcastCursor, saveSelection])
 
   const handleFocus = useCallback(() => {
     hasFocusRef.current = true
@@ -68,12 +99,12 @@ export function CollaborativeTextarea({
 
   const handleBlur = useCallback(() => {
     hasFocusRef.current = false
+    relSelRef.current = null
     const el = textareaRef.current
     if (el) onChange(el.value)
     clearCursor()
   }, [clearCursor, onChange])
 
-  // Use document selectionchange for live selection updates (fires during mouse drag)
   useEffect(() => {
     function onSelectionChange() {
       if (document.activeElement === textareaRef.current) {
@@ -81,6 +112,7 @@ export function CollaborativeTextarea({
         handleSelect()
       } else if (hasFocusRef.current) {
         hasFocusRef.current = false
+        relSelRef.current = null
         clearCursor()
       }
     }
@@ -127,7 +159,6 @@ export function CollaborativeTextarea({
           cursor={cursor}
           textareaRef={textareaRef}
           mirrorRef={mirrorRef}
-          value={value}
         />
       ))}
     </div>
@@ -135,12 +166,11 @@ export function CollaborativeTextarea({
 }
 
 function TextareaCursor({
-  cursor, textareaRef, mirrorRef, value,
+  cursor, textareaRef, mirrorRef,
 }: {
   cursor: { clientId: number; name: string; color: string; anchor: number; focus: number }
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   mirrorRef: React.RefObject<HTMLDivElement | null>
-  value: string
 }) {
   const [rects, setRects] = useState<Array<{ left: number; top: number; width: number; height: number }>>([])
   const [labelPos, setLabelPos] = useState<{ left: number; top: number } | null>(null)
@@ -191,7 +221,7 @@ function TextareaCursor({
     if (newRects.length > 0) {
       setLabelPos({ left: newRects[0]!.left, top: newRects[0]!.top - 14 })
     }
-  }, [cursor.anchor, cursor.focus, value, textareaRef, mirrorRef])
+  }, [cursor.anchor, cursor.focus, textareaRef, mirrorRef])
 
   const isCaret = cursor.anchor === cursor.focus
 
