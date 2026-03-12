@@ -256,7 +256,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <header className="h-14 shrink-0 border-b flex items-center gap-2 px-4">
             <SidebarTrigger />
-            {/* <Separator orientation="vertical" className="h-4" /> */}
+            <Separator orientation="vertical" className="h-4" />
             <span className="text-sm text-muted-foreground flex-1">
               {items.find(i => i.slug === currentSlug)?.label ?? ''}
             </span>

@@ -53,6 +53,19 @@ export { ComputedField } from './fields/ComputedField.js'
 export { Block }         from './Block.js'
 export type { BlockMeta } from './Block.js'
 
+// ─── Node Map (shared block infrastructure) ──────────────────
+export {
+  nodeId, emptyNodeMap,
+  addNode, updateNodeProps, removeNode, moveNode, reorderNode,
+  arrayToNodeMap, repeaterArrayToNodeMap, nodeMapToArray, ensureNodeMap,
+} from './NodeMap.js'
+export type { NodeData, NodeMap } from './NodeMap.js'
+
+// ─── Content Field ───────────────────────────────────────────
+export { ContentField }     from './fields/ContentField.js'
+export { contentBlockDefs } from './ContentBlock.js'
+export type { ContentBlockDef } from './ContentBlock.js'
+
 // ─── Filters ───────────────────────────────────────────────
 
 export { Filter, SelectFilter, SearchFilter } from './Filter.js'

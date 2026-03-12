@@ -1,4 +1,5 @@
-import type { FieldMeta, PanelI18n } from '@boostkit/panels'
+import type { FieldMeta, PanelI18n, NodeMap } from '@boostkit/panels'
+import { ensureNodeMap } from '@boostkit/panels'
 import { Badge } from '@/components/ui/badge.js'
 
 interface CellValueProps {
@@ -74,8 +75,29 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
       </span>
     )
   }
-  if (type === 'json' || type === 'repeater' || type === 'builder') {
+  if (type === 'json' || type === 'repeater') {
     return <span className="text-xs text-muted-foreground font-mono">[JSON]</span>
+  }
+  if (type === 'content') {
+    const map = ensureNodeMap(value)
+    const root = map.ROOT
+    if (!root || root.nodes.length === 0) return <span className="text-muted-foreground/40">—</span>
+    for (const id of root.nodes) {
+      const node = map[id]
+      if (node && (node.type === 'paragraph' || node.type === 'heading')) {
+        const raw = (node.props.text as string) || ''
+        const plain = raw.replace(/<[^>]*>/g, '')
+        if (plain) return <span className="truncate max-w-[20rem] block">{plain}</span>
+      }
+    }
+    return <span className="text-muted-foreground text-xs">{root.nodes.length} blocks</span>
+  }
+  if (type === 'builder') {
+    const map = ensureNodeMap(value)
+    const root = map.ROOT
+    const count = root ? root.nodes.length : 0
+    if (count === 0) return <span className="text-muted-foreground/40">—</span>
+    return <span className="text-xs text-muted-foreground">{count} blocks</span>
   }
   if (type === 'image') {
     const src = String(value)

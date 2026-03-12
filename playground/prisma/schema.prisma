@@ -94,6 +94,7 @@ model Article {
   accentColor     String?
   metaTitle       String?
   metaDescription String?
+  content         Json?
   metadata        String?    // JSON blob
   categories      Category[]
   createdAt       DateTime   @default(now())

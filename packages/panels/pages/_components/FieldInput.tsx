@@ -3,8 +3,11 @@ import { Checkbox } from '@base-ui-components/react/checkbox'
 import { Dialog } from '@base-ui-components/react/dialog'
 import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
-import type { FieldMeta, PanelI18n } from '@boostkit/panels'
+import type { FieldMeta, PanelI18n, NodeMap } from '@boostkit/panels'
+import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from '@boostkit/panels'
 import { customFieldRenderers } from './CustomFieldRenderers.js'
+import { SortableBlockList } from './SortableBlockList.js'
+import { ContentEditor } from './ContentEditor.js'
 
 interface Props {
   field:       FieldMeta
@@ -300,65 +303,74 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     const schema   = (field.extra?.schema ?? []) as FieldMeta[]
     const addLabel = (field.extra?.addLabel as string) ?? i18n.addItem
     const maxItems = field.extra?.maxItems as number | undefined
-    const items    = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
+    const nodeMap  = ensureNodeMap(value)
+    const root     = nodeMap.ROOT!
+    const nodeIds  = root.nodes
 
-    function updateItem(index: number, fieldName: string, fieldValue: unknown) {
-      const next = items.map((item, i) =>
-        i === index ? { ...item, [fieldName]: fieldValue } : item,
-      )
-      onChange(next)
+    function emit(next: NodeMap) { onChange(next) }
+
+    function handleAddItem() {
+      if (maxItems !== undefined && nodeIds.length >= maxItems) return
+      const props: Record<string, unknown> = {}
+      for (const f of schema) props[f.name] = undefined
+      const { map } = addNode(nodeMap, 'item', props)
+      emit(map)
     }
 
-    function addItem() {
-      if (maxItems !== undefined && items.length >= maxItems) return
-      const empty: Record<string, unknown> = {}
-      for (const f of schema) empty[f.name] = undefined
-      onChange([...items, empty])
-    }
-
-    function removeItem(index: number) {
-      onChange(items.filter((_, i) => i !== index))
+    function handleReorder(id: string, fromIndex: number, toIndex: number) {
+      emit(reorderNode(nodeMap, id, fromIndex, toIndex))
     }
 
     return (
       <div className="flex flex-col gap-3">
-        {items.map((item, index) => (
-          <div key={index} className="rounded-lg border border-input bg-card p-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                {t(i18n.item, { n: index + 1 })}
-              </span>
-              <button
-                type="button"
-                onClick={() => removeItem(index)}
-                className="text-xs text-destructive hover:underline"
-              >
-                {i18n.remove}
-              </button>
-            </div>
+        <SortableBlockList
+          nodeIds={nodeIds}
+          onReorder={handleReorder}
+          disabled={isDisabled}
+          renderNode={(id, index) => {
+            const node = nodeMap[id]
+            if (!node) return null
+            return (
+              <div className="rounded-lg border border-input bg-card p-4 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {t(i18n.item, { n: index + 1 })}
+                  </span>
+                  {!isDisabled && (
+                    <button
+                      type="button"
+                      onClick={() => emit(removeNode(nodeMap, id))}
+                      className="text-xs text-destructive hover:underline"
+                    >
+                      {i18n.remove}
+                    </button>
+                  )}
+                </div>
 
-            {schema.map((subField) => (
-              <div key={subField.name} className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">
-                  {subField.label}
-                  {subField.required && <span className="text-destructive ml-0.5">*</span>}
-                </label>
-                <FieldInput
-                  field={subField}
-                  value={item[subField.name]}
-                  onChange={(v) => updateItem(index, subField.name, v)}
-                  uploadBase={uploadBase}
-                  i18n={i18n}
-                />
+                {schema.map((subField) => (
+                  <div key={subField.name} className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">
+                      {subField.label}
+                      {subField.required && <span className="text-destructive ml-0.5">*</span>}
+                    </label>
+                    <FieldInput
+                      field={subField}
+                      value={node.props[subField.name]}
+                      onChange={(v) => emit(updateNodeProps(nodeMap, id, { [subField.name]: v }))}
+                      uploadBase={uploadBase}
+                      i18n={i18n}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ))}
+            )
+          }}
+        />
 
-        {(maxItems === undefined || items.length < maxItems) && (
+        {!isDisabled && (maxItems === undefined || nodeIds.length < maxItems) && (
           <button
             type="button"
-            onClick={addItem}
+            onClick={handleAddItem}
             className="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-input text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors w-full justify-center"
           >
             <span className="text-base leading-none">+</span>
@@ -376,102 +388,83 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     }>
     const addLabel  = (field.extra?.addLabel as string) ?? i18n.addBlock
     const maxItems  = field.extra?.maxItems as number | undefined
-    const items     = Array.isArray(value)
-      ? (value as Array<{ _type: string } & Record<string, unknown>>)
-      : []
+    const nodeMap   = ensureNodeMap(value)
+    const root      = nodeMap.ROOT!
+    const nodeIds   = root.nodes
     const [pickerOpen, setPickerOpen] = useState(false)
 
-    function addBlock(blockName: string) {
-      const def   = blockDefs.find((b) => b.name === blockName)
+    function emit(next: NodeMap) { onChange(next) }
+
+    function handleAddBlock(blockName: string) {
+      const def = blockDefs.find((b) => b.name === blockName)
       if (!def) return
-      const empty: Record<string, unknown> = { _type: blockName }
-      for (const f of def.schema) empty[f.name] = undefined
-      onChange([...items, empty])
+      const props: Record<string, unknown> = {}
+      for (const f of def.schema) props[f.name] = undefined
+      const { map } = addNode(nodeMap, blockName, props)
+      emit(map)
       setPickerOpen(false)
     }
 
-    function updateBlock(index: number, fieldName: string, fieldValue: unknown) {
-      const next = items.map((item, i) =>
-        i === index ? { ...item, [fieldName]: fieldValue } : item,
-      )
-      onChange(next)
+    function handleReorder(id: string, fromIndex: number, toIndex: number) {
+      emit(reorderNode(nodeMap, id, fromIndex, toIndex))
     }
 
-    function removeBlock(index: number) {
-      onChange(items.filter((_, i) => i !== index))
-    }
-
-    function moveBlock(index: number, direction: -1 | 1) {
-      const next  = [...items]
-      const other = index + direction
-      if (other < 0 || other >= next.length) return
-      ;[next[index], next[other]] = [next[other]!, next[index]!]
-      onChange(next)
-    }
-
-    const atMax = maxItems !== undefined && items.length >= maxItems
+    const atMax = maxItems !== undefined && nodeIds.length >= maxItems
 
     return (
       <div className="flex flex-col gap-3">
-        {items.map((item, index) => {
-          const def = blockDefs.find((b) => b.name === item._type)
-          return (
-            <div key={index} className="rounded-lg border border-input bg-card overflow-hidden">
-              {/* Block header */}
-              <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-input">
-                <span className="flex items-center gap-2 text-xs font-medium">
-                  {def?.icon && <span>{def.icon}</span>}
-                  <span className="text-muted-foreground uppercase tracking-wide">
-                    {def?.label ?? item._type}
+        <SortableBlockList
+          nodeIds={nodeIds}
+          onReorder={handleReorder}
+          disabled={isDisabled}
+          renderNode={(id) => {
+            const node = nodeMap[id]
+            if (!node) return null
+            const def = blockDefs.find((b) => b.name === node.type)
+            return (
+              <div className="rounded-lg border border-input bg-card overflow-hidden">
+                {/* Block header */}
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-input">
+                  <span className="flex items-center gap-2 text-xs font-medium">
+                    {def?.icon && <span>{def.icon}</span>}
+                    <span className="text-muted-foreground uppercase tracking-wide">
+                      {def?.label ?? node.type}
+                    </span>
                   </span>
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => moveBlock(index, -1)}
-                    disabled={index === 0}
-                    className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30"
-                    title={i18n.moveUp}
-                  >↑</button>
-                  <button
-                    type="button"
-                    onClick={() => moveBlock(index, 1)}
-                    disabled={index === items.length - 1}
-                    className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30"
-                    title={i18n.moveDown}
-                  >↓</button>
-                  <button
-                    type="button"
-                    onClick={() => removeBlock(index)}
-                    className="px-1.5 py-0.5 text-xs text-destructive hover:underline ml-1"
-                  >{i18n.remove}</button>
+                  {!isDisabled && (
+                    <button
+                      type="button"
+                      onClick={() => emit(removeNode(nodeMap, id))}
+                      className="px-1.5 py-0.5 text-xs text-destructive hover:underline"
+                    >{i18n.remove}</button>
+                  )}
+                </div>
+
+                {/* Block fields */}
+                <div className="p-4 flex flex-col gap-4">
+                  {(def?.schema ?? []).map((subField) => (
+                    <div key={subField.name} className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium">
+                        {subField.label}
+                        {subField.required && <span className="text-destructive ml-0.5">*</span>}
+                      </label>
+                      <FieldInput
+                        field={subField}
+                        value={node.props[subField.name]}
+                        onChange={(v) => emit(updateNodeProps(nodeMap, id, { [subField.name]: v }))}
+                        uploadBase={uploadBase}
+                        i18n={i18n}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              {/* Block fields */}
-              <div className="p-4 flex flex-col gap-4">
-                {(def?.schema ?? []).map((subField) => (
-                  <div key={subField.name} className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium">
-                      {subField.label}
-                      {subField.required && <span className="text-destructive ml-0.5">*</span>}
-                    </label>
-                    <FieldInput
-                      field={subField}
-                      value={item[subField.name]}
-                      onChange={(v) => updateBlock(index, subField.name, v)}
-                      uploadBase={uploadBase}
-                      i18n={i18n}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        })}
+            )
+          }}
+        />
 
         {/* Block picker */}
-        {!atMax && (
+        {!atMax && !isDisabled && (
           <div className="relative">
             <button
               type="button"
@@ -488,7 +481,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
                   <button
                     key={def.name}
                     type="button"
-                    onClick={() => addBlock(def.name)}
+                    onClick={() => handleAddBlock(def.name)}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
                   >
                     {def.icon && <span className="text-base shrink-0">{def.icon}</span>}
@@ -609,6 +602,24 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
         onChange={onChange}
         uploadBase={uploadBase}
         i18n={i18n}
+        disabled={isDisabled}
+      />
+    )
+  }
+
+  // ── Content ─────────────────────────────────────────────
+  if (field.type === 'content') {
+    const allowedBlocks = field.extra?.blockTypes as string[] | undefined
+    const placeholder   = field.extra?.placeholder as string | undefined
+    const maxBlocks     = field.extra?.maxBlocks as number | undefined
+    return (
+      <ContentEditor
+        value={value}
+        onChange={onChange}
+        allowedBlocks={allowedBlocks}
+        placeholder={placeholder}
+        maxBlocks={maxBlocks}
+        uploadBase={uploadBase}
         disabled={isDisabled}
       />
     )

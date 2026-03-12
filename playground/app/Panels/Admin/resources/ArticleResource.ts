@@ -11,6 +11,7 @@ import {
   ColorField,
   FileField,
   JsonField,
+  ContentField,
   RelationField,
   ComputedField,
   SelectFilter,
@@ -67,6 +68,11 @@ export class ArticleResource extends Resource {
           .maxSize(5)
           .disk('public')
           .directory('articles'),
+
+        ContentField.make('content')
+          .label('Content')
+          .placeholder('Start writing...')
+          .collaborative(),
 
         TagsField.make('tags')
           .label('Tags')
