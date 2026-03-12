@@ -22,6 +22,7 @@ export class ArticleResource extends Resource {
   static model          = Article
   static label          = 'Articles'
   static labelSingular  = 'Article'
+  static icon           = 'file-text'
   static titleField     = 'title'
   static defaultSort    = 'createdAt'
   static defaultSortDir = 'DESC' as const
