@@ -178,6 +178,31 @@ local.on('synced', () => console.log('Local content loaded'))
 
 Edits made offline are merged back automatically when the connection restores.
 
+## Live Facade
+
+The `Live` facade provides server-side access to ydoc operations without needing to import Yjs directly. Used internally by `@boostkit/panels` for versioning.
+
+```ts
+import { Live } from '@boostkit/live'
+
+// Seed a ydoc with initial field data (idempotent — only sets fields not already in the map)
+await Live.seed('panel:articles:abc123', { title: 'Hello', excerpt: 'World' })
+
+// Snapshot the current ydoc state as a Uint8Array
+const snapshot = Live.snapshot('panel:articles:abc123')
+
+// Read all key-value pairs from a named Y.Map
+const fields = Live.readMap('panel:articles:abc123', 'fields')
+// => { title: 'Hello', excerpt: 'World' }
+
+// Get the configured persistence adapter
+const persistence = Live.persistence()
+```
+
+The facade resolves the persistence adapter from:
+1. DI container (`'live.persistence'` binding) — set by `live()` provider
+2. Global key (`__boostkit_live_persistence__`) — fallback
+
 ## Artisan Commands
 
 | Command | Description |

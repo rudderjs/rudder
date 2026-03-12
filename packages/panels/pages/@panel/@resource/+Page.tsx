@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Checkbox } from '@base-ui-components/react/checkbox'
 import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
+import { useLiveTable } from '../../_hooks/useLiveTable.js'
 import type { Data } from './+data.js'
 
 type SchemaItem = FieldMeta | SectionMeta | TabsMeta
@@ -56,6 +57,9 @@ export default function ResourceListPage() {
   const searchFields = allFields.filter((f) => f.searchable)
   const hasSearch    = searchFields.length > 0
   const hasFilters   = resourceMeta.filters.length > 0
+
+  // ── Live table auto-refresh (opt-in via Resource.live) ──
+  useLiveTable({ enabled: resourceMeta.live, slug, pathSegment })
 
   // ── Persist table state (opt-in via Resource.persistTableState) ──
   const storageKey          = `panels:${pathSegment}:${slug}:tableState`

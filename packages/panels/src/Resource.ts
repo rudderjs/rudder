@@ -27,6 +27,8 @@ export interface ResourceMeta {
   perPage:           number
   perPageOptions:    number[]
   paginationType:    'pagination' | 'loadMore'
+  live:              boolean
+  versioned:         boolean
 }
 
 // ─── Resource base class ───────────────────────────────────
@@ -75,6 +77,22 @@ export class Resource {
 
   /** Pagination style: 'pagination' (numbered pages) or 'loadMore' (append button). */
   static paginationType: 'pagination' | 'loadMore' = 'pagination'
+
+  /**
+   * Enable live table updates via WebSocket broadcasting.
+   * When true, any CRUD mutation broadcasts to all connected viewers,
+   * causing their table to refresh automatically.
+   * Uses @boostkit/broadcast — no Yjs required.
+   */
+  static live = false
+
+  /**
+   * Enable Yjs-backed version history for this resource.
+   * Each record gets a ydoc that tracks field changes over time.
+   * Save = snapshot ydoc + publish field values to DB.
+   * Uses @boostkit/live.
+   */
+  static versioned = false
 
   // ── Abstract / overridable ──────────────────────────────
 
@@ -143,6 +161,8 @@ export class Resource {
       perPage:         Cls.perPage,
       perPageOptions:  Cls.perPageOptions,
       paginationType:  Cls.paginationType,
+      live:            Cls.live,
+      versioned:       Cls.versioned,
     }
     if (Cls.defaultSort    !== undefined) meta.defaultSort    = Cls.defaultSort
     if (Cls.defaultSortDir !== undefined) meta.defaultSortDir = Cls.defaultSortDir

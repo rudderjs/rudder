@@ -8,6 +8,7 @@ export class TodoResource extends Resource {
   static paginationType = 'loadMore' as const
   static perPage = 5
   static persistTableState = true
+  static live = true
   
   fields() {
     return [

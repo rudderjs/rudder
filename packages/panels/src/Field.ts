@@ -31,6 +31,7 @@ export interface FieldMeta {
   component?:          string
   conditions?:         Condition[]
   displayTransformed?: boolean
+  collaborative?:      boolean
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -50,6 +51,7 @@ export abstract class Field {
   protected _editableFn?: (ctx: unknown) => boolean
   protected _validateFn?: (value: unknown, data: Record<string, unknown>) => Promise<string | true> | string | true
   protected _displayFn?: (value: unknown, record: unknown) => unknown
+  protected _collaborative = false
 
   constructor(name: string) {
     this._name = name
@@ -260,6 +262,19 @@ export abstract class Field {
     return this._displayFn ? this._displayFn(value, record) : value
   }
 
+  /**
+   * Enable real-time collaborative editing for this field.
+   * Value syncs live via Yjs between all connected editors.
+   * Requires `static versioned = true` on the resource.
+   */
+  collaborative(value = true): this {
+    this._collaborative = value
+    return this
+  }
+
+  /** @internal */
+  isCollaborative(): boolean { return this._collaborative }
+
   // ── Getters ────────────────────────────────────────────
 
   getName():       string  { return this._name }
@@ -299,6 +314,7 @@ export abstract class Field {
     if (this._component !== undefined) meta.component = this._component
     if (this._conditions.length > 0)   meta.conditions = this._conditions
     if (this._displayFn !== undefined) meta.displayTransformed = true
+    if (this._collaborative) meta.collaborative = true
     return meta
   }
 }

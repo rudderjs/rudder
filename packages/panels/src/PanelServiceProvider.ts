@@ -384,6 +384,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
       const record = await Model.create(body)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.created', { id: (record as any).id })
       return res.status(201).json({ data: record })
     }, mw)
 
@@ -405,6 +406,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
       const record = await Model.query().update(id, body)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.updated', { id })
       return res.json({ data: record })
     }, mw)
 
@@ -420,6 +422,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (!exists) return res.status(404).json({ message: 'Record not found.' })
 
       await Model.query().delete(id)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.deleted', { id })
       return res.json({ message: 'Deleted successfully.' })
     }, mw)
 
@@ -442,6 +445,7 @@ export class PanelServiceProvider extends ServiceProvider {
         }
       }
 
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'records.deleted', { ids, deleted })
       return res.json({ message: `${deleted} records deleted.`, deleted })
     }, mw)
 
@@ -468,8 +472,128 @@ export class PanelServiceProvider extends ServiceProvider {
       }
 
       await action.execute(records)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'action.executed', { action: actionName, ids })
       return res.json({ message: 'Action executed successfully.' })
     }, mw)
+
+    // ── Version routes (only for versioned resources) ───
+    if ((ResourceClass as any).versioned) {
+      this.mountVersionRoutes(router, panel, ResourceClass, mw)
+    }
+  }
+
+  // ── Version history routes ──────────────────────────
+
+  private mountVersionRoutes(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    router: any,
+    panel: Panel,
+    ResourceClass: typeof Resource,
+    mw: MiddlewareHandler[],
+  ): void {
+    const slug = ResourceClass.getSlug()
+    const base = `${panel.getApiBase()}/${slug}`
+
+    // GET /{panel}/api/{resource}/{id}/_versions — list
+    router.get(`${base}/:id/_versions`, async (req: AppRequest, res: AppResponse) => {
+      const id = (req.params as Record<string, string>)['id']
+      const docName = `panel:${slug}:${id}`
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prisma = this.app.make<any>('prisma')
+        const versions = await prisma.panelVersion.findMany({
+          where: { docName },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, label: true, userId: true, createdAt: true },
+        })
+        return res.json({ data: versions })
+      } catch {
+        return res.json({ data: [] })
+      }
+    }, mw)
+
+    // POST /{panel}/api/{resource}/{id}/_versions — create (snapshot + publish)
+    router.post(`${base}/:id/_versions`, async (req: AppRequest, res: AppResponse) => {
+      const resource = new ResourceClass()
+      const ctx = this.buildContext(req)
+      if (!await resource.policy('update', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Model = ResourceClass.model as any
+      if (!Model) return res.status(500).json({ message: 'No model.' })
+
+      const id      = (req.params as Record<string, string>)['id']
+      const docName = `panel:${slug}:${id}`
+      const body    = req.body as { label?: string }
+
+      try {
+        const { Live } = await import('@boostkit/live')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prisma = this.app.make<any>('prisma')
+
+        const snapshot    = Live.snapshot(docName)
+        const fieldValues = Live.readMap(docName, 'fields')
+
+        await prisma.panelVersion.create({
+          data: {
+            docName,
+            snapshot: Buffer.from(snapshot),
+            label:    body.label ?? null,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            userId:   (ctx.user as any)?.id ?? null,
+          },
+        })
+
+        const coerced = this.coercePayload(resource, fieldValues, 'update')
+        await Model.query().update(id, coerced)
+
+        if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.updated', { id })
+
+        return res.json({ message: 'Version saved and published.' })
+      } catch (err) {
+        return res.status(500).json({ message: 'Failed to save version.', error: String(err) })
+      }
+    }, mw)
+
+    // GET /{panel}/api/{resource}/{id}/_versions/{versionId} — detail
+    router.get(`${base}/:id/_versions/:versionId`, async (req: AppRequest, res: AppResponse) => {
+      const versionId = (req.params as Record<string, string>)['versionId']
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prisma = this.app.make<any>('prisma')
+        const version = await prisma.panelVersion.findUnique({ where: { id: versionId } })
+        if (!version) return res.status(404).json({ message: 'Version not found.' })
+
+        const Y   = await import('yjs')
+        const doc = new Y.Doc()
+        Y.applyUpdate(doc, new Uint8Array(version.snapshot))
+        const fields = doc.getMap('fields')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: Record<string, unknown> = {}
+        fields.forEach((val: unknown, key: string) => { data[key] = val })
+        doc.destroy()
+
+        return res.json({
+          data: {
+            id:        version.id,
+            label:     version.label,
+            userId:    version.userId,
+            createdAt: version.createdAt,
+            fields:    data,
+          },
+        })
+      } catch (err) {
+        return res.status(500).json({ message: 'Failed to read version.', error: String(err) })
+      }
+    }, mw)
+  }
+
+  // ── Live broadcast helper ─────────────────────────────
+
+  private liveBroadcast(slug: string, event: string, data: unknown): void {
+    void import('@boostkit/broadcast').then(({ broadcast }) => {
+      broadcast(`panel:${slug}`, event, data)
+    }).catch(() => { /* @boostkit/broadcast not registered */ })
   }
 
   // ── Helpers ────────────────────────────────────────────

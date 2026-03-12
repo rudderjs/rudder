@@ -814,6 +814,89 @@ The selection bar is visible whenever at least one row is selected, regardless o
 
 ---
 
+## Real-Time Features
+
+Panels offers three independent, composable real-time layers. Each is opt-in per resource via static flags.
+
+### Live Table (`static live = true`)
+
+When any user creates, updates, or deletes a record, all viewers of that resource's table see the change instantly — no manual refresh needed. Powered by `@boostkit/broadcast` (WebSocket pub/sub). No Yjs required.
+
+```ts
+export class TodoResource extends Resource {
+  static model = Todo
+  static live  = true   // enables live table updates
+  // ...
+}
+```
+
+**Requirements**: `@boostkit/broadcast` must be installed and `broadcasting()` registered in providers.
+
+### Versioned (`static versioned = true`)
+
+Adds Yjs-backed version history to a resource. Each record gets a ydoc that tracks changes. On save, a snapshot is stored and the DB record is updated.
+
+```ts
+export class ArticleResource extends Resource {
+  static model     = Article
+  static versioned = true   // enables version history
+  // ...
+}
+```
+
+The edit page shows a "Publish" button (instead of "Save"), a connection status indicator, and a "Version History" sidebar where previous versions can be restored.
+
+**Requirements**:
+- `@boostkit/live` must be installed and `live()` registered in providers
+- A `PanelVersion` model in your Prisma schema:
+
+```prisma
+model PanelVersion {
+  id        String   @id @default(cuid())
+  docName   String
+  snapshot  Bytes
+  label     String?
+  userId    String?
+  createdAt DateTime @default(now())
+  @@index([docName, createdAt])
+}
+```
+
+**API routes** (auto-mounted for versioned resources):
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/{panel}/api/{resource}/{id}/_versions` | List version history |
+| `POST` | `/{panel}/api/{resource}/{id}/_versions` | Snapshot current ydoc + publish to DB |
+| `GET` | `/{panel}/api/{resource}/{id}/_versions/{versionId}` | Get version field data |
+
+### Collaborative Fields (`.collaborative()`)
+
+Mark individual fields for real-time collaborative editing between users. When two users edit the same record, changes to collaborative fields are synced live via Yjs.
+
+```ts
+fields() {
+  return [
+    TextField.make('title')
+      .collaborative(),    // synced live between editors
+
+    TextareaField.make('excerpt')
+      .collaborative(),    // synced live between editors
+
+    SelectField.make('status'),  // NOT collaborative — local only
+  ]
+}
+```
+
+Collaborative fields require `static versioned = true` on the resource.
+
+The edit page shows:
+- **Connection status** — green dot when connected, grey when disconnected
+- **Presence avatars** — colored circles showing who else is editing (name initial + color)
+- **Live field sync** — typing in a collaborative field updates it in real-time for all editors
+
+---
+
 ## Guard
 
 ```ts
