@@ -6,6 +6,7 @@ export class CategoryResource extends Resource {
   static slug          = 'categories'
   static label         = 'Categories'
   static labelSingular = 'Category'
+  static icon          = 'folder-tree'
   static titleField    = 'name'
   static defaultSort   = 'name'
 

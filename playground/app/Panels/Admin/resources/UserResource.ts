@@ -5,6 +5,7 @@ export class UserResource extends Resource {
   static model = User
   static label = 'Users'
   static labelSingular = 'User'
+  static icon = 'users'
 
   fields() {
     return [

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Toaster } from 'sonner'
 import type { PanelMeta } from '@boostkit/panels'
 import { GlobalSearch } from './GlobalSearch.js'
+import { ResourceIcon } from './ResourceIcon.js'
 import { ThemeProvider } from './ThemeProvider.js'
 import { ThemeToggle } from './ThemeToggle.js'
 import {
@@ -152,7 +153,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
                   {items.map((item) => (
                     <SidebarMenuItem key={item.slug}>
                       <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
-                        {item.icon && <span className="text-base leading-none">{item.icon}</span>}
+                        <ResourceIcon icon={item.icon} />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -217,7 +218,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
               ].join(' ')}
             >
-              {item.icon && <span className="text-base leading-none">{item.icon}</span>}
+              <ResourceIcon icon={item.icon} />
               {item.label}
             </a>
           ))}
