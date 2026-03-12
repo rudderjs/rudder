@@ -5,6 +5,8 @@ import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
 import type { FieldMeta, PanelI18n, NodeMap } from '@boostkit/panels'
 import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from '@boostkit/panels'
+import { CollaborativeInput } from './collaborative/CollaborativeInput.js'
+import { CollaborativeTextarea } from './collaborative/CollaborativeTextarea.js'
 import { customFieldRenderers } from './CustomFieldRenderers.js'
 import { SortableBlockList } from './SortableBlockList.js'
 import { ContentEditor } from './ContentEditor.js'
@@ -17,6 +19,10 @@ interface Props {
   uploadBase?: string
   i18n:        PanelI18n
   disabled?:   boolean
+  /** Y.Text instance for collaborative text sync (optional) */
+  yText?:      any | null
+  /** Awareness instance for cursor broadcasting (optional) */
+  awareness?:  any | null
 }
 
 function generateSlug(str: string): string {
@@ -30,7 +36,7 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
-export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false }: Props) {
+export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, yText, awareness }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
   const isDisabled = disabled || field.readonly
 
@@ -96,6 +102,24 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
 
   // ── Textarea ─────────────────────────────────────────────
   if (field.type === 'textarea') {
+    if (yText && awareness) {
+      return (
+        <CollaborativeTextarea
+          value={(value as string) ?? ''}
+          onChange={(v) => onChange(v)}
+          yText={yText}
+          awareness={awareness}
+          fieldName={field.name}
+          rows={(field.extra?.rows as number) ?? 4}
+          className={inputCls}
+          placeholder={(field.extra?.placeholder as string) ?? ''}
+          disabled={isDisabled}
+          required={field.required}
+          readOnly={field.readonly}
+          name={field.name}
+        />
+      )
+    }
     return (
       <textarea
         name={field.name}
@@ -657,6 +681,26 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
   const inputValue = (field.type === 'date' || field.type === 'datetime')
     ? formatDateValue(value)
     : (value as string) ?? ''
+
+  // Collaborative text input for text/email fields
+  if ((field.type === 'text' || field.type === 'email') && yText && awareness) {
+    return (
+      <CollaborativeInput
+        value={(value as string) ?? ''}
+        onChange={(v) => onChange(v)}
+        yText={yText}
+        awareness={awareness}
+        fieldName={field.name}
+        type={inputType}
+        className={inputCls}
+        placeholder={(field.extra?.placeholder as string) ?? ''}
+        disabled={isDisabled}
+        required={field.required}
+        readOnly={field.readonly}
+        name={field.name}
+      />
+    )
+  }
 
   return (
     <input
