@@ -148,7 +148,7 @@ export default function ShowPage() {
         {/* HasMany relation tables */}
         {hasManyFields.map((field) => (
           <HasManyTable
-            key={field.name}
+            key={`${field.name}-${id}`}
             field={field}
             parentId={id}
             parentSlug={slug}
