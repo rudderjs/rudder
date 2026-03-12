@@ -90,6 +90,20 @@ export const en = {
   globalSearch:         'Search everything\u2026',
   globalSearchShortcut: '\u2318K',
   globalSearchEmpty:    'No results for ":query"',
+
+  // Versioning & collaboration
+  publish:              'Publish',
+  publishing:           'Publishing\u2026',
+  publishedToast:       'Version published.',
+  publishError:         'Failed to publish. Please try again.',
+  versionHistory:       'Version History',
+  noVersions:           'No versions yet.',
+  restore:              'Restore',
+  restoredToast:        'Version restored.',
+  restoreError:         'Failed to restore version.',
+  connectedLive:        'Connected',
+  disconnectedLive:     'Disconnected',
+  editingNow:           ':n editing',
 }
 
 export type PanelI18n = typeof en
