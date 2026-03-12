@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@boostkit/core": "workspace:*",
-    "@boostkit/router": "workspace:*"
+    "@boostkit/router": "workspace:*",
+    "quill-delta": "^5.1.0"
   },
   "peerDependencies": {
     "@boostkit/broadcast": "workspace:*",
