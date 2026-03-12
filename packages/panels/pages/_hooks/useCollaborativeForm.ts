@@ -59,7 +59,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       const { WebsocketProvider } = await import('y-websocket')
       if (destroyed) return
 
-      const wsUrl    = `ws://${window.location.host}${options!.wsPath}`
+      const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      const wsUrl    = `${wsProto}://${window.location.host}${options!.wsPath}`
       const doc      = new Y.Doc()
       const provider = new WebsocketProvider(wsUrl, options!.docName, doc)
 
