@@ -198,11 +198,11 @@ function SvgMask({ src, className }: { src: string; className?: string }) {
 }
 
 /** Logo that shows full branding when expanded, just the icon when collapsed. */
-function SidebarLogo({ branding, name }: { branding: PanelMeta['branding']; name: string }) {
+function SidebarLogo({ branding, name, path }: { branding: PanelMeta['branding']; name: string; path: string }) {
   const title = branding?.title ?? name
   const isSvg = branding?.logo?.endsWith('.svg')
   return (
-    <div className="flex items-center gap-2 px-2 py-1 min-h-[2rem]">
+    <a href={path} className="flex items-center gap-2 px-2 hover:opacity-80 transition-opacity">
       {branding?.logo ? (
         <>
           {isSvg
@@ -214,7 +214,7 @@ function SidebarLogo({ branding, name }: { branding: PanelMeta['branding']; name
       ) : (
         <span className="text-sm font-semibold truncate">{title}</span>
       )}
-    </div>
+    </a>
   )
 }
 
@@ -229,8 +229,8 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
     <SidebarProvider>
       <div dir={dir} className="flex h-screen w-full">
         <Sidebar side={dir === 'rtl' ? 'right' : 'left'} collapsible="icon">
-          <SidebarHeader className="border-b">
-            <SidebarLogo branding={branding} name={panelMeta.name} />
+          <SidebarHeader className="h-14 border-b justify-center">
+            <SidebarLogo branding={branding} name={panelMeta.name} path={panelMeta.path} />
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
