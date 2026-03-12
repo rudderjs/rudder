@@ -265,7 +265,7 @@ export default function ResourceListPage() {
         toast.error('Action failed. Please try again.')
       }
       setSelected([])
-      window.location.reload()
+      void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
     } catch {
       toast.error('Action failed. Please try again.')
     } finally {
@@ -285,7 +285,7 @@ export default function ResourceListPage() {
       if (res.ok) {
         toast.success(t(i18n.bulkDeletedToast, { n: selected.length }))
         setSelected([])
-        window.location.reload()
+        void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
       } else {
         toast.error(i18n.deleteError)
       }
