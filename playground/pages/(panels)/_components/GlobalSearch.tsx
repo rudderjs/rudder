@@ -3,6 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { navigate } from 'vike/client/router'
 import type { PanelMeta } from '@boostkit/panels'
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog.js'
 
 interface SearchResult {
   resource: string
@@ -11,224 +16,139 @@ interface SearchResult {
 }
 
 interface Props {
-  panelMeta:   PanelMeta
-  pathSegment: string
-}
-
-function t(template: string, vars: Record<string, string>): string {
-  return template.replace(/:([a-z]+)/g, (_, k: string) => vars[k] ?? `:${k}`)
+  panelMeta:    PanelMeta
+  pathSegment:  string
 }
 
 export function GlobalSearch({ panelMeta, pathSegment }: Props) {
-  const { i18n } = panelMeta
-  const [open,    setOpen]    = useState(false)
-  const [query,   setQuery]   = useState('')
+  const i18n = panelMeta.i18n
+  const [open, setOpen]       = useState(false)
+  const [query, setQuery]     = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
-  const [focused, setFocused] = useState(-1)
+  const [focused, setFocused] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  const inputRef     = useRef<HTMLInputElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Flatten results for keyboard nav
+  const flatItems = results.flatMap((g) =>
+    g.records.map((r) => ({ resource: g.resource, id: r.id, title: r.title, label: g.label }))
+  )
 
-  // ⌘K / Ctrl+K opens search
+  // Cmd/Ctrl+K shortcut
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
+    function handler(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setOpen(true)
-        setTimeout(() => inputRef.current?.focus(), 0)
       }
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
   }, [])
 
-  // Close on outside click
+  // Focus input when opening
   useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (!containerRef.current?.contains(e.target as Node)) {
-        setOpen(false)
-        setQuery('')
-        setResults([])
-      }
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [])
+    if (open) setTimeout(() => inputRef.current?.focus(), 50)
+  }, [open])
 
-  // Fetch results with debounce
-  const fetchResults = useCallback((q: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!q.trim()) { setResults([]); setLoading(false); return }
-
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true)
-      try {
-        const res  = await fetch(`/${pathSegment}/api/_search?q=${encodeURIComponent(q)}&limit=5`)
-        const data = await res.json() as { results: SearchResult[] }
-        setResults(data.results)
-        setFocused(-1)
-      } catch {
-        setResults([])
-      } finally {
-        setLoading(false)
-      }
-    }, 300)
-  }, [pathSegment])
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value
-    setQuery(val)
-    fetchResults(val)
-  }
-
-  // Flat list of all {resource, id} pairs for keyboard nav
-  const flatItems = results.flatMap(group =>
-    group.records.map(r => ({ resource: group.resource, id: r.id }))
-  )
-
-  function goToItem(index: number) {
-    const item = flatItems[index]
-    if (!item) return
-    void navigate(`/${pathSegment}/${item.resource}/${item.id}`)
+  function close() {
     setOpen(false)
     setQuery('')
     setResults([])
+    setFocused(0)
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Escape') {
-      setOpen(false)
-      setQuery('')
-      setResults([])
-      return
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setFocused(i => Math.min(i + 1, flatItems.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setFocused(i => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter' && focused >= 0) {
-      e.preventDefault()
-      goToItem(focused)
-    }
+  function goToItem(item: { resource: string; id: string }) {
+    close()
+    void navigate(`/${pathSegment}/${item.resource}/${item.id}`)
   }
 
-  const hasResults = results.some(g => g.records.length > 0)
-  const showEmpty  = !loading && query.trim().length > 0 && !hasResults
+  const search = useCallback((q: string) => {
+    if (!q.trim()) { setResults([]); return }
+    setLoading(true)
+    fetch(`/${pathSegment}/api/_search?q=${encodeURIComponent(q)}&limit=5`)
+      .then((r) => r.ok ? r.json() as Promise<{ results: SearchResult[] }> : { results: [] })
+      .then((data) => { setResults(data.results); setFocused(0) })
+      .catch(() => setResults([]))
+      .finally(() => setLoading(false))
+  }, [pathSegment])
 
-  // Track flat index as we render
-  let flatIndex = 0
+  function handleInput(value: string) {
+    setQuery(value)
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => search(value), 300)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocused((f) => Math.min(f + 1, flatItems.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setFocused((f) => Math.max(f - 1, 0)) }
+    if (e.key === 'Enter' && flatItems[focused]) { e.preventDefault(); goToItem(flatItems[focused]) }
+  }
 
   return (
-    <div ref={containerRef} className="relative">
-      {/* Trigger button (closed state) */}
-      {!open && (
-        <button
-          type="button"
-          onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 0) }}
-          className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-background text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-        >
-          <SearchIcon />
-          <span className="hidden sm:inline">{i18n.globalSearch}</span>
-          <span className="hidden sm:inline text-xs border border-input rounded px-1 py-0.5 font-mono leading-none">
-            {i18n.globalSearchShortcut}
-          </span>
-        </button>
-      )}
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 h-8 px-3 rounded-md border text-sm text-muted-foreground hover:bg-accent transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span className="hidden sm:inline">{i18n.globalSearch ?? 'Search...'}</span>
+        <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border px-1.5 text-[10px] text-muted-foreground">
+          {i18n.globalSearchShortcut ?? '⌘K'}
+        </kbd>
+      </button>
 
-      {/* Search input (open state) */}
-      {open && (
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-ring bg-background ring-2 ring-ring min-w-[260px]">
-            <SearchIcon className="text-muted-foreground shrink-0" />
+      <Dialog open={open} onOpenChange={(o) => { if (!o) close() }}>
+        <DialogContent className="p-0 gap-0 max-w-lg" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Search</DialogTitle>
+          <div className="flex items-center gap-2 px-4 border-b">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input
               ref={inputRef}
-              type="text"
               value={query}
-              onChange={handleChange}
+              onChange={(e) => handleInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={i18n.globalSearch}
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              placeholder={i18n.globalSearch ?? 'Search everything...'}
+              className="flex-1 h-12 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
-            {loading && <SpinnerIcon />}
+            {loading && (
+              <svg className="animate-spin h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            )}
           </div>
-
-          {/* Dropdown */}
-          {(hasResults || showEmpty) && (
-            <div className="absolute top-full mt-1 start-0 end-0 z-50 min-w-[320px] rounded-lg border border-border bg-popover shadow-lg py-1.5 max-h-[400px] overflow-y-auto">
-
-              {showEmpty && (
-                <p className="px-4 py-3 text-sm text-muted-foreground">
-                  {t(i18n.globalSearchEmpty, { query: query.trim() })}
+          {query.trim() && (
+            <div className="max-h-[400px] overflow-y-auto py-1.5">
+              {!loading && flatItems.length === 0 && (
+                <p className="px-4 py-6 text-sm text-center text-muted-foreground">
+                  {(i18n.globalSearchEmpty ?? 'No results for ":query"').replace(':query', query)}
                 </p>
               )}
-
-              {results.map((group) => {
-                if (group.records.length === 0) return null
-                return (
-                  <div key={group.resource}>
-                    <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      {group.label}
-                    </p>
-                    {group.records.map((record) => {
-                      const idx = flatIndex++
-                      const isFocused = idx === focused
-                      return (
-                        <button
-                          key={record.id}
-                          type="button"
-                          onMouseDown={(e) => { e.preventDefault(); goToItem(idx) }}
-                          onMouseEnter={() => setFocused(idx)}
-                          className={[
-                            'w-full flex items-center gap-2 px-3 py-2 text-sm text-start transition-colors',
-                            isFocused
-                              ? 'bg-accent text-accent-foreground'
-                              : 'hover:bg-accent hover:text-accent-foreground',
-                          ].join(' ')}
-                        >
-                          <span className="truncate">{record.title}</span>
-                          <span className="ms-auto text-xs text-muted-foreground shrink-0">
-                            {group.label}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-
+              {results.map((group) => (
+                <div key={group.resource}>
+                  <p className="px-3 pt-3 pb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</p>
+                  {group.records.map((record) => {
+                    const idx = flatItems.findIndex((f) => f.id === record.id && f.resource === group.resource)
+                    return (
+                      <button
+                        key={record.id}
+                        className={[
+                          'w-full flex items-center gap-2 px-3 py-2 text-sm text-start transition-colors',
+                          idx === focused ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50',
+                        ].join(' ')}
+                        onMouseEnter={() => setFocused(idx)}
+                        onMouseDown={(e) => { e.preventDefault(); goToItem({ resource: group.resource, id: record.id }) }}
+                      >
+                        <span className="truncate">{record.title}</span>
+                        <span className="ms-auto text-xs text-muted-foreground shrink-0">{group.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SearchIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      width="14" height="14" viewBox="0 0 14 14" fill="none"
-      className={className}
-      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
-    >
-      <circle cx="6" cy="6" r="4.5" />
-      <path d="M9.5 9.5L12.5 12.5" />
-    </svg>
-  )
-}
-
-function SpinnerIcon() {
-  return (
-    <svg
-      width="14" height="14" viewBox="0 0 14 14" fill="none"
-      className="animate-spin text-muted-foreground"
-      stroke="currentColor" strokeWidth="1.5"
-    >
-      <circle cx="7" cy="7" r="5.5" strokeDasharray="20 15" strokeLinecap="round" />
-    </svg>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
