@@ -31,10 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.js'
 import { Separator } from '@/components/ui/separator.js'
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from '@/components/ui/tooltip.js'
 
 interface Props {
@@ -127,6 +124,93 @@ function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelMet
   )
 }
 
+/** Sidebar user menu — collapses to just the avatar when sidebar is in icon mode. */
+function SidebarUserMenu({ user, i18n }: { user: SessionUser | null; i18n: PanelMeta['i18n'] }) {
+  if (!user) return null
+  const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
+
+  async function handleSignOut() {
+    await fetch('/api/auth/sign-out', { method: 'POST' })
+    window.location.href = '/login'
+  }
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <SidebarMenuButton
+            size="lg"
+            render={<DropdownMenuTrigger />}
+            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+            tooltip={user.name ?? user.email ?? ''}
+          >
+            <Avatar className="h-7 w-7 rounded-md text-[10px]">
+              {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+              <AvatarFallback className="rounded-md text-[10px]">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              {user.name && <span className="truncate font-medium">{user.name}</span>}
+              {user.email && <span className="truncate text-xs text-muted-foreground">{user.email}</span>}
+            </div>
+          </SidebarMenuButton>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            className="w-[--radix-dropdown-menu-trigger-width] min-w-52 rounded-lg"
+          >
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-1">
+                  {user.name && <p className="text-sm font-medium">{user.name}</p>}
+                  {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
+                </div>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
+              {i18n.signOut}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
+/** Fetch and inline an SVG so it inherits currentColor. */
+function InlineSvg({ src, className }: { src: string; className?: string }) {
+  const [svg, setSvg] = useState<string | null>(null)
+  useEffect(() => {
+    fetch(src)
+      .then((r) => r.ok ? r.text() : null)
+      .then((text) => { if (text) setSvg(text) })
+      .catch(() => {})
+  }, [src])
+  if (!svg) return <img src={src} alt="" className={className} />
+  return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
+/** Logo that shows full branding when expanded, just the icon when collapsed. */
+function SidebarLogo({ branding, name }: { branding: PanelMeta['branding']; name: string }) {
+  const title = branding?.title ?? name
+  const isSvg = branding?.logo?.endsWith('.svg')
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 min-h-[2rem]">
+      {branding?.logo ? (
+        <>
+          {isSvg
+            ? <InlineSvg src={branding.logo!} className="h-6 w-6 shrink-0 text-foreground [&>svg]:h-full [&>svg]:w-full" />
+            : <img src={branding.logo} alt={title} className="h-6 w-6 shrink-0" />
+          }
+          <span className="text-sm font-semibold truncate group-data-[collapsible=icon]:hidden">{title}</span>
+        </>
+      ) : (
+        <span className="text-sm font-semibold truncate">{title}</span>
+      )}
+    </div>
+  )
+}
+
 function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props & { currentSlug: string }) {
   const items = useNavItemsWithPersistedState(panelMeta)
   const user  = useSessionUser(initialUser)
@@ -139,12 +223,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
       <div dir={dir} className="flex h-screen w-full">
         <Sidebar side={dir === 'rtl' ? 'right' : 'left'} collapsible="icon">
           <SidebarHeader className="border-b">
-            <div className="flex items-center gap-2 px-2 py-1">
-              {branding?.logo
-                ? <img src={branding.logo} alt={branding?.title ?? panelMeta.name} className="h-6" />
-                : <span className="text-sm font-semibold truncate">{branding?.title ?? panelMeta.name}</span>
-              }
-            </div>
+            <SidebarLogo branding={branding} name={panelMeta.name} />
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
@@ -163,9 +242,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="border-t">
-            <div className="flex items-center justify-between px-2 py-1">
-              <UserDropdown user={user} i18n={i18n} />
-            </div>
+            <SidebarUserMenu user={user} i18n={i18n} />
           </SidebarFooter>
         </Sidebar>
 
@@ -201,7 +278,13 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
       <header className="h-14 shrink-0 border-b bg-card flex items-center gap-4 px-6">
         <div className="flex items-center gap-2 me-2">
           {branding?.logo
-            ? <img src={branding.logo} alt={branding?.title ?? panelMeta.name} className="h-6" />
+            ? <>
+                {branding.logo.endsWith('.svg')
+                  ? <InlineSvg src={branding.logo} className="h-6 w-6 text-foreground [&>svg]:h-full [&>svg]:w-full" />
+                  : <img src={branding.logo} alt={branding?.title ?? panelMeta.name} className="h-6 w-6" />
+                }
+                <span className="text-sm font-semibold">{branding?.title ?? panelMeta.name}</span>
+              </>
             : <span className="text-sm font-semibold">{branding?.title ?? panelMeta.name}</span>
           }
         </div>

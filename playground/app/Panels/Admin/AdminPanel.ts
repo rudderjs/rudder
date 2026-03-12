@@ -13,6 +13,7 @@ export const adminPanel = Panel.make('admin')
   .path('/admin')
   .branding({
     title: 'BoostKit',
+    logo: '/logo.svg',
   })
   .layout('sidebar')
   .locale('en')
