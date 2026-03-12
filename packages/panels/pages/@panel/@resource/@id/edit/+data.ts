@@ -1,5 +1,5 @@
 import { PanelRegistry } from '@boostkit/panels'
-import { getSessionUser } from '../../../_lib/getSessionUser.js'
+import { getSessionUser } from '../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>

@@ -692,7 +692,7 @@ function CellValue({ value, type, extra, displayTransformed, pathSegment, i18n }
     )
   }
   if (type === 'date' || type === 'datetime') {
-    return <span className="text-muted-foreground">{new Date(value as string).toLocaleDateString()}</span>
+    return <span className="text-muted-foreground">{new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(value as string))}</span>
   }
   if (type === 'color') {
     return (

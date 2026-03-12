@@ -126,9 +126,9 @@ function SchemaTable({ element, panelPath: _, i18n }: { element: Extract<PanelSc
 function formatCellValue(value: unknown, i18n: PanelI18n): string {
   if (value === null || value === undefined) return '—'
   if (typeof value === 'boolean') return value ? i18n.yes : i18n.no
-  if (value instanceof Date) return value.toLocaleDateString()
+  if (value instanceof Date) return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(value)
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-    return new Date(value).toLocaleDateString()
+    return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(value))
   }
   return String(value)
 }

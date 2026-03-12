@@ -47,6 +47,32 @@ export async function data(pageContext: PageContextServer) {
     record = await q.find(id)
   }
 
+  // Seed ydoc for versioned resources
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const versioned = (ResourceClass as any).versioned ?? false
+  if (record && versioned) {
+    try {
+      const { Live } = await import('@boostkit/live')
+      const docName = `panel:${slug}:${id}`
+      const fieldData: Record<string, unknown> = {}
+      for (const f of flattenFields(resource.fields())) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const name = (f as any).getName() as string
+        if (name in (record as Record<string, unknown>)) {
+          fieldData[name] = (record as Record<string, unknown>)[name]
+        }
+      }
+      await Live.seed(docName, fieldData)
+    } catch {
+      // @boostkit/live not available — silently skip
+    }
+  }
+
   const sessionUser = await getSessionUser(pageContext)
-  return { panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser }
+  return {
+    panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser,
+    versioned,
+    wsLivePath: versioned ? '/ws-live' : null,
+    docName:    versioned ? `panel:${slug}:${id}` : null,
+  }
 }
