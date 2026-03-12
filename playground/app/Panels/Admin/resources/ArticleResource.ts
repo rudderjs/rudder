@@ -26,8 +26,10 @@ export class ArticleResource extends Resource {
   static defaultSort    = 'createdAt'
   static defaultSortDir = 'DESC' as const
   static persistTableState = true
-  static perPage = 5 
+  static perPage = 5
   static perPageOptions = [5,10, 15, 25, 50, 100]
+  static live      = true
+  static versioned = true
 
   fields() {
     return [
@@ -37,7 +39,8 @@ export class ArticleResource extends Resource {
           .label('Title')
           .required()
           .searchable()
-          .sortable(),
+          .sortable()
+          .collaborative(),
 
         SlugField.make('slug')
           .label('Slug')
@@ -53,7 +56,8 @@ export class ArticleResource extends Resource {
         TextareaField.make('excerpt')
           .label('Excerpt')
           .rows(3)
-          .hideFromTable(),
+          .hideFromTable()
+          .collaborative(),
 
         FileField.make('coverImage')
           .label('Cover Image')
