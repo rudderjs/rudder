@@ -1,3 +1,12 @@
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb.js'
+
 interface Crumb {
   label: string
   href?: string
@@ -9,16 +18,18 @@ interface Props {
 
 export function Breadcrumbs({ crumbs }: Props) {
   return (
-    <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6">
-      {crumbs.map((crumb, i) => (
-        <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <span>/</span>}
-          {crumb.href
-            ? <a href={crumb.href} className="hover:text-foreground transition-colors">{crumb.label}</a>
-            : <span className="text-foreground font-medium">{crumb.label}</span>
-          }
-        </span>
-      ))}
-    </nav>
+    <Breadcrumb className="mb-6">
+      <BreadcrumbList>
+        {crumbs.map((crumb, i) => (
+          <BreadcrumbItem key={i}>
+            {i > 0 && <BreadcrumbSeparator />}
+            {crumb.href
+              ? <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+              : <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+            }
+          </BreadcrumbItem>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
   )
 }
