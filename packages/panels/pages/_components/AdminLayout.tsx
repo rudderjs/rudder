@@ -21,6 +21,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -100,22 +101,22 @@ function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelMet
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors outline-none">
-          <Avatar className="h-6 w-6 text-[10px]">
-            {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
-            <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
-          </Avatar>
-          <span className="hidden sm:inline text-sm">{user.name ?? user.email}</span>
-        </button>
+      <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors outline-none">
+        <Avatar className="h-6 w-6 text-[10px]">
+          {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+          <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
+        </Avatar>
+        <span className="hidden sm:inline text-sm">{user.name ?? user.email}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col gap-1">
-            {user.name && <p className="text-sm font-medium">{user.name}</p>}
-            {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
-          </div>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col gap-1">
+              {user.name && <p className="text-sm font-medium">{user.name}</p>}
+              {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
+            </div>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
           {i18n.signOut}
@@ -150,11 +151,9 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
                 <SidebarMenu>
                   {items.map((item) => (
                     <SidebarMenuItem key={item.slug}>
-                      <SidebarMenuButton asChild isActive={item.slug === currentSlug} tooltip={item.label}>
-                        <a href={item.href}>
-                          {item.icon && <span className="text-base leading-none">{item.icon}</span>}
-                          <span>{item.label}</span>
-                        </a>
+                      <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
+                        {item.icon && <span className="text-base leading-none">{item.icon}</span>}
+                        <span>{item.label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}

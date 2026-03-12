@@ -502,25 +502,23 @@ export default function ResourceListPage() {
                     <div className="flex items-center justify-end gap-2">
                       {rowActions.map((action) => (
                         <Tooltip key={action.name}>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={() => {
-                                if (action.requiresConfirm) {
-                                  setConfirm({ action, records: [(record as { id: string })] })
-                                } else {
-                                  void executeAction(action, [id])
-                                }
-                              }}
-                              className={[
-                                'px-2 py-1 rounded text-xs font-medium transition-colors',
-                                action.destructive
-                                  ? 'text-destructive hover:bg-destructive/10'
-                                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                              ].join(' ')}
-                            >
-                              {action.icon && <span className="me-1">{action.icon}</span>}
-                              {action.label}
-                            </button>
+                          <TooltipTrigger
+                            onClick={() => {
+                              if (action.requiresConfirm) {
+                                setConfirm({ action, records: [(record as { id: string })] })
+                              } else {
+                                void executeAction(action, [id])
+                              }
+                            }}
+                            className={[
+                              'px-2 py-1 rounded text-xs font-medium transition-colors',
+                              action.destructive
+                                ? 'text-destructive hover:bg-destructive/10'
+                                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                            ].join(' ')}
+                          >
+                            {action.icon && <span className="me-1">{action.icon}</span>}
+                            {action.label}
                           </TooltipTrigger>
                           <TooltipContent>{action.label}</TooltipContent>
                         </Tooltip>
