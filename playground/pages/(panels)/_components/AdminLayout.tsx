@@ -177,17 +177,24 @@ function SidebarUserMenu({ user, i18n }: { user: SessionUser | null; i18n: Panel
   )
 }
 
-/** Fetch and inline an SVG so it inherits currentColor. */
-function InlineSvg({ src, className }: { src: string; className?: string }) {
-  const [svg, setSvg] = useState<string | null>(null)
-  useEffect(() => {
-    fetch(src)
-      .then((r) => r.ok ? r.text() : null)
-      .then((text) => { if (text) setSvg(text) })
-      .catch(() => {})
-  }, [src])
-  if (!svg) return <img src={src} alt="" className={className} />
-  return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
+/** SVG rendered via CSS mask so currentColor applies without fetching. */
+function SvgMask({ src, className }: { src: string; className?: string }) {
+  return (
+    <span
+      className={className}
+      style={{
+        backgroundColor: 'currentColor',
+        maskImage: `url(${src})`,
+        maskSize: 'contain',
+        maskRepeat: 'no-repeat',
+        maskPosition: 'center',
+        WebkitMaskImage: `url(${src})`,
+        WebkitMaskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+      }}
+    />
+  )
 }
 
 /** Logo that shows full branding when expanded, just the icon when collapsed. */
@@ -199,7 +206,7 @@ function SidebarLogo({ branding, name }: { branding: PanelMeta['branding']; name
       {branding?.logo ? (
         <>
           {isSvg
-            ? <InlineSvg src={branding.logo!} className="h-6 w-6 shrink-0 text-foreground [&>svg]:h-full [&>svg]:w-full" />
+            ? <SvgMask src={branding.logo!} className="inline-block h-6 w-6 shrink-0" />
             : <img src={branding.logo} alt={title} className="h-6 w-6 shrink-0" />
           }
           <span className="text-sm font-semibold truncate group-data-[collapsible=icon]:hidden">{title}</span>
@@ -280,7 +287,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
           {branding?.logo
             ? <>
                 {branding.logo.endsWith('.svg')
-                  ? <InlineSvg src={branding.logo} className="h-6 w-6 text-foreground [&>svg]:h-full [&>svg]:w-full" />
+                  ? <SvgMask src={branding.logo} className="inline-block h-6 w-6" />
                   : <img src={branding.logo} alt={branding?.title ?? panelMeta.name} className="h-6 w-6" />
                 }
                 <span className="text-sm font-semibold">{branding?.title ?? panelMeta.name}</span>
