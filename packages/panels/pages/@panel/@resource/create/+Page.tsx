@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
 import { FieldInput } from '../../../_components/FieldInput.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js'
 import type { Data } from './+data.js'
 
 function t(template: string, vars: Record<string, string | number>): string {
@@ -234,33 +235,26 @@ export default function CreatePage() {
 
     // ── Tabs ─────────────────────────────────────────────
     if (item.type === 'tabs') {
-      const tabs = item as TabsMeta
-      const key  = `tabs-${index}`
-      const active = activeTab[key] ?? 0
-
+      const tabsMeta = item as TabsMeta
+      const key = `tabs-${index}`
       return (
-        <div key={key} className="rounded-xl border border-border bg-card">
-          <div className="flex border-b border-border bg-muted/40">
-            {tabs.tabs.map((tab, i) => (
-              <button
-                key={tab.label}
-                type="button"
-                onClick={() => setActiveTab((p) => ({ ...p, [key]: i }))}
-                className={[
-                  'px-5 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px',
-                  i === active
-                    ? 'border-primary text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
+        <Tabs key={key} defaultValue={tabsMeta.tabs[0]?.label} className="rounded-xl border border-border bg-card">
+          <TabsList className="w-full justify-start rounded-none border-b bg-muted/40 px-2">
+            {tabsMeta.tabs.map((tab) => (
+              <TabsTrigger key={tab.label} value={tab.label} className="text-sm">
                 {tab.label}
-              </button>
+              </TabsTrigger>
             ))}
-          </div>
-          <div className="p-5 flex flex-col gap-4">
-            {(tabs.tabs[active]?.fields ?? []).filter((f) => !f.hidden.includes('create') && isFieldVisible(f as { conditions?: Condition[] }, values)).map((f) => renderField(f))}
-          </div>
-        </div>
+          </TabsList>
+          {tabsMeta.tabs.map((tab) => (
+            <TabsContent key={tab.label} value={tab.label} className="p-5 flex flex-col gap-4 mt-0">
+              {tab.fields
+                .filter((f) => !f.hidden.includes('create') && isFieldVisible(f as { conditions?: Condition[] }, values))
+                .map((f) => renderField(f))
+              }
+            </TabsContent>
+          ))}
+        </Tabs>
       )
     }
 
