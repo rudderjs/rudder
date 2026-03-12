@@ -39,17 +39,13 @@ export function CollaborativeInput({
     broadcastCursor(el.selectionStart ?? 0, el.selectionEnd ?? 0)
   }, [broadcastCursor])
 
+  // Use document selectionchange for live selection updates (fires during mouse drag)
   useEffect(() => {
-    const el = inputRef.current
-    if (!el) return
-    el.addEventListener('select', handleSelect)
-    el.addEventListener('click', handleSelect)
-    el.addEventListener('keyup', handleSelect)
-    return () => {
-      el.removeEventListener('select', handleSelect)
-      el.removeEventListener('click', handleSelect)
-      el.removeEventListener('keyup', handleSelect)
+    function onSelectionChange() {
+      if (document.activeElement === inputRef.current) handleSelect()
     }
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => document.removeEventListener('selectionchange', onSelectionChange)
   }, [handleSelect])
 
   return (
@@ -139,13 +135,14 @@ function CursorIndicator({
   return (
     <>
       <div
-        className="absolute pointer-events-none z-10"
+        className="absolute pointer-events-none"
         style={{
           left: pos.left,
           top: pos.top,
           width: pos.width,
           height: pos.height,
-          backgroundColor: isCaret ? cursor.color : `${cursor.color}33`,
+          backgroundColor: cursor.color,
+          opacity: isCaret ? 1 : 0.15,
           borderRadius: isCaret ? 0 : 2,
         }}
       />

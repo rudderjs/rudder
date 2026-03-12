@@ -39,17 +39,13 @@ export function CollaborativeTextarea({
     broadcastCursor(el.selectionStart ?? 0, el.selectionEnd ?? 0)
   }, [broadcastCursor])
 
+  // Use document selectionchange for live selection updates (fires during mouse drag)
   useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.addEventListener('select', handleSelect)
-    el.addEventListener('click', handleSelect)
-    el.addEventListener('keyup', handleSelect)
-    return () => {
-      el.removeEventListener('select', handleSelect)
-      el.removeEventListener('click', handleSelect)
-      el.removeEventListener('keyup', handleSelect)
+    function onSelectionChange() {
+      if (document.activeElement === textareaRef.current) handleSelect()
     }
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => document.removeEventListener('selectionchange', onSelectionChange)
   }, [handleSelect])
 
   return (
@@ -162,13 +158,14 @@ function TextareaCursor({
       {rects.map((r, i) => (
         <div
           key={i}
-          className="absolute pointer-events-none z-10"
+          className="absolute pointer-events-none"
           style={{
             left: r.left,
             top: r.top,
             width: r.width,
             height: r.height,
-            backgroundColor: isCaret ? cursor.color : `${cursor.color}33`,
+            backgroundColor: cursor.color,
+            opacity: isCaret ? 1 : 0.15,
           }}
         />
       ))}
