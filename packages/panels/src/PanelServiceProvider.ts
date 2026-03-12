@@ -384,6 +384,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
       const record = await Model.create(body)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.created', { id: (record as any).id })
       return res.status(201).json({ data: record })
     }, mw)
 
@@ -405,6 +406,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
       const record = await Model.query().update(id, body)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.updated', { id })
       return res.json({ data: record })
     }, mw)
 
@@ -420,6 +422,7 @@ export class PanelServiceProvider extends ServiceProvider {
       if (!exists) return res.status(404).json({ message: 'Record not found.' })
 
       await Model.query().delete(id)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.deleted', { id })
       return res.json({ message: 'Deleted successfully.' })
     }, mw)
 
@@ -442,6 +445,7 @@ export class PanelServiceProvider extends ServiceProvider {
         }
       }
 
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'records.deleted', { ids, deleted })
       return res.json({ message: `${deleted} records deleted.`, deleted })
     }, mw)
 
@@ -468,8 +472,17 @@ export class PanelServiceProvider extends ServiceProvider {
       }
 
       await action.execute(records)
+      if ((ResourceClass as any).live) this.liveBroadcast(slug, 'action.executed', { action: actionName, ids })
       return res.json({ message: 'Action executed successfully.' })
     }, mw)
+  }
+
+  // ── Live broadcast helper ─────────────────────────────
+
+  private liveBroadcast(slug: string, event: string, data: unknown): void {
+    void import('@boostkit/broadcast').then(({ broadcast }) => {
+      broadcast(`panel:${slug}`, event, data)
+    }).catch(() => { /* @boostkit/broadcast not registered */ })
   }
 
   // ── Helpers ────────────────────────────────────────────
