@@ -414,6 +414,12 @@ importers:
         specifier: workspace:*
         version: link:../router
     devDependencies:
+      '@boostkit/broadcast':
+        specifier: workspace:*
+        version: link:../broadcast
+      '@boostkit/live':
+        specifier: workspace:*
+        version: link:../live
       '@boostkit/storage':
         specifier: workspace:*
         version: link:../storage
@@ -423,6 +429,9 @@ importers:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+      yjs:
+        specifier: ^13.6.29
+        version: 13.6.29
 
   packages/queue:
     dependencies:

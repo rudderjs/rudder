@@ -33,21 +33,28 @@
     "@boostkit/router": "workspace:*"
   },
   "peerDependencies": {
-    "@boostkit/storage": "workspace:*",
-    "@boostkit/broadcast": "workspace:*",
-    "@boostkit/live": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@boostkit/storage": { "optional": true },
-    "@boostkit/broadcast": { "optional": true },
-    "@boostkit/live": { "optional": true }
-  },
-  "devDependencies": {
-    "@boostkit/storage": "workspace:*",
     "@boostkit/broadcast": "workspace:*",
     "@boostkit/live": "workspace:*",
+    "@boostkit/storage": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@boostkit/storage": {
+      "optional": true
+    },
+    "@boostkit/broadcast": {
+      "optional": true
+    },
+    "@boostkit/live": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@boostkit/broadcast": "workspace:*",
+    "@boostkit/live": "workspace:*",
+    "@boostkit/storage": "workspace:*",
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "yjs": "^13.6.29"
   },
   "author": "Suleiman Shahbari"
 }
