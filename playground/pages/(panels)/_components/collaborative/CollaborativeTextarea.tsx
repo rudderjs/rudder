@@ -24,33 +24,30 @@ export function CollaborativeTextarea({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mirrorRef   = useRef<HTMLDivElement>(null)
   const hasFocusRef = useRef(false)
-  const savedSelRef = useRef<{ start: number; end: number } | null>(null)
 
+  /**
+   * Remote change handler — when focused, update DOM directly to avoid
+   * React re-render which resets native selection and causes flashing.
+   */
   const handleRemoteChange = useCallback((newValue: string) => {
     const el = textareaRef.current
     if (el && hasFocusRef.current) {
-      savedSelRef.current = {
-        start: el.selectionStart ?? 0,
-        end:   el.selectionEnd   ?? 0,
-      }
+      const start = el.selectionStart ?? 0
+      const end   = el.selectionEnd   ?? 0
+
+      el.value = newValue
+
+      el.setSelectionRange(
+        Math.min(start, newValue.length),
+        Math.min(end,   newValue.length),
+      )
+      return
     }
     onChange(newValue)
   }, [onChange])
 
   const { applyLocalChange } = useYTextSync(yText, handleRemoteChange)
   const { remoteCursors, broadcastCursor, clearCursor } = useYTextCursors({ yText, awareness, fieldName })
-
-  // Restore selection after React re-renders with remote value
-  useEffect(() => {
-    const el = textareaRef.current
-    const saved = savedSelRef.current
-    if (el && saved && hasFocusRef.current) {
-      const start = Math.min(saved.start, value.length)
-      const end   = Math.min(saved.end,   value.length)
-      el.setSelectionRange(start, end)
-      savedSelRef.current = null
-    }
-  }, [value])
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value
@@ -71,11 +68,12 @@ export function CollaborativeTextarea({
 
   const handleBlur = useCallback(() => {
     hasFocusRef.current = false
+    const el = textareaRef.current
+    if (el) onChange(el.value)
     clearCursor()
-  }, [clearCursor])
+  }, [clearCursor, onChange])
 
   // Use document selectionchange for live selection updates (fires during mouse drag)
-  // Also clears cursor when focus moves to another element
   useEffect(() => {
     function onSelectionChange() {
       if (document.activeElement === textareaRef.current) {
@@ -152,20 +150,22 @@ function TextareaCursor({
     const mirror   = mirrorRef.current
     if (!textarea || !mirror) return
 
+    const text = textarea.value
+
     const styles = window.getComputedStyle(textarea)
     ;['font', 'letterSpacing', 'lineHeight', 'padding', 'border', 'width'].forEach(prop => {
       ;(mirror.style as any)[prop] = styles.getPropertyValue(prop)
     })
 
-    const anchorIdx = Math.min(cursor.anchor, value.length)
-    const focusIdx  = Math.min(cursor.focus, value.length)
+    const anchorIdx = Math.min(cursor.anchor, text.length)
+    const focusIdx  = Math.min(cursor.focus, text.length)
     const start     = Math.min(anchorIdx, focusIdx)
     const end       = Math.max(anchorIdx, focusIdx)
 
-    const before = document.createTextNode(value.slice(0, start))
+    const before = document.createTextNode(text.slice(0, start))
     const marker = document.createElement('span')
-    marker.textContent = value.slice(start, end) || '\u200B'
-    const after = document.createTextNode(value.slice(end))
+    marker.textContent = text.slice(start, end) || '\u200B'
+    const after = document.createTextNode(text.slice(end))
 
     mirror.innerHTML = ''
     mirror.appendChild(before)

@@ -23,38 +23,35 @@ export function CollaborativeInput({
 }: Props) {
   const inputRef  = useRef<HTMLInputElement>(null)
   const mirrorRef = useRef<HTMLSpanElement>(null)
-  /** Tracks whether this input currently has focus */
   const hasFocusRef = useRef(false)
-  /** Saved selection to restore after remote update */
-  const savedSelRef = useRef<{ start: number; end: number } | null>(null)
 
+  /**
+   * Remote change handler — when this input has focus, update the DOM directly
+   * to avoid React re-render which would reset the native selection and cause flashing.
+   * When unfocused, go through React state normally.
+   */
   const handleRemoteChange = useCallback((newValue: string) => {
-    // Save current selection before React re-renders the input
     const el = inputRef.current
     if (el && hasFocusRef.current) {
-      savedSelRef.current = {
-        start: el.selectionStart ?? 0,
-        end:   el.selectionEnd   ?? 0,
-      }
+      // Save selection
+      const start = el.selectionStart ?? 0
+      const end   = el.selectionEnd   ?? 0
+
+      // Update DOM directly — no React re-render
+      el.value = newValue
+
+      // Restore selection (clamped to new length)
+      el.setSelectionRange(
+        Math.min(start, newValue.length),
+        Math.min(end,   newValue.length),
+      )
+      return
     }
     onChange(newValue)
   }, [onChange])
 
   const { applyLocalChange } = useYTextSync(yText, handleRemoteChange)
   const { remoteCursors, broadcastCursor, clearCursor } = useYTextCursors({ yText, awareness, fieldName })
-
-  // Restore selection after React re-renders with remote value
-  useEffect(() => {
-    const el = inputRef.current
-    const saved = savedSelRef.current
-    if (el && saved && hasFocusRef.current) {
-      // Clamp to new value length
-      const start = Math.min(saved.start, value.length)
-      const end   = Math.min(saved.end,   value.length)
-      el.setSelectionRange(start, end)
-      savedSelRef.current = null
-    }
-  }, [value])
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = e.target.value
@@ -75,8 +72,11 @@ export function CollaborativeInput({
 
   const handleBlur = useCallback(() => {
     hasFocusRef.current = false
+    // Sync DOM value back to React state in case remote changes were applied directly
+    const el = inputRef.current
+    if (el) onChange(el.value)
     clearCursor()
-  }, [clearCursor])
+  }, [clearCursor, onChange])
 
   // Use document selectionchange for live selection updates (fires during mouse drag)
   // Also clears cursor when focus moves to another element
@@ -86,7 +86,6 @@ export function CollaborativeInput({
         hasFocusRef.current = true
         handleSelect()
       } else if (hasFocusRef.current) {
-        // Focus left this input — clear our cursor
         hasFocusRef.current = false
         clearCursor()
       }
@@ -149,14 +148,17 @@ function CursorIndicator({
     const mirror = mirrorRef.current
     if (!input || !mirror) return
 
+    // Use the actual DOM value (may differ from React value during direct updates)
+    const text = input.value
+
     const styles = window.getComputedStyle(input)
     mirror.style.font = styles.font
     mirror.style.letterSpacing = styles.letterSpacing
     mirror.style.paddingLeft = styles.paddingLeft
     mirror.style.borderLeftWidth = styles.borderLeftWidth
 
-    const cursorIdx = Math.min(cursor.anchor, value.length)
-    mirror.textContent = value.slice(0, cursorIdx)
+    const cursorIdx = Math.min(cursor.anchor, text.length)
+    mirror.textContent = text.slice(0, cursorIdx)
     const inputRect  = input.getBoundingClientRect()
     const mirrorRect = mirror.getBoundingClientRect()
 
@@ -166,8 +168,8 @@ function CursorIndicator({
     if (cursor.anchor === cursor.focus) {
       setPos({ left, top: 4, width: 2, height })
     } else {
-      const endIdx = Math.min(cursor.focus, value.length)
-      mirror.textContent = value.slice(0, endIdx)
+      const endIdx = Math.min(cursor.focus, text.length)
+      mirror.textContent = text.slice(0, endIdx)
       const endLeft = mirror.getBoundingClientRect().width - input.scrollLeft
       const selLeft = Math.min(left, endLeft)
       const selWidth = Math.abs(endLeft - left)
