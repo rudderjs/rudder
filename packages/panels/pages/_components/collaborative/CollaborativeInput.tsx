@@ -23,9 +23,38 @@ export function CollaborativeInput({
 }: Props) {
   const inputRef  = useRef<HTMLInputElement>(null)
   const mirrorRef = useRef<HTMLSpanElement>(null)
+  /** Tracks whether this input currently has focus */
+  const hasFocusRef = useRef(false)
+  /** Saved selection to restore after remote update */
+  const savedSelRef = useRef<{ start: number; end: number } | null>(null)
 
-  const { applyLocalChange } = useYTextSync(yText, onChange)
+  const handleRemoteChange = useCallback((newValue: string) => {
+    // Save current selection before React re-renders the input
+    const el = inputRef.current
+    if (el && hasFocusRef.current) {
+      savedSelRef.current = {
+        start: el.selectionStart ?? 0,
+        end:   el.selectionEnd   ?? 0,
+      }
+    }
+    onChange(newValue)
+  }, [onChange])
+
+  const { applyLocalChange } = useYTextSync(yText, handleRemoteChange)
   const { remoteCursors, broadcastCursor, clearCursor } = useYTextCursors({ yText, awareness, fieldName })
+
+  // Restore selection after React re-renders with remote value
+  useEffect(() => {
+    const el = inputRef.current
+    const saved = savedSelRef.current
+    if (el && saved && hasFocusRef.current) {
+      // Clamp to new value length
+      const start = Math.min(saved.start, value.length)
+      const end   = Math.min(saved.end,   value.length)
+      el.setSelectionRange(start, end)
+      savedSelRef.current = null
+    }
+  }, [value])
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = e.target.value
@@ -39,14 +68,32 @@ export function CollaborativeInput({
     broadcastCursor(el.selectionStart ?? 0, el.selectionEnd ?? 0)
   }, [broadcastCursor])
 
+  const handleFocus = useCallback(() => {
+    hasFocusRef.current = true
+    handleSelect()
+  }, [handleSelect])
+
+  const handleBlur = useCallback(() => {
+    hasFocusRef.current = false
+    clearCursor()
+  }, [clearCursor])
+
   // Use document selectionchange for live selection updates (fires during mouse drag)
+  // Also clears cursor when focus moves to another element
   useEffect(() => {
     function onSelectionChange() {
-      if (document.activeElement === inputRef.current) handleSelect()
+      if (document.activeElement === inputRef.current) {
+        hasFocusRef.current = true
+        handleSelect()
+      } else if (hasFocusRef.current) {
+        // Focus left this input — clear our cursor
+        hasFocusRef.current = false
+        clearCursor()
+      }
     }
     document.addEventListener('selectionchange', onSelectionChange)
     return () => document.removeEventListener('selectionchange', onSelectionChange)
-  }, [handleSelect])
+  }, [handleSelect, clearCursor])
 
   return (
     <div className="relative">
@@ -56,8 +103,8 @@ export function CollaborativeInput({
         name={name}
         value={value}
         onChange={handleChange}
-        onFocus={handleSelect}
-        onBlur={clearCursor}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
         required={required}

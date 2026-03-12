@@ -23,9 +23,34 @@ export function CollaborativeTextarea({
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mirrorRef   = useRef<HTMLDivElement>(null)
+  const hasFocusRef = useRef(false)
+  const savedSelRef = useRef<{ start: number; end: number } | null>(null)
 
-  const { applyLocalChange } = useYTextSync(yText, onChange)
+  const handleRemoteChange = useCallback((newValue: string) => {
+    const el = textareaRef.current
+    if (el && hasFocusRef.current) {
+      savedSelRef.current = {
+        start: el.selectionStart ?? 0,
+        end:   el.selectionEnd   ?? 0,
+      }
+    }
+    onChange(newValue)
+  }, [onChange])
+
+  const { applyLocalChange } = useYTextSync(yText, handleRemoteChange)
   const { remoteCursors, broadcastCursor, clearCursor } = useYTextCursors({ yText, awareness, fieldName })
+
+  // Restore selection after React re-renders with remote value
+  useEffect(() => {
+    const el = textareaRef.current
+    const saved = savedSelRef.current
+    if (el && saved && hasFocusRef.current) {
+      const start = Math.min(saved.start, value.length)
+      const end   = Math.min(saved.end,   value.length)
+      el.setSelectionRange(start, end)
+      savedSelRef.current = null
+    }
+  }, [value])
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value
@@ -39,14 +64,31 @@ export function CollaborativeTextarea({
     broadcastCursor(el.selectionStart ?? 0, el.selectionEnd ?? 0)
   }, [broadcastCursor])
 
+  const handleFocus = useCallback(() => {
+    hasFocusRef.current = true
+    handleSelect()
+  }, [handleSelect])
+
+  const handleBlur = useCallback(() => {
+    hasFocusRef.current = false
+    clearCursor()
+  }, [clearCursor])
+
   // Use document selectionchange for live selection updates (fires during mouse drag)
+  // Also clears cursor when focus moves to another element
   useEffect(() => {
     function onSelectionChange() {
-      if (document.activeElement === textareaRef.current) handleSelect()
+      if (document.activeElement === textareaRef.current) {
+        hasFocusRef.current = true
+        handleSelect()
+      } else if (hasFocusRef.current) {
+        hasFocusRef.current = false
+        clearCursor()
+      }
     }
     document.addEventListener('selectionchange', onSelectionChange)
     return () => document.removeEventListener('selectionchange', onSelectionChange)
-  }, [handleSelect])
+  }, [handleSelect, clearCursor])
 
   return (
     <div className="relative">
@@ -55,8 +97,8 @@ export function CollaborativeTextarea({
         name={name}
         value={value}
         onChange={handleChange}
-        onFocus={handleSelect}
-        onBlur={clearCursor}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}
