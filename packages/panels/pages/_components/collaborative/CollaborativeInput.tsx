@@ -67,14 +67,15 @@ export function CollaborativeInput({
   const handleRemoteChange = useCallback((newValue: string) => {
     const el = inputRef.current
     if (el && hasFocusRef.current) {
-      // Save selection as relative positions BEFORE applying the change
-      // (already saved via selectionchange, but ensure it's current)
-      saveSelection()
+      // DON'T call saveSelection() here — Y.Text is already updated,
+      // so converting current absolute indices would create positions
+      // in the NEW text that resolve back to the same index.
+      // Instead, use the RelativePosition saved earlier by selectionchange.
 
       // Update DOM directly
       el.value = newValue
 
-      // Restore selection from relative positions (now adjusted for the remote edit)
+      // Restore selection from relative positions (automatically shifted by Yjs)
       const saved = relSelRef.current
       if (saved) {
         const start = fromRelPos(saved.anchor)
@@ -86,6 +87,9 @@ export function CollaborativeInput({
           )
         }
       }
+
+      // Re-save the restored selection as new RelativePositions for the next remote edit
+      saveSelection()
       return
     }
     onChange(newValue)

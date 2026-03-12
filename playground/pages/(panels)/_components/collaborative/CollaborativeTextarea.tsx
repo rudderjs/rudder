@@ -57,7 +57,7 @@ export function CollaborativeTextarea({
   const handleRemoteChange = useCallback((newValue: string) => {
     const el = textareaRef.current
     if (el && hasFocusRef.current) {
-      saveSelection()
+      // Use RelativePosition saved earlier by selectionchange (before Y.Text was updated)
       el.value = newValue
 
       const saved = relSelRef.current
@@ -71,6 +71,9 @@ export function CollaborativeTextarea({
           )
         }
       }
+
+      // Re-save restored selection as new RelativePositions for next remote edit
+      saveSelection()
       return
     }
     onChange(newValue)
