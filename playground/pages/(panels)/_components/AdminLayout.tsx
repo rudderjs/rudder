@@ -235,7 +235,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
   )
 }
 
-export default function AdminLayout({ panelMeta, currentSlug, initialUser, children }: Props) {
+export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: Props) {
   const slug = currentSlug ?? ''
   const content = panelMeta.layout === 'topbar'
     ? <TopbarLayout panelMeta={panelMeta} currentSlug={slug} initialUser={initialUser}>{children}</TopbarLayout>
