@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import type { ContentBlockDef, NodeData, NodeMap } from '@boostkit/panels'
 import { contentBlockDefs, ensureNodeMap, addNode, updateNodeProps, removeNode, removeNodeRecursive, reorderNode } from '@boostkit/panels'
 import { useCrossBlockSelection } from '../_hooks/useCrossBlockSelection.js'
@@ -85,6 +85,119 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
     }
     return yText
   }, [yDoc, yDocSynced])
+
+  // ── Structural sync via Y.Map ──────────────────────────────
+  // Syncs add/remove/reorder of blocks across users.
+  // Text content for text blocks is NOT included (handled by per-block Y.Text).
+  const lastSyncedFingerprintRef = useRef('')
+  const suppressStructuralObserverRef = useRef(false)
+  /** True after we've applied the initial remote structure (or confirmed none exists).
+   *  Prevents the local→Y.Map sync from overwriting remote state with stale DB values on refresh. */
+  const initialStructureAppliedRef = useRef(false)
+
+  /** Fingerprint that changes only on structural changes, not text edits */
+  function structuralFingerprint(map: NodeMap): string {
+    const keys = Object.keys(map).sort()
+    return keys.map(k => {
+      const n = map[k]
+      if (!n) return ''
+      const props = TEXT_BLOCK_TYPES.has(n.type)
+        ? Object.entries(n.props).filter(([k]) => k !== 'text').map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('&')
+        : JSON.stringify(n.props)
+      return `${k}:${n.type}:${n.parent}:[${n.nodes.join(',')}]:${props}`
+    }).join('|')
+  }
+
+  // Sync local structural changes → Y.Map
+  // Gated by initialStructureAppliedRef to avoid overwriting remote state with stale DB on refresh.
+  useEffect(() => {
+    if (!yDoc || !yDocSynced || !initialStructureAppliedRef.current) return
+
+    const fp = structuralFingerprint(value)
+    if (fp === lastSyncedFingerprintRef.current) return
+    lastSyncedFingerprintRef.current = fp
+
+    const structMap = yDoc.getMap('content:structure')
+    const stripped: Record<string, unknown> = {}
+    for (const [id, node] of Object.entries(value)) {
+      if (!node) continue
+      const props = TEXT_BLOCK_TYPES.has(node.type)
+        ? Object.fromEntries(Object.entries(node.props).filter(([k]) => k !== 'text'))
+        : node.props
+      stripped[id] = { type: node.type, props, parent: node.parent, nodes: [...node.nodes] }
+    }
+    suppressStructuralObserverRef.current = true
+    structMap.set('map', JSON.stringify(stripped))
+  }) // runs every render, fingerprint check prevents unnecessary Y.Map writes
+
+  // Observe remote structural changes → update local NodeMap
+  useEffect(() => {
+    if (!yDoc || !yDocSynced) return
+    const structMap = yDoc.getMap('content:structure')
+
+    // On initial sync: if Y.Map has structure, it's the source of truth (may have unsaved blocks).
+    // If no remote structure exists, the DB value is correct — mark as applied so local sync can start.
+    const initial = structMap.get('map') as string | undefined
+    if (initial) {
+      const remote = JSON.parse(initial) as Record<string, NodeData>
+      lastSyncedFingerprintRef.current = structuralFingerprint(remote as NodeMap)
+      mergeRemoteStructure(remote)
+    } else {
+      // No remote structure yet — seed Y.Map from current DB-loaded value
+      lastSyncedFingerprintRef.current = structuralFingerprint(value)
+    }
+    initialStructureAppliedRef.current = true
+
+    function handler(_event: any, transaction: any) {
+      if (suppressStructuralObserverRef.current) {
+        suppressStructuralObserverRef.current = false
+        return
+      }
+      if (transaction.local) return
+      const raw = structMap.get('map') as string | undefined
+      if (!raw) return
+      const remote = JSON.parse(raw) as Record<string, NodeData>
+      lastSyncedFingerprintRef.current = structuralFingerprint(remote as NodeMap)
+      mergeRemoteStructure(remote)
+    }
+
+    structMap.observe(handler)
+    return () => structMap.unobserve(handler)
+  }, [yDoc, yDocSynced]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Merge remote NodeMap structure with Y.Text content for text blocks.
+   *  Preserves the active selection across the DOM reorder. */
+  function mergeRemoteStructure(remote: Record<string, NodeData>) {
+    // Save selection — React will move DOM nodes (insertBefore) which clears it
+    const sel = window.getSelection()
+    const savedRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null
+
+    const merged: NodeMap = {}
+    for (const [id, node] of Object.entries(remote)) {
+      if (!node) continue
+      if (TEXT_BLOCK_TYPES.has(node.type)) {
+        const yText = yDoc!.getText(`block:${id}`)
+        merged[id] = { ...node, props: { ...node.props, text: yText.toString() } }
+      } else {
+        merged[id] = node
+      }
+    }
+    onChange(merged)
+
+    // Restore selection after React commits the DOM reorder
+    if (savedRange) {
+      requestAnimationFrame(() => {
+        const s = window.getSelection()
+        if (!s) return
+        try {
+          s.removeAllRanges()
+          s.addRange(savedRange)
+        } catch {
+          // Range references may be invalid if the block was removed
+        }
+      })
+    }
+  }
 
   function handleAddBlock(type: string, atIndex?: number, parentId?: string) {
     const props = defaultBlockProps[type]
