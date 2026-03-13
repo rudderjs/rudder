@@ -80,6 +80,70 @@ export function removeNode(map: NodeMap, id: string): NodeMap {
   }
 }
 
+/** Remove a node, all its descendants, and its ID from its parent's nodes array. */
+export function removeNodeRecursive(map: NodeMap, id: string): NodeMap {
+  const node = map[id]
+  if (!node) return map
+  const parent = map[node.parent]
+  if (!parent) return map
+
+  // Collect all descendant IDs
+  const toRemove = new Set<string>()
+  function collect(nodeId: string) {
+    toRemove.add(nodeId)
+    const n = map[nodeId]
+    if (n) n.nodes.forEach(collect)
+  }
+  collect(id)
+
+  // Build new map without removed nodes
+  const result: NodeMap = {}
+  for (const [k, v] of Object.entries(map)) {
+    if (!toRemove.has(k)) result[k] = v
+  }
+  // Update parent's children
+  result[node.parent] = { ...parent, nodes: parent.nodes.filter(nid => nid !== id) }
+  return result
+}
+
+/** Move a node (and its subtree) from one parent to another at a given index. */
+export function moveNodeToParent(
+  map: NodeMap,
+  id: string,
+  newParentId: string,
+  atIndex?: number,
+): NodeMap {
+  const node = map[id]
+  if (!node) return map
+  const oldParent = map[node.parent]
+  const newParent = map[newParentId]
+  if (!oldParent || !newParent) return map
+  if (node.parent === newParentId) {
+    // Same parent — just reorder
+    const nodes = [...newParent.nodes]
+    const fromIdx = nodes.indexOf(id)
+    if (fromIdx === -1) return map
+    nodes.splice(fromIdx, 1)
+    const idx = atIndex ?? nodes.length
+    nodes.splice(idx, 0, id)
+    return { ...map, [newParentId]: { ...newParent, nodes } }
+  }
+
+  // Remove from old parent
+  const oldNodes = oldParent.nodes.filter(nid => nid !== id)
+  // Insert into new parent
+  const newNodes = [...newParent.nodes]
+  const idx = atIndex ?? newNodes.length
+  newNodes.splice(idx, 0, id)
+
+  return {
+    ...map,
+    [id]:          { ...node, parent: newParentId },
+    [node.parent]: { ...oldParent, nodes: oldNodes },
+    [newParentId]: { ...newParent, nodes: newNodes },
+  }
+}
+
 /** Move a node up or down within its parent's nodes array. */
 export function moveNode(map: NodeMap, id: string, direction: -1 | 1): NodeMap {
   const node = map[id]

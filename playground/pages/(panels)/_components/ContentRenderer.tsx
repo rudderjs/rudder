@@ -17,13 +17,13 @@ export function ContentRenderer({ value, className }: Props) {
     <div className={['prose prose-sm dark:prose-invert max-w-none', className].filter(Boolean).join(' ')}>
       {root.nodes.map((id) => {
         const node = map[id]
-        return node ? <NodeView key={id} node={node} /> : null
+        return node ? <NodeView key={id} nodeId={id} node={node} map={map} /> : null
       })}
     </div>
   )
 }
 
-function NodeView({ node }: { node: NodeData }) {
+function NodeView({ nodeId, node, map }: { nodeId: string; node: NodeData; map: NodeMap }) {
   const p = node.props
   switch (node.type) {
     case 'paragraph':
@@ -53,12 +53,56 @@ function NodeView({ node }: { node: NodeData }) {
       const Tag = (p.style as string) === 'numbered' ? 'ol' : 'ul'
       return (
         <Tag>
-          {(Array.isArray(p.items) ? p.items : []).map((item, i) => (
+          {node.nodes.map(itemId => {
+            const item = map[itemId]
+            if (!item || item.type !== 'list-item') return null
+            const sublistId = item.nodes.find(id => map[id]?.type === 'list')
+            return (
+              <li key={itemId}>
+                {(item.props.text as string) || ''}
+                {sublistId && map[sublistId] && (
+                  <NodeView nodeId={sublistId} node={map[sublistId]!} map={map} />
+                )}
+              </li>
+            )
+          })}
+          {/* Legacy flat items fallback */}
+          {node.nodes.length === 0 && Array.isArray(p.items) && (p.items as string[]).map((item, i) => (
             <li key={i}>{item as string}</li>
           ))}
         </Tag>
       )
     }
+    case 'table': {
+      const cols = (p.cols as number) ?? 2
+      const cellIds = node.nodes
+      const rows = Math.ceil(cellIds.length / cols)
+      return (
+        <table>
+          <tbody>
+            {Array.from({ length: rows }, (_, r) => (
+              <tr key={r}>
+                {Array.from({ length: cols }, (_, c) => {
+                  const cellId = cellIds[r * cols + c]
+                  const cell = cellId ? map[cellId] : null
+                  return (
+                    <td key={c}>
+                      {cell && cell.nodes.map(childId => {
+                        const child = map[childId]
+                        return child ? <NodeView key={childId} nodeId={childId} node={child} map={map} /> : null
+                      })}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+    case 'table-cell':
+    case 'list-item':
+      return null
     default:
       return null
   }
