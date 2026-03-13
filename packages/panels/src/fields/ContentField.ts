@@ -4,7 +4,7 @@ export class ContentField extends Field {
   constructor(name: string) {
     super(name)
     this._extra['blockTypes'] = [
-      'paragraph', 'heading', 'image', 'divider', 'code', 'quote', 'list',
+      'paragraph', 'heading', 'image', 'divider', 'code', 'quote', 'list', 'table',
     ]
   }
 

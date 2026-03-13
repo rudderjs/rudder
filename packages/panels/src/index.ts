@@ -56,7 +56,7 @@ export type { BlockMeta } from './Block.js'
 // ─── Node Map (shared block infrastructure) ──────────────────
 export {
   nodeId, emptyNodeMap,
-  addNode, updateNodeProps, removeNode, moveNode, reorderNode,
+  addNode, updateNodeProps, removeNode, removeNodeRecursive, moveNode, moveNodeToParent, reorderNode,
   arrayToNodeMap, repeaterArrayToNodeMap, nodeMapToArray, ensureNodeMap,
 } from './NodeMap.js'
 export type { NodeData, NodeMap } from './NodeMap.js'
