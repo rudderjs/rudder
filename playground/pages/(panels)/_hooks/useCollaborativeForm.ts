@@ -80,20 +80,30 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       }
       yTextMapRef.current = yTexts
 
-      // Seed initial text content
-      doc.transact(() => {
-        for (const f of textFields) {
-          const yText = yTexts.get(f.name)!
-          const initVal = String(options!.values[f.name] ?? '')
-          if (yText.length === 0 && initVal) {
-            yText.insert(0, initVal)
+      // Seed initial content AFTER first sync from server.
+      // If we seed before sync, both the seed and server state merge → duplicated text.
+      function seedAfterSync() {
+        if (destroyed) return
+        doc.transact(() => {
+          for (const f of textFields) {
+            const yText = yTexts.get(f.name)!
+            const initVal = String(options!.values[f.name] ?? '')
+            // Only seed if Y.Text is still empty after sync (first-ever connection)
+            if (yText.length === 0 && initVal) {
+              yText.insert(0, initVal)
+            }
           }
-        }
-        // Seed non-text collaborative fields
-        for (const f of mapFields) {
-          if (!fieldsMap.has(f.name)) fieldsMap.set(f.name, options!.values[f.name] ?? null)
-        }
-      })
+          for (const f of mapFields) {
+            if (!fieldsMap.has(f.name)) fieldsMap.set(f.name, options!.values[f.name] ?? null)
+          }
+        })
+      }
+
+      if (provider.synced) {
+        seedAfterSync()
+      } else {
+        provider.once('synced', seedAfterSync)
+      }
 
       // Observe Y.Text changes → update React state
       for (const f of textFields) {
