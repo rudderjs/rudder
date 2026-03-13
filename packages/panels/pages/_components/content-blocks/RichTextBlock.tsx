@@ -12,6 +12,23 @@ interface Props {
   yText?:     any | null
   awareness?: any | null
   fieldName?: string
+  /** Called when "/" is typed in an empty block — receives caret position for menu placement */
+  onSlashCommand?: (position: { top: number; left: number }) => void
+  /** Called on double Enter — parent should create a new block after this one */
+  onNewBlockAfter?: () => void
+  /** Called on Backspace in an empty block — parent should delete this block and focus previous */
+  onDeleteBlock?: () => void
+  /** When true, arrow/enter/escape keystrokes are forwarded to slash menu handlers */
+  slashMenuActive?: boolean
+  /** Slash menu navigation callbacks */
+  onSlashNavigate?: (delta: number) => void
+  onSlashSelect?: () => void
+  onSlashClose?: () => void
+  onSlashQueryChange?: (query: string) => void
+  /** Called on Tab/Shift+Tab — used by list items for indent/outdent */
+  onTab?: (shiftKey: boolean) => void
+  /** When true, single Enter at end creates new block (used by list items) */
+  enterCreatesBlock?: boolean
 }
 
 const tagStyles: Record<string, string> = {
@@ -58,12 +75,13 @@ function textLength(root: Node): number {
   return count
 }
 
-export function RichTextBlock({ text, onChange, tag = 'p', disabled, placeholder, yText, awareness, fieldName }: Props) {
+export function RichTextBlock({ text, onChange, tag = 'p', disabled, placeholder, yText, awareness, fieldName, onSlashCommand, onNewBlockAfter, onDeleteBlock, slashMenuActive, onSlashNavigate, onSlashSelect, onSlashClose, onSlashQueryChange, onTab, enterCreatesBlock }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const lastHtml = useRef(text)
   const hasFocusRef = useRef(false)
   const relSelRef = useRef<{ anchor: any; focus: any } | null>(null)
   const yRef = useRef<any>(null)
+  const lastEnterRef = useRef<number>(0)
 
   // Load Yjs for RelativePosition
   useEffect(() => {
@@ -189,11 +207,53 @@ export function RichTextBlock({ text, onChange, tag = 'p', disabled, placeholder
       onChange(html)
       applyLocalChange(html)
     }
-  }, [onChange, applyLocalChange])
+    // Forward plain text as slash query when menu is active
+    if (slashMenuActive && onSlashQueryChange) {
+      const plainText = ref.current.textContent ?? ''
+      onSlashQueryChange(plainText)
+    }
+  }, [onChange, applyLocalChange, slashMenuActive, onSlashQueryChange])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (disabled) return
     const mod = e.metaKey || e.ctrlKey
+
+    // When slash menu is active, intercept navigation keys
+    if (slashMenuActive) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        onSlashNavigate?.(1)
+        return
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        onSlashNavigate?.(-1)
+        return
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        onSlashSelect?.()
+        return
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        // Clear typed filter text from the contenteditable
+        const el = ref.current
+        if (el) {
+          el.innerHTML = ''
+          lastHtml.current = ''
+          onChange('')
+          applyLocalChange('')
+        }
+        onSlashClose?.()
+        return
+      }
+      // All other keys: let them type into the contenteditable (used as filter)
+      // The onInput handler will fire and we pass query up via handleInput
+    }
+
+    if (e.key === 'Tab' && onTab) {
+      e.preventDefault()
+      onTab(e.shiftKey)
+      return
+    }
 
     if (mod && e.key === 'b') {
       e.preventDefault()
@@ -208,11 +268,80 @@ export function RichTextBlock({ text, onChange, tag = 'p', disabled, placeholder
       e.preventDefault()
       const url = prompt('Link URL:')
       if (url) document.execCommand('createLink', false, url)
+    } else if (e.key === 'Backspace' && onDeleteBlock) {
+      const el = ref.current
+      if (el && (el.textContent ?? '').trim() === '' && el.innerHTML.replace(/<br\s*\/?>/g, '').trim() === '') {
+        e.preventDefault()
+        onDeleteBlock()
+        return
+      }
+    } else if (e.key === '/' && onSlashCommand) {
+      // Show slash command menu if block is empty
+      const el = ref.current
+      if (el) {
+        const plainText = el.textContent ?? ''
+        if (plainText.trim() === '') {
+          e.preventDefault()
+          // Use the element's own rect — range rect is zero in empty contenteditable
+          const elRect = el.getBoundingClientRect()
+          onSlashCommand({
+            top: elRect.bottom + 4,
+            left: elRect.left,
+          })
+        }
+      }
     } else if (e.key === 'Enter' && !e.shiftKey) {
+      const now = Date.now()
+      const el = ref.current
+
+      // Helper: check if caret is at end of content
+      function isCaretAtEnd(): boolean {
+        if (!el) return false
+        const sel = window.getSelection()
+        if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) return false
+        const range = document.createRange()
+        range.setStart(sel.anchorNode!, sel.anchorOffset)
+        range.setEnd(el, el.childNodes.length)
+        const afterCaret = range.cloneContents()
+        const tmp = document.createElement('div')
+        tmp.appendChild(afterCaret)
+        return (tmp.textContent ?? '').trim() === ''
+      }
+
+      // List-item mode: single Enter at end creates new item
+      if (enterCreatesBlock && onNewBlockAfter && el) {
+        if (isCaretAtEnd()) {
+          e.preventDefault()
+          onNewBlockAfter()
+          return
+        }
+        // Not at end — insert line break normally
+        e.preventDefault()
+        document.execCommand('insertLineBreak')
+        return
+      }
+
+      // Paragraph mode: double Enter at end creates new block
+      if (onNewBlockAfter && now - lastEnterRef.current < 500 && el) {
+        if (isCaretAtEnd()) {
+          e.preventDefault()
+          let html = el.innerHTML
+          html = html.replace(/(<br\s*\/?>)+\s*$/, '')
+          el.innerHTML = html
+          lastHtml.current = html
+          onChange(html)
+          applyLocalChange(html)
+          lastEnterRef.current = 0
+          onNewBlockAfter()
+          return
+        }
+      }
+
+      lastEnterRef.current = now
       e.preventDefault()
       document.execCommand('insertLineBreak')
     }
-  }, [disabled])
+  }, [disabled, slashMenuActive, onSlashNavigate, onSlashSelect, onSlashClose, onSlashCommand, onNewBlockAfter, onDeleteBlock, onChange, applyLocalChange, onTab, enterCreatesBlock])
 
   // Broadcast cursor on selection changes
   const handleSelectionBroadcast = useCallback(() => {
