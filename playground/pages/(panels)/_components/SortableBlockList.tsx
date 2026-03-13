@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DndContext, closestCenter, DragOverlay, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -19,14 +19,18 @@ interface Props {
 /**
  * Self-contained sortable list with its own DndContext.
  * Drag is scoped to this container only — no cross-container moves.
+ * DndContext is client-only to avoid SSR hydration mismatches (aria-describedby IDs differ).
  */
 export function SortableBlockList({ nodeIds, renderNode, onReorder, disabled }: Props) {
+  const [mounted, setMounted] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
-  if (disabled || !onReorder) {
+  useEffect(() => { setMounted(true) }, [])
+
+  if (disabled || !onReorder || !mounted) {
     return (
       <>
         {nodeIds.map((id, index) => (

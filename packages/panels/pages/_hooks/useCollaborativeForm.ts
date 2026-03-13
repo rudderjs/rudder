@@ -180,12 +180,18 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
     return yTextMapRef.current.get(fieldName) ?? null
   }, [])
 
+  /** Get the Y.Doc instance for creating per-block Y.Text (e.g. content blocks) */
+  const getDoc = useCallback(() => {
+    return docRef.current ?? null
+  }, [])
+
   return {
     connected,
     presences,
     setCollaborativeValue,
     syncAllFieldsToDoc,
     getYText,
+    getDoc,
     awareness: awarenessRef.current,
   }
 }

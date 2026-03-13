@@ -661,6 +661,14 @@ export class PanelServiceProvider extends ServiceProvider {
       } else if (type === 'tags') {
         // UI submits an array; store as JSON string
         result[name] = Array.isArray(val) ? JSON.stringify(val) : (val ?? '[]')
+      } else if (type === 'content') {
+        // Prisma Json? field: pass object as-is, parse JSON strings, empty → null
+        if (val === '' || val === null || val === undefined) {
+          result[name] = null
+        } else if (typeof val === 'string') {
+          try { result[name] = JSON.parse(val) } catch { result[name] = null }
+        }
+        // else: already an object — pass through
       } else if (type === 'belongsTo') {
         result[name] = (val === '' || val === null || val === undefined) ? null : String(val)
       } else if (type === 'belongsToMany') {
