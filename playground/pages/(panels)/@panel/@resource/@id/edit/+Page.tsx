@@ -112,7 +112,7 @@ export default function EditPage() {
 
   const collabFields = formFields.map((f) => ({
     name: f.name,
-    collaborative: f.type === 'content' ? false : (f.collaborative ?? false),
+    collaborative: (f.type === 'content' || f.type === 'richcontent') ? false : (f.collaborative ?? false),
     textField: f.collaborative && (f.type === 'text' || f.type === 'textarea' || f.type === 'email'),
   }))
 

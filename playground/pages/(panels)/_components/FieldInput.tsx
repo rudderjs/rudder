@@ -10,6 +10,7 @@ import { CollaborativeTextarea } from './collaborative/CollaborativeTextarea.js'
 import { customFieldRenderers } from './CustomFieldRenderers.js'
 import { SortableBlockList } from './SortableBlockList.js'
 import { ContentEditor } from './ContentEditor.js'
+import { LexicalEditor } from './LexicalEditor.js'
 
 interface Props {
   field:       FieldMeta
@@ -652,6 +653,23 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
         yDoc={yDoc}
         awareness={awareness}
         yDocSynced={yDocSynced}
+      />
+    )
+  }
+
+  // ── Rich Content (Lexical) ───────────────────────────────
+  if (field.type === 'richcontent') {
+    return (
+      <LexicalEditor
+        value={value}
+        onChange={onChange}
+        placeholder={field.extra?.placeholder as string | undefined}
+        disabled={isDisabled}
+        yDoc={yDoc}
+        awareness={awareness}
+        yDocSynced={yDocSynced}
+        fragmentName={`richcontent:${field.name}`}
+        blocks={field.extra?.blocks as any[] | undefined}
       />
     )
   }

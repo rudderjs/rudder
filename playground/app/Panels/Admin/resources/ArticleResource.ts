@@ -12,6 +12,7 @@ import {
   FileField,
   JsonField,
   ContentField,
+  RichContentField,
   RelationField,
   ComputedField,
   SelectFilter,
@@ -72,6 +73,11 @@ export class ArticleResource extends Resource {
         ContentField.make('content')
           .label('Content')
           .placeholder('Start writing...')
+          .collaborative(),
+
+        RichContentField.make('body')
+          .label('Body (Lexical)')
+          .placeholder('Start writing your article…')
           .collaborative(),
 
         TagsField.make('tags')
