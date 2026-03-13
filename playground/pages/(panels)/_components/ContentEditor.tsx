@@ -165,12 +165,50 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
     return () => structMap.unobserve(handler)
   }, [yDoc, yDocSynced]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Walk text nodes to convert a flat char index → { node, offset } in the DOM */
+  function indexToNodeOffset(root: Node, target: number): { node: Node; offset: number } | null {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let count = 0
+    while (walker.nextNode()) {
+      const len = walker.currentNode.textContent!.length
+      if (count + len >= target) return { node: walker.currentNode, offset: target - count }
+      count += len
+    }
+    if (root.childNodes.length === 0) return { node: root, offset: 0 }
+    return null
+  }
+
+  /** Walk text nodes to convert a DOM { node, offset } → flat char index */
+  function nodeOffsetToIndex(root: Node, targetNode: Node, offset: number): number {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let count = 0
+    while (walker.nextNode()) {
+      if (walker.currentNode === targetNode) return count + offset
+      count += walker.currentNode.textContent!.length
+    }
+    return count
+  }
+
   /** Merge remote NodeMap structure with Y.Text content for text blocks.
    *  Preserves the active selection across the DOM reorder. */
   function mergeRemoteStructure(remote: Record<string, NodeData>) {
-    // Save selection — React will move DOM nodes (insertBefore) which clears it
+    // Save selection as block ID + text offsets (stable across DOM moves)
+    let savedSel: { blockId: string; start: number; end: number } | null = null
     const sel = window.getSelection()
-    const savedRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0)
+      const ce = (range.startContainer as HTMLElement).closest?.('[contenteditable]')
+        ?? (range.startContainer.parentElement?.closest('[contenteditable]'))
+      const blockEl = ce?.closest('[data-block-id]')
+      if (ce && blockEl) {
+        const blockId = blockEl.getAttribute('data-block-id')!
+        savedSel = {
+          blockId,
+          start: nodeOffsetToIndex(ce, range.startContainer, range.startOffset),
+          end:   nodeOffsetToIndex(ce, range.endContainer, range.endOffset),
+        }
+      }
+    }
 
     const merged: NodeMap = {}
     for (const [id, node] of Object.entries(remote)) {
@@ -184,17 +222,24 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
     }
     onChange(merged)
 
-    // Restore selection after React commits the DOM reorder
-    if (savedRange) {
+    // Restore selection by finding the block fresh in the post-render DOM
+    if (savedSel) {
+      const { blockId, start, end } = savedSel
       requestAnimationFrame(() => {
+        const blockEl = document.querySelector(`[data-block-id="${blockId}"]`)
+        const ce = blockEl?.querySelector('[contenteditable]') as HTMLElement
+        if (!ce) return
+        ce.focus({ preventScroll: true })
+        const startPos = indexToNodeOffset(ce, start)
+        const endPos   = indexToNodeOffset(ce, end)
+        if (!startPos || !endPos) return
         const s = window.getSelection()
         if (!s) return
-        try {
-          s.removeAllRanges()
-          s.addRange(savedRange)
-        } catch {
-          // Range references may be invalid if the block was removed
-        }
+        const range = document.createRange()
+        range.setStart(startPos.node, startPos.offset)
+        range.setEnd(endPos.node, endPos.offset)
+        s.removeAllRanges()
+        s.addRange(range)
       })
     }
   }
