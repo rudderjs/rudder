@@ -133,6 +133,7 @@ export function TableBlock({ node, nodeId, nodeMap, onChange, renderBlock, defs,
                       defaultBlockProps={defaultBlockProps}
                       disabled={disabled}
                       placeholder="Type or add block..."
+                      autoEmptyParagraph
                     />
                   </td>
                 )

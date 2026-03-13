@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { NodeData, NodeMap, ContentBlockDef } from '@boostkit/panels'
 import { addNode, removeNode, removeNodeRecursive, reorderNode } from '@boostkit/panels'
 import { BlockPicker } from './BlockPicker.js'
@@ -21,15 +22,31 @@ interface Props {
   maxBlocks?:   number
   /** Placeholder when empty */
   placeholder?: string
+  /** Auto-create an empty paragraph when container has no children */
+  autoEmptyParagraph?: boolean
 }
 
 export function NestedBlockEditor({
-  nodeMap, parentId, onChange, renderBlock, defs, defaultBlockProps, disabled, maxBlocks, placeholder,
+  nodeMap, parentId, onChange, renderBlock, defs, defaultBlockProps, disabled, maxBlocks, placeholder, autoEmptyParagraph,
 }: Props) {
   const parent  = nodeMap[parentId]
   if (!parent) return null
   const childIds = parent.nodes
   const atMax    = maxBlocks !== undefined && childIds.length >= maxBlocks
+  const autoInitRef = useRef(false)
+
+  // Auto-create an empty paragraph in empty containers (e.g. table cells)
+  useEffect(() => {
+    if (autoInitRef.current || !autoEmptyParagraph || disabled) return
+    autoInitRef.current = true
+    if (childIds.length === 0) {
+      const props = defaultBlockProps['paragraph']
+      if (props) {
+        const { map } = addNode(nodeMap, 'paragraph', { ...props }, parentId)
+        onChange(map)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleAdd(type: string, atIndex?: number) {
     const props = defaultBlockProps[type]
@@ -39,7 +56,6 @@ export function NestedBlockEditor({
   }
 
   function handleRemove(id: string) {
-    // Use recursive remove for container blocks that may have children
     const node = nodeMap[id]
     if (node && node.nodes.length > 0) {
       onChange(removeNodeRecursive(nodeMap, id))
@@ -62,6 +78,10 @@ export function NestedBlockEditor({
   }
 
   if (childIds.length === 0 && !disabled) {
+    if (autoEmptyParagraph) {
+      // Will be auto-created by effect above — show nothing while waiting
+      return null
+    }
     return (
       <div className="flex items-center justify-center py-3 text-xs text-muted-foreground">
         <BlockPicker defs={defs} onSelect={(type) => handleAdd(type)} trigger="empty" placeholder={placeholder ?? 'Add content...'} />
@@ -85,8 +105,10 @@ export function NestedBlockEditor({
             {renderBlock(node, id, (patch) => handleUpdateProps(id, patch), nodeMap)}
             {!disabled && !atMax && index < childIds.length - 1 && (
               <div className="h-0 relative">
-                <div className="absolute inset-x-0 flex justify-center opacity-0 group-hover/nested-block:opacity-100 transition-opacity z-10">
-                  <BlockPicker defs={defs} onSelect={(type) => handleAdd(type, index + 1)} trigger="between" />
+                <div className="absolute inset-x-0 flex justify-center opacity-0 group-hover/nested-block:opacity-100 transition-opacity z-10 pointer-events-none">
+                  <div className="pointer-events-auto">
+                    <BlockPicker defs={defs} onSelect={(type) => handleAdd(type, index + 1)} trigger="between" />
+                  </div>
                 </div>
               </div>
             )}

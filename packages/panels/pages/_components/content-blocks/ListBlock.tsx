@@ -1,6 +1,8 @@
 import { useRef } from 'react'
 import type { NodeData, NodeMap, ContentBlockDef } from '@boostkit/panels'
-import { addNode, removeNode, removeNodeRecursive } from '@boostkit/panels'
+import { addNode, removeNode, removeNodeRecursive, reorderNode } from '@boostkit/panels'
+import { RichTextBlock } from './RichTextBlock.js'
+import { SortableBlockList } from '../SortableBlockList.js'
 
 interface Props {
   node:             NodeData
@@ -11,9 +13,17 @@ interface Props {
   defs:             ContentBlockDef[]
   defaultBlockProps: Record<string, Record<string, unknown>>
   disabled?:        boolean
+  /** Slash command handler from ContentEditor */
+  onSlashCommand?:  (blockId: string, parentId: string, position: { top: number; left: number }) => void
+  /** Slash menu state from ContentEditor */
+  slashBlockId?:    string | null
+  slashNavigate?:   (delta: number) => void
+  slashSelect?:     () => void
+  slashClose?:      () => void
+  slashQueryChange?:(query: string) => void
 }
 
-export function ListBlock({ node, nodeId, nodeMap, onChange, disabled }: Props) {
+export function ListBlock({ node, nodeId, nodeMap, onChange, disabled, onSlashCommand, slashBlockId, slashNavigate, slashSelect, slashClose, slashQueryChange }: Props) {
   const style    = (node.props.style as 'bullet' | 'numbered') ?? 'bullet'
   const itemIds  = node.nodes
   const initRef  = useRef(false)
@@ -24,7 +34,7 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled }: Props) 
     const legacyItems = Array.isArray(node.props.items) ? (node.props.items as string[]) : ['']
     let map = nodeMap
     for (const text of legacyItems) {
-      const result = addNode(map, 'list-item', { text }, nodeId)
+      const result = addNode(map, 'list-item', { text: text || '' }, nodeId)
       map = result.map
     }
     onChange(map)
@@ -45,8 +55,12 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled }: Props) 
   }
 
   function addItemAfter(afterIndex: number) {
-    const { map } = addNode(nodeMap, 'list-item', { text: '' }, nodeId, afterIndex + 1)
+    const { map, id: newId } = addNode(nodeMap, 'list-item', { text: '' }, nodeId, afterIndex + 1)
     onChange(map)
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-list-item-id="${newId}"] [contenteditable]`) as HTMLElement
+      el?.focus()
+    })
   }
 
   function removeItem(itemId: string) {
@@ -59,41 +73,68 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled }: Props) 
     }
   }
 
+  function handleDeleteItem(itemId: string, itemIndex: number) {
+    if (itemIds.length <= 1) return
+    const prevId = itemIndex > 0 ? itemIds[itemIndex - 1] : null
+    removeItem(itemId)
+    if (prevId) {
+      requestAnimationFrame(() => {
+        const prevEl = document.querySelector(`[data-list-item-id="${prevId}"] [contenteditable]`) as HTMLElement
+        if (prevEl) {
+          prevEl.focus()
+          const sel = window.getSelection()
+          if (sel) {
+            const range = document.createRange()
+            range.selectNodeContents(prevEl)
+            range.collapse(false)
+            sel.removeAllRanges()
+            sel.addRange(range)
+          }
+        }
+      })
+    }
+  }
+
+  function handleNewItemAfter(itemId: string) {
+    const itemIndex = itemIds.indexOf(itemId)
+    if (itemIndex === -1) return
+    addItemAfter(itemIndex)
+  }
+
+  function handleItemSlashCommand(itemId: string, position: { top: number; left: number }) {
+    onSlashCommand?.(itemId, nodeId, position)
+  }
+
+  function handleReorder(id: string, fromIndex: number, toIndex: number) {
+    onChange(reorderNode(nodeMap, id, fromIndex, toIndex))
+  }
+
   function indentItem(itemId: string, itemIndex: number) {
-    // Indent = make this item a child of a sublist under the previous sibling
     if (itemIndex === 0) return
     const prevId = itemIds[itemIndex - 1]!
     const prevItem = nodeMap[prevId]!
 
-    // Check if prev sibling already has a sublist
     const existingSublist = prevItem.nodes.find(id => nodeMap[id]?.type === 'list')
     let map = { ...nodeMap }
 
     if (existingSublist) {
-      // Add to existing sublist
       const sublist = map[existingSublist]!
       map[existingSublist] = { ...sublist, nodes: [...sublist.nodes, itemId] }
     } else {
-      // Create a new sublist under prev sibling
       const result = addNode(map, 'list', { style }, prevId)
       map = result.map
-      // Move item into the new sublist
       const sublistId = result.id
       map[sublistId] = { ...map[sublistId]!, nodes: [itemId] }
     }
 
-    // Remove item from current parent
     const parentNode = map[nodeId]!
     map[nodeId] = { ...parentNode, nodes: parentNode.nodes.filter(id => id !== itemId) }
-    // Update item's parent
     const sublistId = existingSublist ?? Object.keys(map).find(k => map[k]!.nodes.includes(itemId) && k !== nodeId)!
     map[itemId] = { ...map[itemId]!, parent: sublistId }
     onChange(map)
   }
 
   function outdentItem(itemId: string) {
-    // Outdent = move this item from sublist back to grandparent list
-    // Current parent is this list (nodeId). This list's parent should be a list-item. That list-item's parent should be the grandparent list.
     const thisList = nodeMap[nodeId]
     if (!thisList) return
     const parentItem = nodeMap[thisList.parent]
@@ -103,54 +144,24 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled }: Props) 
 
     let map = { ...nodeMap }
 
-    // Remove item from this sublist
     const sublistNode = map[nodeId]!
     map[nodeId] = { ...sublistNode, nodes: sublistNode.nodes.filter(id => id !== itemId) }
 
-    // Insert item after the parent list-item in the grandparent list
     const gpNode = map[parentItem.parent]!
     const parentItemIndex = gpNode.nodes.indexOf(thisList.parent)
     const newNodes = [...gpNode.nodes]
     newNodes.splice(parentItemIndex + 1, 0, itemId)
     map[parentItem.parent] = { ...gpNode, nodes: newNodes }
 
-    // Update item's parent
     map[itemId] = { ...map[itemId]!, parent: parentItem.parent }
 
-    // Clean up empty sublist
     if (map[nodeId]!.nodes.length === 0) {
-      // Remove empty sublist from parent item
       const pItem = map[thisList.parent]!
       map[thisList.parent] = { ...pItem, nodes: pItem.nodes.filter(id => id !== nodeId) }
       delete map[nodeId]
     }
 
     onChange(map)
-  }
-
-  function handleKeyDown(itemId: string, itemIndex: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addItemAfter(itemIndex)
-      setTimeout(() => {
-        const container = (e.target as HTMLElement).closest('[data-list-id]')
-        const inputs = container?.querySelectorAll(':scope > ul > li > input[data-list-item], :scope > ol > li > input[data-list-item]')
-        const next = inputs?.[itemIndex + 1] as HTMLInputElement | undefined
-        next?.focus()
-      }, 0)
-    }
-    if (e.key === 'Backspace' && (e.target as HTMLInputElement).value === '' && itemIds.length > 1) {
-      e.preventDefault()
-      removeItem(itemId)
-    }
-    if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault()
-      indentItem(itemId, itemIndex)
-    }
-    if (e.key === 'Tab' && e.shiftKey) {
-      e.preventDefault()
-      outdentItem(itemId)
-    }
   }
 
   const Tag = style === 'numbered' ? 'ol' : 'ul'
@@ -166,38 +177,55 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled }: Props) 
         {style === 'bullet' ? '•' : '1.'}
       </button>
       <Tag className={`flex-1 flex flex-col gap-0.5 ${style === 'numbered' ? 'list-decimal' : 'list-disc'} pl-5`}>
-        {itemIds.map((itemId, i) => {
-          const item = nodeMap[itemId]
-          if (!item || item.type !== 'list-item') return null
-          const sublistId = item.nodes.find(id => nodeMap[id]?.type === 'list')
-          return (
-            <li key={itemId}>
-              <input
-                type="text"
-                data-list-item
-                value={(item.props.text as string) ?? ''}
-                onChange={(e) => updateItemText(itemId, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(itemId, i, e)}
-                className="w-full bg-transparent outline-none text-sm py-0.5"
-                placeholder="List item..."
-                disabled={disabled}
-              />
-              {/* Render nested sublist if exists */}
-              {sublistId && nodeMap[sublistId] && (
-                <ListBlock
-                  node={nodeMap[sublistId]!}
-                  nodeId={sublistId}
-                  nodeMap={nodeMap}
-                  onChange={onChange}
-                  renderBlock={() => null}
-                  defs={[]}
-                  defaultBlockProps={{}}
+        <SortableBlockList
+          nodeIds={itemIds}
+          onReorder={handleReorder}
+          disabled={disabled}
+          renderNode={(itemId, i) => {
+            const item = nodeMap[itemId]
+            if (!item || item.type !== 'list-item') return null
+            const sublistId = item.nodes.find(id => nodeMap[id]?.type === 'list')
+            return (
+              <li data-list-item-id={itemId}>
+                <RichTextBlock
+                  text={(item.props.text as string) ?? ''}
+                  onChange={(text) => updateItemText(itemId, text)}
+                  tag="p"
                   disabled={disabled}
+                  placeholder="List item..."
+                  onSlashCommand={(pos) => handleItemSlashCommand(itemId, pos)}
+                  onNewBlockAfter={() => handleNewItemAfter(itemId)}
+                  onDeleteBlock={() => handleDeleteItem(itemId, i)}
+                  slashMenuActive={slashBlockId === itemId}
+                  onSlashNavigate={slashNavigate}
+                  onSlashSelect={slashSelect}
+                  onSlashClose={slashClose}
+                  onSlashQueryChange={slashQueryChange}
+                  onTab={(shiftKey) => shiftKey ? outdentItem(itemId) : indentItem(itemId, i)}
+                  enterCreatesBlock
                 />
-              )}
-            </li>
-          )
-        })}
+                {sublistId && nodeMap[sublistId] && (
+                  <ListBlock
+                    node={nodeMap[sublistId]!}
+                    nodeId={sublistId}
+                    nodeMap={nodeMap}
+                    onChange={onChange}
+                    renderBlock={() => null}
+                    defs={[]}
+                    defaultBlockProps={{}}
+                    disabled={disabled}
+                    onSlashCommand={onSlashCommand}
+                    slashBlockId={slashBlockId}
+                    slashNavigate={slashNavigate}
+                    slashSelect={slashSelect}
+                    slashClose={slashClose}
+                    slashQueryChange={slashQueryChange}
+                  />
+                )}
+              </li>
+            )
+          }}
+        />
       </Tag>
     </div>
   )

@@ -1,4 +1,5 @@
-import { DndContext, closestCenter, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { useState } from 'react'
+import { DndContext, closestCenter, DragOverlay, type DragStartEvent, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { icons } from 'lucide-react'
@@ -16,11 +17,17 @@ interface Props {
 }
 
 export function SortableBlockList({ nodeIds, onReorder, renderNode, disabled }: Props) {
+  const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string)
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
     const oldIndex = nodeIds.indexOf(active.id as string)
@@ -39,27 +46,41 @@ export function SortableBlockList({ nodeIds, onReorder, renderNode, disabled }: 
     )
   }
 
+  const activeIndex = activeId ? nodeIds.indexOf(activeId) : -1
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <SortableContext items={nodeIds} strategy={verticalListSortingStrategy}>
         {nodeIds.map((id, index) => (
-          <SortableItem key={id} id={id}>
+          <SortableItem key={id} id={id} isDragOverlay={false}>
             {renderNode(id, index)}
           </SortableItem>
         ))}
       </SortableContext>
+      <DragOverlay dropAnimation={null}>
+        {activeId && activeIndex !== -1 ? (
+          <div className="opacity-90 shadow-lg rounded bg-background border border-border">
+            <div className="group/sortable relative">
+              <div className="absolute -left-8 top-2 cursor-grabbing">
+                <GripVertical className="size-4 text-muted-foreground" />
+              </div>
+              {renderNode(activeId, activeIndex)}
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   )
 }
 
-function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
+function SortableItem({ id, children, isDragOverlay }: { id: string; children: React.ReactNode; isDragOverlay: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={isDragging ? 'opacity-50 z-50' : ''}
+      className={isDragging ? 'opacity-30' : ''}
       {...attributes}
     >
       <div className="group/sortable relative">
