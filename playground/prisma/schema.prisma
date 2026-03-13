@@ -95,6 +95,7 @@ model Article {
   metaTitle       String?
   metaDescription String?
   content         Json?
+  body            Json?      // Lexical editor state JSON
   metadata        String?    // JSON blob
   categories      Category[]
   createdAt       DateTime   @default(now())
