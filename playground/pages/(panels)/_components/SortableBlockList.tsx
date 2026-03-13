@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DndContext, closestCenter, DragOverlay, type DragStartEvent, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, closestCenter, DragOverlay, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { icons } from 'lucide-react'
@@ -9,34 +9,24 @@ const GripVertical = icons['GripVertical']!
 interface Props {
   /** Ordered node IDs. */
   nodeIds:    string[]
-  /** Called when a drag completes with (activeId, oldIndex, newIndex). */
-  onReorder:  (id: string, fromIndex: number, toIndex: number) => void
   /** Render function for each node. Receives the node ID and index. */
   renderNode: (id: string, index: number) => React.ReactNode
+  /** Called when items are reordered via drag. Receives (fromIndex, toIndex). */
+  onReorder?: (fromIndex: number, toIndex: number) => void
   disabled?:  boolean
 }
 
-export function SortableBlockList({ nodeIds, onReorder, renderNode, disabled }: Props) {
-  const [activeId, setActiveId] = useState<string | null>(null)
+/**
+ * Self-contained sortable list with its own DndContext.
+ * Drag is scoped to this container only — no cross-container moves.
+ */
+export function SortableBlockList({ nodeIds, renderNode, onReorder, disabled }: Props) {
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string)
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null)
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = nodeIds.indexOf(active.id as string)
-    const newIndex = nodeIds.indexOf(over.id as string)
-    if (oldIndex === -1 || newIndex === -1) return
-    onReorder(active.id as string, oldIndex, newIndex)
-  }
-
-  if (disabled) {
+  if (disabled || !onReorder) {
     return (
       <>
         {nodeIds.map((id, index) => (
@@ -46,26 +36,29 @@ export function SortableBlockList({ nodeIds, onReorder, renderNode, disabled }: 
     )
   }
 
-  const activeIndex = activeId ? nodeIds.indexOf(activeId) : -1
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragId(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const fromIndex = nodeIds.indexOf(active.id as string)
+    const toIndex = nodeIds.indexOf(over.id as string)
+    if (fromIndex === -1 || toIndex === -1) return
+    onReorder!(fromIndex, toIndex)
+  }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={(e) => setActiveDragId(e.active.id as string)} onDragEnd={handleDragEnd} onDragCancel={() => setActiveDragId(null)}>
       <SortableContext items={nodeIds} strategy={verticalListSortingStrategy}>
         {nodeIds.map((id, index) => (
-          <SortableItem key={id} id={id} isDragOverlay={false}>
+          <SortableItem key={id} id={id}>
             {renderNode(id, index)}
           </SortableItem>
         ))}
       </SortableContext>
       <DragOverlay dropAnimation={null}>
-        {activeId && activeIndex !== -1 ? (
-          <div className="opacity-90 shadow-lg rounded bg-background border border-border">
-            <div className="group/sortable relative">
-              <div className="absolute -left-8 top-2 cursor-grabbing">
-                <GripVertical className="size-4 text-muted-foreground" />
-              </div>
-              {renderNode(activeId, activeIndex)}
-            </div>
+        {activeDragId ? (
+          <div className="opacity-80 shadow-lg rounded bg-background border border-border px-3 py-2 text-sm text-muted-foreground">
+            Moving block…
           </div>
         ) : null}
       </DragOverlay>
@@ -73,7 +66,7 @@ export function SortableBlockList({ nodeIds, onReorder, renderNode, disabled }: 
   )
 }
 
-function SortableItem({ id, children, isDragOverlay }: { id: string; children: React.ReactNode; isDragOverlay: boolean }) {
+export function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
   return (

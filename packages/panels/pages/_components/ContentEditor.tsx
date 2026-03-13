@@ -105,7 +105,10 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
     }
   }
 
-  function handleReorder(id: string, fromIndex: number, toIndex: number) {
+  /** Reorder blocks within the root container */
+  function handleReorder(fromIndex: number, toIndex: number) {
+    const id = nodeIds[fromIndex]
+    if (!id) return
     onChange(reorderNode(value, id, fromIndex, toIndex))
   }
 
@@ -417,71 +420,71 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
   }
 
   return (
-    <div ref={containerRef} onMouseDown={handleCrossBlockMouseDown} className="relative flex flex-col gap-1 min-h-[200px] rounded-lg border border-input bg-background p-3 pl-12">
-      <InlineToolbar containerRef={containerRef} />
+      <div ref={containerRef} onMouseDown={handleCrossBlockMouseDown} className="relative flex flex-col gap-1 min-h-[200px] rounded-lg border border-input bg-background p-3 pl-12">
+        <InlineToolbar containerRef={containerRef} />
 
-      {nodeIds.length === 0 && !disabled && (
-        <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-          <BlockPicker defs={defs} onSelect={(type) => handleAddBlock(type)} trigger="empty" placeholder={placeholder} />
-        </div>
-      )}
+        {nodeIds.length === 0 && !disabled && (
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+            <BlockPicker defs={defs} onSelect={(type) => handleAddBlock(type)} trigger="empty" placeholder={placeholder} />
+          </div>
+        )}
 
-      <SortableBlockList
-        nodeIds={nodeIds}
-        onReorder={handleReorder}
-        disabled={disabled}
-        renderNode={(id, index) => {
-          const node = value[id]
-          if (!node) return null
+        <SortableBlockList
+          nodeIds={nodeIds}
+          disabled={disabled}
+          onReorder={handleReorder}
+          renderNode={(id, index) => {
+            const node = value[id]
+            if (!node) return null
 
-          const highlight = getBlockHighlight(id)
+            const highlight = getBlockHighlight(id)
 
-          return (
-            <div className="group/content-block relative" data-block-id={id}>
-              {/* Cross-block selection highlight overlay */}
-              {highlight.type !== 'none' && (
-                <div className="absolute inset-0 bg-primary/15 pointer-events-none rounded" />
-              )}
+            return (
+              <div className="group/content-block relative" data-block-id={id}>
+                {/* Cross-block selection highlight overlay */}
+                {highlight.type !== 'none' && (
+                  <div className="absolute inset-0 bg-primary/15 pointer-events-none rounded" />
+                )}
 
-              {!disabled && (
-                <div className="absolute right-1 top-0 opacity-0 group-hover/content-block:opacity-100 transition-opacity z-10">
-                  <button type="button" onClick={() => handleRemoveNode(id)}
-                    className="text-xs text-destructive hover:text-destructive/80 p-0.5">&times;</button>
-                </div>
-              )}
+                {!disabled && (
+                  <div className="absolute right-1 top-0 opacity-0 group-hover/content-block:opacity-100 transition-opacity z-10">
+                    <button type="button" onClick={() => handleRemoveNode(id)}
+                      className="text-xs text-destructive hover:text-destructive/80 p-0.5">&times;</button>
+                  </div>
+                )}
 
-              {renderBlockNode(node, id, (patch) => handleUpdateNode(id, patch), value, 'ROOT')}
+                {renderBlockNode(node, id, (patch) => handleUpdateNode(id, patch), value, 'ROOT')}
 
-              {!disabled && !atMax && (
-                <div className="h-0 relative">
-                  <div className="absolute inset-x-0 -top-0.5 flex justify-center opacity-0 group-hover/content-block:opacity-100 transition-opacity z-10 pointer-events-none">
-                    <div className="pointer-events-auto">
-                      <BlockPicker defs={defs} onSelect={(type) => handleAddBlock(type, index + 1)} trigger="between" />
+                {!disabled && !atMax && (
+                  <div className="h-0 relative">
+                    <div className="absolute inset-x-0 -top-0.5 flex justify-center opacity-0 group-hover/content-block:opacity-100 transition-opacity z-10 pointer-events-none">
+                      <div className="pointer-events-auto">
+                        <BlockPicker defs={defs} onSelect={(type) => handleAddBlock(type, index + 1)} trigger="between" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )
-        }}
-      />
-
-      {nodeIds.length > 0 && !disabled && !atMax && (
-        <div className="flex justify-center pt-2">
-          <BlockPicker defs={defs} onSelect={(type) => handleAddBlock(type)} trigger="bottom" />
-        </div>
-      )}
-
-      {/* Slash command menu */}
-      {slashState && (
-        <SlashCommandMenu
-          defs={slashDefs()}
-          query={slashState.query}
-          selectedIndex={slashState.selectedIndex}
-          onSelect={handleSlashSelectType}
-          position={slashState.position}
+                )}
+              </div>
+            )
+          }}
         />
-      )}
-    </div>
+
+        {nodeIds.length > 0 && !disabled && !atMax && (
+          <div className="flex justify-center pt-2">
+            <BlockPicker defs={defs} onSelect={(type) => handleAddBlock(type)} trigger="bottom" />
+          </div>
+        )}
+
+        {/* Slash command menu */}
+        {slashState && (
+          <SlashCommandMenu
+            defs={slashDefs()}
+            query={slashState.query}
+            selectedIndex={slashState.selectedIndex}
+            onSelect={handleSlashSelectType}
+            position={slashState.position}
+          />
+        )}
+      </div>
   )
 }

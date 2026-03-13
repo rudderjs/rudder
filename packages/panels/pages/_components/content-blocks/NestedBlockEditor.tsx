@@ -64,7 +64,9 @@ export function NestedBlockEditor({
     }
   }
 
-  function handleReorder(id: string, fromIndex: number, toIndex: number) {
+  function handleReorder(fromIndex: number, toIndex: number) {
+    const id = childIds[fromIndex]
+    if (!id) return
     onChange(reorderNode(nodeMap, id, fromIndex, toIndex))
   }
 
@@ -91,30 +93,35 @@ export function NestedBlockEditor({
 
   return (
     <div className="flex flex-col gap-0.5 min-h-[1.5em]">
-      {childIds.map((id, index) => {
-        const node = nodeMap[id]
-        if (!node) return null
-        return (
-          <div key={id} className="group/nested-block relative">
-            {!disabled && (
-              <div className="absolute right-0 top-0 opacity-0 group-hover/nested-block:opacity-100 transition-opacity z-10">
-                <button type="button" onClick={() => handleRemove(id)}
-                  className="text-xs text-destructive hover:text-destructive/80 p-0.5">&times;</button>
-              </div>
-            )}
-            {renderBlock(node, id, (patch) => handleUpdateProps(id, patch), nodeMap)}
-            {!disabled && !atMax && index < childIds.length - 1 && (
-              <div className="h-0 relative">
-                <div className="absolute inset-x-0 flex justify-center opacity-0 group-hover/nested-block:opacity-100 transition-opacity z-10 pointer-events-none">
-                  <div className="pointer-events-auto">
-                    <BlockPicker defs={defs} onSelect={(type) => handleAdd(type, index + 1)} trigger="between" />
+      <SortableBlockList
+        nodeIds={childIds}
+        disabled={disabled}
+        onReorder={handleReorder}
+        renderNode={(id, index) => {
+          const node = nodeMap[id]
+          if (!node) return null
+          return (
+            <div className="group/nested-block relative">
+              {!disabled && (
+                <div className="absolute right-0 top-0 opacity-0 group-hover/nested-block:opacity-100 transition-opacity z-10">
+                  <button type="button" onClick={() => handleRemove(id)}
+                    className="text-xs text-destructive hover:text-destructive/80 p-0.5">&times;</button>
+                </div>
+              )}
+              {renderBlock(node, id, (patch) => handleUpdateProps(id, patch), nodeMap)}
+              {!disabled && !atMax && index < childIds.length - 1 && (
+                <div className="h-0 relative">
+                  <div className="absolute inset-x-0 flex justify-center opacity-0 group-hover/nested-block:opacity-100 transition-opacity z-10 pointer-events-none">
+                    <div className="pointer-events-auto">
+                      <BlockPicker defs={defs} onSelect={(type) => handleAdd(type, index + 1)} trigger="between" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )
-      })}
+              )}
+            </div>
+          )
+        }}
+      />
       {!disabled && !atMax && (
         <div className="flex justify-center pt-1">
           <BlockPicker defs={defs} onSelect={(type) => handleAdd(type)} trigger="bottom" />

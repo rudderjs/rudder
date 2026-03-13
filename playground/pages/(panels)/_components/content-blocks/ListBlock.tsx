@@ -21,9 +21,11 @@ interface Props {
   slashSelect?:     () => void
   slashClose?:      () => void
   slashQueryChange?:(query: string) => void
+  /** True when rendered as a sublist inside a parent list-item */
+  nested?:          boolean
 }
 
-export function ListBlock({ node, nodeId, nodeMap, onChange, disabled, onSlashCommand, slashBlockId, slashNavigate, slashSelect, slashClose, slashQueryChange }: Props) {
+export function ListBlock({ node, nodeId, nodeMap, onChange, disabled, onSlashCommand, slashBlockId, slashNavigate, slashSelect, slashClose, slashQueryChange, nested }: Props) {
   const style    = (node.props.style as 'bullet' | 'numbered') ?? 'bullet'
   const itemIds  = node.nodes
   const initRef  = useRef(false)
@@ -105,9 +107,6 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled, onSlashCo
     onSlashCommand?.(itemId, nodeId, position)
   }
 
-  function handleReorder(id: string, fromIndex: number, toIndex: number) {
-    onChange(reorderNode(nodeMap, id, fromIndex, toIndex))
-  }
 
   function indentItem(itemId: string, itemIndex: number) {
     if (itemIndex === 0) return
@@ -166,44 +165,44 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled, onSlashCo
 
   const Tag = style === 'numbered' ? 'ol' : 'ul'
 
-  return (
-    <div className="flex items-start gap-2" data-list-id={nodeId}>
-      <button
-        type="button"
-        onClick={toggleStyle}
-        className="text-xs text-muted-foreground hover:text-foreground mt-1.5 shrink-0"
-        disabled={disabled}
-      >
-        {style === 'bullet' ? '•' : '1.'}
-      </button>
-      <Tag className={`flex-1 flex flex-col gap-0.5 ${style === 'numbered' ? 'list-decimal' : 'list-disc'} pl-5`}>
-        <SortableBlockList
+  const listContent = (
+    <Tag className={`flex-1 flex flex-col gap-0.5 ${style === 'numbered' ? 'list-decimal' : 'list-disc'} ${nested ? 'pl-4 mt-0.5' : 'pl-5'}`}>
+      <SortableBlockList
           nodeIds={itemIds}
-          onReorder={handleReorder}
           disabled={disabled}
+          onReorder={(fromIndex, toIndex) => {
+            const id = itemIds[fromIndex]
+            if (!id) return
+            onChange(reorderNode(nodeMap, id, fromIndex, toIndex))
+          }}
           renderNode={(itemId, i) => {
             const item = nodeMap[itemId]
             if (!item || item.type !== 'list-item') return null
             const sublistId = item.nodes.find(id => nodeMap[id]?.type === 'list')
+            const hasSublist = !!(sublistId && nodeMap[sublistId])
+            const itemText = (item.props.text as string) ?? ''
+            const hideTextField = hasSublist && itemText.trim() === ''
             return (
-              <li data-list-item-id={itemId}>
-                <RichTextBlock
-                  text={(item.props.text as string) ?? ''}
-                  onChange={(text) => updateItemText(itemId, text)}
-                  tag="p"
-                  disabled={disabled}
-                  placeholder="List item..."
-                  onSlashCommand={(pos) => handleItemSlashCommand(itemId, pos)}
-                  onNewBlockAfter={() => handleNewItemAfter(itemId)}
-                  onDeleteBlock={() => handleDeleteItem(itemId, i)}
-                  slashMenuActive={slashBlockId === itemId}
-                  onSlashNavigate={slashNavigate}
-                  onSlashSelect={slashSelect}
-                  onSlashClose={slashClose}
-                  onSlashQueryChange={slashQueryChange}
-                  onTab={(shiftKey) => shiftKey ? outdentItem(itemId) : indentItem(itemId, i)}
-                  enterCreatesBlock
-                />
+              <li data-list-item-id={itemId} className={hideTextField ? 'list-none' : ''}>
+                {!hideTextField && (
+                  <RichTextBlock
+                    text={itemText}
+                    onChange={(text) => updateItemText(itemId, text)}
+                    tag="p"
+                    disabled={disabled}
+                    placeholder="List item..."
+                    onSlashCommand={(pos) => handleItemSlashCommand(itemId, pos)}
+                    onNewBlockAfter={() => handleNewItemAfter(itemId)}
+                    onDeleteBlock={() => handleDeleteItem(itemId, i)}
+                    slashMenuActive={slashBlockId === itemId}
+                    onSlashNavigate={slashNavigate}
+                    onSlashSelect={slashSelect}
+                    onSlashClose={slashClose}
+                    onSlashQueryChange={slashQueryChange}
+                    onTab={(shiftKey) => shiftKey ? outdentItem(itemId) : indentItem(itemId, i)}
+                    enterCreatesBlock
+                  />
+                )}
                 {sublistId && nodeMap[sublistId] && (
                   <ListBlock
                     node={nodeMap[sublistId]!}
@@ -220,13 +219,29 @@ export function ListBlock({ node, nodeId, nodeMap, onChange, disabled, onSlashCo
                     slashSelect={slashSelect}
                     slashClose={slashClose}
                     slashQueryChange={slashQueryChange}
+                    nested
                   />
                 )}
               </li>
             )
           }}
         />
-      </Tag>
+    </Tag>
+  )
+
+  if (nested) return listContent
+
+  return (
+    <div className="flex items-start gap-2" data-list-id={nodeId}>
+      <button
+        type="button"
+        onClick={toggleStyle}
+        className="text-xs text-muted-foreground hover:text-foreground mt-1.5 shrink-0"
+        disabled={disabled}
+      >
+        {style === 'bullet' ? '•' : '1.'}
+      </button>
+      {listContent}
     </div>
   )
 }
