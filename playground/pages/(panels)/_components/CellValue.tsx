@@ -92,6 +92,20 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
     }
     return <span className="text-muted-foreground text-xs">{root.nodes.length} blocks</span>
   }
+  if (type === 'richcontent') {
+    const json = value as any
+    let text = ''
+    try {
+      const extractText = (node: any): string => {
+        if (node.text) return node.text
+        if (node.children) return node.children.map(extractText).join(' ')
+        return ''
+      }
+      text = extractText(json?.root ?? {}).slice(0, 100)
+    } catch { text = '' }
+    if (!text) return <span className="text-muted-foreground/40">—</span>
+    return <span className="truncate max-w-[20rem] block">{text}{text.length >= 100 ? '…' : ''}</span>
+  }
   if (type === 'builder') {
     const map = ensureNodeMap(value)
     const root = map.ROOT

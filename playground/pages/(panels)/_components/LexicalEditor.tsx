@@ -13,6 +13,8 @@ import { CodeNode } from '@lexical/code'
 import { HorizontalRuleNode } from '@lexical/react/LexicalHorizontalRuleNode'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { useEffect } from 'react'
+import { SlashCommandPlugin } from './lexical/SlashCommandPlugin.js'
+import { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 
 interface Props {
   value:         unknown       // Lexical JSON state or null
@@ -100,6 +102,8 @@ export function LexicalEditor({
           ErrorBoundary={LexicalErrorBoundary}
         />
         <ListPlugin />
+        <SlashCommandPlugin />
+        <FloatingToolbarPlugin />
 
         {isCollab ? (
           <CollaborationPlugin
