@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from 'react'
+import { flushSync } from 'react-dom'
 import type { ContentBlockDef, NodeData, NodeMap } from '@boostkit/panels'
 import { contentBlockDefs, ensureNodeMap, addNode, updateNodeProps, removeNode, removeNodeRecursive, reorderNode } from '@boostkit/panels'
 import { useCrossBlockSelection } from '../_hooks/useCrossBlockSelection.js'
@@ -220,27 +221,30 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
         merged[id] = node
       }
     }
-    onChange(merged)
+    // flushSync forces React to commit DOM changes synchronously,
+    // so we can restore the selection immediately after — no timing race.
+    flushSync(() => { onChange(merged) })
 
-    // Restore selection by finding the block fresh in the post-render DOM
+    // Restore selection — DOM is already updated
     if (savedSel) {
       const { blockId, start, end } = savedSel
-      requestAnimationFrame(() => {
-        const blockEl = document.querySelector(`[data-block-id="${blockId}"]`)
-        const ce = blockEl?.querySelector('[contenteditable]') as HTMLElement
-        if (!ce) return
+      const blockEl = document.querySelector(`[data-block-id="${blockId}"]`)
+      const ce = blockEl?.querySelector('[contenteditable]') as HTMLElement
+      if (ce) {
         ce.focus({ preventScroll: true })
         const startPos = indexToNodeOffset(ce, start)
         const endPos   = indexToNodeOffset(ce, end)
-        if (!startPos || !endPos) return
-        const s = window.getSelection()
-        if (!s) return
-        const range = document.createRange()
-        range.setStart(startPos.node, startPos.offset)
-        range.setEnd(endPos.node, endPos.offset)
-        s.removeAllRanges()
-        s.addRange(range)
-      })
+        if (startPos && endPos) {
+          const s = window.getSelection()
+          if (s) {
+            const range = document.createRange()
+            range.setStart(startPos.node, startPos.offset)
+            range.setEnd(endPos.node, endPos.offset)
+            s.removeAllRanges()
+            s.addRange(range)
+          }
+        }
+      }
     }
   }
 
