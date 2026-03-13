@@ -50,9 +50,11 @@ interface Props {
   yDoc?:          any | null
   /** Awareness for cursor broadcasting (optional) */
   awareness?:     any | null
+  /** True after Y.Doc initial sync completes — block Y.Text seeding deferred until true */
+  yDocSynced?:    boolean
 }
 
-export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeholder, maxBlocks, uploadBase, disabled, yDoc, awareness }: Props) {
+export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeholder, maxBlocks, uploadBase, disabled, yDoc, awareness, yDocSynced }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const value   = ensureNodeMap(rawValue)
   const root    = value.ROOT!
@@ -69,19 +71,20 @@ export function ContentEditor({ value: rawValue, onChange, allowedBlocks, placeh
   /** Track which block Y.Text instances have been seeded */
   const seededBlocksRef = useRef<Set<string>>(new Set())
 
-  /** Get or create a Y.Text for a specific block node, seeding initial content if needed */
+  /** Get or create a Y.Text for a specific block node, seeding initial content if needed.
+   *  Seeding is deferred until yDocSynced is true to prevent CRDT merge duplication. */
   const getBlockYText = useCallback((nodeId: string, initialText?: string) => {
     if (!yDoc) return null
     const yText = yDoc.getText(`block:${nodeId}`)
-    // Seed initial text if this is the first time and Y.Text is empty
-    if (!seededBlocksRef.current.has(nodeId) && yText.length === 0 && initialText) {
+    // Only seed AFTER initial sync — seeding before sync causes CRDT merge duplication
+    if (yDocSynced && !seededBlocksRef.current.has(nodeId) && yText.length === 0 && initialText) {
       yText.insert(0, initialText)
       seededBlocksRef.current.add(nodeId)
     } else {
       seededBlocksRef.current.add(nodeId)
     }
     return yText
-  }, [yDoc])
+  }, [yDoc, yDocSynced])
 
   function handleAddBlock(type: string, atIndex?: number, parentId?: string) {
     const props = defaultBlockProps[type]

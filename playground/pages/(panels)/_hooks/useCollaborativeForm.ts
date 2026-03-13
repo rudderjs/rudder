@@ -19,11 +19,15 @@ interface Presence { name: string; color: string }
 
 interface CollaborativeFormReturn {
   connected:             boolean
+  /** True after the initial ydoc sync from server completes. Safe to seed Y.Text after this. */
+  synced:                boolean
   presences:             Presence[]
   setCollaborativeValue: (name: string, value: unknown) => void
   syncAllFieldsToDoc:    (allValues: Record<string, unknown>) => void
   /** Get Y.Text instance for a text field. Returns null if not connected or field is not a text field. */
   getYText:              (fieldName: string) => any | null
+  /** Get the Y.Doc instance. */
+  getDoc:                () => any | null
   /** Get the awareness instance. Returns null if not connected. */
   awareness:             any | null
 }
@@ -39,6 +43,7 @@ interface CollaborativeFormReturn {
  */
 export function useCollaborativeForm(options: CollaborativeFormOptions | null): CollaborativeFormReturn {
   const [connected, setConnected] = useState(false)
+  const [synced, setSynced] = useState(false)
   const [presences, setPresences] = useState<Presence[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const providerRef  = useRef<any>(null)
@@ -101,8 +106,12 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
       if (provider.synced) {
         seedAfterSync()
+        setSynced(true)
       } else {
-        provider.once('synced', seedAfterSync)
+        provider.once('synced', () => {
+          seedAfterSync()
+          setSynced(true)
+        })
       }
 
       // Observe Y.Text changes → update React state
@@ -187,6 +196,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
   return {
     connected,
+    synced,
     presences,
     setCollaborativeValue,
     syncAllFieldsToDoc,
