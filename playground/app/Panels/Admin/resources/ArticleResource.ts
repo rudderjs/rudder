@@ -13,6 +13,7 @@ import {
   JsonField,
   ContentField,
   RichContentField,
+  Block,
   RelationField,
   ComputedField,
   SelectFilter,
@@ -78,6 +79,27 @@ export class ArticleResource extends Resource {
         RichContentField.make('body')
           .label('Body (Lexical)')
           .placeholder('Start writing your article…')
+          .blocks([
+            Block.make('callToAction')
+              .label('Call to Action')
+              .icon('📣')
+              .schema([
+                TextField.make('title').label('Title').required(),
+                TextField.make('buttonText').label('Button Text'),
+                TextField.make('url').label('URL'),
+                SelectField.make('style').label('Style').options([
+                  { value: 'primary', label: 'Primary' },
+                  { value: 'outline', label: 'Outline' },
+                ]),
+              ]),
+            Block.make('video')
+              .label('Video Embed')
+              .icon('🎬')
+              .schema([
+                TextField.make('url').label('URL').required(),
+                TextField.make('caption').label('Caption'),
+              ]),
+          ])
           .collaborative(),
 
         TagsField.make('tags')
