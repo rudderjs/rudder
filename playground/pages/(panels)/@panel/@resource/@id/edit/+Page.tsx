@@ -175,7 +175,21 @@ export default function EditPage() {
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_versions/${versionId}`)
       if (res.ok) {
         const body = await res.json() as { data: { fields: Record<string, unknown> } }
-        setValues((prev) => ({ ...prev, ...body.data.fields }))
+        const restoredFields = body.data.fields
+        const merged = { ...values, ...restoredFields }
+        setValues(merged)
+
+        // Sync ALL restored values to Y.Doc — both collaborative (Y.Text)
+        // and non-collaborative (Y.Map) fields, so nothing is lost on refresh
+        if (collaborative) {
+          // First sync Y.Text fields individually (setCollaborativeValue handles Y.Text clearing)
+          for (const [name, val] of Object.entries(restoredFields)) {
+            setCollaborativeValue(name, val)
+          }
+          // Then sync everything to Y.Map for non-collaborative fields
+          syncAllFieldsToDoc(merged)
+        }
+
         toast.success(i18n.restoredToast ?? 'Version restored.')
       } else {
         toast.error(i18n.restoreError ?? 'Failed to restore version.')

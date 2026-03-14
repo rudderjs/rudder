@@ -228,14 +228,21 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
     }
   }, [options?.docName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Write a local change to the ydoc (for non-text collaborative fields). */
+  /** Write a local change to the ydoc. Handles both Y.Text and Y.Map fields. */
   const setCollaborativeValue = useCallback((name: string, value: unknown) => {
     const doc = docRef.current
     if (!doc) return
-    // For text fields, use applyDelta via the component — don't set on map
-    if (yTextMapRef.current.has(name)) return
-    suppressRef.current.add(name)
-    doc.getMap('fields').set(name, value ?? null)
+    const yText = yTextMapRef.current.get(name)
+    if (yText) {
+      // Y.Text field: clear and re-insert the text content
+      doc.transact(() => {
+        yText.delete(0, yText.length)
+        if (value) yText.insert(0, String(value))
+      })
+    } else {
+      suppressRef.current.add(name)
+      doc.getMap('fields').set(name, value ?? null)
+    }
   }, [])
 
   /** Write ALL field values to the ydoc before save (for version snapshot). */

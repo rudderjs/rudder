@@ -52,7 +52,7 @@ export async function data(pageContext: PageContextServer) {
   const draftable     = (ResourceClass as any).draftable ?? false
   const collaborative = (ResourceClass as any).collaborative ?? false
 
-  // Seed ydoc for collaborative resources
+  // Collaborative: seed ydoc on first load, then merge ydoc values into record
   if (record && collaborative) {
     try {
       const { Live } = await import('@boostkit/live')
@@ -66,6 +66,17 @@ export async function data(pageContext: PageContextServer) {
         }
       }
       await Live.seed(docName, fieldData)
+
+      // Read current Y.Doc state and merge into record
+      // This ensures restored version values (synced to Y.Doc) show up on refresh
+      const ydocFields = Live.readMap(docName, 'fields')
+      if (ydocFields && Object.keys(ydocFields).length > 0) {
+        for (const [key, val] of Object.entries(ydocFields)) {
+          if (val !== undefined && val !== null) {
+            (record as Record<string, unknown>)[key] = val
+          }
+        }
+      }
     } catch {
       // @boostkit/live not available — silently skip
     }
