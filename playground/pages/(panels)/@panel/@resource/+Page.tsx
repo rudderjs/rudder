@@ -391,14 +391,16 @@ export default function ResourceListPage() {
               {isTrashed ? (i18n as any).exitTrash : (i18n as any).viewTrash}
             </a>
           )}
-          {!isTrashed && (
+          {!isTrashed && (resourceMeta as any).draftable ? (
+            <CreateDraftButton slug={slug} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
+          ) : !isTrashed ? (
             <a
               href={`/${pathSegment}/${slug}/create`}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0"
             >
               {t(i18n.newButton, { label: resourceMeta.labelSingular })}
             </a>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -929,6 +931,44 @@ function ForceDeleteRowButton({ slug, id, pathSegment, i18n }: { slug: string; i
         cancelLabel={i18n.cancel}
       />
     </>
+  )
+}
+
+function CreateDraftButton({ slug, pathSegment, labelSingular, i18n }: {
+  slug: string; pathSegment: string; labelSingular: string; i18n: PanelI18n
+}) {
+  const [creating, setCreating] = useState(false)
+
+  async function handleCreate() {
+    setCreating(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ draftStatus: 'draft' }),
+      })
+      if (res.ok) {
+        const body = await res.json() as { data: { id: string } }
+        void navigate(`/${pathSegment}/${slug}/${body.data.id}/edit`)
+      } else {
+        toast.error((i18n as any).saveError ?? 'Failed to create draft.')
+        setCreating(false)
+      }
+    } catch {
+      toast.error((i18n as any).saveError ?? 'Failed to create draft.')
+      setCreating(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCreate}
+      disabled={creating}
+      className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0 disabled:opacity-50"
+    >
+      {creating ? (i18n as any).loading : t(i18n.newButton, { label: labelSingular })}
+    </button>
   )
 }
 

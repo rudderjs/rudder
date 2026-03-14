@@ -162,8 +162,8 @@ export default function EditPage() {
     try {
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_versions`)
       if (res.ok) {
-        const data = await res.json() as VersionEntry[]
-        setVersions(data)
+        const body = await res.json() as { data: VersionEntry[] }
+        setVersions(body.data ?? [])
       }
     } finally {
       setLoadingVersions(false)
@@ -174,8 +174,8 @@ export default function EditPage() {
     try {
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_versions/${versionId}`)
       if (res.ok) {
-        const data = await res.json() as { fields: Record<string, unknown> }
-        setValues((prev) => ({ ...prev, ...data.fields }))
+        const body = await res.json() as { data: { fields: Record<string, unknown> } }
+        setValues((prev) => ({ ...prev, ...body.data.fields }))
         toast.success(i18n.restoredToast ?? 'Version restored.')
       } else {
         toast.error(i18n.restoreError ?? 'Failed to restore version.')

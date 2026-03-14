@@ -401,7 +401,7 @@ export class PanelServiceProvider extends ServiceProvider {
       const errors = await this.validatePayload(resource, body, 'create')
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
-      // Draftable: default _status to 'draft' unless explicitly set
+      // Draftable: default draftStatus to 'draft' unless explicitly set
       if ((ResourceClass as any).draftable && !body['draftStatus']) {
         body['draftStatus'] = 'draft'
       }
@@ -934,6 +934,9 @@ export class PanelServiceProvider extends ServiceProvider {
     const fields = flattenFields(resource.fields())
     const errors: Record<string, string[]> = {}
 
+    // Skip required-field validation for draft saves
+    const isDraft = body['draftStatus'] === 'draft'
+
     for (const field of fields) {
       if (field.isReadonly()) continue
       if (field.getType() === 'belongsTo' || field.getType() === 'belongsToMany') continue
@@ -948,12 +951,15 @@ export class PanelServiceProvider extends ServiceProvider {
 
       const value = body[name]
 
-      if (field.isRequired() && (value === undefined || value === null || value === '')) {
+      // Drafts skip required validation — user can save incomplete records
+      if (!isDraft && field.isRequired() && (value === undefined || value === null || value === '')) {
         errors[name] = [`${field.getLabel()} is required.`]
       }
     }
 
-    // Per-field custom validators (inspired by PayloadCMS)
+    // Per-field custom validators — skip entirely for drafts
+    if (isDraft) return Object.keys(errors).length > 0 ? errors : null
+
     for (const field of flattenFields(resource.fields())) {
       if (!field.hasValidate()) continue
       if (field.isReadonly()) continue
