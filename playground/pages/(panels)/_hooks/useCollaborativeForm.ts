@@ -155,11 +155,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
           setConnected(status === 'connected')
         })
 
-        // Presence
-        const userName  = `User-${Math.floor(Math.random() * 1000)}`
-        const userColor = `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`
-        wsProvider.awareness.setLocalStateField('user', { name: userName, color: userColor })
-
+        // Presence — user state is set later in __bk_start_sync (after
+        // CollaborationPlugin's initLocalState wipes awareness with setLocalState)
         const syncPresences = () => {
           const states = [...wsProvider.awareness.getStates().values()] as { user?: Presence }[]
           setPresences(states.flatMap(s => s.user ? [s.user] : []))
@@ -177,8 +174,15 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       // ── Deferred sync trigger ──────────────────────────────
       // The fake provider's connect() calls this AFTER the editor's
       // observer is attached — guaranteeing updates arrive post-observer.
+      // It also runs AFTER CollaborationPlugin's initLocalState(), which
+      // calls setLocalState() and wipes our 'user' field. So we re-set
+      // the user field here.
+      const userName  = useWebsocket ? `User-${Math.floor(Math.random() * 1000)}` : ''
+      const userColor = useWebsocket ? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)` : ''
       ;(doc as any).__bk_start_sync = () => {
         if (destroyed) return
+        // Re-set user presence — initLocalState() wiped it via setLocalState()
+        wsProvider?.awareness.setLocalStateField('user', { name: userName, color: userColor })
         // Connect WS now — sync arrives over the network, well after
         // the current synchronous code (observer setup) completes.
         wsProvider?.connect()

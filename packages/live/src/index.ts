@@ -224,6 +224,8 @@ interface Room {
   clients: Set<import('ws').WebSocket>
   /** Resolves when persisted state has been loaded into the doc. */
   ready:   Promise<void>
+  /** Latest awareness message per client — sent to newly connected clients. */
+  awarenessMap: Map<import('ws').WebSocket, Uint8Array>
 }
 
 const g       = globalThis as Record<string, unknown>
@@ -240,7 +242,7 @@ function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
       const update = Y.encodeStateAsUpdate(persisted, sv)
       if (update.length > 2) Y.applyUpdate(doc, update)
     }).catch(() => {})
-    rooms.set(docName, { doc, clients: new Set(), ready })
+    rooms.set(docName, { doc, clients: new Set(), ready, awarenessMap: new Map() })
   }
   return rooms.get(docName)!
 }
@@ -305,6 +307,13 @@ async function handleConnection(
   // ── Step 1: send server state vector ──────────────────────
   ws.send(encodeSyncMsg(syncStep1, Y.encodeStateVector(room.doc)))
 
+  // ── Step 2: send existing awareness states to the new client ─
+  for (const [client, buf] of room.awarenessMap) {
+    if (client !== ws && client.readyState === 1 /* OPEN */) {
+      ws.send(buf)
+    }
+  }
+
   // ── Message handler ───────────────────────────────────────
   ws.on('message', async (raw: Buffer) => {
     const buf = new Uint8Array(raw)
@@ -339,7 +348,9 @@ async function handleConnection(
       }
 
     } else if (type === messageAwareness) {
-      // Broadcast awareness (presence/cursors) to all other clients as-is
+      // Store latest awareness message for this client
+      room.awarenessMap.set(ws, new Uint8Array(buf))
+      // Broadcast awareness (presence/cursors) to all other clients
       for (const client of room.clients) {
         if (client !== ws && client.readyState === 1) {
           client.send(buf)
@@ -350,6 +361,7 @@ async function handleConnection(
 
   ws.on('close', () => {
     room.clients.delete(ws)
+    room.awarenessMap.delete(ws)
   })
 }
 
