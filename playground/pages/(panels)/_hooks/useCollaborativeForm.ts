@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 interface CollaborativeField {
   name:          string
@@ -32,6 +32,9 @@ interface CollaborativeFormReturn {
   getDoc:                () => any | null
   /** Get the awareness instance. Returns null if not connected. */
   awareness:             any | null
+  /** Stable user identity — same name/color for input/textarea cursors and Lexical cursors. */
+  userName:              string
+  userColor:             string
 }
 
 /**
@@ -63,6 +66,13 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
   const suppressRef  = useRef<Set<string>>(new Set())
   /** Map of fieldName → Y.Text for text fields */
   const yTextMapRef  = useRef<Map<string, any>>(new Map())
+
+  // Stable user identity — generated once per hook instance, shared by
+  // input/textarea cursors (useYTextCursors) and Lexical (CollaborationPlugin).
+  const { userName, userColor } = useMemo(() => ({
+    userName:  `User-${Math.floor(Math.random() * 1000)}`,
+    userColor: `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
+  }), [])
 
   useEffect(() => {
     if (!options) return
@@ -177,8 +187,6 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       // It also runs AFTER CollaborationPlugin's initLocalState(), which
       // calls setLocalState() and wipes our 'user' field. So we re-set
       // the user field here.
-      const userName  = useWebsocket ? `User-${Math.floor(Math.random() * 1000)}` : ''
-      const userColor = useWebsocket ? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)` : ''
       ;(doc as any).__bk_start_sync = () => {
         if (destroyed) return
         // Re-set user presence — initLocalState() wiped it via setLocalState()
@@ -258,5 +266,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
     getYText,
     getDoc,
     awareness,
+    userName,
+    userColor,
   }
 }

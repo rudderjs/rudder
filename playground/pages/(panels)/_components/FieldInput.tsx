@@ -28,6 +28,9 @@ interface Props {
   yDoc?:       any | null
   /** True after Y.Doc initial sync — passed to ContentEditor to defer seeding */
   yDocSynced?: boolean
+  /** Stable user identity for collaborative cursors (shared across all field types) */
+  userName?: string
+  userColor?: string
 }
 
 function generateSlug(str: string): string {
@@ -41,7 +44,7 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
-export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, yText, awareness, yDoc, yDocSynced }: Props) {
+export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, yText, awareness, yDoc, yDocSynced, userName, userColor }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
   const isDisabled = disabled || field.readonly
 
@@ -670,6 +673,8 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
         yDocSynced={yDocSynced}
         fragmentName={`richcontent:${field.name}`}
         blocks={field.extra?.blocks as any[] | undefined}
+        userName={userName}
+        userColor={userColor}
       />
     )
   }

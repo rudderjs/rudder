@@ -144,7 +144,7 @@ export default function EditPage() {
   }, [])
 
   // Collaborative form hook
-  const { connected, synced, presences, setCollaborativeValue, syncAllFieldsToDoc, getYText, getDoc, awareness } = useCollaborativeForm(
+  const { connected, synced, presences, setCollaborativeValue, syncAllFieldsToDoc, getYText, getDoc, awareness, userName, userColor } = useCollaborativeForm(
     versioned && docName && wsLivePath
       ? { docName, wsPath: wsLivePath, fields: collabFields, values, setValue: setFormValue, providers: liveProviders as any }
       : null,
@@ -245,7 +245,7 @@ export default function EditPage() {
             {field.required && <span className="text-destructive ml-0.5">*</span>}
           </label>
         )}
-        <FieldInput field={field} value={values[field.name]} onChange={(v: unknown) => setValue(field.name, v)} uploadBase={uploadBase} i18n={i18n} disabled={fieldDisabled} yText={field.collaborative ? getYText(field.name) : null} awareness={field.collaborative ? awareness : null} yDoc={field.collaborative ? getDoc() : null} yDocSynced={synced} />
+        <FieldInput field={field} value={values[field.name]} onChange={(v: unknown) => setValue(field.name, v)} uploadBase={uploadBase} i18n={i18n} disabled={fieldDisabled} yText={field.collaborative ? getYText(field.name) : null} awareness={field.collaborative ? awareness : null} yDoc={field.collaborative ? getDoc() : null} yDocSynced={synced} userName={userName} userColor={userColor} />
         {errors[field.name]?.map((e) => (
           <p key={e} className="mt-1 text-xs text-destructive">{e}</p>
         ))}

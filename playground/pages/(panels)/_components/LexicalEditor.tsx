@@ -33,6 +33,9 @@ interface Props {
   yDocSynced?:   boolean
   fragmentName?: string
   blocks?:       any[]
+  /** Stable user identity — passed to CollaborationPlugin so Lexical cursors match input/textarea cursors. */
+  userName?:     string
+  userColor?:    string
 }
 
 const EDITOR_NODES = [
@@ -70,10 +73,11 @@ const THEME = {
 export function LexicalEditor({
   value, onChange, placeholder, disabled,
   yDoc, awareness, yDocSynced, fragmentName = 'richcontent',
-  blocks,
+  blocks, userName, userColor,
 }: Props) {
   const isCollab = !!(yDoc && yDocSynced)
   const anchorRef = useRef<HTMLDivElement>(null)
+  const cursorsContainerRef = useRef<HTMLDivElement>(null)
 
   const blockRegistry = useMemo(() => {
     const map = new Map<string, BlockMeta>()
@@ -124,6 +128,7 @@ export function LexicalEditor({
     <LexicalComposer initialConfig={initialConfig}>
       <div className="lexical-editor rounded-lg border border-input bg-background relative">
         <div ref={anchorRef} className="relative">
+        <div ref={cursorsContainerRef} className="cursors-container" />
         <RichTextPlugin
           contentEditable={
             <ContentEditable
@@ -146,6 +151,9 @@ export function LexicalEditor({
             id={fragmentName}
             providerFactory={createProviderFactory(yDoc, awareness, yDocSynced)}
             shouldBootstrap={false}
+            username={userName}
+            cursorColor={userColor}
+            cursorsContainerRef={cursorsContainerRef}
           />
         ) : (
           <HistoryPlugin />
