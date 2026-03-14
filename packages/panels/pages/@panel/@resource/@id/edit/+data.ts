@@ -47,10 +47,16 @@ export async function data(pageContext: PageContextServer) {
     record = await q.find(id)
   }
 
-  // Seed ydoc for versioned resources
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const versioned = (ResourceClass as any).versioned ?? false
-  if (record && versioned) {
+  // Feature flags (independent)
+  const versioned     = (ResourceClass as any).versioned ?? false
+  const draftable     = (ResourceClass as any).draftable ?? false
+  // Derive collaborative from fields — true if any field has .collaborative()
+  const collaborative = flattenFields(resource.fields()).some(
+    (f: any) => typeof f.isCollaborative === 'function' && f.isCollaborative()
+  )
+
+  // Collaborative: seed ydoc on first load, then merge ydoc values into record
+  if (record && collaborative) {
     try {
       const { Live } = await import('@boostkit/live')
       const docName = `panel:${slug}:${id}`
@@ -63,8 +69,30 @@ export async function data(pageContext: PageContextServer) {
         }
       }
       await Live.seed(docName, fieldData)
+
+      // Read current Y.Doc state and merge into record
+      // This ensures restored version values (synced to Y.Doc) show up on refresh
+      const ydocFields = Live.readMap(docName, 'fields')
+      if (ydocFields && Object.keys(ydocFields).length > 0) {
+        for (const [key, val] of Object.entries(ydocFields)) {
+          if (val !== undefined && val !== null) {
+            (record as Record<string, unknown>)[key] = val
+          }
+        }
+      }
     } catch {
       // @boostkit/live not available — silently skip
+    }
+  }
+
+  // Read client-side providers from live config
+  let liveProviders: string[] = ['websocket']
+  if (collaborative) {
+    try {
+      const configs = await import('../../../../../../config/index.js')
+      liveProviders = (configs.default as any)?.live?.providers ?? ['websocket']
+    } catch {
+      // config not available — use default
     }
   }
 
@@ -72,7 +100,10 @@ export async function data(pageContext: PageContextServer) {
   return {
     panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser,
     versioned,
-    wsLivePath: versioned ? '/ws-live' : null,
-    docName:    versioned ? `panel:${slug}:${id}` : null,
+    draftable,
+    collaborative,
+    wsLivePath: collaborative ? '/ws-live' : null,
+    docName:    collaborative ? `panel:${slug}:${id}` : null,
+    liveProviders: collaborative ? liveProviders : [],
   }
 }
