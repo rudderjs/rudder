@@ -21,6 +21,27 @@ export function FloatingToolbarPlugin() {
   const [isCode, setIsCode] = useState(false)
   const [isLink, setIsLink] = useState(false)
 
+  const positionToolbar = useCallback(() => {
+    const nativeSelection = window.getSelection()
+    const toolbar = toolbarRef.current
+    if (!nativeSelection || nativeSelection.rangeCount === 0 || !toolbar) return
+
+    const range = nativeSelection.getRangeAt(0)
+    const virtualEl = {
+      getBoundingClientRect: () => range.getBoundingClientRect(),
+      getClientRects: () => range.getClientRects(),
+    }
+
+    computePosition(virtualEl as Element, toolbar, {
+      placement: 'top',
+      strategy: 'fixed',
+      middleware: [offset(8), flip(), shift({ padding: 8 })],
+    }).then(({ x, y }) => {
+      toolbar.style.left = `${x}px`
+      toolbar.style.top = `${y}px`
+    })
+  }, [])
+
   const updateToolbar = useCallback(() => {
     const selection = $getSelection()
     if (!$isRangeSelection(selection) || selection.isCollapsed()) {
@@ -40,26 +61,36 @@ export function FloatingToolbarPlugin() {
 
     setIsVisible(true)
 
-    requestAnimationFrame(() => {
-      const nativeSelection = window.getSelection()
-      const toolbar = toolbarRef.current
-      if (!nativeSelection || nativeSelection.rangeCount === 0 || !toolbar) return
+    requestAnimationFrame(() => positionToolbar())
+  }, [positionToolbar])
 
-      const range = nativeSelection.getRangeAt(0)
-      const virtualEl = {
-        getBoundingClientRect: () => range.getBoundingClientRect(),
-        getClientRects: () => range.getClientRects(),
+  // Reposition toolbar on scroll so it follows the selection
+  useEffect(() => {
+    if (!isVisible) return
+
+    // Find the scrollable ancestor (the panel's scroll container)
+    const rootEl = editor.getRootElement()
+    if (!rootEl) return
+
+    let scrollParent: HTMLElement | Window = window
+    let el: HTMLElement | null = rootEl.parentElement
+    while (el) {
+      const { overflow, overflowY } = getComputedStyle(el)
+      if (overflow === 'auto' || overflow === 'scroll' || overflowY === 'auto' || overflowY === 'scroll') {
+        scrollParent = el
+        break
       }
+      el = el.parentElement
+    }
 
-      computePosition(virtualEl as Element, toolbar, {
-        placement: 'top',
-        middleware: [offset(8), flip(), shift({ padding: 8 })],
-      }).then(({ x, y }) => {
-        toolbar.style.left = `${x}px`
-        toolbar.style.top = `${y}px`
-      })
-    })
-  }, [])
+    const onScroll = () => requestAnimationFrame(() => positionToolbar())
+    scrollParent.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll, { passive: true })
+    return () => {
+      scrollParent.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [isVisible, editor, positionToolbar])
 
   useEffect(() => {
     return mergeRegister(
