@@ -275,6 +275,21 @@ export abstract class Field {
   /** @internal */
   isCollaborative(): boolean { return this._collaborative }
 
+  /**
+   * Map field values to colored badge pills in the table view.
+   *
+   * @example
+   * SelectField.make('status').badge({
+   *   draft:     { color: 'yellow', label: 'Draft' },
+   *   published: { color: 'green',  label: 'Published' },
+   *   archived:  { color: 'gray',   label: 'Archived' },
+   * })
+   */
+  badge(mapping: Record<string, { color?: string; label?: string }>): this {
+    this._extra['badge'] = mapping
+    return this
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName():       string  { return this._name }

@@ -28,4 +28,12 @@ export class NumberField extends Field {
     this._extra['step'] = n
     return this
   }
+
+  /** Render as a progress bar in the table view (0 to max). */
+  progressBar(opts?: { max?: number; color?: string }): this {
+    this._extra['progressBar'] = true
+    if (opts?.max !== undefined) this._extra['progressMax'] = opts.max
+    if (opts?.color !== undefined) this._extra['progressColor'] = opts.color
+    return this
+  }
 }

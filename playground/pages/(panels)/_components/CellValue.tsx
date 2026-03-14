@@ -48,6 +48,54 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
     )
   }
   if (value === null || value === undefined) return <span className="text-muted-foreground/40">—</span>
+
+  // ── Badge mapping — any field can use extra.badge to map values to colored pills ──
+  const badgeMap = extra?.['badge'] as Record<string, { color?: string; label?: string }> | undefined
+  if (badgeMap && value !== undefined && value !== null) {
+    const key    = String(value)
+    const config = badgeMap[key]
+    if (config) {
+      const colors: Record<string, string> = {
+        gray:   'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+        red:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+        orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+        yellow: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+        green:  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+        blue:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+        purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+        pink:   'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+      }
+      const cls = colors[config.color ?? 'gray'] ?? colors['gray']
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{config.label ?? key}</span>
+    }
+  }
+
+  // ── Select — show label from options instead of raw value ──
+  if (type === 'select') {
+    const options = extra?.['options'] as { label: string; value: string | number | boolean }[] | undefined
+    if (options) {
+      const opt = options.find(o => String(o.value) === String(value))
+      if (opt) return <span>{opt.label}</span>
+    }
+    return <span>{String(value)}</span>
+  }
+
+  // ── Number with progressBar ──
+  if (type === 'number' && extra?.['progressBar']) {
+    const num   = Number(value) || 0
+    const max   = Number(extra['progressMax'] ?? 100)
+    const pct   = Math.min(Math.max((num / max) * 100, 0), 100)
+    const color = extra['progressColor'] as string | undefined
+    return (
+      <div className="flex items-center gap-2 min-w-[8rem]">
+        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color ?? 'var(--primary)' }} />
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums w-8 text-end">{Math.round(pct)}%</span>
+      </div>
+    )
+  }
+
   if (type === 'boolean' || type === 'toggle') {
     return <Badge variant={value ? 'default' : 'secondary'}>{value ? i18n.yes : i18n.no}</Badge>
   }

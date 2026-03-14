@@ -127,6 +127,11 @@ export class ArticleResource extends Resource {
               { label: 'Published', value: 'published' },
               { label: 'Archived',  value: 'archived'  },
             ])
+            .badge({
+              draft:     { color: 'yellow', label: 'Draft' },
+              published: { color: 'green',  label: 'Published' },
+              archived:  { color: 'gray',   label: 'Archived' },
+            })
             .default('draft')
             .required(),
 
