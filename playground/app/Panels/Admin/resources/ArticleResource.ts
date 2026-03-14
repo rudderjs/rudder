@@ -151,7 +151,8 @@ export class ArticleResource extends Resource {
             .label('Featured')
             .onLabel('Featured')
             .offLabel('Not featured')
-            .inlineEditable(),
+            .inlineEditable()
+            .collaborative(),
 
           DateField.make('publishedAt')
             .label('Publish Date'),

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { Breadcrumbs }      from '../../../../_components/Breadcrumbs.js'
@@ -64,20 +64,24 @@ export default function EditPage() {
   const initialValues = buildInitialValues(formFields, record as Record<string, unknown>)
 
   // ── Collaborative form ───────────────────────────────────
+  // Ref bridges useCollaborativeForm (called first) → useEditForm's setFormValue (called second).
+  // When a remote Y.Map change arrives, it calls this ref to update React form state.
+  const remoteSetValueRef = useRef<(name: string, value: unknown) => void>(() => {})
+
   const {
     connected, synced, presences,
     setCollaborativeValue, syncAllFieldsToDoc,
     getDoc, awareness, userName, userColor,
   } = useCollaborativeForm(
     collaborative && docName && wsLivePath
-      ? { docName, wsPath: wsLivePath, fields: collabFields, values: initialValues, setValue: () => {}, providers: liveProviders as any }
+      ? { docName, wsPath: wsLivePath, fields: collabFields, values: initialValues, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
       : null,
   )
 
   // ── Edit form state ──────────────────────────────────────
   const {
-    values, errors, saving, formKey,
-    setValue, handleSave, handleSubmit, restoreVersion,
+    values, errors, saving, formKey, activeVersionId,
+    setValue, setFormValue, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, collaborative, i18n,
@@ -85,6 +89,9 @@ export default function EditPage() {
     setCollaborativeValue: collaborative ? setCollaborativeValue : undefined,
     selfSyncFields,
   })
+
+  // Wire the ref to setFormValue (not setValue — avoid writing back to Y.Map)
+  remoteSetValueRef.current = setFormValue
 
   // ── Version history toggle ───────────────────────────────
   const [showHistory, setShowHistory] = useState(false)
@@ -153,6 +160,7 @@ export default function EditPage() {
             id={id}
             onRestore={restoreVersion}
             i18n={i18n}
+            activeVersionId={activeVersionId}
           />
         )}
       </div>

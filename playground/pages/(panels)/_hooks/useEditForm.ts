@@ -33,6 +33,8 @@ export function useEditForm(opts: UseEditFormOptions) {
   const [saving, setSaving] = useState(false)
   // Incremented on version restore — used as React key to force-remount collaborative editors
   const [formKey, setFormKey] = useState(0)
+  // Tracks the currently restored version (null = latest/unsaved)
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null)
 
   const setFormValue = useCallback((name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }))
@@ -124,19 +126,7 @@ export function useEditForm(opts: UseEditFormOptions) {
         const restoredFields = body.data.fields
         const merged = { ...values, ...restoredFields }
 
-        // Save restored values to DB
-        const saveRes = await fetch(`/${pathSegment}/api/${slug}/${id}`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(merged),
-        })
-
-        if (!saveRes.ok) {
-          toast.error(i18n.restoreError ?? 'Failed to restore version.')
-          return
-        }
-
-        // Clear server-side Y.Docs so editors seed from restored DB values on reconnect
+        // Clear server-side Y.Docs so editors seed from restored values on reconnect
         if (collaborative) {
           await fetch(`/${pathSegment}/api/${slug}/${id}/_clear-live`, {
             method: 'POST',
@@ -145,9 +135,11 @@ export function useEditForm(opts: UseEditFormOptions) {
         }
 
         // Update form state with restored values and bump formKey
-        // to force-remount collaborative editors (fresh Y.Docs)
+        // to force-remount collaborative editors (fresh Y.Docs).
+        // User can review and save manually.
         setValues(merged)
         setFormKey(k => k + 1)
+        setActiveVersionId(versionId)
         toast.success(i18n.restoredToast ?? 'Version restored.')
       } else {
         toast.error(i18n.restoreError ?? 'Failed to restore version.')
@@ -162,6 +154,7 @@ export function useEditForm(opts: UseEditFormOptions) {
     errors,
     saving,
     formKey,
+    activeVersionId,
     setValue,
     setFormValue,
     handleSave,

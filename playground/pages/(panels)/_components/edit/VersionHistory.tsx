@@ -14,9 +14,11 @@ interface Props {
   id:             string
   onRestore:      (versionId: string) => void
   i18n:           PanelI18n & Record<string, string>
+  /** ID of the currently restored/active version (if any) */
+  activeVersionId?: string | null
 }
 
-export function VersionHistory({ pathSegment, slug, id, onRestore, i18n }: Props) {
+export function VersionHistory({ pathSegment, slug, id, onRestore, i18n, activeVersionId }: Props) {
   const [versions, setVersions]           = useState<VersionEntry[]>([])
   const [loading, setLoading]             = useState(false)
   const [loaded, setLoaded]               = useState(false)
@@ -50,21 +52,32 @@ export function VersionHistory({ pathSegment, slug, id, onRestore, i18n }: Props
           {!loading && versions.length === 0 && (
             <p className="text-sm text-muted-foreground">{i18n.noVersions ?? 'No versions yet.'}</p>
           )}
-          {versions.map((v) => (
-            <div key={v.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-              <div>
-                <p className="text-sm">{v.label ?? new Date(v.createdAt).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleString()}</p>
-              </div>
-              <button
-                type="button"
-                className="text-xs text-primary hover:underline"
-                onClick={() => onRestore(v.id)}
+          {versions.map((v, idx) => {
+            const isActive = v.id === activeVersionId || (!activeVersionId && idx === 0)
+            return (
+              <div
+                key={v.id}
+                className={`flex items-center justify-between py-2 border-b border-border last:border-0 ${isActive ? 'bg-primary/5 -mx-3 px-3 rounded-md' : ''}`}
               >
-                {i18n.restore ?? 'Restore'}
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2">
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                  <div>
+                    <p className="text-sm">{v.label ?? new Date(v.createdAt).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(v.createdAt).toLocaleString()}</p>
+                  </div>
+                </div>
+                {!isActive && (
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline shrink-0"
+                    onClick={() => onRestore(v.id)}
+                  >
+                    {i18n.restore ?? 'Restore'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
