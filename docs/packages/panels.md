@@ -852,43 +852,75 @@ The selection bar is visible whenever at least one row is selected, regardless o
 
 ---
 
-## Real-Time Features
+## Feature Flags
 
-Panels offers three independent, composable real-time layers. Each is opt-in per resource via static flags.
-
-### Live Table (`static live = true`)
-
-When any user creates, updates, or deletes a record, all viewers of that resource's table see the change instantly — no manual refresh needed. Powered by `@boostkit/broadcast` (WebSocket pub/sub). No Yjs required.
-
-```ts
-export class TodoResource extends Resource {
-  static model = Todo
-  static live  = true   // enables live table updates
-  // ...
-}
-```
-
-**Requirements**: `@boostkit/broadcast` must be installed and `broadcasting()` registered in providers.
-
-### Versioned (`static versioned = true`)
-
-Adds Yjs-backed version history to a resource. Each record gets a ydoc that tracks changes. On save, a snapshot is stored and the DB record is updated.
+Resources support five independent flags that compose freely:
 
 ```ts
 export class ArticleResource extends Resource {
-  static model     = Article
-  static versioned = true   // enables version history
-  // ...
+  static live          = true   // table auto-refreshes on save
+  static versioned     = true   // version history with JSON snapshots
+  static draftable     = true   // draft/publish workflow
+  static collaborative = true   // real-time Yjs co-editing
+  static softDeletes   = true   // trash & restore
 }
 ```
 
-The edit page shows a "Publish" button (instead of "Save"), a connection status indicator, and a "Version History" sidebar where previous versions can be restored.
+### Live Table (`static live = true`)
 
-**Requirements**:
-- `@boostkit/live` must be installed and `live()` registered in providers
-- A `PanelVersion` model in your Prisma schema:
+When any user creates, updates, or deletes a record, all viewers of that resource's table see the change instantly. Powered by `@boostkit/broadcast`. No Yjs required.
+
+**Requirements**: `@boostkit/broadcast` registered in providers.
+
+### Versioned (`static versioned = true`)
+
+Each save/publish creates a JSON snapshot in the `PanelVersion` table. Users can view past versions and revert. **Does not require Yjs** — works with plain JSON.
+
+**Requirements**: `PanelVersion` model in Prisma schema.
+
+### Draftable (`static draftable = true`)
+
+Records have a `draftStatus` field (`'draft'` | `'published'`). Create defaults to draft. Edit page shows "Save Draft" and "Publish" buttons. Published records show an "Unpublish" option.
+
+**Requirements**: `draftStatus String @default("draft")` column on the model.
+
+### Collaborative (`static collaborative = true`)
+
+Real-time co-editing via Yjs CRDT. Fields marked `.collaborative()` use Y.Text (character-level merge, cursors). Other fields sync via Y.Map. The edit page shows connection status and presence avatars.
+
+```ts
+fields() {
+  return [
+    TextField.make('title').collaborative(),      // live cursors + character merge
+    TextareaField.make('excerpt').collaborative(), // live cursors + character merge
+    SelectField.make('status'),                    // NOT collaborative
+  ]
+}
+```
+
+**Requirements**: `@boostkit/live` registered in providers.
+
+### Soft Deletes (`static softDeletes = true`)
+
+Delete sets `deletedAt` instead of removing. List view adds a "View Trash" toggle. Trashed records can be restored or permanently deleted (with confirmation).
+
+**Requirements**: `deletedAt DateTime?` column on the model.
+
+### Composing Flags
+
+| Combo | Behavior |
+|-------|----------|
+| `versioned` only | Save creates a JSON snapshot. Can rollback. |
+| `draftable` only | Draft/publish workflow. No history. |
+| `draftable + versioned` | Draft/publish + version history on each publish. |
+| `collaborative` only | Real-time co-editing. Save goes to DB. |
+| `collaborative + versioned` | Co-edit + version snapshots. |
+| All flags | Full power: co-edit, draft/publish, version history, trash. |
+
+### Required Prisma Models
 
 ```prisma
+// For versioned resources
 model PanelVersion {
   id        String   @id @default(cuid())
   docName   String
@@ -898,40 +930,79 @@ model PanelVersion {
   createdAt DateTime @default(now())
   @@index([docName, createdAt])
 }
-```
 
-**API routes** (auto-mounted for versioned resources):
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/{panel}/api/{resource}/{id}/_versions` | List version history |
-| `POST` | `/{panel}/api/{resource}/{id}/_versions` | Snapshot current ydoc + publish to DB |
-| `GET` | `/{panel}/api/{resource}/{id}/_versions/{versionId}` | Get version field data |
-
-### Collaborative Fields (`.collaborative()`)
-
-Mark individual fields for real-time collaborative editing between users. When two users edit the same record, changes to collaborative fields are synced live via Yjs.
-
-```ts
-fields() {
-  return [
-    TextField.make('title')
-      .collaborative(),    // synced live between editors
-
-    TextareaField.make('excerpt')
-      .collaborative(),    // synced live between editors
-
-    SelectField.make('status'),  // NOT collaborative — local only
-  ]
+// For globals
+model PanelGlobal {
+  slug      String   @id
+  data      String   @default("{}")
+  updatedAt DateTime @updatedAt
 }
 ```
 
-Collaborative fields require `static versioned = true` on the resource.
+---
 
-The edit page shows:
-- **Connection status** — green dot when connected, grey when disconnected
-- **Presence avatars** — colored circles showing who else is editing (name initial + color)
-- **Live field sync** — typing in a collaborative field updates it in real-time for all editors
+## Globals
+
+Single-record settings pages — same field system as Resources but no list/create/delete.
+
+```ts
+import { Global, TextField, ToggleField, Section } from '@boostkit/panels'
+
+export class SiteSettingsGlobal extends Global {
+  static slug  = 'site-settings'
+  static label = 'Site Settings'
+  static icon  = '⚙️'
+
+  fields() {
+    return [
+      Section.make('General').schema(
+        TextField.make('siteName').required(),
+        TextField.make('tagline'),
+      ),
+      Section.make('Maintenance').schema(
+        ToggleField.make('maintenanceMode'),
+      ),
+    ]
+  }
+}
+```
+
+Register: `.globals([SiteSettingsGlobal])`. API: `GET/PUT /{panel}/api/_globals/{slug}`.
+
+---
+
+## Table Column Types
+
+### Badge Mapping
+
+Map field values to colored pills — works on any field:
+
+```ts
+SelectField.make('status').badge({
+  draft:     { color: 'yellow', label: 'Draft' },
+  published: { color: 'green',  label: 'Published' },
+})
+```
+
+Colors: `gray`, `red`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`.
+
+### Progress Bar
+
+```ts
+NumberField.make('completion').progressBar({ max: 100, color: '#22c55e' })
+```
+
+### Inline Table Editing
+
+Edit values directly in the table cell:
+
+```ts
+SelectField.make('status').inlineEditable()   // click → dropdown
+ToggleField.make('featured').inlineEditable() // click → toggle
+TextField.make('title').inlineEditable()       // click → input
+```
+
+Sends partial `PUT` with only the changed field.
 
 ---
 
@@ -1046,6 +1117,15 @@ For each resource, the following routes are mounted at boot:
 | `GET` | `/{panel}/api/{resource}/_options` | Relation select options — used by RelationField |
 | `GET` | `/{panel}/api/{resource}/_schema` | Field definitions — used for inline create dialog |
 | `GET` | `/{panel}/api/{resource}/_related` | HasMany records — `?fk=col&id=val[&through=true]` |
+| `POST` | `/{panel}/api/{resource}/:id/_restore` | Restore soft-deleted record |
+| `DELETE` | `/{panel}/api/{resource}/:id/_force` | Permanently delete |
+| `POST` | `/{panel}/api/{resource}/_restore` | Bulk restore — body: `{ ids: string[] }` |
+| `DELETE` | `/{panel}/api/{resource}/_force` | Bulk force delete — body: `{ ids: string[] }` |
+| `GET` | `/{panel}/api/{resource}/:id/_versions` | List version snapshots |
+| `POST` | `/{panel}/api/{resource}/:id/_versions` | Create version snapshot |
+| `GET` | `/{panel}/api/{resource}/:id/_versions/:vid` | Version detail |
+| `GET` | `/{panel}/api/_globals/{slug}` | Read global settings |
+| `PUT` | `/{panel}/api/_globals/{slug}` | Update global settings |
 
 List query params:
 
@@ -1057,3 +1137,4 @@ List query params:
 | `sort` | `?sort=name` | Sort column (must be `.sortable()`) |
 | `dir` | `?dir=DESC` | Sort direction — `ASC` or `DESC` (default: `ASC`) |
 | `filter[field]` | `?filter[role]=admin` | Apply a registered filter |
+| `trashed` | `?trashed=true` | Show soft-deleted records (when `softDeletes` enabled) |
