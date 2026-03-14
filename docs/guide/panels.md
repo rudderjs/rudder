@@ -148,6 +148,7 @@ Panel.make('admin')
     return ctx.user?.role === 'admin'
   })
   .resources([UserResource, PostResource])
+  .globals([SiteSettingsGlobal])          // single-record settings pages
 ```
 
 The `guard` receives a `PanelContext` (`{ user, headers, path }`) and returns `true` to allow or `false` to reject. Unauthenticated UI requests are redirected to `/login?redirect=<encodedPath>`; API requests receive `401 Unauthorized`.
@@ -458,6 +459,128 @@ actions() {
 
 ---
 
+## Globals
+
+Single-record settings pages — same field system as Resources but no list/create/delete.
+
+```ts
+import { Global, TextField, ToggleField, Section } from '@boostkit/panels'
+
+export class SiteSettingsGlobal extends Global {
+  static slug  = 'site-settings'
+  static label = 'Site Settings'
+  static icon  = '⚙️'
+
+  fields() {
+    return [
+      Section.make('General').schema(
+        TextField.make('siteName').required(),
+        TextField.make('tagline'),
+      ),
+      Section.make('Maintenance').schema(
+        ToggleField.make('maintenanceMode'),
+      ),
+    ]
+  }
+}
+```
+
+Register on the panel: `.globals([SiteSettingsGlobal])`. API: `GET/PUT /{panel}/api/_globals/{slug}`.
+
+Requires a `PanelGlobal` table: `slug String @id`, `data String @default("{}")`, `updatedAt DateTime @updatedAt`.
+
+---
+
+## Feature Flags
+
+Resources support five independent flags that can be combined freely:
+
+```ts
+export class ArticleResource extends Resource {
+  static live          = true   // table auto-refreshes on save
+  static versioned     = true   // version history with JSON snapshots
+  static draftable     = true   // draft/publish workflow
+  static collaborative = true   // real-time Yjs co-editing
+  static softDeletes   = true   // trash & restore
+}
+```
+
+| Flag | What it does | Requires |
+|------|-------------|----------|
+| `live` | Table auto-refreshes when anyone saves | `@boostkit/broadcast` |
+| `versioned` | JSON snapshots on each save, version history, rollback | `PanelVersion` table |
+| `draftable` | Draft/publish workflow with Save Draft + Publish buttons | `draftStatus` column |
+| `collaborative` | Real-time Yjs co-editing with cursors | `@boostkit/live` |
+| `softDeletes` | Trash, restore, force-delete | `deletedAt` column |
+
+### Soft Deletes
+
+When `softDeletes = true`, delete sets `deletedAt` instead of removing the record. The list view adds a "View Trash" toggle to see soft-deleted records. Trashed records can be restored or permanently deleted.
+
+Requires `deletedAt DateTime?` on the model.
+
+### Draft/Publish
+
+When `draftable = true`, create defaults to `draftStatus = 'draft'`. The edit page shows "Save Draft" and "Publish" buttons. Published records show an "Unpublish" option.
+
+Requires `draftStatus String @default("draft")` on the model.
+
+---
+
+## Table Column Types
+
+Fields render visually in table cells based on their type:
+
+| Type | Rendering |
+|------|-----------|
+| `image` | Thumbnail preview |
+| `boolean` / `toggle` | Yes/No badge |
+| `date` | Formatted date |
+| `color` | Swatch + hex code |
+| `tags` | Badge pills |
+| `select` | Label from options (not raw value) |
+| `belongsTo` | Linked name |
+| `belongsToMany` | Badge pills with links |
+
+### Badge Mapping
+
+Map field values to colored pills — works on any field type:
+
+```ts
+SelectField.make('status').badge({
+  draft:     { color: 'yellow', label: 'Draft' },
+  published: { color: 'green',  label: 'Published' },
+  archived:  { color: 'gray',   label: 'Archived' },
+})
+```
+
+Colors: `gray`, `red`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`.
+
+### Progress Bar
+
+Render a number field as a visual progress bar:
+
+```ts
+NumberField.make('completion').progressBar({ max: 100, color: '#22c55e' })
+```
+
+---
+
+## Inline Table Editing
+
+Edit field values directly in the table cell — no edit page needed:
+
+```ts
+SelectField.make('status').inlineEditable()   // click → dropdown
+ToggleField.make('featured').inlineEditable() // click → toggle switch
+TextField.make('title').inlineEditable()       // click → text input
+NumberField.make('priority').inlineEditable()  // click → number input
+```
+
+Sends `PUT /{panel}/api/{resource}/:id` with only the changed field (partial update). Validation only runs on submitted fields.
+
+---
+
 ## Authorization
 
 Override `policy()` in your resource to control access per-action:
@@ -469,7 +592,7 @@ async policy(action: PolicyAction, ctx: PanelContext): Promise<boolean> {
 }
 ```
 
-`PolicyAction`: `'viewAny' | 'view' | 'create' | 'update' | 'delete'`
+`PolicyAction`: `'viewAny' | 'view' | 'create' | 'update' | 'delete' | 'restore' | 'forceDelete'`
 
 The API responds with 403 when `policy()` returns `false`.
 
@@ -492,6 +615,12 @@ For each resource, `@boostkit/panels` mounts:
 | `GET` | `/{panel}/api/{resource}/_options` | Relation select options — used by RelationField |
 | `GET` | `/{panel}/api/{resource}/_schema` | Field definitions — used for inline create dialog |
 | `GET` | `/{panel}/api/{resource}/_related` | HasMany records — `?fk=col&id=val[&through=true]` |
+| `POST` | `/{panel}/api/{resource}/:id/_restore` | Restore soft-deleted record |
+| `DELETE` | `/{panel}/api/{resource}/:id/_force` | Permanently delete |
+| `GET` | `/{panel}/api/{resource}/:id/_versions` | List version snapshots |
+| `POST` | `/{panel}/api/{resource}/:id/_versions` | Create version snapshot |
+| `GET` | `/{panel}/api/_globals/{slug}` | Read global settings |
+| `PUT` | `/{panel}/api/_globals/{slug}` | Update global settings |
 
 ---
 
@@ -506,6 +635,11 @@ export class PostResource extends Resource {
   static icon           = 'file-text'   // sidebar icon name
   static defaultSort    = 'createdAt'   // default sort column
   static defaultSortDir = 'DESC'        // 'ASC' | 'DESC'
+  static live           = false         // auto-refresh table on save
+  static versioned      = false         // version history with JSON snapshots
+  static draftable      = false         // draft/publish workflow
+  static collaborative  = false         // real-time Yjs co-editing
+  static softDeletes    = false         // trash & restore
 
   fields() { return [...] }
   filters() { return [...] }   // optional
