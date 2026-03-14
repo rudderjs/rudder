@@ -5,11 +5,11 @@ import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
 import type { FieldMeta, PanelI18n, NodeMap } from '@boostkit/panels'
 import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from '@boostkit/panels'
-import { CollaborativeInput } from './collaborative/CollaborativeInput.js'
-import { CollaborativeTextarea } from './collaborative/CollaborativeTextarea.js'
+import { CollaborativePlainText } from './collaborative/CollaborativePlainText.js'
 import { customFieldRenderers } from './CustomFieldRenderers.js'
 import { SortableBlockList } from './SortableBlockList.js'
 import { ContentEditor } from './ContentEditor.js'
+import { LexicalEditor } from './LexicalEditor.js'
 
 interface Props {
   field:       FieldMeta
@@ -19,14 +19,19 @@ interface Props {
   uploadBase?: string
   i18n:        PanelI18n
   disabled?:   boolean
-  /** Y.Text instance for collaborative text sync (optional) */
-  yText?:      any | null
   /** Awareness instance for cursor broadcasting (optional) */
   awareness?:  any | null
   /** Y.Doc instance for per-block Y.Text in content fields (optional) */
   yDoc?:       any | null
   /** True after Y.Doc initial sync — passed to ContentEditor to defer seeding */
   yDocSynced?: boolean
+  /** Stable user identity for collaborative cursors (shared across all field types) */
+  userName?: string
+  userColor?: string
+  /** WebSocket path for live collaboration (e.g. '/ws-live') — used by LexicalEditor */
+  wsPath?:   string | null
+  /** Base document name for live collaboration — used by LexicalEditor */
+  docName?:  string | null
 }
 
 function generateSlug(str: string): string {
@@ -40,7 +45,7 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
-export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, yText, awareness, yDoc, yDocSynced }: Props) {
+export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, awareness, yDoc, yDocSynced, userName, userColor, wsPath, docName }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
   const isDisabled = disabled || field.readonly
 
@@ -106,21 +111,21 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
 
   // ── Textarea ─────────────────────────────────────────────
   if (field.type === 'textarea') {
-    if (yText && awareness) {
+    if (field.collaborative && wsPath && docName) {
       return (
-        <CollaborativeTextarea
+        <CollaborativePlainText
           value={(value as string) ?? ''}
           onChange={(v) => onChange(v)}
-          yText={yText}
-          awareness={awareness}
+          wsPath={wsPath}
+          docName={docName}
           fieldName={field.name}
-          rows={(field.extra?.rows as number) ?? 4}
+          multiline
           className={inputCls}
           placeholder={(field.extra?.placeholder as string) ?? ''}
           disabled={isDisabled}
           required={field.required}
-          readOnly={field.readonly}
-          name={field.name}
+          userName={userName}
+          userColor={userColor}
         />
       )
     }
@@ -656,6 +661,24 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     )
   }
 
+  // ── Rich Content (Lexical) ───────────────────────────────
+  if (field.type === 'richcontent') {
+    return (
+      <LexicalEditor
+        value={value}
+        onChange={onChange}
+        placeholder={field.extra?.placeholder as string | undefined}
+        disabled={isDisabled}
+        wsPath={field.collaborative ? wsPath : null}
+        docName={field.collaborative ? docName : null}
+        fragmentName={`richcontent:${field.name}`}
+        blocks={field.extra?.blocks as any[] | undefined}
+        userName={userName}
+        userColor={userColor}
+      />
+    )
+  }
+
   // ── Custom renderer ──────────────────────────────────────
   const customKey = field.component ?? field.type
   const CustomRenderer = customFieldRenderers[customKey]
@@ -690,21 +713,20 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     : (value as string) ?? ''
 
   // Collaborative text input for text/email fields
-  if ((field.type === 'text' || field.type === 'email') && yText && awareness) {
+  if ((field.type === 'text' || field.type === 'email') && field.collaborative && wsPath && docName) {
     return (
-      <CollaborativeInput
+      <CollaborativePlainText
         value={(value as string) ?? ''}
         onChange={(v) => onChange(v)}
-        yText={yText}
-        awareness={awareness}
+        wsPath={wsPath}
+        docName={docName}
         fieldName={field.name}
-        type={inputType}
         className={inputCls}
         placeholder={(field.extra?.placeholder as string) ?? ''}
         disabled={isDisabled}
         required={field.required}
-        readOnly={field.readonly}
-        name={field.name}
+        userName={userName}
+        userColor={userColor}
       />
     )
   }
