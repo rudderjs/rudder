@@ -120,9 +120,7 @@ export function LexicalEditor({
     )
   }
 
-  return (
-    <BlockRegistryContext.Provider value={blockRegistry}>
-    <LexicalCollaboration>
+  const editorContent = (
     <LexicalComposer initialConfig={initialConfig}>
       <div className="lexical-editor rounded-lg border border-input bg-background relative">
         <div ref={anchorRef} className="relative">
@@ -147,7 +145,8 @@ export function LexicalEditor({
           <CollaborationPlugin
             id={fragmentName}
             providerFactory={createProviderFactory(yDoc, awareness, yDocSynced)}
-            shouldBootstrap={false}
+            shouldBootstrap={true}
+            initialEditorState={value ? JSON.stringify(value) : undefined}
           />
         ) : (
           <>
@@ -163,7 +162,15 @@ export function LexicalEditor({
       </div>
       <style>{collabCursorStyles + dragHandleStyles}</style>
     </LexicalComposer>
-    </LexicalCollaboration>
+  )
+
+  return (
+    <BlockRegistryContext.Provider value={blockRegistry}>
+      {isCollab ? (
+        <LexicalCollaboration>{editorContent}</LexicalCollaboration>
+      ) : (
+        editorContent
+      )}
     </BlockRegistryContext.Provider>
   )
 }
