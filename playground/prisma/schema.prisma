@@ -89,6 +89,7 @@ model Article {
   coverImage      String?
   tags            String     @default("[]")  // JSON-encoded string[]
   status          String     @default("draft")
+  draftStatus     String     @default("draft")  // draftable: 'draft' | 'published'
   featured        Boolean    @default(false)
   publishedAt     DateTime?
   accentColor     String?

@@ -115,6 +115,18 @@ export const en = {
   bulkRestore:          'Restore Selected',
   bulkForceDelete:      'Delete Permanently',
   trashedBanner:        'You are viewing trashed records.',
+  draft:                'Draft',
+  published:            'Published',
+  saveDraft:            'Save Draft',
+  savingDraft:          'Saving\u2026',
+  savedDraftToast:      'Draft saved.',
+  publishButton:        'Publish',
+  publishingButton:     'Publishing\u2026',
+  publishedToastDraft:  'Published successfully.',
+  unpublish:            'Unpublish',
+  unpublishedToast:     'Unpublished — record is now a draft.',
+  draftBadge:           'Draft',
+  publishedBadge:       'Published',
 }
 
 export type PanelI18n = typeof en

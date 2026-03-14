@@ -90,7 +90,7 @@ interface VersionEntry {
 
 export default function EditPage() {
   const config = useConfig()
-  const { panelMeta, resourceMeta, record, pathSegment, slug, id, versioned, wsLivePath, docName, liveProviders } = useData<Data>()
+  const { panelMeta, resourceMeta, record, pathSegment, slug, id, versioned, draftable, collaborative, wsLivePath, docName, liveProviders } = useData<Data>()
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   const i18n = panelMeta.i18n as Data['panelMeta']['i18n'] & Record<string, string>
   config({ title: `${i18n.edit} ${resourceMeta.labelSingular} — ${panelName}` })
@@ -145,7 +145,7 @@ export default function EditPage() {
 
   // Collaborative form hook
   const { connected, synced, presences, setCollaborativeValue, syncAllFieldsToDoc, getYText, getDoc, awareness, userName, userColor } = useCollaborativeForm(
-    versioned && docName && wsLivePath
+    collaborative && docName && wsLivePath
       ? { docName, wsPath: wsLivePath, fields: collabFields, values, setValue: setFormValue, providers: liveProviders as any }
       : null,
   )
@@ -185,21 +185,29 @@ export default function EditPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  // Current record status for draftable resources
+  const recordStatus = draftable ? ((record as Record<string, unknown>)?.['draftStatus'] as string ?? 'draft') : null
+
+  async function handleSave(publishAction?: 'draft' | 'publish' | 'unpublish') {
     setSaving(true)
     setErrors({})
     try {
-      if (versioned) {
-        // Sync all fields to ydoc before publish
+      if (collaborative) {
         syncAllFieldsToDoc(values)
       }
 
-      // Always save to DB via PUT
+      const payload = { ...values } as Record<string, unknown>
+
+      // Draftable: set _status based on action
+      if (draftable && publishAction) {
+        payload['draftStatus'] = publishAction === 'publish' ? 'published' : 'draft'
+      }
+
+      // Save to DB via PUT
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(values),
+        body:    JSON.stringify(payload),
       })
       if (res.status === 422) {
         const body = await res.json() as { errors: Record<string, string[]> }
@@ -211,26 +219,45 @@ export default function EditPage() {
         return
       }
 
-      // For versioned resources, also snapshot a version
+      // Versioned: create a snapshot
       if (versioned) {
-        const vRes = await fetch(`/${pathSegment}/api/${slug}/${id}/_versions`, {
+        await fetch(`/${pathSegment}/api/${slug}/${id}/_versions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: null }),
+          body: JSON.stringify({
+            label: null,
+            ...(!collaborative ? { fields: values } : {}),
+            ...(draftable && publishAction ? { draftStatus: publishAction === 'publish' ? 'published' : 'draft' } : {}),
+          }),
         })
-        if (vRes.ok) {
-          toast.success(i18n.publishedToast ?? 'Version published.')
-        } else {
-          toast.success(i18n.savedToast)
-        }
+      }
+
+      // Toast based on action
+      if (draftable && publishAction === 'publish') {
+        toast.success(i18n.publishedToastDraft ?? 'Published successfully.')
+      } else if (draftable && publishAction === 'unpublish') {
+        toast.success(i18n.unpublishedToast ?? 'Unpublished.')
+      } else if (draftable && publishAction === 'draft') {
+        toast.success(i18n.savedDraftToast ?? 'Draft saved.')
       } else {
         toast.success(i18n.savedToast)
       }
+
       void navigate(backHref)
     } catch {
       toast.error(i18n.saveError)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (draftable) {
+      // Default submit = save draft (Publish is a separate button)
+      await handleSave('draft')
+    } else {
+      await handleSave()
     }
   }
 
@@ -327,17 +354,19 @@ export default function EditPage() {
         { label: `${i18n.edit} ${resourceMeta.labelSingular}` },
       ]} />
 
-      {/* Presence & version history bar */}
-      {versioned && (
+      {/* Presence bar (collaborative) & version history bar */}
+      {(collaborative || versioned) && (
         <div className="flex items-center gap-3 mb-4 text-sm">
-          {/* Connection status */}
-          <span className={`inline-flex items-center gap-1.5 ${connected ? 'text-green-600' : 'text-muted-foreground'}`}>
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
-            {connected ? (i18n.connectedLive ?? 'Connected') : (i18n.disconnectedLive ?? 'Disconnected')}
-          </span>
+          {/* Connection status — only for collaborative */}
+          {collaborative && (
+            <span className={`inline-flex items-center gap-1.5 ${connected ? 'text-green-600' : 'text-muted-foreground'}`}>
+              <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+              {connected ? (i18n.connectedLive ?? 'Connected') : (i18n.disconnectedLive ?? 'Disconnected')}
+            </span>
+          )}
 
-          {/* Presence avatars */}
-          {presences.length > 1 && (
+          {/* Presence avatars — only for collaborative */}
+          {collaborative && presences.length > 1 && (
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <span className="flex -space-x-1.5">
                 {presences.slice(0, 5).map((p, i) => (
@@ -355,16 +384,29 @@ export default function EditPage() {
             </span>
           )}
 
+          {/* Draft status badge — only for draftable */}
+          {draftable && recordStatus && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              recordStatus === 'published'
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+            }`}>
+              {recordStatus === 'published' ? (i18n.publishedBadge ?? 'Published') : (i18n.draftBadge ?? 'Draft')}
+            </span>
+          )}
+
           <div className="flex-1" />
 
-          {/* Version history toggle */}
-          <button
-            type="button"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => { setShowHistory(!showHistory); if (!showHistory && versions.length === 0) void loadVersions() }}
-          >
-            {i18n.versionHistory ?? 'Version History'}
-          </button>
+          {/* Version history toggle — only for versioned */}
+          {versioned && (
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => { setShowHistory(!showHistory); if (!showHistory && versions.length === 0) void loadVersions() }}
+            >
+              {i18n.versionHistory ?? 'Version History'}
+            </button>
+          )}
         </div>
       )}
 
@@ -379,16 +421,46 @@ export default function EditPage() {
               .map((item, i) => renderSchemaItem(item, i))
             }
             <div className="flex items-center gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                {saving
-                  ? (versioned ? (i18n.publishing ?? 'Publishing\u2026') : i18n.saving)
-                  : (versioned ? (i18n.publish ?? 'Publish') : i18n.save)
-                }
-              </button>
+              {draftable ? (
+                <>
+                  {/* Save Draft button (default submit) */}
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-5 py-2 border border-border text-sm font-medium rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+                  >
+                    {saving ? (i18n.savingDraft ?? 'Saving\u2026') : (i18n.saveDraft ?? 'Save Draft')}
+                  </button>
+                  {/* Publish button */}
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void handleSave('publish')}
+                    className="px-5 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {saving ? (i18n.publishingButton ?? 'Publishing\u2026') : (i18n.publishButton ?? 'Publish')}
+                  </button>
+                  {/* Unpublish — only when currently published */}
+                  {recordStatus === 'published' && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void handleSave('unpublish')}
+                      className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    >
+                      {i18n.unpublish ?? 'Unpublish'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-5 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {saving ? i18n.saving : i18n.save}
+                </button>
+              )}
               <a
                 href={backHref}
                 className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"

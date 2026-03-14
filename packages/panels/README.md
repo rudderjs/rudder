@@ -858,7 +858,113 @@ async policy(action: PolicyAction, ctx: PanelContext): Promise<boolean> {
 }
 ```
 
-`PolicyAction`: `'viewAny' | 'view' | 'create' | 'update' | 'delete'`
+`PolicyAction`: `'viewAny' | 'view' | 'create' | 'update' | 'delete' | 'restore' | 'forceDelete'`
+
+---
+
+## Globals
+
+Single-record settings pages — same field system as Resources but no list/create/delete. Just an edit form.
+
+```ts
+import { Global, TextField, ToggleField, Section } from '@boostkit/panels'
+
+export class SiteSettingsGlobal extends Global {
+  static slug  = 'site-settings'
+  static label = 'Site Settings'
+  static icon  = '⚙️'
+
+  fields() {
+    return [
+      Section.make('General').schema(
+        TextField.make('siteName').required(),
+        TextField.make('tagline'),
+      ),
+      Section.make('Maintenance').schema(
+        ToggleField.make('maintenanceMode'),
+      ),
+    ]
+  }
+}
+```
+
+Register on the panel: `.globals([SiteSettingsGlobal])`. API: `GET/PUT /{panel}/api/_globals/{slug}`.
+
+Storage: single `PanelGlobal` table — `slug` (PK) + `data` (JSON string). No migration needed per global.
+
+---
+
+## Feature Flags
+
+Resources support five independent feature flags:
+
+```ts
+export class ArticleResource extends Resource {
+  static live          = true   // table auto-refreshes on save
+  static versioned     = true   // version history with JSON snapshots
+  static draftable     = true   // draft/publish workflow
+  static collaborative = true   // real-time Yjs co-editing
+  static softDeletes   = true   // trash & restore
+}
+```
+
+### `live`
+Table auto-refreshes when any user saves. Uses `@boostkit/broadcast` — no Yjs.
+
+### `versioned`
+Each save/publish creates a JSON snapshot in `PanelVersion`. View history and revert. No Yjs needed.
+
+### `draftable`
+Records have a `draftStatus` field (`'draft'` | `'published'`). Create defaults to draft. Edit page shows "Save Draft" and "Publish" buttons. Requires `draftStatus String @default("draft")` column.
+
+### `collaborative`
+Real-time co-editing via Yjs CRDT. `.collaborative()` fields use Y.Text (cursors, character merge). Other fields sync via Y.Map. Requires `@boostkit/live`.
+
+### `softDeletes`
+Delete sets `deletedAt` instead of removing. Trash view with restore and force-delete. Requires `deletedAt DateTime?` column.
+
+### Composing Flags
+
+| Combo | Behavior |
+|-------|----------|
+| `versioned` only | Save creates a JSON snapshot. Can rollback. |
+| `draftable` only | Draft/publish workflow. No history. |
+| `draftable + versioned` | Draft/publish + version history on each publish. |
+| `collaborative` only | Real-time co-editing. Save goes to DB. |
+| `collaborative + versioned` | Co-edit + version snapshots. |
+| All three | Full power: co-edit, draft/publish, version history. |
+
+---
+
+## Table Column Types
+
+Fields render visually in table cells:
+
+- **Badge mapping** — `.badge({ draft: { color: 'yellow', label: 'Draft' } })` — any field
+- **Select** — shows label from options instead of raw value
+- **Image** — thumbnail preview (via `FileField.image()`)
+- **Toggle/Boolean** — Yes/No badge
+- **Color** — swatch + hex code
+- **Tags** — badge pills
+- **Progress bar** — `NumberField.progressBar({ max: 100, color: '#22c55e' })`
+- **Relations** — linked names with badges
+
+Badge colors: `gray`, `red`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`.
+
+---
+
+## Inline Table Editing
+
+Edit field values directly in the table — no edit page needed.
+
+```ts
+SelectField.make('status').inlineEditable()   // click → dropdown
+ToggleField.make('featured').inlineEditable() // click → toggle switch
+TextField.make('title').inlineEditable()       // click → text input
+NumberField.make('priority').inlineEditable()  // click → number input
+```
+
+Sends `PUT /api/{resource}/:id` with just the changed field (partial update). Validation only runs on the submitted field.
 
 ---
 
@@ -881,9 +987,19 @@ For each resource, the following routes are automatically mounted:
 | `GET` | `/{panel}/api/{resource}/_options` | Relation select options — used by RelationField |
 | `GET` | `/{panel}/api/{resource}/_schema` | Field definitions — used for inline create dialog |
 | `GET` | `/{panel}/api/{resource}/_related` | HasMany records — `?fk=col&id=val[&through=true]` |
+| `POST` | `/{panel}/api/{resource}/:id/_restore` | Restore soft-deleted record |
+| `DELETE` | `/{panel}/api/{resource}/:id/_force` | Permanently delete |
+| `POST` | `/{panel}/api/{resource}/_restore` | Bulk restore — body: `{ ids: string[] }` |
+| `DELETE` | `/{panel}/api/{resource}/_force` | Bulk force delete — body: `{ ids: string[] }` |
+| `GET` | `/{panel}/api/{resource}/:id/_versions` | List version snapshots |
+| `POST` | `/{panel}/api/{resource}/:id/_versions` | Create version snapshot |
+| `GET` | `/{panel}/api/{resource}/:id/_versions/:vid` | Version detail |
+| `GET` | `/{panel}/api/_globals/{slug}` | Read global settings |
+| `PUT` | `/{panel}/api/_globals/{slug}` | Update global settings |
 
 The `GET` list endpoint supports:
 - `?page=1&perPage=15` — pagination (defaults configurable via `static perPage` / `static perPageOptions`)
 - `?search=foo` — search across `.searchable()` fields (LIKE)
 - `?sort=name&dir=ASC` — sort by `.sortable()` field
 - `?filter[field]=value` — apply filters
+- `?trashed=true` — show soft-deleted records (when `softDeletes` enabled)

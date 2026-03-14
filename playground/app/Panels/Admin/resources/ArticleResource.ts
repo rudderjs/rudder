@@ -32,9 +32,11 @@ export class ArticleResource extends Resource {
   static persistTableState = true
   static perPage = 5
   static perPageOptions = [5,10, 15, 25, 50, 100]
-  static live        = true
-  static versioned   = true
-  static softDeletes = true
+  static live          = true
+  static versioned     = true
+  static draftable     = true
+  static collaborative = true
+  static softDeletes   = true
 
   fields() {
     return [

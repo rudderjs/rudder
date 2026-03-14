@@ -29,6 +29,8 @@ export interface ResourceMeta {
   paginationType:    'pagination' | 'loadMore'
   live:              boolean
   versioned:         boolean
+  draftable:         boolean
+  collaborative:     boolean
   softDeletes:       boolean
 }
 
@@ -88,12 +90,28 @@ export class Resource {
   static live = false
 
   /**
-   * Enable Yjs-backed version history for this resource.
-   * Each record gets a ydoc that tracks field changes over time.
-   * Save = snapshot ydoc + publish field values to DB.
-   * Uses @boostkit/live.
+   * Enable version history for this resource.
+   * Each save/publish creates a JSON snapshot in the PanelVersion table.
+   * Users can view past versions and revert to any snapshot.
+   * Does NOT require Yjs — works with plain JSON snapshots.
    */
   static versioned = false
+
+  /**
+   * Enable draft/publish workflow for this resource.
+   * Records have a `_status` field ('draft' | 'published').
+   * Create saves as draft by default. "Publish" makes it live.
+   * Requires a `_status String @default("draft")` column on the model's table.
+   */
+  static draftable = false
+
+  /**
+   * Enable real-time collaborative editing via Yjs CRDT.
+   * Fields marked `.collaborative()` use Y.Text (character-level merge, cursors).
+   * Other fields sync via Y.Map (last-write-wins, no cursors).
+   * Uses @boostkit/live for WebSocket sync.
+   */
+  static collaborative = false
 
   /**
    * Enable soft deletes for this resource.
@@ -173,6 +191,8 @@ export class Resource {
       paginationType:  Cls.paginationType,
       live:            Cls.live,
       versioned:       Cls.versioned,
+      draftable:       Cls.draftable,
+      collaborative:   Cls.collaborative,
       softDeletes:     Cls.softDeletes,
     }
     if (Cls.defaultSort    !== undefined) meta.defaultSort    = Cls.defaultSort

@@ -401,6 +401,11 @@ export class PanelServiceProvider extends ServiceProvider {
       const errors = await this.validatePayload(resource, body, 'create')
       if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
+      // Draftable: default _status to 'draft' unless explicitly set
+      if ((ResourceClass as any).draftable && !body['draftStatus']) {
+        body['draftStatus'] = 'draft'
+      }
+
       const record = await Model.create(body)
       if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.created', { id: (record as any).id })
       return res.status(201).json({ data: record })
@@ -583,8 +588,8 @@ export class PanelServiceProvider extends ServiceProvider {
       }, mw)
     }
 
-    // ── Version routes (only for versioned resources) ───
-    if ((ResourceClass as any).versioned) {
+    // ── Version routes (versioned or collaborative resources) ───
+    if ((ResourceClass as any).versioned || (ResourceClass as any).collaborative) {
       this.mountVersionRoutes(router, panel, ResourceClass, mw)
     }
   }
@@ -694,8 +699,9 @@ export class PanelServiceProvider extends ServiceProvider {
     ResourceClass: typeof Resource,
     mw: MiddlewareHandler[],
   ): void {
-    const slug = ResourceClass.getSlug()
-    const base = `${panel.getApiBase()}/${slug}`
+    const slug          = ResourceClass.getSlug()
+    const base          = `${panel.getApiBase()}/${slug}`
+    const isCollab      = (ResourceClass as any).collaborative === true
 
     // GET /{panel}/api/{resource}/{id}/_versions — list
     router.get(`${base}/:id/_versions`, async (req: AppRequest, res: AppResponse) => {
@@ -715,7 +721,9 @@ export class PanelServiceProvider extends ServiceProvider {
       }
     }, mw)
 
-    // POST /{panel}/api/{resource}/{id}/_versions — create (snapshot + publish)
+    // POST /{panel}/api/{resource}/{id}/_versions — create snapshot
+    // With collaborative: reads from Y.Doc (live state)
+    // Without collaborative: reads from request body or current DB record
     router.post(`${base}/:id/_versions`, async (req: AppRequest, res: AppResponse) => {
       const resource = new ResourceClass()
       const ctx = this.buildContext(req)
@@ -727,27 +735,54 @@ export class PanelServiceProvider extends ServiceProvider {
 
       const id      = (req.params as Record<string, string>)['id']
       const docName = `panel:${slug}:${id}`
-      const body    = req.body as { label?: string }
+      const body    = req.body as { label?: string; fields?: Record<string, unknown>; draftStatus?: string }
 
       try {
-        const { Live } = await import('@boostkit/live')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const prisma = this.app.make<any>('prisma')
 
-        const snapshot    = Live.snapshot(docName)
-        const fieldValues = Live.readMap(docName, 'fields')
+        let fieldValues: Record<string, unknown>
 
+        if (body.fields) {
+          // Explicit fields in body — used by both collaborative and non-collaborative
+          fieldValues = body.fields
+        } else if (isCollab) {
+          // Collaborative: read from Y.Doc
+          try {
+            const { Live } = await import('@boostkit/live')
+            fieldValues = Live.readMap(docName, 'fields')
+          } catch {
+            // Y.Doc not available — fall back to DB record
+            const record = await Model.find(id)
+            fieldValues = record ? { ...(record as Record<string, unknown>) } : {}
+            delete fieldValues['id']; delete fieldValues['createdAt']; delete fieldValues['updatedAt']
+          }
+        } else {
+          // Non-collaborative: snapshot from current DB record
+          const record = await Model.find(id)
+          fieldValues = record ? { ...(record as Record<string, unknown>) } : {}
+          delete fieldValues['id']; delete fieldValues['createdAt']; delete fieldValues['updatedAt']
+        }
+
+        // Store version as JSON snapshot
         await prisma.panelVersion.create({
           data: {
             docName,
-            snapshot: Buffer.from(snapshot),
+            snapshot: Buffer.from(JSON.stringify(fieldValues)),
             label:    body.label ?? null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             userId:   (ctx.user as any)?.id ?? null,
           },
         })
 
+        // Write field values to DB (publish)
         const coerced = this.coercePayload(resource, fieldValues, 'update')
+
+        // Handle draftable: set _status if provided
+        if ((ResourceClass as any).draftable && body.draftStatus) {
+          coerced['draftStatus'] = body.draftStatus
+        }
+
         await Model.query().update(id, coerced)
 
         if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.updated', { id })
@@ -767,14 +802,21 @@ export class PanelServiceProvider extends ServiceProvider {
         const version = await prisma.panelVersion.findUnique({ where: { id: versionId } })
         if (!version) return res.status(404).json({ message: 'Version not found.' })
 
-        const Y   = await import('yjs')
-        const doc = new Y.Doc()
-        Y.applyUpdate(doc, new Uint8Array(version.snapshot))
-        const fields = doc.getMap('fields')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: Record<string, unknown> = {}
-        fields.forEach((val: unknown, key: string) => { data[key] = val })
-        doc.destroy()
+        let data: Record<string, unknown>
+
+        // Try JSON first (non-collaborative snapshots)
+        try {
+          data = JSON.parse(Buffer.from(version.snapshot).toString('utf8'))
+        } catch {
+          // Fall back to Y.Doc binary (collaborative snapshots)
+          const Y   = await import('yjs')
+          const doc = new Y.Doc()
+          Y.applyUpdate(doc, new Uint8Array(version.snapshot))
+          const fields = doc.getMap('fields')
+          data = {}
+          fields.forEach((val: unknown, key: string) => { data[key] = val })
+          doc.destroy()
+        }
 
         return res.json({
           data: {

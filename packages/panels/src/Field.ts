@@ -265,7 +265,7 @@ export abstract class Field {
   /**
    * Enable real-time collaborative editing for this field.
    * Value syncs live via Yjs between all connected editors.
-   * Requires `static versioned = true` on the resource.
+   * Requires `static collaborative = true` on the resource.
    */
   collaborative(value = true): this {
     this._collaborative = value

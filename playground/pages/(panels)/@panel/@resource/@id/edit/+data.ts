@@ -47,10 +47,13 @@ export async function data(pageContext: PageContextServer) {
     record = await q.find(id)
   }
 
-  // Seed ydoc for versioned resources
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const versioned = (ResourceClass as any).versioned ?? false
-  if (record && versioned) {
+  // Feature flags (independent)
+  const versioned     = (ResourceClass as any).versioned ?? false
+  const draftable     = (ResourceClass as any).draftable ?? false
+  const collaborative = (ResourceClass as any).collaborative ?? false
+
+  // Seed ydoc for collaborative resources
+  if (record && collaborative) {
     try {
       const { Live } = await import('@boostkit/live')
       const docName = `panel:${slug}:${id}`
@@ -70,7 +73,7 @@ export async function data(pageContext: PageContextServer) {
 
   // Read client-side providers from live config
   let liveProviders: string[] = ['websocket']
-  if (versioned) {
+  if (collaborative) {
     try {
       const configs = await import('../../../../../../config/index.js')
       liveProviders = (configs.default as any)?.live?.providers ?? ['websocket']
@@ -83,8 +86,10 @@ export async function data(pageContext: PageContextServer) {
   return {
     panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser,
     versioned,
-    wsLivePath: versioned ? '/ws-live' : null,
-    docName:    versioned ? `panel:${slug}:${id}` : null,
-    liveProviders: versioned ? liveProviders : [],
+    draftable,
+    collaborative,
+    wsLivePath: collaborative ? '/ws-live' : null,
+    docName:    collaborative ? `panel:${slug}:${id}` : null,
+    liveProviders: collaborative ? liveProviders : [],
   }
 }
