@@ -15,6 +15,11 @@ export type { PageMeta } from './Page.js'
 export { Resource } from './Resource.js'
 export type { ResourceMeta, FieldOrGrouping, SchemaItemMeta } from './Resource.js'
 
+// ─── Global ────────────────────────────────────────────────
+
+export { Global } from './Global.js'
+export type { GlobalMeta } from './Global.js'
+
 // ─── Groupings ─────────────────────────────────────────────
 
 export { Section } from './Section.js'

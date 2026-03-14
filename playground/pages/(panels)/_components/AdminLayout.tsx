@@ -46,6 +46,7 @@ interface NavItem {
   label: string
   icon:  string | undefined
   href:  string
+  group?: 'resource' | 'global' | 'page'
 }
 
 interface SessionUser {
@@ -57,8 +58,9 @@ interface SessionUser {
 function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   const path = panelMeta.path
   return [
-    ...panelMeta.resources.map((r) => ({ slug: r.slug, label: r.label, icon: r.icon, href: `${path}/${r.slug}` })),
-    ...panelMeta.pages.map((p)     => ({ slug: p.slug, label: p.label, icon: p.icon, href: `${path}/${p.slug}` })),
+    ...panelMeta.resources.map((r) => ({ slug: r.slug, label: r.label, icon: r.icon, href: `${path}/${r.slug}`, group: 'resource' as const })),
+    ...(panelMeta.globals ?? []).map((g) => ({ slug: g.slug, label: g.label, icon: g.icon, href: `${path}/globals/${g.slug}`, group: 'global' as const })),
+    ...panelMeta.pages.map((p)     => ({ slug: p.slug, label: p.label, icon: p.icon, href: `${path}/${p.slug}`, group: 'page' as const })),
   ]
 }
 
@@ -236,7 +238,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {items.map((item) => (
+                  {items.filter(i => i.group === 'resource').map((item) => (
                     <SidebarMenuItem key={item.slug}>
                       <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
                         <ResourceIcon icon={item.icon} />
@@ -247,6 +249,38 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+            {items.some(i => i.group === 'global') && (
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.filter(i => i.group === 'global').map((item) => (
+                      <SidebarMenuItem key={item.slug}>
+                        <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
+                          <ResourceIcon icon={item.icon} />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
+            {items.some(i => i.group === 'page') && (
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.filter(i => i.group === 'page').map((item) => (
+                      <SidebarMenuItem key={item.slug}>
+                        <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
+                          <ResourceIcon icon={item.icon} />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
           </SidebarContent>
           <SidebarFooter className="border-t">
             <SidebarUserMenu user={user} i18n={i18n} />

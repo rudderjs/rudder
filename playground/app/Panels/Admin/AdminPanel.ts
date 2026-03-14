@@ -1,8 +1,9 @@
 import { Panel, Heading, Text, Stats, Stat, Table } from '@boostkit/panels'
-import { TodoResource }      from './resources/TodoResource.js'
-import { UserResource }      from './resources/UserResource.js'
-import { ArticleResource }   from './resources/ArticleResource.js'
-import { CategoryResource }  from './resources/CategoryResource.js'
+import { TodoResource }         from './resources/TodoResource.js'
+import { UserResource }         from './resources/UserResource.js'
+import { ArticleResource }      from './resources/ArticleResource.js'
+import { CategoryResource }     from './resources/CategoryResource.js'
+import { SiteSettingsGlobal }   from './globals/SiteSettingsGlobal.js'
 import { CustomPage } from './pages/CustomPage.js'
 import { Article }    from '../../Models/Article.js'
 import { Category }   from '../../Models/Category.js'
@@ -23,6 +24,9 @@ export const adminPanel = Panel.make('admin')
     CategoryResource,
     TodoResource,
     UserResource,
+  ])
+  .globals([
+    SiteSettingsGlobal,
   ])
   .schema(async (ctx) => [
     Heading.make(`Welcome back${ctx.user?.name ? `, ${ctx.user.name}` : ''}.`),

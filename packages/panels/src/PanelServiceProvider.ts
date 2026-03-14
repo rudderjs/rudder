@@ -4,6 +4,7 @@ import { PanelRegistry } from './PanelRegistry.js'
 import type { Panel } from './Panel.js'
 import type { Field } from './Field.js'
 import type { Resource, FieldOrGrouping } from './Resource.js'
+import type { Global } from './Global.js'
 import type { Action } from './Action.js'
 import type { PanelContext } from './types.js'
 import { ComputedField } from './fields/ComputedField.js'
@@ -140,6 +141,11 @@ export class PanelServiceProvider extends ServiceProvider {
       // Mount CRUD routes for each resource
       for (const ResourceClass of panel.getResources()) {
         this.mountResource(router, panel, ResourceClass, mw)
+      }
+
+      // Mount routes for each global
+      for (const GlobalClass of panel.getGlobals()) {
+        this.mountGlobal(router, panel, GlobalClass, mw)
       }
     }
   }
@@ -480,6 +486,102 @@ export class PanelServiceProvider extends ServiceProvider {
     if ((ResourceClass as any).versioned) {
       this.mountVersionRoutes(router, panel, ResourceClass, mw)
     }
+  }
+
+  // ── Global routes (single-record settings) ────────
+
+  private mountGlobal(
+    router: {
+      get(path: string, handler: (req: AppRequest, res: AppResponse) => unknown, mw?: MiddlewareHandler[]): void
+      put(path: string, handler: (req: AppRequest, res: AppResponse) => unknown, mw?: MiddlewareHandler[]): void
+    },
+    panel: Panel,
+    GlobalClass: typeof Global,
+    mw: MiddlewareHandler[],
+  ): void {
+    const slug = GlobalClass.getSlug()
+    const base = `${panel.getApiBase()}/_globals/${slug}`
+
+    // GET /{panel}/api/_globals/{slug} — read global data
+    router.get(base, async (req, res) => {
+      const global = new GlobalClass()
+      const ctx    = this.buildContext(req)
+      if (!await global.policy('view', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prisma = this.app.make<any>('prisma')
+        const row    = await prisma.panelGlobal.findUnique({ where: { slug } })
+        const data   = row?.data ? (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) : {}
+        return res.json({ data })
+      } catch {
+        return res.json({ data: {} })
+      }
+    }, mw)
+
+    // PUT /{panel}/api/_globals/{slug} — update global data
+    router.put(base, async (req, res) => {
+      const global = new GlobalClass()
+      const ctx    = this.buildContext(req)
+      if (!await global.policy('update', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+
+      const raw    = req.body as Record<string, unknown>
+      const body   = this.coerceGlobalPayload(global, raw)
+      const errors = await this.validatePayload(global as unknown as Resource, body, 'update')
+      if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prisma = this.app.make<any>('prisma')
+        const serialized = JSON.stringify(body)
+        await prisma.panelGlobal.upsert({
+          where:  { slug },
+          update: { data: serialized },
+          create: { slug, data: serialized },
+        })
+        return res.json({ message: 'Saved.', data: body })
+      } catch (err) {
+        return res.status(500).json({ message: 'Failed to save.', error: String(err) })
+      }
+    }, mw)
+  }
+
+  /**
+   * Coerce global payload values — same logic as resource coercion
+   * but without relation handling (globals store JSON, no FK relations).
+   */
+  private coerceGlobalPayload(
+    global: Global,
+    body: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const result = { ...body }
+    for (const field of flattenFields((global as any).fields())) {
+      const name = field.getName()
+      if (!(name in result)) continue
+      const val  = result[name]
+      const type = field.getType()
+      if (type === 'boolean' || type === 'toggle') {
+        result[name] = val === true || val === 'true' || val === '1' || val === 1
+      } else if (type === 'number') {
+        result[name] = (val === '' || val === null || val === undefined) ? null : Number(val)
+      } else if (type === 'date' || type === 'datetime') {
+        if (val === '' || val === null || val === undefined) {
+          result[name] = null
+        } else {
+          const d = new Date(String(val))
+          result[name] = isNaN(d.getTime()) ? null : d
+        }
+      } else if (type === 'tags') {
+        result[name] = Array.isArray(val) ? val : (val ?? [])
+      } else if (type === 'content' || type === 'richcontent') {
+        if (val === '' || val === null || val === undefined) {
+          result[name] = null
+        } else if (typeof val === 'string') {
+          try { result[name] = JSON.parse(val) } catch { result[name] = null }
+        }
+      }
+    }
+    return result
   }
 
   // ── Version history routes ──────────────────────────

@@ -113,6 +113,12 @@ model PanelVersion {
   @@index([docName, createdAt])
 }
 
+model PanelGlobal {
+  slug      String   @id
+  data      String   @default("{}")  // JSON stored as string for SQLite compatibility
+  updatedAt DateTime @updatedAt
+}
+
 model Category {
   id        String     @id @default(cuid())
   name      String

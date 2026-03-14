@@ -1,6 +1,7 @@
 import type { PanelGuard, BrandingOptions, PanelLayout, PanelContext } from './types.js'
 import type { Resource, ResourceMeta } from './Resource.js'
 import type { Page, PageMeta } from './Page.js'
+import type { Global, GlobalMeta } from './Global.js'
 import { getPanelI18n, getPanelDir, getActiveLocale } from './i18n/index.js'
 import type { PanelI18n } from './i18n/index.js'
 
@@ -17,6 +18,7 @@ export interface PanelMeta {
   path:      string
   branding:  BrandingOptions
   resources: ResourceMeta[]
+  globals:   GlobalMeta[]
   pages:     PageMeta[]
   layout:    PanelLayout
   locale:    string
@@ -32,6 +34,7 @@ export class Panel {
   protected _guard?:    PanelGuard
   protected _branding:  BrandingOptions = {}
   protected _resources: (typeof Resource)[] = []
+  protected _globals:   (typeof Global)[] = []
   protected _pages:     (typeof Page)[] = []
   protected _layout:    PanelLayout = 'sidebar'
   protected _locale?:   string
@@ -103,6 +106,12 @@ export class Panel {
     return this
   }
 
+  /** Global (single-record) classes to register in this panel. */
+  globals(list: (typeof Global)[]): this {
+    this._globals = list
+    return this
+  }
+
   /**
    * Define the panel landing page schema.
    * Accepts a static array of elements or an async function receiving the
@@ -131,6 +140,7 @@ export class Panel {
   getGuard(): PanelGuard | undefined { return this._guard }
   getBranding(): BrandingOptions { return this._branding }
   getResources(): (typeof Resource)[] { return this._resources }
+  getGlobals(): (typeof Global)[] { return this._globals }
   getPages(): (typeof Page)[] { return this._pages }
   getLayout(): PanelLayout { return this._layout }
   getSchema(): PanelSchemaDefinition | undefined { return this._schema }
@@ -147,6 +157,7 @@ export class Panel {
       path:      this._path,
       branding:  this._branding,
       resources: this._resources.map((R) => new R().toMeta()),
+      globals:   this._globals.map((G) => new G().toMeta()),
       pages:     this._pages.map((P) => P.toMeta()),
       layout:    this._layout,
       locale,
