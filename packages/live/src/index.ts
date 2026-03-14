@@ -516,4 +516,15 @@ export const Live = {
     ymap.forEach((val, key) => { result[key] = val })
     return result
   },
+
+  /**
+   * Clear a Y.Doc from both persistence and the in-memory room cache.
+   * Connected clients will receive a fresh empty doc on next sync.
+   */
+  async clearDocument(docName: string): Promise<void> {
+    const persistence = this.persistence()
+    await persistence.clearDocument(docName)
+    const rooms = g[KEY] as Map<string, Room> | undefined
+    rooms?.delete(docName)
+  },
 }

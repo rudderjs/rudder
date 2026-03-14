@@ -806,6 +806,35 @@ export class PanelServiceProvider extends ServiceProvider {
       }
     }, mw)
 
+    // POST /{panel}/api/{resource}/{id}/_clear-live — clear per-field Y.Docs (for version restore)
+    router.post(`${base}/:id/_clear-live`, async (req: AppRequest, res: AppResponse) => {
+      if (!isCollab) return res.json({ message: 'Not collaborative.' })
+      const id = (req.params as Record<string, string>)['id']
+      const docName = `panel:${slug}:${id}`
+
+      try {
+        const { Live } = await import('@boostkit/live')
+
+        // Clear the main shared Y.Doc (in-memory room + persistence)
+        await Live.clearDocument(docName)
+
+        // Clear per-field Y.Docs (text:*, richcontent:*)
+        const resource = new ResourceClass()
+        for (const f of flattenFields(resource.fields())) {
+          if (f.isCollaborative()) {
+            const type = f.getType()
+            const name = f.getName()
+            const prefix = (type === 'richcontent' || type === 'content') ? type : 'text'
+            await Live.clearDocument(`${docName}:${prefix}:${name}`)
+          }
+        }
+
+        return res.json({ message: 'Live documents cleared.' })
+      } catch {
+        return res.json({ message: 'No live provider — skipped.' })
+      }
+    }, mw)
+
     // GET /{panel}/api/{resource}/{id}/_versions/{versionId} — detail
     router.get(`${base}/:id/_versions/:versionId`, async (req: AppRequest, res: AppResponse) => {
       const versionId = (req.params as Record<string, string>)['versionId']

@@ -81,7 +81,7 @@ export function useEditForm(opts: UseEditFormOptions) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             label: null,
-            ...(!collaborative ? { fields: values } : {}),
+            fields: values,
             ...(draftable && publishAction ? { draftStatus: publishAction === 'publish' ? 'published' : 'draft' } : {}),
           }),
         })
@@ -121,16 +121,31 @@ export function useEditForm(opts: UseEditFormOptions) {
         const body = await res.json() as { data: { fields: Record<string, unknown> } }
         const restoredFields = body.data.fields
         const merged = { ...values, ...restoredFields }
-        setValues(merged)
 
-        if (collaborative && setCollaborativeValue && syncAllFieldsToDoc) {
-          for (const [name, val] of Object.entries(restoredFields)) {
-            setCollaborativeValue(name, val)
-          }
-          syncAllFieldsToDoc(merged)
+        // Save restored values to DB first
+        const saveRes = await fetch(`/${pathSegment}/api/${slug}/${id}`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(merged),
+        })
+
+        if (!saveRes.ok) {
+          toast.error(i18n.restoreError ?? 'Failed to restore version.')
+          return
+        }
+
+        // Clear server-side Y.Docs so editors seed from restored DB values on reconnect
+        if (collaborative) {
+          await fetch(`/${pathSegment}/api/${slug}/${id}/_clear-live`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
         }
 
         toast.success(i18n.restoredToast ?? 'Version restored.')
+
+        // Reload the page so all collaborative editors reconnect and seed from restored DB values
+        window.location.reload()
       } else {
         toast.error(i18n.restoreError ?? 'Failed to restore version.')
       }
