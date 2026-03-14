@@ -102,6 +102,7 @@ export default function ResourceListPage() {
   if (persist && typeof window !== 'undefined' && urlSearch && !(isLoadMore && extraRecords.length > 0)) {
     const persistParams = new URLSearchParams(urlSearch)
     persistParams.delete('trashed')
+    persistParams.delete('draft')
     const cleanSearch = persistParams.toString()
     if (cleanSearch) {
       sessionStorage.setItem(storageKey, '?' + cleanSearch)
@@ -127,6 +128,7 @@ export default function ResourceListPage() {
   const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
   const currentSearch = urlParams.get('search') ?? ''
   const isTrashed     = urlParams.get('trashed') === 'true'
+  const draftFilter   = urlParams.get('draft') // 'true' | 'false' | null (all)
   const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
 
   // Reset selection and loadMore state when navigating to a different resource
@@ -411,6 +413,30 @@ export default function ResourceListPage() {
         </div>
       )}
 
+      {/* ── Draft filter tabs ──────────────────────────────── */}
+      {hasSoftDeletes && !isTrashed && (resourceMeta as any).draftable && (
+        <div className="flex items-center gap-1 mb-4">
+          {([
+            { key: null,    label: i18n.all ?? 'All' },
+            { key: 'true',  label: (i18n as any).draft ?? 'Draft' },
+            { key: 'false', label: (i18n as any).published ?? 'Published' },
+          ] as { key: string | null; label: string }[]).map(({ key, label }) => (
+            <a
+              key={key ?? 'all'}
+              href={`/${pathSegment}/${slug}${key !== null ? `?draft=${key}` : ''}`}
+              className={[
+                'px-3 py-1.5 text-sm rounded-md transition-colors',
+                draftFilter === key || (key === null && draftFilter === null)
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              ].join(' ')}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+      )}
+
       {/* ── Toolbar (search + filters) ─────────────────────── */}
       {(hasSearch || hasFilters) && (
         <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -602,12 +628,19 @@ export default function ResourceListPage() {
                     <TableCell key={f.name} className="px-4 py-3 text-foreground">
                       {fi === 0
                         ? (
-                          <a
-                            href={`/${pathSegment}/${slug}/${id}`}
-                            className="font-medium hover:text-primary transition-colors"
-                          >
-                            <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
-                          </a>
+                          <span className="inline-flex items-center gap-2">
+                            <a
+                              href={`/${pathSegment}/${slug}/${id}`}
+                              className="font-medium hover:text-primary transition-colors"
+                            >
+                              <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
+                            </a>
+                            {(resourceMeta as any).draftable && record['draftStatus'] === 'draft' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                {(i18n as any).draft ?? 'Draft'}
+                              </span>
+                            )}
+                          </span>
                         )
                         : f.extra?.['inlineEditable'] && !isTrashed
                           ? <InlineEditCell record={record} field={f} slug={slug} pathSegment={pathSegment} i18n={i18n} />

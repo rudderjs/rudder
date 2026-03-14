@@ -237,6 +237,18 @@ export class PanelServiceProvider extends ServiceProvider {
         }
       }
 
+      // Draftable — filter by draft status
+      const hasDraftable = (ResourceClass as any).draftable === true
+      const draftFilter  = url.searchParams.get('draft')
+      if (hasDraftable) {
+        if (draftFilter === 'true') {
+          q = q.where('draftStatus', 'draft')
+        } else if (draftFilter === 'false') {
+          q = q.where('draftStatus', 'published')
+        }
+        // no filter param = show all (drafts + published)
+      }
+
       // Include belongsTo relations so the table can show display names
       for (const f of flattenFields(resource.fields()).filter(f => f.getType() === 'belongsTo')) {
         q = q.with(relationName(f))
