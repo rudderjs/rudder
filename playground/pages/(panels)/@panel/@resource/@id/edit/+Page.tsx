@@ -90,7 +90,7 @@ interface VersionEntry {
 
 export default function EditPage() {
   const config = useConfig()
-  const { panelMeta, resourceMeta, record, pathSegment, slug, id, versioned, wsLivePath, docName } = useData<Data>()
+  const { panelMeta, resourceMeta, record, pathSegment, slug, id, versioned, wsLivePath, docName, liveProviders } = useData<Data>()
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   const i18n = panelMeta.i18n as Data['panelMeta']['i18n'] & Record<string, string>
   config({ title: `${i18n.edit} ${resourceMeta.labelSingular} — ${panelName}` })
@@ -146,7 +146,7 @@ export default function EditPage() {
   // Collaborative form hook
   const { connected, synced, presences, setCollaborativeValue, syncAllFieldsToDoc, getYText, getDoc, awareness } = useCollaborativeForm(
     versioned && docName && wsLivePath
-      ? { docName, wsPath: wsLivePath, fields: collabFields, values, setValue: setFormValue }
+      ? { docName, wsPath: wsLivePath, fields: collabFields, values, setValue: setFormValue, providers: liveProviders as any }
       : null,
   )
 

@@ -20,11 +20,26 @@ export interface LivePersistence {
 
 // ─── Config ─────────────────────────────────────────────────
 
+/** Client-side Y.js providers. */
+export type LiveClientProvider = 'websocket' | 'indexeddb'
+
 export interface LiveConfig {
   /** URL path for the Live WebSocket endpoint. Default: `/ws-live` */
   path?: string
-  /** Persistence adapter. Default: in-memory (resets on restart). */
+  /** Server-side persistence adapter. Default: in-memory (resets on restart). */
   persistence?: LivePersistence
+  /**
+   * Client-side Y.js providers. Default: `['websocket']`.
+   *
+   * - `'websocket'` — sync with server via y-websocket (real-time collaboration)
+   * - `'indexeddb'` — cache Y.Doc in browser IndexedDB (survives refresh/restart)
+   *
+   * Multiple providers can coexist:
+   * ```ts
+   * providers: ['websocket', 'indexeddb']
+   * ```
+   */
+  providers?: LiveClientProvider[]
   /**
    * Auth callback — return true to allow, false to deny.
    * Receives the upgrade request and the document name.

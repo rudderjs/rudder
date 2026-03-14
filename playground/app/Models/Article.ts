@@ -15,6 +15,8 @@ export class Article extends Model {
   accentColor!:     string | null
   metaTitle!:       string | null
   metaDescription!: string | null
+  content!:         unknown | null
+  body!:            unknown | null
   metadata!:        string | null
   categories?:      Array<{ id: string; name: string; slug: string }>
   createdAt!:       Date

@@ -68,11 +68,23 @@ export async function data(pageContext: PageContextServer) {
     }
   }
 
+  // Read client-side providers from live config
+  let liveProviders: string[] = ['websocket']
+  if (versioned) {
+    try {
+      const configs = await import('../../../../../../config/index.js')
+      liveProviders = (configs.default as any)?.live?.providers ?? ['websocket']
+    } catch {
+      // config not available — use default
+    }
+  }
+
   const sessionUser = await getSessionUser(pageContext)
   return {
     panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser,
     versioned,
     wsLivePath: versioned ? '/ws-live' : null,
     docName:    versioned ? `panel:${slug}:${id}` : null,
+    liveProviders: versioned ? liveProviders : [],
   }
 }

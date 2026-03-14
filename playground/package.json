@@ -72,6 +72,7 @@
     "vike": "^0.4.239",
     "vike-photon": "^0.1.24",
     "vike-react": "^0.6.20",
+    "y-indexeddb": "^9.0.12",
     "y-websocket": "^2.0.0",
     "yjs": "^13.6.0",
     "zod": "^4.0.0"
@@ -82,6 +83,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.58.2",
     "prisma": "^7.0.0",
     "shadcn": "^4.0.2",
     "tsx": "^4.21.0",

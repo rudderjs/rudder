@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
@@ -17,7 +17,7 @@ import { useEffect } from 'react'
 import { SlashCommandPlugin } from './lexical/SlashCommandPlugin.js'
 import { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 import { DraggableBlockPlugin_EXPERIMENTAL } from '@lexical/react/LexicalDraggableBlockPlugin'
-import { $getSelection, $isRangeSelection } from 'lexical'
+import { $getRoot, $getSelection, $isRangeSelection, $parseSerializedNode } from 'lexical'
 import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
 import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
@@ -106,7 +106,7 @@ export function LexicalEditor({
     theme: THEME,
     editable: !disabled,
     editorState: isCollab
-      ? null  // CRITICAL: must be null for CollaborationPlugin to hydrate from Y.js
+      ? null  // CollaborationPlugin hydrates from Y.js; SeedPlugin handles DB fallback
       : (value ? JSON.stringify(value) : undefined),
     onError: (error: Error) => console.error('[LexicalEditor]', error),
   }), [fragmentName, disabled, isCollab]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -127,7 +127,7 @@ export function LexicalEditor({
         <RichTextPlugin
           contentEditable={
             <ContentEditable
-              className="prose prose-sm max-w-none p-3 pl-10 min-h-[200px] outline-none"
+              className="ContentEditable__root prose prose-sm max-w-none p-3 pl-10 min-h-[200px] outline-none"
             />
           }
           placeholder={
@@ -145,22 +145,19 @@ export function LexicalEditor({
           <CollaborationPlugin
             id={fragmentName}
             providerFactory={createProviderFactory(yDoc, awareness, yDocSynced)}
-            shouldBootstrap={true}
-            initialEditorState={value ? JSON.stringify(value) : undefined}
+            shouldBootstrap={false}
           />
         ) : (
-          <>
-            <HistoryPlugin />
-            <OnChangePlugin onChange={onChange} />
-          </>
+          <HistoryPlugin />
         )}
 
-        {isCollab && <OnChangePlugin onChange={onChange} />}
+        <OnChangePlugin onChange={onChange} />
+        {isCollab && <SeedPlugin value={value} />}
 
         <DragHandleLoader anchorRef={anchorRef} />
         </div>
       </div>
-      <style>{collabCursorStyles + dragHandleStyles}</style>
+      <style>{dragHandleStyles}</style>
     </LexicalComposer>
   )
 
@@ -176,8 +173,6 @@ export function LexicalEditor({
 }
 
 // ── DragHandleLoader ────────────────────────────────────────
-// DraggableBlockPlugin_EXPERIMENTAL (v0.41) requires menuRef, targetLineRef,
-// menuComponent, targetLineComponent, and isOnMenu.
 
 function DragHandleLoader({ anchorRef }: { anchorRef: React.RefObject<HTMLDivElement | null> }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -211,36 +206,80 @@ function DragHandleLoader({ anchorRef }: { anchorRef: React.RefObject<HTMLDivEle
 }
 
 // ── OnChangePlugin ──────────────────────────────────────────
+// Only fires onChange when content actually changed (dirtyElements/dirtyLeaves),
+// NOT for selection changes or awareness updates. This prevents the parent form
+// from re-rendering on every cursor move, which would reset caret position in
+// other controlled inputs.
 
 function OnChangePlugin({ onChange }: { onChange: (json: unknown) => void }) {
   const [editor] = useLexicalComposerContext()
   useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
+    return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
+      if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return
       onChange(editorState.toJSON())
     })
   }, [editor, onChange])
   return null
 }
 
-// ── Collaboration Provider Factory ──────────────────────────
+// ── SeedPlugin ──────────────────────────────────────────────
+// In collaborative mode, the editor starts empty (editorState: null) and
+// CollaborationPlugin binds to the Y.XmlFragment. If the Y.Doc is fresh
+// (server restart, new session), the fragment is empty. This plugin seeds
+// the editor from the database value after CollaborationPlugin initializes.
 //
-// KEY AWARENESS FIX: @lexical/yjs calls provider.on('sync', cb) to know when
-// the Y.Doc is ready. Since our provider is already synced (useCollaborativeForm
-// manages the WebSocket), we must:
-// 1. Store the 'sync' callback when Lexical registers it
-// 2. Fire it immediately (via microtask) since we're already synced
-// 3. Support on/off properly so cleanup works
+// Uses editor.update() + $parseSerializedNode so mutations go through
+// the normal path and trigger syncLexicalUpdateToYjs (the Y.js binding).
+// editor.setEditorState() does NOT mark elements dirty, so the binding's
+// syncLexicalUpdateToYjs skips the sync (it checks dirtyElements.has('root')).
 
-function createProviderFactory(yDoc: any, awareness: any, alreadySynced: boolean) {
+function SeedPlugin({ value }: { value: unknown }) {
+  const [editor] = useLexicalComposerContext()
+  const seeded = useRef(false)
+
+  useEffect(() => {
+    if (seeded.current || !value) return
+    // Wait for CollaborationPlugin to bind and sync
+    const timer = setTimeout(() => {
+      if (seeded.current) return
+      const isEmpty = editor.getEditorState().read(() => {
+        return !$getRoot().getTextContent().trim()
+      })
+      if (isEmpty) {
+        seeded.current = true
+        try {
+          const serialized = typeof value === 'string' ? JSON.parse(value) : value
+          const children = (serialized as any)?.root?.children
+          if (Array.isArray(children) && children.length > 0) {
+            editor.update(() => {
+              const root = $getRoot()
+              root.clear()
+              for (const child of children) {
+                const node = $parseSerializedNode(child)
+                root.append(node)
+              }
+            })
+          }
+        } catch (e) {
+          console.error('[LexicalEditor] SeedPlugin failed:', e)
+        }
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [editor, value])
+
+  return null
+}
+
+// ── Collaboration Provider Factory ──────────────────────────
+
+function createProviderFactory(yDoc: any, awareness: any, _alreadySynced: boolean) {
   return (id: string, yjsDocMap: Map<string, any>) => {
-    // Inject our existing Y.Doc so Lexical uses the shared doc
     yjsDocMap.set(id, yDoc)
 
-    // Track event listeners for proper on/off support
     const listeners = new Map<string, Set<Function>>()
 
     const provider = {
-      // Share awareness from useCollaborativeForm — cursors use existing user identity
       awareness: awareness ?? {
         getLocalState: () => null,
         setLocalState: () => {},
@@ -249,17 +288,25 @@ function createProviderFactory(yDoc: any, awareness: any, alreadySynced: boolean
         on: () => {},
         off: () => {},
       },
-      connect() {},      // Already connected via our WebSocket provider
+      connect() {
+        // Called by CollaborationPlugin's useProvider AFTER the
+        // observeDeep listener is attached.  Trigger the real WS/IDB
+        // connections so content arrives as Y.Doc updates that the
+        // observer will catch.
+        yDoc.__bk_start_sync?.()
+
+        // Fire 'sync' after a microtask — by this point the observer
+        // is attached AND the WS/IDB providers have been started (but
+        // their async I/O hasn't completed yet, so the Y.Doc is still
+        // empty when 'sync' fires — bootstrap/SeedPlugin handles fallback).
+        Promise.resolve().then(() => {
+          listeners.get('sync')?.forEach(cb => cb(true))
+        })
+      },
       disconnect() {},
       on(type: string, cb: Function) {
         if (!listeners.has(type)) listeners.set(type, new Set())
         listeners.get(type)!.add(cb)
-
-        // If already synced and Lexical is registering a 'sync' listener,
-        // fire it on next microtask so Lexical initializes properly
-        if (type === 'sync' && alreadySynced) {
-          Promise.resolve().then(() => cb(true))
-        }
       },
       off(type: string, cb: Function) {
         listeners.get(type)?.delete(cb)
@@ -287,34 +334,15 @@ const dragHandleStyles = `
     opacity: 1;
   }
   .draggable-block-target-line {
-    height: 3px;
-    background: hsl(var(--primary));
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 4px;
+    background: var(--primary);
     border-radius: 2px;
     pointer-events: none;
-  }
-`
-
-const collabCursorStyles = `
-  .lexical-cursor {
-    display: inline;
-    position: relative;
-    z-index: 10;
-  }
-  .lexical-cursor-caret {
-    display: inline-block;
-    width: 2px;
-    position: relative;
-    z-index: 10;
-  }
-  .lexical-cursor-name {
-    position: absolute;
-    top: -1.2em;
-    left: -1px;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 4px;
-    border-radius: 3px 3px 3px 0;
-    white-space: nowrap;
-    color: white;
+    opacity: 0;
+    z-index: 5;
+    will-change: transform;
   }
 `

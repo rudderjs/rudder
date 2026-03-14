@@ -18,6 +18,7 @@ interface UseYTextCursorsOptions {
 export function useYTextCursors({ yText, awareness, fieldName }: UseYTextCursorsOptions) {
   const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([])
   const yRef = useRef(yText)
+  const prevCursorsRef = useRef<string>('[]')
   yRef.current = yText
 
   const broadcastCursor = useCallback((anchor: number, focus: number) => {
@@ -88,7 +89,13 @@ export function useYTextCursors({ yText, awareness, fieldName }: UseYTextCursors
         }
       })
 
-      setRemoteCursors(cursors)
+      // Only re-render if cursors actually changed — avoids resetting
+      // native input caret on unrelated awareness updates (e.g. Lexical cursor)
+      const key = JSON.stringify(cursors)
+      if (key !== prevCursorsRef.current) {
+        prevCursorsRef.current = key
+        setRemoteCursors(cursors)
+      }
     }
 
     awareness.on('change', handleChange)
