@@ -4,7 +4,7 @@ export type PanelLayout = 'sidebar' | 'topbar'
 
 // ─── Policy ────────────────────────────────────────────────
 
-export type PolicyAction = 'viewAny' | 'view' | 'create' | 'update' | 'delete'
+export type PolicyAction = 'viewAny' | 'view' | 'create' | 'update' | 'delete' | 'restore' | 'forceDelete'
 
 // ─── Panel Context ─────────────────────────────────────────
 

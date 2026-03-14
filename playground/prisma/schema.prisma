@@ -98,6 +98,7 @@ model Article {
   body            Json?      // Lexical editor state JSON
   metadata        String?    // JSON blob
   categories      Category[]
+  deletedAt       DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }

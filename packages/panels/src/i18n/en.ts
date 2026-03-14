@@ -104,6 +104,17 @@ export const en = {
   connectedLive:        'Connected',
   disconnectedLive:     'Disconnected',
   editingNow:           ':n editing',
+  trash:                'Trash',
+  viewTrash:            'View Trash',
+  exitTrash:            'View All',
+  restoreRecord:        'Restore',
+  restoredRecordToast:  'Record restored.',
+  forceDelete:          'Delete Permanently',
+  forceDeleteConfirm:   'This will permanently delete the record. This action cannot be undone.',
+  forceDeletedToast:    'Permanently deleted.',
+  bulkRestore:          'Restore Selected',
+  bulkForceDelete:      'Delete Permanently',
+  trashedBanner:        'You are viewing trashed records.',
 }
 
 export type PanelI18n = typeof en

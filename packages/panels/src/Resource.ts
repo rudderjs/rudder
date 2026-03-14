@@ -29,6 +29,7 @@ export interface ResourceMeta {
   paginationType:    'pagination' | 'loadMore'
   live:              boolean
   versioned:         boolean
+  softDeletes:       boolean
 }
 
 // ─── Resource base class ───────────────────────────────────
@@ -93,6 +94,15 @@ export class Resource {
    * Uses @boostkit/live.
    */
   static versioned = false
+
+  /**
+   * Enable soft deletes for this resource.
+   * When true, deleting a record sets `deletedAt` instead of removing it.
+   * Soft-deleted records are hidden from the list by default but can be
+   * viewed via the trash toggle. Supports restore and force-delete actions.
+   * Requires a `deletedAt DateTime?` column on the model's table.
+   */
+  static softDeletes = false
 
   // ── Abstract / overridable ──────────────────────────────
 
@@ -163,6 +173,7 @@ export class Resource {
       paginationType:  Cls.paginationType,
       live:            Cls.live,
       versioned:       Cls.versioned,
+      softDeletes:     Cls.softDeletes,
     }
     if (Cls.defaultSort    !== undefined) meta.defaultSort    = Cls.defaultSort
     if (Cls.defaultSortDir !== undefined) meta.defaultSortDir = Cls.defaultSortDir

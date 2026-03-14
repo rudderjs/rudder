@@ -226,6 +226,17 @@ export class PanelServiceProvider extends ServiceProvider {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q: any = Model.query()
 
+      // Soft deletes — filter by trashed status
+      const hasSoftDeletes = (ResourceClass as any).softDeletes === true
+      const trashed        = url.searchParams.get('trashed') === 'true'
+      if (hasSoftDeletes) {
+        if (trashed) {
+          q = q.where('deletedAt', '!=', null)
+        } else {
+          q = q.where('deletedAt', null)
+        }
+      }
+
       // Include belongsTo relations so the table can show display names
       for (const f of flattenFields(resource.fields()).filter(f => f.getType() === 'belongsTo')) {
         q = q.with(relationName(f))
@@ -279,6 +290,7 @@ export class PanelServiceProvider extends ServiceProvider {
           currentPage: result.currentPage,
           perPage:     result.perPage,
           lastPage:    result.lastPage,
+          ...(hasSoftDeletes ? { trashed } : {}),
         },
       })
     }, mw)
@@ -416,7 +428,7 @@ export class PanelServiceProvider extends ServiceProvider {
       return res.json({ data: record })
     }, mw)
 
-    // ── DELETE /panel/api/resource/:id — delete ───────────
+    // ── DELETE /panel/api/resource/:id — delete (or soft-delete) ───
     router.delete(`${base}/:id`, async (req, res) => {
       const resource = new ResourceClass()
       const ctx      = this.buildContext(req)
@@ -427,12 +439,16 @@ export class PanelServiceProvider extends ServiceProvider {
       const exists = await Model.find(id)
       if (!exists) return res.status(404).json({ message: 'Record not found.' })
 
-      await Model.query().delete(id)
+      if ((ResourceClass as any).softDeletes) {
+        await Model.query().update(id, { deletedAt: new Date() })
+      } else {
+        await Model.query().delete(id)
+      }
       if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.deleted', { id })
       return res.json({ message: 'Deleted successfully.' })
     }, mw)
 
-    // ── DELETE /panel/api/resource — bulk delete ──────────
+    // ── DELETE /panel/api/resource — bulk delete (or soft-delete) ──
     router.delete(base, async (req, res) => {
       const resource = new ResourceClass()
       const ctx      = this.buildContext(req)
@@ -446,7 +462,11 @@ export class PanelServiceProvider extends ServiceProvider {
       for (const id of ids) {
         const exists = await Model.find(id)
         if (exists) {
-          await Model.query().delete(id)
+          if ((ResourceClass as any).softDeletes) {
+            await Model.query().update(id, { deletedAt: new Date() })
+          } else {
+            await Model.query().delete(id)
+          }
           deleted++
         }
       }
@@ -481,6 +501,87 @@ export class PanelServiceProvider extends ServiceProvider {
       if ((ResourceClass as any).live) this.liveBroadcast(slug, 'action.executed', { action: actionName, ids })
       return res.json({ message: 'Action executed successfully.' })
     }, mw)
+
+    // ── Soft-delete routes (restore + force delete) ───
+    if ((ResourceClass as any).softDeletes) {
+      // POST /panel/api/resource/:id/_restore — restore a soft-deleted record
+      router.post(`${base}/:id/_restore`, async (req: AppRequest, res: AppResponse) => {
+        const resource = new ResourceClass()
+        const ctx      = this.buildContext(req)
+        if (!await resource.policy('restore', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+        if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+        const id     = (req.params as Record<string, string>)['id']
+        const exists = await Model.find(id)
+        if (!exists) return res.status(404).json({ message: 'Record not found.' })
+
+        await Model.query().update(id, { deletedAt: null })
+        if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.restored', { id })
+        return res.json({ message: 'Record restored.' })
+      }, mw)
+
+      // DELETE /panel/api/resource/:id/_force — permanently delete
+      router.delete(`${base}/:id/_force`, async (req: AppRequest, res: AppResponse) => {
+        const resource = new ResourceClass()
+        const ctx      = this.buildContext(req)
+        if (!await resource.policy('forceDelete', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+        if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+        const id     = (req.params as Record<string, string>)['id']
+        const exists = await Model.find(id)
+        if (!exists) return res.status(404).json({ message: 'Record not found.' })
+
+        await Model.query().delete(id)
+        if ((ResourceClass as any).live) this.liveBroadcast(slug, 'record.forceDeleted', { id })
+        return res.json({ message: 'Permanently deleted.' })
+      }, mw)
+
+      // POST /panel/api/resource/_restore — bulk restore
+      router.post(`${base}/_restore`, async (req: AppRequest, res: AppResponse) => {
+        const resource = new ResourceClass()
+        const ctx      = this.buildContext(req)
+        if (!await resource.policy('restore', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+        if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+        const { ids } = req.body as { ids?: string[] }
+        if (!ids?.length) return res.status(422).json({ message: 'No records selected.' })
+
+        let restored = 0
+        for (const id of ids) {
+          const exists = await Model.find(id)
+          if (exists) {
+            await Model.query().update(id, { deletedAt: null })
+            restored++
+          }
+        }
+
+        if ((ResourceClass as any).live) this.liveBroadcast(slug, 'records.restored', { ids, restored })
+        return res.json({ message: `${restored} records restored.`, restored })
+      }, mw)
+
+      // DELETE /panel/api/resource/_force — bulk force delete
+      router.delete(`${base}/_force`, async (req: AppRequest, res: AppResponse) => {
+        const resource = new ResourceClass()
+        const ctx      = this.buildContext(req)
+        if (!await resource.policy('forceDelete', ctx)) return res.status(403).json({ message: 'Forbidden.' })
+        if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
+
+        const { ids } = req.body as { ids?: string[] }
+        if (!ids?.length) return res.status(422).json({ message: 'No records selected.' })
+
+        let deleted = 0
+        for (const id of ids) {
+          const exists = await Model.find(id)
+          if (exists) {
+            await Model.query().delete(id)
+            deleted++
+          }
+        }
+
+        if ((ResourceClass as any).live) this.liveBroadcast(slug, 'records.forceDeleted', { ids, deleted })
+        return res.json({ message: `${deleted} records permanently deleted.`, deleted })
+      }, mw)
+    }
 
     // ── Version routes (only for versioned resources) ───
     if ((ResourceClass as any).versioned) {
