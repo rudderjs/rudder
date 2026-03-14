@@ -31,6 +31,10 @@ interface Props {
   /** Stable user identity for collaborative cursors (shared across all field types) */
   userName?: string
   userColor?: string
+  /** WebSocket path for live collaboration (e.g. '/ws-live') — used by LexicalEditor */
+  wsPath?:   string | null
+  /** Base document name for live collaboration — used by LexicalEditor */
+  docName?:  string | null
 }
 
 function generateSlug(str: string): string {
@@ -44,7 +48,7 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
-export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, yText, awareness, yDoc, yDocSynced, userName, userColor }: Props) {
+export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, yText, awareness, yDoc, yDocSynced, userName, userColor, wsPath, docName }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
   const isDisabled = disabled || field.readonly
 
@@ -668,9 +672,8 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
         onChange={onChange}
         placeholder={field.extra?.placeholder as string | undefined}
         disabled={isDisabled}
-        yDoc={yDoc}
-        awareness={awareness}
-        yDocSynced={yDocSynced}
+        wsPath={field.collaborative ? wsPath : null}
+        docName={field.collaborative ? docName : null}
         fragmentName={`richcontent:${field.name}`}
         blocks={field.extra?.blocks as any[] | undefined}
         userName={userName}

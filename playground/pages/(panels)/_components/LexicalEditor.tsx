@@ -28,9 +28,10 @@ interface Props {
   onChange:      (json: unknown) => void
   placeholder?:  string
   disabled?:     boolean
-  yDoc?:         any | null
-  awareness?:    any | null
-  yDocSynced?:   boolean
+  /** WebSocket path for live collaboration (e.g. '/ws-live') */
+  wsPath?:       string | null
+  /** Base document name — each editor creates room `${docName}:${fragmentName}` */
+  docName?:      string | null
   fragmentName?: string
   blocks?:       any[]
   /** Stable user identity — passed to CollaborationPlugin so Lexical cursors match input/textarea cursors. */
@@ -72,12 +73,61 @@ const THEME = {
 
 export function LexicalEditor({
   value, onChange, placeholder, disabled,
-  yDoc, awareness, yDocSynced, fragmentName = 'richcontent',
+  wsPath, docName, fragmentName = 'richcontent',
   blocks, userName, userColor,
 }: Props) {
-  const isCollab = !!(yDoc && yDocSynced)
+  const isCollab = !!(wsPath && docName)
   const anchorRef = useRef<HTMLDivElement>(null)
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
+
+  // ── Per-editor collaborative state ─────────────────────────
+  // Each LexicalEditor instance creates its own Y.Doc + WebSocket connection
+  // because Lexical's createBinding hardcodes doc.get('root', XmlText) —
+  // multiple editors sharing one Y.Doc would bind to the same fragment.
+  const [collabReady, setCollabReady] = useState(false)
+  const collabRef = useRef<{ doc: any; provider: any } | null>(null)
+
+  useEffect(() => {
+    if (!isCollab) return
+    let destroyed = false
+
+    Promise.all([import('yjs'), import('y-websocket')]).then(([Y, ws]) => {
+      if (destroyed) return
+
+      const doc = new Y.Doc()
+      const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      const wsUrl    = `${wsProto}://${window.location.host}${wsPath}`
+      const roomName = `${docName}:${fragmentName}`
+
+      const provider = new ws.WebsocketProvider(wsUrl, roomName, doc, { connect: false })
+      provider.awareness.setLocalStateField('user', {
+        name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
+        color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
+      })
+
+      collabRef.current = { doc, provider }
+      setCollabReady(true)
+    })
+
+    return () => {
+      destroyed = true
+      collabRef.current?.provider?.destroy()
+      collabRef.current?.doc?.destroy()
+      collabRef.current = null
+      setCollabReady(false)
+    }
+  }, [wsPath, docName, fragmentName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Memoize provider factory — must be stable across renders so
+  // CollaborationPlugin doesn't disconnect/reconnect on every re-render.
+  const providerFactory = useMemo(() => {
+    if (!collabReady || !collabRef.current) return undefined
+    const { doc, provider } = collabRef.current
+    return (_id: string, yjsDocMap: Map<string, any>) => {
+      yjsDocMap.set(_id, doc)
+      return provider
+    }
+  }, [collabReady])
 
   const blockRegistry = useMemo(() => {
     const map = new Map<string, BlockMeta>()
@@ -104,19 +154,21 @@ export function LexicalEditor({
     ))
   }, [blocks])
 
+  const collabActive = isCollab && collabReady && !!providerFactory
+
   const initialConfig = useMemo(() => ({
     namespace: fragmentName,
     nodes: [...EDITOR_NODES],
     theme: THEME,
     editable: !disabled,
-    editorState: isCollab
+    editorState: collabActive
       ? null  // CollaborationPlugin hydrates from Y.js; SeedPlugin handles DB fallback
       : (value ? JSON.stringify(value) : undefined),
     onError: (error: Error) => console.error('[LexicalEditor]', error),
-  }), [fragmentName, disabled, isCollab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [fragmentName, disabled, collabActive]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show loading state while waiting for Y.Doc sync
-  if (yDoc && !yDocSynced) {
+  // Show loading state while waiting for Y.Doc + WS setup
+  if (isCollab && !collabReady) {
     return (
       <div className="min-h-[200px] rounded-lg border border-input bg-background p-3 flex items-center justify-center text-sm text-muted-foreground">
         Connecting…
@@ -146,10 +198,10 @@ export function LexicalEditor({
         <SlashCommandPlugin extraItems={blockSlashItems} />
         <FloatingToolbarPlugin />
 
-        {isCollab ? (
+        {collabActive ? (
           <CollaborationPlugin
             id={fragmentName}
-            providerFactory={createProviderFactory(yDoc, awareness, yDocSynced)}
+            providerFactory={providerFactory}
             shouldBootstrap={false}
             username={userName}
             cursorColor={userColor}
@@ -159,8 +211,8 @@ export function LexicalEditor({
           <HistoryPlugin />
         )}
 
-        <OnChangePlugin onChange={onChange} />
-        {isCollab && <SeedPlugin value={value} />}
+        <OnChangePlugin onChange={onChange} collaborative={collabActive} />
+        {collabActive && <SeedPlugin value={value} />}
 
         <DragHandleLoader anchorRef={anchorRef} />
         </div>
@@ -171,7 +223,7 @@ export function LexicalEditor({
 
   return (
     <BlockRegistryContext.Provider value={blockRegistry}>
-      {isCollab ? (
+      {collabActive ? (
         <LexicalCollaboration>{editorContent}</LexicalCollaboration>
       ) : (
         editorContent
@@ -219,14 +271,17 @@ function DragHandleLoader({ anchorRef }: { anchorRef: React.RefObject<HTMLDivEle
 // from re-rendering on every cursor move, which would reset caret position in
 // other controlled inputs.
 
-function OnChangePlugin({ onChange }: { onChange: (json: unknown) => void }) {
+function OnChangePlugin({ onChange, collaborative }: { onChange: (json: unknown) => void; collaborative?: boolean }) {
   const [editor] = useLexicalComposerContext()
   useEffect(() => {
-    return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
+    return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves, tags }) => {
       if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return
+      // In collaborative mode, skip remote changes — they arrive via Y.XmlFragment,
+      // no need to push them back into React form state (which would cause re-render cascades).
+      if (collaborative && tags.has('collaboration')) return
       onChange(editorState.toJSON())
     })
-  }, [editor, onChange])
+  }, [editor, onChange, collaborative])
   return null
 }
 
@@ -277,52 +332,6 @@ function SeedPlugin({ value }: { value: unknown }) {
   }, [editor, value])
 
   return null
-}
-
-// ── Collaboration Provider Factory ──────────────────────────
-
-function createProviderFactory(yDoc: any, awareness: any, _alreadySynced: boolean) {
-  return (id: string, yjsDocMap: Map<string, any>) => {
-    yjsDocMap.set(id, yDoc)
-
-    const listeners = new Map<string, Set<Function>>()
-
-    const provider = {
-      awareness: awareness ?? {
-        getLocalState: () => null,
-        setLocalState: () => {},
-        setLocalStateField: () => {},
-        getStates: () => new Map(),
-        on: () => {},
-        off: () => {},
-      },
-      connect() {
-        // Called by CollaborationPlugin's useProvider AFTER the
-        // observeDeep listener is attached.  Trigger the real WS/IDB
-        // connections so content arrives as Y.Doc updates that the
-        // observer will catch.
-        yDoc.__bk_start_sync?.()
-
-        // Fire 'sync' after a microtask — by this point the observer
-        // is attached AND the WS/IDB providers have been started (but
-        // their async I/O hasn't completed yet, so the Y.Doc is still
-        // empty when 'sync' fires — bootstrap/SeedPlugin handles fallback).
-        Promise.resolve().then(() => {
-          listeners.get('sync')?.forEach(cb => cb(true))
-        })
-      },
-      disconnect() {},
-      on(type: string, cb: Function) {
-        if (!listeners.has(type)) listeners.set(type, new Set())
-        listeners.get(type)!.add(cb)
-      },
-      off(type: string, cb: Function) {
-        listeners.get(type)?.delete(cb)
-      },
-    }
-
-    return provider
-  }
 }
 
 const dragHandleStyles = `

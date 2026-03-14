@@ -187,8 +187,10 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       // It also runs AFTER CollaborationPlugin's initLocalState(), which
       // calls setLocalState() and wipes our 'user' field. So we re-set
       // the user field here.
+      let syncStarted = false
       ;(doc as any).__bk_start_sync = () => {
-        if (destroyed) return
+        if (destroyed || syncStarted) return
+        syncStarted = true
         // Re-set user presence — initLocalState() wiped it via setLocalState()
         wsProvider?.awareness.setLocalStateField('user', { name: userName, color: userColor })
         // Connect WS now — sync arrives over the network, well after
