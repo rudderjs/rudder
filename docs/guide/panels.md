@@ -493,14 +493,13 @@ Requires a `PanelGlobal` table: `slug String @id`, `data String @default("{}")`,
 
 ## Feature Flags
 
-Resources support five independent flags that can be combined freely:
+Resources support four static flags. Collaborative mode is derived automatically from fields.
 
 ```ts
 export class ArticleResource extends Resource {
   static live          = true   // table auto-refreshes on save
   static versioned     = true   // version history with JSON snapshots
   static draftable     = true   // draft/publish workflow
-  static collaborative = true   // real-time Yjs co-editing
   static softDeletes   = true   // trash & restore
 }
 ```
@@ -508,9 +507,8 @@ export class ArticleResource extends Resource {
 | Flag | What it does | Requires |
 |------|-------------|----------|
 | `live` | Table auto-refreshes when anyone saves | `@boostkit/broadcast` |
-| `versioned` | JSON snapshots on each save, version history, rollback | `PanelVersion` table |
+| `versioned` | JSON snapshots on each save, version history with restore | `PanelVersion` table |
 | `draftable` | Draft/publish workflow with Save Draft + Publish buttons | `draftStatus` column |
-| `collaborative` | Real-time Yjs co-editing with cursors | `@boostkit/live` |
 | `softDeletes` | Trash, restore, force-delete | `deletedAt` column |
 
 ### Soft Deletes
@@ -524,6 +522,26 @@ Requires `deletedAt DateTime?` on the model.
 When `draftable = true`, create defaults to `draftStatus = 'draft'`. The edit page shows "Save Draft" and "Publish" buttons. Published records show an "Unpublish" option.
 
 Requires `draftStatus String @default("draft")` on the model.
+
+### Collaborative Editing
+
+No resource-level flag needed — just add `.collaborative()` to any field:
+
+```ts
+fields() {
+  return [
+    TextField.make('title').collaborative(),           // character-level CRDT + cursors
+    RichContentField.make('body').collaborative(),     // rich-text collaboration
+    ToggleField.make('featured').collaborative(),      // instant sync (last-write-wins)
+    SelectField.make('status').collaborative(),        // instant sync
+    SlugField.make('slug').from('title'),              // not collaborative
+  ]
+}
+```
+
+Text-based fields get their own Y.Doc + Lexical editor with live cursors. Value-based fields (toggles, selects, dates, etc.) sync via Y.Map (last-write-wins). The edit page shows connection status and presence avatars automatically.
+
+Requires `@boostkit/live` registered in providers.
 
 ---
 
@@ -638,8 +656,8 @@ export class PostResource extends Resource {
   static live           = false         // auto-refresh table on save
   static versioned      = false         // version history with JSON snapshots
   static draftable      = false         // draft/publish workflow
-  static collaborative  = false         // real-time Yjs co-editing
   static softDeletes    = false         // trash & restore
+  // collaborative mode is derived from fields — add .collaborative() to any field
 
   fields() { return [...] }
   filters() { return [...] }   // optional

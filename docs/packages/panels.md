@@ -854,14 +854,13 @@ The selection bar is visible whenever at least one row is selected, regardless o
 
 ## Feature Flags
 
-Resources support five independent flags that compose freely:
+Resources support four static feature flags. Collaborative mode is derived automatically from fields.
 
 ```ts
 export class ArticleResource extends Resource {
   static live          = true   // table auto-refreshes on save
   static versioned     = true   // version history with JSON snapshots
   static draftable     = true   // draft/publish workflow
-  static collaborative = true   // real-time Yjs co-editing
   static softDeletes   = true   // trash & restore
 }
 ```
@@ -874,7 +873,7 @@ When any user creates, updates, or deletes a record, all viewers of that resourc
 
 ### Versioned (`static versioned = true`)
 
-Each save/publish creates a JSON snapshot in the `PanelVersion` table. Users can view past versions and revert. **Does not require Yjs** — works with plain JSON.
+Each save/publish creates a JSON snapshot in the `PanelVersion` table. Users can view past versions and revert. The version history panel highlights the active version and lets users restore any snapshot — restoring populates the form without saving, so users can review before committing. **Does not require Yjs** — works with plain JSON.
 
 **Requirements**: `PanelVersion` model in Prisma schema.
 
@@ -884,27 +883,47 @@ Records have a `draftStatus` field (`'draft'` | `'published'`). Create defaults 
 
 **Requirements**: `draftStatus String @default("draft")` column on the model.
 
-### Collaborative (`static collaborative = true`)
-
-Real-time co-editing via Yjs CRDT. Fields marked `.collaborative()` use Y.Text (character-level merge, cursors). Other fields sync via Y.Map. The edit page shows connection status and presence avatars.
-
-```ts
-fields() {
-  return [
-    TextField.make('title').collaborative(),      // live cursors + character merge
-    TextareaField.make('excerpt').collaborative(), // live cursors + character merge
-    SelectField.make('status'),                    // NOT collaborative
-  ]
-}
-```
-
-**Requirements**: `@boostkit/live` registered in providers.
-
 ### Soft Deletes (`static softDeletes = true`)
 
 Delete sets `deletedAt` instead of removing. List view adds a "View Trash" toggle. Trashed records can be restored or permanently deleted (with confirmation).
 
 **Requirements**: `deletedAt DateTime?` column on the model.
+
+### Collaborative Editing
+
+No resource-level flag needed — just add `.collaborative()` to any field. A resource is automatically collaborative when any field has `.collaborative()`. The edit page shows connection status and presence avatars.
+
+```ts
+fields() {
+  return [
+    // Text-based fields — each gets its own Y.Doc + Lexical editor
+    TextField.make('title').collaborative(),
+    TextareaField.make('excerpt').collaborative(),
+    RichContentField.make('body').collaborative(),
+
+    // Value-based fields — shared Y.Doc, Y.Map (last-write-wins)
+    ToggleField.make('featured').collaborative(),
+    SelectField.make('status').collaborative(),
+    DateField.make('publishedAt').collaborative(),
+    ColorField.make('accentColor').collaborative(),
+
+    // Non-collaborative fields work as normal
+    SlugField.make('slug').from('title'),
+  ]
+}
+```
+
+**How it works:**
+
+| Field type | Sync mechanism | Details |
+|---|---|---|
+| `text`, `textarea`, `email` | Own Y.Doc per field (Lexical PlainText) | Character-level CRDT, remote cursors |
+| `richcontent`, `content` | Own Y.Doc per field (Lexical RichText) | Full rich-text collaboration with cursors |
+| `boolean`, `toggle`, `select`, `date`, `color`, `tags`, etc. | Shared Y.Doc via Y.Map | Last-write-wins, instant sync |
+
+Each text-based collaborative field gets its own WebSocket room (e.g., `panel:articles:{id}:text:title`) for complete isolation. Non-text collaborative fields share a single Y.Map in the form-level Y.Doc.
+
+**Requirements**: `@boostkit/live` registered in providers.
 
 ### Composing Flags
 
@@ -913,8 +932,8 @@ Delete sets `deletedAt` instead of removing. List view adds a "View Trash" toggl
 | `versioned` only | Save creates a JSON snapshot. Can rollback. |
 | `draftable` only | Draft/publish workflow. No history. |
 | `draftable + versioned` | Draft/publish + version history on each publish. |
-| `collaborative` only | Real-time co-editing. Save goes to DB. |
-| `collaborative + versioned` | Co-edit + version snapshots. |
+| `.collaborative()` fields | Real-time co-editing. Save goes to DB. |
+| `.collaborative()` + `versioned` | Co-edit + version snapshots with restore. |
 | All flags | Full power: co-edit, draft/publish, version history, trash. |
 
 ### Required Prisma Models

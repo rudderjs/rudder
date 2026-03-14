@@ -896,14 +896,13 @@ Storage: single `PanelGlobal` table — `slug` (PK) + `data` (JSON string). No m
 
 ## Feature Flags
 
-Resources support five independent feature flags:
+Resources support four static feature flags. Collaborative mode is derived automatically from fields.
 
 ```ts
 export class ArticleResource extends Resource {
   static live          = true   // table auto-refreshes on save
   static versioned     = true   // version history with JSON snapshots
   static draftable     = true   // draft/publish workflow
-  static collaborative = true   // real-time Yjs co-editing
   static softDeletes   = true   // trash & restore
 }
 ```
@@ -912,16 +911,51 @@ export class ArticleResource extends Resource {
 Table auto-refreshes when any user saves. Uses `@boostkit/broadcast` — no Yjs.
 
 ### `versioned`
-Each save/publish creates a JSON snapshot in `PanelVersion`. View history and revert. No Yjs needed.
+Each save/publish creates a JSON snapshot in `PanelVersion`. View history and revert. The version history panel highlights the active version and lets users restore any snapshot. No Yjs needed.
 
 ### `draftable`
 Records have a `draftStatus` field (`'draft'` | `'published'`). Create defaults to draft. Edit page shows "Save Draft" and "Publish" buttons. Requires `draftStatus String @default("draft")` column.
 
-### `collaborative`
-Real-time co-editing via Yjs CRDT. `.collaborative()` fields use Y.Text (cursors, character merge). Other fields sync via Y.Map. Requires `@boostkit/live`.
-
 ### `softDeletes`
 Delete sets `deletedAt` instead of removing. Trash view with restore and force-delete. Requires `deletedAt DateTime?` column.
+
+### Collaborative Editing
+
+No resource-level flag needed — just add `.collaborative()` to any field. The resource is automatically collaborative when any field has `.collaborative()`.
+
+```ts
+fields() {
+  return [
+    // Text-based fields — each gets its own Y.Doc + Lexical editor
+    TextField.make('title').collaborative(),
+    TextareaField.make('excerpt').collaborative(),
+    RichContentField.make('body').collaborative(),
+
+    // Value-based fields — shared Y.Doc, Y.Map (last-write-wins)
+    ToggleField.make('featured').collaborative(),
+    SelectField.make('status').collaborative(),
+    DateField.make('publishedAt').collaborative(),
+    ColorField.make('accentColor').collaborative(),
+
+    // Non-collaborative fields work as normal
+    SlugField.make('slug').from('title'),
+  ]
+}
+```
+
+**How it works:**
+
+| Field type | Sync mechanism | Details |
+|---|---|---|
+| `text`, `textarea`, `email` | Own Y.Doc per field (Lexical PlainText) | Character-level CRDT, remote cursors |
+| `richcontent`, `content` | Own Y.Doc per field (Lexical RichText) | Full rich-text collaboration with cursors |
+| `boolean`, `toggle`, `select`, `date`, `color`, `tags`, etc. | Shared Y.Doc via Y.Map | Last-write-wins, instant sync |
+
+Each text-based field gets its own WebSocket room (`panel:articles:{id}:text:title`, `panel:articles:{id}:richcontent:body`, etc.) for complete isolation. Non-text fields share a single Y.Map in the form-level Y.Doc.
+
+**Requirements**: `@boostkit/live` registered in providers.
+
+The edit page shows connection status and presence avatars when collaborative fields are present.
 
 ### Composing Flags
 
@@ -930,9 +964,9 @@ Delete sets `deletedAt` instead of removing. Trash view with restore and force-d
 | `versioned` only | Save creates a JSON snapshot. Can rollback. |
 | `draftable` only | Draft/publish workflow. No history. |
 | `draftable + versioned` | Draft/publish + version history on each publish. |
-| `collaborative` only | Real-time co-editing. Save goes to DB. |
-| `collaborative + versioned` | Co-edit + version snapshots. |
-| All three | Full power: co-edit, draft/publish, version history. |
+| `.collaborative()` fields | Real-time co-editing. Save goes to DB. |
+| `.collaborative()` + `versioned` | Co-edit + version snapshots with restore. |
+| All flags | Full power: co-edit, draft/publish, version history, trash. |
 
 ---
 
