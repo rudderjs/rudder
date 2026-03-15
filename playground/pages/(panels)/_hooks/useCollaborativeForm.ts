@@ -12,6 +12,8 @@ interface CollaborativeFormOptions {
   wsPath:     string
   fields:     CollaborativeField[]
   values:     Record<string, unknown>
+  /** Lazy getter for current form values — used by seedAfterSync to avoid stale closures. */
+  getValues?: () => Record<string, unknown>
   setValue:   (name: string, value: unknown) => void
   /** Client-side providers. Default: ['websocket'] */
   providers?: ('websocket' | 'indexeddb')[]
@@ -127,17 +129,18 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       // If we seed before sync, both the seed and server state merge → duplicated text.
       function seedAfterSync() {
         if (destroyed) return
+        // Use getValues() for latest form values (avoids stale closure after version restore)
+        const vals = options!.getValues?.() ?? options!.values
         doc.transact(() => {
           for (const f of textFields) {
             const yText = yTexts.get(f.name)!
-            const initVal = String(options!.values[f.name] ?? '')
-            // Only seed if Y.Text is still empty after sync (first-ever connection)
+            const initVal = String(vals[f.name] ?? '')
             if (yText.length === 0 && initVal) {
               yText.insert(0, initVal)
             }
           }
           for (const f of mapFields) {
-            if (!fieldsMap.has(f.name)) fieldsMap.set(f.name, options!.values[f.name] ?? null)
+            if (!fieldsMap.has(f.name)) fieldsMap.set(f.name, vals[f.name] ?? null)
           }
         })
       }
