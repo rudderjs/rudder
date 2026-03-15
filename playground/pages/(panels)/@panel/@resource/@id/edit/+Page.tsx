@@ -116,8 +116,11 @@ export default function EditPage() {
         socket = new mod.BKSocket(`ws://${window.location.host}/ws`)
         socket.channel(`panel:${slug}`).on('version.restored', async (data: any) => {
           if (data?.id !== id) return
-          // Another user saved after restoring — fetch fresh data and stay collaborative.
-          // Use navigate to re-run +data.ts which re-seeds Y.Docs from the correct DB values.
+          // Another user saved after restoring a version.
+          // Unmount editors to stop y-websocket auto-reconnect pushing stale data,
+          // then navigate to re-run +data.ts with correct DB values + fresh Y.Doc rooms.
+          setFormKey(-1)
+          await new Promise(r => setTimeout(r, 200))
           void navigate(window.location.pathname + window.location.search, {
             overwriteLastHistoryEntry: true,
           })
