@@ -40,38 +40,37 @@ export class ArticleResource extends Resource {
   fields() {
     return [
       // ── Content ──────────────────────────────────────────────
-      Section.make('Content').schema(
-        TextField.make('title')
-          .label('Title')
-          .required()
-          .searchable()
-          .sortable()
-          .collaborative(),
+      TextField.make('title')
+        .label('Title')
+        .required()
+        .searchable()
+        .sortable()
+        .collaborative(),
 
-        SlugField.make('slug')
-          .label('Slug')
-          .from('title')
-          .required()
-          // Per-field validation: unique slug check
-          .validate(async (value, data) => {
-            const q = Article.query().where('slug', value as string)
-            if (data['id']) (q as any).where('id', '!=', data['id'])
-            return await (q as any).first() ? 'Slug already in use' : true
-          }),
+      SlugField.make('slug')
+        .label('Slug')
+        .from('title')
+        .required()
+        // Per-field validation: unique slug check
+        .validate(async (value, data) => {
+          const q = Article.query().where('slug', value as string)
+          if (data['id']) (q as any).where('id', '!=', data['id'])
+          return await (q as any).first() ? 'Slug already in use' : true
+        }),
 
-        TextareaField.make('excerpt')
-          .label('Excerpt')
-          .rows(3)
-          .hideFromTable()
-          .collaborative(),
+      TextareaField.make('excerpt')
+        .label('Excerpt')
+        .rows(3)
+        .hideFromTable()
+        .collaborative(),
 
-        FileField.make('coverImage')
-          .label('Cover Image')
-          .image()
-          .accept('image/*')
-          .maxSize(5)
-          .disk('public')
-          .directory('articles'),
+      FileField.make('coverImage')
+        .label('Cover Image')
+        .image()
+        .accept('image/*')
+        .maxSize(5)
+        .disk('public')
+        .directory('articles'),
 
         // ContentField.make('content')
         //   .label('Content')
@@ -141,7 +140,7 @@ export class ArticleResource extends Resource {
           .multiple()
           .creatable(),
           // .hideFromTable(),
-      ),
+
 
       // ── Publishing ────────────────────────────────────────────
       Section.make('Publishing')
