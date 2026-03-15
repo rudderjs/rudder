@@ -47,6 +47,9 @@ export default function Page() {
     // Show local user immediately (don't wait for server echo)
     syncUsers()
 
+
+
+    
     provider.awareness.on('change', syncUsers)
 
     return () => {

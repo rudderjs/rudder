@@ -7,12 +7,14 @@ export default function Page() {
   const data = useData<Data>()
   const [user, setUser] = useState(data.user)
 
+
   async function signOut() {
     await fetch('/api/auth/sign-out', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    '{}',
     })
+    
     window.location.href = '/'
   }
 
