@@ -518,13 +518,30 @@ export const Live = {
   },
 
   /**
-   * Clear a Y.Doc from both persistence and the in-memory room cache.
-   * Connected clients will receive a fresh empty doc on next sync.
+   * Clear all content from a Y.Doc and its persistence.
+   * The room stays alive — connected clients receive the deletions via WebSocket
+   * (CRDT delete operations), so their Y.Docs become empty too.
+   * After this, SeedPlugin on reconnecting/remounting editors will re-seed from DB.
    */
   async clearDocument(docName: string): Promise<void> {
     const persistence = this.persistence()
     await persistence.clearDocument(docName)
     const rooms = g[KEY] as Map<string, Room> | undefined
-    rooms?.delete(docName)
+    const room = rooms?.get(docName)
+    if (room) {
+      // Clear all shared types in the Y.Doc — these are CRDT delete operations
+      // that sync to all connected clients via the existing WebSocket connections.
+      room.doc.transact(() => {
+        // Clear Y.Map('fields') — used by non-text collaborative fields
+        const fields = room.doc.getMap('fields')
+        for (const key of [...fields.keys()]) fields.delete(key)
+
+        // Clear 'root' XmlText — used by Lexical editors
+        try {
+          const root = room.doc.get('root', Y.XmlText)
+          if (root.length > 0) root.delete(0, root.length)
+        } catch { /* no 'root' XmlText in this doc */ }
+      })
+    }
   },
 }

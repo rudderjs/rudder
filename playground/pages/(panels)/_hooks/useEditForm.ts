@@ -36,6 +36,13 @@ export function useEditForm(opts: UseEditFormOptions) {
   // Tracks the currently restored version (null = latest/unsaved)
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null)
 
+  /** Reset form with new values and remount collaborative editors. */
+  const resetForm = useCallback((newValues: Record<string, unknown>) => {
+    setValues(newValues)
+    setFormKey(k => k + 1)
+    setActiveVersionId(null)
+  }, [])
+
   const setFormValue = useCallback((name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }))
     setErrors((prev) => ({ ...prev, [name]: [] }))
@@ -134,11 +141,8 @@ export function useEditForm(opts: UseEditFormOptions) {
           })
         }
 
-        // Update form state with restored values and bump formKey
-        // to force-remount collaborative editors (fresh Y.Docs).
-        // User can review and save manually.
-        setValues(merged)
-        setFormKey(k => k + 1)
+        // Update form state and remount collaborative editors
+        resetForm(merged)
         setActiveVersionId(versionId)
         toast.success(i18n.restoredToast ?? 'Version restored.')
       } else {
@@ -157,6 +161,7 @@ export function useEditForm(opts: UseEditFormOptions) {
     activeVersionId,
     setValue,
     setFormValue,
+    resetForm,
     handleSave,
     handleSubmit,
     restoreVersion,
