@@ -62,7 +62,11 @@ export function broadcasting(config: BroadcastConfig = {}): new (app: Applicatio
       // Register upgrade handler on globalThis so @boostkit/vite and
       // @boostkit/server-hono can attach it to the http.Server without
       // a hard dependency on @boostkit/broadcast.
-      ;(globalThis as Record<string, unknown>)[UPGRADE_KEY] = getUpgradeHandler(path)
+      // Store both the broadcast-specific handler AND the combined handler
+      // so that @boostkit/live can chain without circular references on HMR.
+      const handler = getUpgradeHandler(path)
+      ;(globalThis as Record<string, unknown>)['__boostkit_ws_broadcast_upgrade__'] = handler
+      ;(globalThis as Record<string, unknown>)[UPGRADE_KEY] = handler
 
       this.publishes({
         from: new URL('../client', import.meta.url).pathname,

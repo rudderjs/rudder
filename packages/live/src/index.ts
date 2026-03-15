@@ -405,8 +405,9 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
         void handleConnection(ws as WsSocket, req, persistence, config.onChange)
       })
 
-      // Chain into the existing upgrade handler (works alongside @boostkit/ws)
-      const prev = g['__boostkit_ws_upgrade__'] as
+      // Chain into the broadcast-specific handler (not the combined handler)
+      // to avoid circular references during HMR re-boots.
+      const prev = (g['__boostkit_ws_broadcast_upgrade__'] ?? g['__boostkit_ws_upgrade__']) as
         | ((req: unknown, socket: unknown, head: unknown) => void)
         | undefined
 

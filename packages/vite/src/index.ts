@@ -88,6 +88,8 @@ export function boostkit(): Promise<Plugin[]> {
           // are read-only and cannot be reassigned.
           const http = _require('http') as typeof import('http')
           const orig = http.createServer.bind(http) as typeof http.createServer
+          // Keep the monkey-patch active (don't restore) so that program reloads
+          // (which create a new HTTP server) also get the upgrade handler.
           http.createServer = ((...args: Parameters<typeof http.createServer>) => {
             const srv = (orig as (...a: unknown[]) => import('node:http').Server)(...args)
             srv.on('upgrade', (req, socket, head) => {
@@ -96,8 +98,6 @@ export function boostkit(): Promise<Plugin[]> {
                 | undefined
               handler?.(req, socket, head)
             })
-            // Restore immediately so we only intercept the first server (srvx's)
-            http.createServer = orig
             return srv
           }) as typeof http.createServer
         },
