@@ -15,6 +15,8 @@ interface CollaborativeFormOptions {
   setValue:   (name: string, value: unknown) => void
   /** Client-side providers. Default: ['websocket'] */
   providers?: ('websocket' | 'indexeddb')[]
+  /** Change this to force reconnect (e.g. on version restore). */
+  resetKey?:  number
 }
 
 interface Presence { name: string; color: string }
@@ -206,7 +208,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       setAwareness(null)
       yTextMapRef.current  = new Map()
     }
-  }, [options?.docName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [options?.docName, options?.resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Write a local change to the ydoc. Handles both Y.Text and Y.Map fields. */
   const setCollaborativeValue = useCallback((name: string, value: unknown) => {

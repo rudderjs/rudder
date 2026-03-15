@@ -64,6 +64,9 @@ export default function EditPage() {
   const initialValues = buildInitialValues(formFields, record as Record<string, unknown>)
 
   // ── Collaborative form ───────────────────────────────────
+  // formKey lives here (not in useEditForm) so useCollaborativeForm can use it as resetKey.
+  const [formKey, setFormKey] = useState(0)
+
   // Ref bridges useCollaborativeForm (called first) → useEditForm's setFormValue (called second).
   // When a remote Y.Map change arrives, it calls this ref to update React form state.
   const remoteSetValueRef = useRef<(name: string, value: unknown) => void>(() => {})
@@ -74,13 +77,13 @@ export default function EditPage() {
     getDoc, awareness, userName, userColor,
   } = useCollaborativeForm(
     collaborative && docName && wsLivePath
-      ? { docName, wsPath: wsLivePath, fields: collabFields, values: initialValues, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
+      ? { docName, wsPath: wsLivePath, fields: collabFields, values: initialValues, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any, resetKey: formKey }
       : null,
   )
 
   // ── Edit form state ──────────────────────────────────────
   const {
-    values, errors, saving, formKey, activeVersionId,
+    values, errors, saving, activeVersionId,
     setValue, setFormValue, resetForm, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
@@ -88,6 +91,7 @@ export default function EditPage() {
     syncAllFieldsToDoc: collaborative ? syncAllFieldsToDoc : undefined,
     setCollaborativeValue: collaborative ? setCollaborativeValue : undefined,
     selfSyncFields,
+    setFormKey,
   })
 
   // Wire the ref to setFormValue (not setValue — avoid writing back to Y.Map)

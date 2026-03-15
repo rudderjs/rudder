@@ -19,21 +19,20 @@ interface UseEditFormOptions {
   /** Fields that handle their own Y.Doc sync (each via its own Lexical + Y.Doc instance).
    *  setValue will NOT call setCollaborativeValue for these — they already sync themselves. */
   selfSyncFields?:        Set<string>
+  /** Setter for formKey — lives in parent so useCollaborativeForm can use it as resetKey. */
+  setFormKey:              (fn: (k: number) => number) => void
 }
 
 export function useEditForm(opts: UseEditFormOptions) {
   const {
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, collaborative, i18n,
-    syncAllFieldsToDoc, setCollaborativeValue, selfSyncFields,
+    syncAllFieldsToDoc, setCollaborativeValue, selfSyncFields, setFormKey,
   } = opts
 
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [saving, setSaving] = useState(false)
-  // Incremented on version restore — used as React key to force-remount collaborative editors
-  const [formKey, setFormKey] = useState(0)
-  // Tracks the currently restored version (null = latest/unsaved)
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null)
 
   /** Reset form with new values and remount collaborative editors. */
@@ -157,7 +156,6 @@ export function useEditForm(opts: UseEditFormOptions) {
     values,
     errors,
     saving,
-    formKey,
     activeVersionId,
     setValue,
     setFormValue,
