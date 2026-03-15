@@ -66,7 +66,7 @@ export function CollaborativePlainText({
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
       })
 
-      provider.once('synced', () => {
+      ;(provider as any).once('synced', () => {
         if (!destroyed) setProviderSynced(true)
       })
 
@@ -98,12 +98,14 @@ export function CollaborativePlainText({
     nodes: [],
     theme: THEME,
     editable: !disabled,
-    editorState: collabReady ? null : (value ? () => {
-      const root = $getRoot()
-      const p = $createParagraphNode()
-      p.append($createTextNode(value))
-      root.append(p)
-    } : undefined),
+    ...(collabReady
+      ? { editorState: null }
+      : value ? { editorState: () => {
+          const root = $getRoot()
+          const p = $createParagraphNode()
+          p.append($createTextNode(value))
+          root.append(p)
+        } } : {}),
     onError: (error: Error) => console.error('[CollaborativePlainText]', error),
   }), [fragmentName, disabled, collabReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,8 +141,8 @@ export function CollaborativePlainText({
           id={fragmentName}
           providerFactory={providerFactory!}
           shouldBootstrap={false}
-          username={userName}
-          cursorColor={userColor}
+          username={userName ?? ''}
+          cursorColor={userColor ?? ''}
           cursorsContainerRef={cursorsContainerRef}
         />
         <OnChangePlugin onChange={onChange} />

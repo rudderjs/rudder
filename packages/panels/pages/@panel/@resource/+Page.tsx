@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table.js'
 import { CellValue, resolveCellValue } from '../../_components/CellValue.js'
+import { InlineEditCell } from '../../_components/InlineEditCell.js'
 import {
   Tooltip,
   TooltipContent,
@@ -78,6 +79,7 @@ export default function ResourceListPage() {
   const searchFields = allFields.filter((f) => f.searchable)
   const hasSearch    = searchFields.length > 0
   const hasFilters   = resourceMeta.filters.length > 0
+  const hasSoftDeletes = (resourceMeta as any).softDeletes === true
 
   // ── Live table auto-refresh (opt-in via Resource.live) ──
   useLiveTable({ enabled: resourceMeta.live, slug, pathSegment })
@@ -96,8 +98,17 @@ export default function ResourceListPage() {
   // Save params to sessionStorage whenever URL has them
   // In loadMore mode, once extra pages are loaded, handleLoadMore saves the updated URL directly
   // — skip the render-time save to avoid overwriting with stale SSR urlSearch
+  // Exclude trashed param from persistence — trash toggle is a view switch, not a filter to restore
   if (persist && typeof window !== 'undefined' && urlSearch && !(isLoadMore && extraRecords.length > 0)) {
-    sessionStorage.setItem(storageKey, '?' + urlSearch)
+    const persistParams = new URLSearchParams(urlSearch)
+    persistParams.delete('trashed')
+    persistParams.delete('draft')
+    const cleanSearch = persistParams.toString()
+    if (cleanSearch) {
+      sessionStorage.setItem(storageKey, '?' + cleanSearch)
+    } else {
+      sessionStorage.removeItem(storageKey)
+    }
   }
 
   // Trigger the restore navigation (once per restore)
@@ -116,6 +127,8 @@ export default function ResourceListPage() {
   const currentSort   = urlParams.get('sort') ?? resourceMeta.defaultSort ?? ''
   const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
   const currentSearch = urlParams.get('search') ?? ''
+  const isTrashed     = urlParams.get('trashed') === 'true'
+  const draftFilter   = urlParams.get('draft') // 'true' | 'false' | null (all)
   const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
 
   // Reset selection and loadMore state when navigating to a different resource
@@ -274,6 +287,51 @@ export default function ResourceListPage() {
     }
   }
 
+  async function handleBulkRestore() {
+    setBulkDeletePending(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}/_restore`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ids: selected }),
+      })
+      if (res.ok) {
+        toast.success((i18n as any).restoredRecordToast)
+        setSelected([])
+        void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
+      } else {
+        toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+      }
+    } catch {
+      toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+    } finally {
+      setBulkDeletePending(false)
+    }
+  }
+
+  async function handleBulkForceDelete() {
+    setBulkDeletePending(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}/_force`, {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ids: selected }),
+      })
+      if (res.ok) {
+        toast.success((i18n as any).forceDeletedToast)
+        setSelected([])
+        void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
+      } else {
+        toast.error(i18n.deleteError)
+      }
+    } catch {
+      toast.error(i18n.deleteError)
+    } finally {
+      setBulkDeletePending(false)
+      setBulkDeleteConfirmOpen(false)
+    }
+  }
+
   async function handleBulkDelete() {
     setBulkDeletePending(true)
     try {
@@ -313,18 +371,71 @@ export default function ResourceListPage() {
       {/* ── Header ────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-5 gap-4">
         <div>
-          <h1 className="text-xl font-semibold">{resourceMeta.label}</h1>
+          <h1 className="text-xl font-semibold">
+            {resourceMeta.label}
+            {isTrashed && <span className="text-muted-foreground ms-2 text-base font-normal">— {(i18n as any).trash}</span>}
+          </h1>
           {pagination && (
             <p className="text-sm text-muted-foreground mt-0.5">{t(i18n.records, { n: pagination.total })}</p>
           )}
         </div>
-        <a
-          href={`/${pathSegment}/${slug}/create`}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0"
-        >
-          {t(i18n.newButton, { label: resourceMeta.labelSingular })}
-        </a>
+        <div className="flex items-center gap-2">
+          {hasSoftDeletes && (
+            <a
+              href={isTrashed ? `/${pathSegment}/${slug}` : `/${pathSegment}/${slug}?trashed=true`}
+              className={[
+                'inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border transition-colors shrink-0',
+                isTrashed
+                  ? 'border-primary text-primary bg-primary/10 hover:bg-primary/20'
+                  : 'border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              ].join(' ')}
+            >
+              {isTrashed ? (i18n as any).exitTrash : (i18n as any).viewTrash}
+            </a>
+          )}
+          {!isTrashed && (resourceMeta as any).draftable ? (
+            <CreateDraftButton slug={slug} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
+          ) : !isTrashed ? (
+            <a
+              href={`/${pathSegment}/${slug}/create`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0"
+            >
+              {t(i18n.newButton, { label: resourceMeta.labelSingular })}
+            </a>
+          ) : null}
+        </div>
       </div>
+
+      {/* ── Trashed banner ─────────────────────────────────── */}
+      {isTrashed && (
+        <div className="mb-4 px-4 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400">
+          {(i18n as any).trashedBanner}
+        </div>
+      )}
+
+      {/* ── Draft filter tabs ──────────────────────────────── */}
+      {hasSoftDeletes && !isTrashed && (resourceMeta as any).draftable && (
+        <div className="flex items-center gap-1 mb-4">
+          {([
+            { key: null,    label: i18n.all ?? 'All' },
+            { key: 'true',  label: (i18n as any).draft ?? 'Draft' },
+            { key: 'false', label: (i18n as any).published ?? 'Published' },
+          ] as { key: string | null; label: string }[]).map(({ key, label }) => (
+            <a
+              key={key ?? 'all'}
+              href={`/${pathSegment}/${slug}${key !== null ? `?draft=${key}` : ''}`}
+              className={[
+                'px-3 py-1.5 text-sm rounded-md transition-colors',
+                draftFilter === key || (key === null && draftFilter === null)
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              ].join(' ')}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* ── Toolbar (search + filters) ─────────────────────── */}
       {(hasSearch || hasFilters) && (
@@ -412,13 +523,32 @@ export default function ResourceListPage() {
                 {action.label}
               </button>
             ))}
-            <button
-              onClick={() => setBulkDeleteConfirmOpen(true)}
-              disabled={actionPending || bulkDeletePending}
-              className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-destructive/10 text-destructive hover:bg-destructive/20"
-            >
-              {bulkDeletePending ? i18n.loading : t(i18n.deleteSelected, { n: selected.length })}
-            </button>
+            {isTrashed ? (
+              <>
+                <button
+                  onClick={handleBulkRestore}
+                  disabled={actionPending || bulkDeletePending}
+                  className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-primary/10 text-primary hover:bg-primary/20"
+                >
+                  {bulkDeletePending ? i18n.loading : (i18n as any).bulkRestore}
+                </button>
+                <button
+                  onClick={() => setBulkDeleteConfirmOpen(true)}
+                  disabled={actionPending || bulkDeletePending}
+                  className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-destructive/10 text-destructive hover:bg-destructive/20"
+                >
+                  {bulkDeletePending ? i18n.loading : (i18n as any).bulkForceDelete}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setBulkDeleteConfirmOpen(true)}
+                disabled={actionPending || bulkDeletePending}
+                className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-destructive/10 text-destructive hover:bg-destructive/20"
+              >
+                {bulkDeletePending ? i18n.loading : t(i18n.deleteSelected, { n: selected.length })}
+              </button>
+            )}
           </div>
           <button
             onClick={() => setSelected([])}
@@ -498,14 +628,23 @@ export default function ResourceListPage() {
                     <TableCell key={f.name} className="px-4 py-3 text-foreground">
                       {fi === 0
                         ? (
-                          <a
-                            href={`/${pathSegment}/${slug}/${id}`}
-                            className="font-medium hover:text-primary transition-colors"
-                          >
-                            <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
-                          </a>
+                          <span className="inline-flex items-center gap-2">
+                            <a
+                              href={`/${pathSegment}/${slug}/${id}`}
+                              className="font-medium hover:text-primary transition-colors"
+                            >
+                              <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
+                            </a>
+                            {(resourceMeta as any).draftable && record['draftStatus'] === 'draft' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                {(i18n as any).draft ?? 'Draft'}
+                              </span>
+                            )}
+                          </span>
                         )
-                        : <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
+                        : f.extra?.['inlineEditable'] && !isTrashed
+                          ? <InlineEditCell record={record} field={f} slug={slug} pathSegment={pathSegment} i18n={i18n} />
+                          : <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                       }
                     </TableCell>
                   ))}
@@ -534,24 +673,33 @@ export default function ResourceListPage() {
                           <TooltipContent>{action.label}</TooltipContent>
                         </Tooltip>
                       ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const back = window.location.pathname + window.location.search
-                          void navigate(`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
-                        }}
-                        className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                      >
-                        {i18n.edit}
-                      </button>
-                      <DuplicateRowButton
-                        slug={slug}
-                        id={id}
-                        pathSegment={pathSegment}
-                        schema={allFields}
-                        i18n={i18n}
-                      />
-                      <DeleteRowButton slug={slug} id={id} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
+                      {isTrashed ? (
+                        <>
+                          <RestoreRowButton slug={slug} id={id} pathSegment={pathSegment} i18n={i18n} />
+                          <ForceDeleteRowButton slug={slug} id={id} pathSegment={pathSegment} i18n={i18n} />
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const back = window.location.pathname + window.location.search
+                              void navigate(`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
+                            }}
+                            className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                          >
+                            {i18n.edit}
+                          </button>
+                          <DuplicateRowButton
+                            slug={slug}
+                            id={id}
+                            pathSegment={pathSegment}
+                            schema={allFields}
+                            i18n={i18n}
+                          />
+                          <DeleteRowButton slug={slug} id={id} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -673,9 +821,9 @@ export default function ResourceListPage() {
         <ConfirmDialog
           open
           onClose={() => setBulkDeleteConfirmOpen(false)}
-          onConfirm={handleBulkDelete}
-          title={t(i18n.deleteSelected, { n: selected.length })}
-          message={t(i18n.bulkDeleteConfirm, { n: selected.length })}
+          onConfirm={isTrashed ? handleBulkForceDelete : handleBulkDelete}
+          title={isTrashed ? (i18n as any).forceDelete : t(i18n.deleteSelected, { n: selected.length })}
+          message={isTrashed ? (i18n as any).forceDeleteConfirm : t(i18n.bulkDeleteConfirm, { n: selected.length })}
           danger
           confirmLabel={i18n.confirm}
           cancelLabel={i18n.cancel}
@@ -724,7 +872,7 @@ function DeleteRowButton({ slug, id, pathSegment, labelSingular, i18n }: { slug:
       toast.error(i18n.deleteError)
     }
     setOpen(false)
-    window.location.reload()
+    void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
   }
 
   return (
@@ -746,6 +894,114 @@ function DeleteRowButton({ slug, id, pathSegment, labelSingular, i18n }: { slug:
         cancelLabel={i18n.cancel}
       />
     </>
+  )
+}
+
+function RestoreRowButton({ slug, id, pathSegment, i18n }: { slug: string; id: string; pathSegment: string; i18n: PanelI18n }) {
+  const [pending, setPending] = useState(false)
+
+  async function handleRestore() {
+    setPending(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_restore`, { method: 'POST' })
+      if (res.ok) {
+        toast.success((i18n as any).restoredRecordToast)
+      } else {
+        toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+      }
+    } catch {
+      toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+    }
+    setPending(false)
+    void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
+  }
+
+  return (
+    <button
+      onClick={handleRestore}
+      disabled={pending}
+      className="text-xs px-2.5 py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+    >
+      {(i18n as any).restoreRecord}
+    </button>
+  )
+}
+
+function ForceDeleteRowButton({ slug, id, pathSegment, i18n }: { slug: string; id: string; pathSegment: string; i18n: PanelI18n }) {
+  const [open, setOpen] = useState(false)
+
+  async function handleForceDelete() {
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_force`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success((i18n as any).forceDeletedToast)
+      } else {
+        toast.error(i18n.deleteError)
+      }
+    } catch {
+      toast.error(i18n.deleteError)
+    }
+    setOpen(false)
+    void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="text-xs px-2.5 py-1 rounded border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
+      >
+        {(i18n as any).forceDelete}
+      </button>
+      <ConfirmDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onConfirm={handleForceDelete}
+        title={(i18n as any).forceDelete}
+        message={(i18n as any).forceDeleteConfirm}
+        danger
+        confirmLabel={i18n.confirm}
+        cancelLabel={i18n.cancel}
+      />
+    </>
+  )
+}
+
+function CreateDraftButton({ slug, pathSegment, labelSingular, i18n }: {
+  slug: string; pathSegment: string; labelSingular: string; i18n: PanelI18n
+}) {
+  const [creating, setCreating] = useState(false)
+
+  async function handleCreate() {
+    setCreating(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/${slug}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ draftStatus: 'draft' }),
+      })
+      if (res.ok) {
+        const body = await res.json() as { data: { id: string } }
+        void navigate(`/${pathSegment}/${slug}/${body.data.id}/edit`)
+      } else {
+        toast.error((i18n as any).saveError ?? 'Failed to create draft.')
+        setCreating(false)
+      }
+    } catch {
+      toast.error((i18n as any).saveError ?? 'Failed to create draft.')
+      setCreating(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCreate}
+      disabled={creating}
+      className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0 disabled:opacity-50"
+    >
+      {creating ? (i18n as any).loading : t(i18n.newButton, { label: labelSingular })}
+    </button>
   )
 }
 

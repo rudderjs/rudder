@@ -90,7 +90,7 @@ function getDefaultOptions(editor: any): SlashMenuOption[] {
 
 interface Props {
   /** Additional slash menu items (e.g. custom blocks) */
-  extraItems?: SlashMenuOption[]
+  extraItems?: SlashMenuOption[] | undefined
 }
 
 export function SlashCommandPlugin({ extraItems }: Props) {

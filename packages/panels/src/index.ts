@@ -74,6 +74,11 @@ export type { ContentBlockDef } from './ContentBlock.js'
 // ─── Rich Content Field (Lexical) ───────────────────────────
 export { RichContentField } from './fields/RichContentField.js'
 
+// ─── Editor Registry ────────────────────────────────────────
+
+export { editorRegistry } from './EditorRegistry.js'
+export type { RichContentEditorProps, CollaborativePlainTextProps } from './EditorRegistry.js'
+
 // ─── Filters ───────────────────────────────────────────────
 
 export { Filter, SelectFilter, SearchFilter } from './Filter.js'

@@ -429,9 +429,57 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+
+  packages/panels-lexical:
+    devDependencies:
+      '@boostkit/panels':
+        specifier: workspace:*
+        version: link:../panels
+      '@floating-ui/dom':
+        specifier: ^1.6.0
+        version: 1.7.6
+      '@lexical/code':
+        specifier: ^0.41.0
+        version: 0.41.0
+      '@lexical/link':
+        specifier: ^0.41.0
+        version: 0.41.0
+      '@lexical/list':
+        specifier: ^0.41.0
+        version: 0.41.0
+      '@lexical/react':
+        specifier: ^0.41.0
+        version: 0.41.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(yjs@13.6.29)
+      '@lexical/rich-text':
+        specifier: ^0.41.0
+        version: 0.41.0
+      '@lexical/utils':
+        specifier: ^0.41.0
+        version: 0.41.0
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      lexical:
+        specifier: ^0.41.0
+        version: 0.41.0
+      react:
+        specifier: ^19.0.0
+        version: 19.2.4
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      y-websocket:
+        specifier: ^2.1.0
+        version: 2.1.0(yjs@13.6.29)
       yjs:
         specifier: ^13.6.29
         version: 13.6.29
@@ -674,6 +722,9 @@ importers:
       '@boostkit/panels':
         specifier: workspace:*
         version: link:../packages/panels
+      '@boostkit/panels-lexical':
+        specifier: workspace:*
+        version: link:../packages/panels-lexical
       '@boostkit/queue':
         specifier: workspace:*
         version: link:../packages/queue

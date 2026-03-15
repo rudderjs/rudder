@@ -9,10 +9,7 @@
     "directory": "packages/panels-lexical"
   },
   "type": "module",
-  "files": [
-    "dist",
-    "pages"
-  ],
+  "files": ["dist"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -27,28 +24,41 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/panels": "workspace:*"
-  },
+  "dependencies": {},
   "peerDependencies": {
+    "@boostkit/panels": "workspace:*",
+    "react": ">=18",
+    "lexical": ">=0.20",
+    "@lexical/react": ">=0.20",
+    "@lexical/rich-text": ">=0.20",
+    "@lexical/list": ">=0.20",
+    "@lexical/link": ">=0.20",
+    "@lexical/code": ">=0.20",
+    "@lexical/utils": ">=0.20",
+    "@floating-ui/dom": ">=1",
+    "yjs": ">=13",
+    "y-websocket": ">=2"
+  },
+  "peerDependenciesMeta": {
+    "yjs": { "optional": true },
+    "y-websocket": { "optional": true }
+  },
+  "devDependencies": {
+    "@boostkit/panels": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "lexical": "^0.41.0",
     "@lexical/react": "^0.41.0",
     "@lexical/rich-text": "^0.41.0",
     "@lexical/list": "^0.41.0",
     "@lexical/link": "^0.41.0",
     "@lexical/code": "^0.41.0",
-    "@lexical/yjs": "^0.41.0",
-    "yjs": "^13.6.0",
-    "y-websocket": "^2.0.0"
-  },
-  "peerDependenciesMeta": {
-    "y-websocket": { "optional": true },
-    "yjs": { "optional": true }
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.4.0"
+    "@lexical/utils": "^0.41.0",
+    "@floating-ui/dom": "^1.6.0",
+    "react": "^19.0.0",
+    "typescript": "^5.4.0",
+    "yjs": "^13.6.29",
+    "y-websocket": "^2.1.0"
   },
   "author": "Suleiman Shahbari"
 }

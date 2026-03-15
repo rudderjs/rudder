@@ -43,6 +43,28 @@ export async function data(pageContext: PageContextServer) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = Model.query()
 
+    // Soft deletes — filter by trashed status
+    const hasSoftDeletes = (ResourceClass as any).softDeletes === true
+    const trashed        = params.get('trashed') === 'true'
+    if (hasSoftDeletes) {
+      if (trashed) {
+        q = q.where('deletedAt', '!=', null)
+      } else {
+        q = q.where('deletedAt', null)
+      }
+    }
+
+    // Draftable — filter by draft status
+    const hasDraftable = (ResourceClass as any).draftable === true
+    const draftFilter  = params.get('draft')
+    if (hasDraftable) {
+      if (draftFilter === 'true') {
+        q = q.where('draftStatus', 'draft')
+      } else if (draftFilter === 'false') {
+        q = q.where('draftStatus', 'published')
+      }
+    }
+
     // Include belongsTo and belongsToMany relations so the table shows names instead of raw IDs
     for (const f of flattenFields(resource.fields())) {
       const type = (f as any).getType?.() as string | undefined
