@@ -1,5 +1,5 @@
 import '@/index.css'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function ResetPasswordPage() {
   const [password, setPassword]       = useState('')
@@ -7,9 +7,14 @@ export default function ResetPasswordPage() {
   const [error, setError]             = useState('')
   const [success, setSuccess]         = useState('')
   const [loading, setLoading]         = useState(false)
+  const [token, setToken]             = useState<string | null>(null)
+  const [mounted, setMounted]         = useState(false)
 
-  const params = new URLSearchParams(window.location.search)
-  const token  = params.get('token')
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setToken(params.get('token'))
+    setMounted(true)
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -38,6 +43,14 @@ export default function ResetPasswordPage() {
       setError('Something went wrong. Please try again.')
     }
     setLoading(false)
+  }
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-svh items-center justify-center p-4">
+        <div className="text-sm text-gray-500">Loading...</div>
+      </div>
+    )
   }
 
   if (!token) {
