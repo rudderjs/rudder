@@ -86,8 +86,8 @@ export default function EditPage() {
 
   // ── Edit form state ──────────────────────────────────────
   const {
-    values, errors, saving, activeVersionId,
-    setValue, setFormValue, resetForm, handleSave, handleSubmit, restoreVersion,
+    values, errors, saving, activeVersionId, isRestorePreview,
+    setValue, setFormValue, resetForm, rejoinLive, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, collaborative, i18n,
@@ -200,8 +200,10 @@ export default function EditPage() {
             slug={slug}
             id={id}
             onRestore={restoreVersion}
+            onRejoinLive={rejoinLive}
             i18n={i18n}
             activeVersionId={activeVersionId}
+            isRestorePreview={isRestorePreview}
           />
         )}
       </div>

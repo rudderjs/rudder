@@ -13,12 +13,15 @@ interface Props {
   slug:           string
   id:             string
   onRestore:      (versionId: string) => void
+  onRejoinLive?:  () => void
   i18n:           PanelI18n & Record<string, string>
   /** ID of the currently restored/active version (if any) */
   activeVersionId?: string | null
+  /** True when the form is in restore preview mode (non-collaborative) */
+  isRestorePreview?: boolean
 }
 
-export function VersionHistory({ pathSegment, slug, id, onRestore, i18n, activeVersionId }: Props) {
+export function VersionHistory({ pathSegment, slug, id, onRestore, onRejoinLive, i18n, activeVersionId, isRestorePreview }: Props) {
   const [versions, setVersions]           = useState<VersionEntry[]>([])
   const [loading, setLoading]             = useState(false)
   const [loaded, setLoaded]               = useState(false)
@@ -48,6 +51,17 @@ export function VersionHistory({ pathSegment, slug, id, onRestore, i18n, activeV
           <p className="text-sm font-semibold">{i18n.versionHistory ?? 'Version History'}</p>
         </div>
         <div className="p-3 max-h-96 overflow-y-auto">
+          {/* Rejoin Live button — shown when in restore preview mode */}
+          {isRestorePreview && onRejoinLive && (
+            <button
+              type="button"
+              className="w-full mb-3 px-3 py-2 text-xs font-medium text-primary-foreground bg-primary rounded-md hover:bg-primary/90"
+              onClick={onRejoinLive}
+            >
+              {i18n.rejoinLive ?? 'Back to Live Editing'}
+            </button>
+          )}
+
           {loading && <p className="text-sm text-muted-foreground">{i18n.loading}</p>}
           {!loading && versions.length === 0 && (
             <p className="text-sm text-muted-foreground">{i18n.noVersions ?? 'No versions yet.'}</p>
