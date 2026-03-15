@@ -5,14 +5,26 @@ export type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun'
 export interface TemplateContext {
   name:       string
   db:         'sqlite' | 'postgresql' | 'mysql'
+  orm:        'prisma' | 'drizzle' | false
   withTodo:   boolean
-  withAuth:   boolean
   authSecret: string
   frameworks: ('react' | 'vue' | 'solid')[]
   primary:    'react' | 'vue' | 'solid'
   tailwind:   boolean
   shadcn:     boolean
   pm:         PackageManager
+  packages: {
+    auth:          boolean
+    cache:         boolean
+    queue:         boolean
+    storage:       boolean
+    mail:          boolean
+    notifications: boolean
+    scheduler:     boolean
+    broadcast:     boolean
+    live:          boolean
+    panels:        boolean
+  }
 }
 
 /** Detect which package manager invoked the installer.
@@ -68,12 +80,19 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   }
   files['tsconfig.json']        = tsconfigJson(ctx)
   files['vite.config.ts']       = viteConfig(ctx)
-  files['prisma.config.ts']     = prismaConfig()
   files['.env']                 = dotenv(ctx)
   files['.env.example']         = dotenvExample(ctx)
   files['.gitignore']           = gitignore()
 
-  files['prisma/schema.prisma'] = prismaSchema(ctx)
+  // Database schema
+  if (ctx.orm === 'prisma') {
+    files['prisma.config.ts']            = prismaConfig(ctx)
+    files['prisma/schema/base.prisma']   = prismaBase(ctx)
+    if (ctx.packages.auth)          files['prisma/schema/auth.prisma']         = prismaAuth()
+    if (ctx.packages.notifications) files['prisma/schema/notification.prisma'] = prismaNotification()
+    if (ctx.withTodo)               files['prisma/schema/todo.prisma']         = prismaTodo()
+    files['prisma/schema/modules.prisma'] = '// <boostkit:modules:start>\n// <boostkit:modules:end>\n'
+  }
 
   if (ctx.tailwind) {
     files['src/index.css'] = indexCss(ctx)
@@ -82,28 +101,31 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['bootstrap/app.ts']       = bootstrapApp()
   files['bootstrap/providers.ts'] = bootstrapProviders(ctx)
 
+  // Config files — always generated
   files['config/app.ts']      = configApp()
   files['config/server.ts']   = configServer()
-  files['config/database.ts'] = configDatabase(ctx)
-  files['config/queue.ts']    = configQueue()
-  files['config/mail.ts']     = configMail()
-  files['config/cache.ts']    = configCache()
-  files['config/storage.ts']  = configStorage()
-  files['config/auth.ts']     = configAuth(ctx)
-  files['config/session.ts']  = configSession()
-  files['config/index.ts']    = configIndex()
+
+  // Config files — conditional on selected packages
+  if (ctx.orm)                    files['config/database.ts'] = configDatabase(ctx)
+  if (ctx.packages.auth)         files['config/auth.ts']     = configAuth(ctx)
+  if (ctx.packages.auth)         files['config/session.ts']  = configSession()
+  if (ctx.packages.queue)        files['config/queue.ts']    = configQueue()
+  if (ctx.packages.mail)         files['config/mail.ts']     = configMail()
+  if (ctx.packages.cache)        files['config/cache.ts']    = configCache()
+  if (ctx.packages.storage)      files['config/storage.ts']  = configStorage()
+
+  files['config/index.ts']    = configIndex(ctx)
   files['env.d.ts']           = envDts()
 
-  files['app/Models/User.ts']                       = userModel()
-  files['app/Providers/AppServiceProvider.ts']      = appServiceProvider()
-  files['app/Middleware/RequestIdMiddleware.ts']     = requestIdMiddleware()
+  if (ctx.packages.auth && ctx.orm) files['app/Models/User.ts'] = userModel()
+  files['app/Providers/AppServiceProvider.ts']  = appServiceProvider()
+  files['app/Middleware/RequestIdMiddleware.ts'] = requestIdMiddleware()
 
   files['routes/api.ts']     = routesApi(ctx)
   files['routes/web.ts']     = routesWeb()
   files['routes/console.ts'] = routesConsole()
 
   const ext = pageExt(ctx.primary)
-
   files['pages/+config.ts']              = pagesRootConfig(ctx)
   if (ctx.frameworks.length > 1) {
     files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
@@ -122,10 +144,6 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files[`pages/todos/+Page${ext}`]                 = todoPage(ctx)
   }
 
-  // Auth pages come from @boostkit/auth (published via vendor:publish or copied post-install)
-  // — not generated inline here
-
-  // Secondary framework demo pages
   for (const fw of ctx.frameworks.filter(f => f !== ctx.primary)) {
     const dext = pageExt(fw)
     files[`pages/${fw}-demo/+config.ts`]   = demoPageConfig(fw)
@@ -191,26 +209,16 @@ function packageJson(ctx: TemplateContext): string {
     'lucide-react':             '^0.575.0',
   } : {}
 
-  const deps = {
+  // Base framework deps (always included)
+  const deps: Record<string, string> = {
     '@boostkit/artisan':      'latest',
     '@boostkit/vite':         'latest',
-    '@boostkit/auth':         'latest',
-    '@boostkit/cache':        'latest',
     '@boostkit/contracts':    'latest',
     '@boostkit/core':         'latest',
     '@boostkit/middleware':   'latest',
-    '@boostkit/orm':          'latest',
-    '@boostkit/orm-prisma':   'latest',
-    '@boostkit/queue':        'latest',
     '@boostkit/router':       'latest',
-    '@boostkit/schedule':     'latest',
     '@boostkit/server-hono':  'latest',
-    '@boostkit/session':      'latest',
-    '@boostkit/storage':      'latest',
     '@boostkit/support':      'latest',
-    '@boostkit/mail':         'latest',
-    '@boostkit/notification': 'latest',
-    '@prisma/client':         '^7.0.0',
     'dotenv':                 '^16.4.0',
     'reflect-metadata':       '^0.2.2',
     'vike':                   '^0.4.239',
@@ -222,10 +230,34 @@ function packageJson(ctx: TemplateContext): string {
     ...dbDeps[db],
   }
 
-  const devDeps = {
+  // ORM deps
+  if (ctx.orm === 'prisma') {
+    deps['@boostkit/orm']        = 'latest'
+    deps['@boostkit/orm-prisma'] = 'latest'
+    deps['@prisma/client']       = '^7.0.0'
+  } else if (ctx.orm === 'drizzle') {
+    deps['@boostkit/orm']         = 'latest'
+    deps['@boostkit/orm-drizzle'] = 'latest'
+  }
+
+  // Optional package deps
+  if (ctx.packages.auth)         { deps['@boostkit/auth'] = 'latest'; deps['@boostkit/session'] = 'latest' }
+  if (ctx.packages.cache)         deps['@boostkit/cache']        = 'latest'
+  if (ctx.packages.queue)         deps['@boostkit/queue']        = 'latest'
+  if (ctx.packages.storage)       deps['@boostkit/storage']      = 'latest'
+  if (ctx.packages.mail)          deps['@boostkit/mail']         = 'latest'
+  if (ctx.packages.notifications) deps['@boostkit/notification'] = 'latest'
+  if (ctx.packages.scheduler)     deps['@boostkit/schedule']     = 'latest'
+  if (ctx.packages.broadcast)     deps['@boostkit/broadcast']    = 'latest'
+  if (ctx.packages.live)          deps['@boostkit/live']         = 'latest'
+  if (ctx.packages.panels) {
+    deps['@boostkit/panels']         = 'latest'
+    deps['@boostkit/panels-lexical'] = 'latest'
+  }
+
+  const devDeps: Record<string, string> = {
     '@boostkit/cli': 'latest',
     '@types/node':   '^20.0.0',
-    'prisma':        '^7.0.0',
     'tsx':           '^4.21.0',
     'typescript':    '^5.4.0',
     'vite':          '^7.1.0',
@@ -233,8 +265,10 @@ function packageJson(ctx: TemplateContext): string {
     ...tailwindDevDeps,
     ...dbDevDeps[db],
   }
+  if (ctx.orm === 'prisma') devDeps['prisma'] = '^7.0.0'
 
-  const builtDeps: string[] = ['@prisma/engines', 'esbuild', 'prisma']
+  const builtDeps: string[] = ['esbuild']
+  if (ctx.orm === 'prisma') { builtDeps.push('@prisma/engines', 'prisma') }
   if (db === 'sqlite') builtDeps.unshift('better-sqlite3')
 
   const pmField: Record<string, unknown> = {}
@@ -365,13 +399,17 @@ ${pluginsStr}
 
 // ─── prisma.config.ts ──────────────────────────────────────
 
-function prismaConfig(): string {
+function prismaConfig(ctx: TemplateContext): string {
+  const dbUrl = ctx.db === 'sqlite'
+    ? "process.env['DATABASE_URL'] ?? 'file:./dev.db'"
+    : "process.env['DATABASE_URL']!"
+
   return `import { defineConfig } from 'prisma/config'
 
 export default defineConfig({
-  schema: 'prisma/schema.prisma',
+  schema: 'prisma/schema',
   datasource: {
-    url: process.env['DATABASE_URL'] ?? 'file:./dev.db',
+    url: ${dbUrl},
   },
 })
 `
@@ -380,45 +418,55 @@ export default defineConfig({
 // ─── .env ──────────────────────────────────────────────────
 
 function dotenv(ctx: TemplateContext): string {
-  const dbUrl = ctx.db === 'sqlite'
-    ? 'DATABASE_URL="file:./dev.db"'
-    : ctx.db === 'postgresql'
-      ? 'DATABASE_URL="postgresql://user:password@localhost:5432/mydb"'
-      : 'DATABASE_URL="mysql://user:password@localhost:3306/mydb"'
+  const lines = [
+    `APP_NAME=${ctx.name}`,
+    'APP_ENV=development',
+    'APP_DEBUG=true',
+    'APP_URL=http://localhost:3000',
+    '',
+    'PORT=3000',
+  ]
 
-  return `APP_NAME=${ctx.name}
-APP_ENV=development
-APP_DEBUG=true
-APP_URL=http://localhost:3000
+  if (ctx.orm) {
+    lines.push('')
+    if (ctx.db === 'sqlite') lines.push('DATABASE_URL="file:./dev.db"')
+    else if (ctx.db === 'postgresql') lines.push('DATABASE_URL="postgresql://user:password@localhost:5432/mydb"')
+    else lines.push('DATABASE_URL="mysql://user:password@localhost:3306/mydb"')
+  }
 
-${dbUrl}
+  if (ctx.packages.auth) {
+    lines.push('')
+    lines.push(`AUTH_SECRET=${ctx.authSecret}`)
+  }
 
-PORT=3000
-
-AUTH_SECRET=${ctx.authSecret}
-`
+  return lines.join('\n') + '\n'
 }
 
 // ─── .env.example ──────────────────────────────────────────
 
 function dotenvExample(ctx: TemplateContext): string {
-  const dbUrl = ctx.db === 'sqlite'
-    ? 'DATABASE_URL="file:./dev.db"'
-    : ctx.db === 'postgresql'
-      ? 'DATABASE_URL="postgresql://user:password@localhost:5432/mydb"'
-      : 'DATABASE_URL="mysql://user:password@localhost:3306/mydb"'
+  const lines = [
+    `APP_NAME=${ctx.name}`,
+    'APP_ENV=development',
+    'APP_DEBUG=false',
+    'APP_URL=http://localhost:3000',
+    '',
+    'PORT=3000',
+  ]
 
-  return `APP_NAME=${ctx.name}
-APP_ENV=development
-APP_DEBUG=false
-APP_URL=http://localhost:3000
+  if (ctx.orm) {
+    lines.push('')
+    if (ctx.db === 'sqlite') lines.push('DATABASE_URL="file:./dev.db"')
+    else if (ctx.db === 'postgresql') lines.push('DATABASE_URL="postgresql://user:password@localhost:5432/mydb"')
+    else lines.push('DATABASE_URL="mysql://user:password@localhost:3306/mydb"')
+  }
 
-${dbUrl}
+  if (ctx.packages.auth) {
+    lines.push('')
+    lines.push('AUTH_SECRET=please-set-a-real-32-char-secret-here')
+  }
 
-PORT=3000
-
-AUTH_SECRET=please-set-a-real-32-char-secret-here
-`
+  return lines.join('\n') + '\n'
 }
 
 // ─── .gitignore ────────────────────────────────────────────
@@ -437,28 +485,12 @@ function pnpmWorkspace(): string {
   return `# Standalone project — prevents pnpm from merging with a parent workspace\npackages: []\n`
 }
 
-// ─── prisma/schema.prisma ──────────────────────────────────
+// ─── prisma/schema/*.prisma ─────────────────────────────────
 
-function prismaSchema(ctx: TemplateContext): string {
+function prismaBase(ctx: TemplateContext): string {
   const provider = ctx.db === 'sqlite' ? 'sqlite'
     : ctx.db === 'postgresql' ? 'postgresql'
     : 'mysql'
-
-  const todoModel = ctx.withTodo ? `
-// <boostkit:modules:start>
-// module: Todo (Todo.prisma)
-model Todo {
-  id        String   @id @default(cuid())
-  title     String
-  completed Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-// <boostkit:modules:end>
-` : `
-// <boostkit:modules:start>
-// <boostkit:modules:end>
-`
 
   return `generator client {
   provider = "prisma-client-js"
@@ -467,8 +499,11 @@ model Todo {
 datasource db {
   provider = "${provider}"
 }
+`
+}
 
-model User {
+function prismaAuth(): string {
+  return `model User {
   id            String    @id @default(cuid())
   name          String
   email         String    @unique
@@ -518,9 +553,12 @@ model Verification {
   createdAt  DateTime?
   updatedAt  DateTime?
 }
+`
+}
 
-model Notification {
-  id              String  @id @default(cuid())
+function prismaNotification(): string {
+  return `model Notification {
+  id              String   @id @default(cuid())
   notifiable_id   String
   notifiable_type String
   type            String
@@ -531,7 +569,21 @@ model Notification {
 
   @@index([notifiable_type, notifiable_id])
 }
-${todoModel}`
+`
+}
+
+function prismaTodo(): string {
+  return `// <boostkit:modules:start>
+// module: Todo (Todo.prisma)
+model Todo {
+  id        String   @id @default(cuid())
+  title     String
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+// <boostkit:modules:end>
+`
 }
 
 // ─── src/index.css ─────────────────────────────────────────
@@ -703,38 +755,72 @@ export default Application.configure({
 // ─── bootstrap/providers.ts ────────────────────────────────
 
 function bootstrapProviders(ctx: TemplateContext): string {
-  const todoImport = ctx.withTodo
-    ? `import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'\n`
-    : ''
-  const todoProvider = ctx.withTodo ? `  TodoServiceProvider,\n` : ''
+  const imports: string[] = [
+    "import type { Application, ServiceProvider } from '@boostkit/core'",
+  ]
+  const providers: string[] = []
 
-  return `import type { Application, ServiceProvider } from '@boostkit/core'
-import { auth } from '@boostkit/auth'
-import { events } from '@boostkit/core'
-import { queue } from '@boostkit/queue'
-import { mail } from '@boostkit/mail'
-import { notifications } from '@boostkit/notification'
-import { cache } from '@boostkit/cache'
-import { storage } from '@boostkit/storage'
-import { scheduler } from '@boostkit/schedule'
-import { session } from '@boostkit/session'
-import { database } from '@boostkit/orm-prisma'
-import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
-${todoImport}import configs from '../config/index.js'
+  if (ctx.orm === 'prisma') {
+    imports.push("import { database } from '@boostkit/orm-prisma'")
+    providers.push("database(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'")
+  } else if (ctx.orm === 'drizzle') {
+    imports.push("import { database } from '@boostkit/orm-drizzle'")
+    providers.push("database(configs.database),  // boots first — binds Drizzle to DI as 'drizzle'")
+  }
+
+  if (ctx.packages.auth) {
+    imports.push("import { auth } from '@boostkit/auth'")
+    providers.push('auth(configs.auth),')
+  }
+
+  // events is from core — always available
+  imports.push("import { events } from '@boostkit/core'")
+  providers.push('events({}),')
+
+  if (ctx.packages.queue) {
+    imports.push("import { queue } from '@boostkit/queue'")
+    providers.push('queue(configs.queue),')
+  }
+  if (ctx.packages.mail) {
+    imports.push("import { mail } from '@boostkit/mail'")
+    providers.push('mail(configs.mail),')
+  }
+  if (ctx.packages.notifications) {
+    imports.push("import { notifications } from '@boostkit/notification'")
+    providers.push('notifications(),')
+  }
+  if (ctx.packages.cache) {
+    imports.push("import { cache } from '@boostkit/cache'")
+    providers.push('cache(configs.cache),')
+  }
+  if (ctx.packages.storage) {
+    imports.push("import { storage } from '@boostkit/storage'")
+    providers.push('storage(configs.storage),')
+  }
+  if (ctx.packages.auth) {
+    imports.push("import { session } from '@boostkit/session'")
+    providers.push('session(configs.session),')
+  }
+  if (ctx.packages.scheduler) {
+    imports.push("import { scheduler } from '@boostkit/schedule'")
+    providers.push('scheduler(),')
+  }
+
+  imports.push("import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'")
+  providers.push('AppServiceProvider,')
+
+  if (ctx.withTodo) {
+    imports.push("import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'")
+    providers.push('TodoServiceProvider,')
+  }
+
+  imports.push("import configs from '../config/index.js'")
+
+  return `${imports.join('\n')}
 
 export default [
-  database(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'
-  auth(configs.auth),                // auto-discovers 'prisma' from DI
-  events({}),
-  queue(configs.queue),
-  mail(configs.mail),
-  notifications(),
-  cache(configs.cache),
-  storage(configs.storage),
-  session(configs.session),
-  scheduler(),
-  AppServiceProvider,
-${todoProvider}] satisfies (new (app: Application) => ServiceProvider)[]
+  ${providers.join('\n  ')}
+] satisfies (new (app: Application) => ServiceProvider)[]
 `
 }
 
@@ -921,18 +1007,42 @@ export default {
 `
 }
 
-function configIndex(): string {
-  return `import app      from './app.js'
-import server   from './server.js'
-import database from './database.js'
-import queue    from './queue.js'
-import mail     from './mail.js'
-import cache    from './cache.js'
-import storage  from './storage.js'
-import session  from './session.js'
-import auth     from './auth.js'
+function configIndex(ctx: TemplateContext): string {
+  const imports: string[] = [
+    "import app      from './app.js'",
+    "import server   from './server.js'",
+  ]
+  const keys: string[] = ['app', 'server']
 
-const configs = { app, server, database, queue, mail, cache, storage, session, auth }
+  if (ctx.orm) {
+    imports.push("import database from './database.js'")
+    keys.push('database')
+  }
+  if (ctx.packages.auth) {
+    imports.push("import auth     from './auth.js'")
+    imports.push("import session  from './session.js'")
+    keys.push('auth', 'session')
+  }
+  if (ctx.packages.queue) {
+    imports.push("import queue    from './queue.js'")
+    keys.push('queue')
+  }
+  if (ctx.packages.mail) {
+    imports.push("import mail     from './mail.js'")
+    keys.push('mail')
+  }
+  if (ctx.packages.cache) {
+    imports.push("import cache    from './cache.js'")
+    keys.push('cache')
+  }
+  if (ctx.packages.storage) {
+    imports.push("import storage  from './storage.js'")
+    keys.push('storage')
+  }
+
+  return `${imports.join('\n')}
+
+const configs = { ${keys.join(', ')} }
 
 export type Configs = typeof configs
 
@@ -1029,38 +1139,54 @@ export class RequestIdMiddleware extends Middleware {
 // ─── routes ────────────────────────────────────────────────
 
 function routesApi(ctx: TemplateContext): string {
-  const todoComment = ctx.withTodo
-    ? `\n// Todo routes are registered by TodoServiceProvider — see app/Modules/Todo/TodoServiceProvider.ts\n`
-    : ''
+  const imports: string[] = [
+    "import { router } from '@boostkit/router'",
+  ]
+  const lines: string[] = []
 
-  return `import { router } from '@boostkit/router'
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
-import { RateLimit } from '@boostkit/middleware'
+  if (ctx.packages.auth) {
+    imports.push("import { app } from '@boostkit/core'")
+    imports.push("import type { BetterAuthInstance } from '@boostkit/auth'")
+    imports.push("import { RateLimit } from '@boostkit/middleware'")
+    lines.push('')
+    lines.push("const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')")
+  }
 
-const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')
+  lines.push('')
+  lines.push("router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))")
 
-router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
-
-// GET /api/me — returns current session or null
+  if (ctx.packages.auth) {
+    lines.push('')
+    lines.push(`// GET /api/me — returns current session or null
 router.get('/api/me', async (req) => {
   const auth = app().make<BetterAuthInstance>('auth')
   const session = await auth.api.getSession({
     headers: new Headers(req.headers as Record<string, string>),
   })
   return Response.json(session ?? { user: null, session: null })
-})
-${todoComment}
-// All /api/auth/* requests are handled by better-auth
+})`)
+  }
+
+  if (ctx.withTodo) {
+    lines.push('')
+    lines.push('// Todo routes are registered by TodoServiceProvider — see app/Modules/Todo/TodoServiceProvider.ts')
+  }
+
+  if (ctx.packages.auth) {
+    lines.push('')
+    lines.push(`// All /api/auth/* requests are handled by better-auth
 router.all('/api/auth/*', (req) => {
   const auth    = app().make<BetterAuthInstance>('auth')
   const honoCtx = req.raw as { req: { raw: Request } }
   return auth.handler(honoCtx.req.raw)
-}, [authLimit])
+}, [authLimit])`)
+  }
 
-// Catch-all: any unmatched /api/* route returns 404
-router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))
-`
+  lines.push('')
+  lines.push("// Catch-all: any unmatched /api/* route returns 404")
+  lines.push("router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))")
+
+  return imports.join('\n') + '\n' + lines.join('\n') + '\n'
 }
 
 function routesWeb(): string {
@@ -1193,7 +1319,7 @@ function pagesIndexPageReact(ctx: TemplateContext): string {
   const todosLink = ctx.withTodo
     ? `          <a href="/todos" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
-  const authLinks = ctx.withAuth
+  const authLinks = ctx.packages.auth
     ? `          <a href="/register" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
           <a href="/login" className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
     : ''
@@ -1257,7 +1383,7 @@ function pagesIndexPageVue(ctx: TemplateContext): string {
   const todosLink = ctx.withTodo
     ? `\n      <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
-  const authLinks = ctx.withAuth
+  const authLinks = ctx.packages.auth
     ? `\n      <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>\n      <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
     : ''
 
@@ -1311,7 +1437,7 @@ function pagesIndexPageSolid(ctx: TemplateContext): string {
   const todosLink = ctx.withTodo
     ? `\n        <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
-  const authLinks = ctx.withAuth
+  const authLinks = ctx.packages.auth
     ? `\n        <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>\n        <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
     : ''
 

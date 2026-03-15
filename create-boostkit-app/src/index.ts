@@ -33,27 +33,81 @@ async function main(): Promise<void> {
     name = (answer as string).trim()
   }
 
-  // ── Database ───────────────────────────────────────────
+  // ── Database ORM ─────────────────────────────────────────
 
-  const dbAnswer = await select({
-    message: 'Database driver',
+  const ormAnswer = await select({
+    message: 'Database ORM',
     options: [
-      { value: 'sqlite',       label: 'SQLite',             hint: 'recommended for development' },
-      { value: 'postgresql',   label: 'PostgreSQL' },
-      { value: 'mysql',        label: 'MySQL / MariaDB' },
+      { value: 'prisma',  label: 'Prisma',  hint: 'recommended' },
+      { value: 'drizzle', label: 'Drizzle' },
+      { value: 'none',    label: 'None',     hint: 'no database' },
     ],
   })
-  if (isCancel(dbAnswer)) { cancel('Cancelled.'); process.exit(0) }
-  const db = dbAnswer as 'sqlite' | 'postgresql' | 'mysql'
+  if (isCancel(ormAnswer)) { cancel('Cancelled.'); process.exit(0) }
+  const orm = ormAnswer === 'none' ? false : ormAnswer as 'prisma' | 'drizzle'
+
+  // ── Database driver (only if ORM selected) ───────────────
+
+  let db: 'sqlite' | 'postgresql' | 'mysql' = 'sqlite'
+  if (orm) {
+    const dbAnswer = await select({
+      message: 'Database driver',
+      options: [
+        { value: 'sqlite',       label: 'SQLite',             hint: 'recommended for development' },
+        { value: 'postgresql',   label: 'PostgreSQL' },
+        { value: 'mysql',        label: 'MySQL / MariaDB' },
+      ],
+    })
+    if (isCancel(dbAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    db = dbAnswer as 'sqlite' | 'postgresql' | 'mysql'
+  }
+
+  // ── Package checklist ────────────────────────────────────
+
+  const packageAnswer = await multiselect({
+    message: 'Select packages to include',
+    options: [
+      { value: 'auth',          label: 'Authentication',   hint: 'login, register, sessions' },
+      { value: 'cache',         label: 'Cache',            hint: 'memory + Redis drivers' },
+      { value: 'queue',         label: 'Queue',            hint: 'background jobs' },
+      { value: 'storage',       label: 'Storage',          hint: 'file uploads (local + S3)' },
+      { value: 'mail',          label: 'Mail',             hint: 'SMTP + log driver' },
+      { value: 'notifications', label: 'Notifications',    hint: 'multi-channel notifications' },
+      { value: 'scheduler',     label: 'Scheduler',        hint: 'cron-like task scheduling' },
+      { value: 'broadcast',     label: 'WebSocket',        hint: 'real-time channels' },
+      { value: 'live',          label: 'Real-time Collab',  hint: 'Yjs CRDT sync' },
+      { value: 'panels',        label: 'Admin Panel',      hint: 'auto-generated CRUD admin' },
+    ],
+    initialValues: ['auth', 'cache'],
+    required: false,
+  })
+  if (isCancel(packageAnswer)) { cancel('Cancelled.'); process.exit(0) }
+  const selectedPackages = packageAnswer as string[]
+
+  const packages = {
+    auth:          selectedPackages.includes('auth'),
+    cache:         selectedPackages.includes('cache'),
+    queue:         selectedPackages.includes('queue'),
+    storage:       selectedPackages.includes('storage'),
+    mail:          selectedPackages.includes('mail'),
+    notifications: selectedPackages.includes('notifications'),
+    scheduler:     selectedPackages.includes('scheduler'),
+    broadcast:     selectedPackages.includes('broadcast'),
+    live:          selectedPackages.includes('live'),
+    panels:        selectedPackages.includes('panels'),
+  }
 
   // ── Todo module ────────────────────────────────────────
 
-  const withTodoAnswer = await confirm({
-    message:      'Include example Todo module?',
-    initialValue: true,
-  })
-  if (isCancel(withTodoAnswer)) { cancel('Cancelled.'); process.exit(0) }
-  const withTodo = withTodoAnswer as boolean
+  let withTodo = false
+  if (orm) {
+    const withTodoAnswer = await confirm({
+      message:      'Include example Todo module?',
+      initialValue: true,
+    })
+    if (isCancel(withTodoAnswer)) { cancel('Cancelled.'); process.exit(0) }
+    withTodo = withTodoAnswer as boolean
+  }
 
   // ── Frontend frameworks ────────────────────────────────
 
@@ -108,15 +162,6 @@ async function main(): Promise<void> {
     shadcn = shadcnAnswer as boolean
   }
 
-  // ── Authentication pages ───────────────────────────────
-
-  const withAuthAnswer = await confirm({
-    message:      'Add authentication pages? (login + register)',
-    initialValue: true,
-  })
-  if (isCancel(withAuthAnswer)) { cancel('Cancelled.'); process.exit(0) }
-  const withAuth = withAuthAnswer as boolean
-
   // ── Install dependencies ───────────────────────────────
 
   const installAnswer = await confirm({
@@ -143,7 +188,7 @@ async function main(): Promise<void> {
   const s = spinner()
   s.start('Scaffolding project files...')
 
-  const templates = getTemplates({ name, db, withTodo, withAuth, authSecret, frameworks, primary, tailwind, shadcn, pm })
+  const templates = getTemplates({ name, db, orm, withTodo, authSecret, frameworks, primary, tailwind, shadcn, pm, packages })
 
   for (const [filePath, content] of Object.entries(templates)) {
     const abs = path.join(target, filePath)
@@ -152,7 +197,7 @@ async function main(): Promise<void> {
   }
 
   // Copy auth pages from installer's own @boostkit/auth dependency
-  if (withAuth) {
+  if (packages.auth) {
     try {
       const require      = createRequire(import.meta.url)
       const authPkgPath  = require.resolve('@boostkit/auth/package.json')
@@ -184,9 +229,11 @@ async function main(): Promise<void> {
   const nextSteps = [
     `  cd ${name}`,
     ...(!install ? [`  ${pmInstall(pm)}`] : []),
-    `  ${pmExec(pm, 'prisma generate')}`,
-    `  ${pmExec(pm, 'prisma db push')}`,
-    ...(!install && withAuth ? [`  ${pmRun(pm, 'artisan')} vendor:publish --tag=auth-pages-${primary}`] : []),
+    ...(orm === 'prisma' ? [
+      `  ${pmExec(pm, 'prisma generate')}`,
+      `  ${pmExec(pm, 'prisma db push')}`,
+    ] : []),
+    ...(!install && packages.auth ? [`  ${pmRun(pm, 'artisan')} vendor:publish --tag=auth-pages-${primary}`] : []),
     `  ${pmRun(pm, 'dev')}`,
   ]
 
