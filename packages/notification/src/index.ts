@@ -174,7 +174,15 @@ export const notify = (
  */
 export function notifications(): new (app: Application) => ServiceProvider {
   class NotificationServiceProvider extends ServiceProvider {
-    register(): void {}
+    register(): void {
+      const schemaDir = new URL('../schema', import.meta.url).pathname
+      this.publishes([
+        { from: `${schemaDir}/notification.prisma`,            to: 'prisma/schema',   tag: 'notification-schema', orm: 'prisma' as const },
+        { from: `${schemaDir}/notification.drizzle.sqlite.ts`, to: 'database/schema', tag: 'notification-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },
+        { from: `${schemaDir}/notification.drizzle.pg.ts`,     to: 'database/schema', tag: 'notification-schema', orm: 'drizzle' as const, driver: 'postgresql' as const },
+        { from: `${schemaDir}/notification.drizzle.mysql.ts`,  to: 'database/schema', tag: 'notification-schema', orm: 'drizzle' as const, driver: 'mysql' as const },
+      ])
+    }
 
     boot(): void {
       ChannelRegistry.register('mail',     new MailChannel())

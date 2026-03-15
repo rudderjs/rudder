@@ -36,7 +36,16 @@ function flattenFields(items: FieldOrGrouping[]): Field[] {
 // ─── Panel Service Provider ────────────────────────────────
 
 export class PanelServiceProvider extends ServiceProvider {
-  register(): void {}
+  register(): void {
+    // Panel schema (ORM + driver-specific)
+    const schemaDir = new URL('../schema', import.meta.url).pathname
+    this.publishes([
+      { from: `${schemaDir}/panels.prisma`,            to: 'prisma/schema',   tag: 'panels-schema', orm: 'prisma' as const },
+      { from: `${schemaDir}/panels.drizzle.sqlite.ts`, to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },
+      { from: `${schemaDir}/panels.drizzle.pg.ts`,     to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'postgresql' as const },
+      { from: `${schemaDir}/panels.drizzle.mysql.ts`,  to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'mysql' as const },
+    ])
+  }
 
   async boot(): Promise<void> {
     this.publishes({

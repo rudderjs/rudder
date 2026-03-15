@@ -1643,3 +1643,46 @@ describe('duplicate i18n keys', () => {
     assert.ok(i18n.duplicate.length > 0)
   })
 })
+
+// ─── Schema files ─────────────────────────────────────────
+
+import { existsSync, readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const schemaDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'schema')
+
+describe('panels schema files', () => {
+  it('ships panels.prisma with PanelVersion and PanelGlobal', () => {
+    const file = join(schemaDir, 'panels.prisma')
+    assert.ok(existsSync(file), 'panels.prisma should exist')
+    const content = readFileSync(file, 'utf8')
+    assert.ok(content.includes('model PanelVersion'), 'should contain PanelVersion model')
+    assert.ok(content.includes('model PanelGlobal'), 'should contain PanelGlobal model')
+  })
+
+  it('ships drizzle schemas for all 3 drivers', () => {
+    for (const variant of ['sqlite', 'pg', 'mysql']) {
+      const file = join(schemaDir, `panels.drizzle.${variant}.ts`)
+      assert.ok(existsSync(file), `panels.drizzle.${variant}.ts should exist`)
+      const content = readFileSync(file, 'utf8')
+      assert.ok(content.includes('export const panelVersion'), `${variant}: should export panelVersion`)
+      assert.ok(content.includes('export const panelGlobal'), `${variant}: should export panelGlobal`)
+    }
+  })
+
+  it('sqlite schema imports from sqlite-core', () => {
+    const content = readFileSync(join(schemaDir, 'panels.drizzle.sqlite.ts'), 'utf8')
+    assert.ok(content.includes('drizzle-orm/sqlite-core'))
+  })
+
+  it('pg schema imports from pg-core', () => {
+    const content = readFileSync(join(schemaDir, 'panels.drizzle.pg.ts'), 'utf8')
+    assert.ok(content.includes('drizzle-orm/pg-core'))
+  })
+
+  it('mysql schema imports from mysql-core', () => {
+    const content = readFileSync(join(schemaDir, 'panels.drizzle.mysql.ts'), 'utf8')
+    assert.ok(content.includes('drizzle-orm/mysql-core'))
+  })
+})

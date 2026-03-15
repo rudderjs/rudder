@@ -89,3 +89,58 @@ describe('AuthMiddleware()', () => {
     assert.notStrictEqual(a, b)
   })
 })
+
+// ─── Schema files ─────────────────────────────────────────
+
+import { existsSync, readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const schemaDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'schema')
+
+describe('auth schema files', () => {
+  it('ships auth.prisma with all 4 models', () => {
+    const file = join(schemaDir, 'auth.prisma')
+    assert.ok(existsSync(file), 'auth.prisma should exist')
+    const content = readFileSync(file, 'utf8')
+    assert.ok(content.includes('model User'), 'should contain User model')
+    assert.ok(content.includes('model Session'), 'should contain Session model')
+    assert.ok(content.includes('model Account'), 'should contain Account model')
+    assert.ok(content.includes('model Verification'), 'should contain Verification model')
+  })
+
+  it('ships auth.drizzle.sqlite.ts importing from sqlite-core', () => {
+    const file = join(schemaDir, 'auth.drizzle.sqlite.ts')
+    assert.ok(existsSync(file), 'auth.drizzle.sqlite.ts should exist')
+    const content = readFileSync(file, 'utf8')
+    assert.ok(content.includes('drizzle-orm/sqlite-core'), 'should import from sqlite-core')
+    assert.ok(content.includes('sqliteTable'), 'should use sqliteTable')
+  })
+
+  it('ships auth.drizzle.pg.ts importing from pg-core', () => {
+    const file = join(schemaDir, 'auth.drizzle.pg.ts')
+    assert.ok(existsSync(file), 'auth.drizzle.pg.ts should exist')
+    const content = readFileSync(file, 'utf8')
+    assert.ok(content.includes('drizzle-orm/pg-core'), 'should import from pg-core')
+    assert.ok(content.includes('pgTable'), 'should use pgTable')
+  })
+
+  it('ships auth.drizzle.mysql.ts importing from mysql-core', () => {
+    const file = join(schemaDir, 'auth.drizzle.mysql.ts')
+    assert.ok(existsSync(file), 'auth.drizzle.mysql.ts should exist')
+    const content = readFileSync(file, 'utf8')
+    assert.ok(content.includes('drizzle-orm/mysql-core'), 'should import from mysql-core')
+    assert.ok(content.includes('mysqlTable'), 'should use mysqlTable')
+  })
+
+  it('all drizzle schemas export user, session, account, verification', () => {
+    for (const variant of ['sqlite', 'pg', 'mysql']) {
+      const file = join(schemaDir, `auth.drizzle.${variant}.ts`)
+      const content = readFileSync(file, 'utf8')
+      assert.ok(content.includes('export const user'), `${variant}: should export user`)
+      assert.ok(content.includes('export const session'), `${variant}: should export session`)
+      assert.ok(content.includes('export const account'), `${variant}: should export account`)
+      assert.ok(content.includes('export const verification'), `${variant}: should export verification`)
+    }
+  })
+})

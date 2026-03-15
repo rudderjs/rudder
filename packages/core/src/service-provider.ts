@@ -15,6 +15,10 @@ export interface PublishGroup {
    * Auth pages should NOT set this — users may customize them.
    */
   force?: boolean
+  /** If set, only publish when this ORM is detected in the project. */
+  orm?: 'prisma' | 'drizzle'
+  /** If set, only publish when this database driver is detected. Used with orm='drizzle'. */
+  driver?: 'sqlite' | 'postgresql' | 'mysql'
 }
 
 const _g = globalThis as Record<string, unknown>

@@ -10,7 +10,8 @@
   "type": "module",
   "files": [
     "dist",
-    "pages"
+    "pages",
+    "schema"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -335,3 +335,44 @@ describe('notifications() provider', () => {
     assert.ok(ChannelRegistry.has('database'))
   })
 })
+
+// ─── Schema files ─────────────────────────────────────────
+
+import { existsSync, readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const schemaDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'schema')
+
+describe('notification schema files', () => {
+  it('ships notification.prisma with Notification model', () => {
+    const file = join(schemaDir, 'notification.prisma')
+    assert.ok(existsSync(file), 'notification.prisma should exist')
+    const content = readFileSync(file, 'utf8')
+    assert.ok(content.includes('model Notification'), 'should contain Notification model')
+  })
+
+  it('ships drizzle schemas for all 3 drivers', () => {
+    for (const variant of ['sqlite', 'pg', 'mysql']) {
+      const file = join(schemaDir, `notification.drizzle.${variant}.ts`)
+      assert.ok(existsSync(file), `notification.drizzle.${variant}.ts should exist`)
+      const content = readFileSync(file, 'utf8')
+      assert.ok(content.includes('export const notification'), `${variant}: should export notification`)
+    }
+  })
+
+  it('sqlite schema imports from sqlite-core', () => {
+    const content = readFileSync(join(schemaDir, 'notification.drizzle.sqlite.ts'), 'utf8')
+    assert.ok(content.includes('drizzle-orm/sqlite-core'))
+  })
+
+  it('pg schema imports from pg-core', () => {
+    const content = readFileSync(join(schemaDir, 'notification.drizzle.pg.ts'), 'utf8')
+    assert.ok(content.includes('drizzle-orm/pg-core'))
+  })
+
+  it('mysql schema imports from mysql-core', () => {
+    const content = readFileSync(join(schemaDir, 'notification.drizzle.mysql.ts'), 'utf8')
+    assert.ok(content.includes('drizzle-orm/mysql-core'))
+  })
+})
