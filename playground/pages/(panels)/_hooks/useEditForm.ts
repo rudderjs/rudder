@@ -132,7 +132,14 @@ export function useEditForm(opts: UseEditFormOptions) {
         const restoredFields = body.data.fields
         const merged = { ...values, ...restoredFields }
 
-        // Clear server-side Y.Docs so editors seed from restored values on reconnect
+        // Save restored values to DB so +data.ts reads them on navigation
+        await fetch(`/${pathSegment}/api/${slug}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(merged),
+        })
+
+        // Clear server-side Y.Docs so fresh rooms seed from restored DB values
         if (collaborative) {
           await fetch(`/${pathSegment}/api/${slug}/${id}/_clear-live`, {
             method: 'POST',
@@ -140,10 +147,15 @@ export function useEditForm(opts: UseEditFormOptions) {
           })
         }
 
-        // Update form state and remount collaborative editors
-        resetForm(merged)
-        setActiveVersionId(versionId)
         toast.success(i18n.restoredToast ?? 'Version restored.')
+
+        // Client-side navigation — re-runs +data.ts (reads restored DB values),
+        // remounts the entire page with fresh state. No window.location.reload().
+        const params = new URLSearchParams(window.location.search)
+        params.set('restoredVersion', versionId)
+        await navigate(`/${pathSegment}/${slug}/${id}/edit?${params.toString()}`, {
+          overwriteLastHistoryEntry: true,
+        })
       } else {
         toast.error(i18n.restoreError ?? 'Failed to restore version.')
       }
