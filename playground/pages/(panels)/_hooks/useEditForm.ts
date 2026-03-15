@@ -23,13 +23,15 @@ interface UseEditFormOptions {
   setFormKey:              (fn: (k: number) => number) => void
   /** Current formKey — used to detect if we're on temporary rooms after restore. */
   formKey:                 number
+  /** Ref to flag that we're syncing — prevents broadcast handler from firing on ourselves. */
+  isSyncingRef:            React.MutableRefObject<boolean>
 }
 
 export function useEditForm(opts: UseEditFormOptions) {
   const {
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, collaborative, i18n,
-    syncAllFieldsToDoc, setCollaborativeValue, selfSyncFields, setFormKey, formKey,
+    syncAllFieldsToDoc, setCollaborativeValue, selfSyncFields, setFormKey, formKey, isSyncingRef,
   } = opts
 
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
@@ -110,11 +112,13 @@ export function useEditForm(opts: UseEditFormOptions) {
 
       if (collaborative && formKey > 0) {
         // Saving after a version restore:
-        // 1. Sync Y.Doc rooms with saved DB values
+        // 1. Sync Y.Doc rooms with saved DB values (flag to skip own broadcast handler)
+        isSyncingRef.current = true
         await fetch(`/${pathSegment}/api/${slug}/${id}/_sync-live`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
+        isSyncingRef.current = false
         // 2. Rejoin collaborative mode (formKey back to 0)
         setFormKey(0)
         setActiveVersionId(null)

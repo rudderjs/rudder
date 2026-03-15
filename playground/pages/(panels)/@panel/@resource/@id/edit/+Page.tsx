@@ -69,8 +69,10 @@ export default function EditPage() {
   const [formKey, setFormKey] = useState(0)
 
   // Ref for current form values — useCollaborativeForm seeds from this on reconnect.
-  // Without this, seedAfterSync would use stale initialValues after version restore.
   const currentValuesRef = useRef<Record<string, unknown>>(initialValues)
+
+  // Flag to skip broadcast handler when we're the one who triggered _sync-live
+  const isSyncingRef = useRef(false)
 
   // Ref bridges useCollaborativeForm (called first) → useEditForm's setFormValue (called second).
   const remoteSetValueRef = useRef<(name: string, value: unknown) => void>(() => {})
@@ -97,6 +99,7 @@ export default function EditPage() {
     selfSyncFields,
     setFormKey,
     formKey,
+    isSyncingRef,
   })
 
   // Keep refs in sync with latest state
@@ -116,6 +119,8 @@ export default function EditPage() {
         socket = new mod.BKSocket(`ws://${window.location.host}/ws`)
         socket.channel(`panel:${slug}`).on('version.restored', async (data: any) => {
           if (data?.id !== id) return
+          // Skip if WE triggered the sync (we handle our own state in handleSave)
+          if (isSyncingRef.current) return
           // Another user saved after restoring a version.
           // Unmount editors to stop y-websocket auto-reconnect pushing stale data,
           // then navigate to re-run +data.ts with correct DB values + fresh Y.Doc rooms.
