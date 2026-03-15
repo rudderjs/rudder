@@ -4,6 +4,9 @@ import type { ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import type { PanelMeta } from '@boostkit/panels'
+import { registerLexical } from '@boostkit/panels-lexical'
+
+registerLexical()
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

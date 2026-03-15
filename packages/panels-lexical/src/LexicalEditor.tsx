@@ -23,7 +23,7 @@ import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
 import type { BlockMeta } from '@boostkit/panels'
 
-interface Props {
+export interface Props {
   value:         unknown       // Lexical JSON state or null
   onChange:      (json: unknown) => void
   placeholder?:  string
@@ -107,7 +107,7 @@ export function LexicalEditor({
       })
 
       // Mark synced after initial server handshake completes
-      provider.once('synced', () => {
+      ;(provider as any).once('synced', () => {
         if (!destroyed) setProviderSynced(true)
       })
 
@@ -168,9 +168,9 @@ export function LexicalEditor({
     nodes: [...EDITOR_NODES],
     theme: THEME,
     editable: !disabled,
-    editorState: collabActive
-      ? null  // CollaborationPlugin hydrates from Y.js; SeedPlugin handles DB fallback
-      : (value ? JSON.stringify(value) : undefined),
+    ...(collabActive
+      ? { editorState: null }  // CollaborationPlugin hydrates from Y.js; SeedPlugin handles DB fallback
+      : value ? { editorState: JSON.stringify(value) } : {}),
     onError: (error: Error) => console.error('[LexicalEditor]', error),
   }), [fragmentName, disabled, collabActive]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -210,8 +210,8 @@ export function LexicalEditor({
             id={fragmentName}
             providerFactory={providerFactory}
             shouldBootstrap={false}
-            username={userName}
-            cursorColor={userColor}
+            username={userName ?? ''}
+            cursorColor={userColor ?? ''}
             cursorsContainerRef={cursorsContainerRef}
           />
         ) : (

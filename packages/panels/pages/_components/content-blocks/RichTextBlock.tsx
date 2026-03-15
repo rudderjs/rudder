@@ -178,6 +178,20 @@ export function RichTextBlock({ text, onChange, tag = 'p', disabled, placeholder
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When yText becomes available (transitions from null), sync innerHTML from Y.Text content.
+  // Y.Text is the source of truth — it may contain live edits not yet saved to DB.
+  const prevYTextRef = useRef<any>(null)
+  useEffect(() => {
+    if (yText && yText !== prevYTextRef.current) {
+      const yContent = yText.toString()
+      if (yContent && ref.current && yContent !== lastHtml.current) {
+        ref.current.innerHTML = yContent
+        lastHtml.current = yContent
+      }
+    }
+    prevYTextRef.current = yText
+  }, [yText])
+
   // Sync external changes (non-collaborative path) — skip if we're the source
   useEffect(() => {
     // Skip if collaborative — handleRemoteChange handles it

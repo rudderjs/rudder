@@ -54,8 +54,8 @@
     "@boostkit/live": "workspace:*",
     "@boostkit/storage": "workspace:*",
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0",
-    "yjs": "^13.6.29"
+    "@types/react": "^19.2.14",
+    "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"
 }

@@ -1,37 +1,11 @@
-import { ServiceProvider } from '@boostkit/core'
+export { LexicalEditor } from './LexicalEditor.js'
+export type { Props as LexicalEditorProps } from './LexicalEditor.js'
 
-/**
- * Lexical rich-text editor adapter for @boostkit/panels.
- *
- * Publishes LexicalEditor and CollaborativePlainText components into the
- * panels UI pages. These render `richcontent` fields and collaborative
- * `text`/`textarea`/`email` fields using Lexical + Yjs.
- *
- * @example
- * ```ts
- * // bootstrap/providers.ts
- * import { panelsLexical } from '@boostkit/panels-lexical'
- *
- * export default [
- *   panels([adminPanel]),
- *   panelsLexical(),
- *   // ...
- * ]
- * ```
- */
-class PanelsLexicalServiceProvider extends ServiceProvider {
-  register(): void {}
+export { CollaborativePlainText } from './CollaborativePlainText.js'
 
-  async boot(): Promise<void> {
-    this.publishes({
-      from: new URL('../pages', import.meta.url).pathname,
-      to:   'pages/(panels)',
-      tag:  'panels-lexical',
-    })
-  }
-}
+export { BlockNode, $createBlockNode, $isBlockNode } from './lexical/BlockNode.js'
+export { BlockRegistryContext, BlockNodeComponent } from './lexical/BlockNodeComponent.js'
+export { SlashCommandPlugin, SlashMenuOption } from './lexical/SlashCommandPlugin.js'
+export { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 
-/** Factory function — register in providers to publish Lexical editor components. */
-export function panelsLexical(): PanelsLexicalServiceProvider {
-  return new PanelsLexicalServiceProvider()
-}
+export { registerLexical } from './register.js'

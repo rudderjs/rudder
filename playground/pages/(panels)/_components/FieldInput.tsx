@@ -5,11 +5,10 @@ import { Select } from '@base-ui-components/react/select'
 import { Switch } from '@base-ui-components/react/switch'
 import type { FieldMeta, PanelI18n, NodeMap } from '@boostkit/panels'
 import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from '@boostkit/panels'
-import { CollaborativePlainText } from './collaborative/CollaborativePlainText.js'
+import { editorRegistry } from '@boostkit/panels'
 import { customFieldRenderers } from './CustomFieldRenderers.js'
 import { SortableBlockList } from './SortableBlockList.js'
 import { ContentEditor } from './ContentEditor.js'
-import { LexicalEditor } from './LexicalEditor.js'
 
 interface Props {
   field:       FieldMeta
@@ -112,22 +111,25 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
   // ── Textarea ─────────────────────────────────────────────
   if (field.type === 'textarea') {
     if (field.collaborative && wsPath && docName) {
-      return (
-        <CollaborativePlainText
-          value={(value as string) ?? ''}
-          onChange={(v) => onChange(v)}
-          wsPath={wsPath}
-          docName={docName}
-          fieldName={field.name}
-          multiline
-          className={inputCls}
-          placeholder={(field.extra?.placeholder as string) ?? ''}
-          disabled={isDisabled}
-          required={field.required}
-          userName={userName}
-          userColor={userColor}
-        />
-      )
+      const CollabText = editorRegistry.collaborativePlainText
+      if (CollabText) {
+        return (
+          <CollabText
+            value={(value as string) ?? ''}
+            onChange={(v) => onChange(v)}
+            wsPath={wsPath}
+            docName={docName}
+            fieldName={field.name}
+            multiline
+            className={inputCls}
+            placeholder={(field.extra?.placeholder as string) ?? ''}
+            disabled={isDisabled}
+            required={field.required}
+            userName={userName}
+            userColor={userColor}
+          />
+        )
+      }
     }
     return (
       <textarea
@@ -661,20 +663,34 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     )
   }
 
-  // ── Rich Content (Lexical) ───────────────────────────────
+  // ── Rich Content ──────────────────────────────────────────
   if (field.type === 'richcontent') {
+    const RichEditor = editorRegistry.richcontent
+    if (RichEditor) {
+      return (
+        <RichEditor
+          value={value}
+          onChange={onChange}
+          placeholder={field.extra?.placeholder as string | undefined}
+          disabled={isDisabled}
+          wsPath={field.collaborative ? wsPath : null}
+          docName={field.collaborative ? docName : null}
+          fragmentName={`richcontent:${field.name}`}
+          blocks={field.extra?.blocks as any[] | undefined}
+          userName={userName}
+          userColor={userColor}
+        />
+      )
+    }
     return (
-      <LexicalEditor
-        value={value}
-        onChange={onChange}
-        placeholder={field.extra?.placeholder as string | undefined}
+      <textarea
+        name={field.name}
+        value={typeof value === 'string' ? value : (value ? JSON.stringify(value, null, 2) : '')}
+        onChange={(e) => onChange(e.target.value)}
+        rows={8}
         disabled={isDisabled}
-        wsPath={field.collaborative ? wsPath : null}
-        docName={field.collaborative ? docName : null}
-        fragmentName={`richcontent:${field.name}`}
-        blocks={field.extra?.blocks as any[] | undefined}
-        userName={userName}
-        userColor={userColor}
+        placeholder={(field.extra?.placeholder as string) ?? 'Rich content editor not installed. Install @boostkit/panels-lexical for rich editing.'}
+        className={inputCls}
       />
     )
   }
@@ -714,21 +730,24 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
 
   // Collaborative text input for text/email fields
   if ((field.type === 'text' || field.type === 'email') && field.collaborative && wsPath && docName) {
-    return (
-      <CollaborativePlainText
-        value={(value as string) ?? ''}
-        onChange={(v) => onChange(v)}
-        wsPath={wsPath}
-        docName={docName}
-        fieldName={field.name}
-        className={inputCls}
-        placeholder={(field.extra?.placeholder as string) ?? ''}
-        disabled={isDisabled}
-        required={field.required}
-        userName={userName}
-        userColor={userColor}
-      />
-    )
+    const CollabText = editorRegistry.collaborativePlainText
+    if (CollabText) {
+      return (
+        <CollabText
+          value={(value as string) ?? ''}
+          onChange={(v) => onChange(v)}
+          wsPath={wsPath}
+          docName={docName}
+          fieldName={field.name}
+          className={inputCls}
+          placeholder={(field.extra?.placeholder as string) ?? ''}
+          disabled={isDisabled}
+          required={field.required}
+          userName={userName}
+          userColor={userColor}
+        />
+      )
+    }
   }
 
   return (
