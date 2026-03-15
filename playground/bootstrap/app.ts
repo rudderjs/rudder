@@ -21,7 +21,7 @@ export default Application.configure({
   })
   .withMiddleware((m) => {
     // Global middlewares
-    m.use(RateLimit.perMinute(60))
+    // m.use(RateLimit.perMinute(60))
     m.use(requestIdMiddleware)
   })
   .withExceptions((e) => {

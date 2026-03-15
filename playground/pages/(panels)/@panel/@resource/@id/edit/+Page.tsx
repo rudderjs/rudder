@@ -81,7 +81,7 @@ export default function EditPage() {
   // ── Edit form state ──────────────────────────────────────
   const {
     values, errors, saving, formKey, activeVersionId,
-    setValue, setFormValue, handleSave, handleSubmit, restoreVersion,
+    setValue, setFormValue, resetForm, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, collaborative, i18n,
@@ -92,6 +92,38 @@ export default function EditPage() {
 
   // Wire the ref to setFormValue (not setValue — avoid writing back to Y.Map)
   remoteSetValueRef.current = setFormValue
+
+  // ── Listen for remote version restore (another user restored) ──
+  useEffect(() => {
+    if (!collaborative || typeof window === 'undefined') return
+    let destroyed = false
+    let socket: any = null
+
+    async function connect() {
+      try {
+        const mod = await import(/* @vite-ignore */ '/src/BKSocket.ts') as any
+        if (destroyed) return
+        socket = new mod.BKSocket(`ws://${window.location.host}/ws`)
+        socket.channel(`panel:${slug}`).on('version.restored', async (data: any) => {
+          if (data?.id !== id) return
+          // Another user restored a version — fetch fresh record and remount editors
+          try {
+            const res = await fetch(`/${pathSegment}/api/${slug}/${id}`)
+            if (res.ok) {
+              const body = await res.json() as { data: Record<string, unknown> }
+              resetForm(buildInitialValues(formFields, body.data))
+            }
+          } catch { /* ignore */ }
+        })
+      } catch { /* BKSocket not available */ }
+    }
+
+    void connect()
+    return () => {
+      destroyed = true
+      socket?.disconnect()
+    }
+  }, [collaborative, slug, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Version history toggle ───────────────────────────────
   const [showHistory, setShowHistory] = useState(false)

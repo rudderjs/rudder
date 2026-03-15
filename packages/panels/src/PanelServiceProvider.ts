@@ -829,6 +829,9 @@ export class PanelServiceProvider extends ServiceProvider {
           }
         }
 
+        // Broadcast to all clients so they remount editors with fresh Y.Docs
+        this.liveBroadcast(slug, 'version.restored', { id })
+
         return res.json({ message: 'Live documents cleared.' })
       } catch {
         return res.json({ message: 'No live provider — skipped.' })
