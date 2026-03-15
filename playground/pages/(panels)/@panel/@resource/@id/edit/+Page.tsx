@@ -67,8 +67,11 @@ export default function EditPage() {
   // formKey lives here (not in useEditForm) so useCollaborativeForm can use it as resetKey.
   const [formKey, setFormKey] = useState(0)
 
+  // Ref for current form values — useCollaborativeForm seeds from this on reconnect.
+  // Without this, seedAfterSync would use stale initialValues after version restore.
+  const currentValuesRef = useRef<Record<string, unknown>>(initialValues)
+
   // Ref bridges useCollaborativeForm (called first) → useEditForm's setFormValue (called second).
-  // When a remote Y.Map change arrives, it calls this ref to update React form state.
   const remoteSetValueRef = useRef<(name: string, value: unknown) => void>(() => {})
 
   const {
@@ -77,7 +80,7 @@ export default function EditPage() {
     getDoc, awareness, userName, userColor,
   } = useCollaborativeForm(
     collaborative && docName && wsLivePath
-      ? { docName, wsPath: wsLivePath, fields: collabFields, values: initialValues, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any, resetKey: formKey }
+      ? { docName, wsPath: wsLivePath, fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any, resetKey: formKey }
       : null,
   )
 
@@ -94,8 +97,9 @@ export default function EditPage() {
     setFormKey,
   })
 
-  // Wire the ref to setFormValue (not setValue — avoid writing back to Y.Map)
+  // Keep refs in sync with latest state
   remoteSetValueRef.current = setFormValue
+  currentValuesRef.current = values
 
   // ── Listen for remote version restore (another user restored) ──
   useEffect(() => {
