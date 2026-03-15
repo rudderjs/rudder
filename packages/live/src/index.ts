@@ -518,22 +518,15 @@ export const Live = {
   },
 
   /**
-   * Clear a Y.Doc: close all connections, destroy the room, and clear persistence.
-   * Clients auto-reconnect to a fresh empty room. The broadcast system notifies
-   * other users to navigate/remount so they get correct data from DB.
+   * Orphan a Y.Doc room and clear its persistence.
+   * The room is removed from the map but connections stay open on the orphaned
+   * room object (no auto-reconnect race). New connections via getOrCreateRoom()
+   * get a fresh empty room. Old connections die when clients navigate/unmount.
    */
   async clearDocument(docName: string): Promise<void> {
     const persistence = this.persistence()
     await persistence.clearDocument(docName)
     const rooms = g[KEY] as Map<string, Room> | undefined
-    const room = rooms?.get(docName)
-    if (room) {
-      for (const client of room.clients) {
-        try { client.close() } catch { /* ignore */ }
-      }
-      room.clients.clear()
-      room.doc.destroy()
-      rooms!.delete(docName)
-    }
+    rooms?.delete(docName)
   },
 }
