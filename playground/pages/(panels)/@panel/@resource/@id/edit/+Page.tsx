@@ -102,8 +102,9 @@ export default function EditPage() {
     isSyncingRef,
   })
 
-  // Keep refs in sync with latest state
-  remoteSetValueRef.current = setFormValue
+  // Keep refs in sync with latest state.
+  // During restore preview, remote Y.Map changes are ignored (form is non-collaborative).
+  remoteSetValueRef.current = isRestorePreview ? () => {} : setFormValue
   currentValuesRef.current = values
 
   // ── Listen for remote version restore (another user restored) ──
@@ -185,8 +186,8 @@ export default function EditPage() {
               synced={synced}
               userName={userName}
               userColor={userColor}
-              wsPath={formKey > 0 ? null : wsLivePath}
-              docName={formKey > 0 ? null : docName}
+              wsPath={formKey === 0 ? wsLivePath : null}
+              docName={formKey === 0 ? docName : null}
             />
             <FormActions
               draftable={draftable}
