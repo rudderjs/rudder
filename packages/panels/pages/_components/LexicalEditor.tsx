@@ -85,6 +85,7 @@ export function LexicalEditor({
   // because Lexical's createBinding hardcodes doc.get('root', XmlText) —
   // multiple editors sharing one Y.Doc would bind to the same fragment.
   const [collabReady, setCollabReady] = useState(false)
+  const [providerSynced, setProviderSynced] = useState(false)
   const collabRef = useRef<{ doc: any; provider: any } | null>(null)
 
   useEffect(() => {
@@ -105,6 +106,11 @@ export function LexicalEditor({
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
       })
 
+      // Mark synced after initial server handshake completes
+      provider.once('synced', () => {
+        if (!destroyed) setProviderSynced(true)
+      })
+
       collabRef.current = { doc, provider }
       setCollabReady(true)
     })
@@ -115,6 +121,7 @@ export function LexicalEditor({
       collabRef.current?.doc?.destroy()
       collabRef.current = null
       setCollabReady(false)
+      setProviderSynced(false)
     }
   }, [wsPath, docName, fragmentName]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,7 +219,7 @@ export function LexicalEditor({
         )}
 
         <OnChangePlugin onChange={onChange} />
-        {collabActive && <SeedPlugin value={value} />}
+        {collabActive && providerSynced && <SeedPlugin value={value} />}
 
         <DragHandleLoader anchorRef={anchorRef} />
         </div>
@@ -299,33 +306,30 @@ function SeedPlugin({ value }: { value: unknown }) {
 
   useEffect(() => {
     if (seeded.current || !value) return
-    // Wait for CollaborationPlugin to bind and sync
-    const timer = setTimeout(() => {
-      if (seeded.current) return
-      const isEmpty = editor.getEditorState().read(() => {
-        return !$getRoot().getTextContent().trim()
-      })
-      if (isEmpty) {
-        seeded.current = true
-        try {
-          const serialized = typeof value === 'string' ? JSON.parse(value) : value
-          const children = (serialized as any)?.root?.children
-          if (Array.isArray(children) && children.length > 0) {
-            editor.update(() => {
-              const root = $getRoot()
-              root.clear()
-              for (const child of children) {
-                const node = $parseSerializedNode(child)
-                root.append(node)
-              }
-            })
-          }
-        } catch (e) {
-          console.error('[LexicalEditor] SeedPlugin failed:', e)
+    // Provider sync is already complete (parent only renders SeedPlugin after 'synced').
+    // If the editor is still empty, seed from the DB value.
+    const isEmpty = editor.getEditorState().read(() => {
+      return !$getRoot().getTextContent().trim()
+    })
+    if (isEmpty) {
+      seeded.current = true
+      try {
+        const serialized = typeof value === 'string' ? JSON.parse(value) : value
+        const children = (serialized as any)?.root?.children
+        if (Array.isArray(children) && children.length > 0) {
+          editor.update(() => {
+            const root = $getRoot()
+            root.clear()
+            for (const child of children) {
+              const node = $parseSerializedNode(child)
+              root.append(node)
+            }
+          })
         }
+      } catch (e) {
+        console.error('[LexicalEditor] SeedPlugin failed:', e)
       }
-    }, 500)
-    return () => clearTimeout(timer)
+    }
   }, [editor, value])
 
   return null

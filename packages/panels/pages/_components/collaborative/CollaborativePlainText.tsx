@@ -44,6 +44,7 @@ export function CollaborativePlainText({
 
   // ── Per-field collaborative state ─────────────────────────
   const [collabReady, setCollabReady] = useState(false)
+  const [providerSynced, setProviderSynced] = useState(false)
   const collabRef = useRef<{ doc: any; provider: any } | null>(null)
 
   const fragmentName = `text:${fieldName}`
@@ -65,6 +66,10 @@ export function CollaborativePlainText({
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
       })
 
+      provider.once('synced', () => {
+        if (!destroyed) setProviderSynced(true)
+      })
+
       collabRef.current = { doc, provider }
       setCollabReady(true)
     })
@@ -75,6 +80,7 @@ export function CollaborativePlainText({
       collabRef.current?.doc?.destroy()
       collabRef.current = null
       setCollabReady(false)
+      setProviderSynced(false)
     }
   }, [wsPath, docName, fragmentName]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,7 +145,7 @@ export function CollaborativePlainText({
         />
         <OnChangePlugin onChange={onChange} />
         {!multiline && <BlockEnterPlugin />}
-        <SeedPlugin value={value} />
+        {providerSynced && <SeedPlugin value={value} />}
       </div>
     </LexicalComposer>
   )
@@ -191,21 +197,17 @@ function SeedPlugin({ value }: { value: string }) {
 
   useEffect(() => {
     if (seeded.current || !value) return
-    const timer = setTimeout(() => {
-      if (seeded.current) return
-      const isEmpty = editor.getEditorState().read(() => !$getRoot().getTextContent().trim())
-      if (isEmpty) {
-        seeded.current = true
-        editor.update(() => {
-          const root = $getRoot()
-          root.clear()
-          const p = $createParagraphNode()
-          p.append($createTextNode(value))
-          root.append(p)
-        })
-      }
-    }, 500)
-    return () => clearTimeout(timer)
+    const isEmpty = editor.getEditorState().read(() => !$getRoot().getTextContent().trim())
+    if (isEmpty) {
+      seeded.current = true
+      editor.update(() => {
+        const root = $getRoot()
+        root.clear()
+        const p = $createParagraphNode()
+        p.append($createTextNode(value))
+        root.append(p)
+      })
+    }
   }, [editor, value])
 
   return null
