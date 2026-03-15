@@ -1,5 +1,6 @@
 import '@/index.css'
 import { useState, useEffect } from 'react'
+import { navigate } from 'vike/client/router'
 import { Toaster } from 'sonner'
 import type { PanelMeta } from '@boostkit/panels'
 import { GlobalSearch } from './GlobalSearch.js'
@@ -96,7 +97,7 @@ function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelMet
 
   async function handleSignOut() {
     await fetch('/api/auth/sign-out', { method: 'POST' })
-    window.location.href = '/login'
+    await navigate('/login')
   }
 
   return (
@@ -133,7 +134,7 @@ function SidebarUserMenu({ user, i18n }: { user: SessionUser | null; i18n: Panel
 
   async function handleSignOut() {
     await fetch('/api/auth/sign-out', { method: 'POST' })
-    window.location.href = '/login'
+    await navigate('/login')
   }
 
   return (

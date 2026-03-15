@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import '@/index.css'
 import { ref } from 'vue'
+import { navigate } from 'vike/client/router'
 
 const name     = ref('')
 const email    = ref('')
@@ -17,7 +18,7 @@ async function handleSubmit() {
     body:    JSON.stringify({ name: name.value, email: email.value, password: password.value }),
   })
   if (res.ok) {
-    window.location.href = '/'
+    await navigate('/')
   } else {
     const body = await res.json().catch(() => ({})) as { message?: string }
     error.value = body.message ?? 'Could not create account. Please try again.'

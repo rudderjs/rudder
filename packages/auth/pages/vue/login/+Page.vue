@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import '@/index.css'
 import { ref } from 'vue'
+import { navigate } from 'vike/client/router'
 
 const email    = ref('')
 const password = ref('')
@@ -18,7 +19,7 @@ async function handleSubmit() {
   if (res.ok) {
     const params = new URLSearchParams(window.location.search)
     const redirect = params.get('redirect')
-    window.location.href = redirect && redirect.startsWith('/') ? redirect : '/'
+    await navigate(redirect && redirect.startsWith('/') ? redirect : '/')
   } else {
     const body = await res.json().catch(() => ({})) as { message?: string }
     error.value = body.message ?? 'Invalid email or password.'

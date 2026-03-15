@@ -1,5 +1,6 @@
 import '@/index.css'
 import { createSignal } from 'solid-js'
+import { navigate } from 'vike/client/router'
 
 export default function LoginPage() {
   const [email, setEmail]       = createSignal('')
@@ -19,7 +20,7 @@ export default function LoginPage() {
     if (res.ok) {
       const params = new URLSearchParams(window.location.search)
       const redirect = params.get('redirect')
-      window.location.href = redirect && redirect.startsWith('/') ? redirect : '/'
+      await navigate(redirect && redirect.startsWith('/') ? redirect : '/')
     } else {
       const body = await res.json().catch(() => ({})) as { message?: string }
       setError(body.message ?? 'Invalid email or password.')

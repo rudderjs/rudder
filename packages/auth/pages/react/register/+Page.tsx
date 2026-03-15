@@ -1,5 +1,6 @@
 import '@/index.css'
 import { useState } from 'react'
+import { navigate } from 'vike/client/router'
 
 export default function RegisterPage() {
   const [name, setName]         = useState('')
@@ -18,7 +19,7 @@ export default function RegisterPage() {
       body:    JSON.stringify({ name, email, password }),
     })
     if (res.ok) {
-      window.location.href = '/'
+      await navigate('/')
     } else {
       const body = await res.json().catch(() => ({})) as { message?: string }
       setError(body.message ?? 'Could not create account. Please try again.')
