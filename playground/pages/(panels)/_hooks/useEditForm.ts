@@ -13,17 +13,11 @@ interface UseEditFormOptions {
   draftable:     boolean
   collaborative: boolean
   i18n:          PanelI18n & Record<string, string>
-  // Collaborative callbacks (optional)
   syncAllFieldsToDoc?:    (values: Record<string, unknown>) => void
   setCollaborativeValue?: (name: string, value: unknown) => void
-  /** Fields that handle their own Y.Doc sync (each via its own Lexical + Y.Doc instance).
-   *  setValue will NOT call setCollaborativeValue for these — they already sync themselves. */
   selfSyncFields?:        Set<string>
-  /** Setter for formKey — lives in parent so useCollaborativeForm can use it as resetKey. */
-  setFormKey:              (fn: (k: number) => number) => void
-  /** Current formKey — used to detect if we're on temporary rooms after restore. */
+  setFormKey:              (fn: ((k: number) => number) | number) => void
   formKey:                 number
-  /** Ref to flag that we're syncing — prevents broadcast handler from firing on ourselves. */
   isSyncingRef:            React.MutableRefObject<boolean>
 }
 
@@ -37,23 +31,22 @@ export function useEditForm(opts: UseEditFormOptions) {
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [saving, setSaving] = useState(false)
-  const [activeVersionId, setActiveVersionId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null
-    return new URLSearchParams(window.location.search).get('restoredVersion')
-  })
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null)
 
-  /** Reset form with new values and bump formKey (enters restore preview mode). */
+  const isRestorePreview = formKey !== 0
+
+  /** Reset form with new values and enter restore preview mode. */
   const resetForm = useCallback((newValues: Record<string, unknown>) => {
     setValues(newValues)
-    setFormKey(k => k + 1)
+    setFormKey((k: number) => k + 1)
     setActiveVersionId(null)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Rejoin collaborative mode — reset formKey to 0 so editors reconnect to live rooms. */
+  /** Rejoin collaborative mode. */
   const rejoinLive = useCallback(() => {
     setFormKey(0)
     setActiveVersionId(null)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setFormValue = useCallback((name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }))
@@ -62,8 +55,9 @@ export function useEditForm(opts: UseEditFormOptions) {
 
   function setValue(name: string, value: unknown) {
     setFormValue(name, value)
+    // Don't sync to Y.Doc during restore preview — form is non-collaborative
+    if (isRestorePreview) return
     // Don't double-sync fields that handle their own Y.Doc sync
-    // Text-based collaborative fields each have their own Y.Doc + Lexical instance
     if (setCollaborativeValue && !selfSyncFields?.has(name)) {
       setCollaborativeValue(name, value)
     }
@@ -73,11 +67,13 @@ export function useEditForm(opts: UseEditFormOptions) {
     setSaving(true)
     setErrors({})
     try {
-      if (collaborative && syncAllFieldsToDoc) {
+      // Don't sync to Y.Doc before save if in restore preview
+      if (collaborative && syncAllFieldsToDoc && !isRestorePreview) {
         syncAllFieldsToDoc(values)
       }
 
       const payload = { ...values } as Record<string, unknown>
+      console.log('[handleSave] payload title:', payload['title'], 'isRestorePreview:', isRestorePreview, 'formKey:', formKey)
 
       if (draftable && publishAction) {
         payload['draftStatus'] = publishAction === 'publish' ? 'published' : 'draft'
@@ -110,32 +106,6 @@ export function useEditForm(opts: UseEditFormOptions) {
         })
       }
 
-      if (collaborative && formKey > 0) {
-        // Saving after a version restore:
-        // 1. Sync Y.Doc rooms with saved DB values (flag to skip own broadcast handler)
-        isSyncingRef.current = true
-        await fetch(`/${pathSegment}/api/${slug}/${id}/_sync-live`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-        isSyncingRef.current = false
-        // 2. Rejoin collaborative mode (formKey back to 0)
-        setFormKey(0)
-        setActiveVersionId(null)
-
-        if (draftable && publishAction === 'publish') {
-          toast.success(i18n.publishedToastDraft ?? 'Published successfully.')
-        } else if (draftable && publishAction === 'unpublish') {
-          toast.success(i18n.unpublishedToast ?? 'Unpublished.')
-        } else if (draftable && publishAction === 'draft') {
-          toast.success(i18n.savedDraftToast ?? 'Draft saved.')
-        } else {
-          toast.success(i18n.savedToast)
-        }
-        // Stay on edit page — user is back in collaborative mode
-        return
-      }
-
       if (draftable && publishAction === 'publish') {
         toast.success(i18n.publishedToastDraft ?? 'Published successfully.')
       } else if (draftable && publishAction === 'unpublish') {
@@ -144,6 +114,20 @@ export function useEditForm(opts: UseEditFormOptions) {
         toast.success(i18n.savedDraftToast ?? 'Draft saved.')
       } else {
         toast.success(i18n.savedToast)
+      }
+
+      if (collaborative && isRestorePreview) {
+        // Push restored values to the shared Y.Doc (still connected)
+        // so other users get the update in real-time
+        if (syncAllFieldsToDoc) syncAllFieldsToDoc(values)
+
+        // Clear per-field Y.Doc rooms on server so they re-seed from DB next time
+        isSyncingRef.current = true
+        await fetch(`/${pathSegment}/api/${slug}/${id}/_sync-live`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        isSyncingRef.current = false
       }
 
       void navigate(backHref)
@@ -171,9 +155,6 @@ export function useEditForm(opts: UseEditFormOptions) {
         const restoredFields = body.data.fields
         const merged = { ...values, ...restoredFields }
 
-        // Update form state + remount collaborative editors (no DB save — user reviews first).
-        // formKey bump causes editors to connect to brand new rooms (docName:v{formKey})
-        // that are guaranteed empty — SeedPlugin seeds from restored values.
         resetForm(merged)
         setActiveVersionId(versionId)
         toast.success(i18n.restoredToast ?? 'Version restored.')
@@ -190,7 +171,7 @@ export function useEditForm(opts: UseEditFormOptions) {
     errors,
     saving,
     activeVersionId,
-    isRestorePreview: formKey > 0,
+    isRestorePreview,
     setValue,
     setFormValue,
     resetForm,
