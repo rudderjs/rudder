@@ -52,7 +52,16 @@ export interface BetterAuthConfig {
   secret?: string
   /** App base URL. Falls back to process.env.APP_URL */
   baseUrl?: string
-  emailAndPassword?: { enabled?: boolean; requireEmailVerification?: boolean }
+  emailAndPassword?: {
+    enabled?: boolean
+    requireEmailVerification?: boolean
+    /** Send a password reset email. Required for forgot-password flow. */
+    sendResetPassword?: (data: { user: { email: string }; url: string; token: string }, request?: Request) => Promise<void>
+    /** Called after a password has been successfully reset */
+    onPasswordReset?: (data: { user: { id: string; email: string } }) => void | Promise<void>
+    /** Reset token expiry in seconds (default: 3600 = 1 hour) */
+    resetPasswordTokenExpiresIn?: number
+  }
   socialProviders?: Record<string, { clientId: string; clientSecret: string }>
   trustedOrigins?: string[]
   /**
@@ -190,6 +199,15 @@ export function auth(
           enabled: config.emailAndPassword?.enabled ?? true,
           ...(config.emailAndPassword?.requireEmailVerification !== undefined
             ? { requireEmailVerification: config.emailAndPassword.requireEmailVerification }
+            : {}),
+          ...(config.emailAndPassword?.sendResetPassword
+            ? { sendResetPassword: config.emailAndPassword.sendResetPassword as any }
+            : {}),
+          ...(config.emailAndPassword?.onPasswordReset
+            ? { onPasswordReset: config.emailAndPassword.onPasswordReset as any }
+            : {}),
+          ...(config.emailAndPassword?.resetPasswordTokenExpiresIn !== undefined
+            ? { resetPasswordTokenExpiresIn: config.emailAndPassword.resetPasswordTokenExpiresIn }
             : {}),
         },
         ...(config.socialProviders && { socialProviders: config.socialProviders }),

@@ -12,10 +12,10 @@ async function handleSubmit() {
   success.value = ''
   loading.value = true
   try {
-    const res = await fetch('/api/auth/forget-password', {
+    const res = await fetch('/api/auth/request-password-reset', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email: email.value }),
+      body:    JSON.stringify({ email: email.value, redirectTo: '/reset-password' }),
     })
     if (res.ok) {
       success.value = 'If an account exists with that email, a password reset link has been sent.'
