@@ -4,18 +4,43 @@ import { getTemplates, pmExec, pmRun, pmInstall, type TemplateContext } from './
 
 // ─── Helpers ───────────────────────────────────────────────
 
+const defaultPkgs: TemplateContext['packages'] = {
+  auth: true, cache: true, queue: false, storage: false,
+  mail: false, notifications: false, scheduler: false,
+  broadcast: false, live: false, panels: false,
+}
+
+const noPkgs: TemplateContext['packages'] = {
+  auth: false, cache: false, queue: false, storage: false,
+  mail: false, notifications: false, scheduler: false,
+  broadcast: false, live: false, panels: false,
+}
+
+const noAuth: TemplateContext['packages'] = {
+  auth: false, cache: true, queue: false, storage: false,
+  mail: false, notifications: false, scheduler: false,
+  broadcast: false, live: false, panels: false,
+}
+
+const allPkgs: TemplateContext['packages'] = {
+  auth: true, cache: true, queue: true, storage: true,
+  mail: true, notifications: true, scheduler: true,
+  broadcast: true, live: true, panels: true,
+}
+
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
   return {
     name:       'my-app',
     db:         'sqlite',
+    orm:        'prisma' as const,
     withTodo:   false,
-    withAuth:   false,
     authSecret: 'test-secret',
-    frameworks: ['react'],
-    primary:    'react',
+    frameworks: ['react'] as ('react' | 'vue' | 'solid')[],
+    primary:    'react' as const,
     tailwind:   true,
     shadcn:     false,
-    pm:         'pnpm',
+    pm:         'pnpm' as const,
+    packages:   defaultPkgs,
     ...overrides,
   }
 }
@@ -32,14 +57,13 @@ describe('getTemplates() — core files always present', () => {
   it('generates .env', () => assert.ok('.env' in files))
   it('generates .env.example', () => assert.ok('.env.example' in files))
   it('generates .gitignore', () => assert.ok('.gitignore' in files))
-  it('generates prisma/schema.prisma', () => assert.ok('prisma/schema.prisma' in files))
+  it('generates prisma/schema/base.prisma when orm=prisma', () => assert.ok('prisma/schema/base.prisma' in files))
   it('generates bootstrap/app.ts', () => assert.ok('bootstrap/app.ts' in files))
   it('generates bootstrap/providers.ts', () => assert.ok('bootstrap/providers.ts' in files))
   it('generates routes/api.ts', () => assert.ok('routes/api.ts' in files))
   it('generates routes/web.ts', () => assert.ok('routes/web.ts' in files))
   it('generates routes/console.ts', () => assert.ok('routes/console.ts' in files))
   it('generates config/index.ts', () => assert.ok('config/index.ts' in files))
-  it('generates app/Models/User.ts', () => assert.ok('app/Models/User.ts' in files))
 })
 
 // ─── Tailwind / shadcn ─────────────────────────────────────
@@ -83,12 +107,12 @@ describe('getTemplates() — Todo module', () => {
 
   it('prisma schema includes Todo model when withTodo=true', () => {
     const files = getTemplates(ctx({ withTodo: true }))
-    assert.ok(files['prisma/schema.prisma']!.includes('model Todo {'))
+    assert.ok(files['prisma/schema/todo.prisma']!.includes('model Todo {'))
   })
 
   it('prisma schema does not include Todo model when withTodo=false', () => {
     const files = getTemplates(ctx({ withTodo: false }))
-    assert.ok(!files['prisma/schema.prisma']!.includes('model Todo {'))
+    assert.ok(!('prisma/schema/todo.prisma' in files))
   })
 })
 
@@ -150,8 +174,8 @@ describe('getTemplates() — secondary framework demo pages', () => {
 
 describe('getTemplates() — auth pages', () => {
   it('never generates login/register page files (come from @boostkit/auth)', () => {
-    const withAuthFiles    = getTemplates(ctx({ withAuth: true }))
-    const withoutAuthFiles = getTemplates(ctx({ withAuth: false }))
+    const withAuthFiles    = getTemplates(ctx({ packages: { ...defaultPkgs, auth: true } }))
+    const withoutAuthFiles = getTemplates(ctx({ packages: noAuth }))
     for (const files of [withAuthFiles, withoutAuthFiles]) {
       assert.ok(!('pages/login/+Page.tsx' in files))
       assert.ok(!('pages/login/+guard.ts' in files))
@@ -159,15 +183,15 @@ describe('getTemplates() — auth pages', () => {
     }
   })
 
-  it('home page includes login/register links when withAuth=true', () => {
-    const files = getTemplates(ctx({ withAuth: true, tailwind: true }))
+  it('home page includes login/register links when auth selected', () => {
+    const files = getTemplates(ctx({ packages: { ...defaultPkgs, auth: true }, tailwind: true }))
     const page  = files['pages/index/+Page.tsx']!
     assert.ok(page.includes('/login'))
     assert.ok(page.includes('/register'))
   })
 
-  it('home page excludes login/register links when withAuth=false', () => {
-    const files = getTemplates(ctx({ withAuth: false }))
+  it('home page excludes login/register links when auth not selected', () => {
+    const files = getTemplates(ctx({ packages: noAuth }))
     const page  = files['pages/index/+Page.tsx']!
     assert.ok(!page.includes('/login'))
     assert.ok(!page.includes('/register'))
@@ -333,21 +357,21 @@ describe('getTemplates() — tsconfig.json jsx', () => {
 describe('getTemplates() — prisma schema', () => {
   it('uses sqlite provider for sqlite db', () => {
     const files = getTemplates(ctx({ db: 'sqlite' }))
-    assert.ok(files['prisma/schema.prisma']!.includes('provider = "sqlite"'))
+    assert.ok(files['prisma/schema/base.prisma']!.includes('provider = "sqlite"'))
   })
 
   it('uses postgresql provider for postgresql db', () => {
     const files = getTemplates(ctx({ db: 'postgresql' }))
-    assert.ok(files['prisma/schema.prisma']!.includes('provider = "postgresql"'))
+    assert.ok(files['prisma/schema/base.prisma']!.includes('provider = "postgresql"'))
   })
 
   it('uses mysql provider for mysql db', () => {
     const files = getTemplates(ctx({ db: 'mysql' }))
-    assert.ok(files['prisma/schema.prisma']!.includes('provider = "mysql"'))
+    assert.ok(files['prisma/schema/base.prisma']!.includes('provider = "mysql"'))
   })
 
-  it('always includes User, Session, Account, Verification models', () => {
-    const schema = getTemplates(ctx())['prisma/schema.prisma']!
+  it('includes User, Session, Account, Verification models when auth selected', () => {
+    const schema = getTemplates(ctx())['prisma/schema/auth.prisma']!
     assert.ok(schema.includes('model User {'))
     assert.ok(schema.includes('model Session {'))
     assert.ok(schema.includes('model Account {'))
@@ -355,7 +379,7 @@ describe('getTemplates() — prisma schema', () => {
   })
 
   it('includes module markers', () => {
-    const schema = getTemplates(ctx())['prisma/schema.prisma']!
+    const schema = getTemplates(ctx())['prisma/schema/modules.prisma']!
     assert.ok(schema.includes('// <boostkit:modules:start>'))
     assert.ok(schema.includes('// <boostkit:modules:end>'))
   })
@@ -369,14 +393,128 @@ describe('getTemplates() — .env', () => {
     assert.ok(files['.env']!.includes('APP_NAME=test-project'))
   })
 
-  it('includes auth secret', () => {
-    const files = getTemplates(ctx({ authSecret: 'abc123' }))
+  it('includes auth secret when auth selected', () => {
+    const files = getTemplates(ctx({ authSecret: 'abc123', packages: { ...defaultPkgs, auth: true } }))
     assert.ok(files['.env']!.includes('AUTH_SECRET=abc123'))
   })
 
-  it('.env.example has placeholder secret', () => {
-    const files = getTemplates(ctx({ authSecret: 'real-secret' }))
+  it('.env.example has placeholder secret when auth selected', () => {
+    const files = getTemplates(ctx({ authSecret: 'real-secret', packages: { ...defaultPkgs, auth: true } }))
     assert.ok(!files['.env.example']!.includes('real-secret'))
     assert.ok(files['.env.example']!.includes('please-set'))
+  })
+})
+
+// ─── Package checklist ────────────────────────────────────
+
+describe('getTemplates() — package checklist', () => {
+  it('no database → no prisma files, no config/database.ts', () => {
+    const files = getTemplates(ctx({ orm: false, packages: noPkgs }))
+    assert.ok(!('prisma/schema/base.prisma' in files))
+    assert.ok(!('prisma.config.ts' in files))
+    assert.ok(!('config/database.ts' in files))
+  })
+
+  it('auth not selected → no auth schema, no config/auth.ts, no @boostkit/auth in deps', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
+    assert.ok(!('prisma/schema/auth.prisma' in files))
+    assert.ok(!('config/auth.ts' in files))
+    assert.ok(!('config/session.ts' in files))
+    assert.ok(!('app/Models/User.ts' in files))
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok(!('@boostkit/auth' in pkg.dependencies))
+    assert.ok(!('@boostkit/session' in pkg.dependencies))
+  })
+
+  it('auth selected → auth schema, config/auth.ts, @boostkit/auth in deps', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+    assert.ok('prisma/schema/auth.prisma' in files)
+    assert.ok('config/auth.ts' in files)
+    assert.ok('config/session.ts' in files)
+    assert.ok('app/Models/User.ts' in files)
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok('@boostkit/auth' in pkg.dependencies)
+    assert.ok('@boostkit/session' in pkg.dependencies)
+  })
+
+  it('cache not selected → no config/cache.ts, no @boostkit/cache in deps', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
+    assert.ok(!('config/cache.ts' in files))
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok(!('@boostkit/cache' in pkg.dependencies))
+  })
+
+  it('queue selected → config/queue.ts, @boostkit/queue in deps', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, queue: true } }))
+    assert.ok('config/queue.ts' in files)
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok('@boostkit/queue' in pkg.dependencies)
+  })
+
+  it('notifications selected → @boostkit/notification in deps + prisma schema', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, notifications: true } }))
+    assert.ok('prisma/schema/notification.prisma' in files)
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok('@boostkit/notification' in pkg.dependencies)
+  })
+
+  it('no packages selected → minimal providers.ts', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
+    const providers = files['bootstrap/providers.ts']!
+    assert.ok(providers.includes('AppServiceProvider'))
+    assert.ok(!providers.includes('@boostkit/auth'))
+    assert.ok(!providers.includes('@boostkit/cache'))
+    assert.ok(!providers.includes('@boostkit/queue'))
+  })
+
+  it('all packages selected → full providers.ts', () => {
+    const files = getTemplates(ctx({ packages: allPkgs }))
+    const providers = files['bootstrap/providers.ts']!
+    assert.ok(providers.includes('@boostkit/auth'))
+    assert.ok(providers.includes('@boostkit/cache'))
+    assert.ok(providers.includes('@boostkit/queue'))
+    assert.ok(providers.includes('@boostkit/mail'))
+    assert.ok(providers.includes('@boostkit/storage'))
+    assert.ok(providers.includes('@boostkit/notification'))
+    assert.ok(providers.includes('@boostkit/schedule'))
+  })
+
+  it('config/index.ts only re-exports existing configs', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
+    const index = files['config/index.ts']!
+    assert.ok(index.includes("from './app.js'"))
+    assert.ok(index.includes("from './server.js'"))
+    assert.ok(!index.includes("from './auth.js'"))
+    assert.ok(!index.includes("from './cache.js'"))
+  })
+
+  it('base deps always included regardless of package selection', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok('@boostkit/core' in pkg.dependencies)
+    assert.ok('@boostkit/router' in pkg.dependencies)
+    assert.ok('@boostkit/server-hono' in pkg.dependencies)
+    assert.ok('@boostkit/middleware' in pkg.dependencies)
+    assert.ok('@boostkit/vite' in pkg.dependencies)
+  })
+
+  it('.env omits AUTH_SECRET when auth not selected', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
+    assert.ok(!files['.env']!.includes('AUTH_SECRET'))
+  })
+
+  it('.env includes DATABASE_URL when orm set', () => {
+    const files = getTemplates(ctx({ orm: 'prisma' }))
+    assert.ok(files['.env']!.includes('DATABASE_URL'))
+  })
+
+  it('.env omits DATABASE_URL when orm=false', () => {
+    const files = getTemplates(ctx({ orm: false, packages: noPkgs }))
+    assert.ok(!files['.env']!.includes('DATABASE_URL'))
+  })
+
+  it('prisma config uses schema directory', () => {
+    const files = getTemplates(ctx({ orm: 'prisma' }))
+    assert.ok(files['prisma.config.ts']!.includes("schema: 'prisma/schema'"))
   })
 })
