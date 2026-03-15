@@ -40,10 +40,16 @@ export function useEditForm(opts: UseEditFormOptions) {
     return new URLSearchParams(window.location.search).get('restoredVersion')
   })
 
-  /** Reset form with new values and remount collaborative editors. */
+  /** Reset form with new values and bump formKey (enters restore preview mode). */
   const resetForm = useCallback((newValues: Record<string, unknown>) => {
     setValues(newValues)
     setFormKey(k => k + 1)
+    setActiveVersionId(null)
+  }, [])
+
+  /** Rejoin collaborative mode — reset formKey to 0 so editors reconnect to live rooms. */
+  const rejoinLive = useCallback(() => {
+    setFormKey(0)
     setActiveVersionId(null)
   }, [])
 
@@ -165,9 +171,11 @@ export function useEditForm(opts: UseEditFormOptions) {
     errors,
     saving,
     activeVersionId,
+    isRestorePreview: formKey > 0,
     setValue,
     setFormValue,
     resetForm,
+    rejoinLive,
     handleSave,
     handleSubmit,
     restoreVersion,
