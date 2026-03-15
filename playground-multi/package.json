@@ -12,14 +12,6 @@
     "typecheck": "tsc --noEmit",
     "artisan": "tsx node_modules/@boostkit/cli/src/index.ts"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "@prisma/engines",
-      "esbuild",
-      "prisma"
-    ]
-  },
   "dependencies": {
     "@boostkit/artisan": "workspace:*",
     "@boostkit/vite": "workspace:*",

@@ -1,0 +1,16 @@
+model PanelVersion {
+  id        String   @id @default(cuid())
+  docName   String   // panel:{resourceSlug}:{recordId}
+  snapshot  Bytes    // Y.encodeStateAsUpdate(doc)
+  label     String?  // optional user-provided label
+  userId    String?  // who saved this version
+  createdAt DateTime @default(now())
+
+  @@index([docName, createdAt])
+}
+
+model PanelGlobal {
+  slug      String   @id
+  data      String   @default("{}")  // JSON stored as string for SQLite compatibility
+  updatedAt DateTime @updatedAt
+}

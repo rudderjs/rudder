@@ -1,0 +1,45 @@
+// <boostkit:modules:start>
+// module: Todo (Todo.prisma)
+model Todo {
+  id        String   @id @default(cuid())
+  title     String
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+// <boostkit:modules:end>
+
+model Article {
+  id              String     @id @default(cuid())
+  title           String     @default("")
+  slug            String?    @unique
+  excerpt         String?
+  coverImage      String?
+  tags            String     @default("[]")  // JSON-encoded string[]
+  status          String     @default("draft")
+  draftStatus     String     @default("draft")  // draftable: 'draft' | 'published'
+  featured        Boolean    @default(false)
+  publishedAt     DateTime?
+  accentColor     String?
+  metaTitle       String?
+  metaDescription String?
+  content         Json?
+  body            Json?      // Lexical editor state JSON
+  metadata        String?    // JSON blob
+  categories      Category[]
+  deletedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  articles  Article[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
