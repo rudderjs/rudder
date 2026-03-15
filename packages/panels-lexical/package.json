@@ -1,0 +1,54 @@
+{
+  "name": "@boostkit/panels-lexical",
+  "version": "0.0.1",
+  "description": "Lexical rich-text editor adapter for @boostkit/panels",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/boostkitjs/boostkit",
+    "directory": "packages/panels-lexical"
+  },
+  "type": "module",
+  "files": [
+    "dist",
+    "pages"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@boostkit/core": "workspace:*",
+    "@boostkit/panels": "workspace:*"
+  },
+  "peerDependencies": {
+    "lexical": "^0.41.0",
+    "@lexical/react": "^0.41.0",
+    "@lexical/rich-text": "^0.41.0",
+    "@lexical/list": "^0.41.0",
+    "@lexical/link": "^0.41.0",
+    "@lexical/code": "^0.41.0",
+    "@lexical/yjs": "^0.41.0",
+    "yjs": "^13.6.0",
+    "y-websocket": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "y-websocket": { "optional": true },
+    "yjs": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}
