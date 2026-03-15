@@ -120,16 +120,25 @@ export default function EditPage() {
         socket = new mod.BKSocket(`ws://${window.location.host}/ws`)
         socket.channel(`panel:${slug}`).on('version.restored', async (data: any) => {
           if (data?.id !== id) return
-          // Skip if WE triggered the sync (we handle our own state in handleSave)
           if (isSyncingRef.current) return
           // Another user saved after restoring a version.
-          // Unmount editors to stop y-websocket auto-reconnect pushing stale data,
-          // then navigate to re-run +data.ts with correct DB values + fresh Y.Doc rooms.
+          // 1. Unmount editors (stop stale Y.Doc connections)
           setFormKey(-1)
-          await new Promise(r => setTimeout(r, 200))
-          void navigate(window.location.pathname + window.location.search, {
-            overwriteLastHistoryEntry: true,
-          })
+          await new Promise(r => setTimeout(r, 300))
+          // 2. Fetch fresh record from DB
+          try {
+            const res = await fetch(`/${pathSegment}/api/${slug}/${id}`)
+            if (res.ok) {
+              const body = await res.json() as { data: Record<string, unknown> }
+              const freshValues = buildInitialValues(formFields, body.data)
+              // 3. Update form state with fresh DB values
+              for (const [key, val] of Object.entries(freshValues)) {
+                setFormValue(key, val)
+              }
+            }
+          } catch { /* ignore */ }
+          // 4. Rejoin collaborative mode — editors remount with fresh Y.Docs
+          setFormKey(0)
         })
       } catch { /* BKSocket not available */ }
     }

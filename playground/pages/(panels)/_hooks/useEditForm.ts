@@ -73,7 +73,6 @@ export function useEditForm(opts: UseEditFormOptions) {
       }
 
       const payload = { ...values } as Record<string, unknown>
-      console.log('[handleSave] payload title:', payload['title'], 'isRestorePreview:', isRestorePreview, 'formKey:', formKey)
 
       if (draftable && publishAction) {
         payload['draftStatus'] = publishAction === 'publish' ? 'published' : 'draft'
