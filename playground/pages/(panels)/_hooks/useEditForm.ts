@@ -108,13 +108,28 @@ export function useEditForm(opts: UseEditFormOptions) {
         })
       }
 
-      // If saving after a version restore, clear the original Y.Doc rooms
-      // so they re-seed from the now-correct DB values on next page load.
       if (collaborative && formKey > 0) {
+        // Saving after a version restore:
+        // 1. Sync Y.Doc rooms with saved DB values
         await fetch(`/${pathSegment}/api/${slug}/${id}/_sync-live`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
+        // 2. Rejoin collaborative mode (formKey back to 0)
+        setFormKey(0)
+        setActiveVersionId(null)
+
+        if (draftable && publishAction === 'publish') {
+          toast.success(i18n.publishedToastDraft ?? 'Published successfully.')
+        } else if (draftable && publishAction === 'unpublish') {
+          toast.success(i18n.unpublishedToast ?? 'Unpublished.')
+        } else if (draftable && publishAction === 'draft') {
+          toast.success(i18n.savedDraftToast ?? 'Draft saved.')
+        } else {
+          toast.success(i18n.savedToast)
+        }
+        // Stay on edit page — user is back in collaborative mode
+        return
       }
 
       if (draftable && publishAction === 'publish') {
