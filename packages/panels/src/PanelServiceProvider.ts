@@ -870,8 +870,8 @@ export class PanelServiceProvider extends ServiceProvider {
           data = JSON.parse(Buffer.from(version.snapshot).toString('utf8'))
         } catch {
           // Fall back to Y.Doc binary (collaborative snapshots)
-          const yjsModule = 'yjs'
-          const Y   = await import(/* webpackIgnore: true */ yjsModule) as any
+          const yjsId = 'yjs'
+          const Y   = await import(/* @vite-ignore */ yjsId) as any
           const doc = new Y.Doc()
           Y.applyUpdate(doc, new Uint8Array(version.snapshot))
           const fields = doc.getMap('fields')

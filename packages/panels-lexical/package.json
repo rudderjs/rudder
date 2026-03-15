@@ -9,7 +9,7 @@
     "directory": "packages/panels-lexical"
   },
   "type": "module",
-  "files": ["dist"],
+  "files": ["dist", "src"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
