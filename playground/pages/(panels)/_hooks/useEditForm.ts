@@ -33,7 +33,10 @@ export function useEditForm(opts: UseEditFormOptions) {
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [saving, setSaving] = useState(false)
-  const [activeVersionId, setActiveVersionId] = useState<string | null>(null)
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.search).get('restoredVersion')
+  })
 
   /** Reset form with new values and remount collaborative editors. */
   const resetForm = useCallback((newValues: Record<string, unknown>) => {
