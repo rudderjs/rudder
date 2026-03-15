@@ -197,11 +197,9 @@ function SeedPlugin({ value }: { value: string }) {
 
   useEffect(() => {
     if (seeded.current || !value) return
-    const text = editor.getEditorState().read(() => $getRoot().getTextContent().trim())
-    console.log('[SeedPlugin] check:', { value, text, isEmpty: !text, seeded: seeded.current })
-    if (!text) {
+    const isEmpty = editor.getEditorState().read(() => !$getRoot().getTextContent().trim())
+    if (isEmpty) {
       seeded.current = true
-      console.log('[SeedPlugin] seeding with:', value)
       editor.update(() => {
         const root = $getRoot()
         root.clear()
@@ -209,8 +207,6 @@ function SeedPlugin({ value }: { value: string }) {
         p.append($createTextNode(value))
         root.append(p)
       })
-    } else {
-      console.log('[SeedPlugin] NOT seeding — editor has content:', text)
     }
   }, [editor, value])
 
