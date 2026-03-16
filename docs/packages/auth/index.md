@@ -176,6 +176,76 @@ const session = await auth.api.getSession({ headers: request.headers })
 
 ---
 
+## Schema Publishing
+
+The auth package provides its own Prisma schema file containing the `User`, `Session`, `Account`, and `Verification` models. Publish it into your project's multi-file schema directory:
+
+```bash
+pnpm artisan vendor:publish --tag=auth-schema
+```
+
+This creates `prisma/schema/auth.prisma`. Then push the schema:
+
+```bash
+pnpm artisan db:push
+```
+
+If you are using Drizzle instead of Prisma, the auth package auto-detects the ORM at runtime and works with the Drizzle adapter directly — no schema publishing needed. Define the auth tables in your Drizzle schema file as described in the [better-auth Drizzle documentation](https://www.better-auth.com/docs/adapters/drizzle).
+
+---
+
+## Auth Pages
+
+The auth package can publish pre-built authentication pages into your project:
+
+```bash
+pnpm artisan vendor:publish --tag=auth-pages
+```
+
+This creates the following pages under `pages/(auth)/`:
+
+| Page | Path | Description |
+|------|------|-------------|
+| Login | `/login` | Email/password sign-in form |
+| Register | `/register` | New user registration form |
+| Forgot Password | `/forgot-password` | Request a password reset email |
+| Reset Password | `/reset-password?token=...` | Set a new password using a reset token |
+
+### Password Reset
+
+Password reset requires the `sendResetPassword` callback in your auth config to send the reset email:
+
+```ts
+// config/auth.ts
+export default {
+  // ...
+  emailAndPassword: {
+    enabled: true,
+    sendResetPassword: async ({ user, url }) => {
+      // Send the password reset email
+      // `url` contains the full reset link with token
+      await mail.send(new PasswordResetMail(user, url))
+    },
+  },
+} satisfies BetterAuthConfig
+```
+
+### Login Redirect
+
+The login page supports a `redirect` query parameter. After successful authentication, the user is redirected to the specified path:
+
+```
+/login?redirect=/dashboard
+```
+
+---
+
+## Drizzle Support
+
+`@boostkit/auth` auto-detects which ORM is in use at runtime. When `@boostkit/orm-drizzle` is registered instead of `@boostkit/orm-prisma`, the auth provider automatically uses better-auth's Drizzle adapter. No additional configuration is needed beyond having the auth tables defined in your Drizzle schema.
+
+---
+
 ## Notes
 
 - `@boostkit/auth` includes `better-auth` as a direct dependency — no separate install needed beyond `@boostkit/auth`.

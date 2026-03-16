@@ -49,36 +49,57 @@ pnpm add better-sqlite3 @prisma/adapter-better-sqlite3
 pnpm add -D @types/better-sqlite3
 ```
 
-### 2. Initialise
+### 2. Multi-file Prisma Schema
 
-```bash
-pnpm exec prisma init
+BoostKit uses a **multi-file schema** layout. Instead of a single `prisma/schema.prisma`, schemas are split into separate files inside a `prisma/schema/` directory:
+
+```
+prisma/
+├── schema/
+│   ├── base.prisma          # generator + datasource
+│   ├── user.prisma          # User model
+│   ├── post.prisma          # Post model
+│   ├── auth.prisma          # Auth models (published by @boostkit/auth)
+│   └── notification.prisma  # Notification model (published by @boostkit/notification)
+└── prisma.config.ts         # Points to prisma/schema directory
 ```
 
-This creates `prisma/schema.prisma` and adds `DATABASE_URL` to `.env`.
+Each concern lives in its own file. BoostKit packages can publish their own schema files via `pnpm artisan vendor:publish --tag=<pkg>-schema` (see [Schema Publishing](#schema-publishing) below).
 
-### 3. Define your schema
+### 3. Configure prisma.config.ts
+
+The `prisma.config.ts` file at the project root tells Prisma where to find the schema directory and how to connect:
+
+```ts
+// prisma.config.ts
+import path from 'node:path'
+import { defineConfig } from 'prisma/config'
+
+export default defineConfig({
+  earlyAccess: true,
+  schema: path.join(__dirname, 'prisma', 'schema'),
+})
+```
+
+The datasource URL is configured in the `base.prisma` file inside the schema directory, not in `prisma.config.ts`.
+
+### 4. Define your schema
 
 ```prisma
-// prisma/schema.prisma
+// prisma/schema/base.prisma
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["prismaSchemaFolder"]
 }
 
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+```
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  body      String
-  published Boolean  @default(false)
-  createdAt DateTime @default(now())
-  authorId  String
-}
-
+```prisma
+// prisma/schema/user.prisma
 model User {
   id        String   @id @default(cuid())
   name      String
@@ -88,11 +109,23 @@ model User {
 }
 ```
 
-### 4. Push schema + generate client
+```prisma
+// prisma/schema/post.prisma
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  authorId  String
+}
+```
+
+### 5. Push schema + generate client
 
 ```bash
-pnpm exec prisma db push        # sync schema to the database (no migration file)
-pnpm exec prisma generate       # regenerate the Prisma client
+pnpm artisan db:push            # sync schema to the database (no migration file)
+pnpm artisan db:generate        # regenerate the Prisma client
 ```
 
 ### 5. Register the provider
@@ -363,69 +396,89 @@ const total = await User.query().count()
 
 ---
 
-## Migrations
+## Unified Database Commands
 
-Migrations track schema changes over time and let you apply them consistently across environments.
+BoostKit provides a unified set of artisan commands that work with both Prisma and Drizzle. The commands auto-detect which ORM is in use and delegate to the appropriate tool.
 
-### Prisma Migrations
+```bash
+pnpm artisan migrate              # run pending migrations
+pnpm artisan migrate:fresh        # drop all tables + re-migrate from scratch
+pnpm artisan migrate:status       # show migration status
+pnpm artisan make:migration <name> # create a new migration file
+pnpm artisan db:push              # push schema directly (no migration file)
+pnpm artisan db:generate          # regenerate client (Prisma only)
+```
 
-| Command | When to use |
-|---|---|
-| `pnpm exec prisma db push` | Development — sync schema instantly, no migration file created |
-| `pnpm exec prisma migrate dev` | Development — create a named migration file + apply it |
-| `pnpm exec prisma migrate deploy` | Production — apply all pending migration files |
-| `pnpm exec prisma migrate reset` | Development — drop database, re-run all migrations from scratch |
+Under the hood, each command maps to the native ORM tool:
+
+| Artisan Command | Prisma Equivalent | Drizzle Equivalent |
+|---|---|---|
+| `migrate` | `prisma migrate deploy` | `drizzle-kit migrate` |
+| `migrate:fresh` | `prisma migrate reset` | drop all + `drizzle-kit migrate` |
+| `migrate:status` | `prisma migrate status` | `drizzle-kit status` |
+| `make:migration <name>` | `prisma migrate dev --name <name>` | `drizzle-kit generate` |
+| `db:push` | `prisma db push` | `drizzle-kit push` |
+| `db:generate` | `prisma generate` | *(no-op)* |
 
 **Typical development workflow:**
 
 ```bash
-# 1. Edit prisma/schema.prisma — add a column, rename a model, etc.
+# 1. Edit your schema files (prisma/schema/*.prisma or database/schema.ts)
 
 # 2a. Quick sync (no history, good for local iteration)
-pnpm exec prisma db push
+pnpm artisan db:push
 
 # 2b. OR create a tracked migration (use this when the change is ready)
-pnpm exec prisma migrate dev --name add_published_to_posts
+pnpm artisan make:migration add_published_to_posts
 
-# 3. Regenerate the Prisma client after any schema change
-pnpm exec prisma generate
+# 3. Regenerate the client after schema changes (Prisma only)
+pnpm artisan db:generate
 ```
 
 **Production deployment:**
 
 ```bash
-# Apply all pending migration files — safe to run in CI/CD
-pnpm exec prisma migrate deploy
+# Apply all pending migrations — safe to run in CI/CD
+pnpm artisan migrate
 ```
 
-Migration files are stored in `prisma/migrations/` and should be committed to version control.
+Migration files are stored in `prisma/migrations/` (Prisma) or the `out` directory from `drizzle.config.ts` (Drizzle), and should be committed to version control.
 
 ---
 
-### Drizzle Migrations
+## Schema Publishing
+
+BoostKit packages that require database tables can publish their own schema files into your project. This keeps package schemas separate from your application schemas while still allowing Prisma's multi-file schema to merge them all.
+
+```bash
+pnpm artisan vendor:publish --tag=auth-schema          # publishes prisma/schema/auth.prisma
+pnpm artisan vendor:publish --tag=notification-schema   # publishes prisma/schema/notification.prisma
+```
+
+After publishing, run `pnpm artisan db:push` or `pnpm artisan make:migration` to apply the new tables.
+
+---
+
+## Legacy Prisma/Drizzle Commands
+
+You can still use the native Prisma and Drizzle CLI commands directly if you prefer, but the unified artisan commands are recommended for consistency.
+
+### Prisma (direct)
 
 | Command | When to use |
 |---|---|
-| `pnpm exec drizzle-kit push` | Development — sync schema instantly, no migration file created |
-| `pnpm exec drizzle-kit generate` | Development — generate a migration SQL file from schema diff |
-| `pnpm exec drizzle-kit migrate` | Development/Production — apply pending migration files |
+| `pnpm exec prisma db push` | Development — sync schema instantly |
+| `pnpm exec prisma migrate dev` | Development — create a named migration + apply |
+| `pnpm exec prisma migrate deploy` | Production — apply pending migrations |
+| `pnpm exec prisma migrate reset` | Development — drop + re-migrate |
 
-**Typical development workflow:**
+### Drizzle (direct)
 
-```bash
-# 1. Edit database/schema.ts — add a column, new table, etc.
-
-# 2a. Quick sync (no history, good for local iteration)
-pnpm exec drizzle-kit push
-
-# 2b. OR generate a tracked migration file
-pnpm exec drizzle-kit generate
-
-# 3. Apply pending migrations
-pnpm exec drizzle-kit migrate
-```
-
-Migration files are stored in the `out` directory configured in `drizzle.config.ts` (e.g. `database/migrations/`) and should be committed to version control.
+| Command | When to use |
+|---|---|
+| `pnpm exec drizzle-kit push` | Development — sync schema instantly |
+| `pnpm exec drizzle-kit generate` | Generate a migration SQL file |
+| `pnpm exec drizzle-kit migrate` | Apply pending migrations |
 
 ---
 

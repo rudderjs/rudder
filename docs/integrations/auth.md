@@ -231,6 +231,61 @@ Then initiate OAuth from the client:
 window.location.href = '/api/auth/sign-in/social?provider=github&callbackURL=/dashboard'
 ```
 
+## 9. Password Reset
+
+To enable password reset, configure the `sendResetPassword` callback in your auth config. This callback is invoked when a user requests a password reset and is responsible for sending the email containing the reset link.
+
+### Configure the callback
+
+```ts
+// config/auth.ts
+import { Env } from '@boostkit/support'
+import type { BetterAuthConfig } from '@boostkit/auth'
+
+export default {
+  secret:           Env.get('AUTH_SECRET', 'change-me-at-least-32-chars!!'),
+  baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
+  emailAndPassword: {
+    enabled: true,
+    sendResetPassword: async ({ user, url }) => {
+      // url is the full reset link: https://yourapp.com/reset-password?token=...
+      // Send the email using @boostkit/mail, nodemailer, or any email service
+      await mail.send(new PasswordResetMail(user, url))
+    },
+  },
+  trustedOrigins: [Env.get('APP_URL', 'http://localhost:3000')],
+} satisfies BetterAuthConfig
+```
+
+### Auth pages
+
+Publish the pre-built auth pages if you haven't already:
+
+```bash
+pnpm artisan vendor:publish --tag=auth-pages
+```
+
+This creates pages under `pages/(auth)/`:
+
+- **`/forgot-password`** — form where the user enters their email to request a reset link
+- **`/reset-password?token=...`** — form where the user sets a new password using the token from the email
+
+### How it works
+
+1. User visits `/forgot-password` and submits their email
+2. The client calls `POST /api/auth/request-password-reset` with the email
+3. better-auth generates a reset token, builds the URL, and calls your `sendResetPassword` callback
+4. The user clicks the link in the email and lands on `/reset-password?token=abc123`
+5. The client calls `POST /api/auth/reset-password` with the token and new password
+6. better-auth validates the token and updates the password
+
+### better-auth endpoints
+
+| Endpoint | Method | Body | Description |
+|---|---|---|---|
+| `/api/auth/request-password-reset` | POST | `{ email }` | Sends the reset email via your callback |
+| `/api/auth/reset-password` | POST | `{ token, newPassword }` | Validates token and sets new password |
+
 ## Notes
 
 - `AUTH_SECRET` must be at least 32 characters for HMAC signing.

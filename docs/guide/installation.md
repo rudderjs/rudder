@@ -19,25 +19,28 @@ yarn create boostkit-app my-app
 bunx create-boostkit-app my-app
 ```
 
-The CLI walks you through 8 prompts:
+The CLI walks you through a series of prompts, adapting follow-up questions based on your choices:
 
-| # | Prompt | Options | Default |
-|---|--------|---------|---------|
-| 1 | **Project name** | any string | — |
-| 2 | **Database driver** | SQLite · PostgreSQL · MySQL | SQLite |
-| 3 | **Include Todo module?** | yes / no | yes |
-| 4 | **Frontend frameworks** | React · Vue · Solid *(multiselect)* | React |
-| 5 | **Primary framework** | one of the selected | *(only shown when >1 selected)* |
-| 6 | **Add Tailwind CSS?** | yes / no | yes |
-| 7 | **Add shadcn/ui?** | yes / no | yes *(only shown when React + Tailwind)* |
-| 8 | **Install dependencies?** | yes / no | yes |
+| # | Prompt | Options | Default | Condition |
+|---|--------|---------|---------|-----------|
+| 1 | **Project name** | any string | — | always |
+| 2 | **Database ORM** | Prisma · Drizzle · None | Prisma | always |
+| 3 | **Database driver** | SQLite · PostgreSQL · MySQL | SQLite | only when ORM selected |
+| 4 | **Packages** | Auth · Cache · Queue · Storage · Mail · Notifications · Scheduler · WebSocket · Real-time · Admin Panel *(multiselect)* | — | always |
+| 5 | **Include Todo module?** | yes / no | yes | only when a database ORM is selected |
+| 6 | **Frontend frameworks** | React · Vue · Solid *(multiselect)* | React | always |
+| 7 | **Primary framework** | one of the selected | — | only when >1 framework selected |
+| 8 | **Add Tailwind CSS?** | yes / no | yes | always |
+| 9 | **Add shadcn/ui?** | yes / no | yes | only when React + Tailwind |
+| 10 | **Install dependencies?** | yes / no | yes | always |
+
+Only the packages you select in step 4 get their dependencies added to `package.json`, their service providers registered in `bootstrap/providers.ts`, their config files generated in `config/`, and their schema files published (e.g. `prisma/schema/auth.prisma`). Unselected packages are excluded entirely — no dead code or unused config.
 
 After scaffolding, the CLI prints the exact commands for your package manager. For reference:
 
 | Step | pnpm | npm | yarn | bun |
 |------|------|-----|------|-----|
-| Prisma generate | `pnpm exec prisma generate` | `npx prisma generate` | `yarn dlx prisma generate` | `bunx prisma generate` |
-| Prisma db push | `pnpm exec prisma db push` | `npx prisma db push` | `yarn dlx prisma db push` | `bunx prisma db push` |
+| Migrate | `pnpm artisan migrate` | `npm run artisan migrate` | `yarn artisan migrate` | `bun artisan migrate` |
 | Dev server | `pnpm dev` | `npm run dev` | `yarn dev` | `bun dev` |
 
 Your app will be running at `http://localhost:3000`.
