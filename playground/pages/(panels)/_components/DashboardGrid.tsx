@@ -6,6 +6,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  useSensor,
   useSensors,
 } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
@@ -166,9 +167,18 @@ export function DashboardGrid({
           setWidgets(body.widgets)
         }
         if (layoutRes.ok) {
-          const body = await layoutRes.json() as { layout: DashboardLayoutItem[] }
+          const body = await layoutRes.json() as { layout: any[] }
           if (body.layout.length > 0) {
-            setLayout(body.layout)
+            // Normalize: ensure each item has a numeric `w` (migrate from old format)
+            const normalized: DashboardLayoutItem[] = body.layout.map((item: any) => {
+              const widgetDef = defaultWidgets.find(d => d.id === item.widgetId)
+              return {
+                widgetId: item.widgetId,
+                w: typeof item.w === 'number' ? item.w : (widgetDef?.defaultSize.w ?? 6),
+                ...(item.settings && { settings: item.settings }),
+              }
+            })
+            setLayout(normalized)
           } else {
             setLayout(computeDefaultLayout(defaultWidgets))
           }
@@ -188,12 +198,14 @@ export function DashboardGrid({
     try {
       const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
       const qs = tabQuery(tabId)
-      await fetch(`${base}/layout${qs}`, {
+      console.log('[DashboardGrid] saving layout:', newLayout.length, 'items')
+      const res = await fetch(`${base}/layout${qs}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ layout: newLayout }),
       })
-    } catch { /* save failed silently */ }
+      console.log('[DashboardGrid] save response:', res.status, await res.clone().text())
+    } catch (err) { console.error('[DashboardGrid] save failed:', err) }
   }, [pathSegment, dashboardId, tabId])
 
   // ── Drag end — reorder ──────────────────────────────────────────────────
@@ -284,7 +296,7 @@ export function DashboardGrid({
         <h2 className="text-lg font-semibold">{heading}</h2>
         {editable && (
           <div className="flex items-center gap-2">
-            {editing && (
+            {editing && availableWidgets.length > 0 && (
               <button
                 type="button"
                 onClick={() => setShowPalette(!showPalette)}
