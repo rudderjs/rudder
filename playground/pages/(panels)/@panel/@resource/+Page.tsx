@@ -229,7 +229,7 @@ export default function ResourceListPage() {
       else url.searchParams.delete('search')
       url.searchParams.delete('page')
       navigateAndPersist(url)
-    }, 350)
+    }, 150)
   }
 
   // ── Sort ────────────────────────────────────────────────
