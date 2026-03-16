@@ -22,6 +22,30 @@ import { WidgetRenderer } from './WidgetRenderer.js'
 import { WidgetSettingsDrawer } from './WidgetSettingsDrawer.js'
 import type { PanelSchemaElementMeta, PanelI18n } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/dashboards'
+import { icons as lucideIcons } from 'lucide-react'
+
+// ── Widget icon — supports emoji strings and lucide icon names ──────────────
+
+function WidgetIcon({ icon, className }: { icon: string; className?: string }) {
+  // Check if it's an emoji (starts with non-ASCII) or a lucide icon name
+  if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(icon)) {
+    return <span className={className}>{icon}</span>
+  }
+
+  // Try lucide icon — convert kebab-case to PascalCase
+  const pascalName = icon
+    .split('-')
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('') as keyof typeof lucideIcons
+
+  const LucideIcon = lucideIcons[pascalName]
+  if (LucideIcon) {
+    return <LucideIcon className={className} />
+  }
+
+  // Fallback: render as text
+  return <span className={className}>{icon}</span>
+}
 
 // ── Size presets ────────────────────────────────────────────────────────────
 
@@ -530,18 +554,31 @@ function WidgetCard({ widget, panelPath, i18n }: { widget: WidgetWithData; panel
     return <CustomWidgetLoader widget={widget} />
   }
 
+  // Stat with icon — render custom card instead of WidgetRenderer
+  if (widget.component === 'stat') {
+    return (
+      <div className="rounded-xl border bg-card p-5 flex flex-col gap-1 h-full">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{widget.label}</p>
+          {widget.icon && <WidgetIcon icon={widget.icon} className="w-5 h-5 text-muted-foreground" />}
+        </div>
+        <p className="text-3xl font-bold tabular-nums">{((data?.value as number | string) ?? 0).toLocaleString()}</p>
+        {data?.description !== undefined && (
+          <p className="text-xs text-muted-foreground mt-0.5">{String(data.description)}</p>
+        )}
+        {data?.trend !== undefined && (
+          <p className={`text-xs font-medium mt-0.5 ${(data.trend as number) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+            {(data.trend as number) >= 0 ? '↑' : '↓'} {Math.abs(data.trend as number)}%
+          </p>
+        )}
+      </div>
+    )
+  }
+
   let element: PanelSchemaElementMeta | null = null
 
-  if (widget.component === 'stat') {
-    element = {
-      type: 'stats',
-      stats: [{
-        label: widget.label,
-        value: (data?.value as number | string) ?? 0,
-        ...(data?.description !== undefined && { description: data.description as string }),
-        ...(data?.trend !== undefined && { trend: data.trend as number }),
-      }],
-    }
+  if (false) {
+    // stat handled above
   } else if (widget.component === 'chart') {
     element = {
       type: 'chart',

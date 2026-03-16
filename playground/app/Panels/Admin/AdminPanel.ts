@@ -42,7 +42,7 @@ export const adminPanel = Panel.make('admin')
           .label('Total Articles')
           .component('stat')
           .small()
-          .icon('📝')
+          .icon('file-text')
           .data(async () => ({
             value: await Article.query().count(),
             trend: 5,
@@ -52,7 +52,7 @@ export const adminPanel = Panel.make('admin')
           .label('Total Categories')
           .component('stat')
           .small()
-          .icon('📂')
+          .icon('folder-open')
           .data(async () => ({
             value: await Category.query().count(),
           })),
@@ -61,7 +61,7 @@ export const adminPanel = Panel.make('admin')
           .label('Total Todos')
           .component('stat-progress')
           .small()
-          .icon('✅')
+          .icon('check-circle')
           .data(async () => ({
             value: await Todo.query().where('completed', true).count(),
             max: await Todo.query().count(),
@@ -72,7 +72,8 @@ export const adminPanel = Panel.make('admin')
           .label('Total Users')
           .component('stat')
           .small()
-          .icon('👥')
+          .icon('users')
+          .lazy()
           .data(async () => ({
             value: await User.query().count(),
           })),
