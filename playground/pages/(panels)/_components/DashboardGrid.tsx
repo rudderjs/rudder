@@ -55,6 +55,7 @@ export interface DashboardGridProps {
   label?:         string
   editable?:      boolean
   defaultWidgets: WidgetMeta[]
+  ssrWidgets?:    WidgetWithData[]
   pathSegment:    string
   panelPath:      string
   i18n:           PanelI18n & Record<string, string>
@@ -133,15 +134,17 @@ export function DashboardGrid({
   label,
   editable = true,
   defaultWidgets,
+  ssrWidgets,
   pathSegment,
   panelPath,
   i18n,
   tabId,
 }: DashboardGridProps) {
-  const [widgets, setWidgets] = useState<WidgetWithData[]>([])
-  const [layout, setLayout] = useState<DashboardLayoutItem[]>([])
+  const hasSSR = ssrWidgets && ssrWidgets.length > 0
+  const [widgets, setWidgets] = useState<WidgetWithData[]>(hasSSR ? ssrWidgets : [])
+  const [layout, setLayout] = useState<DashboardLayoutItem[]>(hasSSR ? computeDefaultLayout(defaultWidgets) : [])
   const [editing, setEditing] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!hasSSR)
   const [showPalette, setShowPalette] = useState(false)
   const [settingsWidgetId, setSettingsWidgetId] = useState<string | null>(null)
   const layoutRef = useRef(layout)
@@ -155,19 +158,47 @@ export function DashboardGrid({
   // ── Load widgets + layout ───────────────────────────────────────────────
   useEffect(() => {
     async function load() {
+      // Use SSR widgets if available (skip API for non-lazy)
+      if (ssrWidgets && ssrWidgets.length > 0) {
+        setWidgets(ssrWidgets)
+
+        // Fetch lazy widgets via API
+        const lazyIds = ssrWidgets.filter(w => w.lazy && !w.data).map(w => w.id)
+        if (lazyIds.length > 0) {
+          try {
+            const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
+            const qs = tabQuery(tabId)
+            const res = await fetch(`${base}/widgets${qs}`)
+            if (res.ok) {
+              const body = await res.json() as { widgets: WidgetWithData[] }
+              setWidgets(prev => prev.map(w => {
+                if (!lazyIds.includes(w.id)) return w
+                const fresh = body.widgets.find(fw => fw.id === w.id)
+                return fresh ?? w
+              }))
+            }
+          } catch { /* lazy fetch failed */ }
+        }
+      } else {
+        // No SSR data — fetch everything via API (fallback)
+        try {
+          const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
+          const qs = tabQuery(tabId)
+          const res = await fetch(`${base}/widgets${qs}`)
+          if (res.ok) {
+            const body = await res.json() as { widgets: WidgetWithData[] }
+            setWidgets(body.widgets)
+          }
+        } catch { /* fetch failed */ }
+      }
+
+      // Load layout
       try {
         const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
         const qs = tabQuery(tabId)
-        const [widgetsRes, layoutRes] = await Promise.all([
-          fetch(`${base}/widgets${qs}`),
-          fetch(`${base}/layout${qs}`),
-        ])
-        if (widgetsRes.ok) {
-          const body = await widgetsRes.json() as { widgets: WidgetWithData[] }
-          setWidgets(body.widgets)
-        }
-        if (layoutRes.ok) {
-          const body = await layoutRes.json() as { layout: any[] }
+        const res = await fetch(`${base}/layout${qs}`)
+        if (res.ok) {
+          const body = await res.json() as { layout: any[] }
           if (body.layout.length > 0) {
             // Normalize: ensure each item has a numeric `w` (migrate from old format)
             const normalized: DashboardLayoutItem[] = body.layout.map((item: any) => {
@@ -188,23 +219,50 @@ export function DashboardGrid({
       } catch {
         setLayout(computeDefaultLayout(defaultWidgets))
       }
+
       setLoading(false)
     }
     void load()
   }, [pathSegment, dashboardId, tabId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Polling — re-fetch widgets with pollInterval ───────────────────────
+  useEffect(() => {
+    const pollingWidgets = widgets.filter(w => w.pollInterval && w.pollInterval > 0)
+    if (pollingWidgets.length === 0) return
+
+    const timers: ReturnType<typeof setInterval>[] = []
+
+    for (const pw of pollingWidgets) {
+      const timer = setInterval(async () => {
+        try {
+          const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
+          const tabParam = tabId ? `&tab=${tabId}` : ''
+          const res = await fetch(`${base}/widgets?widget=${pw.id}${tabParam}`)
+          if (res.ok) {
+            const body = await res.json() as { widgets: WidgetWithData[] }
+            const fresh = body.widgets.find(w => w.id === pw.id)
+            if (fresh) {
+              setWidgets(prev => prev.map(w => w.id === pw.id ? fresh : w))
+            }
+          }
+        } catch { /* poll failed */ }
+      }, pw.pollInterval!)
+      timers.push(timer)
+    }
+
+    return () => timers.forEach(t => clearInterval(t))
+  }, [widgets.map(w => `${w.id}:${w.pollInterval}`).join(','), pathSegment, dashboardId, tabId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Save layout ─────────────────────────────────────────────────────────
   const saveLayout = useCallback(async (newLayout: DashboardLayoutItem[]) => {
     try {
       const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
       const qs = tabQuery(tabId)
-      console.log('[DashboardGrid] saving layout:', newLayout.length, 'items')
-      const res = await fetch(`${base}/layout${qs}`, {
+      await fetch(`${base}/layout${qs}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ layout: newLayout }),
       })
-      console.log('[DashboardGrid] save response:', res.status, await res.clone().text())
     } catch (err) { console.error('[DashboardGrid] save failed:', err) }
   }, [pathSegment, dashboardId, tabId])
 

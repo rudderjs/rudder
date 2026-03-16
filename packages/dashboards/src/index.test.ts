@@ -392,6 +392,36 @@ describe('Dashboard schema element', () => {
   })
 })
 
+// ─── Widget — lazy ────────────────────────────────────────
+
+describe('Widget — lazy', () => {
+  it('defaults to not lazy', () => {
+    assert.equal(Widget.make('x').isLazy(), false)
+    assert.equal(Widget.make('x').toMeta().lazy, undefined)
+  })
+
+  it('lazy() sets flag', () => {
+    const w = Widget.make('x').lazy()
+    assert.equal(w.isLazy(), true)
+    assert.equal(w.toMeta().lazy, true)
+  })
+})
+
+// ─── Widget — polling ─────────────────────────────────────
+
+describe('Widget — polling', () => {
+  it('no polling by default', () => {
+    assert.equal(Widget.make('x').getPollInterval(), undefined)
+    assert.equal(Widget.make('x').toMeta().pollInterval, undefined)
+  })
+
+  it('poll(ms) sets interval', () => {
+    const w = Widget.make('x').poll(5000)
+    assert.equal(w.getPollInterval(), 5000)
+    assert.equal(w.toMeta().pollInterval, 5000)
+  })
+})
+
 describe('Dashboard.tab()', () => {
   it('creates a tab with id', () => {
     const tab = Dashboard.tab('overview')

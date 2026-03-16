@@ -99,7 +99,32 @@ export async function resolveSchema(
       continue
     }
 
-    // All other element types (text, heading, stats, chart, list, dashboard, etc.)
+    // Dashboard elements — resolve widget data for SSR
+    if (type === 'dashboard') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dashboard = el as any
+      const meta = dashboard.toMeta()
+
+      // Resolve top-level widget data
+      if (meta.widgets) {
+        meta.widgets = await resolveWidgetData(dashboard.getWidgets(), ctx)
+      }
+
+      // Resolve tab widget data
+      if (meta.tabs) {
+        for (let i = 0; i < meta.tabs.length; i++) {
+          const tab = dashboard.getTabs()[i]
+          if (tab) {
+            meta.tabs[i].widgets = await resolveWidgetData(tab.getWidgets(), ctx)
+          }
+        }
+      }
+
+      result.push(meta as PanelSchemaElementMeta)
+      continue
+    }
+
+    // All other element types (text, heading, stats, chart, list, etc.)
     // — pass through their toMeta() directly
     if (typeof (el as any).toMeta === 'function') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,6 +133,30 @@ export async function resolveSchema(
   }
 
   return result
+}
+
+// ─── Dashboard widget data resolver ────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveWidgetData(widgets: any[], ctx: any): Promise<any[]> {
+  return Promise.all(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    widgets.map(async (widget: any) => {
+      const meta = widget.toMeta()
+      // Skip data resolution for lazy widgets
+      if (meta.lazy) return { ...meta, data: null }
+
+      const dataFn = widget.getDataFn?.()
+      if (dataFn) {
+        try {
+          meta.data = await dataFn({ user: ctx.user })
+        } catch {
+          meta.data = null
+        }
+      }
+      return meta
+    })
+  )
 }
 
 // ─── Helpers ───────────────────────────────────────────────

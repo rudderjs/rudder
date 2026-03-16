@@ -22,6 +22,8 @@ export interface WidgetMeta {
   maxSize?:       WidgetSize
   settings?:      WidgetSettingsField[]
   componentPath?: string
+  lazy?:          boolean
+  pollInterval?:  number
 }
 
 export class Widget {
@@ -36,6 +38,8 @@ export class Widget {
   private _maxSize?:     WidgetSize
   private _settings:     WidgetSettingsField[] = []
   private _componentPath?: string
+  private _lazy = false
+  private _pollInterval?: number
 
   protected constructor(id: string) {
     this._id = id
@@ -51,6 +55,12 @@ export class Widget {
   description(d: string): this { this._description = d; return this }
   icon(i: string): this { this._icon = i; return this }
   data(fn: (ctx?: unknown, settings?: Record<string, unknown>) => Promise<unknown>): this { this._dataFn = fn; return this }
+
+  /** Defer data loading to client-side. Shows skeleton on initial render. */
+  lazy(): this { this._lazy = true; return this }
+
+  /** Re-fetch widget data every N milliseconds. First render uses SSR data. */
+  poll(ms: number): this { this._pollInterval = ms; return this }
 
   minSize(s: WidgetSize): this { this._minSize = s; return this }
   maxSize(s: WidgetSize): this { this._maxSize = s; return this }
@@ -80,6 +90,8 @@ export class Widget {
   getComponent(): string { return this._component }
   getDataFn(): ((ctx?: unknown, settings?: Record<string, unknown>) => Promise<unknown>) | undefined { return this._dataFn }
   getComponentPath(): string | undefined { return this._componentPath }
+  isLazy(): boolean { return this._lazy }
+  getPollInterval(): number | undefined { return this._pollInterval }
 
   toMeta(): WidgetMeta {
     return {
@@ -93,6 +105,8 @@ export class Widget {
       ...(this._maxSize !== undefined && { maxSize: this._maxSize }),
       ...(this._settings.length > 0 && { settings: this._settings }),
       ...(this._componentPath !== undefined && { componentPath: this._componentPath }),
+      ...(this._lazy && { lazy: true }),
+      ...(this._pollInterval !== undefined && { pollInterval: this._pollInterval }),
     }
   }
 }

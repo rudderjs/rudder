@@ -71,6 +71,7 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
           label={dashboard.label}
           editable={dashboard.editable}
           defaultWidgets={dashboard.widgets}
+          ssrWidgets={dashboard.widgets}
           pathSegment={pathSegment}
           panelPath={panelPath}
           i18n={i18n}
@@ -107,6 +108,7 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
                 tabId={tab.id}
                 editable={dashboard.editable}
                 defaultWidgets={tab.widgets}
+                ssrWidgets={tab.widgets}
                 pathSegment={pathSegment}
                 panelPath={panelPath}
                 i18n={i18n}
