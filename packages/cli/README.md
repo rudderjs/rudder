@@ -82,6 +82,19 @@ pnpm artisan vendor:publish --tag=panels-pages --force   # overwrite existing fi
 
 Assets are declared by packages in their service provider's `boot()` method via `this.publishes()`. See `@boostkit/core` for the `ServiceProvider` API.
 
+### Database Commands
+
+Laravel-style migration commands that delegate to the appropriate ORM tool. The CLI auto-detects which ORM is installed by checking `package.json` for `@boostkit/orm-prisma` or `@boostkit/orm-drizzle`.
+
+| Command | Description | Prisma | Drizzle |
+|---|---|---|---|
+| `artisan migrate` | Run pending migrations | `prisma migrate dev` (dev) / `prisma migrate deploy` (prod) | `drizzle-kit migrate` |
+| `artisan migrate:fresh` | Drop all + re-migrate | `prisma migrate reset --force` | `drizzle-kit migrate --force` |
+| `artisan migrate:status` | Show migration status | `prisma migrate status` | `drizzle-kit check` |
+| `artisan make:migration <name>` | Create new migration | `prisma migrate dev --create-only --name <name>` | `drizzle-kit generate --name <name>` |
+| `artisan db:push` | Push schema directly (no migration file) | `prisma db push` | `drizzle-kit push` |
+| `artisan db:generate` | Regenerate DB client | `prisma generate` | No-op (Drizzle schemas are TypeScript) |
+
 ### `route:list`
 
 Lists all registered API routes (from `@boostkit/router`) and Vike filesystem page routes.
