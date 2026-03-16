@@ -41,7 +41,7 @@ export const adminPanel = Panel.make('admin')
       Stat.make('Total Users').value(await User.query().count()),
     ]),
 
-    // ── Standalone widgets (static, no customization) ──────────
+    // ── Standalone widgets (ssr, static, no customization) ──────────
     Widget.make('articles-overview')
       .label('Published Articles')
       .component('stat')
@@ -83,6 +83,7 @@ export const adminPanel = Panel.make('admin')
           .label('Total Articles')
           .component('stat')
           .small()
+          .lazy()
           .icon('file-text')
           .data(async () => ({
             value: await Article.query().count(),
