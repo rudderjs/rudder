@@ -34,6 +34,27 @@ export const adminPanel = Panel.make('admin')
     Heading.make(`Welcome back${ctx.user?.name ? `, ${ctx.user.name}` : ''}.`),
     Text.make('Here\'s a quick overview of your content.'),
 
+    // ── Standalone widgets (static, no customization) ──────────
+    Widget.make('articles-overview')
+      .label('Published Articles')
+      .component('stat')
+      .icon('newspaper')
+      .data(async () => ({
+        value: await Article.query().count(),
+        trend: 8,
+        description: 'Total published articles',
+      })),
+
+    Widget.make('todo-progress')
+      .label('Todo Progress')
+      .component('stat-progress')
+      .icon('list-checks')
+      .data(async () => ({
+        value: await Todo.query().where('completed', true).count(),
+        max: await Todo.query().count(),
+        label: 'Tasks completed',
+      })),
+
     // ── User-customizable dashboard (drag/resize/settings) ───
     Dashboard.make('overview')
       .label('Overview')

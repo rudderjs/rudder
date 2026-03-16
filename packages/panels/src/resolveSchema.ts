@@ -157,6 +157,27 @@ export async function resolveSchema(
       continue
     }
 
+    // Standalone widget — resolve data for SSR, pass through
+    if (type === 'widget') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const widget = el as any
+      const meta = widget.toMeta()
+
+      if (!meta.lazy) {
+        const dataFn = widget.getDataFn?.()
+        if (dataFn) {
+          try {
+            meta.data = await dataFn({ user: ctx.user })
+          } catch {
+            meta.data = null
+          }
+        }
+      }
+
+      result.push(meta as PanelSchemaElementMeta)
+      continue
+    }
+
     // All other element types (text, heading, stats, chart, list, etc.)
     // — pass through their toMeta() directly
     if (typeof (el as any).toMeta === 'function') {

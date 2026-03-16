@@ -5,6 +5,7 @@ import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { WidgetRenderer } from '../_components/WidgetRenderer.js'
 import { DashboardGrid }  from '../_components/DashboardGrid.js'
+import { StandaloneWidget } from '../_components/StandaloneWidget.js'
 import type { PanelI18n } from '@boostkit/panels'
 import type { Data } from './+data.js'
 
@@ -22,6 +23,18 @@ export default function PanelRootPage() {
   return (
     <div className="flex flex-col gap-6">
       {schemaData.map((el, i) => {
+        // Standalone widget — static, no customization
+        if (el.type === 'widget') {
+          return (
+            <StandaloneWidget
+              key={`widget-${(el as any).id ?? i}`}
+              widget={el as any}
+              panelPath={panelMeta.path}
+              pathSegment={pathSegment}
+              i18n={i18n}
+            />
+          )
+        }
         // Dashboard elements get special rendering with DashboardGrid
         if (el.type === 'dashboard') {
           return (

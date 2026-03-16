@@ -84,6 +84,7 @@ export class Widget {
   /** Preset: { w: 12, h: 3 } */
   large(): this { this._defaultSize = { w: 12, h: 3 }; return this }
 
+  getType(): 'widget' { return 'widget' }
   getId(): string { return this._id }
   getLabel(): string { return this._label }
   getDefaultSize(): WidgetSize { return this._defaultSize }
@@ -93,8 +94,9 @@ export class Widget {
   isLazy(): boolean { return this._lazy }
   getPollInterval(): number | undefined { return this._pollInterval }
 
-  toMeta(): WidgetMeta {
+  toMeta(): WidgetMeta & { type: 'widget' } {
     return {
+      type:        'widget',
       id:          this._id,
       label:       this._label,
       defaultSize: this._defaultSize,
