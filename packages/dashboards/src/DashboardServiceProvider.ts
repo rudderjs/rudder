@@ -38,6 +38,22 @@ export function dashboard(): new (app: Application) => ServiceProvider {
         return // panels or router not available
       }
 
+      // Resolve user from auth session (same pattern as PanelServiceProvider)
+      async function resolveUserId(req: any): Promise<string | undefined> {
+        if (req.user?.id) return req.user.id as string
+        try {
+          const { app } = await import('@boostkit/core') as any
+          const auth = app().make('auth')
+          if (auth?.api?.getSession) {
+            const session = await auth.api.getSession({
+              headers: new Headers(req.headers as Record<string, string>),
+            })
+            return session?.user?.id as string | undefined
+          }
+        } catch { /* auth not configured */ }
+        return undefined
+      }
+
       for (const panel of PanelRegistry.all()) {
         const panelName = panel.getName()
         const base = `${panel.getApiBase()}/_dashboard`
@@ -89,7 +105,8 @@ export function dashboard(): new (app: Application) => ServiceProvider {
               try {
                 const settingsStr = req.query?.settings as string | undefined
                 const settings = settingsStr ? JSON.parse(settingsStr) : undefined
-                data = await dataFn({ user: req.user }, settings)
+                const uid = await resolveUserId(req)
+                data = await dataFn({ user: uid ? { id: uid, ...req.user } : req.user }, settings)
               } catch { /* data resolution failed */ }
             }
             results.push({ ...meta, data })
@@ -99,7 +116,7 @@ export function dashboard(): new (app: Application) => ServiceProvider {
 
         // GET /_dashboard/:dashId/layout — user's saved layout (or default)
         router.get(`${base}/:dashId/layout`, async (req: any, res: any) => {
-          const userId = req.user?.id as string | undefined
+          const userId = await resolveUserId(req)
           const dashId = req.params.dashId as string
           const tabId = req.query?.tab as string | undefined
           const layoutKey = tabId ? `${dashId}:${tabId}` : dashId
@@ -126,7 +143,7 @@ export function dashboard(): new (app: Application) => ServiceProvider {
 
         // PUT /_dashboard/:dashId/layout — save user's layout
         router.put(`${base}/:dashId/layout`, async (req: any, res: any) => {
-          const userId = req.user?.id as string | undefined
+          const userId = await resolveUserId(req)
           if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
           }
