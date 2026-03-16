@@ -18,6 +18,7 @@ import {
   RelationField,
   ComputedField,
   Action,
+  Tab,
 } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 
@@ -206,6 +207,14 @@ export class ArticleResource extends Resource {
         })
         .display((v) => `${v} words`),
 
+    ]
+  }
+
+  tabs() {
+    return [
+      Tab.make('all').label('All'),
+      Tab.make('published').label('Published').icon('circle-check').query((q: any) => q.where('draftStatus', 'published')),
+      Tab.make('draft').label('Drafts').icon('pencil-line').query((q: any) => q.where('draftStatus', 'draft')),
     ]
   }
 

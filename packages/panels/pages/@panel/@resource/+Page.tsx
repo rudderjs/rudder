@@ -427,27 +427,28 @@ export default function ResourceListPage() {
         </div>
       )}
 
-      {/* ── Draft filter tabs ──────────────────────────────── */}
-      {hasSoftDeletes && !isTrashed && (resourceMeta as any).draftable && (
-        <div className="flex items-center gap-1 mb-4">
-          {([
-            { key: null,    label: i18n.all ?? 'All' },
-            { key: 'true',  label: (i18n as any).draft ?? 'Draft' },
-            { key: 'false', label: (i18n as any).published ?? 'Published' },
-          ] as { key: string | null; label: string }[]).map(({ key, label }) => (
-            <a
-              key={key ?? 'all'}
-              href={`/${pathSegment}/${slug}${key !== null ? `?draft=${key}` : ''}`}
-              className={[
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                draftFilter === key || (key === null && draftFilter === null)
-                  ? 'bg-primary text-primary-foreground font-medium'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              ].join(' ')}
-            >
-              {label}
-            </a>
-          ))}
+      {/* ── List tabs ────────────────────────────────────────── */}
+      {resourceMeta.tabs.length > 0 && (
+        <div className="flex items-center gap-1 mb-4 border-b">
+          {resourceMeta.tabs.map((tab) => {
+            const activeTab = urlParams.get('tab') ?? ''
+            const isActive  = tab.name === activeTab || (!activeTab && tab.name === resourceMeta.tabs[0]!.name)
+            return (
+              <a
+                key={tab.name}
+                href={`/${pathSegment}/${slug}${tab.name !== resourceMeta.tabs[0]!.name ? `?tab=${tab.name}` : ''}`}
+                className={[
+                  'inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                  isActive
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+                ].join(' ')}
+              >
+                {tab.icon && <ResourceIcon icon={tab.icon} className="size-4" />}
+                {tab.label}
+              </a>
+            )
+          })}
         </div>
       )}
 

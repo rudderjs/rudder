@@ -1,6 +1,7 @@
 import type { Field, FieldMeta } from './Field.js'
 import type { Filter } from './Filter.js'
 import type { Action } from './Action.js'
+import type { Tab, ListTabMeta } from './Tab.js'
 import type { Section, SectionMeta } from './Section.js'
 import type { Tabs, TabsMeta } from './Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
@@ -19,6 +20,7 @@ export interface ResourceMeta {
   icon:           string | undefined
   fields:         SchemaItemMeta[]
   filters:        ReturnType<Filter['toMeta']>[]
+  tabs:           ListTabMeta[]
   actions:        ReturnType<Action['toMeta']>[]
   defaultSort?:      string
   defaultSortDir?:   'ASC' | 'DESC'
@@ -153,6 +155,9 @@ export class Resource {
   /** Define table filters. */
   filters(): Filter[] { return [] }
 
+  /** Define tab filters for the list view (e.g. All / Published / Draft). */
+  tabs(): Tab[] { return [] }
+
   /** Define record actions (bulk or single). */
   actions(): Action[] { return [] }
 
@@ -216,6 +221,7 @@ export class Resource {
       icon:          Cls.icon,
       fields:        fieldsMeta,
       filters:       this.filters().map((f) => f.toMeta()),
+      tabs:          this.tabs().map((t) => t.toMeta()),
       actions:       this.actions().map((a) => a.toMeta()),
       persistTableState:  Cls.persistTableState,
       perPage:         Cls.perPage,

@@ -43,6 +43,15 @@ export async function data(pageContext: PageContextServer) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = Model.query()
 
+    // Tab filter — apply active tab's query modifier
+    const activeTab = params.get('tab') ?? ''
+    if (activeTab) {
+      const tabs = resource.tabs()
+      const tab  = tabs.find((t) => t.getName() === activeTab)
+      const tabQuery = tab?.getQueryFn()
+      if (tabQuery) q = tabQuery(q)
+    }
+
     // Soft deletes — filter by trashed status
     const hasSoftDeletes = (ResourceClass as any).softDeletes === true
     const trashed        = params.get('trashed') === 'true'

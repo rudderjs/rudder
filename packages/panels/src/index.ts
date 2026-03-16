@@ -79,6 +79,11 @@ export { RichContentField } from './fields/RichContentField.js'
 export { editorRegistry } from './EditorRegistry.js'
 export type { RichContentEditorProps, CollaborativePlainTextProps } from './EditorRegistry.js'
 
+// ─── Tabs ───────────────────────────────────────────────────
+
+export { Tab } from './Tab.js'
+export type { ListTabMeta } from './Tab.js'
+
 // ─── Filters ───────────────────────────────────────────────
 
 export { Filter, SelectFilter, SearchFilter } from './Filter.js'
