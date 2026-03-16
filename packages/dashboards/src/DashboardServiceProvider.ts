@@ -172,6 +172,39 @@ export function dashboard(): new (app: Application) => ServiceProvider {
 
           return res.json({ ok: true })
         })
+
+        // GET /_widgets/:widgetId — resolve a standalone widget's data
+        // Used by lazy standalone widgets that weren't resolved at SSR time
+        router.get(`${panel.getApiBase()}/_widgets/:widgetId`, async (req: any, res: any) => {
+          const widgetId = req.params.widgetId as string
+
+          // Find the widget in the schema (resolve async schema if needed)
+          const schema = typeof schemaDef === 'function'
+            ? await schemaDef({ user: req.user, headers: req.headers ?? {}, path: req.url })
+            : schemaDef ?? []
+
+          let widget: any = null
+          for (const el of schema) {
+            if (typeof el?.getType === 'function' && el.getType() === 'widget' && el.getId() === widgetId) {
+              widget = el
+              break
+            }
+          }
+
+          if (!widget) return res.status(404).json({ error: 'Widget not found' })
+
+          const meta = widget.toMeta()
+          const dataFn = widget.getDataFn?.()
+          if (dataFn) {
+            try {
+              meta.data = await dataFn({ user: req.user })
+            } catch {
+              meta.data = null
+            }
+          }
+
+          return res.json({ widget: meta })
+        })
       }
     }
   }
