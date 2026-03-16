@@ -209,14 +209,17 @@ export default function ResourceListPage() {
     void navigate(url.pathname + url.search)
   }
 
-  function applySearch(e: React.FormEvent) {
-    e.preventDefault()
-    const q   = searchRef.current?.value ?? ''
-    const url = new URL(window.location.href)
-    if (q) url.searchParams.set('search', q)
-    else url.searchParams.delete('search')
-    url.searchParams.delete('page')
-    navigateAndPersist(url)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleSearchInput(value: string) {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      const url = new URL(window.location.href)
+      if (value.trim()) url.searchParams.set('search', value.trim())
+      else url.searchParams.delete('search')
+      url.searchParams.delete('page')
+      navigateAndPersist(url)
+    }, 350)
   }
 
   // ── Sort ────────────────────────────────────────────────
@@ -444,22 +447,30 @@ export default function ResourceListPage() {
 
           {/* Search */}
           {hasSearch && (
-            <form onSubmit={applySearch} className="flex gap-2">
+            <div className="relative group">
+              <ResourceIcon icon="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
               <input
                 ref={searchRef}
-                type="search"
+                type="text"
                 name="search"
                 defaultValue={currentSearch}
                 placeholder={t(i18n.search, { label: resourceMeta.label.toLowerCase() })}
-                className="h-9 px-3 text-sm rounded-md border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[220px]"
+                onChange={(e) => handleSearchInput(e.currentTarget.value)}
+                className="h-9 pl-8 pr-8 text-sm rounded-md border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[220px]"
               />
-              <button
-                type="submit"
-                className="h-9 px-3 text-sm rounded-md border bg-background hover:bg-accent transition-colors"
-              >
-                {i18n.searchButton}
-              </button>
-            </form>
+              {currentSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (searchRef.current) searchRef.current.value = ''
+                    handleSearchInput('')
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ResourceIcon icon="x" className="size-4" />
+                </button>
+              )}
+            </div>
           )}
 
           {/* Select filters */}
