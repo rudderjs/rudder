@@ -50,18 +50,27 @@ export async function data(pageContext: PageContextServer) {
   // Feature flags (independent)
   const versioned     = (ResourceClass as any).versioned ?? false
   const draftable     = (ResourceClass as any).draftable ?? false
-  // Derive collaborative from fields — true if any field has .collaborative()
-  const collaborative = flattenFields(resource.fields()).some(
-    (f: any) => typeof f.isCollaborative === 'function' && f.isCollaborative()
+
+  const allFields = flattenFields(resource.fields())
+
+  // Yjs needed if any field has .collaborative() or .persist('websocket'|'indexeddb')
+  const needsYjs = allFields.some(
+    (f: any) => typeof f.isYjs === 'function' && f.isYjs()
   )
 
-  // Collaborative: seed ydoc on first load, then merge ydoc values into record
-  if (record && collaborative) {
+  // Check if any field actually needs websocket (vs indexeddb-only)
+  const needsWebsocket = allFields.some((f: any) => {
+    const providers: string[] = typeof f.getYjsProviders === 'function' ? f.getYjsProviders() : []
+    return providers.includes('websocket')
+  })
+
+  // Seed Y.Doc on first load (needed for both websocket and indexeddb)
+  if (record && needsYjs && needsWebsocket) {
     try {
       const { Live } = await import('@boostkit/live')
       const docName = `panel:${slug}:${id}`
       const fieldData: Record<string, unknown> = {}
-      for (const f of flattenFields(resource.fields())) {
+      for (const f of allFields) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const name = (f as any).getName() as string
         if (name in (record as Record<string, unknown>)) {
@@ -74,14 +83,24 @@ export async function data(pageContext: PageContextServer) {
     }
   }
 
-  // Read client-side providers from live config
-  let liveProviders: string[] = ['websocket']
-  if (collaborative) {
+  // Collect Yjs providers needed by fields
+  const fieldProviders = new Set<string>()
+  for (const f of allFields) {
+    const providers: string[] = typeof (f as any).getYjsProviders === 'function' ? (f as any).getYjsProviders() : []
+    for (const p of providers) fieldProviders.add(p)
+  }
+
+  // Merge with config-level providers (only if websocket is needed)
+  let liveProviders: string[] = [...fieldProviders]
+  if (needsWebsocket) {
     try {
       const configs = await import('../../../../../../config/index.js')
-      liveProviders = (configs.default as any)?.live?.providers ?? ['websocket']
+      const configProviders: string[] = (configs.default as any)?.live?.providers ?? ['websocket']
+      for (const p of configProviders) {
+        if (!liveProviders.includes(p)) liveProviders.push(p)
+      }
     } catch {
-      // config not available — use default
+      if (!liveProviders.includes('websocket')) liveProviders.push('websocket')
     }
   }
 
@@ -90,9 +109,9 @@ export async function data(pageContext: PageContextServer) {
     panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser,
     versioned,
     draftable,
-    collaborative,
-    wsLivePath: collaborative ? '/ws-live' : null,
-    docName:    collaborative ? `panel:${slug}:${id}` : null,
-    liveProviders: collaborative ? liveProviders : [],
+    yjs: needsYjs,
+    wsLivePath: needsWebsocket ? '/ws-live' : null,
+    docName:    needsYjs ? `panel:${slug}:${id}` : null,
+    liveProviders: needsYjs ? liveProviders : [],
   }
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 interface CollaborativeField {
   name:          string
-  collaborative?: boolean
+  yjs?: boolean
   /** Set to true for text/textarea/content fields that should use Y.Text for character-level sync */
   textField?:    boolean
 }
@@ -93,8 +93,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       docRef.current = doc
 
       const fieldsMap  = doc.getMap('fields')
-      const textFields = options!.fields.filter(f => f.collaborative && f.textField)
-      const mapFields  = options!.fields.filter(f => f.collaborative && !f.textField)
+      const textFields = options!.fields.filter(f => f.yjs && f.textField)
+      const mapFields  = options!.fields.filter(f => f.yjs && !f.textField)
 
       // Create Y.Text instances for text fields
       const yTexts = new Map<string, any>()
@@ -145,10 +145,31 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
         })
       }
 
+      // ── IndexedDB provider (offline persistence) ──────────
+      if (useIndexeddb) {
+        import('y-indexeddb').then(({ IndexeddbPersistence }) => {
+          if (destroyed) return
+          const idb = new IndexeddbPersistence(options!.docName, doc)
+          idbRef.current = idb
+
+          // If no WebSocket, seed after IDB syncs (restores offline data)
+          if (!useWebsocket) {
+            idb.once('synced', () => {
+              seedAfterSync()
+              setSynced(true)
+            })
+          }
+        }).catch(e => {
+          console.warn('[useCollaborativeForm] y-indexeddb not available:', e)
+          // If IDB was the only provider, seed immediately as fallback
+          if (!useWebsocket) {
+            seedAfterSync()
+            setSynced(true)
+          }
+        })
+      }
+
       // ── WebSocket provider (real-time collaboration) ────────
-      // This shared doc handles Y.Map fields (toggles, selects, etc.).
-      // Text-based fields each have their own Y.Doc + WS via Lexical.
-      // Connect immediately — no deferred sync needed.
       if (useWebsocket) {
         const { WebsocketProvider } = await import('y-websocket')
         if (destroyed) return
@@ -178,24 +199,17 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
         wsProvider.awareness.on('change', syncPresences)
 
         // Seed form fields (Y.Map) after WS sync
-        wsProvider.once('synced', () => seedAfterSync())
-
-        // Create IDB provider if configured
-        if (useIndexeddb) {
-          import('y-indexeddb').then(({ IndexeddbPersistence }) => {
-            if (!destroyed) {
-              idbRef.current = new IndexeddbPersistence(options!.docName, doc)
-            }
-          }).catch(e => {
-            console.warn('[useCollaborativeForm] y-indexeddb not available:', e)
-          })
-        }
-      } else {
-        // No WebSocket provider — seed immediately
-        seedAfterSync()
+        wsProvider.once('synced', () => {
+          seedAfterSync()
+          setSynced(true)
+        })
       }
 
-      setSynced(true)
+      // No providers at all — seed immediately
+      if (!useWebsocket && !useIndexeddb) {
+        seedAfterSync()
+        setSynced(true)
+      }
     }
 
     void connect()

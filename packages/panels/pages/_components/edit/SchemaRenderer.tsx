@@ -50,8 +50,8 @@ export function SchemaRenderer({
           uploadBase={uploadBase}
           i18n={i18n}
           disabled={fieldDisabled}
-          awareness={field.collaborative && awareness ? awareness : null}
-          yDoc={field.collaborative && getDoc ? getDoc() : null}
+          awareness={field.yjs && awareness ? awareness : null}
+          yDoc={field.yjs && getDoc ? getDoc() : null}
           yDocSynced={synced}
           userName={userName}
           userColor={userColor}

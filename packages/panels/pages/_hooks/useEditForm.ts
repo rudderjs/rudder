@@ -11,7 +11,7 @@ interface UseEditFormOptions {
   backHref:      string
   versioned:     boolean
   draftable:     boolean
-  collaborative: boolean
+  yjs: boolean
   i18n:          PanelI18n & Record<string, string>
   syncAllFieldsToDoc?:    (values: Record<string, unknown>) => void
   setCollaborativeValue?: (name: string, value: unknown) => void
@@ -19,13 +19,15 @@ interface UseEditFormOptions {
   setFormKey:              (fn: ((k: number) => number) | number) => void
   formKey:                 number
   isSyncingRef:            React.MutableRefObject<boolean>
+  /** Called after a successful manual save (before navigation). */
+  onSaved?:                () => void
 }
 
 export function useEditForm(opts: UseEditFormOptions) {
   const {
     pathSegment, slug, id, initialValues, backHref,
-    versioned, draftable, collaborative, i18n,
-    syncAllFieldsToDoc, setCollaborativeValue, selfSyncFields, setFormKey, formKey, isSyncingRef,
+    versioned, draftable, yjs, i18n,
+    syncAllFieldsToDoc, setCollaborativeValue, selfSyncFields, setFormKey, formKey, isSyncingRef, onSaved,
   } = opts
 
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
@@ -68,7 +70,7 @@ export function useEditForm(opts: UseEditFormOptions) {
     setErrors({})
     try {
       // Don't sync to Y.Doc before save if in restore preview
-      if (collaborative && syncAllFieldsToDoc && !isRestorePreview) {
+      if (yjs && syncAllFieldsToDoc && !isRestorePreview) {
         syncAllFieldsToDoc(values)
       }
 
@@ -115,7 +117,7 @@ export function useEditForm(opts: UseEditFormOptions) {
         toast.success(i18n.savedToast)
       }
 
-      if (collaborative && isRestorePreview) {
+      if (yjs && isRestorePreview) {
         // Push restored values to the shared Y.Doc (still connected)
         // so other users get the update in real-time
         if (syncAllFieldsToDoc) syncAllFieldsToDoc(values)
@@ -129,6 +131,7 @@ export function useEditForm(opts: UseEditFormOptions) {
         isSyncingRef.current = false
       }
 
+      onSaved?.()
       void navigate(backHref)
     } catch {
       toast.error(i18n.saveError)

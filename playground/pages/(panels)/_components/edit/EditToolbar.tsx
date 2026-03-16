@@ -1,10 +1,11 @@
 import type { PanelI18n } from '@boostkit/panels'
 import { t } from '../../_lib/formHelpers.js'
+import type { AutosaveStatus } from '../../_hooks/useAutosave.js'
 
 interface Presence { name: string; color: string }
 
 interface Props {
-  collaborative:  boolean
+  yjs:  boolean
   versioned:      boolean
   draftable:      boolean
   connected:      boolean
@@ -13,25 +14,29 @@ interface Props {
   showHistory:    boolean
   onToggleHistory: () => void
   i18n:           PanelI18n & Record<string, string>
+  autosave?:      boolean
+  autosaveStatus?: AutosaveStatus
+  autosaveDirty?: boolean
 }
 
 export function EditToolbar({
-  collaborative, versioned, draftable,
+  yjs, versioned, draftable,
   connected, presences, recordStatus,
   showHistory, onToggleHistory, i18n,
+  autosave, autosaveStatus, autosaveDirty,
 }: Props) {
-  if (!collaborative && !versioned && !draftable) return null
+  if (!yjs && !versioned && !draftable && !autosave) return null
 
   return (
     <div className="flex items-center gap-3 mb-4 text-sm">
-      {collaborative && (
+      {yjs && (
         <span className={`inline-flex items-center gap-1.5 ${connected ? 'text-green-600' : 'text-muted-foreground'}`}>
           <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground'}`} />
           {connected ? (i18n.connectedLive ?? 'Connected') : (i18n.disconnectedLive ?? 'Disconnected')}
         </span>
       )}
 
-      {collaborative && presences.length > 1 && (
+      {yjs && presences.length > 1 && (
         <span className="inline-flex items-center gap-1 text-muted-foreground">
           <span className="flex -space-x-1.5">
             {presences.slice(0, 5).map((p, i) => (
@@ -56,6 +61,38 @@ export function EditToolbar({
             : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
         }`}>
           {recordStatus === 'published' ? (i18n.publishedBadge ?? 'Published') : (i18n.draftBadge ?? 'Draft')}
+        </span>
+      )}
+
+      {autosave && (
+        <span className={`inline-flex items-center gap-1.5 text-xs ${
+          autosaveStatus === 'saving' ? 'text-muted-foreground' :
+          autosaveStatus === 'saved' ? 'text-green-600 dark:text-green-400' :
+          autosaveStatus === 'error' ? 'text-red-600 dark:text-red-400' :
+          autosaveDirty ? 'text-amber-600 dark:text-amber-400' :
+          'text-muted-foreground'
+        }`}>
+          {autosaveStatus === 'saving' && (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+              {i18n.autosaving ?? 'Saving\u2026'}
+            </>
+          )}
+          {autosaveStatus === 'saved' && (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {i18n.autosaved ?? 'Saved'}
+            </>
+          )}
+          {autosaveStatus === 'error' && (i18n.saveError ?? 'Save failed')}
+          {(autosaveStatus === 'idle' && autosaveDirty) && (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {i18n.unsavedChanges ?? 'Unsaved changes'}
+            </>
+          )}
         </span>
       )}
 

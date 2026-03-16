@@ -7,6 +7,9 @@ import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
 import { Breadcrumbs }      from '../../../_components/Breadcrumbs.js'
 import { SchemaRenderer }   from '../../../_components/edit/SchemaRenderer.js'
+import { RestoreBanner }    from '../../../_components/edit/RestoreBanner.js'
+import { useFormPersist }   from '../../../_hooks/useFormPersist.js'
+import { useFieldPersist }  from '../../../_hooks/useFieldPersist.js'
 import { flattenFormFields, t } from '../../../_lib/formHelpers.js'
 import type { SchemaItem }  from '../../../_lib/formHelpers.js'
 import type { FieldMeta }   from '@boostkit/panels'
@@ -66,6 +69,29 @@ export default function CreatePage() {
     setErrors((prev) => ({ ...prev, [name]: [] }))
   }
 
+  // ── Per-field persist (silent localStorage) ────────────────
+  const fieldPersistKey = `bk:${pathSegment}:${slug}:create`
+  const { clearPersistedFields } = useFieldPersist({
+    storageKeyPrefix: fieldPersistKey,
+    formFields,
+    values,
+    setValue,
+  })
+
+  // ── Form persist (localStorage backup) ─────────────────────
+  const persistEnabled = resourceMeta.persistFormState ?? false
+  const storageKey = `bk:${pathSegment}:${slug}:create`
+
+  const persistOps = useFormPersist({
+    storageKey,
+    enabled: persistEnabled,
+    values,
+    initialValues,
+    onRestore: (restored) => {
+      setValues((prev) => ({ ...prev, ...restored }))
+    },
+  })
+
   // Auto-generate slug from source field
   useEffect(() => {
     const slugFields = formFields.filter((f) => f.type === 'slug' && f.extra?.['from'])
@@ -95,6 +121,8 @@ export default function CreatePage() {
         return
       }
       if (res.ok) {
+        persistOps.clearDraft()
+        clearPersistedFields()
         toast.success(t(i18n.createdToast, { singular: resourceMeta.labelSingular }))
         void navigate(backHref)
       } else {
@@ -114,6 +142,15 @@ export default function CreatePage() {
         { label: resourceMeta.label, href: `/${pathSegment}/${slug}` },
         { label: t(i18n.create, { singular: resourceMeta.labelSingular }) },
       ]} />
+
+      {persistOps.showBanner && persistOps.storedTimestamp && (
+        <RestoreBanner
+          timestamp={persistOps.storedTimestamp}
+          onRestore={persistOps.restore}
+          onDismiss={persistOps.dismiss}
+          i18n={i18n}
+        />
+      )}
 
       <div className="max-w-2xl">
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">

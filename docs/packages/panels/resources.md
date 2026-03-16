@@ -65,14 +65,16 @@ export class UserResource extends Resource {
 
 ## Feature Flags
 
-Resources support four static feature flags. Collaborative mode is derived automatically from fields.
+Resources support several static feature flags. Collaborative mode is derived automatically from fields.
 
 ```ts
 export class ArticleResource extends Resource {
-  static live          = true   // table auto-refreshes on save
-  static versioned     = true   // version history with JSON snapshots
-  static draftable     = true   // draft/publish workflow
-  static softDeletes   = true   // trash & restore
+  static live              = true               // table auto-refreshes on save
+  static versioned         = true               // version history with JSON snapshots
+  static draftable         = true               // draft/publish workflow
+  static softDeletes       = true               // trash & restore
+  static autosave          = true               // periodic server save (default 30s)
+  static persistFormState  = true               // localStorage backup + restore banner
 }
 ```
 
@@ -99,6 +101,79 @@ Records have a `draftStatus` field (`'draft'` | `'published'`). Create defaults 
 Delete sets `deletedAt` instead of removing. List view adds a "View Trash" toggle. Trashed records can be restored or permanently deleted (with confirmation).
 
 **Requirements**: `deletedAt DateTime?` column on the model.
+
+### Autosave (`static autosave = true`)
+
+Periodically saves form changes to the server without requiring the user to click Save. Only applies to the edit page (create requires explicit submission).
+
+```ts
+export class ArticleResource extends Resource {
+  static autosave = true                  // enable with default 30s interval
+  // or
+  static autosave = { interval: 10000 }  // custom interval (ms)
+}
+```
+
+The edit toolbar shows a status indicator:
+- **Unsaved changes** — form is dirty, waiting for next interval
+- **Saving...** — autosave request in progress
+- **Saved** — autosave succeeded (fades after 3s)
+
+Autosave skips when: a manual save is in progress, the form is in version restore preview, or no changes have been made since the last save. Does not create version snapshots (only manual save does).
+
+### Form State Persistence (`static persistFormState = true`)
+
+Backs up form values to `localStorage` as the user types. On page reload or browser crash, a restore banner offers to recover the draft. Applies to both create and edit pages.
+
+```ts
+export class ArticleResource extends Resource {
+  static persistFormState = true
+}
+```
+
+Features:
+- **Restore banner** — "You have unsaved changes from 5m ago. Restore / Discard"
+- **beforeunload warning** — browser confirms before leaving with unsaved changes
+- Drafts are cleared on successful save (manual or autosave)
+
+The two flags are independent — use either or both:
+
+| Config | Behavior |
+|--------|----------|
+| `autosave` only | Server saves every N seconds. No localStorage, no restore banner. |
+| `persistFormState` only | localStorage backup + restore banner + beforeunload. Manual save only. |
+| Both | localStorage catches crashes between autosave intervals. |
+
+### Per-Field Persist (`.persist()`)
+
+For granular control, add `.persist()` to individual fields. Values are silently saved and restored — no banner, no prompt.
+
+```ts
+fields() {
+  return [
+    // localStorage — silent save/restore per field
+    TextField.make('title').persist(),
+
+    // y-indexeddb — Yjs offline persistence (survives refresh)
+    TextField.make('body').persist('indexeddb'),
+
+    // y-websocket — Yjs real-time sync (like .collaborative())
+    TextField.make('notes').persist('websocket'),
+
+    // Both Yjs providers — real-time + offline
+    TextField.make('content').persist(['websocket', 'indexeddb']),
+  ]
+}
+```
+
+| Mode | Mechanism |
+|---|---|
+| `.persist()` | localStorage — silent save/restore per field |
+| `.persist('indexeddb')` | y-indexeddb — Y.Doc survives browser refresh |
+| `.persist('websocket')` | y-websocket — real-time sync between editors |
+| `.persist(['websocket', 'indexeddb'])` | Both — real-time + offline persistence |
+
+`.persist()` is independent from `persistFormState`. Use `persistFormState` for full-form backup with a restore banner. Use `.persist()` for individual fields that should quietly survive page reloads.
 
 ### Collaborative Editing
 
@@ -145,7 +220,10 @@ Each text-based collaborative field gets its own WebSocket room (e.g., `panel:ar
 | `draftable + versioned` | Draft/publish + version history on each publish. |
 | `.collaborative()` fields | Real-time co-editing. Save goes to DB. |
 | `.collaborative()` + `versioned` | Co-edit + version snapshots with restore. |
-| All flags | Full power: co-edit, draft/publish, version history, trash. |
+| `autosave` only | Periodic server save, status indicator in toolbar. |
+| `persistFormState` only | localStorage backup, restore banner, beforeunload. |
+| `autosave + persistFormState` | Server autosave + localStorage crash safety net. |
+| All flags | Full power: co-edit, draft/publish, version history, trash, autosave, persist. |
 
 ### Required Prisma Models
 

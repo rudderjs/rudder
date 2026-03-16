@@ -31,7 +31,9 @@ export interface FieldMeta {
   component?:          string
   conditions?:         Condition[]
   displayTransformed?: boolean
-  collaborative?:      boolean
+  yjs?:                boolean
+  persist?:            'localStorage' | string[]
+  yjsProviders?:      string[]
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -51,7 +53,9 @@ export abstract class Field {
   protected _editableFn?: (ctx: unknown) => boolean
   protected _validateFn?: (value: unknown, data: Record<string, unknown>) => Promise<string | true> | string | true
   protected _displayFn?: (value: unknown, record: unknown) => unknown
-  protected _collaborative = false
+  protected _yjs = false
+  protected _yjsProviders: string[] = []
+  protected _persist: false | 'localStorage' | string[] = false
 
   constructor(name: string) {
     this._name = name
@@ -264,16 +268,56 @@ export abstract class Field {
 
   /**
    * Enable real-time collaborative editing for this field.
-   * Value syncs live via Yjs between all connected editors.
-   * Requires `static collaborative = true` on the resource.
+   * Shorthand for `.persist('websocket')` — syncs live via Yjs.
    */
   collaborative(value = true): this {
-    this._collaborative = value
+    this._yjs = value
+    if (value && !this._yjsProviders.includes('websocket')) {
+      this._yjsProviders.push('websocket')
+    }
     return this
   }
 
   /** @internal */
-  isCollaborative(): boolean { return this._collaborative }
+  /** @internal — true when this field needs a Y.Doc (collaborative or yjs-persist). */
+  isYjs(): boolean { return this._yjs }
+
+
+  /**
+   * Persist this field's value across page reloads.
+   *
+   * @example
+   * .persist()                          // localStorage (silent save/restore)
+   * .persist('indexeddb')               // y-indexeddb (Yjs offline persistence)
+   * .persist('websocket')              // y-websocket (Yjs real-time sync)
+   * .persist(['websocket', 'indexeddb']) // both Yjs providers
+   */
+  persist(mode?: 'indexeddb' | 'websocket' | ('indexeddb' | 'websocket')[]): this {
+    if (mode === undefined) {
+      this._persist = 'localStorage'
+    } else if (Array.isArray(mode)) {
+      this._persist = mode
+    } else {
+      this._persist = [mode]
+    }
+    // Any Yjs-based persist needs the Yjs infrastructure (Y.Doc)
+    if (Array.isArray(this._persist)) {
+      this._yjs = true
+      for (const p of this._persist) {
+        if (!this._yjsProviders.includes(p)) this._yjsProviders.push(p)
+      }
+    }
+    return this
+  }
+
+  /** @internal */
+  isPersist(): boolean { return this._persist !== false }
+
+  /** @internal */
+  getPersistMode(): false | 'localStorage' | string[] { return this._persist }
+
+  /** @internal */
+  getYjsProviders(): string[] { return this._yjsProviders }
 
   /**
    * Map field values to colored badge pills in the table view.
@@ -339,7 +383,9 @@ export abstract class Field {
     if (this._component !== undefined) meta.component = this._component
     if (this._conditions.length > 0)   meta.conditions = this._conditions
     if (this._displayFn !== undefined) meta.displayTransformed = true
-    if (this._collaborative) meta.collaborative = true
+    if (this._yjs) meta.yjs = true
+    if (this._yjsProviders.length > 0) meta.yjsProviders = this._yjsProviders
+    if (this._persist !== false) meta.persist = this._persist
     return meta
   }
 }

@@ -26,13 +26,16 @@ export interface ResourceMeta {
   defaultSortDir?:   'ASC' | 'DESC'
   titleField?:       string
   persistTableState:    boolean
+  persistFormState:     boolean
+  autosave:             boolean
+  autosaveInterval:     number
   perPage:           number
   perPageOptions:    number[]
   paginationType:    'pagination' | 'loadMore'
   live:              boolean
   versioned:         boolean
   draftable:         boolean
-  collaborative:     boolean
+  yjs:               boolean
   softDeletes:       boolean
   navigationGroup?: string
   navigationBadgeColor?: 'gray' | 'primary' | 'success' | 'warning' | 'danger'
@@ -111,6 +114,25 @@ export class Resource {
    * Requires a `_status String @default("draft")` column on the model's table.
    */
   static draftable = false
+
+  /**
+   * Persist form state to localStorage while editing.
+   * When true, form values are backed up to localStorage as the user types.
+   * On page reload or crash, a restore banner offers to recover the draft.
+   * Applies to both create and edit pages.
+   */
+  static persistFormState = false
+
+  /**
+   * Enable automatic saving of form changes to the server.
+   * When true, the edit page periodically saves changes via PUT without
+   * requiring the user to click Save. A status indicator shows save state.
+   * Only applies to the edit page (create requires explicit submission).
+   */
+  static autosave: boolean | { interval?: number } = false
+
+  /** Default autosave interval in milliseconds. */
+  static autosaveInterval = 30000
 
   /**
    * Enable soft deletes for this resource.
@@ -206,12 +228,12 @@ export class Resource {
     const fieldItems = this.fields()
     const fieldsMeta = fieldItems.map((f) => f.toMeta()) as SchemaItemMeta[]
 
-    // Derive collaborative from fields — true if any field has .collaborative()
-    const hasCollabField = fieldItems.some((item) => {
+    // Derive yjs from fields — true if any field needs a Y.Doc
+    const hasYjsField = fieldItems.some((item) => {
       if ('getFields' in item) {
-        return (item as { getFields(): Field[] }).getFields().some((f) => f.isCollaborative())
+        return (item as { getFields(): Field[] }).getFields().some((f) => f.isYjs())
       }
-      return (item as Field).isCollaborative()
+      return (item as Field).isYjs()
     })
 
     const meta: ResourceMeta = {
@@ -224,13 +246,18 @@ export class Resource {
       tabs:          this.tabs().map((t) => t.toMeta()),
       actions:       this.actions().map((a) => a.toMeta()),
       persistTableState:  Cls.persistTableState,
+      persistFormState:   Cls.persistFormState,
+      autosave:           typeof Cls.autosave === 'object' ? true : !!Cls.autosave,
+      autosaveInterval:   typeof Cls.autosave === 'object' && Cls.autosave.interval
+                            ? Cls.autosave.interval
+                            : Cls.autosaveInterval,
       perPage:         Cls.perPage,
       perPageOptions:  Cls.perPageOptions,
       paginationType:  Cls.paginationType,
       live:            Cls.live,
       versioned:       Cls.versioned,
       draftable:       Cls.draftable,
-      collaborative:   hasCollabField,
+      yjs:             hasYjsField,
       softDeletes:     Cls.softDeletes,
     }
     if (Cls.defaultSort    !== undefined) meta.defaultSort    = Cls.defaultSort

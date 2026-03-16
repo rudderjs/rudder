@@ -11,6 +11,10 @@ import { SchemaRenderer }   from '../../../../_components/edit/SchemaRenderer.js
 import { VersionHistory }   from '../../../../_components/edit/VersionHistory.js'
 import { useCollaborativeForm } from '../../../../_hooks/useCollaborativeForm.js'
 import { useEditForm }      from '../../../../_hooks/useEditForm.js'
+import { useFormPersist }   from '../../../../_hooks/useFormPersist.js'
+import { useFieldPersist }  from '../../../../_hooks/useFieldPersist.js'
+import { useAutosave }      from '../../../../_hooks/useAutosave.js'
+import { RestoreBanner }    from '../../../../_components/edit/RestoreBanner.js'
 import { flattenFormFields, buildInitialValues } from '../../../../_lib/formHelpers.js'
 import type { SchemaItem }  from '../../../../_lib/formHelpers.js'
 import type { Data } from './+data.js'
@@ -20,7 +24,7 @@ export default function EditPage() {
   const {
     panelMeta, resourceMeta, record,
     pathSegment, slug, id,
-    versioned, draftable, collaborative,
+    versioned, draftable, yjs,
     wsLivePath, docName, liveProviders,
   } = useData<Data>()
 
@@ -51,18 +55,20 @@ export default function EditPage() {
 
   const collabFields = formFields.map((f) => ({
     name: f.name,
-    collaborative: f.collaborative && !textTypes.has(f.type) ? true : false,
+    yjs: f.yjs && !textTypes.has(f.type) ? true : false,
     textField: false, // no more Y.Text in shared doc — all text fields self-sync via Lexical
   }))
 
   // All text-based collaborative fields self-sync — don't double-write via setCollaborativeValue
   const selfSyncFields = new Set(
     formFields
-      .filter(f => f.collaborative && textTypes.has(f.type))
+      .filter(f => f.yjs && textTypes.has(f.type))
       .map(f => f.name)
   )
 
   const initialValues = buildInitialValues(formFields, record as Record<string, unknown>)
+
+  // Providers are now resolved server-side in +data.ts from field yjsProviders
 
   // ── Collaborative form ───────────────────────────────────
   // formKey lives here (not in useEditForm) so useCollaborativeForm can use it as resetKey.
@@ -82,10 +88,13 @@ export default function EditPage() {
     setCollaborativeValue, syncAllFieldsToDoc,
     getDoc, awareness, userName, userColor,
   } = useCollaborativeForm(
-    collaborative && docName && wsLivePath
-      ? { docName: docName!, wsPath: wsLivePath!, fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
+    yjs && docName
+      ? { docName: docName!, wsPath: wsLivePath ?? '', fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
       : null,
   )
+
+  // ── Ref for cross-hook callbacks (avoids circular deps) ──
+  const onManualSaveRef = useRef<() => void>(() => {})
 
   // ── Edit form state ──────────────────────────────────────
   const {
@@ -93,13 +102,14 @@ export default function EditPage() {
     setValue, setFormValue, resetForm, rejoinLive, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
-    versioned, draftable, collaborative, i18n,
-    syncAllFieldsToDoc: collaborative ? syncAllFieldsToDoc : undefined,
-    setCollaborativeValue: collaborative ? setCollaborativeValue : undefined,
+    versioned, draftable, yjs, i18n,
+    syncAllFieldsToDoc: yjs ? syncAllFieldsToDoc : undefined,
+    setCollaborativeValue: yjs ? setCollaborativeValue : undefined,
     selfSyncFields,
     setFormKey,
     formKey,
     isSyncingRef,
+    onSaved: () => onManualSaveRef.current(),
   })
 
   // Keep refs in sync with latest state.
@@ -107,9 +117,61 @@ export default function EditPage() {
   remoteSetValueRef.current = isRestorePreview ? () => {} : setFormValue
   currentValuesRef.current = values
 
+  // ── Per-field persist (silent localStorage) ────────────────
+  const fieldPersistKey = `bk:${pathSegment}:${slug}:${id}:edit`
+  const { clearPersistedFields } = useFieldPersist({
+    storageKeyPrefix: fieldPersistKey,
+    formFields,
+    values,
+    setValue: setFormValue,
+  })
+
+  // ── Form persist (localStorage backup) ─────────────────────
+  const persistEnabled = resourceMeta.persistFormState ?? false
+  const storageKey = `bk:${pathSegment}:${slug}:${id}:edit`
+
+  const persistOps = useFormPersist({
+    storageKey,
+    enabled: persistEnabled,
+    values,
+    initialValues,
+    onRestore: (restored) => {
+      for (const [key, val] of Object.entries(restored)) {
+        setValue(key, val)
+      }
+    },
+  })
+
+  // ── Autosave ───────────────────────────────────────────────
+  const autosaveEnabled = resourceMeta.autosave ?? false
+  const autosaveInterval = resourceMeta.autosaveInterval ?? 30000
+  const apiEndpoint = `/${pathSegment}/api/${slug}/${id}`
+
+
+
+  const { autosaveStatus, autosaveDirty, resetBaseline } = useAutosave({
+    enabled: autosaveEnabled,
+    interval: autosaveInterval,
+    endpoint: apiEndpoint,
+    values,
+    initialValues,
+    saving,
+    isRestorePreview,
+    syncAllFieldsToDoc: yjs ? syncAllFieldsToDoc : undefined,
+    yjs,
+    onSaved: () => { persistOps.clearDraft(); clearPersistedFields() },
+  })
+
+  // Wire up the manual save callback now that all hooks are initialized
+  onManualSaveRef.current = () => {
+    persistOps.clearDraft()
+    clearPersistedFields()
+    resetBaseline()
+  }
+
   // ── Listen for remote version restore (another user restored) ──
   useEffect(() => {
-    if (!collaborative || typeof window === 'undefined') return
+    if (!yjs || typeof window === 'undefined') return
     let destroyed = false
     let socket: any = null
 
@@ -148,7 +210,7 @@ export default function EditPage() {
       destroyed = true
       socket?.disconnect()
     }
-  }, [collaborative, slug, id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [yjs, slug, id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Version history toggle ───────────────────────────────
   const [showHistory, setShowHistory] = useState(false)
@@ -166,8 +228,17 @@ export default function EditPage() {
         { label: `${i18n.edit} ${resourceMeta.labelSingular}` },
       ]} />
 
+      {persistOps.showBanner && persistOps.storedTimestamp && (
+        <RestoreBanner
+          timestamp={persistOps.storedTimestamp}
+          onRestore={persistOps.restore}
+          onDismiss={persistOps.dismiss}
+          i18n={i18n}
+        />
+      )}
+
       <EditToolbar
-        collaborative={collaborative}
+        yjs={yjs}
         versioned={versioned}
         draftable={draftable}
         connected={connected}
@@ -176,6 +247,9 @@ export default function EditPage() {
         showHistory={showHistory}
         onToggleHistory={() => setShowHistory(!showHistory)}
         i18n={i18n}
+        autosave={autosaveEnabled}
+        autosaveStatus={autosaveStatus}
+        autosaveDirty={autosaveDirty}
       />
 
       <div className={versioned && showHistory ? 'flex gap-6' : ''}>

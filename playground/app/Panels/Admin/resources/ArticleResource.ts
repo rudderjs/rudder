@@ -31,6 +31,8 @@ export class ArticleResource extends Resource {
   static defaultSort    = 'createdAt'
   static defaultSortDir = 'DESC' as const
   static persistTableState = true
+  static persistFormState  = false
+  // static autosave          = { interval: 10000 }
   static perPage = 5
   static perPageOptions = [5,10, 15, 25, 50, 100]
   static live          = true
@@ -53,7 +55,7 @@ export class ArticleResource extends Resource {
         .required()
         .searchable()
         .sortable()
-        .collaborative(),
+        .persist(['websocket', 'indexeddb']),
 
       SlugField.make('slug')
         .label('Slug')

@@ -127,6 +127,15 @@ export const en = {
   unpublishedToast:     'Unpublished — record is now a draft.',
   draftBadge:           'Draft',
   publishedBadge:       'Published',
+
+  // Autosave & persist
+  autosaved:            'Saved',
+  autosaving:           'Saving\u2026',
+  unsavedChanges:       'Unsaved changes',
+  restoreDraft:         'You have unsaved changes from :time. Restore them?',
+  restoreDraftButton:   'Restore',
+  discardDraft:         'Discard',
+  unsavedWarning:       'You have unsaved changes. Are you sure you want to leave?',
 }
 
 export type PanelI18n = typeof en

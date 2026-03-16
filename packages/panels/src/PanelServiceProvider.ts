@@ -627,7 +627,7 @@ export class PanelServiceProvider extends ServiceProvider {
     }
 
     // ── Version routes (versioned or collaborative resources) ───
-    const hasCollabFields = flattenFields(new ResourceClass().fields()).some(f => f.isCollaborative())
+    const hasCollabFields = flattenFields(new ResourceClass().fields()).some(f => f.isYjs())
     if ((ResourceClass as any).versioned || hasCollabFields) {
       this.mountVersionRoutes(router, panel, ResourceClass, mw)
     }
@@ -740,7 +740,7 @@ export class PanelServiceProvider extends ServiceProvider {
   ): void {
     const slug          = ResourceClass.getSlug()
     const base          = `${panel.getApiBase()}/${slug}`
-    const isCollab      = flattenFields(new ResourceClass().fields()).some(f => f.isCollaborative())
+    const isCollab      = flattenFields(new ResourceClass().fields()).some(f => f.isYjs())
 
     // GET /{panel}/api/{resource}/{id}/_versions — list
     router.get(`${base}/:id/_versions`, async (req: AppRequest, res: AppResponse) => {
@@ -845,7 +845,7 @@ export class PanelServiceProvider extends ServiceProvider {
         await Live.clearDocument(docName)
 
         const resource = new ResourceClass()
-        const collabFields = flattenFields(resource.fields()).filter(f => f.isCollaborative())
+        const collabFields = flattenFields(resource.fields()).filter(f => f.isYjs())
 
         for (const f of collabFields) {
           const type = f.getType()

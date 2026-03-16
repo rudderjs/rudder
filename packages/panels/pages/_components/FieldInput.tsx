@@ -110,7 +110,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
 
   // ── Textarea ─────────────────────────────────────────────
   if (field.type === 'textarea') {
-    if (field.collaborative && wsPath && docName) {
+    if (field.yjs && wsPath && docName) {
       const CollabText = editorRegistry.collaborativePlainText
       if (CollabText) {
         return (
@@ -673,8 +673,8 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
           onChange={onChange}
           placeholder={field.extra?.placeholder as string | undefined}
           disabled={isDisabled}
-          wsPath={field.collaborative ? wsPath : null}
-          docName={field.collaborative ? docName : null}
+          wsPath={field.yjs ? wsPath : null}
+          docName={field.yjs ? docName : null}
           fragmentName={`richcontent:${field.name}`}
           blocks={field.extra?.blocks as any[] | undefined}
           userName={userName}
@@ -729,7 +729,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     : (value as string) ?? ''
 
   // Collaborative text input for text/email fields
-  if ((field.type === 'text' || field.type === 'email') && field.collaborative && wsPath && docName) {
+  if ((field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
     const CollabText = editorRegistry.collaborativePlainText
     if (CollabText) {
       return (
