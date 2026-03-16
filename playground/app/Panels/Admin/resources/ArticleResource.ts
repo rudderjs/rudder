@@ -40,7 +40,7 @@ export class ArticleResource extends Resource {
   static navigationGroup     = 'Content'
   static navigationBadge     = async () => await Article.query().count()
   static navigationBadgeColor = 'primary' as const
-  static emptyStateIcon       = '📝'
+  static emptyStateIcon       = 'file-text'
   static emptyStateHeading    = 'No :label yet'
   static emptyStateDescription = 'Write your first article to share with the world.'
 

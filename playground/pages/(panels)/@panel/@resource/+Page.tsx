@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table.js'
 import { CellValue, resolveCellValue } from '../../_components/CellValue.js'
+import { ResourceIcon } from '../../_components/ResourceIcon.js'
 import { InlineEditCell } from '../../_components/InlineEditCell.js'
 import {
   Tooltip,
@@ -711,14 +712,18 @@ export default function ResourceListPage() {
                   {hasActiveFilters
                     ? (
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-2xl">🔍</span>
+                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <ResourceIcon icon="search" className="size-6 text-muted-foreground" />
+                        </div>
                         <p className="text-sm font-medium">{i18n.noResultsTitle}</p>
                         <p className="text-sm text-muted-foreground">{i18n.noResultsHint}</p>
                       </div>
                     )
                     : (
                       <div className="flex flex-col items-center gap-3">
-                        <span className="text-3xl">{resourceMeta.emptyStateIcon ?? '📭'}</span>
+                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <ResourceIcon icon={resourceMeta.emptyStateIcon ?? resourceMeta.icon} className="size-6 text-muted-foreground" />
+                        </div>
                         <p className="text-sm font-medium">
                           {resourceMeta.emptyStateHeading
                             ? t(resourceMeta.emptyStateHeading, { label: resourceMeta.label })
