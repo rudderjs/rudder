@@ -394,6 +394,139 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 
 ---
 
+## Navigation Groups
+
+Group resources in the sidebar by assigning a `navigationGroup`. Resources with the same group are grouped under a collapsible heading. Ungrouped resources appear at the top level.
+
+```ts
+export class ArticleResource extends Resource {
+  static navigationGroup = 'Content'
+}
+
+export class CategoryResource extends Resource {
+  static navigationGroup = 'Content'
+}
+
+export class UserResource extends Resource {
+  static navigationGroup = 'Settings'
+}
+```
+
+Groups appear in the order they are first encountered in the resource list.
+
+---
+
+## Navigation Badges
+
+Show dynamic counts or labels next to resource links in the sidebar.
+
+```ts
+export class ArticleResource extends Resource {
+  static navigationBadge = async () => await Article.query().count()
+  static navigationBadgeColor = 'primary' // 'gray' | 'primary' | 'success' | 'warning' | 'danger'
+}
+```
+
+| Property | Description |
+|----------|-------------|
+| `static navigationBadge` | Async function returning a number or string to display |
+| `static navigationBadgeColor` | Badge color variant (default: `'gray'`) |
+
+Badges are resolved server-side on each page load.
+
+---
+
+## Empty State Customization
+
+Customize the message shown when a resource table has no records.
+
+```ts
+export class ArticleResource extends Resource {
+  static emptyStateIcon = 'file-text'            // lucide icon name (defaults to resource icon)
+  static emptyStateHeading = 'No :label yet'     // :label placeholder replaced with resource label
+  static emptyStateDescription = 'Write your first article.'
+}
+```
+
+| Property | Default |
+|----------|---------|
+| `static emptyStateIcon` | Resource icon |
+| `static emptyStateHeading` | `'No :label yet'` |
+| `static emptyStateDescription` | `'Create your first :labelSingular to get started.'` |
+
+The `:label` and `:labelSingular` placeholders are replaced with the resource's `label` and `labelSingular` values.
+
+---
+
+## Tab Filters
+
+Define filtered views as tabs above the table. Users click a tab to apply a preset query filter.
+
+```ts
+import { Tab } from '@boostkit/panels'
+
+export class ArticleResource extends Resource {
+  tabs() {
+    return [
+      Tab.make('all').label('All'),
+      Tab.make('published').label('Published').icon('circle-check')
+        .query((q) => q.where('draftStatus', 'published')),
+      Tab.make('draft').label('Drafts').icon('pencil-line')
+        .query((q) => q.where('draftStatus', 'draft')),
+    ]
+  }
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `Tab.make(key)` | Create a tab with a unique key |
+| `.label(text)` | Display label |
+| `.icon(name)` | Lucide icon name shown before the label |
+| `.query(fn)` | Query callback — receives the ORM query builder |
+
+The first tab without a `.query()` callback (e.g. `'all'`) shows unfiltered records. The active tab persists in `sessionStorage` and restores when navigating back via the sidebar.
+
+---
+
+## Live Debounced Search
+
+The per-resource search input filters results as you type with a 150 ms debounce. No search button is needed — results update automatically. Mark fields as `.searchable()` to include them in the search query.
+
+---
+
+## Schema Publishing
+
+Panels ships its own database models (`PanelVersion`, `PanelGlobal`) used by the versioning and globals features. Publish the Prisma schema shard into your project:
+
+```bash
+pnpm artisan vendor:publish --tag=panels-schema
+```
+
+After publishing, merge it into your main schema and regenerate the Prisma client:
+
+```bash
+pnpm artisan module:publish   # merges *.prisma shards into prisma/schema.prisma
+pnpm exec prisma generate
+pnpm exec prisma db push      # or prisma migrate dev
+```
+
+---
+
+## Editor Registry
+
+Panels uses a pluggable editor system via `editorRegistry`. By default, text fields use plain inputs. Install `@boostkit/panels-lexical` for rich text editing:
+
+```bash
+pnpm add @boostkit/panels-lexical
+```
+
+The Lexical package auto-registers its editors on import. It provides rich text editing for `RichContentField` and collaborative plain-text editing for text-based fields with `.collaborative()`.
+
+See [`@boostkit/panels-lexical`](../panels-lexical) for configuration and customization.
+
+---
+
 ## Layout Options
 
 ```ts
