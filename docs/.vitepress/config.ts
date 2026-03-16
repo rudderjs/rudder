@@ -161,6 +161,20 @@ export default defineConfig({
             { text: '@boostkit/artisan', link: '/packages/artisan' },
           ],
         },
+        {
+          text: 'Panels',
+          items: [
+            { text: 'Overview', link: '/packages/panels/' },
+            { text: 'Resources', link: '/packages/panels/resources' },
+            { text: 'Fields', link: '/packages/panels/fields' },
+            { text: 'Listing Records', link: '/packages/panels/listing' },
+            { text: 'Navigation', link: '/packages/panels/navigation' },
+            { text: 'Globals', link: '/packages/panels/globals' },
+            { text: 'Custom Pages', link: '/packages/panels/pages' },
+            { text: 'Editor', link: '/packages/panels/editor' },
+            { text: 'API Routes', link: '/packages/panels/api' },
+          ],
+        },
       ],
 
       '/cli/': [
