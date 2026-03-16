@@ -20,27 +20,50 @@ export default function PanelRootPage() {
 
   if (!schemaData || schemaData.length === 0) return null
 
+  // Group consecutive standalone widgets into grid rows
+  const groups: { type: 'widget-group' | 'element'; items: any[] }[] = []
+  for (const el of schemaData) {
+    if ((el as any).type === 'widget') {
+      const last = groups[groups.length - 1]
+      if (last?.type === 'widget-group') {
+        last.items.push(el)
+      } else {
+        groups.push({ type: 'widget-group', items: [el] })
+      }
+    } else {
+      groups.push({ type: 'element', items: [el] })
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      {schemaData.map((el, i) => {
-        // Standalone widget — static, no customization
-        if (el.type === 'widget') {
+      {groups.map((group, gi) => {
+        if (group.type === 'widget-group') {
           return (
-            <StandaloneWidget
-              key={`widget-${(el as any).id ?? i}`}
-              widget={el as any}
-              panelPath={panelMeta.path}
-              pathSegment={pathSegment}
-              i18n={i18n}
-            />
+            <div key={`wg-${gi}`} className="grid grid-cols-12 gap-4">
+              {group.items.map((el: any, wi: number) => {
+                const w = el.defaultSize?.w ?? 12
+                return (
+                  <div key={`widget-${el.id ?? wi}`} style={{ gridColumn: `span ${Math.min(w, 12)}` }}>
+                    <StandaloneWidget
+                      widget={el}
+                      panelPath={panelMeta.path}
+                      pathSegment={pathSegment}
+                      i18n={i18n}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           )
         }
-        // Dashboard elements get special rendering with DashboardGrid
+
+        const el = group.items[0]
         if (el.type === 'dashboard') {
           return (
             <DashboardSection
-              key={`dash-${(el as any).id ?? i}`}
-              dashboard={el as any}
+              key={`dash-${el.id ?? gi}`}
+              dashboard={el}
               pathSegment={pathSegment}
               panelPath={panelMeta.path}
               i18n={i18n}
@@ -48,7 +71,7 @@ export default function PanelRootPage() {
           )
         }
         return (
-          <WidgetRenderer key={i} element={el} panelPath={panelMeta.path} i18n={i18n} />
+          <WidgetRenderer key={gi} element={el} panelPath={panelMeta.path} i18n={i18n} />
         )
       })}
     </div>

@@ -38,6 +38,7 @@ export const adminPanel = Panel.make('admin')
     Widget.make('articles-overview')
       .label('Published Articles')
       .component('stat')
+      .defaultSize({ w: 2, h: 4 })
       .icon('newspaper')
       .data(async () => ({
         value: await Article.query().count(),
@@ -48,6 +49,7 @@ export const adminPanel = Panel.make('admin')
     Widget.make('todo-progress')
       .label('Todo Progress')
       .component('stat-progress')
+      .defaultSize({ w: 4, h: 1 })
       .icon('list-checks')
       .data(async () => ({
         value: await Todo.query().where('completed', true).count(),
@@ -55,6 +57,16 @@ export const adminPanel = Panel.make('admin')
         label: 'Tasks completed',
       })),
 
+    Widget.make('total-users-static')
+      .label('Total Users')
+      .component('stat')
+      .defaultSize({ w: 4, h: 2 })
+      .icon('users')
+      .data(async () => ({
+        value: await User.query().count(),
+      })),
+
+      
     // ── User-customizable dashboard (drag/resize/settings) ───
     Dashboard.make('overview')
       .label('Overview')
