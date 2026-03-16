@@ -1,6 +1,6 @@
 # Widgets & Schema Elements
 
-Schema elements are the building blocks for panel landing pages (`Panel.schema()`) and resource show page widgets (`Resource.widgets()`). They render stats, charts, tables, lists, and text content.
+Schema elements are the building blocks for panel landing pages (`Panel.schema()`) and resource show page widgets (`Resource.widgets()`). They render stats, charts, tables, lists, and text content. When combined with `@boostkit/dashboards`, they also power user-customizable dashboard grids.
 
 ---
 
@@ -132,10 +132,11 @@ List.make('Quick Links')
 
 ## Panel Landing Page (`Panel.schema()`)
 
-By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with schema elements.
+By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with schema elements, standalone widgets, and user-customizable dashboards.
 
 ```ts
 import { Panel, Heading, Text, Stats, Stat, Table, Chart, List } from '@boostkit/panels'
+import { Dashboard, Widget } from '@boostkit/dashboards'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -149,6 +150,26 @@ export const adminPanel = Panel.make('admin')
       Stat.make('Articles').value(await Article.query().count()),
       Stat.make('Published').value(await Article.query().where('status', 'published').count()),
     ]),
+
+    // Standalone widgets -- static, no drag/customize
+    Widget.make('total-articles')
+      .label('Published Articles')
+      .component('stat')
+      .defaultSize({ w: 4, h: 2 })
+      .icon('newspaper')
+      .data(async () => ({ value: await Article.query().count(), trend: 5 })),
+
+    // User-customizable dashboard
+    Dashboard.make('overview')
+      .label('Overview')
+      .widgets([
+        Widget.make('total-users').label('Users').component('stat').small()
+          .data(async () => ({ value: await User.query().count() })),
+      ])
+      .tabs([
+        Dashboard.tab('content').label('Content').widgets([...]),
+        Dashboard.tab('charts').label('Charts').widgets([...]),
+      ]),
 
     Chart.make('Monthly Revenue')
       .chartType('bar')
@@ -199,10 +220,11 @@ export class ArticleResource extends Resource {
   widgets(record?: Record<string, unknown>) {
     return [
       Stats.make([
+        Stat.make('Views').value(record?.viewCount ?? 0),
         Stat.make('Word Count').value(String(record?.content ?? '').split(' ').length),
         Stat.make('Status').value(String(record?.draftStatus ?? 'draft')),
       ]),
-      Chart.make('Views Over Time')
+      Chart.make('Traffic')
         .chartType('area')
         .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])
         .datasets([{ label: 'Views', data: [45, 120, 89, 200, 156] }])
@@ -223,14 +245,28 @@ Widgets render above the record fields on the show page. All schema element type
 
 ## WidgetRenderer Component
 
-The `WidgetRenderer` React component renders schema elements in the browser. It is used internally by the panel landing page and show page, and is also available for custom pages.
+The `WidgetRenderer` React component renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Also available for custom pages.
 
 ```tsx
 import { WidgetRenderer } from '@boostkit/panels/client'
 
-export default function DashboardPage({ data }) {
+export default function CustomPage({ data }) {
   return <WidgetRenderer widgets={data.widgets} panel="admin" />
 }
 ```
 
 `WidgetRenderer` handles all element types and renders the appropriate UI component for each (stat cards, charts, tables, lists, headings, text).
+
+---
+
+## Dashboard Widgets
+
+For user-customizable dashboards with drag-and-drop, layout persistence, lazy loading, and polling, see the [@boostkit/dashboards](/packages/dashboards) documentation.
+
+Key concepts:
+
+- **Standalone widgets**: `Widget.make()` placed directly in `Panel.schema()` renders as a static grid element
+- **Dashboard widgets**: `Widget.make()` inside `Dashboard.make().widgets()` supports drag-and-drop, resize, and per-user customization
+- **Dashboard tabs**: `Dashboard.tab('id').label('Name').widgets([...])` for tabbed widget sections
+- **Lazy + polling**: `.lazy()` defers to client-side, `.poll(ms)` re-fetches periodically
+- **Widget settings**: Configurable per-widget fields editable by users

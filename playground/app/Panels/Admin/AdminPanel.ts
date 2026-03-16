@@ -34,6 +34,13 @@ export const adminPanel = Panel.make('admin')
     Heading.make(`Welcome back${ctx.user?.name ? `, ${ctx.user.name}` : ''}.`),
     Text.make('Here\'s a quick overview of your content.'),
 
+    Stats.make([
+      Stat.make('Total Articles').value(await Article.query().count()),
+      Stat.make('Total Categories').value(await Category.query().count()),
+      Stat.make('Total Todos').value(await Todo.query().count()),
+      Stat.make('Total Users').value(await User.query().count()),
+    ]),
+
     // ── Standalone widgets (static, no customization) ──────────
     Widget.make('articles-overview')
       .label('Published Articles')

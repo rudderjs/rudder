@@ -1,136 +1,265 @@
 # @boostkit/dashboards
 
-User-customizable dashboard builder for BoostKit panels. Drag-and-drop widgets with per-user layout persistence.
+User-customizable dashboard builder for BoostKit panels. `Dashboard.make()` is a schema element placed inside `Panel.schema()` -- no separate provider config needed. The `dashboard()` provider auto-discovers dashboards from panel schemas.
+
+## Installation
 
 ```bash
-pnpm add @boostkit/dashboards
+pnpm add @boostkit/dashboards @boostkit/panels @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities recharts
 ```
 
----
-
-## Quick Start
+## Provider Setup
 
 ```ts
 // bootstrap/providers.ts
+import { panels } from '@boostkit/panels'
 import { dashboard } from '@boostkit/dashboards'
-import { Widget } from '@boostkit/dashboards'
 
 export default [
-  dashboard({
-    widgets: [
-      Widget.make('total-users')
-        .label('Total Users')
-        .component('stat')
-        .defaultSize('small')
-        .icon('👥')
-        .data(async () => ({
-          value: await User.query().count(),
-          trend: 12,
-        })),
-
-      Widget.make('revenue')
-        .label('Monthly Revenue')
-        .component('chart')
-        .defaultSize('large')
-        .data(async () => ({
-          type: 'bar',
-          labels: ['Jan', 'Feb', 'Mar', 'Apr'],
-          datasets: [{ label: 'Revenue', data: [4200, 5800, 4900, 7100] }],
-        })),
-
-      Widget.make('recent-articles')
-        .label('Recent Articles')
-        .component('table')
-        .defaultSize('large')
-        .data(async () => ({
-          columns: [
-            { name: 'title', label: 'Title' },
-            { name: 'createdAt', label: 'Date' },
-          ],
-          records: await Article.query().orderBy('createdAt', 'desc').limit(5).get(),
-          href: '/admin/articles',
-        })),
-    ],
-  }),
-  // ... other providers
+  panels([adminPanel]),
+  dashboard(),    // no config -- auto-discovers Dashboard.make() from panel schemas
 ]
 ```
 
 ---
 
-## Widget Class
+## Dashboard as Schema Element
 
-Register available widgets using the fluent builder API:
+Dashboards are defined inside `Panel.schema()` alongside other schema elements:
+
+```ts
+import { Panel, Heading } from '@boostkit/panels'
+import { Dashboard, Widget } from '@boostkit/dashboards'
+
+export const adminPanel = Panel.make('admin')
+  .path('/admin')
+  .resources([UserResource, ArticleResource])
+  .schema(async (ctx) => [
+    Heading.make('Welcome'),
+
+    // Standalone widgets (static, no customization)
+    Widget.make('total-articles')
+      .label('Published Articles')
+      .component('stat')
+      .defaultSize({ w: 4, h: 2 })
+      .icon('newspaper')
+      .data(async () => ({ value: await Article.query().count(), trend: 5 })),
+
+    // User-customizable dashboard
+    Dashboard.make('overview')
+      .label('Overview')
+      .widgets([
+        Widget.make('total-users')
+          .label('Total Users')
+          .component('stat')
+          .small()
+          .icon('users')
+          .data(async () => ({ value: await User.query().count(), trend: 12 })),
+
+        Widget.make('revenue')
+          .label('Monthly Revenue')
+          .component('chart')
+          .large()
+          .data(async () => ({
+            type: 'bar',
+            labels: ['Jan', 'Feb', 'Mar', 'Apr'],
+            datasets: [{ label: 'Revenue', data: [4200, 5800, 4900, 7100] }],
+          })),
+      ]),
+  ])
+```
+
+---
+
+## Standalone Widgets
+
+Widgets placed directly in `Panel.schema()` (outside a `Dashboard`) render as static, SSR'd elements -- no drag, no customize. Consecutive standalone widgets auto-group into a responsive 12-column grid. Width is controlled by `.defaultSize({ w })`.
+
+```ts
+.schema(async (ctx) => [
+  Widget.make('users').label('Users').component('stat').defaultSize({ w: 4, h: 2 })
+    .data(async () => ({ value: 150 })),
+  Widget.make('articles').label('Articles').component('stat').defaultSize({ w: 4, h: 2 })
+    .data(async () => ({ value: 42 })),
+  Widget.make('comments').label('Comments').component('stat').defaultSize({ w: 4, h: 2 })
+    .data(async () => ({ value: 389 })),
+])
+```
+
+---
+
+## Dashboard Sections
+
+Multiple `Dashboard.make()` in schema render as separate sections (not tabs), each with its own Customize button:
+
+```
+Overview          [Customize]
+[widget grid]
+
+Analytics         [Customize]
+[widget grid]
+```
+
+---
+
+## Dashboard with Tabs
+
+```ts
+Dashboard.make('main')
+  .label('Main')
+  .widgets([...])                  // always visible above tabs
+  .tabs([
+    Dashboard.tab('content').label('Content').widgets([...]),
+    Dashboard.tab('charts').label('Charts').widgets([...]),
+  ])
+```
+
+Top-level `.widgets()` render above the tab bar. Each tab has its own widget grid with independent layout persistence.
+
+---
+
+## Widget API
 
 ```ts
 Widget.make('widget-id')
-  .label('Display Name')         // shown in the dashboard and palette
-  .component('stat')             // 'stat' | 'chart' | 'table' | 'list'
-  .defaultSize('medium')         // 'small' | 'medium' | 'large'
-  .description('Optional desc')  // shown in the widget palette
-  .icon('📊')                    // shown in the widget palette
-  .data(async (ctx) => ({        // async data resolver, called on each load
+  .label('Display Name')              // shown in dashboard and palette
+  .component('stat')                  // 'stat' | 'chart' | 'table' | 'list' | 'stat-progress' | 'user-card' | 'custom'
+  .defaultSize({ w: 6, h: 2 })       // 12-col grid: w=columns, h=row units
+  .minSize({ w: 3, h: 2 })           // optional resize constraints
+  .maxSize({ w: 12, h: 6 })
+  .icon('file-text')                  // lucide icon name or emoji
+  .description('Optional tooltip')
+  .data(async (ctx, settings) => ({   // async data resolver
     value: 42,
     trend: 5,
   }))
+  .settings([                         // per-widget configurable fields
+    { name: 'period', type: 'select', options: ['7d', '30d'], default: '30d' },
+    { name: 'showTrend', type: 'toggle', default: true },
+  ])
+  .lazy()                             // defer data loading to client-side
+  .poll(10000)                        // re-fetch every 10s after SSR
+  .render('/app/widgets/Custom')      // custom React component (sets component to 'custom')
 ```
 
-### Widget Sizes
+### Size Presets
 
-| Size | Grid Columns | Best For |
-|------|-------------|----------|
-| `small` | 1 of 4 | Single stat, shortcut button |
-| `medium` | 2 of 4 | Stat row, mini chart, short list |
-| `large` | 4 of 4 (full width) | Full chart, table, activity feed |
+```ts
+.small()    // { w: 3, h: 2 }
+.medium()   // { w: 6, h: 2 }
+.large()    // { w: 12, h: 3 }
+```
 
-### Widget Components
-
-| Component | Expected `data()` Shape |
-|-----------|------------------------|
-| `stat` | `{ value: number \| string, trend?: number, description?: string }` |
-| `chart` | `{ type: 'line' \| 'bar' \| 'area' \| 'pie' \| 'doughnut', labels: string[], datasets: { label, data, color? }[] }` |
-| `table` | `{ columns: { name, label }[], records: object[], href: string }` |
-| `list` | `{ items: { label, description?, href?, icon? }[], limit?: number }` |
+Or use `.defaultSize({ w, h })` for custom sizes on the 12-column grid.
 
 ---
 
-## Dashboard Grid
+## Widget Components
 
-The dashboard renders as a responsive 4-column grid. Users can:
-
-1. **Customize** -- click "Customize" to enter edit mode
-2. **Drag** -- reorder widgets by dragging
-3. **Resize** -- click the S/M/L pill to cycle through sizes
-4. **Add** -- click "+ Add Widget" to add from the palette
-5. **Remove** -- click x to remove a widget
-6. **Done** -- click "Done" to save the layout
-
-Layout is saved per-user in the `PanelDashboardLayout` database table.
-
-### Responsive Breakpoints
-
-| Screen | Columns |
-|--------|---------|
-| Large (>=1200px) | 4 |
-| Medium (>=768px) | 4 |
-| Small (>=480px) | 2 |
-| Extra small | 1 |
+| Component | Data shape | Description |
+|---|---|---|
+| `stat` | `{ value, trend?, description? }` | Number card with optional trend arrow |
+| `stat-progress` | `{ value, max, label?, color? }` | Circular progress ring |
+| `chart` | `{ type, labels, datasets, height? }` | Recharts (line/bar/area/pie/doughnut) |
+| `table` | `{ columns, records, href }` | Data table with link |
+| `list` | `{ items, limit? }` | Item list with icons/links |
+| `user-card` | `{ name, role?, avatar?, href? }` | Avatar card |
+| `custom` | any | Custom React component via `.render()` |
 
 ---
 
-## Database Model
+## Widget Rendering Modes
 
-Add this model to your Prisma schema:
+| Mode | API | Behavior |
+|---|---|---|
+| SSR (default) | no flag | Data resolved server-side, renders instantly |
+| Lazy | `.lazy()` | Shows skeleton, fetches data client-side |
+| Polling | `.poll(ms)` | SSR first render, then re-fetches every N ms |
+
+```ts
+// SSR -- default
+Widget.make('users').component('stat')
+  .data(async () => ({ value: 42 }))
+
+// Lazy -- skeleton first, client-side fetch
+Widget.make('slow-query').component('table').lazy()
+  .data(async () => ({ columns: [...], records: await expensiveQuery() }))
+
+// Polling -- SSR first, then refresh every 10 seconds
+Widget.make('active-now').component('stat').poll(10000)
+  .data(async () => ({ value: await getActiveUsers() }))
+```
+
+---
+
+## Widget Settings
+
+Widgets can have configurable fields. Users edit them via a drawer in customize mode.
+
+```ts
+Widget.make('revenue-chart')
+  .label('Revenue')
+  .component('chart')
+  .settings([
+    { name: 'period', type: 'select', label: 'Period', options: ['7d', '30d', '90d'], default: '30d' },
+    { name: 'showTrend', type: 'toggle', label: 'Show Trend', default: true },
+  ])
+  .data(async (ctx, settings) => {
+    const days = parseInt(settings.period)
+    const records = await Revenue.query().where('date', '>=', daysAgo(days)).get()
+    return {
+      type: 'bar',
+      labels: records.map(r => r.date),
+      datasets: [{ label: 'Revenue', data: records.map(r => r.amount) }],
+    }
+  })
+```
+
+Setting field types: `text`, `number`, `select`, `toggle`.
+
+---
+
+## Icons
+
+Supports lucide icon names (kebab-case) and emoji:
+
+```ts
+.icon('file-text')    // lucide icon
+.icon('newspaper')    // lucide icon
+.icon('users')        // lucide icon
+.icon('📊')           // emoji
+```
+
+---
+
+## Drag-and-Drop
+
+Uses `@dnd-kit/sortable` for reordering widgets. In customize mode:
+
+1. **Drag handle** -- 6-dot grip icon to reorder
+2. **Size presets** -- `1/4` `1/3` `1/2` `2/3` `Full` buttons
+3. **Settings** -- gear icon (shown when widget has settings)
+4. **Remove** -- remove widget from layout
+5. **Add Widget** -- palette to add available widgets
+
+Click "Customize" to enter edit mode, "Done" to save.
+
+---
+
+## Layout Persistence
+
+Per-user layout saved to the `PanelDashboardLayout` database table. Each dashboard + tab gets its own layout keyed by `userId + panel + dashboardId`.
 
 ```prisma
 model PanelDashboardLayout {
-  id        String   @id @default(cuid())
-  userId    String
-  panel     String
-  layout    String   @default("[]")  // JSON: [{ widgetId, size, x, y, w, h }]
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  panel       String
+  dashboardId String   @default("default")
+  layout      String   @default("[]")
+  updatedAt   DateTime @updatedAt
 
-  @@unique([userId, panel])
+  @@unique([userId, panel, dashboardId])
 }
 ```
 
@@ -141,25 +270,51 @@ pnpm exec prisma generate
 pnpm exec prisma db push
 ```
 
+### SSR Layout Resolution
+
+Both widget data AND saved layout are resolved server-side in `resolveSchema()`. No loading flash -- the dashboard renders with the user's customized layout instantly.
+
 ---
 
 ## API Endpoints
 
-The dashboard service provider mounts these routes for each panel:
-
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `{panel}/api/_dashboard/widgets` | GET | All registered widgets with resolved data |
-| `{panel}/api/_dashboard/layout` | GET | User's saved layout (or default) |
-| `{panel}/api/_dashboard/layout` | PUT | Save user's layout |
+| `{panel}/api/_dashboard/{dashId}/widgets` | GET | Widgets with resolved data |
+| `{panel}/api/_dashboard/{dashId}/layout` | GET | User's saved layout |
+| `{panel}/api/_dashboard/{dashId}/layout` | PUT | Save user's layout |
+
+---
+
+## Custom Widget Components
+
+Use `.render()` to provide a custom React component:
+
+```ts
+Widget.make('custom-widget')
+  .label('My Custom Widget')
+  .render('/app/widgets/MyWidget')   // sets component to 'custom'
+  .defaultSize({ w: 6, h: 3 })
+  .data(async () => ({ foo: 'bar' }))
+```
+
+The component receives the resolved data as props:
+
+```tsx
+// app/widgets/MyWidget.tsx
+export default function MyWidget({ data }: { data: { foo: string } }) {
+  return <div>{data.foo}</div>
+}
+```
 
 ---
 
 ## Peer Dependencies
 
-- `@boostkit/panels` -- widget rendering
-- `react-grid-layout` -- drag-and-drop grid
-
-```bash
-pnpm add @boostkit/dashboards @boostkit/panels react-grid-layout
-```
+| Dependency | Purpose |
+|---|---|
+| `@boostkit/panels` | Panel infrastructure and widget rendering |
+| `@dnd-kit/core` | Drag-and-drop primitives |
+| `@dnd-kit/sortable` | Sortable grid layout |
+| `@dnd-kit/utilities` | DnD utility hooks |
+| `recharts` | Chart rendering (line/bar/area/pie/doughnut) |
