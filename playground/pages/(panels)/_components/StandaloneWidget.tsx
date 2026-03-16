@@ -25,11 +25,10 @@ export function StandaloneWidget({ widget, panelPath, pathSegment, i18n }: Props
     if (!widget.lazy || widget.data) return
     async function fetchData() {
       try {
-        const res = await fetch(`/${pathSegment}/api/_dashboard/_standalone/widgets?widget=${widget.id}`)
+        const res = await fetch(`/${pathSegment}/api/_widgets/${widget.id}`)
         if (res.ok) {
-          const body = await res.json() as { widgets: WidgetWithData[] }
-          const fresh = body.widgets.find(w => w.id === widget.id)
-          if (fresh) setData(fresh.data)
+          const body = await res.json() as { widget: WidgetWithData }
+          if (body.widget?.data) setData(body.widget.data)
         }
       } catch { /* failed */ }
       setLoading(false)
@@ -42,11 +41,10 @@ export function StandaloneWidget({ widget, panelPath, pathSegment, i18n }: Props
     if (!widget.pollInterval || widget.pollInterval <= 0) return
     const timer = setInterval(async () => {
       try {
-        const res = await fetch(`/${pathSegment}/api/_dashboard/_standalone/widgets?widget=${widget.id}`)
+        const res = await fetch(`/${pathSegment}/api/_widgets/${widget.id}`)
         if (res.ok) {
-          const body = await res.json() as { widgets: WidgetWithData[] }
-          const fresh = body.widgets.find(w => w.id === widget.id)
-          if (fresh) setData(fresh.data)
+          const body = await res.json() as { widget: WidgetWithData }
+          if (body.widget?.data) setData(body.widget.data)
         }
       } catch { /* failed */ }
     }, widget.pollInterval)

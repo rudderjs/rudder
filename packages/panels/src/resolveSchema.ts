@@ -157,18 +157,20 @@ export async function resolveSchema(
       continue
     }
 
-    // Standalone widget — always resolve data for SSR (lazy only applies inside Dashboard)
+    // Standalone widget — resolve data for SSR (skip lazy widgets)
     if (type === 'widget') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const widget = el as any
       const meta = widget.toMeta()
 
-      const dataFn = widget.getDataFn?.()
-      if (dataFn) {
-        try {
-          meta.data = await dataFn({ user: ctx.user })
-        } catch {
-          meta.data = null
+      if (!meta.lazy) {
+        const dataFn = widget.getDataFn?.()
+        if (dataFn) {
+          try {
+            meta.data = await dataFn({ user: ctx.user })
+          } catch {
+            meta.data = null
+          }
         }
       }
 
