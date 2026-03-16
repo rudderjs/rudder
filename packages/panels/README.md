@@ -347,10 +347,11 @@ This pre-selects `parentId` in the create form. Useful for the "create related" 
 
 ## Panel Schema (Landing Page)
 
-By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with stats, headings, text, and data tables.
+By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with stats, headings, text, data tables, charts, lists, standalone widgets, and user-customizable dashboards.
 
 ```ts
-import { Panel, Heading, Text, Stats, Stat, Table } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Table, Chart, List } from '@boostkit/panels'
+import { Dashboard, Widget } from '@boostkit/dashboards'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -365,15 +366,47 @@ export const adminPanel = Panel.make('admin')
       Stat.make('Published').value(await Article.query().where('status', 'published').count()),
     ]),
 
+    // Standalone widgets — static, no drag/customize
+    Widget.make('total-articles')
+      .label('Published Articles')
+      .component('stat')
+      .defaultSize({ w: 4, h: 2 })
+      .icon('newspaper')
+      .data(async () => ({ value: await Article.query().count(), trend: 5 })),
+
+    // User-customizable dashboard
+    Dashboard.make('overview')
+      .label('Overview')
+      .widgets([...])
+      .tabs([
+        Dashboard.tab('content').label('Content').widgets([...]),
+        Dashboard.tab('charts').label('Charts').widgets([...]),
+      ]),
+
+    Chart.make('Monthly Revenue')
+      .chartType('bar')
+      .labels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'])
+      .datasets([
+        { label: 'Revenue', data: [4200, 5800, 4900, 7100, 6300, 8200] },
+        { label: 'Expenses', data: [3100, 3800, 3200, 4500, 4100, 5000], color: '#ef4444' },
+      ])
+      .height(350),
+
     Table.make('Recent Articles')
       .resource('articles')
       .columns(['title', 'status', 'publishedAt'])
       .sortBy('createdAt', 'DESC')
       .limit(5),
+
+    List.make('Quick Links')
+      .items([
+        { label: 'Documentation', href: '/docs', icon: '📖' },
+        { label: 'Settings', href: '/admin/site-settings', icon: '⚙️' },
+      ]),
   ])
 ```
 
-The schema function receives `PanelContext` (`{ user, headers, path }`) and can be async — safe to run ORM queries.
+The schema function receives `PanelContext` (`{ user, headers, path }`) and can be async -- safe to run ORM queries.
 
 **Static schema** (no context needed):
 
@@ -391,14 +424,16 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 | `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `1`) |
 | `Text.make(content)` | Paragraph of text |
 | `Stats.make([...stats])` | Row of stat cards |
-| `Stat.make(label)` | Single stat — `.value(n)`, `.description(text)`, `.trend('up'\|'down'\|'neutral')` |
-| `Table.make(title)` | Data table — `.resource(slug)`, `.columns([...])`, `.limit(n)`, `.sortBy(col, dir)` |
-| `Chart.make(title)` | Chart — `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
-| `List.make(title)` | Item list card — `.items([{ label, description?, href?, icon? }])`, `.limit(n)` |
+| `Stat.make(label)` | Single stat -- `.value(n)`, `.description(text)`, `.trend('up'\|'down'\|'neutral')` |
+| `Table.make(title)` | Data table -- `.resource(slug)`, `.columns([...])`, `.limit(n)`, `.sortBy(col, dir)` |
+| `Chart.make(title)` | Chart -- `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
+| `List.make(title)` | Item list card -- `.items([{ label, description?, href?, icon? }])`, `.limit(n)` |
+| `Widget.make(id)` | Dashboard widget (from `@boostkit/dashboards`) -- standalone or inside `Dashboard.make()` |
+| `Dashboard.make(id)` | User-customizable dashboard grid (from `@boostkit/dashboards`) -- drag-and-drop, per-user layout |
 
 ### `Chart`
 
-Render line, bar, area, pie, or doughnut charts on the dashboard. Uses `recharts` (optional peer dependency).
+Render line, bar, area, pie, or doughnut charts. Uses `recharts` (optional peer dependency).
 
 ```ts
 import { Chart } from '@boostkit/panels'
@@ -423,7 +458,7 @@ Chart types:
 | `pie` | Pie chart |
 | `doughnut` | Doughnut (pie with inner radius) |
 
-**Requirement**: Install `recharts` — `pnpm add recharts`
+**Requirement**: Install `recharts` -- `pnpm add recharts`
 
 ### `List`
 
@@ -1081,7 +1116,7 @@ Storage: single `PanelGlobal` table — `slug` (PK) + `data` (JSON string). No m
 Define widgets on the show page for a specific resource. The `widgets()` method receives the current record and returns schema elements.
 
 ```ts
-import { Resource, Stats, Stat, Chart } from '@boostkit/panels'
+import { Resource, Stats, Stat, Chart, List } from '@boostkit/panels'
 
 export class ArticleResource extends Resource {
   // ... fields, filters, etc.
@@ -1089,14 +1124,20 @@ export class ArticleResource extends Resource {
   widgets(record?: Record<string, unknown>) {
     return [
       Stats.make([
+        Stat.make('Views').value(record?.viewCount ?? 0),
         Stat.make('Word Count').value(String(record?.content ?? '').split(' ').length),
         Stat.make('Status').value(String(record?.draftStatus ?? 'draft')),
       ]),
-      Chart.make('Views Over Time')
+      Chart.make('Traffic')
         .chartType('area')
         .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])
         .datasets([{ label: 'Views', data: [45, 120, 89, 200, 156] }])
         .height(200),
+      List.make('Related Links')
+        .items([
+          { label: 'View on site', href: `/articles/${record?.slug}`, icon: '🔗' },
+          { label: 'Analytics', href: `/analytics/articles/${record?.id}`, icon: '📊' },
+        ]),
     ]
   }
 }
@@ -1104,13 +1145,17 @@ export class ArticleResource extends Resource {
 
 Widgets render above the record fields on the show page. All schema element types are supported: `Stats`, `Chart`, `List`, `Table`, `Text`, `Heading`.
 
-The `WidgetRenderer` React component handles rendering of all widget types. It is used internally by the show page and also available for custom pages:
+### WidgetRenderer Component
+
+The `WidgetRenderer` React component renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Available for custom pages:
 
 ```tsx
 import { WidgetRenderer } from '@boostkit/panels/client'
 
 <WidgetRenderer widgets={widgetData} panel="admin" />
 ```
+
+`WidgetRenderer` handles all element types and renders the appropriate UI component for each (stat cards, charts, tables, lists, headings, text).
 
 ---
 
