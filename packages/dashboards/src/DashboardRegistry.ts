@@ -1,25 +1,33 @@
-import type { Widget } from './Widget.js'
+import type { Dashboard } from './Dashboard.js'
 
 export class DashboardRegistry {
-  private static _widgets: Map<string, Widget> = new Map()
+  private static _dashboards: Map<string, Dashboard> = new Map()
 
-  static register(widget: Widget): void {
-    this._widgets.set(widget.getId(), widget)
+  static register(panelName: string, dashboard: Dashboard): void {
+    this._dashboards.set(`${panelName}:${dashboard.getId()}`, dashboard)
   }
 
-  static get(id: string): Widget | undefined {
-    return this._widgets.get(id)
+  static get(panelName: string, dashboardId: string): Dashboard | undefined {
+    return this._dashboards.get(`${panelName}:${dashboardId}`)
   }
 
-  static all(): Widget[] {
-    return [...this._widgets.values()]
+  static allForPanel(panelName: string): Dashboard[] {
+    const result: Dashboard[] = []
+    for (const [key, dash] of this._dashboards) {
+      if (key.startsWith(`${panelName}:`)) result.push(dash)
+    }
+    return result
   }
 
-  static has(id: string): boolean {
-    return this._widgets.has(id)
+  static all(): Dashboard[] {
+    return [...this._dashboards.values()]
+  }
+
+  static has(panelName: string, dashboardId: string): boolean {
+    return this._dashboards.has(`${panelName}:${dashboardId}`)
   }
 
   static reset(): void {
-    this._widgets.clear()
+    this._dashboards.clear()
   }
 }

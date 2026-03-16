@@ -1,13 +1,10 @@
 import { ServiceProvider, type Application } from '@boostkit/core'
-import type { Widget } from './Widget.js'
+import type { Widget, WidgetSize } from './Widget.js'
+import type { Dashboard } from './Dashboard.js'
 import { DashboardRegistry } from './DashboardRegistry.js'
 
-export interface DashboardConfig {
-  widgets: Widget[]
-}
-
-/** Build default layout positions from registered widgets. */
-function buildDefaultLayout(widgets: Widget[]): Array<{ widgetId: string; size: string; position: number }> {
+/** Build default layout positions from a list of widgets. */
+function buildDefaultLayout(widgets: Widget[]): Array<{ widgetId: string; size: WidgetSize; position: number }> {
   return widgets.map((w, i) => ({
     widgetId: w.getId(),
     size:     w.getDefaultSize(),
@@ -16,31 +13,22 @@ function buildDefaultLayout(widgets: Widget[]): Array<{ widgetId: string; size: 
 }
 
 /**
- * Returns a DashboardServiceProvider class configured for the given dashboard config.
+ * Returns a DashboardServiceProvider class that auto-discovers Dashboard
+ * elements from panel schemas (no widget config needed).
  *
  * Usage in bootstrap/providers.ts:
  *   import { dashboard } from '@boostkit/dashboards'
- *   export default [..., dashboard({ widgets: [...] }), ...]
+ *   export default [..., dashboard(), ...]
  */
-export function dashboard(config: DashboardConfig): new (app: Application) => ServiceProvider {
+export function dashboard(): new (app: Application) => ServiceProvider {
   class DashboardServiceProvider extends ServiceProvider {
     register(): void {
       DashboardRegistry.reset()
-      for (const widget of config.widgets) {
-        DashboardRegistry.register(widget)
-      }
     }
 
     async boot(): Promise<void> {
-      const widgets = DashboardRegistry.all()
-      if (widgets.length === 0) return
-
-      // Dynamic imports — @boostkit/panels is a peer dependency
-      let PanelRegistry: { all(): Array<{ getApiBase(): string; getName(): string }> }
-      let router: {
-        get(path: string, handler: (req: any, res: any) => unknown, mw?: unknown[]): void
-        put(path: string, handler: (req: any, res: any) => unknown, mw?: unknown[]): void
-      }
+      let PanelRegistry: any
+      let router: any
       try {
         const panels    = await import('@boostkit/panels') as any
         PanelRegistry   = panels.PanelRegistry
@@ -51,30 +39,73 @@ export function dashboard(config: DashboardConfig): new (app: Application) => Se
       }
 
       for (const panel of PanelRegistry.all()) {
+        const panelName = panel.getName()
         const base = `${panel.getApiBase()}/_dashboard`
 
-        // GET /_dashboard/widgets — list all widgets with resolved data
-        router.get(`${base}/widgets`, async (req, res) => {
+        // Try to discover Dashboard elements from static schema
+        const schemaDef = panel.getSchema()
+        if (schemaDef && Array.isArray(schemaDef)) {
+          for (const el of schemaDef) {
+            if (typeof el?.getType === 'function' && el.getType() === 'dashboard') {
+              DashboardRegistry.register(panelName, el)
+            }
+          }
+        }
+        // For async schemas, dashboards are discovered at request time (see routes below)
+
+        // GET /_dashboard/:dashId/widgets — list widgets with resolved data
+        router.get(`${base}/:dashId/widgets`, async (req: any, res: any) => {
+          let dashboard = DashboardRegistry.get(panelName, req.params.dashId)
+
+          if (!dashboard) {
+            // Resolve async schema to discover dashboards
+            const schema = typeof schemaDef === 'function'
+              ? await schemaDef({ user: req.user, headers: req.headers ?? {}, path: req.url })
+              : schemaDef ?? []
+            for (const el of schema) {
+              if (typeof el?.getType === 'function' && el.getType() === 'dashboard') {
+                DashboardRegistry.register(panelName, el)
+                if (el.getId() === req.params.dashId) dashboard = el
+              }
+            }
+          }
+
+          if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' })
+
+          // Determine which widgets to return (top-level or tab)
+          const tabId = req.query?.tab as string | undefined
+          let widgets = dashboard.getWidgets()
+          if (tabId) {
+            const tab = dashboard.getTabs()?.find((t: any) => t.getId() === tabId)
+            if (tab) widgets = tab.getWidgets()
+          }
+
           const results = []
           for (const widget of widgets) {
-            const meta  = widget.toMeta()
+            const meta = widget.toMeta()
             let data: unknown = null
             const dataFn = widget.getDataFn()
             if (dataFn) {
               try {
-                data = await dataFn({ user: req.user })
-              } catch { /* data resolution failed — return null */ }
+                const settingsStr = req.query?.settings as string | undefined
+                const settings = settingsStr ? JSON.parse(settingsStr) : undefined
+                data = await dataFn({ user: req.user }, settings)
+              } catch { /* data resolution failed */ }
             }
             results.push({ ...meta, data })
           }
           return res.json({ widgets: results })
         })
 
-        // GET /_dashboard/layout — get user's saved layout (or default)
-        router.get(`${base}/layout`, async (req, res) => {
+        // GET /_dashboard/:dashId/layout — user's saved layout (or default)
+        router.get(`${base}/:dashId/layout`, async (req: any, res: any) => {
           const userId = req.user?.id as string | undefined
+          const dashId = req.params.dashId as string
+          const tabId = req.query?.tab as string | undefined
+          const layoutKey = tabId ? `${dashId}:${tabId}` : dashId
+
           if (!userId) {
-            return res.json({ layout: buildDefaultLayout(widgets) })
+            return res.json({ layout: getDefaultLayout(panelName, dashId, tabId) })
           }
 
           try {
@@ -82,7 +113,7 @@ export function dashboard(config: DashboardConfig): new (app: Application) => Se
             const prisma = app().make('prisma')
             if (prisma?.panelDashboardLayout) {
               const record = await prisma.panelDashboardLayout.findFirst({
-                where: { userId, panel: panel.getName() },
+                where: { userId, panel: panelName, dashboardId: layoutKey },
               })
               if (record) {
                 return res.json({ layout: JSON.parse(String(record.layout)) })
@@ -90,16 +121,19 @@ export function dashboard(config: DashboardConfig): new (app: Application) => Se
             }
           } catch { /* DB not available — fall through to default */ }
 
-          return res.json({ layout: buildDefaultLayout(widgets) })
+          return res.json({ layout: getDefaultLayout(panelName, dashId, tabId) })
         })
 
-        // PUT /_dashboard/layout — save user's layout
-        router.put(`${base}/layout`, async (req, res) => {
+        // PUT /_dashboard/:dashId/layout — save user's layout
+        router.put(`${base}/:dashId/layout`, async (req: any, res: any) => {
           const userId = req.user?.id as string | undefined
           if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
           }
 
+          const dashId = req.params.dashId as string
+          const tabId = req.query?.tab as string | undefined
+          const layoutKey = tabId ? `${dashId}:${tabId}` : dashId
           const body = req.body as { layout?: unknown }
           if (!body?.layout || !Array.isArray(body.layout)) {
             return res.status(400).json({ error: 'Invalid layout' })
@@ -109,21 +143,11 @@ export function dashboard(config: DashboardConfig): new (app: Application) => Se
             const { app } = await import('@boostkit/core') as any
             const prisma = app().make('prisma')
             if (prisma?.panelDashboardLayout) {
-              const existing = await prisma.panelDashboardLayout.findFirst({
-                where: { userId, panel: panel.getName() },
+              await prisma.panelDashboardLayout.upsert({
+                where: { userId_panel_dashboardId: { userId, panel: panelName, dashboardId: layoutKey } },
+                create: { userId, panel: panelName, dashboardId: layoutKey, layout: JSON.stringify(body.layout) },
+                update: { layout: JSON.stringify(body.layout) },
               })
-              const layoutJson = JSON.stringify(body.layout)
-
-              if (existing) {
-                await prisma.panelDashboardLayout.update({
-                  where: { id: existing.id },
-                  data:  { layout: layoutJson },
-                })
-              } else {
-                await prisma.panelDashboardLayout.create({
-                  data: { userId, panel: panel.getName(), layout: layoutJson },
-                })
-              }
             }
           } catch {
             return res.status(500).json({ error: 'Failed to save layout' })
@@ -136,6 +160,21 @@ export function dashboard(config: DashboardConfig): new (app: Application) => Se
   }
 
   return DashboardServiceProvider
+}
+
+function getDefaultLayout(panelName: string, dashId: string, tabId?: string): unknown[] {
+  const dashboard = DashboardRegistry.get(panelName, dashId)
+  if (!dashboard) return []
+
+  let widgets: Widget[]
+  if (tabId) {
+    const tab = dashboard.getTabs()?.find((t: any) => t.getId() === tabId)
+    widgets = tab ? tab.getWidgets() : []
+  } else {
+    widgets = dashboard.getWidgets()
+  }
+
+  return buildDefaultLayout(widgets)
 }
 
 export { buildDefaultLayout }

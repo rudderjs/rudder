@@ -11,7 +11,7 @@ import { session } from '@boostkit/session'
 import { localization } from '@boostkit/localization'
 import { database } from '@boostkit/orm-prisma'
 import { panels } from '@boostkit/panels'
-import { dashboard, Widget } from '@boostkit/dashboards'
+import { dashboard } from '@boostkit/dashboards'
 import { broadcasting } from '@boostkit/broadcast'
 import { live }   from '@boostkit/live'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
@@ -34,52 +34,7 @@ export default [
   scheduler(),
   notifications(),
   panels([adminPanel]),
-  dashboard({
-    widgets: [
-      Widget.make('total-articles')
-        .label('Total Articles')
-        .component('stat')
-        .defaultSize('small')
-        .icon('📝')
-        .data(async () => {
-          const { Article } = await import('../app/Models/Article.js')
-          return { value: await Article.query().count(), trend: 5 }
-        }),
-      Widget.make('total-users')
-        .label('Total Users')
-        .component('stat')
-        .defaultSize('small')
-        .icon('👥')
-        .data(async () => {
-          const { User } = await import('../app/Models/User.js')
-          return { value: await User.query().count() }
-        }),
-      Widget.make('articles-chart')
-        .label('Articles per Month')
-        .component('chart')
-        .defaultSize('large')
-        .icon('📊')
-        .data(async () => ({
-          type: 'bar',
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-          datasets: [
-            { label: 'Published', data: [3, 7, 5, 12, 8, 15] },
-            { label: 'Drafts', data: [2, 4, 3, 5, 2, 6] },
-          ],
-        })),
-      Widget.make('quick-links')
-        .label('Quick Links')
-        .component('list')
-        .defaultSize('medium')
-        .icon('🔗')
-        .data(async () => ({
-          items: [
-            { label: 'Documentation', description: 'Read the docs', href: '/docs', icon: '📖' },
-            { label: 'GitHub', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
-          ],
-        })),
-    ],
-  }),
+  dashboard(),  // auto-discovers Dashboard.make() elements from panel schemas
   broadcasting(),
   live(configs.live),   // /ws-live — Yjs CRDT sync (after broadcasting so upgrade handler chains correctly)
   // User Providers

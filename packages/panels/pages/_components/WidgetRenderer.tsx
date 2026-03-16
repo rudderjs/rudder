@@ -40,6 +40,14 @@ export function WidgetRenderer({ element, panelPath, i18n }: WidgetRendererProps
     return <ListWidget element={element as ListElementMeta} />
   }
 
+  if (element.type === 'stat-progress') {
+    return <StatProgressWidget data={(element as any).data ?? {}} />
+  }
+
+  if (element.type === 'user-card') {
+    return <UserCardWidget data={(element as any).data ?? {}} />
+  }
+
   return null
 }
 
@@ -240,6 +248,71 @@ function ListWidget({ element }: { element: ListElementMeta }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+function StatProgressWidget({ data }: { data: Record<string, unknown> }) {
+  const value = Number(data?.value ?? 0)
+  const max = Number(data?.max ?? 100)
+  const label = String(data?.label ?? '')
+  const pct = max > 0 ? (value / max) * 100 : 0
+  const color = String(data?.color ?? 'hsl(var(--primary))')
+
+  // SVG circular progress
+  const radius = 15.9155
+  const circumference = 2 * Math.PI * radius
+
+  return (
+    <div className="rounded-xl border bg-card p-5 h-full flex flex-col items-center justify-center gap-3">
+      <svg viewBox="0 0 36 36" className="w-20 h-20 -rotate-90">
+        <circle
+          cx="18" cy="18" r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          className="text-muted/20"
+        />
+        <circle
+          cx="18" cy="18" r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="3"
+          strokeDasharray={`${(pct / 100) * circumference} ${circumference}`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="text-center">
+        <p className="text-2xl font-bold tabular-nums">{value}<span className="text-sm font-normal text-muted-foreground">/{max}</span></p>
+        {label && <p className="text-xs text-muted-foreground mt-0.5">{label}</p>}
+      </div>
+    </div>
+  )
+}
+
+function UserCardWidget({ data }: { data: Record<string, unknown> }) {
+  const name = String(data?.name ?? '')
+  const role = String(data?.role ?? '')
+  const avatar = data?.avatar as string | undefined
+  const href = data?.href as string | undefined
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+
+  return (
+    <div className="rounded-xl border bg-card p-5 h-full flex items-center gap-4">
+      {avatar ? (
+        <img src={avatar} alt={name} className="w-12 h-12 rounded-full object-cover shrink-0" />
+      ) : (
+        <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+          {initials}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold truncate">{name}</p>
+        {role && <p className="text-xs text-muted-foreground">{role}</p>}
+      </div>
+      {href && (
+        <a href={href} className="text-xs text-primary hover:underline shrink-0">View</a>
       )}
     </div>
   )

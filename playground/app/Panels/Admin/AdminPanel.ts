@@ -1,4 +1,5 @@
 import { Panel, Heading, Text, Stats, Stat, Table, Chart, List } from '@boostkit/panels'
+import { Dashboard, Widget } from '@boostkit/dashboards'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'
@@ -29,30 +30,110 @@ export const adminPanel = Panel.make('admin')
     SiteSettingsGlobal,
   ])
   .schema(async (ctx) => [
+    // ── Static SSR content ───────────────────────────────────
     Heading.make(`Welcome back${ctx.user?.name ? `, ${ctx.user.name}` : ''}.`),
     Text.make('Here\'s a quick overview of your content.'),
-    Stats.make([
-      Stat.make('Articles').value(await Article.query().count()),
-      Stat.make('Categories').value(await Category.query().count()),
-      Stat.make('Todos').value(await Todo.query().count()),
-      Stat.make('Users').value(await User.query().count()),
-    ]),
-    Chart.make('Articles per Month')
-      .chartType('bar')
-      .labels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'])
-      .datasets([
-        { label: 'Published', data: [3, 7, 5, 12, 8, 15] },
-        { label: 'Drafts', data: [2, 4, 3, 5, 2, 6] },
-      ]),
-    Table.make('Recent Articles')
-      .resource('articles')
-      .columns(['title', 'status', 'createdAt'])
-      .limit(5),
-    List.make('Quick Links')
-      .items([
-        { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
-        { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
-        { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
+
+    // ── User-customizable dashboard (drag/resize/settings) ───
+    Dashboard.make('overview')
+      .label('Overview')
+      .widgets([
+        Widget.make('total-articles')
+          .label('Total Articles')
+          .component('stat')
+          .small()
+          .icon('📝')
+          .data(async () => ({
+            value: await Article.query().count(),
+            trend: 5,
+          })),
+
+        Widget.make('total-categories')
+          .label('Total Categories')
+          .component('stat')
+          .small()
+          .icon('📂')
+          .data(async () => ({
+            value: await Category.query().count(),
+          })),
+
+        Widget.make('total-todos')
+          .label('Total Todos')
+          .component('stat-progress')
+          .small()
+          .icon('✅')
+          .data(async () => ({
+            value: await Todo.query().where('completed', true).count(),
+            max: await Todo.query().count(),
+            label: 'Completed',
+          })),
+
+        Widget.make('total-users')
+          .label('Total Users')
+          .component('stat')
+          .small()
+          .icon('👥')
+          .data(async () => ({
+            value: await User.query().count(),
+          })),
+
+        Widget.make('articles-chart')
+          .label('Articles per Month')
+          .component('chart')
+          .defaultSize({ w: 8, h: 3 })
+          .minSize({ w: 4, h: 2 })
+          .icon('📊')
+          .settings([
+            { name: 'period', type: 'select', label: 'Period', options: ['3 months', '6 months', '12 months'], default: '6 months' },
+          ])
+          .data(async () => ({
+            type: 'bar',
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [
+              { label: 'Published', data: [3, 7, 5, 12, 8, 15] },
+              { label: 'Drafts', data: [2, 4, 3, 5, 2, 6] },
+            ],
+          })),
+
+        Widget.make('quick-links')
+          .label('Quick Links')
+          .component('list')
+          .defaultSize({ w: 4, h: 3 })
+          .icon('🔗')
+          .data(async () => ({
+            items: [
+              { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
+              { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
+              { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
+            ],
+          })),
+      ])
+      .tabs([
+        Dashboard.tab('content').label('Content').widgets([
+          Widget.make('recent-articles')
+            .label('Recent Articles')
+            .component('table')
+            .large()
+            .data(async () => ({
+              columns: [
+                { name: 'title', label: 'Title' },
+                { name: 'createdAt', label: 'Date' },
+              ],
+              records: await Article.query().orderBy('createdAt', 'desc').limit(5).get(),
+              href: '/admin/articles',
+            })),
+        ]),
+        Dashboard.tab('charts').label('Charts').widgets([
+          Widget.make('traffic-chart')
+            .label('Weekly Traffic')
+            .component('chart')
+            .defaultSize({ w: 12, h: 3 })
+            .data(async () => ({
+              type: 'area',
+              labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+              datasets: [{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }],
+            })),
+        ]),
       ]),
   ])
   .pages([

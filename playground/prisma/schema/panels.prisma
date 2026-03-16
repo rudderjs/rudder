@@ -16,11 +16,12 @@ model PanelGlobal {
 }
 
 model PanelDashboardLayout {
-  id        String   @id @default(cuid())
-  userId    String
-  panel     String
-  layout    String   @default("[]")  // JSON: [{ widgetId, size, x, y, w, h }]
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  panel       String
+  dashboardId String   @default("default")
+  layout      String   @default("[]")  // JSON: [{ widgetId, size, x, y, w, h }]
+  updatedAt   DateTime @updatedAt
 
-  @@unique([userId, panel])
+  @@unique([userId, panel, dashboardId])
 }

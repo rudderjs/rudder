@@ -38,24 +38,7 @@ export async function resolveSchema(
     const type = (el as any).getType?.() as string | undefined
     if (!type) continue
 
-    if (type === 'text' || type === 'heading' || type === 'stats') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result.push((el as any).toMeta() as PanelSchemaElementMeta)
-      continue
-    }
-
-    if (type === 'chart') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result.push((el as any).toMeta() as PanelSchemaElementMeta)
-      continue
-    }
-
-    if (type === 'list') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result.push((el as any).toMeta() as PanelSchemaElementMeta)
-      continue
-    }
-
+    // Table needs special resolution (query model, build columns)
     if (type === 'table') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const config = (el as any).getConfig() as import('./schema/Table.js').TableConfig
@@ -113,6 +96,14 @@ export async function resolveSchema(
         records,
         href:     `${panel.getPath()}/${config.resource}`,
       } satisfies TableElementMeta)
+      continue
+    }
+
+    // All other element types (text, heading, stats, chart, list, dashboard, etc.)
+    // — pass through their toMeta() directly
+    if (typeof (el as any).toMeta === 'function') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      result.push((el as any).toMeta() as PanelSchemaElementMeta)
     }
   }
 
