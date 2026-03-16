@@ -718,8 +718,15 @@ export default function ResourceListPage() {
                     )
                     : (
                       <div className="flex flex-col items-center gap-3">
-                        <span className="text-3xl">📭</span>
-                        <p className="text-sm font-medium">{t(i18n.noRecordsTitle, { label: resourceMeta.label })}</p>
+                        <span className="text-3xl">{resourceMeta.emptyStateIcon ?? '📭'}</span>
+                        <p className="text-sm font-medium">
+                          {resourceMeta.emptyStateHeading
+                            ? t(resourceMeta.emptyStateHeading, { label: resourceMeta.label })
+                            : t(i18n.noRecordsTitle, { label: resourceMeta.label })}
+                        </p>
+                        {resourceMeta.emptyStateDescription && (
+                          <p className="text-sm text-muted-foreground">{resourceMeta.emptyStateDescription}</p>
+                        )}
                         <a
                           href={`/${pathSegment}/${slug}/create`}
                           className="text-sm text-primary hover:underline"

@@ -1686,3 +1686,56 @@ describe('panels schema files', () => {
     assert.ok(content.includes('drizzle-orm/mysql-core'))
   })
 })
+
+describe('Resource — navigation group', () => {
+  it('navigationGroup defaults to undefined', () => {
+    class R extends Resource { fields() { return [] } }
+    assert.strictEqual(new R().toMeta().navigationGroup, undefined)
+  })
+
+  it('navigationGroup is included in meta when set', () => {
+    class R extends Resource {
+      static navigationGroup = 'Content'
+      fields() { return [] }
+    }
+    assert.strictEqual(new R().toMeta().navigationGroup, 'Content')
+  })
+})
+
+describe('Resource — navigation badge color', () => {
+  it('navigationBadgeColor defaults to undefined', () => {
+    class R extends Resource { fields() { return [] } }
+    assert.strictEqual(new R().toMeta().navigationBadgeColor, undefined)
+  })
+
+  it('navigationBadgeColor is included in meta when set', () => {
+    class R extends Resource {
+      static navigationBadgeColor = 'danger' as const
+      fields() { return [] }
+    }
+    assert.strictEqual(new R().toMeta().navigationBadgeColor, 'danger')
+  })
+})
+
+describe('Resource — empty state', () => {
+  it('emptyState fields default to undefined', () => {
+    class R extends Resource { fields() { return [] } }
+    const meta = new R().toMeta()
+    assert.strictEqual(meta.emptyStateIcon, undefined)
+    assert.strictEqual(meta.emptyStateHeading, undefined)
+    assert.strictEqual(meta.emptyStateDescription, undefined)
+  })
+
+  it('emptyState fields are included in meta when set', () => {
+    class R extends Resource {
+      static emptyStateIcon = '📝'
+      static emptyStateHeading = 'No :label yet'
+      static emptyStateDescription = 'Create your first article to get started.'
+      fields() { return [] }
+    }
+    const meta = new R().toMeta()
+    assert.strictEqual(meta.emptyStateIcon, '📝')
+    assert.strictEqual(meta.emptyStateHeading, 'No :label yet')
+    assert.strictEqual(meta.emptyStateDescription, 'Create your first article to get started.')
+  })
+})

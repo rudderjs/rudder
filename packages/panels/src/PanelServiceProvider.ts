@@ -71,6 +71,23 @@ export class PanelServiceProvider extends ServiceProvider {
         return res.json(panel.toMeta())
       }, mw)
 
+      // Badge values — resolves async navigationBadge functions for sidebar display
+      router.get(`${panel.getApiBase()}/_badges`, async (_req, res) => {
+        const badges: Record<string, string | number | null> = {}
+        for (const ResourceClass of panel.getResources()) {
+          const badgeFn = ResourceClass.navigationBadge
+          if (badgeFn) {
+            try {
+              const value = await badgeFn()
+              badges[ResourceClass.getSlug()] = value ?? null
+            } catch {
+              badges[ResourceClass.getSlug()] = null
+            }
+          }
+        }
+        return res.json(badges)
+      }, mw)
+
       // Global search endpoint — queries all resources with searchable fields
       router.get(`${panel.getApiBase()}/_search`, async (req, res) => {
         const url   = new URL(req.url, 'http://localhost')

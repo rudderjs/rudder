@@ -32,6 +32,11 @@ export interface ResourceMeta {
   draftable:         boolean
   collaborative:     boolean
   softDeletes:       boolean
+  navigationGroup?: string
+  navigationBadgeColor?: 'gray' | 'primary' | 'success' | 'warning' | 'danger'
+  emptyStateIcon?: string
+  emptyStateHeading?: string
+  emptyStateDescription?: string
 }
 
 // ─── Resource base class ───────────────────────────────────
@@ -113,6 +118,30 @@ export class Resource {
    * Requires a `deletedAt DateTime?` column on the model's table.
    */
   static softDeletes = false
+
+  /** Navigation group label — resources with the same group are grouped in the sidebar. */
+  static navigationGroup?: string
+
+  /**
+   * Navigation badge — async function that returns a count or label for the sidebar badge.
+   * Called on each page load. Return `null` or `undefined` to hide the badge.
+   */
+  static navigationBadge?: () => Promise<string | number | null | undefined>
+
+  /**
+   * Navigation badge color — Tailwind color name.
+   * Options: 'gray' | 'primary' | 'success' | 'warning' | 'danger'
+   */
+  static navigationBadgeColor?: 'gray' | 'primary' | 'success' | 'warning' | 'danger'
+
+  /** Custom empty state icon — emoji or short string. Default: '📭' */
+  static emptyStateIcon?: string
+
+  /** Custom empty state heading. Supports `:label` placeholder. */
+  static emptyStateHeading?: string
+
+  /** Custom empty state description. */
+  static emptyStateDescription?: string
 
   // ── Abstract / overridable ──────────────────────────────
 
@@ -201,6 +230,11 @@ export class Resource {
     if (Cls.defaultSort    !== undefined) meta.defaultSort    = Cls.defaultSort
     if (Cls.defaultSortDir !== undefined) meta.defaultSortDir = Cls.defaultSortDir
     if (Cls.titleField     !== undefined) meta.titleField     = Cls.titleField
+    if (Cls.navigationGroup)       meta.navigationGroup       = Cls.navigationGroup
+    if (Cls.navigationBadgeColor)  meta.navigationBadgeColor  = Cls.navigationBadgeColor
+    if (Cls.emptyStateIcon)        meta.emptyStateIcon        = Cls.emptyStateIcon
+    if (Cls.emptyStateHeading)     meta.emptyStateHeading     = Cls.emptyStateHeading
+    if (Cls.emptyStateDescription) meta.emptyStateDescription = Cls.emptyStateDescription
     return meta
   }
 }

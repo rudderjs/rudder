@@ -7,6 +7,10 @@ export class UserResource extends Resource {
   static labelSingular = 'User'
   static icon = 'users'
 
+  static navigationGroup      = 'System'
+  static navigationBadge      = async () => await User.query().count()
+  static navigationBadgeColor = 'gray' as const
+
   fields() {
     return [
       TextField.make('name')

@@ -37,6 +37,13 @@ export class ArticleResource extends Resource {
   static draftable     = true
   static softDeletes   = true
 
+  static navigationGroup     = 'Content'
+  static navigationBadge     = async () => await Article.query().count()
+  static navigationBadgeColor = 'primary' as const
+  static emptyStateIcon       = '📝'
+  static emptyStateHeading    = 'No :label yet'
+  static emptyStateDescription = 'Write your first article to share with the world.'
+
   fields() {
     return [
       // ── Content ──────────────────────────────────────────────

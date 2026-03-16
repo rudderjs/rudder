@@ -10,6 +10,8 @@ export class CategoryResource extends Resource {
   static titleField    = 'name'
   static defaultSort   = 'name'
 
+  static navigationGroup = 'Content'
+
   fields() {
     return [
       TextField.make('name')

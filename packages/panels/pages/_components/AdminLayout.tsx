@@ -13,6 +13,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -43,11 +44,12 @@ interface Props {
 }
 
 interface NavItem {
-  slug:  string
-  label: string
-  icon:  string | undefined
-  href:  string
-  group?: 'resource' | 'global' | 'page'
+  slug:             string
+  label:            string
+  icon:             string | undefined
+  href:             string
+  kind:             'resource' | 'global' | 'page'
+  navigationGroup?: string
 }
 
 interface SessionUser {
@@ -59,9 +61,22 @@ interface SessionUser {
 function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   const path = panelMeta.path
   return [
-    ...panelMeta.resources.map((r) => ({ slug: r.slug, label: r.label, icon: r.icon, href: `${path}/${r.slug}`, group: 'resource' as const })),
-    ...(panelMeta.globals ?? []).map((g) => ({ slug: g.slug, label: g.label, icon: g.icon, href: `${path}/globals/${g.slug}`, group: 'global' as const })),
-    ...panelMeta.pages.map((p)     => ({ slug: p.slug, label: p.label, icon: p.icon, href: `${path}/${p.slug}`, group: 'page' as const })),
+    ...panelMeta.resources.map((r) => ({
+      slug: r.slug, label: r.label, icon: r.icon,
+      href: `${path}/${r.slug}`,
+      kind: 'resource' as const,
+      navigationGroup: r.navigationGroup,
+    })),
+    ...(panelMeta.globals ?? []).map((g) => ({
+      slug: g.slug, label: g.label, icon: g.icon,
+      href: `${path}/globals/${g.slug}`,
+      kind: 'global' as const,
+    })),
+    ...panelMeta.pages.map((p) => ({
+      slug: p.slug, label: p.label, icon: p.icon,
+      href: `${path}/${p.slug}`,
+      kind: 'page' as const,
+    })),
   ]
 }
 
@@ -221,11 +236,106 @@ function SidebarLogo({ branding, name, path }: { branding: PanelMeta['branding']
   )
 }
 
+function useNavigationBadges(panelMeta: PanelMeta): Record<string, string | number | null> {
+  const [badges, setBadges] = useState<Record<string, string | number | null>>({})
+
+  useEffect(() => {
+    fetch(`${panelMeta.path}/api/_badges`)
+      .then(r => r.ok ? r.json() : {})
+      .then(setBadges)
+      .catch(() => {})
+  }, [panelMeta.path])
+
+  return badges
+}
+
+function SidebarNavigation({ items, currentSlug, badges, panelMeta }: {
+  items: NavItem[]
+  currentSlug: string
+  badges: Record<string, string | number | null>
+  panelMeta: PanelMeta
+}) {
+  const resourceItems = items.filter(i => i.kind === 'resource')
+  const globalItems   = items.filter(i => i.kind === 'global')
+  const pageItems     = items.filter(i => i.kind === 'page')
+
+  // Group resources by navigationGroup
+  const grouped = new Map<string, NavItem[]>()
+  const ungrouped: NavItem[] = []
+  for (const item of resourceItems) {
+    if (item.navigationGroup) {
+      const list = grouped.get(item.navigationGroup) ?? []
+      list.push(item)
+      grouped.set(item.navigationGroup, list)
+    } else {
+      ungrouped.push(item)
+    }
+  }
+
+  const badgeColors: Record<string, string> = {
+    gray:    'bg-muted text-muted-foreground',
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    danger:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  }
+
+  function renderItem(item: NavItem) {
+    const badge = badges[item.slug]
+    const resourceMeta = panelMeta.resources.find(r => r.slug === item.slug)
+    const colorCls = badgeColors[resourceMeta?.navigationBadgeColor ?? 'gray'] ?? badgeColors['gray']
+
+    return (
+      <SidebarMenuItem key={item.slug}>
+        <SidebarMenuButton
+          render={<a href={item.href} />}
+          isActive={item.slug === currentSlug}
+          tooltip={item.label}
+        >
+          <ResourceIcon icon={item.icon} />
+          <span>{item.label}</span>
+          {badge != null && (
+            <span className={`ml-auto inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${colorCls}`}>
+              {badge}
+            </span>
+          )}
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    )
+  }
+
+  function renderGroup(label: string | null, groupItems: NavItem[]) {
+    if (groupItems.length === 0) return null
+    return (
+      <SidebarGroup key={label ?? '__ungrouped'}>
+        {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {groupItems.map(renderItem)}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    )
+  }
+
+  return (
+    <>
+      {renderGroup(null, ungrouped)}
+      {[...grouped.entries()].map(([label, groupItems]) =>
+        renderGroup(label, groupItems)
+      )}
+      {globalItems.length > 0 && renderGroup('Settings', globalItems)}
+      {pageItems.length > 0 && renderGroup('Pages', pageItems)}
+    </>
+  )
+}
+
 function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props & { currentSlug: string }) {
-  const items = useNavItemsWithPersistedState(panelMeta)
-  const user  = useSessionUser(initialUser)
-  const i18n  = panelMeta.i18n
-  const dir   = panelMeta.dir ?? 'ltr'
+  const items  = useNavItemsWithPersistedState(panelMeta)
+  const badges = useNavigationBadges(panelMeta)
+  const user   = useSessionUser(initialUser)
+  const i18n   = panelMeta.i18n
+  const dir    = panelMeta.dir ?? 'ltr'
   const branding = panelMeta.branding
 
   return (
@@ -236,52 +346,12 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
             <SidebarLogo branding={branding} name={panelMeta.name} path={panelMeta.path} />
           </SidebarHeader>
           <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {items.filter(i => i.group === 'resource').map((item) => (
-                    <SidebarMenuItem key={item.slug}>
-                      <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
-                        <ResourceIcon icon={item.icon} />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            {items.some(i => i.group === 'global') && (
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {items.filter(i => i.group === 'global').map((item) => (
-                      <SidebarMenuItem key={item.slug}>
-                        <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
-                          <ResourceIcon icon={item.icon} />
-                          <span>{item.label}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
-            {items.some(i => i.group === 'page') && (
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {items.filter(i => i.group === 'page').map((item) => (
-                      <SidebarMenuItem key={item.slug}>
-                        <SidebarMenuButton render={<a href={item.href} />} isActive={item.slug === currentSlug} tooltip={item.label}>
-                          <ResourceIcon icon={item.icon} />
-                          <span>{item.label}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
+            <SidebarNavigation
+              items={items}
+              currentSlug={currentSlug}
+              badges={badges}
+              panelMeta={panelMeta}
+            />
           </SidebarContent>
           <SidebarFooter className="border-t">
             <SidebarUserMenu user={user} i18n={i18n} />
