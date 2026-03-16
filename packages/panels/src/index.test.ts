@@ -1717,6 +1717,254 @@ describe('Resource — navigation badge color', () => {
   })
 })
 
+// ─── Field — .persist() ──────────────────────────────────────
+
+describe('Field — persist()', () => {
+  it('defaults to no persist', () => {
+    const f = TextField.make('title')
+    assert.equal(f.isPersist(), false)
+    assert.equal(f.getPersistMode(), false)
+    assert.equal(f.isYjs(), false)
+    assert.deepEqual(f.getYjsProviders(), [])
+  })
+
+  it('.persist() sets localStorage mode', () => {
+    const f = TextField.make('title').persist()
+    assert.equal(f.isPersist(), true)
+    assert.equal(f.getPersistMode(), 'localStorage')
+    assert.equal(f.isYjs(), false)
+    assert.deepEqual(f.getYjsProviders(), [])
+  })
+
+  it('.persist() in toMeta()', () => {
+    const meta = TextField.make('title').persist().toMeta()
+    assert.equal(meta.persist, 'localStorage')
+    assert.equal(meta.yjs, undefined)
+    assert.equal(meta.yjsProviders, undefined)
+  })
+
+  it('.persist("indexeddb") sets yjs + indexeddb provider', () => {
+    const f = TextField.make('title').persist('indexeddb')
+    assert.equal(f.isPersist(), true)
+    assert.deepEqual(f.getPersistMode(), ['indexeddb'])
+    assert.equal(f.isYjs(), true)
+    assert.deepEqual(f.getYjsProviders(), ['indexeddb'])
+  })
+
+  it('.persist("indexeddb") in toMeta()', () => {
+    const meta = TextField.make('title').persist('indexeddb').toMeta()
+    assert.deepEqual(meta.persist, ['indexeddb'])
+    assert.equal(meta.yjs, true)
+    assert.deepEqual(meta.yjsProviders, ['indexeddb'])
+  })
+
+  it('.persist("websocket") sets yjs + websocket provider', () => {
+    const f = TextField.make('title').persist('websocket')
+    assert.equal(f.isYjs(), true)
+    assert.deepEqual(f.getYjsProviders(), ['websocket'])
+    assert.deepEqual(f.getPersistMode(), ['websocket'])
+  })
+
+  it('.persist(["websocket", "indexeddb"]) sets both providers', () => {
+    const f = TextField.make('title').persist(['websocket', 'indexeddb'])
+    assert.equal(f.isYjs(), true)
+    assert.deepEqual(f.getYjsProviders(), ['websocket', 'indexeddb'])
+    assert.deepEqual(f.getPersistMode(), ['websocket', 'indexeddb'])
+  })
+
+  it('.persist(["websocket", "indexeddb"]) in toMeta()', () => {
+    const meta = TextField.make('title').persist(['websocket', 'indexeddb']).toMeta()
+    assert.deepEqual(meta.persist, ['websocket', 'indexeddb'])
+    assert.equal(meta.yjs, true)
+    assert.deepEqual(meta.yjsProviders, ['websocket', 'indexeddb'])
+  })
+
+  it('.collaborative() is shorthand for websocket yjs', () => {
+    const f = TextField.make('title').collaborative()
+    assert.equal(f.isYjs(), true)
+    assert.deepEqual(f.getYjsProviders(), ['websocket'])
+    // persist mode is not set — .collaborative() is not .persist()
+    assert.equal(f.getPersistMode(), false)
+  })
+
+  it('.collaborative() in toMeta()', () => {
+    const meta = TextField.make('title').collaborative().toMeta()
+    assert.equal(meta.yjs, true)
+    assert.deepEqual(meta.yjsProviders, ['websocket'])
+    assert.equal(meta.persist, undefined)
+  })
+
+  it('.collaborative().persist("indexeddb") merges providers', () => {
+    const f = TextField.make('title').collaborative().persist('indexeddb')
+    assert.equal(f.isYjs(), true)
+    assert.deepEqual(f.getYjsProviders(), ['websocket', 'indexeddb'])
+    assert.deepEqual(f.getPersistMode(), ['indexeddb'])
+  })
+
+  it('.persist("websocket").persist("indexeddb") merges providers', () => {
+    const f = TextField.make('title').persist('websocket').persist('indexeddb')
+    assert.equal(f.isYjs(), true)
+    assert.deepEqual(f.getYjsProviders(), ['websocket', 'indexeddb'])
+    // persist mode is the last call
+    assert.deepEqual(f.getPersistMode(), ['indexeddb'])
+  })
+
+  it('no duplicate providers when .collaborative().persist("websocket")', () => {
+    const f = TextField.make('title').collaborative().persist('websocket')
+    assert.deepEqual(f.getYjsProviders(), ['websocket'])
+  })
+})
+
+// ─── Resource — autosave & persistFormState ──────────────────
+
+describe('Resource — autosave', () => {
+  it('defaults to autosave=false', () => {
+    class R extends Resource { fields() { return [] } }
+    const meta = new R().toMeta()
+    assert.equal(meta.autosave, false)
+    assert.equal(meta.autosaveInterval, 30000)
+  })
+
+  it('static autosave = true', () => {
+    class R extends Resource {
+      static autosave = true
+      fields() { return [] }
+    }
+    const meta = new R().toMeta()
+    assert.equal(meta.autosave, true)
+    assert.equal(meta.autosaveInterval, 30000)
+  })
+
+  it('static autosave = { interval: 10000 }', () => {
+    class R extends Resource {
+      static autosave = { interval: 10000 }
+      fields() { return [] }
+    }
+    const meta = new R().toMeta()
+    assert.equal(meta.autosave, true)
+    assert.equal(meta.autosaveInterval, 10000)
+  })
+
+  it('static autosave object without interval uses default', () => {
+    class R extends Resource {
+      static autosave = {} as { interval?: number }
+      fields() { return [] }
+    }
+    const meta = new R().toMeta()
+    assert.equal(meta.autosave, true)
+    assert.equal(meta.autosaveInterval, 30000)
+  })
+})
+
+describe('Resource — persistFormState', () => {
+  it('defaults to false', () => {
+    class R extends Resource { fields() { return [] } }
+    const meta = new R().toMeta()
+    assert.equal(meta.persistFormState, false)
+  })
+
+  it('static persistFormState = true', () => {
+    class R extends Resource {
+      static persistFormState = true
+      fields() { return [] }
+    }
+    const meta = new R().toMeta()
+    assert.equal(meta.persistFormState, true)
+  })
+})
+
+// ─── Resource — yjs derived from fields ──────────────────────
+
+describe('Resource — yjs flag', () => {
+  it('yjs=false when no fields use yjs', () => {
+    class R extends Resource {
+      fields() { return [TextField.make('title')] }
+    }
+    assert.equal(new R().toMeta().yjs, false)
+  })
+
+  it('yjs=true when a field has .collaborative()', () => {
+    class R extends Resource {
+      fields() { return [TextField.make('title').collaborative()] }
+    }
+    assert.equal(new R().toMeta().yjs, true)
+  })
+
+  it('yjs=true when a field has .persist("websocket")', () => {
+    class R extends Resource {
+      fields() { return [TextField.make('title').persist('websocket')] }
+    }
+    assert.equal(new R().toMeta().yjs, true)
+  })
+
+  it('yjs=true when a field has .persist("indexeddb")', () => {
+    class R extends Resource {
+      fields() { return [TextField.make('title').persist('indexeddb')] }
+    }
+    assert.equal(new R().toMeta().yjs, true)
+  })
+
+  it('yjs=false when field only has .persist() (localStorage)', () => {
+    class R extends Resource {
+      fields() { return [TextField.make('title').persist()] }
+    }
+    assert.equal(new R().toMeta().yjs, false)
+  })
+
+  it('yjs derived through Section grouping', () => {
+    class R extends Resource {
+      fields() {
+        return [Section.make('Content').schema(
+          TextField.make('title').persist('websocket'),
+        )]
+      }
+    }
+    assert.equal(new R().toMeta().yjs, true)
+  })
+
+  it('yjs derived through Tabs grouping', () => {
+    class R extends Resource {
+      fields() {
+        return [Tabs.make().tab('Main',
+          TextField.make('title').collaborative(),
+        )]
+      }
+    }
+    assert.equal(new R().toMeta().yjs, true)
+  })
+})
+
+// ─── i18n — autosave & persist keys ─────────────────────────
+
+describe('i18n — autosave & persist strings', () => {
+  it('en has all autosave/persist keys', () => {
+    const i18n = getPanelI18n('en')
+    assert.equal(typeof i18n.autosaved, 'string')
+    assert.equal(typeof i18n.autosaving, 'string')
+    assert.equal(typeof i18n.unsavedChanges, 'string')
+    assert.equal(typeof i18n.restoreDraft, 'string')
+    assert.equal(typeof i18n.restoreDraftButton, 'string')
+    assert.equal(typeof i18n.discardDraft, 'string')
+    assert.equal(typeof i18n.unsavedWarning, 'string')
+  })
+
+  it('ar has all autosave/persist keys', () => {
+    const i18n = getPanelI18n('ar')
+    assert.equal(typeof i18n.autosaved, 'string')
+    assert.equal(typeof i18n.autosaving, 'string')
+    assert.equal(typeof i18n.unsavedChanges, 'string')
+    assert.equal(typeof i18n.restoreDraft, 'string')
+    assert.equal(typeof i18n.restoreDraftButton, 'string')
+    assert.equal(typeof i18n.discardDraft, 'string')
+    assert.equal(typeof i18n.unsavedWarning, 'string')
+  })
+
+  it('restoreDraft contains :time placeholder', () => {
+    const i18n = getPanelI18n('en')
+    assert.ok(i18n.restoreDraft.includes(':time'))
+  })
+})
+
 describe('Resource — empty state', () => {
   it('emptyState fields default to undefined', () => {
     class R extends Resource { fields() { return [] } }
