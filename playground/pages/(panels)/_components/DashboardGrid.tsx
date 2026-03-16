@@ -2,32 +2,46 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  ResponsiveGridLayout,
-  useContainerWidth,
-} from 'react-grid-layout'
-import type {
-  Layout,
-  LayoutItem as RGLLayoutItem,
-  ResponsiveLayouts,
-} from 'react-grid-layout'
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { WidgetRenderer } from './WidgetRenderer.js'
 import { WidgetSettingsDrawer } from './WidgetSettingsDrawer.js'
 import type { PanelSchemaElementMeta, PanelI18n } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/dashboards'
 
-import 'react-grid-layout/css/styles.css'
+// ── Size presets ────────────────────────────────────────────────────────────
 
-// ── Grid config ──────────────────────────────────────────────────────────────
-const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
-const ROW_HEIGHT = 80
+const SIZE_PRESETS = [
+  { label: '1/4', w: 3 },
+  { label: '1/3', w: 4 },
+  { label: '1/2', w: 6 },
+  { label: '2/3', w: 8 },
+  { label: 'Full', w: 12 },
+] as const
 
-// ── Types ────────────────────────────────────────────────────────────────────
+/** Clamp width to valid 12-col span. */
+function clampSpan(w: number): number {
+  return Math.max(1, Math.min(12, w))
+}
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
 interface DashboardLayoutItem {
-  widgetId: string
-  x:        number
-  y:        number
-  w:        number
-  h:        number
+  widgetId:  string
+  w:         number
   settings?: Record<string, unknown>
 }
 
@@ -46,32 +60,72 @@ export interface DashboardGridProps {
   tabId?:         string
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Compute layout positions from widget definitions using greedy row-fill. */
+/** Build default layout from widget definitions. */
 function computeDefaultLayout(widgets: WidgetMeta[]): DashboardLayoutItem[] {
-  const items: DashboardLayoutItem[] = []
-  let curX = 0, curY = 0, rowMaxH = 0
-  for (const w of widgets) {
-    const size = w.defaultSize
-    if (curX + size.w > 12) {
-      curX = 0
-      curY += rowMaxH
-      rowMaxH = 0
-    }
-    items.push({ widgetId: w.id, x: curX, y: curY, w: size.w, h: size.h })
-    curX += size.w
-    rowMaxH = Math.max(rowMaxH, size.h)
-  }
-  return items
+  return widgets.map(w => ({
+    widgetId: w.id,
+    w: w.defaultSize.w,
+  }))
 }
 
-/** Build query string suffix for optional tabId. */
 function tabQuery(tabId?: string): string {
   return tabId ? `?tab=${tabId}` : ''
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Sortable widget wrapper ─────────────────────────────────────────────────
+
+interface SortableWidgetProps {
+  id:        string
+  span:      number
+  minHeight?: number
+  editing:   boolean
+  children:  React.ReactNode
+}
+
+function SortableWidget({ id, span, minHeight, editing, children }: SortableWidgetProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: !editing })
+
+  const style: React.CSSProperties = {
+    gridColumn: `span ${span}`,
+    // Only translate — don't let dnd-kit scale/resize the element
+    transform: transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    ...(minHeight ? { minHeight } : {}),
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} className="relative group">
+      {editing && (
+        <div
+          {...listeners}
+          className="absolute top-2 left-2 z-10 w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing rounded bg-background/80 backdrop-blur border border-border opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
+          title="Drag to reorder"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="5" cy="3" r="1.5" />
+            <circle cx="11" cy="3" r="1.5" />
+            <circle cx="5" cy="8" r="1.5" />
+            <circle cx="11" cy="8" r="1.5" />
+            <circle cx="5" cy="13" r="1.5" />
+            <circle cx="11" cy="13" r="1.5" />
+          </svg>
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
 
 export function DashboardGrid({
   dashboardId,
@@ -92,10 +146,12 @@ export function DashboardGrid({
   const layoutRef = useRef(layout)
   layoutRef.current = layout
 
-  // react-grid-layout v2: useContainerWidth hook replaces WidthProvider
-  const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 1200 })
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
-  // -- Load widgets + layout --------------------------------------------------
+  // ── Load widgets + layout ───────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
@@ -114,15 +170,12 @@ export function DashboardGrid({
           if (body.layout.length > 0) {
             setLayout(body.layout)
           } else {
-            // No saved layout — compute from defaults
             setLayout(computeDefaultLayout(defaultWidgets))
           }
         } else {
-          // No layout endpoint or error — use defaults
           setLayout(computeDefaultLayout(defaultWidgets))
         }
       } catch {
-        // Network error — fall back to defaults
         setLayout(computeDefaultLayout(defaultWidgets))
       }
       setLoading(false)
@@ -130,7 +183,7 @@ export function DashboardGrid({
     void load()
   }, [pathSegment, dashboardId, tabId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // -- Save layout ------------------------------------------------------------
+  // ── Save layout ─────────────────────────────────────────────────────────
   const saveLayout = useCallback(async (newLayout: DashboardLayoutItem[]) => {
     try {
       const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
@@ -143,54 +196,44 @@ export function DashboardGrid({
     } catch { /* save failed silently */ }
   }, [pathSegment, dashboardId, tabId])
 
-  // -- react-grid-layout change handler ---------------------------------------
-  const handleLayoutChange = useCallback((rglLayout: Layout, _layouts: ResponsiveLayouts) => {
-    if (!editing) return
+  // ── Drag end — reorder ──────────────────────────────────────────────────
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
     setLayout(prev => {
-      return prev.map(item => {
-        const rglItem = rglLayout.find((l: RGLLayoutItem) => l.i === item.widgetId)
-        if (!rglItem) return item
-        return {
-          ...item,
-          x: rglItem.x,
-          y: rglItem.y,
-          w: rglItem.w,
-          h: rglItem.h,
-        }
-      })
+      const oldIdx = prev.findIndex(item => item.widgetId === active.id)
+      const newIdx = prev.findIndex(item => item.widgetId === over.id)
+      if (oldIdx === -1 || newIdx === -1) return prev
+      return arrayMove(prev, oldIdx, newIdx)
     })
-  }, [editing])
+  }
 
-  // -- Remove widget ----------------------------------------------------------
+  // ── Change widget size ──────────────────────────────────────────────────
+  function setWidgetSize(widgetId: string, w: number) {
+    setLayout(prev => prev.map(item =>
+      item.widgetId === widgetId ? { ...item, w } : item
+    ))
+  }
+
+  // ── Remove widget ───────────────────────────────────────────────────────
   function removeWidget(widgetId: string) {
     setLayout(prev => prev.filter(item => item.widgetId !== widgetId))
   }
 
-  // -- Add widget -------------------------------------------------------------
+  // ── Add widget ──────────────────────────────────────────────────────────
   function addWidget(widget: WidgetWithData) {
-    setLayout(prev => {
-      // Compute Y position: below all existing items
-      let maxBottom = 0
-      for (const item of prev) {
-        maxBottom = Math.max(maxBottom, item.y + item.h)
-      }
-      const size = widget.defaultSize
-      return [
-        ...prev,
-        { widgetId: widget.id, x: 0, y: maxBottom, w: size.w, h: size.h },
-      ]
-    })
+    setLayout(prev => [...prev, { widgetId: widget.id, w: widget.defaultSize.w }])
     setShowPalette(false)
   }
 
-  // -- Done editing -----------------------------------------------------------
+  // ── Done editing ────────────────────────────────────────────────────────
   async function handleDone() {
     setEditing(false)
     setShowPalette(false)
     await saveLayout(layoutRef.current)
   }
 
-  // -- Refresh a single widget with new settings ------------------------------
+  // ── Refresh single widget ──────────────────────────────────────────────
   async function refreshWidget(widgetId: string, settings: Record<string, unknown>) {
     try {
       const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
@@ -209,27 +252,20 @@ export function DashboardGrid({
     } catch { /* refresh failed */ }
   }
 
-  // -- Build active widgets (layout order) ------------------------------------
+  // ── Build active widgets ───────────────────────────────────────────────
   const activeWidgets = layout
-    .map(item => ({
-      ...item,
-      widget: widgets.find(w => w.id === item.widgetId),
-    }))
+    .map(item => ({ ...item, widget: widgets.find(w => w.id === item.widgetId) }))
     .filter(item => item.widget !== undefined)
 
-  // Widgets not in the layout (for the palette)
-  const availableWidgets = widgets.filter(
-    w => !layout.some(item => item.widgetId === w.id)
-  )
+  const availableWidgets = widgets.filter(w => !layout.some(item => item.widgetId === w.id))
 
-  // Don't render anything if no widgets registered at all
   if (!loading && widgets.length === 0) return null
 
   if (loading) {
     return (
       <div className="mt-6">
         <div className="h-8 w-48 animate-pulse bg-muted/30 rounded mb-4" />
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-12 gap-4">
           {[1, 2, 3].map(i => (
             <div key={i} className="col-span-2 h-32 animate-pulse bg-muted/20 rounded-xl" />
           ))}
@@ -238,31 +274,11 @@ export function DashboardGrid({
     )
   }
 
-  // Build react-grid-layout items
-  const rglItems: RGLLayoutItem[] = activeWidgets.map(item => {
-    const widgetMeta = defaultWidgets.find(w => w.id === item.widgetId)
-    return {
-      i:    item.widgetId,
-      x:    item.x,
-      y:    item.y,
-      w:    item.w,
-      h:    item.h,
-      minW: widgetMeta?.minSize?.w ?? 2,
-      minH: widgetMeta?.minSize?.h ?? 1,
-      maxW: widgetMeta?.maxSize?.w ?? 12,
-      maxH: widgetMeta?.maxSize?.h ?? 8,
-      static: !editing,
-    }
-  })
-
-  const rglLayouts: ResponsiveLayouts = {
-    lg: rglItems,
-  }
-
   const heading = label ?? i18n.dashboard ?? 'Dashboard'
+  const widgetIds = activeWidgets.map(w => w.widgetId)
 
   return (
-    <div className="mt-6" ref={containerRef}>
+    <div className="mt-6">
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">{heading}</h2>
@@ -288,10 +304,12 @@ export function DashboardGrid({
         )}
       </div>
 
-      {/* Widget palette (add widgets) */}
+      {/* Palette */}
       {editing && showPalette && availableWidgets.length > 0 && (
         <div className="mb-4 p-4 rounded-xl border bg-muted/30">
-          <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Available Widgets</p>
+          <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
+            {i18n.availableWidgets ?? 'Available Widgets'}
+          </p>
           <div className="flex flex-wrap gap-2">
             {availableWidgets.map(w => (
               <button
@@ -308,7 +326,7 @@ export function DashboardGrid({
         </div>
       )}
 
-      {/* No widgets state */}
+      {/* Empty state */}
       {activeWidgets.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-sm">{i18n.noWidgets ?? 'No widgets added yet.'}</p>
@@ -325,53 +343,78 @@ export function DashboardGrid({
       )}
 
       {/* Widget grid */}
-      {activeWidgets.length > 0 && mounted && (
-        <ResponsiveGridLayout
-          className="layout"
-          width={width}
-          layouts={rglLayouts}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-          cols={COLS}
-          rowHeight={ROW_HEIGHT}
-          margin={[16, 16]}
-          containerPadding={[0, 0]}
-          resizeConfig={{ enabled: editing }}
-          onLayoutChange={handleLayoutChange}
-        >
-          {activeWidgets.map(({ widgetId, widget }) => (
-            <div key={widgetId} className="relative group h-full">
-              {/* Edit overlay — settings + remove buttons */}
-              {editing && (
-                <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {widget!.settings && widget!.settings.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setSettingsWidgetId(widgetId) }}
-                      className="w-5 h-5 flex items-center justify-center text-xs rounded bg-background/80 backdrop-blur border border-border hover:bg-accent transition-colors"
-                      title="Settings"
-                    >
-                      {'\u2699'}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); removeWidget(widgetId) }}
-                    className="w-5 h-5 flex items-center justify-center text-xs rounded bg-background/80 backdrop-blur border border-border text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
-                    title="Remove widget"
+      {activeWidgets.length > 0 && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={widgetIds} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-12 gap-4">
+              {activeWidgets.map(({ widgetId, w, widget }) => {
+                const span = clampSpan(w)
+                const needsHeight = widget?.component === 'chart' || widget?.component === 'table'
+                return (
+                  <SortableWidget
+                    key={widgetId}
+                    id={widgetId}
+                    span={span}
+                    minHeight={needsHeight ? 280 : undefined}
+                    editing={editing}
                   >
-                    {'\u00d7'}
-                  </button>
-                </div>
-              )}
+                    {/* Edit controls */}
+                    {editing && (
+                      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {widget!.settings && widget!.settings.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSettingsWidgetId(widgetId)}
+                            className="w-5 h-5 flex items-center justify-center text-xs rounded bg-background/80 backdrop-blur border border-border hover:bg-accent transition-colors"
+                            title="Settings"
+                          >
+                            ⚙
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeWidget(widgetId)}
+                          className="w-5 h-5 flex items-center justify-center text-xs rounded bg-background/80 backdrop-blur border border-border text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
 
-              {/* Widget content */}
-              <WidgetCard widget={widget!} panelPath={panelPath} i18n={i18n} />
+                    {/* Size presets — shown in edit mode at bottom */}
+                    {editing && (
+                      <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {SIZE_PRESETS.map(preset => (
+                          <button
+                            key={preset.w}
+                            type="button"
+                            onClick={() => setWidgetSize(widgetId, preset.w)}
+                            className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
+                              w === preset.w
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-background/80 backdrop-blur border border-border hover:bg-accent'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Widget content */}
+                    <div className="h-full">
+                      <WidgetCard widget={widget!} panelPath={panelPath} i18n={i18n} />
+                    </div>
+                  </SortableWidget>
+                )
+              })}
             </div>
-          ))}
-        </ResponsiveGridLayout>
+          </SortableContext>
+        </DndContext>
       )}
 
-      {/* Widget settings drawer */}
+      {/* Settings drawer */}
       {settingsWidgetId && (() => {
         const widgetMeta = widgets.find(w => w.id === settingsWidgetId)
         const layoutItem = layout.find(l => l.widgetId === settingsWidgetId)
@@ -398,53 +441,16 @@ export function DashboardGrid({
   )
 }
 
-// -- Widget card -- maps widget component type to schema element ---------------
-
-function CustomWidgetLoader({ widget }: { widget: WidgetWithData }) {
-  const [Comp, setComp] = useState<React.ComponentType<{ data: unknown; widget: WidgetWithData }> | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!widget.componentPath) return
-    import(/* @vite-ignore */ widget.componentPath)
-      .then(mod => setComp(() => mod.default))
-      .catch((err: unknown) => setError(String(err)))
-  }, [widget.componentPath])
-
-  if (error) {
-    return (
-      <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/20 p-5 h-full">
-        <p className="text-sm font-semibold text-red-600">{widget.label}</p>
-        <p className="text-xs text-red-500 mt-1">Failed to load custom component</p>
-      </div>
-    )
-  }
-
-  if (!Comp) {
-    return (
-      <div className="rounded-xl border bg-card p-5 h-full animate-pulse">
-        <div className="h-4 w-24 bg-muted/40 rounded mb-3" />
-        <div className="h-16 bg-muted/20 rounded" />
-      </div>
-    )
-  }
-
-  return <Comp data={widget.data} widget={widget} />
-}
+// ── Widget card — maps widget component type to WidgetRenderer ─────────────
 
 function WidgetCard({ widget, panelPath, i18n }: { widget: WidgetWithData; panelPath: string; i18n: PanelI18n & Record<string, string> }) {
   const data = widget.data as Record<string, unknown> | null
 
-  // Custom component escape hatch
+  // Custom component
   if (widget.component === 'custom' && widget.componentPath) {
-    return (
-      <div className="h-full">
-        <CustomWidgetLoader widget={widget} />
-      </div>
-    )
+    return <CustomWidgetLoader widget={widget} />
   }
 
-  // Map widget component type to PanelSchemaElementMeta
   let element: PanelSchemaElementMeta | null = null
 
   if (widget.component === 'stat') {
@@ -464,7 +470,7 @@ function WidgetCard({ widget, panelPath, i18n }: { widget: WidgetWithData; panel
       chartType: (data?.type as string) ?? 'line',
       labels: (data?.labels as string[]) ?? [],
       datasets: (data?.datasets as any[]) ?? [],
-      height: (data?.height as number) ?? 200,
+      height: (data?.height as number) ?? Math.max((widget.defaultSize.h * 80) - 60, 180),
     } as PanelSchemaElementMeta
   } else if (widget.component === 'table') {
     element = {
@@ -483,15 +489,9 @@ function WidgetCard({ widget, panelPath, i18n }: { widget: WidgetWithData; panel
       limit: (data?.limit as number) ?? 5,
     } as PanelSchemaElementMeta
   } else if (widget.component === 'stat-progress') {
-    element = {
-      type: 'stat-progress',
-      data: data ?? {},
-    } as any
+    element = { type: 'stat-progress', data: data ?? {} } as any
   } else if (widget.component === 'user-card') {
-    element = {
-      type: 'user-card',
-      data: data ?? {},
-    } as any
+    element = { type: 'user-card', data: data ?? {} } as any
   }
 
   if (!element) {
@@ -503,9 +503,39 @@ function WidgetCard({ widget, panelPath, i18n }: { widget: WidgetWithData; panel
     )
   }
 
-  return (
-    <div className="h-full">
-      <WidgetRenderer element={element} panelPath={panelPath} i18n={i18n} />
-    </div>
-  )
+  return <WidgetRenderer element={element} panelPath={panelPath} i18n={i18n} />
+}
+
+// ── Custom component loader ─────────────────────────────────────────────────
+
+function CustomWidgetLoader({ widget }: { widget: WidgetWithData }) {
+  const [Comp, setComp] = useState<React.ComponentType<{ data: unknown; widget: WidgetWithData }> | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!widget.componentPath) return
+    import(/* @vite-ignore */ widget.componentPath)
+      .then(mod => setComp(() => mod.default))
+      .catch((err: unknown) => setError(String(err)))
+  }, [widget.componentPath])
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/20 p-5 h-full">
+        <p className="text-sm font-semibold text-red-600">{widget.label}</p>
+        <p className="text-xs text-red-500 mt-1">Failed to load component</p>
+      </div>
+    )
+  }
+
+  if (!Comp) {
+    return (
+      <div className="rounded-xl border bg-card p-5 h-full animate-pulse">
+        <div className="h-4 w-24 bg-muted/40 rounded mb-3" />
+        <div className="h-16 bg-muted/20 rounded" />
+      </div>
+    )
+  }
+
+  return <Comp data={widget.data} widget={widget} />
 }
