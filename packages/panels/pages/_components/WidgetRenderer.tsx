@@ -43,23 +43,30 @@ export function WidgetRenderer({ element, panelPath, i18n }: WidgetRendererProps
   return null
 }
 
+function StatCard({ stat }: { stat: PanelStatMeta }) {
+  return (
+    <div className="rounded-xl border bg-card p-5 flex flex-col gap-1 h-full">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+      <p className="text-3xl font-bold tabular-nums">{stat.value.toLocaleString()}</p>
+      {stat.description && (
+        <p className="text-xs text-muted-foreground mt-0.5">{stat.description}</p>
+      )}
+      {stat.trend !== undefined && (
+        <p className={`text-xs font-medium mt-0.5 ${stat.trend >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+          {stat.trend >= 0 ? '\u2191' : '\u2193'} {Math.abs(stat.trend)}%
+        </p>
+      )}
+    </div>
+  )
+}
+
 function StatsRow({ stats }: { stats: PanelStatMeta[] }) {
+  // Single stat — render directly, filling the container
+  if (stats.length === 1) return <StatCard stat={stats[0]!} />
+
   return (
     <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(stats.length, 4)}`}>
-      {stats.map((stat, i) => (
-        <div key={i} className="rounded-xl border bg-card p-5 flex flex-col gap-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{stat.label}</p>
-          <p className="text-3xl font-bold tabular-nums">{stat.value.toLocaleString()}</p>
-          {stat.description && (
-            <p className="text-xs text-muted-foreground mt-0.5">{stat.description}</p>
-          )}
-          {stat.trend !== undefined && (
-            <p className={`text-xs font-medium mt-0.5 ${stat.trend >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-              {stat.trend >= 0 ? '\u2191' : '\u2193'} {Math.abs(stat.trend)}%
-            </p>
-          )}
-        </div>
-      ))}
+      {stats.map((stat, i) => <StatCard key={i} stat={stat} />)}
     </div>
   )
 }
