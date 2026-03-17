@@ -42,27 +42,21 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
   const panelMeta = panel.toMeta()
   const sessionUser = await getSessionUser(pageContext)
 
-  // Resolve the page schema (same as Panel.schema())
-  const schemaDef = PageClass.getSchema()
-  let schemaData: PanelSchemaElementMeta[] = []
-  if (schemaDef) {
-    const ctx = {
-      user: sessionUser as any,
-      headers: (pageContext as any).headers ?? {},
-      path: pageContext.urlPathname,
-      params: pageParams,
-    }
-
-    const elements = typeof schemaDef === 'function'
-      ? await schemaDef(ctx)
-      : schemaDef
-
-    // Use resolveSchema with a proxy panel that returns the page elements
-    const pagePanel = Object.create(panel, {
-      getSchema: { value: () => elements },
-    })
-    schemaData = await resolveSchema(pagePanel, ctx)
+  const ctx = {
+    user: sessionUser as any,
+    headers: (pageContext as any).headers ?? {},
+    path: pageContext.urlPathname,
+    params: pageParams,
   }
+
+  // Call schema() directly — works for both overridden methods and define() definitions
+  const elements = await PageClass.schema(ctx)
+
+  // Use resolveSchema with a proxy panel that returns the page elements
+  const pagePanel = Object.create(panel, {
+    getSchema: { value: () => elements },
+  })
+  const schemaData = await resolveSchema(pagePanel, ctx)
 
   const urlSearch = pageContext.urlParsed?.search ?? {}
 
