@@ -4,19 +4,19 @@ import { useState, useEffect, useRef } from 'react'
 import { useData }   from 'vike-react/useData'
 import { navigate }  from 'vike/client/router'
 import { useConfig } from 'vike-react/useConfig'
-import { Breadcrumbs }      from '../../../../_components/Breadcrumbs.js'
-import { EditToolbar }      from '../../../../_components/edit/EditToolbar.js'
-import { FormActions }      from '../../../../_components/edit/FormActions.js'
-import { SchemaRenderer }   from '../../../../_components/edit/SchemaRenderer.js'
-import { VersionHistory }   from '../../../../_components/edit/VersionHistory.js'
-import { useCollaborativeForm } from '../../../../_hooks/useCollaborativeForm.js'
-import { useEditForm }      from '../../../../_hooks/useEditForm.js'
-import { useFormPersist }   from '../../../../_hooks/useFormPersist.js'
-import { useFieldPersist }  from '../../../../_hooks/useFieldPersist.js'
-import { useAutosave }      from '../../../../_hooks/useAutosave.js'
-import { RestoreBanner }    from '../../../../_components/edit/RestoreBanner.js'
-import { flattenFormFields, buildInitialValues } from '../../../../_lib/formHelpers.js'
-import type { SchemaItem }  from '../../../../_lib/formHelpers.js'
+import { Breadcrumbs }      from '../../../../../_components/Breadcrumbs.js'
+import { EditToolbar }      from '../../../../../_components/edit/EditToolbar.js'
+import { FormActions }      from '../../../../../_components/edit/FormActions.js'
+import { SchemaRenderer }   from '../../../../../_components/edit/SchemaRenderer.js'
+import { VersionHistory }   from '../../../../../_components/edit/VersionHistory.js'
+import { useCollaborativeForm } from '../../../../../_hooks/useCollaborativeForm.js'
+import { useEditForm }      from '../../../../../_hooks/useEditForm.js'
+import { useFormPersist }   from '../../../../../_hooks/useFormPersist.js'
+import { useFieldPersist }  from '../../../../../_hooks/useFieldPersist.js'
+import { useAutosave }      from '../../../../../_hooks/useAutosave.js'
+import { RestoreBanner }    from '../../../../../_components/edit/RestoreBanner.js'
+import { flattenFormFields, buildInitialValues } from '../../../../../_lib/formHelpers.js'
+import type { SchemaItem }  from '../../../../../_lib/formHelpers.js'
 import type { Data } from './+data.js'
 
 export default function EditPage() {
@@ -33,7 +33,7 @@ export default function EditPage() {
   config({ title: `${i18n.edit} ${resourceMeta.labelSingular} — ${panelName}` })
 
   // ── Back navigation ──────────────────────────────────────
-  const defaultBack = `/${pathSegment}/${slug}`
+  const defaultBack = `/${pathSegment}/resources/${slug}`
   const [backHref, setBackHref] = useState(defaultBack)
   useEffect(() => {
     const fromQs = new URLSearchParams(window.location.search).get('back')
@@ -224,8 +224,8 @@ export default function EditPage() {
   return (
     <>
       <Breadcrumbs crumbs={[
-        { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/${slug}` },
-        { label: resourceMeta.label, href: `/${pathSegment}/${slug}` },
+        { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
+        { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
         { label: `${i18n.edit} ${resourceMeta.labelSingular}` },
       ]} />
 

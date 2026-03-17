@@ -63,7 +63,7 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   return [
     ...panelMeta.resources.map((r) => ({
       slug: r.slug, label: r.label, icon: r.icon,
-      href: `${path}/${r.slug}`,
+      href: `${path}/resources/${r.slug}`,
       kind: 'resource' as const,
       navigationGroup: r.navigationGroup,
     })),

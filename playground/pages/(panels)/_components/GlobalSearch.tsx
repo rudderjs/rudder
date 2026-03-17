@@ -61,7 +61,7 @@ export function GlobalSearch({ panelMeta, pathSegment }: Props) {
 
   function goToItem(item: { resource: string; id: string }) {
     close()
-    void navigate(`/${pathSegment}/${item.resource}/${item.id}`)
+    void navigate(`/${pathSegment}/resources/${item.resource}/${item.id}`)
   }
 
   const search = useCallback((q: string) => {

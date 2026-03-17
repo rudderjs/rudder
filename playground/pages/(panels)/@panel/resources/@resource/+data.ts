@@ -1,5 +1,5 @@
 import { PanelRegistry } from '@boostkit/panels'
-import { getSessionUser } from '../../_lib/getSessionUser.js'
+import { getSessionUser } from '../../../_lib/getSessionUser.js'
 
 function flattenFields(items: any[]): any[] {
   const result: any[] = []
