@@ -62,29 +62,64 @@ export class Page {
    * Match a URL path against this page's slug pattern and extract route params.
    * Returns an object of extracted params on match, or `null` if no match.
    *
-   * Supports `:param` placeholders anywhere in the slug:
-   *   - `orders/:id`       → `orders/123`      → `{ id: '123' }`
-   *   - `reports/:y/:m`    → `reports/2025/03`  → `{ y: '2025', m: '03' }`
-   *   - `item-:id`         → `item-42`          → `{ id: '42' }`
-   *   - `reports`          → `reports`           → `{}`
+   * Required params:  `:param`  — must be present
+   * Optional params:  `:param?` — segment-level only; absent params are omitted
+   *
+   * @example
+   *   slug `orders/:id`            + path `orders/123`       → `{ id: '123' }`
+   *   slug `reports/:y/:m`         + path `reports/2025/03`  → `{ y: '2025', m: '03' }`
+   *   slug `item-:id`              + path `item-42`          → `{ id: '42' }`
+   *   slug `item/:id?`             + path `item`             → `{}`
+   *   slug `item/:id?`             + path `item/42`          → `{ id: '42' }`
+   *   slug `orders/:id/items/:n?`  + path `orders/1/items`   → `{ id: '1' }`
+   *   slug `orders/:id/items/:n?`  + path `orders/1/items/5` → `{ id: '1', n: '5' }`
    */
-  static matchPath(urlPath: string): Record<string, string> | null {
-    const pattern = this.getSlug()
+  static matchPath(urlPath: string): Record<string, string | undefined> | null {
+    const segments = this.getSlug().split('/')
     const paramNames: string[] = []
+    let regexSource = ''
+    let optionalOpen = 0
 
-    // Escape regex special chars, then replace :param with a capture group
-    const regexSource = pattern
-      .replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
-      .replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name: string) => {
-        paramNames.push(name)
-        return '([^/]+)'
-      })
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i]!
+      const prefix = i === 0 ? '' : '/'
+
+      if (seg.startsWith(':') && seg.endsWith('?') && seg.length > 2) {
+        // Optional segment param: :name?
+        // Wrap the /segment pair so the slash is also optional
+        paramNames.push(seg.slice(1, -1))
+        regexSource += `(?:${prefix}([^/]+)`
+        optionalOpen++
+      } else if (seg.startsWith(':')) {
+        // Required param: :name (may appear inline, e.g. item-:id)
+        const escaped = seg.replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
+          .replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name: string) => {
+            paramNames.push(name)
+            return '([^/]+)'
+          })
+        regexSource += `${prefix}${escaped}`
+      } else {
+        // Literal segment (may contain inline :param, e.g. item-:id)
+        const escaped = seg.replace(/[.+*?^${}()|[\]\\]/g, '\\$&')
+          .replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name: string) => {
+            paramNames.push(name)
+            return '([^/]+)'
+          })
+        regexSource += `${prefix}${escaped}`
+      }
+    }
+
+    // Close all open optional groups (innermost first)
+    for (let i = 0; i < optionalOpen; i++) regexSource += ')?'
 
     const match = urlPath.match(new RegExp(`^${regexSource}$`))
     if (!match) return null
 
-    const params: Record<string, string> = {}
-    paramNames.forEach((name, i) => { params[name] = match[i + 1]! })
+    const params: Record<string, string | undefined> = {}
+    paramNames.forEach((name, i) => {
+      const val = match[i + 1]
+      if (val !== undefined) params[name] = val
+    })
     return params
   }
 

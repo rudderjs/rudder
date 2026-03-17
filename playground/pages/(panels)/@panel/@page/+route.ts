@@ -34,8 +34,12 @@ export const route: RouteSync = (pageContext) => {
     if (!PageClass.hasSchema()) continue
     const params = PageClass.matchPath(urlPath)
     if (params !== null) {
+      // Strip undefined values — Vike routeParams must be strings
+      const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined)
+      ) as Record<string, string>
       return {
-        routeParams: { panel: panelSegment!, page: PageClass.getSlug(), ...params },
+        routeParams: { panel: panelSegment!, page: PageClass.getSlug(), ...cleanParams },
       }
     }
   }
