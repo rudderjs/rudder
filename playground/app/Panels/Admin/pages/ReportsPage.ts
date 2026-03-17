@@ -3,7 +3,7 @@ import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
 
 export class ReportsPage extends Page {
-  static slug  = 'reports/:id'
+  static slug  = 'reports/:id?/:id2?'
   static label = 'Reports'
   static icon  = 'bar-chart-3'
 
