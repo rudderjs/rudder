@@ -5,9 +5,9 @@ import { Badge } from '@/components/ui/badge.js'
 interface CellValueProps {
   value:     unknown
   type:      string
-  extra?:    Record<string, unknown>
-  displayTransformed?: boolean
-  pathSegment?: string
+  extra?:    Record<string, unknown> | undefined
+  displayTransformed?: boolean | undefined
+  pathSegment?: string | undefined
   i18n:      PanelI18n
 }
 

@@ -13,14 +13,14 @@ interface UseEditFormOptions {
   draftable:     boolean
   yjs: boolean
   i18n:          PanelI18n & Record<string, string>
-  syncAllFieldsToDoc?:    (values: Record<string, unknown>) => void
-  setCollaborativeValue?: (name: string, value: unknown) => void
-  selfSyncFields?:        Set<string>
+  syncAllFieldsToDoc?:    ((values: Record<string, unknown>) => void) | undefined
+  setCollaborativeValue?: ((name: string, value: unknown) => void) | undefined
+  selfSyncFields?:        Set<string> | undefined
   setFormKey:              (fn: ((k: number) => number) | number) => void
   formKey:                 number
   isSyncingRef:            React.MutableRefObject<boolean>
   /** Called after a successful manual save (before navigation). */
-  onSaved?:                () => void
+  onSaved?:                (() => void) | undefined
 }
 
 export function useEditForm(opts: UseEditFormOptions) {

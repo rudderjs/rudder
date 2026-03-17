@@ -10,11 +10,12 @@ export type Data = {
   schemaData:  PanelSchemaElementMeta[]
   slug:        undefined
   sessionUser: SessionUser | undefined
+  urlSearch:   Record<string, string>
 }
 
 export async function data(pageContext: PageContextServer): Promise<Data> {
   if (!import.meta.env.SSR) {
-    return { panelMeta: null as never, schemaData: [], slug: undefined, sessionUser: undefined }
+    return { panelMeta: null as never, schemaData: [], slug: undefined, sessionUser: undefined, urlSearch: {} }
   }
 
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }

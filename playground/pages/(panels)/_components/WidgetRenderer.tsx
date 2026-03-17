@@ -40,11 +40,11 @@ export function WidgetRenderer({ element, panelPath, i18n }: WidgetRendererProps
     return <ListWidget element={element as ListElementMeta} />
   }
 
-  if (element.type === 'stat-progress') {
+  if ((element as any).type === 'stat-progress') {
     return <StatProgressWidget data={(element as any).data ?? {}} />
   }
 
-  if (element.type === 'user-card') {
+  if ((element as any).type === 'user-card') {
     return <UserCardWidget data={(element as any).data ?? {}} />
   }
 
@@ -170,7 +170,7 @@ function ChartWidget({ element }: { element: ChartElementMeta }) {
               paddingAngle={2}
             >
               {pieData.map((_: unknown, i: number) => (
-                <Cell key={i} fill={element.datasets[0]?.color ?? colors[i % colors.length]} />
+                <Cell key={i} fill={(element.datasets[0]?.color ?? colors[i % colors.length]) as string} />
               ))}
             </Pie>
             <Tooltip />
@@ -210,8 +210,10 @@ function ChartWidget({ element }: { element: ChartElementMeta }) {
               return <Bar key={ds.label} dataKey={ds.label} fill={color} radius={[4, 4, 0, 0]} />
             }
             if (element.chartType === 'area') {
+              // @ts-expect-error — recharts types don't handle exactOptionalPropertyTypes
               return <Area key={ds.label} type="monotone" dataKey={ds.label} stroke={color} fill={color} fillOpacity={0.15} strokeWidth={2} />
             }
+            // @ts-expect-error — recharts types don't handle exactOptionalPropertyTypes
             return <Line key={ds.label} type="monotone" dataKey={ds.label} stroke={color} strokeWidth={2} dot={{ r: 3 }} />
           })}
         </ChartComp>
