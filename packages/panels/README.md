@@ -428,6 +428,7 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 | `Table.make(title)` | Data table -- `.resource(slug)`, `.columns([...])`, `.limit(n)`, `.sortBy(col, dir)` |
 | `Chart.make(title)` | Chart -- `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
 | `List.make(title)` | Item list card -- `.items([{ label, description?, href?, icon? }])`, `.limit(n)` |
+| `Tabs.make()` | Tabbed sections -- `.tab(label, ...elements)` groups schema elements into tabs |
 | `Widget.make(id)` | Dashboard widget (from `@boostkit/dashboards`) -- standalone or inside `Dashboard.make()` |
 | `Dashboard.make(id)` | User-customizable dashboard grid (from `@boostkit/dashboards`) -- drag-and-drop, per-user layout |
 
