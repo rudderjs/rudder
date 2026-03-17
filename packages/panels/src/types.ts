@@ -51,15 +51,22 @@ export interface PaginatedResult<T = Record<string, unknown>> {
 }
 
 export interface QueryBuilderLike<T = Record<string, unknown>> {
-  where(col: string, op: string, value?: unknown): QueryBuilderLike<T>
+  where(col: string, value: unknown): QueryBuilderLike<T>
+  where(col: string, op: string, value: unknown): QueryBuilderLike<T>
+  orWhere(col: string, value: unknown): QueryBuilderLike<T>
+  orWhere(col: string, op: string, value: unknown): QueryBuilderLike<T>
   orderBy(col: string, dir?: 'ASC' | 'DESC'): QueryBuilderLike<T>
   limit(n: number): QueryBuilderLike<T>
   offset(n: number): QueryBuilderLike<T>
+  with(...relations: string[]): QueryBuilderLike<T>
   get(): Promise<T[]>
+  all(): Promise<T[]>
   first(): Promise<T | null>
+  find(id: string | number): Promise<T | null>
   count(): Promise<number>
   paginate(page: number, perPage?: number): Promise<PaginatedResult<T>>
-  update(id: string | number, data: Record<string, unknown>): Promise<T>
+  create(data: Partial<T>): Promise<T>
+  update(id: string | number, data: Partial<T>): Promise<T>
   delete(id: string | number): Promise<void>
 }
 
@@ -70,4 +77,5 @@ export interface ModelClass<T = Record<string, unknown>> {
   create(data: Partial<T>): Promise<T>
   query(): QueryBuilderLike<T>
   where(col: string, value: unknown): QueryBuilderLike<T>
+  with(...relations: string[]): QueryBuilderLike<T>
 }
