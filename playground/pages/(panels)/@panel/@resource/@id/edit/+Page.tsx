@@ -177,6 +177,7 @@ export default function EditPage() {
 
     async function connect() {
       try {
+        // @ts-expect-error — Vite resolves this at runtime; no static module declaration
         const mod = await import(/* @vite-ignore */ '/src/BKSocket.ts') as any
         if (destroyed) return
         socket = new mod.BKSocket(`ws://${window.location.host}/ws`)

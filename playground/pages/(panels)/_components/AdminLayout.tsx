@@ -38,8 +38,8 @@ import {
 
 interface Props {
   panelMeta:    PanelMeta
-  currentSlug?: string
-  initialUser?: SessionUser
+  currentSlug?: string | undefined
+  initialUser?: SessionUser | undefined
   children:     React.ReactNode
 }
 
@@ -49,7 +49,7 @@ interface NavItem {
   icon:             string | undefined
   href:             string
   kind:             'resource' | 'global' | 'page'
-  navigationGroup?: string
+  navigationGroup?: string | undefined
 }
 
 interface SessionUser {

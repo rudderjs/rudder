@@ -50,15 +50,15 @@ interface DashboardLayoutItem {
 
 export interface DashboardGridProps {
   dashboardId:    string
-  label?:         string
-  editable?:      boolean
+  label?:         string | undefined
+  editable?:      boolean | undefined
   defaultWidgets: WidgetMeta[]
-  ssrWidgets?:    WidgetWithData[]
-  ssrLayout?:     DashboardLayoutItem[]
+  ssrWidgets?:    WidgetWithData[] | undefined
+  ssrLayout?:     DashboardLayoutItem[] | undefined
   pathSegment:    string
   panelPath:      string
   i18n:           PanelI18n & Record<string, string>
-  tabId?:         string
+  tabId?:         string | undefined
 }
 
 /** Build default layout from widget definitions. */
@@ -78,7 +78,7 @@ function tabQuery(tabId?: string): string {
 interface SortableWidgetProps {
   id:        string
   span:      number
-  minHeight?: number
+  minHeight?: number | undefined
   editing:   boolean
   children:  React.ReactNode
 }
