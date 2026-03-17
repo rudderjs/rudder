@@ -172,6 +172,13 @@ Each tab can contain any schema element type — `Stats`, `Chart`, `Table`, `Lis
 | Resource fields | `Field` instances | `Tabs.make().tab('Content', TextField.make('title'))` |
 | Panel schema | Schema elements | `Tabs.make().tab('Charts', Chart.make('Revenue')...)` |
 
+**URL Persistence**: The active tab is persisted in the URL query string. Clicking "Charts" updates the URL to `?tab=charts`. Refreshing or sharing the URL opens the correct tab (SSR-compatible — no flash).
+
+- Default `?tab=` param when using `Tabs.make()`
+- Named param when using `Tabs.make('analytics')` → `?analytics=charts`
+- First tab is the default — no query param in the URL
+- Multiple tab groups use separate param keys to avoid conflicts
+
 ---
 
 ## Panel Landing Page (`Panel.schema()`)

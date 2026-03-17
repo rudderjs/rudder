@@ -69,6 +69,8 @@ boostkit/
 │   ├── mail-nodemailer/    # Nodemailer SMTP adapter
 │   ├── schedule/           # Task scheduler — schedule singleton, schedule:run/work/list
 │   ├── notification/       # Multi-channel notifications (mail, database)
+│   ├── panels/             # Admin panel builder — CRUD resources, schema elements, widgets
+│   ├── dashboards/         # User-customizable dashboard builder — drag-and-drop, per-user layout
 │   └── cli/                # Artisan-style CLI (make:*, module:*, user commands)
 ├── create-boostkit-app/    # Interactive CLI scaffolder (pnpm create boostkit-app)
 │                           #   Prompts: name · DB · Todo · frameworks (React/Vue/Solid)
@@ -174,6 +176,9 @@ Level 1 (parallel — no framework deps):
            │
     orm-prisma   queue-bullmq   queue-inngest
     mail-nodemailer
+           │
+    @boostkit/panels          @boostkit/dashboards
+    (orm, auth, storage)      (panels, dnd-kit)
 ```
 
 **Clean DAG — no cycles**: `@boostkit/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@boostkit/router` and `@boostkit/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@boostkit/core` lists `@boostkit/router` as a regular dependency and imports it with a plain `await import('@boostkit/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
