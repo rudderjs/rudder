@@ -1,6 +1,6 @@
 import type { PanelContext } from './types.js'
 
-// ─── Schema definition (same pattern as Panel.schema()) ─────
+// ─── Schema definition (stored via define()) ─────────────────
 
 type PageSchemaElement = { getType(): string }
 
@@ -29,25 +29,47 @@ export class Page {
   /** Optional icon string shown in the sidebar. */
   static icon?: string
 
-  /** Schema definition — renders the page from schema elements (no Vike page needed). */
-  protected static _schema?: PageSchemaDefinition
+  /** Stored schema definition — set via define(). */
+  protected static _schemaDef?: PageSchemaDefinition
 
   /**
-   * Define the page content using schema elements.
-   * When set, the page renders from schema (SSR) without needing a Vike +Page.tsx file.
+   * Define the page content using a stored schema definition (array or factory function).
+   * Alternative to overriding schema() — useful for inline definitions.
    *
    * @example
    * static {
-   *   this.schema(async (ctx) => [
+   *   this.define(async (ctx) => [
    *     Heading.make('Analytics'),
    *     Stats.make([Stat.make('Users').value(await User.query().count())]),
-   *     Chart.make('Traffic').chartType('area').labels([...]).datasets([...]),
    *   ])
    * }
    */
-  static schema(def: PageSchemaDefinition): typeof Page {
-    this._schema = def
+  static define(def: PageSchemaDefinition): typeof Page {
+    this._schemaDef = def
     return this
+  }
+
+  /**
+   * Return the page's schema elements for the given context.
+   *
+   * **Override this method** to define the page content with full access to
+   * context (params, user, etc.) and async data.
+   *
+   * @example
+   * static async schema({ params, user }) {
+   *   return [
+   *     Heading.make(`Report #${params.id}`),
+   *     Stats.make([Stat.make('Users').value(await User.query().count())]),
+   *   ]
+   * }
+   *
+   * The base implementation falls back to a stored definition set via define().
+   */
+  static async schema(ctx: PanelContext): Promise<PageSchemaElement[]> {
+    if (!this._schemaDef) return []
+    return typeof this._schemaDef === 'function'
+      ? this._schemaDef(ctx)
+      : this._schemaDef
   }
 
   // ── Static helpers ──────────────────────────────────────
@@ -129,12 +151,8 @@ export class Page {
     return name.replace(/([A-Z])/g, ' $1').trim()
   }
 
-  static getSchema(): PageSchemaDefinition | undefined {
-    return this._schema
-  }
-
   static hasSchema(): boolean {
-    return this._schema !== undefined
+    return this._schemaDef !== undefined || this.schema !== Page.schema
   }
 
   /** @internal */

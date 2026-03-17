@@ -1,14 +1,15 @@
 import { Page, Heading, Text, Stats, Stat, Chart, List, Tabs } from '@boostkit/panels'
+import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
 
 export class ReportsPage extends Page {
-  static slug  = 'reports/:id?/:id2?'
+  static slug  = 'reports/:id?'
   static label = 'Reports'
   static icon  = 'bar-chart-3'
 
-  static {
-    this.schema(async ({ params }) => [
+  static async schema({ params }: PanelContext) {
+    return [
       Heading.make('Reports'),
       Heading.make(`number #${params.id}`),
       Text.make('Content and user analytics.'),
@@ -41,6 +42,6 @@ export class ReportsPage extends Page {
               { label: 'Search Console', href: 'https://search.google.com/search-console', icon: '🔍' },
             ]),
         ),
-    ])
+    ]
   }
 }
