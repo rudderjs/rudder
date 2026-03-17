@@ -12,7 +12,6 @@ import {
   ColorField,
   FileField,
   JsonField,
-  ContentField,
   RichContentField,
   Block,
   RelationField,
@@ -243,7 +242,7 @@ export class ArticleResource extends Resource {
             await Article.query().update(record.id, {
               draftStatus: 'published',
               publishedAt: new Date(),
-            })
+            } as any)
           }
         }),
 
@@ -252,7 +251,7 @@ export class ArticleResource extends Resource {
         .bulk()
         .handler(async (records) => {
           for (const record of records as Article[]) {
-            await Article.query().update(record.id, { draftStatus: 'draft' })
+            await Article.query().update(record.id, { draftStatus: 'draft' } as any)
           }
         }),
 
