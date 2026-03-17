@@ -36,5 +36,8 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
     })
   }
 
-  return { panelMeta, schemaData, slug: undefined, sessionUser }
+  // Pass URL search string so schema tabs can SSR the correct active tab
+  const urlSearch = pageContext.urlParsed?.search ?? {}
+
+  return { panelMeta, schemaData, slug: undefined, sessionUser, urlSearch }
 }

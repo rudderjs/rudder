@@ -70,7 +70,8 @@ export async function resolveSchema(
             })
           }
         }
-        result.push({ type: 'tabs', tabs: resolvedTabs } as unknown as PanelSchemaElementMeta)
+        const tabsId = tabs.getId?.()
+        result.push({ type: 'tabs', ...(tabsId && { id: tabsId }), tabs: resolvedTabs } as unknown as PanelSchemaElementMeta)
       } else {
         // All field tabs — pass through toMeta()
         result.push(tabs.toMeta() as PanelSchemaElementMeta)

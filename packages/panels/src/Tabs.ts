@@ -16,6 +16,7 @@ export interface TabMeta {
 
 export interface TabsMeta {
   type: 'tabs'
+  id?:  string | undefined
   tabs: TabMeta[]
 }
 
@@ -64,8 +65,15 @@ class Tab {
 
 export class Tabs {
   private _tabs: Tab[] = []
+  private _id?: string
 
-  static make(): Tabs { return new Tabs() }
+  static make(id?: string): Tabs {
+    const tabs = new Tabs()
+    if (id !== undefined) tabs._id = id
+    return tabs
+  }
+
+  getId(): string | undefined { return this._id }
 
   /**
    * Add a tab with the given label and items.
@@ -99,6 +107,7 @@ export class Tabs {
   toMeta(): TabsMeta {
     return {
       type: 'tabs',
+      ...(this._id !== undefined && { id: this._id }),
       tabs:  this._tabs.map((t) => t.toMeta()),
     }
   }

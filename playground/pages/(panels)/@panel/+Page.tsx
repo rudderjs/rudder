@@ -11,7 +11,7 @@ import type { Data } from './+data.js'
 
 export default function PanelRootPage() {
   const config = useConfig()
-  const { panelMeta, schemaData } = useData<Data>()
+  const { panelMeta, schemaData, urlSearch } = useData<Data>()
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   config({ title: panelName })
 
@@ -65,7 +65,9 @@ export default function PanelRootPage() {
           return (
             <SchemaTabs
               key={`tabs-${gi}`}
+              id={(el as any).id}
               tabs={el.tabs}
+              urlSearch={urlSearch}
               panelPath={panelMeta.path}
               pathSegment={pathSegment}
               i18n={i18n}
@@ -191,32 +193,68 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
 // ── Schema-level Tabs ────────────────────────────────────────────
 
 interface SchemaTabsProps {
+  id?: string
   tabs: { label: string; elements?: any[] }[]
+  urlSearch?: Record<string, string>
   panelPath: string
   pathSegment: string
   i18n: PanelI18n & Record<string, string>
 }
 
-function SchemaTabs({ tabs, panelPath, pathSegment, i18n }: SchemaTabsProps) {
-  const [activeIdx, setActiveIdx] = useState(0)
+/** Slugify a label for use as URL param value. */
+function slugify(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: SchemaTabsProps) {
+  // URL query param key — named id or default 'tab'
+  const paramKey = id ?? 'tab'
+  const defaultSlug = slugify(tabs[0]?.label ?? '')
+
+  // Read active tab from SSR-provided URL search (works on both server and client)
+  const initialSlug = urlSearch?.[paramKey] ?? defaultSlug
+
+  const [activeSlug, setActiveSlug] = useState<string>(initialSlug)
+
+  const activeIdx = Math.max(0, tabs.findIndex(t => slugify(t.label) === activeSlug))
+
+  function switchTab(label: string) {
+    const slug = slugify(label)
+    setActiveSlug(slug)
+
+    // Update URL without navigation
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (slug === slugify(tabs[0]?.label ?? '')) {
+        url.searchParams.delete(paramKey)
+      } else {
+        url.searchParams.set(paramKey, slug)
+      }
+      window.history.replaceState(null, '', url.pathname + url.search)
+    }
+  }
 
   return (
     <div>
-      <div className="flex gap-1 border-b mb-4">
-        {tabs.map((tab, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => setActiveIdx(idx)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              activeIdx === idx
-                ? 'border-b-2 border-primary text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-1 mb-4">
+        {tabs.map((tab, idx) => {
+          const isActive = idx === activeIdx
+          return (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => switchTab(tab.label)}
+              className={[
+                'inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors',
+                isActive
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              ].join(' ')}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
       <div className="flex flex-col gap-6">
         {(tabs[activeIdx]?.elements ?? []).map((el: any, i: number) => {
