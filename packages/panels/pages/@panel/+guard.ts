@@ -13,7 +13,7 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
   if (pageContext.urlPathname === `/${pathSegment}`) {
     if (!panel.hasSchema()) {
       const first = panel.getResources()[0]
-      if (first) throw redirect(`/${pathSegment}/${first.getSlug()}`)
+      if (first) throw redirect(`/${pathSegment}/resources/${first.getSlug()}`)
     }
   }
 

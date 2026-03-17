@@ -5,13 +5,13 @@ import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
-import { Breadcrumbs }      from '../../../_components/Breadcrumbs.js'
-import { SchemaRenderer }   from '../../../_components/edit/SchemaRenderer.js'
-import { RestoreBanner }    from '../../../_components/edit/RestoreBanner.js'
-import { useFormPersist }   from '../../../_hooks/useFormPersist.js'
-import { useFieldPersist }  from '../../../_hooks/useFieldPersist.js'
-import { flattenFormFields, t } from '../../../_lib/formHelpers.js'
-import type { SchemaItem }  from '../../../_lib/formHelpers.js'
+import { Breadcrumbs }      from '../../../../_components/Breadcrumbs.js'
+import { SchemaRenderer }   from '../../../../_components/edit/SchemaRenderer.js'
+import { RestoreBanner }    from '../../../../_components/edit/RestoreBanner.js'
+import { useFormPersist }   from '../../../../_hooks/useFormPersist.js'
+import { useFieldPersist }  from '../../../../_hooks/useFieldPersist.js'
+import { flattenFormFields, t } from '../../../../_lib/formHelpers.js'
+import type { SchemaItem }  from '../../../../_lib/formHelpers.js'
 import type { FieldMeta }   from '@boostkit/panels'
 import type { Data } from './+data.js'
 
@@ -35,7 +35,7 @@ export default function CreatePage() {
 
   // Parse ?prefill[field]=value and ?back= from the URL
   const prefill: Record<string, string> = {}
-  let backHref = `/${pathSegment}/${slug}`
+  let backHref = `/${pathSegment}/resources/${slug}`
   if (typeof window !== 'undefined') {
     new URLSearchParams(window.location.search).forEach((v, k) => {
       const m = k.match(/^prefill\[(.+)\]$/)
@@ -138,8 +138,8 @@ export default function CreatePage() {
   return (
     <>
       <Breadcrumbs crumbs={[
-        { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/${slug}` },
-        { label: resourceMeta.label, href: `/${pathSegment}/${slug}` },
+        { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
+        { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
         { label: t(i18n.create, { singular: resourceMeta.labelSingular }) },
       ]} />
 

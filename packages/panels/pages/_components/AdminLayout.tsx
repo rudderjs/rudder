@@ -38,8 +38,8 @@ import {
 
 interface Props {
   panelMeta:    PanelMeta
-  currentSlug?: string
-  initialUser?: SessionUser
+  currentSlug?: string | undefined
+  initialUser?: SessionUser | undefined
   children:     React.ReactNode
 }
 
@@ -49,7 +49,7 @@ interface NavItem {
   icon:             string | undefined
   href:             string
   kind:             'resource' | 'global' | 'page'
-  navigationGroup?: string
+  navigationGroup?: string | undefined
 }
 
 interface SessionUser {
@@ -63,7 +63,7 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   return [
     ...panelMeta.resources.map((r) => ({
       slug: r.slug, label: r.label, icon: r.icon,
-      href: `${path}/${r.slug}`,
+      href: `${path}/resources/${r.slug}`,
       kind: 'resource' as const,
       navigationGroup: r.navigationGroup,
     })),

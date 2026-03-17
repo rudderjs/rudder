@@ -6,7 +6,7 @@ import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
 import { Checkbox } from '@base-ui-components/react/checkbox'
-import { ConfirmDialog } from '../../_components/ConfirmDialog.js'
+import { ConfirmDialog } from '../../../_components/ConfirmDialog.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
 import {
   Table,
@@ -16,9 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table.js'
-import { CellValue, resolveCellValue } from '../../_components/CellValue.js'
-import { ResourceIcon } from '../../_components/ResourceIcon.js'
-import { InlineEditCell } from '../../_components/InlineEditCell.js'
+import { CellValue, resolveCellValue } from '../../../_components/CellValue.js'
+import { ResourceIcon } from '../../../_components/ResourceIcon.js'
+import { InlineEditCell } from '../../../_components/InlineEditCell.js'
 import {
   Tooltip,
   TooltipContent,
@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select.js'
-import { useLiveTable } from '../../_hooks/useLiveTable.js'
+import { useLiveTable } from '../../../_hooks/useLiveTable.js'
 import type { Data } from './+data.js'
 
 type SchemaItem = FieldMeta | SectionMeta | TabsMeta
@@ -396,7 +396,7 @@ export default function ResourceListPage() {
         <div className="flex items-center gap-2">
           {hasSoftDeletes && (
             <a
-              href={isTrashed ? `/${pathSegment}/${slug}` : `/${pathSegment}/${slug}?trashed=true`}
+              href={isTrashed ? `/${pathSegment}/resources/${slug}` : `/${pathSegment}/resources/${slug}?trashed=true`}
               className={[
                 'inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border transition-colors shrink-0',
                 isTrashed
@@ -411,7 +411,7 @@ export default function ResourceListPage() {
             <CreateDraftButton slug={slug} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
           ) : !isTrashed ? (
             <a
-              href={`/${pathSegment}/${slug}/create`}
+              href={`/${pathSegment}/resources/${slug}/create`}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0"
             >
               {t(i18n.newButton, { label: resourceMeta.labelSingular })}
@@ -431,7 +431,7 @@ export default function ResourceListPage() {
       {resourceMeta.tabs.length > 0 && !isTrashed && (() => {
         const activeTab  = urlParams.get('tab') ?? ''
         const firstTab   = resourceMeta.tabs[0]!.name
-        const basePath   = `/${pathSegment}/${slug}`
+        const basePath   = `/${pathSegment}/resources/${slug}`
 
         function switchTab(name: string) {
           const url = new URL(basePath, 'http://localhost')
@@ -526,11 +526,11 @@ export default function ResourceListPage() {
           {/* Clear filters link */}
           {(currentSearch || resourceMeta.filters.some(f => urlParams.has(`filter[${f.name}]`))) && (
             <a
-              href={`/${pathSegment}/${slug}`}
+              href={`/${pathSegment}/resources/${slug}`}
               onClick={(e) => {
                 e.preventDefault()
                 if (persist) sessionStorage.removeItem(storageKey)
-                void navigate(`/${pathSegment}/${slug}`)
+                void navigate(`/${pathSegment}/resources/${slug}`)
               }}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -668,7 +668,7 @@ export default function ResourceListPage() {
                         ? (
                           <span className="inline-flex items-center gap-2">
                             <a
-                              href={`/${pathSegment}/${slug}/${id}`}
+                              href={`/${pathSegment}/resources/${slug}/${id}`}
                               className="font-medium hover:text-primary transition-colors"
                             >
                               <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
@@ -722,7 +722,7 @@ export default function ResourceListPage() {
                             type="button"
                             onClick={() => {
                               const back = window.location.pathname + window.location.search
-                              void navigate(`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
+                              void navigate(`/${pathSegment}/resources/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
                             }}
                             className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                           >
@@ -770,7 +770,7 @@ export default function ResourceListPage() {
                           <p className="text-sm text-muted-foreground">{resourceMeta.emptyStateDescription}</p>
                         )}
                         <a
-                          href={`/${pathSegment}/${slug}/create`}
+                          href={`/${pathSegment}/resources/${slug}/create`}
                           className="text-sm text-primary hover:underline"
                         >
                           {t(i18n.createFirstLink, { singular: resourceMeta.labelSingular })}
@@ -1031,7 +1031,7 @@ function CreateDraftButton({ slug, pathSegment, labelSingular, i18n }: {
       })
       if (res.ok) {
         const body = await res.json() as { data: { id: string } }
-        void navigate(`/${pathSegment}/${slug}/${body.data.id}/edit`)
+        void navigate(`/${pathSegment}/resources/${slug}/${body.data.id}/edit`)
       } else {
         toast.error((i18n as any).saveError ?? 'Failed to create draft.')
         setCreating(false)
@@ -1114,7 +1114,7 @@ function DuplicateRowButton({ slug, id, pathSegment, schema, i18n }: {
       const back = window.location.pathname + window.location.search
       params.set('back', back)
 
-      void navigate(`/${pathSegment}/${slug}/create?${params.toString()}`)
+      void navigate(`/${pathSegment}/resources/${slug}/create?${params.toString()}`)
     } catch {
       toast.error(i18n.deleteError)
     } finally {

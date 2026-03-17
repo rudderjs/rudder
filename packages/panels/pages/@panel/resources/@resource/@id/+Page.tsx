@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useData }     from 'vike-react/useData'
 import { useConfig }   from 'vike-react/useConfig'
 import { navigate }    from 'vike/client/router'
-import { Breadcrumbs } from '../../../_components/Breadcrumbs.js'
-import { CellValue, resolveCellValue } from '../../../_components/CellValue.js'
+import { Breadcrumbs } from '../../../../_components/Breadcrumbs.js'
+import { CellValue, resolveCellValue } from '../../../../_components/CellValue.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
 import {
   Table,
@@ -16,7 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table.js'
 import { Badge } from '@/components/ui/badge.js'
-import { WidgetRenderer } from '../../../_components/WidgetRenderer.js'
+import { WidgetRenderer } from '../../../../_components/WidgetRenderer.js'
 import type { Data }   from './+data.js'
 
 function t(template: string, vars: Record<string, string | number>): string {
@@ -59,8 +59,8 @@ export default function ShowPage() {
   return (
     <div className="max-w-4xl">
         <Breadcrumbs crumbs={[
-          { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/${slug}` },
-          { label: resourceMeta.label, href: `/${pathSegment}/${slug}` },
+          { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
+          { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
           { label: recordTitle },
         ]} />
 
@@ -70,7 +70,7 @@ export default function ShowPage() {
             type="button"
             onClick={() => {
               const back = window.location.pathname + window.location.search
-              void navigate(`/${pathSegment}/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
+              void navigate(`/${pathSegment}/resources/${slug}/${id}/edit?back=${encodeURIComponent(back)}`)
             }}
             className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
           >
@@ -119,7 +119,7 @@ export default function ShowPage() {
 
         <div className="mt-4">
           <a
-            href={`/${pathSegment}/${slug}`}
+            href={`/${pathSegment}/resources/${slug}`}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             {t(i18n.backTo, { label: resourceMeta.label })}
@@ -185,10 +185,10 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
   if (!resourceSlug) return null
 
   // Create URL: pre-fill the FK and pass back URL so cancel/save return to this record
-  const backUrl  = `/${pathSegment}/${parentSlug}/${parentId}`
+  const backUrl  = `/${pathSegment}/resources/${parentSlug}/${parentId}`
   const createHref = foreignKey
-    ? `/${pathSegment}/${resourceSlug}/create?prefill[${foreignKey}]=${parentId}&back=${encodeURIComponent(backUrl)}`
-    : `/${pathSegment}/${resourceSlug}/create?back=${encodeURIComponent(backUrl)}`
+    ? `/${pathSegment}/resources/${resourceSlug}/create?prefill[${foreignKey}]=${parentId}&back=${encodeURIComponent(backUrl)}`
+    : `/${pathSegment}/resources/${resourceSlug}/create?back=${encodeURIComponent(backUrl)}`
 
   return (
     <div className="mt-6">
@@ -231,7 +231,7 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
                     <TableCell key={col.name} className="px-4 py-3 text-foreground">
                       {ci === 0
                         ? (
-                          <a href={`/${pathSegment}/${resourceSlug}/${row.id}`} className="font-medium hover:text-primary transition-colors">
+                          <a href={`/${pathSegment}/resources/${resourceSlug}/${row.id}`} className="font-medium hover:text-primary transition-colors">
                             <CellValue value={resolveCellValue(row, col)} type={col.type} extra={col.extra} displayTransformed={col.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                           </a>
                         )
@@ -241,7 +241,7 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
                   ))}
                   <TableCell className="px-4 py-3 text-end">
                     <a
-                      href={`/${pathSegment}/${resourceSlug}/${row.id}`}
+                      href={`/${pathSegment}/resources/${resourceSlug}/${row.id}`}
                       className="text-xs text-primary hover:underline"
                     >
                       {i18n.view}

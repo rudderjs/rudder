@@ -5,9 +5,9 @@ import { Badge } from '@/components/ui/badge.js'
 interface CellValueProps {
   value:     unknown
   type:      string
-  extra?:    Record<string, unknown>
-  displayTransformed?: boolean
-  pathSegment?: string
+  extra?:    Record<string, unknown> | undefined
+  displayTransformed?: boolean | undefined
+  pathSegment?: string | undefined
   i18n:      PanelI18n
 }
 
@@ -26,7 +26,7 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
     if (related && typeof related === 'object') {
       const label = String(related[displayField] ?? '—')
       return (targetResource && pathSegment && related['id'])
-        ? <a href={`/${pathSegment}/${targetResource}/${related['id']}`} className="text-primary hover:underline">{label}</a>
+        ? <a href={`/${pathSegment}/resources/${targetResource}/${related['id']}`} className="text-primary hover:underline">{label}</a>
         : <span>{label}</span>
     }
     return <span className="text-muted-foreground/40">—</span>
@@ -41,7 +41,7 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
         {items.map((item) => {
           const label = String(item[displayField] ?? item['name'] ?? item['id'] ?? '?')
           return targetResource && pathSegment && item['id']
-            ? <Badge key={String(item['id'])} variant="outline"><a href={`/${pathSegment}/${targetResource}/${item['id']}`} className="hover:underline">{label}</a></Badge>
+            ? <Badge key={String(item['id'])} variant="outline"><a href={`/${pathSegment}/resources/${targetResource}/${item['id']}`} className="hover:underline">{label}</a></Badge>
             : <Badge key={String(item['id'] ?? label)} variant="outline">{label}</Badge>
         })}
       </span>
