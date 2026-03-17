@@ -121,7 +121,10 @@ export function boostkit(): Promise<Plugin[]> {
         config() {
           return {
             resolve: {
-              alias: { '@': path.resolve(process.cwd(), 'src') },
+              alias: [
+                { find: '@',        replacement: path.resolve(process.cwd(), 'src') },
+                { find: /^App\//,   replacement: path.resolve(process.cwd(), 'app') + '/' },
+              ],
             },
             ssr: {
               external: SSR_EXTERNALS,
