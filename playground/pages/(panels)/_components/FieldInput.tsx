@@ -8,7 +8,6 @@ import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from
 import { editorRegistry } from '@boostkit/panels'
 import { customFieldRenderers } from './CustomFieldRenderers.js'
 import { SortableBlockList } from './SortableBlockList.js'
-import { ContentEditor } from './ContentEditor.js'
 
 interface Props {
   field:       FieldMeta
@@ -19,11 +18,6 @@ interface Props {
   i18n:        PanelI18n
   disabled?:   boolean
   /** Awareness instance for cursor broadcasting (optional) */
-  awareness?:  any | null
-  /** Y.Doc instance for per-block Y.Text in content fields (optional) */
-  yDoc?:       any | null
-  /** True after Y.Doc initial sync — passed to ContentEditor to defer seeding */
-  yDocSynced?: boolean
   /** Stable user identity for collaborative cursors (shared across all field types) */
   userName?: string
   userColor?: string
@@ -44,7 +38,7 @@ function t(template: string, vars: Record<string, string | number>): string {
   return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
-export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, awareness, yDoc, yDocSynced, userName, userColor, wsPath, docName }: Props) {
+export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disabled = false, userName, userColor, wsPath, docName }: Props) {
   const inputCls = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'
   const isDisabled = disabled || field.readonly
 
@@ -638,27 +632,6 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
         uploadBase={uploadBase}
         i18n={i18n}
         disabled={isDisabled}
-      />
-    )
-  }
-
-  // ── Content ─────────────────────────────────────────────
-  if (field.type === 'content') {
-    const allowedBlocks = field.extra?.blockTypes as string[] | undefined
-    const placeholder   = field.extra?.placeholder as string | undefined
-    const maxBlocks     = field.extra?.maxBlocks as number | undefined
-    return (
-      <ContentEditor
-        value={value}
-        onChange={onChange}
-        allowedBlocks={allowedBlocks}
-        placeholder={placeholder}
-        maxBlocks={maxBlocks}
-        uploadBase={uploadBase}
-        disabled={isDisabled}
-        yDoc={yDoc}
-        awareness={awareness}
-        yDocSynced={yDocSynced}
       />
     )
   }

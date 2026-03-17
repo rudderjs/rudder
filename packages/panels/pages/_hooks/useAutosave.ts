@@ -18,13 +18,13 @@ interface UseAutosaveOptions {
   /** Whether the form is in restore preview mode (skip autosave). */
   isRestorePreview: boolean
   /** Sync collaborative fields before save. */
-  syncAllFieldsToDoc?: (values: Record<string, unknown>) => void
+  syncAllFieldsToDoc?: ((values: Record<string, unknown>) => void) | undefined
   /** Whether form uses Yjs. */
   yjs: boolean
   /** Called on successful autosave — used to clear persist draft. */
-  onSaved?: () => void
+  onSaved?: (() => void) | undefined
   /** Called on validation error — set form errors. */
-  onValidationError?: (errors: Record<string, string[]>) => void
+  onValidationError?: ((errors: Record<string, string[]>) => void) | undefined
 }
 
 function isDirty(current: Record<string, unknown>, initial: Record<string, unknown>): boolean {

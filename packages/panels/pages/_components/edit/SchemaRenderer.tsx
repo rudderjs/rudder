@@ -14,9 +14,6 @@ interface Props {
   i18n:        PanelI18n & Record<string, string>
   mode:        'create' | 'edit'
   // Collaborative props (optional)
-  awareness?:  any | null
-  getDoc?:     () => any | null
-  synced?:     boolean
   userName?:   string
   userColor?:  string
   /** WebSocket path for live collaboration */
@@ -27,8 +24,7 @@ interface Props {
 
 export function SchemaRenderer({
   schema, values, errors, setValue, uploadBase, i18n, mode,
-  awareness, getDoc, synced, userName, userColor,
-  wsPath, docName,
+  userName, userColor, wsPath, docName,
 }: Props) {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
 
@@ -50,9 +46,6 @@ export function SchemaRenderer({
           uploadBase={uploadBase}
           i18n={i18n}
           disabled={fieldDisabled}
-          awareness={field.yjs && awareness ? awareness : null}
-          yDoc={field.yjs && getDoc ? getDoc() : null}
-          yDocSynced={synced}
           userName={userName}
           userColor={userColor}
           wsPath={wsPath}

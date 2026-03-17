@@ -9,3 +9,4 @@ export { SlashCommandPlugin, SlashMenuOption } from './lexical/SlashCommandPlugi
 export { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 
 export { registerLexical } from './register.js'
+export { PanelLexicalServiceProvider, panelsLexical } from './PanelLexicalServiceProvider.js'

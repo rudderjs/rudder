@@ -26,6 +26,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
+    "@boostkit/core": "workspace:*",
     "@boostkit/panels": "workspace:*",
     "react": ">=18",
     "lexical": ">=0.20",
@@ -44,6 +45,7 @@
     "y-websocket": { "optional": true }
   },
   "devDependencies": {
+    "@boostkit/core": "workspace:*",
     "@boostkit/panels": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

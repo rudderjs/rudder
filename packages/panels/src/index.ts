@@ -66,11 +66,6 @@ export {
 } from './NodeMap.js'
 export type { NodeData, NodeMap } from './NodeMap.js'
 
-// ─── Content Field ───────────────────────────────────────────
-export { ContentField }     from './fields/ContentField.js'
-export { contentBlockDefs } from './ContentBlock.js'
-export type { ContentBlockDef } from './ContentBlock.js'
-
 // ─── Rich Content Field (Lexical) ───────────────────────────
 export { RichContentField } from './fields/RichContentField.js'
 
