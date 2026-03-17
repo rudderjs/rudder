@@ -1,5 +1,4 @@
-import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Tabs } from '@boostkit/panels'
-import { Dashboard, Widget } from '@boostkit/dashboards'
+import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Tabs, Dashboard, Widget } from '@boostkit/panels'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'

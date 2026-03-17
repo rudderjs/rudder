@@ -11,7 +11,6 @@ import { session } from '@boostkit/session'
 import { localization } from '@boostkit/localization'
 import { database } from '@boostkit/orm-prisma'
 import { panels } from '@boostkit/panels'
-import { dashboard } from '@boostkit/dashboards'
 import { broadcasting } from '@boostkit/broadcast'
 import { live }   from '@boostkit/live'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
@@ -33,8 +32,7 @@ export default [
   localization(configs.localization),
   scheduler(),
   notifications(),
-  panels([adminPanel]),
-  dashboard(),  // auto-discovers Dashboard.make() elements from panel schemas
+  panels([adminPanel]),   // auto-discovers Dashboard.make() elements from panel schemas
   broadcasting(),
   live(configs.live),   // /ws-live — Yjs CRDT sync (after broadcasting so upgrade handler chains correctly)
   // User Providers

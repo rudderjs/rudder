@@ -22,7 +22,7 @@ import { WidgetSettingsDrawer } from './WidgetSettingsDrawer.js'
 import { WidgetCard, WidgetIcon } from './WidgetCard.js'
 import type { WidgetWithData } from './WidgetCard.js'
 import type { PanelI18n } from '@boostkit/panels'
-import type { WidgetMeta } from '@boostkit/dashboards'
+import type { WidgetMeta } from '@boostkit/panels'
 
 // ── Size presets ────────────────────────────────────────────────────────────
 

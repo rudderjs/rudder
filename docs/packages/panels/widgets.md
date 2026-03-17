@@ -1,6 +1,6 @@
 # Widgets & Schema Elements
 
-Schema elements are the building blocks for panel landing pages (`Panel.schema()`) and resource show page widgets (`Resource.widgets()`). They render stats, charts, tables, lists, and text content. When combined with `@boostkit/dashboards`, they also power user-customizable dashboard grids.
+Schema elements are the building blocks for panel landing pages (`Panel.schema()`) and resource show page widgets (`Resource.widgets()`). They render stats, charts, tables, lists, and text content. Dashboard widgets (`Widget`, `Dashboard`) are also part of this package, powering user-customizable dashboard grids.
 
 ---
 
@@ -165,7 +165,7 @@ Tabs.make()
   )
 ```
 
-Each tab can contain any schema element type — `Stats`, `Chart`, `Table`, `List`, `Heading`, `Text`, `Widget`, or even a `Dashboard`. The same `Tabs` class works in both contexts:
+Each tab can contain any schema element type -- `Stats`, `Chart`, `Table`, `List`, `Heading`, `Text`, `Widget`, or even a `Dashboard`. The same `Tabs` class works in both contexts:
 
 | Context | Content | Example |
 |---------|---------|---------|
@@ -186,8 +186,7 @@ Each tab can contain any schema element type — `Stats`, `Chart`, `Table`, `Lis
 By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with schema elements, standalone widgets, and user-customizable dashboards.
 
 ```ts
-import { Panel, Heading, Text, Stats, Stat, Table, Chart, List } from '@boostkit/panels'
-import { Dashboard, Widget } from '@boostkit/dashboards'
+import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Dashboard, Widget } from '@boostkit/panels'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -312,7 +311,7 @@ export default function CustomPage({ data }) {
 
 ## Dashboard Widgets
 
-For user-customizable dashboards with drag-and-drop, layout persistence, lazy loading, and polling, see the [@boostkit/dashboards](/packages/dashboards) documentation.
+For user-customizable dashboards with drag-and-drop, layout persistence, lazy loading, and polling, see the [Widgets documentation](/packages/panels/widgets).
 
 Key concepts:
 

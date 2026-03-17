@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { PanelI18n } from '@boostkit/panels'
-import type { WidgetMeta, WidgetSettingsField } from '@boostkit/dashboards'
+import type { WidgetMeta, WidgetSettingsField } from '@boostkit/panels'
 
 interface Props {
   widget:          WidgetMeta

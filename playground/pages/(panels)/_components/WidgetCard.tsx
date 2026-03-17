@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { WidgetRenderer } from './WidgetRenderer.js'
 import { icons as lucideIcons } from 'lucide-react'
 import type { PanelSchemaElementMeta, PanelI18n } from '@boostkit/panels'
-import type { WidgetMeta } from '@boostkit/dashboards'
+import type { WidgetMeta } from '@boostkit/panels'
 
 export interface WidgetWithData extends WidgetMeta {
   data: unknown

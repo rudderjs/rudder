@@ -127,7 +127,7 @@ export { PanelRegistry } from './PanelRegistry.js'
 
 // ─── Provider ──────────────────────────────────────────────
 
-export { PanelServiceProvider, panels } from './PanelServiceProvider.js'
+export { PanelServiceProvider, panels, buildDefaultLayout } from './PanelServiceProvider.js'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -146,3 +146,14 @@ export type {
 
 export { resourceData } from './resourceData.js'
 export type { ResourceDataContext, ResourceDataResult } from './resourceData.js'
+
+// ─── Widget ─────────────────────────────────────────────
+export { Widget } from './Widget.js'
+export type { WidgetSize, WidgetMeta, WidgetSettingsField } from './Widget.js'
+
+// ─── Dashboard ──────────────────────────────────────────
+export { Dashboard, DashboardTab } from './Dashboard.js'
+export type { DashboardMeta, DashboardTabMeta } from './Dashboard.js'
+
+// ─── Dashboard Registry ─────────────────────────────────
+export { DashboardRegistry } from './DashboardRegistry.js'

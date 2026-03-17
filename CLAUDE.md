@@ -111,8 +111,7 @@ boostkit/
 │   │                   #   Built-in: MemoryPersistence. Optional: livePrisma(), liveRedis()
 │   ├── panels/         # Admin panel builder — Resource CRUD, schema elements (Stats, Chart, Table, List, Tabs),
 │   │                   #   WidgetRenderer, Resource.widgets(), form persist, autosave, Yjs field persist
-│   ├── dashboards/     # User-customizable dashboard builder — Widget registration, Dashboard schema element,
-│   │                   #   drag-and-drop (@dnd-kit), per-user layout persistence (DB), widget settings, lazy/polling
+│   │                   #   + Dashboard builder: Widget, Dashboard, drag-and-drop, per-user layout, settings, lazy/polling
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
 ├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm/npm/yarn/bun create boostkit-app)
 │                          #   Prompts: name · DB · Todo · frameworks · primary · Tailwind · shadcn
@@ -149,8 +148,7 @@ boostkit/
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource CRUD, 25+ field types, schema elements, widgets, versioning, collaboration |
-| `@boostkit/dashboards` | 0.0.1 | Dashboard builder: Widget, Dashboard, drag-and-drop, per-user layout, settings drawer |
+| `@boostkit/panels` | 0.0.3 | Admin panel: Resource CRUD, 25+ field types, schema elements, widgets, versioning, collaboration, dashboard builder |
 
 **Merged/removed packages** (code absorbed, originals deleted):
 - `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
@@ -160,6 +158,7 @@ boostkit/
 - `@boostkit/cache-redis` → merged into `@boostkit/cache`
 - `@boostkit/mail-nodemailer` → merged into `@boostkit/mail`
 - `@boostkit/events` → merged into `@boostkit/core`
+- `@boostkit/dashboards` → merged into `@boostkit/panels`
 
 ---
 
