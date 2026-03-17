@@ -5,6 +5,7 @@ import { ArticleResource }      from './resources/ArticleResource.js'
 import { CategoryResource }     from './resources/CategoryResource.js'
 import { SiteSettingsGlobal }   from './globals/SiteSettingsGlobal.js'
 import { CustomPage } from './pages/CustomPage.js'
+import { ReportsPage } from './pages/ReportsPage.js'
 import { Article }    from '../../Models/Article.js'
 import { Category }   from '../../Models/Category.js'
 import { Todo }       from '../../Models/Todo.js'
@@ -216,4 +217,5 @@ export const adminPanel = Panel.make('admin')
   ])
   .pages([
     CustomPage,
+    ReportsPage,
   ])
