@@ -46,10 +46,10 @@ export function SchemaRenderer({
           uploadBase={uploadBase}
           i18n={i18n}
           disabled={fieldDisabled}
-          userName={userName}
-          userColor={userColor}
-          wsPath={wsPath}
-          docName={docName}
+          {...(userName !== undefined ? { userName } : {})}
+          {...(userColor !== undefined ? { userColor } : {})}
+          {...(wsPath !== undefined ? { wsPath } : {})}
+          {...(docName !== undefined ? { docName } : {})}
         />
         {errors[field.name]?.map((e) => (
           <p key={e} className="mt-1 text-xs text-destructive">{e}</p>

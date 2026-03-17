@@ -2,7 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "src"
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM"],
+    "paths": {
+      "@/*": ["../../playground/src/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "pages", "env.d.ts"]
 }

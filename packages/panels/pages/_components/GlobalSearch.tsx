@@ -28,7 +28,7 @@ export function GlobalSearch({ panelMeta, pathSegment }: Props) {
   const [loading, setLoading] = useState(false)
   const [focused, setFocused] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Flatten results for keyboard nav
   const flatItems = results.flatMap((g) =>

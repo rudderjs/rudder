@@ -265,9 +265,6 @@ export default function EditPage() {
               uploadBase={uploadBase}
               i18n={i18n}
               mode="edit"
-              awareness={awareness}
-              getDoc={getDoc}
-              synced={synced}
               userName={userName}
               userColor={userColor}
               wsPath={formKey === 0 ? wsLivePath : null}

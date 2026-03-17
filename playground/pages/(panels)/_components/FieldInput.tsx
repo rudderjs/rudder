@@ -119,8 +119,8 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
             placeholder={(field.extra?.placeholder as string) ?? ''}
             disabled={isDisabled}
             required={field.required}
-            userName={userName}
-            userColor={userColor}
+            {...(userName !== undefined ? { userName } : {})}
+            {...(userColor !== undefined ? { userColor } : {})}
           />
         )
       }
@@ -346,7 +346,9 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
       emit(map)
     }
 
-    function handleReorder(id: string, fromIndex: number, toIndex: number) {
+    function handleReorder(fromIndex: number, toIndex: number) {
+      const id = nodeIds[fromIndex]
+      if (!id) return
       emit(reorderNode(nodeMap, id, fromIndex, toIndex))
     }
 
@@ -434,7 +436,9 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
       setPickerOpen(false)
     }
 
-    function handleReorder(id: string, fromIndex: number, toIndex: number) {
+    function handleReorder(fromIndex: number, toIndex: number) {
+      const id = nodeIds[fromIndex]
+      if (!id) return
       emit(reorderNode(nodeMap, id, fromIndex, toIndex))
     }
 
@@ -644,14 +648,14 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
         <RichEditor
           value={value}
           onChange={onChange}
-          placeholder={field.extra?.placeholder as string | undefined}
+          {...((field.extra?.placeholder as string | undefined) !== undefined ? { placeholder: field.extra?.placeholder as string } : {})}
           disabled={isDisabled}
-          wsPath={field.yjs ? wsPath : null}
-          docName={field.yjs ? docName : null}
+          wsPath={field.yjs ? (wsPath ?? null) : null}
+          docName={field.yjs ? (docName ?? null) : null}
           fragmentName={`richcontent:${field.name}`}
-          blocks={field.extra?.blocks as any[] | undefined}
-          userName={userName}
-          userColor={userColor}
+          {...((field.extra?.blocks as any[] | undefined) !== undefined ? { blocks: field.extra?.blocks as any[] } : {})}
+          {...(userName !== undefined ? { userName } : {})}
+          {...(userColor !== undefined ? { userColor } : {})}
         />
       )
     }
@@ -716,8 +720,8 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
           placeholder={(field.extra?.placeholder as string) ?? ''}
           disabled={isDisabled}
           required={field.required}
-          userName={userName}
-          userColor={userColor}
+          {...(userName !== undefined ? { userName } : {})}
+          {...(userColor !== undefined ? { userColor } : {})}
         />
       )
     }

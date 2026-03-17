@@ -34,6 +34,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       headers: (pageContext as any).headers ?? {},
       path:    pageContext.urlPathname,
+      params:  {},
     })
   }
 

@@ -86,7 +86,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
     const useIndexeddb = providers.includes('indexeddb')
 
     async function connect() {
-      const Y = await import('yjs')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Y = await import('yjs' as any)
       if (destroyed) return
 
       const doc = new Y.Doc()
@@ -117,8 +118,10 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       }
 
       // Observe Y.Map changes for non-text fields → update React state
-      fieldsMap.observe((event) => {
-        event.keysChanged.forEach((key) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fieldsMap.observe((event: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        event.keysChanged.forEach((key: string) => {
           if (suppressRef.current.has(key)) { suppressRef.current.delete(key); return }
           const field = mapFields.find(f => f.name === key)
           if (field) options!.setValue(key, fieldsMap.get(key))
@@ -147,7 +150,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
       // ── IndexedDB provider (offline persistence) ──────────
       if (useIndexeddb) {
-        import('y-indexeddb').then(({ IndexeddbPersistence }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        import('y-indexeddb' as any).then(({ IndexeddbPersistence }: any) => {
           if (destroyed) return
           const idb = new IndexeddbPersistence(options!.docName, doc)
           idbRef.current = idb
@@ -171,7 +175,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
       // ── WebSocket provider (real-time collaboration) ────────
       if (useWebsocket) {
-        const { WebsocketProvider } = await import('y-websocket')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { WebsocketProvider } = await import('y-websocket' as any) as any
         if (destroyed) return
 
         const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
