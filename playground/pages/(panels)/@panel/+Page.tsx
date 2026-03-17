@@ -60,6 +60,19 @@ export default function PanelRootPage() {
 
         const el = group.items[0]
 
+        // Schema-level Section (collapsible card with schema elements inside)
+        if (el.type === 'section' && el.elements?.length > 0) {
+          return (
+            <SchemaSection
+              key={`section-${gi}`}
+              section={el}
+              panelPath={panelMeta.path}
+              pathSegment={pathSegment}
+              i18n={i18n}
+            />
+          )
+        }
+
         // Schema-level Tabs
         if (el.type === 'tabs' && el.tabs?.some((t: any) => t.elements?.length > 0)) {
           return (
@@ -285,6 +298,68 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ── Schema-level Section ─────────────────────────────────────────
+
+interface SchemaSectionProps {
+  section: { title: string; description?: string; collapsible: boolean; collapsed: boolean; columns: number; elements?: any[] }
+  panelPath: string
+  pathSegment: string
+  i18n: PanelI18n & Record<string, string>
+}
+
+function SchemaSection({ section, panelPath, pathSegment, i18n }: SchemaSectionProps) {
+  const [open, setOpen] = useState(!section.collapsed)
+
+  return (
+    <div className="rounded-xl border bg-card">
+      {/* Header */}
+      <div
+        className={`flex items-center justify-between px-5 py-3 ${section.collapsible ? 'cursor-pointer' : ''} ${section.elements?.length ? 'border-b' : ''}`}
+        onClick={section.collapsible ? () => setOpen(!open) : undefined}
+      >
+        <div>
+          <p className="text-sm font-semibold">{section.title}</p>
+          {section.description && (
+            <p className="text-xs text-muted-foreground mt-0.5">{section.description}</p>
+          )}
+        </div>
+        {section.collapsible && (
+          <svg
+            className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
+      </div>
+
+      {/* Content */}
+      {open && section.elements && section.elements.length > 0 && (
+        <div className="p-5">
+          <div className={`flex flex-col gap-4 ${section.columns > 1 ? `grid grid-cols-${section.columns}` : ''}`}>
+            {section.elements.map((el: any, i: number) => {
+              if (el.type === 'widget') {
+                return (
+                  <StandaloneWidget
+                    key={`sw-${i}`}
+                    widget={el}
+                    panelPath={panelPath}
+                    pathSegment={pathSegment}
+                    i18n={i18n}
+                  />
+                )
+              }
+              return (
+                <WidgetRenderer key={i} element={el} panelPath={panelPath} i18n={i18n} />
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

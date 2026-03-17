@@ -1,4 +1,4 @@
-import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Tabs, Dashboard, Widget } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Tabs, Section, Dashboard, Widget } from '@boostkit/panels'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'
@@ -74,6 +74,21 @@ export const adminPanel = Panel.make('admin')
       })),
 
     // ── Schema-level Tabs ──────────────────────────────────────
+    // ── Schema-level Section (collapsible card) ─────────────
+    Section.make('Analytics')
+      .description('Traffic and content metrics')
+      .collapsible()
+      .schema(
+        Chart.make('Content Growth')
+          .chartType('line')
+          .labels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'])
+          .datasets([
+            { label: 'Articles', data: [5, 12, 18, 25, 33, 42] },
+            { label: 'Users', data: [2, 4, 6, 8, 12, 15] },
+          ]),
+      ),
+
+    // ── Schema-level Tabs ──────────────────────────────────
     Tabs.make()
       .tab('Recent Content',
         Table.make('Recent Articles')

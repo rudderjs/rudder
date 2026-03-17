@@ -38,6 +38,27 @@ export async function resolveSchema(
     const type = (el as any).getType?.() as string | undefined
     if (!type) continue
 
+    // Schema-level Section — resolve elements recursively
+    if (type === 'section') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const section = el as any
+      if (typeof section.hasFields === 'function' && !section.hasFields() && section.getItems().length > 0) {
+        // Schema element section — resolve items recursively
+        const items = section.getItems()
+        const sectionPanel = Object.create(panel, {
+          getSchema: { value: () => items },
+        })
+        const resolved = await resolveSchema(sectionPanel, ctx)
+        const meta = section.toMeta()
+        meta.elements = resolved
+        result.push(meta as PanelSchemaElementMeta)
+        continue
+      }
+      // Field section — pass through toMeta()
+      result.push(section.toMeta() as PanelSchemaElementMeta)
+      continue
+    }
+
     // Schema-level Tabs — resolve each tab's elements recursively
     if (type === 'tabs') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
