@@ -6,10 +6,11 @@ import { CategoryResource }     from './resources/CategoryResource.js'
 import { SiteSettingsGlobal }   from './globals/SiteSettingsGlobal.js'
 import { CustomPage } from './pages/CustomPage.js'
 import { ReportsPage } from './pages/ReportsPage.js'
-import { Article }    from '../../Models/Article.js'
-import { Category }   from '../../Models/Category.js'
-import { Todo }       from '../../Models/Todo.js'
-import { User }       from '../../Models/User.js'
+
+import { Article }    from 'App/Models/Article.js'
+import { Category }   from 'App/Models/Category.js'
+import { Todo }       from 'App/Models/Todo.js'
+import { User }       from 'App/Models/User.js'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
