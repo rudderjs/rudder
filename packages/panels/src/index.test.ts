@@ -385,7 +385,7 @@ describe('Resource', () => {
 
   it('policy() defaults to true for all actions', async () => {
     const r = new (makeResource())()
-    const ctx = { user: undefined, headers: {}, path: '/' }
+    const ctx = { user: undefined, headers: {}, path: '/', params: {} }
     assert.equal(await r.policy('viewAny', ctx), true)
     assert.equal(await r.policy('delete',  ctx), true)
   })

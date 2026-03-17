@@ -90,18 +90,10 @@ export async function data(pageContext: PageContextServer) {
     for (const p of providers) fieldProviders.add(p)
   }
 
-  // Merge with config-level providers (only if websocket is needed)
+  // Ensure websocket is always included when needed
   let liveProviders: string[] = [...fieldProviders]
   if (needsWebsocket) {
-    try {
-      const configs = await import('../../../../../../config/index.js')
-      const configProviders: string[] = (configs.default as any)?.live?.providers ?? ['websocket']
-      for (const p of configProviders) {
-        if (!liveProviders.includes(p)) liveProviders.push(p)
-      }
-    } catch {
-      if (!liveProviders.includes('websocket')) liveProviders.push('websocket')
-    }
+    if (!liveProviders.includes('websocket')) liveProviders.push('websocket')
   }
 
   const sessionUser = await getSessionUser(pageContext)

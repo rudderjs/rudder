@@ -35,6 +35,7 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       headers: (pageContext as any).headers ?? {},
       path:    pageContext.urlPathname,
+      params:  {},
     })
 
     if (!allowed) throw redirect(`/login?redirect=${encodeURIComponent(pageContext.urlPathname)}`)
