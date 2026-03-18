@@ -62,7 +62,7 @@ export function SchemaRenderer({
     if (item.type === 'section') {
       const section = item as SectionMeta
       const key     = `section-${index}`
-      const fields  = section.fields.filter((f) => !f.hidden.includes(mode) && isFieldVisible(f as any, values))
+      const fields  = section.fields.filter((f) => !f.hidden.includes(mode) && isFieldVisible(f, values))
       if (fields.length === 0) return null
       const open    = section.collapsible ? !(collapsedSections[key] ?? section.collapsed) : true
 
@@ -108,7 +108,7 @@ export function SchemaRenderer({
           {tabsMeta.tabs.map((tab) => (
             <TabsContent key={tab.label} value={tab.label} className="p-5 flex flex-col gap-4 mt-0">
               {tab.fields
-                .filter((f) => !f.hidden.includes(mode) && isFieldVisible(f as any, values))
+                .filter((f) => !f.hidden.includes(mode) && isFieldVisible(f, values))
                 .map((f) => renderField(f))
               }
             </TabsContent>

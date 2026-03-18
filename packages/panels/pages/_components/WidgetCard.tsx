@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { WidgetRenderer } from './WidgetRenderer.js'
 import type { WidgetRendererProps } from './WidgetRenderer.js'
-import { icons as lucideIcons } from 'lucide-react'
 import type { PanelSchemaElementMeta, PanelI18n, ChartDataset, PanelColumnMeta, ListItem } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/panels'
 
@@ -14,16 +13,35 @@ export interface WidgetWithData extends WidgetMeta {
 }
 
 // ── Icon — supports emoji and lucide icon names ─────────────────────────────
+// Icons are lazy-loaded via the shared cache in ResourceIcon (avoids bundling all ~2k icons).
+
+type IconComponent = React.ComponentType<{ className?: string }>
+let iconsCache: Record<string, IconComponent> | null = null
+let loadPromise: Promise<void> | null = null
+function loadIcons(): Promise<void> {
+  if (iconsCache) return Promise.resolve()
+  if (!loadPromise) {
+    loadPromise = import('lucide-react').then((mod) => {
+      iconsCache = mod.icons as Record<string, IconComponent>
+    }).catch(() => { iconsCache = {} })
+  }
+  return loadPromise
+}
 
 export function WidgetIcon({ icon, className }: { icon: string; className?: string }) {
+  const pascalName = icon.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
+  const [LucideIcon, setLucideIcon] = useState<IconComponent | null>(() =>
+    iconsCache?.[pascalName] ?? null,
+  )
+
+  useEffect(() => {
+    if (iconsCache) { setLucideIcon(() => iconsCache![pascalName] ?? null); return }
+    loadIcons().then(() => { setLucideIcon(() => iconsCache?.[pascalName] ?? null) }).catch(() => {})
+  }, [pascalName])
+
   if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(icon)) {
     return <span className={className}>{icon}</span>
   }
-  const pascalName = icon
-    .split('-')
-    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-    .join('') as keyof typeof lucideIcons
-  const LucideIcon = lucideIcons[pascalName]
   if (LucideIcon) return <LucideIcon className={className} />
   return <span className={className}>{icon}</span>
 }

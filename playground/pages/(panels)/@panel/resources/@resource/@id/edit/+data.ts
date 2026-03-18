@@ -1,8 +1,18 @@
 import { PanelRegistry } from '@boostkit/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@boostkit/panels'
 import { getSessionUser } from '../../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
+
+function flattenFields(items: FieldOrGrouping[]): Field[] {
+  const result: Field[] = []
+  for (const item of items) {
+    if ('getFields' in item) result.push(...flattenFields((item as { getFields(): FieldOrGrouping[] }).getFields()))
+    else result.push(item as Field)
+  }
+  return result
+}
 
 export async function data(pageContext: PageContextServer) {
   const { panel: pathSegment, resource: slug, id } = pageContext.routeParams as { panel: string; resource: string; id: string }
@@ -20,25 +30,14 @@ export async function data(pageContext: PageContextServer) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function flattenFields(items: any[]): any[] {
-    const result: any[] = []
-    for (const item of items) {
-      if ('getFields' in item) result.push(...flattenFields(item.getFields()))
-      else result.push(item)
-    }
-    return result
-  }
-
-  let record = null
+  let record: RecordRow | null = null
   if (Model) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = Model.query()
+    let q: QueryBuilderLike<RecordRow> = Model.query()
     for (const f of flattenFields(resource.fields())) {
-      const type = (f as any).getType?.() as string | undefined
-      const name = (f as any).getName() as string
+      const type = f.getType()
+      const name = f.getName()
       if (type === 'belongsTo') {
-        const rel = ((f as any)._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
+        const rel = ((f as unknown as { _extra: Record<string, unknown> })._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
         q = q.with(rel)
       } else if (type === 'belongsToMany') {
         q = q.with(name)
@@ -48,19 +47,17 @@ export async function data(pageContext: PageContextServer) {
   }
 
   // Feature flags (independent)
-  const versioned     = (ResourceClass as any).versioned ?? false
-  const draftable     = (ResourceClass as any).draftable ?? false
+  const versioned     = ResourceClass.versioned
+  const draftable     = ResourceClass.draftable
 
   const allFields = flattenFields(resource.fields())
 
   // Yjs needed if any field has .collaborative() or .persist('websocket'|'indexeddb')
-  const needsYjs = allFields.some(
-    (f: any) => typeof f.isYjs === 'function' && f.isYjs()
-  )
+  const needsYjs = allFields.some((f) => f.isYjs())
 
   // Check if any field actually needs websocket (vs indexeddb-only)
-  const needsWebsocket = allFields.some((f: any) => {
-    const providers: string[] = typeof f.getYjsProviders === 'function' ? f.getYjsProviders() : []
+  const needsWebsocket = allFields.some((f) => {
+    const providers: string[] = f.getYjsProviders()
     return providers.includes('websocket')
   })
 
@@ -71,10 +68,9 @@ export async function data(pageContext: PageContextServer) {
       const docName = `panel:${slug}:${id}`
       const fieldData: Record<string, unknown> = {}
       for (const f of allFields) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const name = (f as any).getName() as string
-        if (name in (record as Record<string, unknown>)) {
-          fieldData[name] = (record as Record<string, unknown>)[name]
+        const name = f.getName()
+        if (name in record) {
+          fieldData[name] = record[name]
         }
       }
       await Live.seed(docName, fieldData)
@@ -86,11 +82,12 @@ export async function data(pageContext: PageContextServer) {
   // Collect Yjs providers needed by fields
   const fieldProviders = new Set<string>()
   for (const f of allFields) {
-    const providers: string[] = typeof (f as any).getYjsProviders === 'function' ? (f as any).getYjsProviders() : []
+    const providers: string[] = f.getYjsProviders()
     for (const p of providers) fieldProviders.add(p)
   }
 
   // Ensure websocket is always included when needed
+  // eslint-disable-next-line prefer-const -- array is conditionally mutated below
   let liveProviders: string[] = [...fieldProviders]
   if (needsWebsocket) {
     if (!liveProviders.includes('websocket')) liveProviders.push('websocket')

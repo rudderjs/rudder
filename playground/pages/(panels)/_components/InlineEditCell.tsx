@@ -18,7 +18,7 @@ export function InlineEditCell({ record, field, slug, pathSegment, i18n }: Props
   const id = record['id'] as string
 
   // Sync localValue when record changes (e.g. after live reload)
-  useEffect(() => { setLocalValue(record[field.name]) }, [record[field.name]])
+  useEffect(() => { setLocalValue(record[field.name]) }, [record, field.name])
 
   const save = useCallback(async (newValue: unknown) => {
     if (newValue === record[field.name]) {
@@ -37,10 +37,10 @@ export function InlineEditCell({ record, field, slug, pathSegment, i18n }: Props
         // Update the record in-place so CellValue re-renders
         record[field.name] = newValue
       } else {
-        toast.error((i18n as any).saveError ?? 'Save failed.')
+        toast.error((i18n as PanelI18n & Record<string, string>)['saveError'] ?? 'Save failed.')
       }
     } catch {
-      toast.error((i18n as any).saveError ?? 'Save failed.')
+      toast.error((i18n as PanelI18n & Record<string, string>)['saveError'] ?? 'Save failed.')
     } finally {
       setSaving(false)
       setEditing(false)

@@ -7,8 +7,28 @@ import { Breadcrumbs }       from '../../_components/Breadcrumbs.js'
 import { WidgetRenderer }    from '../../_components/WidgetRenderer.js'
 import { DashboardGrid }     from '../../_components/DashboardGrid.js'
 import { StandaloneWidget }  from '../../_components/StandaloneWidget.js'
-import type { PanelI18n }    from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelI18n, WidgetMeta } from '@boostkit/panels'
+import type { WidgetWithData } from '../../_components/WidgetCard.js'
+import type { DashboardGridProps } from '../../_components/DashboardGrid.js'
 import type { Data } from './+data.js'
+
+type DashboardLayoutItem = DashboardGridProps['ssrLayout'] extends (infer T)[] | undefined ? T : never
+
+interface TabItem { label: string; elements?: SchemaElement[]; [key: string]: unknown }
+
+type DashboardEl = {
+  type: 'dashboard'; id: string; label?: string; editable: boolean
+  widgets: unknown[]; tabs?: unknown[]; savedLayout?: unknown[]; savedTabLayouts?: Record<string, unknown[]>
+}
+
+type SchemaElement = PanelSchemaElementMeta | {
+  type: 'widget'; id?: string; defaultSize?: { w: number; h: number }; [key: string]: unknown
+} | DashboardEl | {
+  type: 'section'; title: string; description?: string; collapsible: boolean
+  collapsed: boolean; columns: number; elements?: SchemaElement[]
+} | {
+  type: 'tabs'; id?: string; tabs: TabItem[]
+}
 
 export default function SchemaPage() {
   const config = useConfig()
@@ -30,9 +50,9 @@ export default function SchemaPage() {
   }
 
   // Group consecutive standalone widgets into grid rows (same logic as panel root)
-  const groups: { type: 'widget-group' | 'element'; items: any[] }[] = []
-  for (const el of schemaData) {
-    if ((el as any).type === 'widget') {
+  const groups: { type: 'widget-group' | 'element'; items: SchemaElement[] }[] = []
+  for (const el of schemaData as SchemaElement[]) {
+    if (el.type === 'widget') {
       const last = groups[groups.length - 1]
       if (last?.type === 'widget-group') {
         last.items.push(el)
@@ -56,12 +76,13 @@ export default function SchemaPage() {
           if (group.type === 'widget-group') {
             return (
               <div key={`wg-${gi}`} className="grid grid-cols-12 gap-4">
-                {group.items.map((el: any, wi: number) => {
-                  const w = el.defaultSize?.w ?? 12
+                {group.items.map((el, wi: number) => {
+                  const widgetEl = el as { type: 'widget'; id?: string; defaultSize?: { w: number; h: number } }
+                  const w = widgetEl.defaultSize?.w ?? 12
                   return (
-                    <div key={`widget-${el.id ?? wi}`} style={{ gridColumn: `span ${Math.min(w, 12)}` }}>
+                    <div key={`widget-${widgetEl.id ?? wi}`} style={{ gridColumn: `span ${Math.min(w, 12)}` }}>
                       <StandaloneWidget
-                        widget={el}
+                        widget={el as unknown as WidgetWithData}
                         panelPath={panelMeta.path}
                         pathSegment={pathSegment}
                         i18n={i18n}
@@ -74,23 +95,31 @@ export default function SchemaPage() {
           }
 
           const el = group.items[0]
+          if (!el) return null
 
           // Schema-level Section
-          if (el.type === 'section' && el.elements?.length > 0) {
-            return <SchemaSection key={`s-${gi}`} section={el} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} />
+          if (el.type === 'section') {
+            const sectionEl = el as { type: 'section'; title: string; description?: string; collapsible: boolean; collapsed: boolean; columns: number; elements?: SchemaElement[] }
+            if (sectionEl.elements?.length) {
+              return <SchemaSection key={`s-${gi}`} section={sectionEl} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} />
+            }
           }
 
           // Schema-level Tabs
-          if (el.type === 'tabs' && el.tabs?.some((t: any) => t.elements?.length > 0)) {
-            return <SchemaTabs key={`t-${gi}`} id={(el as any).id} tabs={el.tabs} urlSearch={urlSearch} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} />
+          if (el.type === 'tabs') {
+            const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[] }
+            if (tabsEl.tabs?.some((t: TabItem) => (t.elements?.length ?? 0) > 0)) {
+              return <SchemaTabs key={`t-${gi}`} id={tabsEl.id} tabs={tabsEl.tabs} urlSearch={urlSearch} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} />
+            }
           }
 
           // Dashboard
           if (el.type === 'dashboard') {
-            return <DashboardSection key={`d-${el.id ?? gi}`} dashboard={el} pathSegment={pathSegment} panelPath={panelMeta.path} i18n={i18n} />
+            const dashEl = el as DashboardEl
+            return <DashboardSection key={`d-${dashEl.id ?? gi}`} dashboard={dashEl} pathSegment={pathSegment} panelPath={panelMeta.path} i18n={i18n} />
           }
 
-          return <WidgetRenderer key={gi} element={el} panelPath={panelMeta.path} i18n={i18n} />
+          return <WidgetRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
         })}
       </div>
     </>
@@ -103,7 +132,14 @@ function slugify(str: string): string {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-function SchemaSection({ section, panelPath, pathSegment, i18n }: any) {
+interface SchemaSectionProps {
+  section: { title: string; description?: string; collapsible: boolean; collapsed: boolean; columns: number; elements?: SchemaElement[] }
+  panelPath: string
+  pathSegment: string
+  i18n: PanelI18n & Record<string, string>
+}
+
+function SchemaSection({ section, panelPath, pathSegment: _pathSegment, i18n }: SchemaSectionProps) {
   const [open, setOpen] = useState(!section.collapsed)
   return (
     <div className="rounded-xl border bg-card">
@@ -121,10 +157,10 @@ function SchemaSection({ section, panelPath, pathSegment, i18n }: any) {
           </svg>
         )}
       </div>
-      {open && section.elements?.length > 0 && (
+      {open && section.elements?.length && (
         <div className="p-5 flex flex-col gap-4">
-          {section.elements.map((el: any, i: number) => (
-            <WidgetRenderer key={i} element={el} panelPath={panelPath} i18n={i18n} />
+          {section.elements.map((el: SchemaElement, i: number) => (
+            <WidgetRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
           ))}
         </div>
       )}
@@ -132,12 +168,21 @@ function SchemaSection({ section, panelPath, pathSegment, i18n }: any) {
   )
 }
 
-function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: any) {
+interface SchemaTabsProps {
+  id?: string | undefined
+  tabs: TabItem[]
+  urlSearch?: Record<string, string> | undefined
+  panelPath: string
+  pathSegment: string
+  i18n: PanelI18n & Record<string, string>
+}
+
+function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment: _pathSegment, i18n }: SchemaTabsProps) {
   const paramKey = id ?? 'tab'
   const defaultSlug = slugify(tabs[0]?.label ?? '')
   const initialSlug = urlSearch?.[paramKey] ?? defaultSlug
   const [activeSlug, setActiveSlug] = useState<string>(initialSlug)
-  const activeIdx = Math.max(0, tabs.findIndex((t: any) => slugify(t.label) === activeSlug))
+  const activeIdx = Math.max(0, tabs.findIndex((t: TabItem) => slugify(t.label) === activeSlug))
 
   function switchTab(label: string) {
     const slug = slugify(label)
@@ -153,7 +198,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: any) 
   return (
     <div>
       <div className="flex items-center gap-1 mb-4">
-        {tabs.map((tab: any, idx: number) => (
+        {tabs.map((tab: TabItem, idx: number) => (
           <button key={idx} type="button" onClick={() => switchTab(tab.label)}
             className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors ${
               activeIdx === idx ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -162,30 +207,44 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: any) 
         ))}
       </div>
       <div className="flex flex-col gap-6">
-        {(tabs[activeIdx]?.elements ?? []).map((el: any, i: number) => (
-          <WidgetRenderer key={i} element={el} panelPath={panelPath} i18n={i18n} />
+        {(tabs[activeIdx]?.elements ?? []).map((el: SchemaElement, i: number) => (
+          <WidgetRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
         ))}
       </div>
     </div>
   )
 }
 
-function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: any) {
-  const hasTabs = dashboard.tabs?.length > 0
-  const hasTopWidgets = dashboard.widgets?.length > 0
-  const [activeTab, setActiveTab] = useState(dashboard.tabs?.[0]?.id ?? null)
+interface DashboardTabItem { id: string; label: string; widgets: unknown[]; [key: string]: unknown }
+
+interface DashboardSectionProps {
+  dashboard: DashboardEl
+  pathSegment: string
+  panelPath: string
+  i18n: PanelI18n & Record<string, string>
+}
+
+function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: DashboardSectionProps) {
+  const tabs = dashboard.tabs as DashboardTabItem[] | undefined
+  const hasTabs = (tabs?.length ?? 0) > 0
+  const hasTopWidgets = (dashboard.widgets?.length ?? 0) > 0
+  const [activeTab, setActiveTab] = useState(tabs?.[0]?.id ?? null)
+
+  const widgets    = dashboard.widgets as WidgetMeta[]
+  const ssrWidgets = dashboard.widgets as WidgetWithData[]
+  const ssrLayout  = dashboard.savedLayout as DashboardLayoutItem[] | undefined
 
   return (
     <div className="space-y-4">
       {hasTopWidgets && (
         <DashboardGrid dashboardId={dashboard.id} label={dashboard.label} editable={dashboard.editable}
-          defaultWidgets={dashboard.widgets} ssrWidgets={dashboard.widgets} ssrLayout={dashboard.savedLayout}
+          defaultWidgets={widgets} ssrWidgets={ssrWidgets} ssrLayout={ssrLayout}
           pathSegment={pathSegment} panelPath={panelPath} i18n={i18n} />
       )}
       {hasTabs && (
         <div>
           <div className="flex gap-1 border-b mb-4">
-            {dashboard.tabs.map((tab: any) => (
+            {(tabs ?? []).map((tab: DashboardTabItem) => (
               <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === tab.id ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -193,13 +252,16 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: any) {
               >{tab.label}</button>
             ))}
           </div>
-          {dashboard.tabs.map((tab: any) => (
-            activeTab === tab.id && (
+          {(tabs ?? []).map((tab: DashboardTabItem) => {
+            const tabWidgets    = tab.widgets as WidgetMeta[]
+            const tabSsrWidgets = tab.widgets as WidgetWithData[]
+            const tabSsrLayout  = dashboard.savedTabLayouts?.[tab.id] as DashboardLayoutItem[] | undefined
+            return activeTab === tab.id && (
               <DashboardGrid key={tab.id} dashboardId={dashboard.id} tabId={tab.id} editable={dashboard.editable}
-                defaultWidgets={tab.widgets} ssrWidgets={tab.widgets} ssrLayout={dashboard.savedTabLayouts?.[tab.id]}
+                defaultWidgets={tabWidgets} ssrWidgets={tabSsrWidgets} ssrLayout={tabSsrLayout}
                 pathSegment={pathSegment} panelPath={panelPath} i18n={i18n} />
             )
-          ))}
+          })}
         </div>
       )}
     </div>

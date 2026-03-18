@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useData }   from 'vike-react/useData'
-import { navigate }  from 'vike/client/router'
 import { useConfig } from 'vike-react/useConfig'
 import { Breadcrumbs }      from '../../../../../_components/Breadcrumbs.js'
 import { EditToolbar }      from '../../../../../_components/edit/EditToolbar.js'
@@ -39,10 +38,6 @@ export default function EditPage() {
     const fromQs = new URLSearchParams(window.location.search).get('back')
     if (fromQs) setBackHref(fromQs)
   }, [])
-
-  if (!record) {
-    return <p className="text-muted-foreground">{i18n.recordNotFound}</p>
-  }
 
   // ── Schema + fields ──────────────────────────────────────
   const schema     = resourceMeta.fields as SchemaItem[]
@@ -84,12 +79,12 @@ export default function EditPage() {
   const remoteSetValueRef = useRef<(name: string, value: unknown) => void>(() => {})
 
   const {
-    connected, synced, presences,
+    connected, synced: _synced, presences,
     setCollaborativeValue, syncAllFieldsToDoc,
-    getDoc, awareness, userName, userColor,
+    getDoc: _getDoc, awareness: _awareness, userName, userColor,
   } = useCollaborativeForm(
     yjs && docName
-      ? { docName: docName!, wsPath: wsLivePath ?? '', fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
+      ? { docName: docName, wsPath: wsLivePath ?? '', fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as ('websocket' | 'indexeddb')[] }
       : null,
   )
 
@@ -99,7 +94,7 @@ export default function EditPage() {
   // ── Edit form state ──────────────────────────────────────
   const {
     values, errors, saving, activeVersionId, isRestorePreview,
-    setValue, setFormValue, resetForm, rejoinLive, handleSave, handleSubmit, restoreVersion,
+    setValue, setFormValue, resetForm: _resetForm, rejoinLive, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, yjs, i18n,
@@ -172,16 +167,19 @@ export default function EditPage() {
   // ── Listen for remote version restore (another user restored) ──
   useEffect(() => {
     if (!yjs || typeof window === 'undefined') return
+    type BKSocketChannel = { on(event: string, cb: (data: Record<string, unknown>) => void): void }
+    type BKSocketInstance = { channel(name: string): BKSocketChannel; disconnect(): void }
+
     let destroyed = false
-    let socket: any = null
+    let socket: BKSocketInstance | null = null
 
     async function connect() {
       try {
         // @ts-expect-error — Vite resolves this at runtime; no static module declaration
-        const mod = await import(/* @vite-ignore */ '/src/BKSocket.ts') as any
+        const mod = await import(/* @vite-ignore */ '/src/BKSocket.ts') as { BKSocket: new (url: string) => BKSocketInstance }
         if (destroyed) return
         socket = new mod.BKSocket(`ws://${window.location.host}/ws`)
-        socket.channel(`panel:${slug}`).on('version.restored', async (data: any) => {
+        socket.channel(`panel:${slug}`).on('version.restored', async (data: Record<string, unknown>) => {
           if (data?.id !== id) return
           if (isSyncingRef.current) return
           // Another user saved after restoring a version.
@@ -215,6 +213,11 @@ export default function EditPage() {
 
   // ── Version history toggle ───────────────────────────────
   const [showHistory, setShowHistory] = useState(false)
+
+  // ── Early guard (after all hooks) ────────────────────────
+  if (!record) {
+    return <p className="text-muted-foreground">{i18n.recordNotFound}</p>
+  }
 
   const recordStatus = draftable
     ? ((record as Record<string, unknown>)?.['draftStatus'] as string ?? 'draft')

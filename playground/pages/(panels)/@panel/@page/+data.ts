@@ -1,7 +1,7 @@
 import { render } from 'vike/abort'
 import type { PageContextServer } from 'vike/types'
 import { PanelRegistry, resolveSchema } from '@boostkit/panels'
-import type { PanelMeta, PanelSchemaElementMeta } from '@boostkit/panels'
+import type { PanelMeta, PanelSchemaElementMeta, PanelUser } from '@boostkit/panels'
 import { getSessionUser } from '../../_lib/getSessionUser.js'
 import type { SessionUser } from '../../_lib/getSessionUser.js'
 
@@ -43,8 +43,8 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
   const sessionUser = await getSessionUser(pageContext)
 
   const ctx = {
-    user: sessionUser as any,
-    headers: (pageContext as any).headers ?? {},
+    user: sessionUser as PanelUser | undefined,
+    headers: (pageContext as PageContextServer & { headers?: Record<string, string> }).headers ?? {},
     path: pageContext.urlPathname,
     params: pageParams,
   }
