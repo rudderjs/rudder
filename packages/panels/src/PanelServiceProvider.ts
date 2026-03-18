@@ -64,21 +64,28 @@ export class PanelServiceProvider extends ServiceProvider {
 // ─── Factory ───────────────────────────────────────────────
 
 import type { Panel as PanelType } from './Panel.js'
-import type { Application } from '@boostkit/core'
+import type { Application, ProviderClass } from '@boostkit/core'
 
 /**
  * Register one or more panels and mount their API routes.
  *
+ * An optional second argument accepts an array of extension providers
+ * (e.g. `panelsLexical()`). These are dynamically registered during boot
+ * via `this.app.register()`, keeping all panels-related wiring in one call.
+ *
  * @example
  * import { panels } from '@boostkit/panels'
- * import { adminPanel, customerPanel } from './panels.js'
+ * import { panelsLexical } from '@boostkit/panels-lexical/server'
+ * import { adminPanel } from './panels.js'
  *
  * export default [
- *   panels([adminPanel, customerPanel]),
- *   ...
+ *   panels([adminPanel], [panelsLexical()]),
  * ]
  */
-export function panels(panelList: PanelType[]): new (app: Application) => PanelServiceProvider {
+export function panels(
+  panelList:   PanelType[],
+  extensions?: ProviderClass[],
+): new (app: Application) => PanelServiceProvider {
   return class extends PanelServiceProvider {
     register(): void {
       PanelRegistry.reset()
@@ -86,6 +93,17 @@ export function panels(panelList: PanelType[]): new (app: Application) => PanelS
       for (const panel of panelList) {
         PanelRegistry.register(panel)
       }
+    }
+
+    override async boot(): Promise<void> {
+      // Register extension providers (e.g. panels-lexical, panels-media)
+      if (extensions) {
+        for (const ext of extensions) {
+          await this.app.register(ext)
+        }
+      }
+
+      await super.boot()
     }
   }
 }

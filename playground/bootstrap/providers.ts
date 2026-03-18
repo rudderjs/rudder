@@ -10,11 +10,8 @@ import { notifications } from '@boostkit/notification'
 import { session } from '@boostkit/session'
 import { localization } from '@boostkit/localization'
 import { database } from '@boostkit/orm-prisma'
-import { panels } from '@boostkit/panels'
-import { panelsLexical } from '@boostkit/panels-lexical/server'
 import { broadcasting } from '@boostkit/broadcast'
 import { live }   from '@boostkit/live'
-import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
@@ -36,14 +33,8 @@ export default [
   scheduler(),
   notifications(),
   broadcasting(),
-  live(configs.live),         // /ws-live — Yjs CRDT sync (after broadcasting so upgrade handler chains correctly)
-
-  // ── Admin panels ────────────────────────────────────────
-  panels([adminPanel]),
-  panelsLexical(),
+  live(configs.live),
 
   // ── Application ─────────────────────────────────────────
-  // AppServiceProvider dynamically registers module providers
-  // (e.g. TodoServiceProvider) via this.app.register()
   AppServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
