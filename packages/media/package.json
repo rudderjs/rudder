@@ -1,0 +1,58 @@
+{
+  "name": "@boostkit/media",
+  "version": "0.0.1",
+  "description": "Media library for @boostkit/panels — file browser, uploads, previews, image conversions.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/boostkitjs/boostkit",
+    "directory": "packages/media"
+  },
+  "type": "module",
+  "files": [
+    "dist",
+    "pages",
+    "schema"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@boostkit/core": "*",
+    "@boostkit/panels": "*",
+    "@boostkit/storage": "*",
+    "@boostkit/image": "*",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@boostkit/image": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@boostkit/core": "workspace:*",
+    "@boostkit/panels": "workspace:*",
+    "@boostkit/storage": "workspace:*",
+    "@boostkit/image": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

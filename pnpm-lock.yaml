@@ -303,6 +303,34 @@ importers:
         specifier: ^6.9.0
         version: 6.10.1
 
+  packages/media:
+    dependencies:
+      react:
+        specifier: '>=18'
+        version: 19.2.4
+    devDependencies:
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
+      '@boostkit/image':
+        specifier: workspace:*
+        version: link:../image
+      '@boostkit/panels':
+        specifier: workspace:*
+        version: link:../panels
+      '@boostkit/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/middleware:
     dependencies:
       '@boostkit/cache':
