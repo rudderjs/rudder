@@ -469,6 +469,9 @@ importers:
       '@boostkit/core':
         specifier: workspace:*
         version: link:../core
+      '@boostkit/image':
+        specifier: workspace:*
+        version: link:../image
       '@boostkit/router':
         specifier: workspace:*
         version: link:../router

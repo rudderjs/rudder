@@ -78,6 +78,11 @@ export class ArticleResource extends Resource {
       FileField.make('coverImage')
         .label('Cover Image')
         .image()
+        .optimize()
+        .conversions([
+          { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
+          { name: 'preview', width: 800, format: 'webp' },
+        ])
         .accept('image/*')
         .maxSize(5)
         .disk('public')
