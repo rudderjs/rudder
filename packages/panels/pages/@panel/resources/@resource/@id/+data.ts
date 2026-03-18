@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PanelRegistry } from '@boostkit/panels'
 import { getSessionUser } from '../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
@@ -21,7 +22,7 @@ export async function data(pageContext: PageContextServer) {
   const resourceMeta = resource.toMeta()
   const panelMeta    = panel.toMeta()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const Model  = ResourceClass.model as any
   function flattenFields(items: any[]): any[] {
     const result: any[] = []
@@ -34,7 +35,7 @@ export async function data(pageContext: PageContextServer) {
 
   let record   = null
   if (Model) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let q: any = Model.query()
     for (const f of flattenFields(resource.fields())) {
       const type = (f as any).getType?.() as string | undefined
@@ -66,7 +67,7 @@ export async function data(pageContext: PageContextServer) {
   }
 
   // ── SSR HasMany relation data ──────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const hasManyData: Record<string, { records: any[]; schema: any[]; pagination: { total: number; currentPage: number; lastPage: number; perPage: number } }> = {}
 
   if (record) {
@@ -80,13 +81,13 @@ export async function data(pageContext: PageContextServer) {
 
       const RelClass = panel.getResources().find((R) => R.getSlug() === relSlug)
       if (!RelClass) continue
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const RelModel = (RelClass as any).model as any
       if (!RelModel) continue
 
       const relResource = new RelClass()
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       let q: any = throughMany
         ? RelModel.query().where(fk, { some: { id } })
         : RelModel.query().where(fk, id)

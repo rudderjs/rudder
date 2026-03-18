@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono'
+import type { StatusCode, RedirectStatusCode } from 'hono/utils/http-status'
 import { renderErrorPage } from './error-page.js'
 import { serve } from '@hono/node-server'
 import type {
@@ -28,7 +29,7 @@ export interface HonoConfig {
 
 // ─── Request Normalizer ────────────────────────────────────
 
-function normalizeRequest(c: any): AppRequest {
+function normalizeRequest(c: Context): AppRequest {
   const url = new URL(c.req.url)
   const req: Record<string, unknown> = {
     method:  c.req.method,
@@ -45,13 +46,14 @@ function normalizeRequest(c: any): AppRequest {
   // Forward per-request augmentations stored on c by middleware (e.g. session, user).
   // Both applyMiddleware and registerRoute call normalizeRequest(c) with the same
   // Hono context, so getters ensure the route handler always sees what was set.
+  const ctx = c as unknown as Record<string, unknown>
   Object.defineProperty(req, 'session', {
-    get: () => (c as Record<string, unknown>)['__bk_session'],
+    get: () => ctx['__bk_session'],
     enumerable: true,
     configurable: true,
   })
   Object.defineProperty(req, 'user', {
-    get: () => (c as Record<string, unknown>)['__bk_user'],
+    get: () => ctx['__bk_user'],
     enumerable: true,
     configurable: true,
   })
@@ -60,7 +62,7 @@ function normalizeRequest(c: any): AppRequest {
 
 // ─── Response Normalizer ───────────────────────────────────
 
-function normalizeResponse(c: any): AppResponse {
+function normalizeResponse(c: Context): AppResponse {
   let statusCode = 200
   const headers: Record<string, string> = {}
 
@@ -77,7 +79,7 @@ function normalizeResponse(c: any): AppResponse {
     json(data) {
       c.header('Content-Type', 'application/json')
       Object.entries(headers).forEach(([k, v]) => c.header(k, v))
-      c.status(statusCode)
+      c.status(statusCode as StatusCode)
       // Hono v4: c.json() returns a Response but does NOT set c.res automatically.
       // We must set c.res explicitly so Hono/srvx always has a valid response to send.
       c.res = c.json(data)
@@ -85,12 +87,12 @@ function normalizeResponse(c: any): AppResponse {
     },
     send(data) {
       Object.entries(headers).forEach(([k, v]) => c.header(k, v))
-      c.status(statusCode)
+      c.status(statusCode as StatusCode)
       c.res = c.text(data)
       return c.res
     },
     redirect(url, code = 302) {
-      c.res = c.redirect(url, code)
+      c.res = c.redirect(url, code as RedirectStatusCode)
       return c.res
     },
   }

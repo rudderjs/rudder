@@ -9,7 +9,7 @@ export interface RichContentEditorProps {
   wsPath?:       string | null
   docName?:      string | null
   fragmentName?: string
-  blocks?:       any[]
+  blocks?:       unknown[]
   userName?:     string
   userColor?:    string
 }

@@ -1,5 +1,19 @@
-// PrismaClient is imported lazily since it requires `prisma generate` to be run first
-type PrismaClient = any
+// PrismaClient is imported lazily since it requires `prisma generate` to be run first.
+// We use a structural type that covers the runtime API we actually depend on.
+type PrismaModelDelegate = {
+  findFirst(args?: Record<string, unknown>): Promise<unknown>
+  findUnique(args: Record<string, unknown>): Promise<unknown>
+  findMany(args?: Record<string, unknown>): Promise<unknown[]>
+  count(args?: Record<string, unknown>): Promise<number>
+  create(args: Record<string, unknown>): Promise<unknown>
+  update(args: Record<string, unknown>): Promise<unknown>
+  delete(args: Record<string, unknown>): Promise<unknown>
+}
+type PrismaClient = {
+  $connect(): Promise<void>
+  $disconnect(): Promise<void>
+  [table: string]: PrismaModelDelegate | ((...args: unknown[]) => unknown)
+}
 
 import type {
   OrmAdapter,
@@ -26,13 +40,13 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     private table:  string
   ) {}
 
-  private get delegate(): any {
-    const d = (this.prisma as any)[this.table]
+  private get delegate(): PrismaModelDelegate {
+    const d = this.prisma[this.table]
     if (!d) throw new Error(
       `[BoostKit ORM] Prisma has no delegate for table "${this.table}". ` +
       `Did you run "prisma generate" after adding the model to your schema?`
     )
-    return d
+    return d as PrismaModelDelegate
   }
 
   where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
@@ -113,15 +127,15 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async first(): Promise<T | null> {
-    return this.delegate.findFirst({
+    return (await this.delegate.findFirst({
       where:   this.buildWhere(),
       include: this.buildInclude(),
       orderBy: this.buildOrderBy(),
-    }) ?? null
+    }) ?? null) as T | null
   }
 
   async find(id: number | string): Promise<T | null> {
-    return this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) ?? null
+    return (await this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) ?? null) as T | null
   }
 
   async get(): Promise<T[]> {
@@ -131,7 +145,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       orderBy: this.buildOrderBy(),
       take:    this._limitN  ?? undefined,
       skip:    this._offsetN ?? undefined,
-    })
+    }) as Promise<T[]>
   }
 
   async all(): Promise<T[]> {
@@ -141,7 +155,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       orderBy: this.buildOrderBy(),
       take:    this._limitN  ?? undefined,
       skip:    this._offsetN ?? undefined,
-    })
+    }) as Promise<T[]>
   }
 
   async count(): Promise<number> {
@@ -149,11 +163,11 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async create(data: Partial<T>): Promise<T> {
-    return this.delegate.create({ data })
+    return this.delegate.create({ data }) as Promise<T>
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
-    return this.delegate.update({ where: { id }, data })
+    return this.delegate.update({ where: { id }, data }) as Promise<T>
   }
 
   async delete(id: number | string): Promise<void> {
@@ -168,7 +182,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
         orderBy: this.buildOrderBy(),
         take:    perPage,
         skip:    (page - 1) * perPage,
-      }),
+      }) as Promise<T[]>,
       this.delegate.count({ where: this.buildWhere() }),
     ])
 
@@ -188,7 +202,9 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 // ─── Prisma Adapter ────────────────────────────────────────
 
 class PrismaAdapter implements OrmAdapter {
-  private constructor(private prisma: PrismaClient) {}
+  private constructor(readonly prismaClient: PrismaClient) {}
+  /** @internal — expose the raw PrismaClient for DI binding */
+  get prisma(): PrismaClient { return this.prismaClient }
 
   static async make(config: PrismaConfig = {}): Promise<PrismaAdapter> {
     if (config.client) return new PrismaAdapter(config.client)
@@ -196,23 +212,26 @@ class PrismaAdapter implements OrmAdapter {
     const opts: Record<string, unknown> = {}
 
     if (config.driver === 'postgresql' && config.url) {
-      const { Pool } = await import('pg') as any
-      const { PrismaPg } = await import('@prisma/adapter-pg') as any
+      const { Pool } = await import('pg') as typeof import('pg')
+      const { PrismaPg } = await import('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg')
       opts['adapter'] = new PrismaPg(new Pool({ connectionString: config.url }))
     } else if (config.driver === 'libsql' && config.url) {
       // Remote libSQL / Turso
-      const { createClient } = await import('@libsql/client') as any
-      const { PrismaLibSql } = await import('@prisma/adapter-libsql') as any
-      opts['adapter'] = new PrismaLibSql(createClient({ url: config.url }))
+      const { PrismaLibSql } = await import('@prisma/adapter-libsql') as typeof import('@prisma/adapter-libsql')
+      opts['adapter'] = new PrismaLibSql({ url: config.url })
     } else {
       // Local SQLite via better-sqlite3 (driver: 'sqlite' or default)
       const dbUrl = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
-      const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as any
+      const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as typeof import('@prisma/adapter-better-sqlite3')
       opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
     }
 
-    const mod = await import('@prisma/client') as any
-    const PC  = mod.PrismaClient ?? mod.default?.PrismaClient ?? mod.default
+    type PrismaClientConstructor = new (opts: Record<string, unknown>) => PrismaClient
+    const mod = await import('@prisma/client') as unknown as { PrismaClient?: PrismaClientConstructor; default?: PrismaClientConstructor | { PrismaClient?: PrismaClientConstructor } }
+    const rawDefault = mod.default
+    const PC = (mod.PrismaClient
+      ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
+    ) as PrismaClientConstructor
     return new PrismaAdapter(new PC(opts))
   }
 
@@ -277,7 +296,7 @@ export function database(config?: DatabaseConfig): new (app: Application) => Ser
 
       ModelRegistry.set(adapter)
       this.app.instance('db', adapter)
-      this.app.instance('prisma', (adapter as any).prisma)
+      this.app.instance('prisma', adapter.prisma)
     }
   }
 

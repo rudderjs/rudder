@@ -161,7 +161,8 @@ class RedisAdapter implements CacheAdapter {
     flushdb(): Promise<unknown>
   }> {
     if (!this.client) {
-      const { Redis } = await import('ioredis') as any
+      const ioredisModule = await import('ioredis') as unknown as { Redis?: typeof import('ioredis').Redis; default?: { Redis?: typeof import('ioredis').Redis } }
+      const Redis = ioredisModule.Redis ?? ioredisModule.default?.Redis ?? (ioredisModule.default as unknown as typeof import('ioredis').Redis)
       this.client = this.config.url
         ? new Redis(this.config.url)
         : new Redis({

@@ -1,5 +1,6 @@
 import { ServiceProvider, type Application, app } from '@boostkit/core'
 import type { MiddlewareHandler } from '@boostkit/contracts'
+import type { BetterAuthOptions } from 'better-auth'
 
 // ─── Module Augmentation ───────────────────────────────────
 
@@ -92,25 +93,29 @@ export interface AuthDbConfig {
 
 // ─── Internal helpers ──────────────────────────────────────
 
+type AnyConstructor = new (opts: Record<string, unknown>) => unknown
+
 async function createPrismaClient(config: AuthDbConfig): Promise<unknown> {
   const opts: Record<string, unknown> = {}
 
   if (config.driver === 'postgresql' && config.url) {
-    const { Pool }     = await import('pg') as any
-    const { PrismaPg } = await import('@prisma/adapter-pg') as any
+    const { Pool }     = await import('pg') as typeof import('pg')
+    const { PrismaPg } = await import('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg')
     opts['adapter'] = new PrismaPg(new Pool({ connectionString: config.url }))
   } else if (config.driver === 'libsql' && config.url) {
-    const { createClient }    = await import('@libsql/client') as any
-    const { PrismaLibSql }    = await import('@prisma/adapter-libsql') as any
-    opts['adapter'] = new PrismaLibSql(createClient({ url: config.url }))
+    const { PrismaLibSql } = await import('@prisma/adapter-libsql') as typeof import('@prisma/adapter-libsql')
+    opts['adapter'] = new PrismaLibSql({ url: config.url })
   } else {
     const dbUrl = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
-    const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as any
+    const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as typeof import('@prisma/adapter-better-sqlite3')
     opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
   }
 
-  const mod = await import('@prisma/client') as any
-  const PC  = mod.PrismaClient ?? mod.default?.PrismaClient ?? mod.default
+  const mod = await import('@prisma/client') as unknown as { PrismaClient?: AnyConstructor; default?: AnyConstructor | { PrismaClient?: AnyConstructor } }
+  const rawDefault = mod.default
+  const PC = (mod.PrismaClient
+    ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
+  ) as AnyConstructor
   return new PC(opts)
 }
 
@@ -163,7 +168,7 @@ export function auth(
       const { betterAuth: createAuth } = await import('better-auth')
 
       // Detect ORM: Prisma → Drizzle → fallback to creating own PrismaClient
-      let database: unknown
+      let database: BetterAuthOptions['database']
 
       let hasPrisma = false
       try { this.app.make('prisma'); hasPrisma = true } catch { /* not bound */ }
@@ -174,16 +179,17 @@ export function auth(
       if (hasPrisma) {
         const { prismaAdapter } = await import('better-auth/adapters/prisma')
         const prisma = this.app.make('prisma')
-        database = prismaAdapter(prisma as any, { provider: mapDriver(dbConfig?.driver) })
+        database = prismaAdapter(prisma as Parameters<typeof prismaAdapter>[0], { provider: mapDriver(dbConfig?.driver) })
       } else if (hasDrizzle) {
-        const { drizzleAdapter } = await import('better-auth/adapters/drizzle') as any
+        type DrizzleAdapterModule = { drizzleAdapter: (db: unknown, opts?: unknown) => unknown }
+        const { drizzleAdapter } = await import('better-auth/adapters/drizzle') as DrizzleAdapterModule
         const drizzle = this.app.make('drizzle')
-        database = drizzleAdapter(drizzle as any)
+        database = drizzleAdapter(drizzle)
       } else if (dbConfig) {
         // Fallback: create a dedicated PrismaClient from explicit dbConfig
         const { prismaAdapter } = await import('better-auth/adapters/prisma')
         const prisma = await createPrismaClient(dbConfig)
-        database = prismaAdapter(prisma as any, { provider: mapDriver(dbConfig.driver) })
+        database = prismaAdapter(prisma as Parameters<typeof prismaAdapter>[0], { provider: mapDriver(dbConfig.driver) })
       } else {
         throw new Error(
           '[@boostkit/auth] No database found. Register @boostkit/orm-prisma or @boostkit/orm-drizzle before auth, ' +
@@ -194,17 +200,17 @@ export function auth(
       const auth = createAuth({
         secret:   config.secret  ?? process.env['AUTH_SECRET'] ?? '',
         baseURL:  config.baseUrl ?? process.env['APP_URL'] ?? 'http://localhost:3000',
-        database: database as any,
+        database,
         emailAndPassword: {
           enabled: config.emailAndPassword?.enabled ?? true,
           ...(config.emailAndPassword?.requireEmailVerification !== undefined
             ? { requireEmailVerification: config.emailAndPassword.requireEmailVerification }
             : {}),
           ...(config.emailAndPassword?.sendResetPassword
-            ? { sendResetPassword: config.emailAndPassword.sendResetPassword as any }
+            ? { sendResetPassword: config.emailAndPassword.sendResetPassword as NonNullable<NonNullable<BetterAuthOptions['emailAndPassword']>['sendResetPassword']> }
             : {}),
           ...(config.emailAndPassword?.onPasswordReset
-            ? { onPasswordReset: config.emailAndPassword.onPasswordReset as any }
+            ? { onPasswordReset: config.emailAndPassword.onPasswordReset as NonNullable<NonNullable<BetterAuthOptions['emailAndPassword']>['onPasswordReset']> }
             : {}),
           ...(config.emailAndPassword?.resetPasswordTokenExpiresIn !== undefined
             ? { resetPasswordTokenExpiresIn: config.emailAndPassword.resetPasswordTokenExpiresIn }
@@ -220,7 +226,7 @@ export function auth(
             user: {
               create: {
                 after: async (user: { id: string; name: string; email: string }) => {
-                  await config.onUserCreated(user)
+                  await config.onUserCreated?.(user)
                 },
               },
             },

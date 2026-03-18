@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { DialogElementMeta, PanelI18n } from '@boostkit/panels'
+import type { DialogElementMeta, PanelI18n, PanelSchemaElementMeta } from '@boostkit/panels'
+import type { FormElementMeta } from '@boostkit/panels'
 import { FormElement } from './FormElement.js'
 import { WidgetRenderer } from './WidgetRenderer.js'
 
@@ -64,12 +65,12 @@ export function DialogElement({ dialog, panelPath, i18n }: DialogElementProps) {
 
             {/* Content */}
             <div className="px-6 py-4 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
-              {(dialog.elements as any[]).map((el: any, i: number) => {
+              {(dialog.elements as PanelSchemaElementMeta[]).map((el, i: number) => {
                 if (el.type === 'form') {
                   return (
                     <FormElement
-                      key={`df-${el.id ?? i}`}
-                      form={el}
+                      key={`df-${(el as FormElementMeta).id ?? i}`}
+                      form={el as FormElementMeta}
                       panelPath={panelPath}
                       i18n={i18n}
                     />

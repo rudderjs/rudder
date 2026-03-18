@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
@@ -20,7 +21,7 @@ export function mountVersionRoutes(
     const docName = `panel:${slug}:${id}`
     try {
       const { app } = await import('@boostkit/core') as any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const prisma = app().make('prisma') as any
       const versions = await prisma.panelVersion.findMany({
         where: { docName },
@@ -41,7 +42,7 @@ export function mountVersionRoutes(
     const ctx = buildContext(req)
     if (!await resource.policy('update', ctx)) return res.status(403).json({ message: 'Forbidden.' })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const Model = ResourceClass.model as any
     if (!Model) return res.status(500).json({ message: 'No model.' })
 
@@ -51,7 +52,7 @@ export function mountVersionRoutes(
 
     try {
       const { app } = await import('@boostkit/core') as any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const prisma = app().make('prisma') as any
 
       let fieldValues: Record<string, unknown>
@@ -83,7 +84,7 @@ export function mountVersionRoutes(
           docName,
           snapshot: Buffer.from(JSON.stringify(fieldValues)),
           label:    body.label ?? null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           userId:   (ctx.user as any)?.id ?? null,
         },
       })
@@ -129,7 +130,7 @@ export function mountVersionRoutes(
       }
 
       // Re-seed the main Y.Doc with saved DB values
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const Model = ResourceClass.model as any
       if (Model) {
         const record = await Model.find(id)
@@ -159,7 +160,7 @@ export function mountVersionRoutes(
     const versionId = (req.params as Record<string, string>)['versionId']
     try {
       const { app } = await import('@boostkit/core') as any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const prisma = app().make('prisma') as any
       const version = await prisma.panelVersion.findUnique({ where: { id: versionId } })
       if (!version) return res.status(404).json({ message: 'Version not found.' })

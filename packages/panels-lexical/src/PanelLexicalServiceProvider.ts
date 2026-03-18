@@ -27,6 +27,7 @@ export class PanelLexicalServiceProvider extends ServiceProvider {
  *   panelsLexical(),
  * ]
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function panelsLexical(): new (...args: any[]) => PanelLexicalServiceProvider {
   return PanelLexicalServiceProvider
 }

@@ -204,10 +204,10 @@ export function DashboardGrid({
         const qs = tabQuery(tabId)
         const res = await fetch(`${base}/layout${qs}`)
         if (res.ok) {
-          const body = await res.json() as { layout: any[] }
+          const body = await res.json() as { layout: Array<{ widgetId: string; w?: unknown; size?: { w?: number }; settings?: Record<string, unknown> }> }
           if (body.layout.length > 0) {
             // Normalize: ensure each item has a numeric `w` (migrate from old format)
-            const normalized: DashboardLayoutItem[] = body.layout.map((item: any) => {
+            const normalized: DashboardLayoutItem[] = body.layout.map((item) => {
               const widgetDef = defaultWidgets.find(d => d.id === item.widgetId)
               return {
                 widgetId: item.widgetId,

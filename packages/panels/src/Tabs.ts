@@ -33,7 +33,7 @@ class Tab {
   /** Get items as Field[] (for resource field context). */
   getFields(): Field[] {
     return this._items.filter(
-      (item): item is Field => typeof (item as any).getType === 'function' && typeof (item as any).getName === 'function'
+      (item): item is Field => typeof (item as Record<string, unknown>)['getType'] === 'function' && typeof (item as Record<string, unknown>)['getName'] === 'function'
     )
   }
 

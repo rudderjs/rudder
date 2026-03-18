@@ -146,6 +146,22 @@ export interface S3DiskConfig {
   forcePathStyle?:  boolean   // required for MinIO
 }
 
+type S3Commands = {
+  GetObjectCommand:     typeof import('@aws-sdk/client-s3').GetObjectCommand
+  PutObjectCommand:     typeof import('@aws-sdk/client-s3').PutObjectCommand
+  DeleteObjectCommand:  typeof import('@aws-sdk/client-s3').DeleteObjectCommand
+  HeadObjectCommand:    typeof import('@aws-sdk/client-s3').HeadObjectCommand
+  ListObjectsV2Command: typeof import('@aws-sdk/client-s3').ListObjectsV2Command
+}
+
+interface S3GetObjectResult {
+  Body?: AsyncIterable<Uint8Array>
+}
+
+interface S3ListObjectsResult {
+  Contents?: Array<{ Key?: string }>
+}
+
 class S3Adapter implements StorageAdapter {
   private client:  unknown
   private readonly bucket:  string
@@ -172,18 +188,12 @@ class S3Adapter implements StorageAdapter {
           credentials: { accessKeyId: this.config.accessKeyId, secretAccessKey: this.config.secretAccessKey ?? '' },
         }),
       })
-      ;(this as any)._cmds = { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command }
+      ;(this as unknown as { _cmds: S3Commands })._cmds = { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command }
     }
     return this.client as { send: (cmd: unknown) => Promise<unknown> }
   }
 
-  private cmds(): {
-    GetObjectCommand:      typeof import('@aws-sdk/client-s3').GetObjectCommand
-    PutObjectCommand:      typeof import('@aws-sdk/client-s3').PutObjectCommand
-    DeleteObjectCommand:   typeof import('@aws-sdk/client-s3').DeleteObjectCommand
-    HeadObjectCommand:     typeof import('@aws-sdk/client-s3').HeadObjectCommand
-    ListObjectsV2Command:  typeof import('@aws-sdk/client-s3').ListObjectsV2Command
-  } { return (this as any)._cmds }
+  private cmds(): S3Commands { return (this as unknown as { _cmds: S3Commands })._cmds }
 
   async put(filePath: string, contents: Buffer | string): Promise<void> {
     const client = await this.getClient()
@@ -196,10 +206,10 @@ class S3Adapter implements StorageAdapter {
   async get(filePath: string): Promise<Buffer | null> {
     try {
       const client = await this.getClient()
-      const res = await client.send(new (this.cmds().GetObjectCommand)({ Bucket: this.bucket, Key: filePath })) as any
+      const res = await client.send(new (this.cmds().GetObjectCommand)({ Bucket: this.bucket, Key: filePath })) as S3GetObjectResult
       if (!res.Body) return null
       const chunks: Uint8Array[] = []
-      for await (const chunk of res.Body as AsyncIterable<Uint8Array>) chunks.push(chunk)
+      for await (const chunk of res.Body) chunks.push(chunk)
       return Buffer.concat(chunks)
     } catch { return null }
   }
@@ -225,8 +235,8 @@ class S3Adapter implements StorageAdapter {
   async list(directory = ''): Promise<string[]> {
     const prefix = directory ? `${directory.replace(/\/$/, '')}/` : ''
     const client = await this.getClient()
-    const res = await client.send(new (this.cmds().ListObjectsV2Command)({ Bucket: this.bucket, Prefix: prefix })) as any
-    return (res.Contents ?? []).map((o: any) => o.Key ?? '').filter(Boolean)
+    const res = await client.send(new (this.cmds().ListObjectsV2Command)({ Bucket: this.bucket, Prefix: prefix })) as S3ListObjectsResult
+    return (res.Contents ?? []).map(o => o.Key ?? '').filter(Boolean)
   }
 
   url(filePath: string): string {

@@ -196,11 +196,11 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
       if (driver === 'sync') {
         adapter = new SyncAdapter()
       } else if (driver === 'inngest') {
-        const { inngest } = await resolveOptionalPeer<any>('@boostkit/queue-inngest')
-        adapter = (inngest as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
+        const { inngest } = await resolveOptionalPeer<{ inngest: (c: unknown) => QueueAdapterProvider }>('@boostkit/queue-inngest')
+        adapter = inngest(connectionConfig).create()
       } else if (driver === 'bullmq') {
-        const { bullmq } = await resolveOptionalPeer<any>('@boostkit/queue-bullmq')
-        adapter = (bullmq as (c: unknown) => QueueAdapterProvider)(connectionConfig).create()
+        const { bullmq } = await resolveOptionalPeer<{ bullmq: (c: unknown) => QueueAdapterProvider }>('@boostkit/queue-bullmq')
+        adapter = bullmq(connectionConfig).create()
       } else {
         throw new Error(`[BoostKit Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
       }

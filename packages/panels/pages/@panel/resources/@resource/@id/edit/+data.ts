@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PanelRegistry } from '@boostkit/panels'
 import { getSessionUser } from '../../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
@@ -17,10 +18,10 @@ export async function data(pageContext: PageContextServer) {
   const resourceMeta = resource.toMeta()
   const panelMeta    = panel.toMeta()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const Model  = ResourceClass.model as any
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   function flattenFields(items: any[]): any[] {
     const result: any[] = []
     for (const item of items) {
@@ -32,7 +33,7 @@ export async function data(pageContext: PageContextServer) {
 
   let record = null
   if (Model) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let q: any = Model.query()
     for (const f of flattenFields(resource.fields())) {
       const type = (f as any).getType?.() as string | undefined
@@ -71,7 +72,7 @@ export async function data(pageContext: PageContextServer) {
       const docName = `panel:${slug}:${id}`
       const fieldData: Record<string, unknown> = {}
       for (const f of allFields) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const name = (f as any).getName() as string
         if (name in (record as Record<string, unknown>)) {
           fieldData[name] = (record as Record<string, unknown>)[name]

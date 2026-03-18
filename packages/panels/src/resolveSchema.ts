@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Panel }         from './Panel.js'
 import type { PanelContext }  from './types.js'
 import type {
@@ -31,7 +32,7 @@ export async function resolveSchema(
   const schemaDef = panel.getSchema()
   if (!schemaDef) return []
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const elements: any[] = typeof schemaDef === 'function'
     ? await (schemaDef as (ctx: PanelContext) => Promise<unknown[]>)(ctx)
     : schemaDef as unknown[]
@@ -39,13 +40,13 @@ export async function resolveSchema(
   const result: PanelSchemaElementMeta[] = []
 
   for (const el of elements) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const type = (el as any).getType?.() as string | undefined
     if (!type) continue
 
     // Schema-level Section — resolve elements recursively
     if (type === 'section') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const section = el as any
       if (typeof section.hasFields === 'function' && !section.hasFields() && section.getItems().length > 0) {
         // Schema element section — resolve items recursively
@@ -66,7 +67,7 @@ export async function resolveSchema(
 
     // Schema-level Tabs — resolve each tab's elements recursively
     if (type === 'tabs') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const tabs = el as any
       const rawTabs = tabs.getTabs() as any[]
 
@@ -107,18 +108,18 @@ export async function resolveSchema(
 
     // Table needs special resolution (query model, build columns)
     if (type === 'table') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const config = (el as any).getConfig() as import('./schema/Table.js').TableConfig
 
       // ── fromResource(Class) — preferred resource-linked mode ───
       if (config.resourceClass) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const ResourceClass = config.resourceClass as any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const Model = ResourceClass.model as any
         if (!Model) continue
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         let q: any = Model.query()
         const sortCol = config.sortBy ?? ResourceClass.defaultSort
         if (sortCol) {
@@ -131,24 +132,24 @@ export async function resolveSchema(
         try { records = await q.get() } catch { /* empty model */ }
 
         // Determine columns — Column[] or string[] resolved via Resource fields
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as any)?.toMeta === 'function'
 
         let columns: import('./schema/Table.js').PanelColumnMeta[]
         if (isColumnInstances) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           columns = (config.columns as any[]).map((col: any) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
         } else {
           const resource   = new ResourceClass()
           const flatFields = flattenFields(resource.fields())
           const names: string[] = config.columns.length > 0
             ? config.columns as string[]
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             : flatFields.filter((f: any) => !f.isHiddenFrom('table') && f.getType() !== 'hasMany').map((f: any) => f.getName() as string).slice(0, 5)
           columns = names.map((name) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const field = flatFields.find((f: any) => f.getName() === name)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             return { name, label: field ? (field as any).getLabel() as string : titleCase(name) }
           })
         }
@@ -167,11 +168,11 @@ export async function resolveSchema(
 
       // ── fromModel(Class) — model-backed, no resource ────────────
       if (config.model) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const Model = config.model as any
 
         // Build query
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         let q: any = Model.query()
         if (config.sortBy) q = q.orderBy(config.sortBy, config.sortDir)
         q = q.limit(config.limit)
@@ -180,12 +181,12 @@ export async function resolveSchema(
         try { records = await q.get() } catch { /* empty model */ }
 
         // Determine columns — accept Column[] or string[]
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as any)?.toMeta === 'function'
 
          
         const columns: import('./schema/Table.js').PanelColumnMeta[] = isColumnInstances
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           ? (config.columns as any[]).map((col: any) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
           : (config.columns as string[]).map((name) => ({ name, label: titleCase(name) }))
 
@@ -210,7 +211,7 @@ export async function resolveSchema(
 
     // Dashboard elements — resolve widget data + user layout for SSR
     if (type === 'dashboard') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const dashboard = el as any
       const meta = dashboard.toMeta()
 
@@ -268,7 +269,7 @@ export async function resolveSchema(
 
     // Dialog — resolve inner elements recursively
     if (type === 'dialog') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const dialog = el as any
       const items  = dialog.getItems() as unknown[]
       const dialogPanel = Object.create(panel, {
@@ -283,7 +284,7 @@ export async function resolveSchema(
 
     // Standalone Form — register submit handler and pass through meta
     if (type === 'form') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const form = el as any
       const handler = form.getSubmitHandler?.()
       if (handler) {
@@ -295,7 +296,7 @@ export async function resolveSchema(
 
     // Standalone widget — resolve data for SSR (skip lazy widgets)
     if (type === 'widget') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const widget = el as any
       const meta = widget.toMeta()
 
@@ -317,7 +318,7 @@ export async function resolveSchema(
     // All other element types (text, heading, stats, chart, list, etc.)
     // — pass through their toMeta() directly
     if (typeof (el as any).toMeta === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       result.push((el as any).toMeta() as PanelSchemaElementMeta)
     }
   }
@@ -327,10 +328,10 @@ export async function resolveSchema(
 
 // ─── Dashboard widget data resolver ────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function resolveWidgetData(widgets: any[], ctx: any): Promise<any[]> {
   return Promise.all(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     widgets.map(async (widget: any) => {
       const meta = widget.toMeta()
       // Skip data resolution for lazy widgets
@@ -351,9 +352,9 @@ async function resolveWidgetData(widgets: any[], ctx: any): Promise<any[]> {
 
 // ─── Helpers ───────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function flattenFields(items: any[]): any[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const result: any[] = []
   for (const item of items) {
     if (typeof item.getFields === 'function') {

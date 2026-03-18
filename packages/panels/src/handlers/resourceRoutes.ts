@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
@@ -17,7 +18,7 @@ export function mountResourceRoutes(
 ): void {
   const slug    = ResourceClass.getSlug()
   const base    = `${panel.getApiBase()}/${slug}`
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const Model   = ResourceClass.model as any
 
   // ── GET /panel/api/resource — list (paginated) ────────
@@ -35,7 +36,7 @@ export function mountResourceRoutes(
     const dir    = (url.searchParams.get('dir') ?? 'ASC').toUpperCase() as 'ASC' | 'DESC'
     const search = url.searchParams.get('search') ?? undefined
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let q: any = Model.query()
 
     // Soft deletes — filter by trashed status
@@ -131,7 +132,7 @@ export function mountResourceRoutes(
 
     if (!fk || !id) return res.status(422).json({ message: 'fk and id query params are required.' })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let q: any = through
       // M2M: WHERE relation.some.id = parentId (Prisma nested filter)
       ? Model.query().where(fk, { some: { id } })
@@ -170,7 +171,7 @@ export function mountResourceRoutes(
     const url   = new URL(req.url, 'http://localhost')
     const label = url.searchParams.get('label') ?? 'name'
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const records: any[] = await Model.query().all()
     const options = records.map((r: any) => ({
       value: String(r.id),
@@ -193,7 +194,7 @@ export function mountResourceRoutes(
       .filter(f => f.getType() === 'belongsToMany')
       .map(f => f.getName())
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let q: any = Model.query()
     for (const rel of manyRelations) q = q.with(rel)
     const record = await q.find(id)

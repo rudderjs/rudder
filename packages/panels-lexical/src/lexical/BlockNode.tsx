@@ -65,6 +65,6 @@ export function $createBlockNode(blockType: string, blockData?: Record<string, u
   return new BlockNode(blockType, blockData ?? {})
 }
 
-export function $isBlockNode(node: any): node is BlockNode {
+export function $isBlockNode(node: unknown): node is BlockNode {
   return node instanceof BlockNode
 }

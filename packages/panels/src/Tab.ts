@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ─── Tab Meta (serialized to client) ────────────────────────
 
 export interface ListTabMeta {

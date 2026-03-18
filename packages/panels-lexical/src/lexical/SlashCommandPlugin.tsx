@@ -8,6 +8,7 @@ import {
 } from '@lexical/react/LexicalTypeaheadMenuPlugin'
 import { $createHeadingNode, $createQuoteNode } from '@lexical/rich-text'
 import { $getSelection, $isRangeSelection } from 'lexical'
+import type { LexicalEditor } from 'lexical'
 import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from '@lexical/list'
 import { $createCodeNode } from '@lexical/code'
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode'
@@ -18,11 +19,11 @@ class SlashMenuOption extends MenuOption {
   title: string
   icon: string
   description: string
-  onSelect: (editor: any) => void
+  onSelect: (editor: LexicalEditor) => void
 
   constructor(
     title: string,
-    opts: { icon: string; description: string; onSelect: (editor: any) => void },
+    opts: { icon: string; description: string; onSelect: (editor: LexicalEditor) => void },
   ) {
     super(title)
     this.title = title
@@ -34,7 +35,7 @@ class SlashMenuOption extends MenuOption {
 
 // ── Default items ───────────────────────────────────────────
 
-function getDefaultOptions(editor: any): SlashMenuOption[] {
+function getDefaultOptions(editor: LexicalEditor): SlashMenuOption[] {
   return [
     new SlashMenuOption('Heading 1', {
       icon: 'H1', description: 'Large heading',
@@ -110,7 +111,7 @@ export function SlashCommandPlugin({ extraItems }: Props) {
   }, [editor, queryString, extraItems])
 
   const onSelectOption = useCallback(
-    (option: SlashMenuOption, textNodeContainingQuery: any, closeMenu: () => void) => {
+    (option: SlashMenuOption, textNodeContainingQuery: { remove(): void } | null, closeMenu: () => void) => {
       editor.update(() => {
         if (textNodeContainingQuery) textNodeContainingQuery.remove()
       })

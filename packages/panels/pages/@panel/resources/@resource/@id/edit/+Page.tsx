@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -38,10 +39,6 @@ export default function EditPage() {
     const fromQs = new URLSearchParams(window.location.search).get('back')
     if (fromQs) setBackHref(fromQs)
   }, [])
-
-  if (!record) {
-    return <p className="text-muted-foreground">{i18n.recordNotFound}</p>
-  }
 
   // ── Schema + fields ──────────────────────────────────────
   const schema     = resourceMeta.fields as SchemaItem[]
@@ -214,6 +211,11 @@ export default function EditPage() {
 
   // ── Version history toggle ───────────────────────────────
   const [showHistory, setShowHistory] = useState(false)
+
+  // ── Early guard (after all hooks) ────────────────────────
+  if (!record) {
+    return <p className="text-muted-foreground">{i18n.recordNotFound}</p>
+  }
 
   const recordStatus = draftable
     ? ((record as Record<string, unknown>)?.['draftStatus'] as string ?? 'draft')

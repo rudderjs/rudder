@@ -96,34 +96,46 @@ export interface PrismaPersistenceConfig {
    */
   model?: string
   /** Pass an existing PrismaClient to avoid creating a new one per operation. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client?: any
+  client?: unknown
 }
+
+type PrismaDelegate = {
+  findMany(args: unknown): Promise<Array<{ update: Uint8Array }>>
+  create(args: unknown): Promise<unknown>
+  deleteMany(args: unknown): Promise<unknown>
+}
+
+type PrismaLikeClient = Record<string, PrismaDelegate> & { $disconnect?: () => Promise<void> }
 
 export function livePrisma(config: PrismaPersistenceConfig = {}): LivePersistence {
   const modelName = config.model ?? 'liveDocument'
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let cachedClient: any = config.client ?? null
+  let cachedClient: PrismaLikeClient | null = (config.client as PrismaLikeClient | undefined) ?? null
 
-  async function getClient() {
+  async function getClient(): Promise<PrismaLikeClient> {
     if (cachedClient) return cachedClient
-    const { PrismaClient } = await import('@prisma/client') as any
-    cachedClient = new PrismaClient()
+    const { PrismaClient } = await import('@prisma/client') as typeof import('@prisma/client')
+    cachedClient = new PrismaClient() as unknown as PrismaLikeClient
     return cachedClient
+  }
+
+  function getDelegate(prisma: PrismaLikeClient): PrismaDelegate {
+    const d = prisma[modelName]
+    if (!d) throw new Error(`[Live] Prisma model "${modelName}" not found.`)
+    return d
   }
 
   return {
     async getYDoc(docName: string): Promise<Y.Doc> {
       const prisma = await getClient()
       const doc    = new Y.Doc()
-      const rows   = await prisma[modelName].findMany({ where: { docName } })
+      const rows   = await getDelegate(prisma).findMany({ where: { docName } })
       for (const row of rows) Y.applyUpdate(doc, row.update)
       return doc
     },
 
     async storeUpdate(docName: string, update: Uint8Array): Promise<void> {
       const prisma = await getClient()
-      await prisma[modelName].create({ data: { docName, update } })
+      await getDelegate(prisma).create({ data: { docName, update } })
     },
 
     async getStateVector(docName: string): Promise<Uint8Array> {
@@ -138,7 +150,7 @@ export function livePrisma(config: PrismaPersistenceConfig = {}): LivePersistenc
 
     async clearDocument(docName: string): Promise<void> {
       const prisma = await getClient()
-      await prisma[modelName].deleteMany({ where: { docName } })
+      await getDelegate(prisma).deleteMany({ where: { docName } })
     },
 
     async destroy(): Promise<void> {
@@ -166,7 +178,8 @@ export function liveRedis(config: RedisLivePersistenceConfig = {}): LivePersiste
 
   async function getClient() {
     if (!client) {
-      const { Redis } = await import('ioredis') as any
+      const ioredisModule = await import('ioredis') as unknown as { Redis?: typeof import('ioredis').Redis; default?: { Redis?: typeof import('ioredis').Redis } }
+      const Redis = ioredisModule.Redis ?? ioredisModule.default?.Redis ?? (ioredisModule.default as unknown as typeof import('ioredis').Redis)
       client = config.url
         ? new Redis(config.url)
         : new Redis({ host: config.host ?? '127.0.0.1', port: config.port ?? 6379, password: config.password })

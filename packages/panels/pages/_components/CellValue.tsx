@@ -141,10 +141,11 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
     return <span className="text-muted-foreground text-xs">{root.nodes.length} blocks</span>
   }
   if (type === 'richcontent') {
-    const json = value as any
+    type LexicalNode = { text?: string; children?: LexicalNode[] }
+    const json = value as { root?: LexicalNode }
     let text: string
     try {
-      const extractText = (node: any): string => {
+      const extractText = (node: LexicalNode): string => {
         if (node.text) return node.text
         if (node.children) return node.children.map(extractText).join(' ')
         return ''

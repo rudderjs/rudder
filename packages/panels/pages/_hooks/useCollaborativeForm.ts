@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 interface CollaborativeField {
@@ -59,13 +60,13 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
   const [synced, setSynced] = useState(false)
   const [presences, setPresences] = useState<Presence[]>([])
   const [awareness, setAwareness] = useState<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const providerRef  = useRef<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const idbRef       = useRef<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const docRef       = useRef<any>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const awarenessRef = useRef<any>(null)
   const suppressRef  = useRef<Set<string>>(new Set())
   /** Map of fieldName → Y.Text for text fields */
@@ -87,7 +88,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
     const useIndexeddb = providers.includes('indexeddb')
 
     async function connect() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const Y = await import('yjs' as any)
       if (destroyed) return
 
@@ -120,7 +121,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       }
 
       // Observe Y.Map changes for non-text fields → update React state
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       fieldsMap.observe((event: any) => {
          
         event.keysChanged.forEach((key: string) => {
@@ -153,7 +154,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
       // ── IndexedDB provider (offline persistence) ──────────
       if (useIndexeddb) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         import('y-indexeddb' as any).then(({ IndexeddbPersistence }: any) => {
           if (destroyed) return
           const idb = new IndexeddbPersistence(opts.docName, doc)
@@ -178,7 +179,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
       // ── WebSocket provider (real-time collaboration) ────────
       if (useWebsocket) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { WebsocketProvider } = await import('y-websocket' as any) as any
         if (destroyed) return
 

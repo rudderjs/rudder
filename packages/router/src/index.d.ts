@@ -26,7 +26,7 @@ export declare class Router {
     delete(path: string, handler: RouteHandler, middleware?: MiddlewareHandler[]): this;
     all(path: string, handler: RouteHandler, middleware?: MiddlewareHandler[]): this;
     /** Register all routes from a decorator-based controller class */
-    registerController(ControllerClass: new () => any): this;
+    registerController(ControllerClass: new () => object): this;
     /** Mount all routes onto a server adapter */
     mount(server: ServerAdapter): void;
     /** Get all registered routes (useful for boostkit routes:list) */

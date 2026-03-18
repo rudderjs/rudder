@@ -13,6 +13,6 @@ import { CollaborativePlainText } from './CollaborativePlainText.js'
  * ```
  */
 export function registerLexical(): void {
-  editorRegistry.richcontent = LexicalEditor as any
-  editorRegistry.collaborativePlainText = CollaborativePlainText as any
+  editorRegistry.richcontent = LexicalEditor as typeof editorRegistry.richcontent
+  editorRegistry.collaborativePlainText = CollaborativePlainText as typeof editorRegistry.collaborativePlainText
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PanelRegistry } from '@boostkit/panels'
 import { getSessionUser } from '../../../_lib/getSessionUser.js'
 
@@ -26,7 +27,7 @@ export async function data(pageContext: PageContextServer) {
   const resourceMeta = resource.toMeta()
   const panelMeta    = panel.toMeta()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const Model  = ResourceClass.model as any
   const params = new URLSearchParams(pageContext.urlOriginal.split('?')[1] ?? '')
   const isLoadMore = (ResourceClass as any).paginationType === 'loadMore'
@@ -40,7 +41,7 @@ export async function data(pageContext: PageContextServer) {
   let pagination: { total: number; currentPage: number; lastPage: number; perPage: number } | null = null
 
   if (Model) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let q: any = Model.query()
 
     // Tab filter — apply active tab's query modifier

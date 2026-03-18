@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MiddlewareHandler } from '@boostkit/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
@@ -22,7 +23,7 @@ export function mountGlobalRoutes(
 
     try {
       const { app } = await import('@boostkit/core') as any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const prisma = app().make('prisma') as any
       const row    = await prisma.panelGlobal.findUnique({ where: { slug } })
       const data   = row?.data ? (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) : {}
@@ -45,7 +46,7 @@ export function mountGlobalRoutes(
 
     try {
       const { app } = await import('@boostkit/core') as any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const prisma = app().make('prisma') as any
       const serialized = JSON.stringify(body)
       await prisma.panelGlobal.upsert({

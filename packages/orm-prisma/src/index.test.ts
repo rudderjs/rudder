@@ -13,12 +13,13 @@ import { prisma, database, type PrismaConfig, type DatabaseConfig } from './inde
 function makeCapturingClient() {
   let lastWhere: Record<string, unknown> = {}
   const delegate = {
-    findMany:  (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return [] },
-    findFirst: (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return null },
-    count:     (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return 0 },
-    create:    () => ({}),
-    update:    () => ({}),
-    delete:    () => undefined,
+    findMany:   async (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return [] },
+    findFirst:  async (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return null },
+    findUnique: async (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return null },
+    count:      async (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return 0 },
+    create:     async () => ({}),
+    update:     async () => ({}),
+    delete:     async () => undefined,
   }
   const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
   return { fakeClient, getLastWhere: () => lastWhere }

@@ -23,6 +23,7 @@ export async function data(pageContext: PageContextServer) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { app } = await import('@boostkit/core') as any
     const prisma  = app().make('prisma')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row     = await (prisma as any).panelGlobal.findUnique({ where: { slug } })
     if (row?.data) record = typeof row.data === 'string' ? JSON.parse(row.data) : row.data
   } catch {

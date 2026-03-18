@@ -2,7 +2,10 @@ import 'reflect-metadata'
 
 // ─── Types ─────────────────────────────────────────────────
 
-type Constructor<T = unknown> = new (...args: any[]) => T
+// Constructor must be contravariant in parameter types to accept any class.
+// Using `unknown[]` is too strict (existing classes have typed params).
+// The widest correct type for a "new-able thing returning T" is:
+type Constructor<T = unknown> = new (...args: never) => T
 type Factory<T = unknown> = (container: Container) => T
 type Binding<T = unknown> = { factory: Factory<T>; singleton: boolean }
 
@@ -126,7 +129,7 @@ export class Container {
       return override ? this.make(override.token) : this.make(type)
     })
 
-    return new target(...(args as unknown[]))
+    return new (target as new (...a: unknown[]) => T)(...args)
   }
 
   private toToken(token: string | symbol | Constructor): string | symbol {

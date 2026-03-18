@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MiddlewareHandler } from '@boostkit/core'
 import type { Panel } from '../Panel.js'
 import type { Widget, WidgetSize } from '../Widget.js'

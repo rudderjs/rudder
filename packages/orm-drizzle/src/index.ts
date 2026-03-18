@@ -1,6 +1,7 @@
 import {
   eq, ne, gt, gte, lt, lte, like, inArray, notInArray,
   and, asc, desc, count as sqlCount,
+  type Column, type SQL,
 } from 'drizzle-orm'
 import type {
   OrmAdapter,
@@ -11,6 +12,29 @@ import type {
   OrderClause,
   PaginatedResult,
 } from '@boostkit/contracts'
+
+// ─── Minimal Drizzle DB interface ──────────────────────────
+
+// Drizzle DB instances share a common fluent query API regardless of driver.
+// We capture only the subset this adapter uses so we don't import driver-specific types.
+type DrizzleQB = {
+  where(cond: SQL): DrizzleQB
+  orderBy(...cols: SQL[]): DrizzleQB
+  limit(n: number): DrizzleQB
+  offset(n: number): DrizzleQB
+  returning(): DrizzleQB
+  set(data: unknown): DrizzleQB
+  values(data: unknown): DrizzleQB
+  then<TResult>(onfulfilled: (value: unknown) => TResult): Promise<TResult>
+}
+
+type DrizzleDb = {
+  select(fields?: Record<string, unknown>): { from(table: unknown): DrizzleQB }
+  insert(table: unknown): { values(data: unknown): DrizzleQB }
+  update(table: unknown): { set(data: unknown): DrizzleQB }
+  delete(table: unknown): DrizzleQB
+  $client?: { end?: () => Promise<void> }
+}
 
 // ─── Global Table Registry ─────────────────────────────────
 
@@ -35,7 +59,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _offsetN: number | null = null
 
   constructor(
-    private readonly db:         unknown,
+    private readonly db:         DrizzleDb,
     private readonly table:      unknown,
     private readonly primaryKey: string,
   ) {}
@@ -69,122 +93,117 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return (this.table as Record<string, unknown>)[column]
   }
 
-  private buildConditions(): unknown | undefined {
+  private buildConditions(): SQL | undefined {
     if (!this._wheres.length) return undefined
 
     const exprs = this._wheres.map(clause => {
-      const col = this.col(clause.column)
+      const col = this.col(clause.column) as Column
       switch (clause.operator) {
-        case '=':      return eq(col as any, clause.value)
-        case '!=':     return ne(col as any, clause.value)
-        case '>':      return gt(col as any, clause.value)
-        case '>=':     return gte(col as any, clause.value)
-        case '<':      return lt(col as any, clause.value)
-        case '<=':     return lte(col as any, clause.value)
-        case 'LIKE':   return like(col as any, clause.value as string)
-        case 'IN':     return inArray(col as any, clause.value as unknown[])
-        case 'NOT IN': return notInArray(col as any, clause.value as unknown[])
+        case '=':      return eq(col, clause.value)
+        case '!=':     return ne(col, clause.value)
+        case '>':      return gt(col, clause.value)
+        case '>=':     return gte(col, clause.value)
+        case '<':      return lt(col, clause.value)
+        case '<=':     return lte(col, clause.value)
+        case 'LIKE':   return like(col, clause.value as string)
+        case 'IN':     return inArray(col, clause.value as unknown[])
+        case 'NOT IN': return notInArray(col, clause.value as unknown[])
       }
     })
 
-    return exprs.length === 1 ? exprs[0] : and(...(exprs as any[]))
+    return exprs.length === 1 ? exprs[0] : and(...(exprs as SQL[]))
   }
 
-  private buildOrderBy(): unknown[] {
+  private buildOrderBy(): SQL[] {
     return this._orders.map(o => {
-      const col = this.col(o.column)
-      return o.direction === 'DESC' ? desc(col as any) : asc(col as any)
+      const col = this.col(o.column) as Column
+      return o.direction === 'DESC' ? desc(col) : asc(col)
     })
   }
 
   async first(): Promise<T | null> {
-    const db      = this.db as any
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
 
-    let q = db.select().from(this.table)
-    if (cond)        q = q.where(cond)
+    let q = this.db.select().from(this.table)
+    if (cond)           q = q.where(cond)
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
 
-    const result: T[] = await q
+    const result = await (q as unknown as Promise<T[]>)
     return result[0] ?? null
   }
 
   async find(id: number | string): Promise<T | null> {
-    const db     = this.db as any
-    const pkCol  = this.col(this.primaryKey)
-    const result: T[] = await db
+    const pkCol = this.col(this.primaryKey) as Column
+    const result = await (this.db
       .select()
       .from(this.table)
-      .where(eq(pkCol as any, id))
-      .limit(1)
+      .where(eq(pkCol, id))
+      .limit(1) as unknown as Promise<T[]>)
     return result[0] ?? null
   }
 
   async get(): Promise<T[]> {
-    const db      = this.db as any
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
 
-    let q = db.select().from(this.table)
+    let q = this.db.select().from(this.table)
     if (cond)           q = q.where(cond)
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
     if (this._offsetN !== null) q = q.offset(this._offsetN)
 
-    return q as Promise<T[]>
+    return q as unknown as Promise<T[]>
   }
 
   async all(): Promise<T[]> {
-    return (this.db as any).select().from(this.table) as Promise<T[]>
+    return this.db.select().from(this.table) as unknown as Promise<T[]>
   }
 
   async count(): Promise<number> {
-    const db   = this.db as any
     const cond = this.buildConditions()
 
-    let q = db.select({ value: sqlCount() }).from(this.table)
+    let q = this.db.select({ value: sqlCount() }).from(this.table)
     if (cond) q = q.where(cond)
 
-    const result: Array<{ value: number | string | bigint }> = await q
+    const result: Array<{ value: number | string | bigint }> = await (q as unknown as Promise<Array<{ value: number | string | bigint }>>)
     return Number(result[0]?.value ?? 0)
   }
 
   async create(data: Partial<T>): Promise<T> {
-    const result: T[] = await (this.db as any)
+    const result = await (this.db
       .insert(this.table)
       .values(data)
-      .returning()
+      .returning() as unknown as Promise<T[]>)
     if (!result[0]) throw new Error('[BoostKit ORM Drizzle] create() returned no rows.')
     return result[0]
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
-    const pkCol   = this.col(this.primaryKey)
-    const result: T[] = await (this.db as any)
+    const pkCol = this.col(this.primaryKey) as Column
+    const result = await (this.db
       .update(this.table)
       .set(data)
-      .where(eq(pkCol as any, id))
-      .returning()
+      .where(eq(pkCol, id))
+      .returning() as unknown as Promise<T[]>)
     if (!result[0]) throw new Error('[BoostKit ORM Drizzle] update() returned no rows.')
     return result[0]
   }
 
   async delete(id: number | string): Promise<void> {
-    const pkCol = this.col(this.primaryKey)
-    await (this.db as any)
+    const pkCol = this.col(this.primaryKey) as Column
+    await (this.db
       .delete(this.table)
-      .where(eq(pkCol as any, id))
+      .where(eq(pkCol, id)) as unknown as Promise<void>)
   }
 
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
-    const db      = this.db as any
 
-    let pageQ = db.select().from(this.table)
-    let cntQ  = db.select({ value: sqlCount() }).from(this.table)
+    let pageQ = this.db.select().from(this.table)
+    let cntQ  = this.db.select({ value: sqlCount() }).from(this.table)
 
     if (cond) {
       pageQ = pageQ.where(cond)
@@ -193,8 +212,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     if (orderBy.length) pageQ = pageQ.orderBy(...orderBy)
     pageQ = pageQ.limit(perPage).offset((page - 1) * perPage)
 
-    const [data, countResult]: [T[], Array<{ value: number | string | bigint }>] =
-      await Promise.all([pageQ, cntQ])
+    const [data, countResult] = await Promise.all([
+      pageQ as unknown as Promise<T[]>,
+      cntQ  as unknown as Promise<Array<{ value: number | string | bigint }>>,
+    ])
 
     const total    = Number(countResult[0]?.value ?? 0)
     const lastPage = Math.max(1, Math.ceil(total / perPage))
@@ -215,31 +236,34 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
 class DrizzleAdapter implements OrmAdapter {
   private constructor(
-    private readonly db:         unknown,
+    private readonly db:         DrizzleDb,
     private readonly tables:     Record<string, unknown>,
     private readonly primaryKey: string,
   ) {}
 
   static async make(config: DrizzleConfig): Promise<DrizzleAdapter> {
-    let db = config.client
+    let db = config.client as DrizzleDb | undefined
 
     if (!db) {
       const url    = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
       const driver = config.driver ?? 'sqlite'
 
       if (driver === 'postgresql') {
-        const { default: postgres }  = await import('postgres') as any
-        const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as any
-        db = dzPostgres(postgres(url))
+        // postgres uses `export =` so dynamic import wraps it in a `.default`
+        const postgresModule          = await import('postgres') as unknown as { default?: (url: string) => unknown }
+        const postgres                = postgresModule.default ?? (postgresModule as unknown as (url: string) => unknown)
+        const { drizzle: dzPostgres } = await import('drizzle-orm/postgres-js') as typeof import('drizzle-orm/postgres-js')
+        db = (dzPostgres as unknown as (sql: unknown) => DrizzleDb)(postgres(url))
       } else if (driver === 'libsql') {
-        const { createClient }       = await import('@libsql/client') as any
-        const { drizzle: dzLibsql }  = await import('drizzle-orm/libsql') as any
-        db = dzLibsql(createClient({ url }))
+        const { createClient }        = await import('@libsql/client') as typeof import('@libsql/client')
+        const { drizzle: dzLibsql }   = await import('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
+        db = dzLibsql(createClient({ url })) as unknown as DrizzleDb
       } else {
-        // default: SQLite via better-sqlite3
-        const { default: Database }    = await import('better-sqlite3') as any
-        const { drizzle: dzSqlite }    = await import('drizzle-orm/better-sqlite3') as any
-        db = dzSqlite(new Database(url.replace(/^file:/, '')))
+        // better-sqlite3 uses `export =` so dynamic import wraps it in `.default`
+        const sqliteModule            = await import('better-sqlite3') as unknown as { default?: new (path: string) => unknown }
+        const Database                = sqliteModule.default ?? (sqliteModule as unknown as new (path: string) => unknown)
+        const { drizzle: dzSqlite }   = await import('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
+        db = (dzSqlite as unknown as (db: unknown) => DrizzleDb)(new Database(url.replace(/^file:/, '')))
       }
     }
 
@@ -264,7 +288,7 @@ class DrizzleAdapter implements OrmAdapter {
   }
 
   async disconnect(): Promise<void> {
-    const end = (this.db as any)?.$client?.end
+    const end = this.db.$client?.end
     if (typeof end === 'function') await end()
   }
 }

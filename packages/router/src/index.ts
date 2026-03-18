@@ -34,7 +34,7 @@ export function Controller(prefix = ''): ClassDecorator {
 
 /** Attach middleware to a controller class or route method */
 export function Middleware(middleware: MiddlewareHandler[]): ClassDecorator & MethodDecorator {
-  return (target: any, key?: string | symbol) => {
+  return (target: object, key?: string | symbol) => {
     if (key) {
       // Method-level middleware (supports both decorator orders)
       const perHandler: Record<string, MiddlewareHandler[]> =
@@ -115,8 +115,8 @@ export class Router {
   all   (path: string, handler: RouteHandler, middleware?: MiddlewareHandler[]) { return this.add('ALL',    path, handler, middleware) }
 
   /** Register all routes from a decorator-based controller class */
-  registerController(ControllerClass: new () => any): this {
-    const instance   = new ControllerClass()
+  registerController(ControllerClass: new () => object): this {
+    const instance   = new ControllerClass() as Record<string, unknown>
     const prefix     = Reflect.getMetadata(CONTROLLER_PREFIX, ControllerClass) ?? ''
     const ctrlMw: MiddlewareHandler[] =
       Reflect.getMetadata(CONTROLLER_MIDDLEWARE, ControllerClass) ?? []

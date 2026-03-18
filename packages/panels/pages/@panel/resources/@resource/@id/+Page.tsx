@@ -81,8 +81,8 @@ export default function ShowPage() {
         {/* Resource widgets */}
         {widgetData && widgetData.length > 0 && (
           <div className="flex flex-col gap-4 mb-6">
-            {widgetData.map((el: any, i: number) => (
-              <WidgetRenderer key={i} element={el} panelPath={`/${pathSegment}`} i18n={i18n as any} />
+            {widgetData.map((el, i: number) => (
+              <WidgetRenderer key={i} element={el as import('@boostkit/panels').PanelSchemaElementMeta} panelPath={`/${pathSegment}`} i18n={i18n} />
             ))}
           </div>
         )}

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MiddlewareHandler } from '@boostkit/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
@@ -48,7 +49,7 @@ export function mountMetaRoutes(
     }> = []
 
     for (const ResourceClass of panel.getResources()) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const Model = ResourceClass.model as any
       if (!Model) continue
 
@@ -59,18 +60,18 @@ export function mountMetaRoutes(
 
       if (searchableCols.length === 0) continue
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       let qb: any = Model.query()
       qb = qb.where(searchableCols[0] ?? '', 'LIKE', `%${q}%`)
       for (let i = 1; i < searchableCols.length; i++) {
         qb = qb.orWhere(searchableCols[i] ?? '', 'LIKE', `%${q}%`)
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const rows: any[] = await qb.limit(limit).all()
       if (rows.length === 0) continue
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const titleField: string = (ResourceClass as any).titleField ?? 'id'
       results.push({
         resource: ResourceClass.getSlug(),
@@ -97,10 +98,10 @@ export function mountMetaRoutes(
 
     // Find the model by name across all resources registered on this panel
     const ResourceClass = panel.getResources().find(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (R) => (R as any).model?.name === modelName || R.getSlug() === modelName,
     )
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const Model = (ResourceClass as any)?.model as any
 
     if (!Model) {
@@ -152,10 +153,10 @@ export function mountMetaRoutes(
   // Upload endpoint — used by FileField / ImageField
   router.post(`${apiBase}/_upload`, async (req, res) => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { Storage } = await import('@boostkit/storage') as any
       // req.raw is the Hono Context (c); c.req.parseBody() parses multipart/form-data
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const body      = await (req.raw as any).req.parseBody() as Record<string, unknown>
       const file      = body['file'] as File
       const disk      = String(body['disk']      ?? 'local')
