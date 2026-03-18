@@ -109,6 +109,48 @@ export async function resolveSchema(
     if (type === 'table') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const config = (el as any).getConfig() as import('./schema/Table.js').TableConfig
+
+      // ── Mode 2: model-backed (.fromModel() / .fromResource()) ──
+      if (config.model) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const Model = config.model as any
+
+        // Build query
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q: any = Model.query()
+        if (config.sortBy) q = q.orderBy(config.sortBy, config.sortDir)
+        q = q.limit(config.limit)
+
+        let records: unknown[] = []
+        try { records = await q.get() } catch { /* empty model */ }
+
+        // Determine columns — accept Column[] or string[]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as any)?.toMeta === 'function'
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const columns: import('./schema/Table.js').PanelColumnMeta[] = isColumnInstances
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? (config.columns as any[]).map((col: any) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
+          : (config.columns as string[]).map((name) => ({ name, label: titleCase(name) }))
+
+        const meta: TableElementMeta = {
+          type:     'table',
+          title:    config.title,
+          resource: '',
+          columns,
+          records,
+          href:     '',
+        }
+        if (config.reorderable) {
+          meta.reorderable      = true
+          meta.reorderEndpoint  = `${panel.getApiBase()}/_tables/reorder`
+        }
+        result.push(meta as PanelSchemaElementMeta)
+        continue
+      }
+
+      // ── Mode 1: resource-linked (.resource(slug)) ──────────────
       if (!config.resource) continue
 
       const ResourceClass = panel.getResources().find(
@@ -140,7 +182,7 @@ export async function resolveSchema(
       const flatFields = flattenFields(resource.fields())
 
       const columnNames: string[] = config.columns.length > 0
-        ? config.columns
+        ? config.columns as string[]
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         : flatFields
             .filter((f: any) => !f.isHiddenFrom('table') && f.getType() !== 'hasMany')
