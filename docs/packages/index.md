@@ -83,7 +83,7 @@ All `@boostkit/*` packages are published to npm individually. Install only what 
 
 | Package | Description | Install |
 |---|---|---|
-| [@boostkit/panels](./panels) | Admin panel builder — define resources, fields, filters, and actions in TypeScript; auto-generates CRUD API routes and a React UI with sidebar or topbar layout. | `pnpm add @boostkit/panels` |
+| [@boostkit/panels](./panels/index) | Admin panel builder — define resources, fields, filters, and actions in TypeScript; auto-generates CRUD API routes and a React UI with sidebar or topbar layout. | `pnpm add @boostkit/panels` |
 
 ## Features
 

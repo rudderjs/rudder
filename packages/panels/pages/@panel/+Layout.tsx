@@ -4,9 +4,9 @@ import type { ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import type { PanelMeta } from '@boostkit/panels'
-import { registerLexical } from '@boostkit/panels-lexical'
-
-registerLexical()
+// Optionally register Lexical editor if @boostkit/panels-lexical is installed.
+// Dynamic import avoids a hard dependency and breaks the panels ↔ panels-lexical cycle.
+import('@boostkit/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
    
