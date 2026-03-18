@@ -69,7 +69,7 @@ export function broadcasting(config: BroadcastConfig = {}): new (app: Applicatio
       ;(globalThis as Record<string, unknown>)[UPGRADE_KEY] = handler
 
       this.publishes({
-        from: new URL('../client', import.meta.url).pathname,
+        from: new URL(/* @vite-ignore */ '../client', import.meta.url).pathname,
         to:   'src',
         tag:  'broadcast-client',
       })

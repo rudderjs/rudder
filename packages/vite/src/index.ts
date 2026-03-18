@@ -146,6 +146,8 @@ export function boostkit(): Promise<Plugin[]> {
                       warning.message.includes('/packages/storage/') ||
                       warning.message.includes('ioredis'))
                   ) return
+                  // Suppress sourcemap errors from vendor:publish copies (tsx without maps).
+                  if (warning.message.includes('Error when using sourcemap')) return
                   warn(warning)
                 },
               },

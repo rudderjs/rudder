@@ -18,7 +18,7 @@ export { buildDefaultLayout } from './handlers/index.js'
 export class PanelServiceProvider extends ServiceProvider {
   register(): void {
     // Panel schema (ORM + driver-specific)
-    const schemaDir = new URL('../schema', import.meta.url).pathname
+    const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
     this.publishes([
       { from: `${schemaDir}/panels.prisma`,            to: 'prisma/schema',   tag: 'panels-schema', orm: 'prisma' as const },
       { from: `${schemaDir}/panels.drizzle.sqlite.ts`, to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },
@@ -29,7 +29,7 @@ export class PanelServiceProvider extends ServiceProvider {
 
   async boot(): Promise<void> {
     this.publishes({
-      from: new URL('../pages', import.meta.url).pathname,
+      from: new URL(/* @vite-ignore */ '../pages', import.meta.url).pathname,
       to:   'pages/(panels)',
       tag:  'panels-pages',
     })
