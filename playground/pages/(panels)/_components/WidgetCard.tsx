@@ -35,7 +35,7 @@ export function WidgetIcon({ icon, className }: { icon: string; className?: stri
   )
 
   useEffect(() => {
-    if (iconsCache) { setLucideIcon(() => iconsCache![pascalName] ?? null); return }
+    if (iconsCache) { setLucideIcon(() => iconsCache?.[pascalName] ?? null); return }
     loadIcons().then(() => { setLucideIcon(() => iconsCache?.[pascalName] ?? null) }).catch(() => {})
   }, [pascalName])
 

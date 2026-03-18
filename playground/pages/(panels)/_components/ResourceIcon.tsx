@@ -53,7 +53,7 @@ export function ResourceIcon({ icon, className = 'size-4' }: ResourceIconProps) 
     if (!icon || icon.startsWith('<svg') || /[^\x00-\x7F]/.test(icon)) return // eslint-disable-line no-control-regex
     const pascalName = toPascalCase(icon)
     if (iconsCache) {
-      setLucideIcon(() => iconsCache![pascalName] ?? null)
+      setLucideIcon(() => iconsCache?.[pascalName] ?? null)
       return
     }
     loadIcons().then(() => {
