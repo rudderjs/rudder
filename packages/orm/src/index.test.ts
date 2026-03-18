@@ -20,6 +20,10 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     create: async (data) => data as T,
     update: async (_id, data) => data as T,
     delete: async () => undefined,
+    withTrashed: function() { return qb },
+    onlyTrashed: function() { return qb },
+    restore: async (_id) => ({} as T),
+    forceDelete: async () => undefined,
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     ...overrides,
   }
@@ -148,7 +152,9 @@ describe('Model static methods', () => {
     class User extends Model {}
     const qb = User.query()
     const methods = ['where', 'orWhere', 'orderBy', 'limit', 'offset', 'with',
-      'first', 'find', 'get', 'all', 'count', 'create', 'update', 'delete', 'paginate']
+      'withTrashed', 'onlyTrashed',
+      'first', 'find', 'get', 'all', 'count', 'create', 'update', 'delete',
+      'restore', 'forceDelete', 'paginate']
     for (const method of methods) {
       assert.strictEqual(typeof (qb as unknown as Record<string, unknown>)[method], 'function',
         `missing method: ${method}`)
@@ -246,6 +252,82 @@ describe('Model static methods', () => {
     class Post extends Model {}
     Post.with('author', 'comments')
     assert.deepStrictEqual(receivedRelations, ['author', 'comments'])
+  })
+})
+
+// ─── Soft Deletes ─────────────────────────────────────────────────────────────
+
+describe('Model soft deletes', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('softDeletes defaults to false', () => {
+    class User extends Model {}
+    assert.strictEqual(User.softDeletes, false)
+  })
+
+  it('softDeletes can be enabled on a model', () => {
+    class Post extends Model {
+      static override softDeletes = true
+    }
+    assert.strictEqual(Post.softDeletes, true)
+  })
+
+  it('query() calls _enableSoftDeletes when model has softDeletes = true', () => {
+    let enabled = false
+    const qb = makeQb()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(qb as any)._enableSoftDeletes = () => { enabled = true }
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+
+    class Post extends Model {
+      static override softDeletes = true
+    }
+    Post.query()
+    assert.strictEqual(enabled, true)
+  })
+
+  it('query() does NOT call _enableSoftDeletes when model has softDeletes = false', () => {
+    let enabled = false
+    const qb = makeQb()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(qb as any)._enableSoftDeletes = () => { enabled = true }
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+
+    class User extends Model {}
+    User.query()
+    assert.strictEqual(enabled, false)
+  })
+
+  it('restore() delegates to query().restore()', async () => {
+    const restored = { id: 1, name: 'Alice', deletedAt: null }
+    const qb = makeQb({ restore: async () => restored as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+
+    class Post extends Model {
+      static override softDeletes = true
+    }
+    const result = await Post.restore(1)
+    assert.deepStrictEqual(result, restored)
+  })
+
+  it('forceDelete() delegates to query().forceDelete()', async () => {
+    let deleted = false
+    const qb = makeQb({ forceDelete: async () => { deleted = true } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+
+    class Post extends Model {
+      static override softDeletes = true
+    }
+    await Post.forceDelete(1)
+    assert.strictEqual(deleted, true)
+  })
+
+  it('query methods include withTrashed and onlyTrashed', () => {
+    ModelRegistry.set(makeAdapter())
+    class Post extends Model {}
+    const qb = Post.query()
+    assert.strictEqual(typeof (qb as unknown as Record<string, unknown>)['withTrashed'], 'function')
+    assert.strictEqual(typeof (qb as unknown as Record<string, unknown>)['onlyTrashed'], 'function')
   })
 })
 

@@ -28,12 +28,15 @@ import type {
 // ─── Prisma Query Builder ──────────────────────────────────
 
 class PrismaQueryBuilder<T> implements QueryBuilder<T> {
-  private _wheres:   WhereClause[] = []
-  private _orWheres: WhereClause[] = []
-  private _orders:   OrderClause[] = []
-  private _limitN:   number | null = null
-  private _offsetN:  number | null = null
-  private _withs:    string[] = []
+  private _wheres:       WhereClause[] = []
+  private _orWheres:     WhereClause[] = []
+  private _orders:       OrderClause[] = []
+  private _limitN:       number | null = null
+  private _offsetN:      number | null = null
+  private _withs:        string[] = []
+  private _withTrashed   = false
+  private _onlyTrashed   = false
+  private _softDeletes   = false
 
   constructor(
     private prisma: PrismaClient,
@@ -76,6 +79,12 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   offset(n: number): this { this._offsetN = n; return this }
   with(...relations: string[]): this { this._withs.push(...relations); return this }
 
+  withTrashed(): this  { this._withTrashed = true; return this }
+  onlyTrashed(): this  { this._onlyTrashed = true; return this }
+
+  /** @internal — called by Model to enable automatic soft delete filtering */
+  _enableSoftDeletes(): this { this._softDeletes = true; return this }
+
   private clauseToFilter(clause: WhereClause): Record<string, unknown> {
     switch (clause.operator) {
       case '=':      return { [clause.column]: clause.value }
@@ -107,6 +116,15 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private buildWhere(): Record<string, unknown> {
     const andFilters = this._wheres.map(c => this.clauseToFilter(c))
     const orFilters  = this._orWheres.map(c => this.clauseToFilter(c))
+
+    // Soft delete filtering
+    if (this._softDeletes && !this._withTrashed) {
+      if (this._onlyTrashed) {
+        andFilters.push({ deletedAt: { not: null } })
+      } else {
+        andFilters.push({ deletedAt: null })
+      }
+    }
 
     if (andFilters.length === 0 && orFilters.length === 0) return {}
 
@@ -171,6 +189,18 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async delete(id: number | string): Promise<void> {
+    if (this._softDeletes) {
+      await this.delegate.update({ where: { id }, data: { deletedAt: new Date() } })
+    } else {
+      await this.delegate.delete({ where: { id } })
+    }
+  }
+
+  async restore(id: number | string): Promise<T> {
+    return this.delegate.update({ where: { id }, data: { deletedAt: null } }) as Promise<T>
+  }
+
+  async forceDelete(id: number | string): Promise<void> {
     await this.delegate.delete({ where: { id } })
   }
 

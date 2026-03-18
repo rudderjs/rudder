@@ -30,6 +30,10 @@ export interface QueryBuilder<T> {
   limit(n: number): this
   offset(n: number): this
   with(...relations: string[]): this
+  /** Include soft-deleted records in query results. */
+  withTrashed(): this
+  /** Return only soft-deleted records. */
+  onlyTrashed(): this
   first(): Promise<T | null>
   find(id: number | string): Promise<T | null>
   get(): Promise<T[]>
@@ -38,6 +42,10 @@ export interface QueryBuilder<T> {
   create(data: Partial<T>): Promise<T>
   update(id: number | string, data: Partial<T>): Promise<T>
   delete(id: number | string): Promise<void>
+  /** Restore a soft-deleted record. */
+  restore(id: number | string): Promise<T>
+  /** Permanently delete a record, bypassing soft deletes. */
+  forceDelete(id: number | string): Promise<void>
   paginate(page: number, perPage?: number): Promise<PaginatedResult<T>>
 }
 

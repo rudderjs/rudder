@@ -89,13 +89,20 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   // Drizzle relational queries require pre-defined relation schemas — no-op here
   with(..._relations: string[]): this { return this }
 
+  // Soft delete support
+  private _withTrashed  = false
+  private _onlyTrashed  = false
+  private _softDeletes  = false
+
+  withTrashed(): this  { this._withTrashed = true; return this }
+  onlyTrashed(): this  { this._onlyTrashed = true; return this }
+  _enableSoftDeletes(): this { this._softDeletes = true; return this }
+
   private col(column: string): unknown {
     return (this.table as Record<string, unknown>)[column]
   }
 
   private buildConditions(): SQL | undefined {
-    if (!this._wheres.length) return undefined
-
     const exprs = this._wheres.map(clause => {
       const col = this.col(clause.column) as Column
       switch (clause.operator) {
@@ -111,6 +118,19 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       }
     })
 
+    // Soft delete filtering
+    if (this._softDeletes && !this._withTrashed) {
+      const deletedAtCol = this.col('deletedAt') as Column | undefined
+      if (deletedAtCol) {
+        if (this._onlyTrashed) {
+          exprs.push(ne(deletedAtCol, null) as SQL)
+        } else {
+          exprs.push(eq(deletedAtCol, null) as SQL)
+        }
+      }
+    }
+
+    if (!exprs.length) return undefined
     return exprs.length === 1 ? exprs[0] : and(...(exprs as SQL[]))
   }
 
@@ -192,6 +212,30 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async delete(id: number | string): Promise<void> {
+    const pkCol = this.col(this.primaryKey) as Column
+    if (this._softDeletes) {
+      const deletedAtCol = this.col('deletedAt') as Column
+      if (deletedAtCol) {
+        await (this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)) as unknown as Promise<void>)
+        return
+      }
+    }
+    await (this.db
+      .delete(this.table)
+      .where(eq(pkCol, id)) as unknown as Promise<void>)
+  }
+
+  async restore(id: number | string): Promise<T> {
+    const pkCol = this.col(this.primaryKey) as Column
+    const result = await (this.db
+      .update(this.table)
+      .set({ deletedAt: null })
+      .where(eq(pkCol, id))
+      .returning() as unknown as Promise<T[]>)
+    return result[0] as T
+  }
+
+  async forceDelete(id: number | string): Promise<void> {
     const pkCol = this.col(this.primaryKey) as Column
     await (this.db
       .delete(this.table)

@@ -42,20 +42,41 @@ export abstract class Model {
   /** Columns that are mass-assignable */
   static fillable: string[] = []
 
+  /**
+   * Enable soft deletes for this model. When true:
+   * - `delete()` sets `deletedAt` instead of removing the record
+   * - Queries automatically exclude records where `deletedAt` is not null
+   * - Use `withTrashed()` to include soft-deleted records
+   * - Use `onlyTrashed()` to return only soft-deleted records
+   * - Use `restore()` to un-delete a record
+   * - Use `forceDelete()` to permanently remove a record
+   */
+  static softDeletes = false
+
   /** Get the table name, auto-pluralizing if not set */
   static getTable(this: typeof Model): string {
     return this.table ?? `${this.name.toLowerCase()}s`
   }
 
-  /** Return a query builder for this model */
+  /** Return a query builder for this model (auto-filters soft deletes) */
   static query<T extends typeof Model>(this: T): QueryBuilder<InstanceType<T>> {
-    return ModelRegistry.getAdapter().query<InstanceType<T>>(
+    const q = ModelRegistry.getAdapter().query<InstanceType<T>>(
       (this as typeof Model).getTable()
     )
+    if ((this as typeof Model).softDeletes) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (q as any)._enableSoftDeletes?.()
+    }
+    return q
   }
 
   private static _q<T extends typeof Model>(self: T): QueryBuilder<InstanceType<T>> {
-    return ModelRegistry.getAdapter().query<InstanceType<T>>((self as typeof Model).getTable())
+    const q = ModelRegistry.getAdapter().query<InstanceType<T>>((self as typeof Model).getTable())
+    if ((self as typeof Model).softDeletes) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (q as any)._enableSoftDeletes?.()
+    }
+    return q
   }
 
   static find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {
@@ -76,6 +97,16 @@ export abstract class Model {
 
   static with<T extends typeof Model>(this: T, ...relations: string[]): QueryBuilder<InstanceType<T>> {
     return Model._q(this).with(...relations)
+  }
+
+  /** Restore a soft-deleted record by ID. */
+  static restore<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T>> {
+    return Model._q(this).restore(id)
+  }
+
+  /** Permanently delete a record by ID, bypassing soft deletes. */
+  static forceDelete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
+    return Model._q(this).forceDelete(id)
   }
 
   toJSON(): Record<string, unknown> {
