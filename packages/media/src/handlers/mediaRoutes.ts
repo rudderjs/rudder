@@ -284,7 +284,7 @@ export function mountMediaRoutes(
       }
     }
 
-    // Delete files from storage
+    // Delete files from storage + remove the directory
     if (item.type === 'file' && item.directory && item.filename) {
       try {
         const storageDisk = Storage.disk(item.disk)
@@ -294,6 +294,13 @@ export function mountMediaRoutes(
         for (const conv of convs) {
           try { await storageDisk.delete(`${item.directory}/${conv.filename}`) } catch { /* ignore */ }
         }
+        // Remove the now-empty directory
+        try {
+          const { rm } = await import('node:fs/promises')
+          const dirPath = (storageDisk as { path?(p: string): string }).path?.(item.directory)
+            ?? item.directory
+          await rm(dirPath, { recursive: true, force: true })
+        } catch { /* ignore — directory may not exist or not be empty */ }
       } catch { /* storage cleanup is best-effort */ }
     }
 
