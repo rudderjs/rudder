@@ -94,6 +94,22 @@ export function vendorPublishCommand(program: Command): void {
         return
       }
 
+      // ── Deduplicate by destination (no-tag mode only) ──
+      // When no --tag is given, multiple groups from the same provider may target the
+      // same `to` path (e.g. auth publishes React, Vue, Solid variants all to pages/(auth)).
+      // Only the first registered group per destination is published — that is the default.
+      // Users must pass --tag to get a specific variant.
+      if (!opts.tag) {
+        entries = entries.map(([name, groups]): [string, PublishGroup[]] => {
+          const seen = new Set<string>()
+          return [name, groups.filter((g) => {
+            if (seen.has(g.to)) return false
+            seen.add(g.to)
+            return true
+          })]
+        }).filter(([, groups]) => groups.length > 0)
+      }
+
       // ── Filter by ORM + driver ─────────────────────────
       // Only applied to groups that have orm/driver set — generic groups always pass.
       const detectedOrm    = detectORM(cwd)
