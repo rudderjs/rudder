@@ -1,4 +1,4 @@
-import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Tabs, Section, Dashboard, Widget, Form, Dialog, TextField, TextareaField, EmailField } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Table, Column, Chart, List, Tabs, Section, Dashboard, Widget, Form, Dialog, TextField, TextareaField, EmailField } from '@boostkit/panels'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'
@@ -93,10 +93,23 @@ export const adminPanel = Panel.make('admin')
     // ── Schema-level Tabs ──────────────────────────────────
     Tabs.make()
       .tab('Recent Content',
+        // Mode 1: resource-linked (existing)
         Table.make('Recent Articles')
           .resource('articles')
           .columns(['title', 'createdAt'])
           .limit(5),
+      )
+      .tab('Users Table',
+        // Mode 2: model-backed with Column.make()
+        Table.make('All Users')
+          .fromModel(User)
+          .columns([
+            Column.make('name').label('Name').sortable().searchable(),
+            Column.make('email').label('Email').sortable().searchable(),
+            Column.make('createdAt').label('Joined').date(),
+          ])
+          .sortBy('createdAt', 'DESC')
+          .limit(10),
       )
       .tab('Charts',
         Chart.make('Weekly Traffic')

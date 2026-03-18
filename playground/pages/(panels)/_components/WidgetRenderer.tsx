@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
 
 export interface WidgetRendererProps {
@@ -79,50 +79,151 @@ function StatsRow({ stats }: { stats: PanelStatMeta[] }) {
   )
 }
 
-function SchemaTable({ element, panelPath: _, i18n }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n }) {
-  const records = element.records as Record<string, unknown>[]
+function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n }) {
+  const el = element as typeof element & { reorderable?: boolean; reorderEndpoint?: string }
+  const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
+  const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null)
+  const [search, setSearch]   = useState('')
+  const [dragging, setDragging] = useState<string | null>(null)
+
+  // Client-side sort
+  const sorted = sort
+    ? [...records].sort((a, b) => {
+        const av = a[sort.col] ?? ''
+        const bv = b[sort.col] ?? ''
+        const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
+        return sort.dir === 'asc' ? cmp : -cmp
+      })
+    : records
+
+  // Client-side search (across all searchable columns)
+  const searchableCols = element.columns
+    .filter((c: PanelColumnMeta) => (c as any).searchable)
+    .map((c: PanelColumnMeta) => c.name)
+
+  const filtered = search && searchableCols.length > 0
+    ? sorted.filter((r) => searchableCols.some((col) => String(r[col] ?? '').toLowerCase().includes(search.toLowerCase())))
+    : sorted
+
+  function toggleSort(colName: string) {
+    setSort((prev) =>
+      prev?.col === colName
+        ? { col: colName, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col: colName, dir: 'asc' },
+    )
+  }
+
+  // Reorder via drag-and-drop (simple pointer-based, no dnd-kit dependency in this renderer)
+  const handleDragStart = useCallback((id: string) => { setDragging(id) }, [])
+  const handleDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault() }, [])
+  const handleDrop      = useCallback((targetId: string, endpoint: string) => {
+    if (!dragging || dragging === targetId) { setDragging(null); return }
+    setRecords((prev) => {
+      const from = prev.findIndex((r) => String(r['id']) === dragging)
+      const to   = prev.findIndex((r) => String(r['id']) === targetId)
+      if (from === -1 || to === -1) return prev
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item!)
+      // Persist order
+      const ids = next.map((r) => String(r['id']))
+      fetch(endpoint, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ids, field: 'position' }),
+      }).catch(() => {})
+      return next
+    })
+    setDragging(null)
+  }, [dragging])
+
+  const hasSearch = element.columns.some((c: PanelColumnMeta) => (c as any).searchable)
+  const hasHref   = !!element.href
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
+      {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/40">
         <p className="text-sm font-semibold">{element.title}</p>
-        <a href={element.href} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-          {i18n.viewAll}
-        </a>
+        <div className="flex items-center gap-3">
+          {hasSearch && (
+            <input
+              type="search"
+              placeholder={i18n.search ?? 'Search…'}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-7 rounded-md border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          )}
+          {hasHref && (
+            <a href={element.href} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              {i18n.viewAll}
+            </a>
+          )}
+        </div>
       </div>
-      {records.length === 0 ? (
+
+      {/* Table */}
+      {filtered.length === 0 ? (
         <p className="px-5 py-4 text-sm text-muted-foreground">{i18n.noRecordsFound}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/20">
-                {element.columns.map((col: PanelColumnMeta) => (
-                  <th key={col.name} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    {col.label}
-                  </th>
-                ))}
-                <th className="w-8" />
+                {el.reorderable && <th className="w-6" />}
+                {element.columns.map((col: PanelColumnMeta) => {
+                  const sortable = (col as any).sortable as boolean | undefined
+                  const isActive = sort?.col === col.name
+                  return (
+                    <th
+                      key={col.name}
+                      className={`text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider ${sortable ? 'cursor-pointer select-none hover:text-foreground' : ''}`}
+                      onClick={sortable ? () => toggleSort(col.name) : undefined}
+                    >
+                      {col.label}
+                      {sortable && isActive && (
+                        <span className="ml-1">{sort?.dir === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </th>
+                  )
+                })}
+                {hasHref && <th className="w-8" />}
               </tr>
             </thead>
             <tbody>
-              {records.map((record, i) => (
-                <tr key={(record['id'] as string) ?? i} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                  {element.columns.map((col: PanelColumnMeta) => (
-                    <td key={col.name} className="px-4 py-2.5 text-muted-foreground">
-                      {formatCellValue(record[col.name], i18n)}
-                    </td>
-                  ))}
-                  <td className="px-4 py-2.5 text-right">
-                    <a
-                      href={`${element.href}/${record['id']}`}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {'\u2192'}
-                    </a>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((record, i) => {
+                const id = String(record['id'] ?? i)
+                return (
+                  <tr
+                    key={id}
+                    className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${dragging === id ? 'opacity-50' : ''}`}
+                    draggable={el.reorderable}
+                    onDragStart={el.reorderable ? () => handleDragStart(id) : undefined}
+                    onDragOver={el.reorderable ? handleDragOver : undefined}
+                    onDrop={el.reorderable && el.reorderEndpoint ? () => handleDrop(id, el.reorderEndpoint!) : undefined}
+                  >
+                    {el.reorderable && (
+                      <td className="px-2 py-2.5 text-muted-foreground cursor-grab">⠿</td>
+                    )}
+                    {element.columns.map((col: PanelColumnMeta) => (
+                      <td key={col.name} className="px-4 py-2.5 text-muted-foreground">
+                        {formatCellValue(record[col.name], col as any, i18n, panelPath)}
+                      </td>
+                    ))}
+                    {hasHref && (
+                      <td className="px-4 py-2.5 text-right">
+                        <a
+                          href={`${element.href}/${record['id']}`}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          →
+                        </a>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -320,12 +421,13 @@ function UserCardWidget({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function formatCellValue(value: unknown, i18n: PanelI18n): string {
-  if (value === null || value === undefined) return '\u2014'
-  if (typeof value === 'boolean') return value ? i18n.yes : i18n.no
-  if (value instanceof Date) return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(value)
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-    return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(value))
+function formatCellValue(value: unknown, col: PanelColumnMeta & { type?: string; format?: string } | null, i18n: PanelI18n, _panelPath?: string): string {
+  if (value === null || value === undefined) return '—'
+  if (col?.type === 'boolean' || typeof value === 'boolean') return value ? i18n.yes : i18n.no
+  if (col?.type === 'date' || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) || value instanceof Date) {
+    try {
+      return new Intl.DateTimeFormat('en', { dateStyle: col?.format === 'datetime' ? undefined : 'medium', ...(col?.format === 'datetime' ? { dateStyle: 'medium', timeStyle: 'short' } : {}) }).format(new Date(String(value)))
+    } catch { return String(value) }
   }
   return String(value)
 }

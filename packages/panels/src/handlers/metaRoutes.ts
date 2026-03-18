@@ -85,6 +85,40 @@ export function mountMetaRoutes(
     return res.json({ results })
   }, mw)
 
+  // Table reorder endpoint — used by Table.make().reorderable()
+  // POST body: { model: string, ids: string[], field: string }
+  // We cannot reference the model class directly here, so the client sends
+  // ordered IDs and the field name; we update each record's position field.
+  router.post(`${apiBase}/_tables/reorder`, async (req, res) => {
+    const { ids, field, model: modelName } = (req.body as { ids?: string[]; field?: string; model?: string }) ?? {}
+    if (!Array.isArray(ids) || !field) {
+      return res.status(400).json({ message: 'ids[] and field are required.' })
+    }
+
+    // Find the model by name across all resources registered on this panel
+    const ResourceClass = panel.getResources().find(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (R) => (R as any).model?.name === modelName || R.getSlug() === modelName,
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Model = (ResourceClass as any)?.model as any
+
+    if (!Model) {
+      return res.status(404).json({ message: `Model "${modelName}" not found on this panel.` })
+    }
+
+    try {
+      await Promise.all(
+        ids.map((id, index) =>
+          Model.query().where('id', id).update({ [field]: index }),
+        ),
+      )
+      return res.json({ success: true })
+    } catch (err) {
+      return res.status(500).json({ message: String(err) })
+    }
+  }, mw)
+
   // Form submit endpoint — used by Form.make().onSubmit()
   router.post(`${apiBase}/_forms/:formId/submit`, async (req, res) => {
     const formId = (req.params as Record<string, string> | undefined)?.['formId']
