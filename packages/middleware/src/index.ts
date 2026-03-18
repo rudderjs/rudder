@@ -154,7 +154,7 @@ function parseCookies(header: string): Record<string, string> {
     header.split(';')
       .map(c => c.trim().split('='))
       .filter(([k]) => k?.trim())
-      .map(([k, ...v]) => [k!.trim(), v.join('=')])
+      .map(([k, ...v]) => [(k ?? '').trim(), v.join('=')])
   )
 }
 
@@ -256,7 +256,7 @@ export function getCsrfToken(cookieName = 'csrf_token'): string {
   if (typeof (globalThis as Record<string, unknown>)['document'] === 'undefined') return ''
   const doc = (globalThis as Record<string, unknown>)['document'] as { cookie: string }
   const match = doc.cookie.match(new RegExp(`(?:^|;\\s*)${cookieName}=([^;]+)`))
-  return match ? decodeURIComponent(match[1]!) : ''
+  return match?.[1] ? decodeURIComponent(match[1]) : ''
 }
 
 // ─── Helper to convert class-based middleware to handler ───

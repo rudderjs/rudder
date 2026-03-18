@@ -139,7 +139,7 @@ export function CollaborativePlainText({
         />
         <CollaborationPlugin
           id={fragmentName}
-          providerFactory={providerFactory!}
+          providerFactory={providerFactory as NonNullable<typeof providerFactory>}
           shouldBootstrap={false}
           username={userName ?? ''}
           cursorColor={userColor ?? ''}

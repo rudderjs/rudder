@@ -69,8 +69,8 @@ export class Container {
       return this.instances.get(key) as T
     }
 
-    if (this.bindings.has(key)) {
-      const binding = this.bindings.get(key)!
+    const binding = this.bindings.get(key)
+    if (binding) {
       const value = binding.factory(this) as T
       if (binding.singleton) this.instances.set(key, value)
       return value
@@ -134,8 +134,8 @@ export class Container {
   }
 
   private resolveAlias(key: string | symbol): string | symbol {
-    if (typeof key === 'string' && this.aliases.has(key)) {
-      return this.aliases.get(key)!
+    if (typeof key === 'string') {
+      return this.aliases.get(key) ?? key
     }
     return key
   }

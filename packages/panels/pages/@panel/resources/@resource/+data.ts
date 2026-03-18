@@ -94,8 +94,8 @@ export async function data(pageContext: PageContextServer) {
     if (search) {
       const cols = flattenFields(resource.fields()).filter((f: any) => f.isSearchable()).map((f: any) => f.getName())
       if (cols.length > 0) {
-        q = q.where(cols[0]!, 'LIKE', `%${search}%`)
-        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i]!, `%${search}%`)
+        q = q.where(cols[0] ?? '', 'LIKE', `%${search}%`)
+        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i] ?? '', `%${search}%`)
       }
     }
 

@@ -103,7 +103,7 @@ function slugify(str: string): string {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-function SchemaSection({ section, panelPath, pathSegment, i18n }: any) {
+function SchemaSection({ section, panelPath, pathSegment: _pathSegment, i18n }: any) {
   const [open, setOpen] = useState(!section.collapsed)
   return (
     <div className="rounded-xl border bg-card">
@@ -132,7 +132,7 @@ function SchemaSection({ section, panelPath, pathSegment, i18n }: any) {
   )
 }
 
-function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: any) {
+function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment: _pathSegment, i18n }: any) {
   const paramKey = id ?? 'tab'
   const defaultSlug = slugify(tabs[0]?.label ?? '')
   const initialSlug = urlSearch?.[paramKey] ?? defaultSlug

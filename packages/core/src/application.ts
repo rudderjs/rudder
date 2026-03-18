@@ -345,7 +345,8 @@ export class BoostKit {
   async handleRequest(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
     if (!this._boot) this._boot = this._providerBoot.then(() => this._createHandler())
     await this._boot
-    return this._handler!(request, env, ctx)
+    if (!this._handler) throw new Error('[BoostKit] Request handler not initialized.')
+    return this._handler(request, env, ctx)
   }
 
   readonly fetch = (request: Request, env?: unknown, ctx?: unknown): Promise<Response> =>

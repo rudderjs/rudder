@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { WidgetRenderer } from '../_components/WidgetRenderer.js'
@@ -176,7 +176,7 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
         <div>
           {/* Tab bar */}
           <div className="flex gap-1 border-b mb-4">
-            {dashboard.tabs!.map(tab => (
+            {(dashboard.tabs ?? []).map(tab => (
               <button
                 key={tab.id}
                 type="button"
@@ -193,7 +193,7 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
           </div>
 
           {/* Active tab's grid */}
-          {dashboard.tabs!.map(tab => (
+          {(dashboard.tabs ?? []).map(tab => (
             activeTab === tab.id && (
               <DashboardGrid
                 key={tab.id}

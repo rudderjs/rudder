@@ -195,7 +195,7 @@ export class Resource {
    * Return false to deny the action — the API responds with 403.
    * Defaults to allowing everything.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   async policy(_action: PolicyAction, _ctx: PanelContext): Promise<boolean> {
     return true
   }

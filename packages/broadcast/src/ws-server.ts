@@ -173,13 +173,13 @@ async function onMessage(
         }
         if (isPresence && typeof result === 'object') {
           if (!state.presence.has(channel)) state.presence.set(channel, new Map())
-          state.presence.get(channel)!.set(id, result)
+          state.presence.get(channel)?.set(id, result)
         }
       }
 
       if (!state.channels.has(channel)) state.channels.set(channel, new Set())
-      state.channels.get(channel)!.add(id)
-      state.subscriptions.get(id)!.add(channel)
+      state.channels.get(channel)?.add(id)
+      state.subscriptions.get(id)?.add(channel)
 
       send(ws, { type: 'subscribed', channel })
 
@@ -275,7 +275,7 @@ export function getUpgradeHandler(
   wsPath = '/ws',
 ): (req: IncomingMessage, socket: Duplex, head: Buffer) => void {
   return (req, socket, head) => {
-    const pathname = (req.url ?? '/').split('?')[0]!
+    const pathname = (req.url ?? '/').split('?')[0] ?? '/'
     if (pathname !== wsPath) return  // not our path — leave for other handlers (e.g. Vite HMR)
 
     const state = g[KEY] as WsState | undefined

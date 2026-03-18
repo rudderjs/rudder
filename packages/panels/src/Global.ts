@@ -1,7 +1,4 @@
-import type { Field, FieldMeta } from './Field.js'
-import type { Section, SectionMeta } from './Section.js'
-import type { Tabs, TabsMeta } from './Tabs.js'
-import type { PolicyAction, PanelContext } from './types.js'
+import type { PanelContext } from './types.js'
 import type { FieldOrGrouping, SchemaItemMeta } from './Resource.js'
 
 // ─── Global meta (for UI / meta endpoint) ───────────────
@@ -72,7 +69,7 @@ export class Global {
    * Return false to deny the action — the API responds with 403.
    * Defaults to allowing everything.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   async policy(_action: 'view' | 'update', _ctx: PanelContext): Promise<boolean> {
     return true
   }

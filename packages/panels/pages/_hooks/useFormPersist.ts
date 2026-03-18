@@ -80,7 +80,7 @@ export function useFormPersist(opts: UseFormPersistOptions) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [enabled, storageKey, values]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, storageKey, values])  
 
   // ── beforeunload warning ────────────────────────────────────
   useEffect(() => {

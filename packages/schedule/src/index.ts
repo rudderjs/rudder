@@ -173,7 +173,8 @@ export function scheduler(): new (app: Application) => ServiceProvider {
 
         for (const task of tasks) {
           const label = task.getDescription() || task.getCron()
-          const opts  = task.getTimezone() ? { timezone: task.getTimezone()! } : {}
+          const tz    = task.getTimezone()
+          const opts  = tz ? { timezone: tz } : {}
           jobs.push(new Cron(task.getCron(), opts, async () => {
             process.stdout.write(`[Schedule] Running "${label}" ... `)
             try {

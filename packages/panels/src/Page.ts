@@ -103,7 +103,7 @@ export class Page {
     let optionalOpen = 0
 
     for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]!
+      const seg = segments[i] ?? ''
       const prefix = i === 0 ? '' : '/'
 
       if (seg.startsWith(':') && seg.endsWith('?') && seg.length > 2) {

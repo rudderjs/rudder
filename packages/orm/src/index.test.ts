@@ -26,7 +26,7 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
   return qb
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function makeAdapter(qb: QueryBuilder<any> = makeQb()): OrmAdapter {
   return {
     query: () => qb,

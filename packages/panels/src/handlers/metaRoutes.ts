@@ -61,9 +61,9 @@ export function mountMetaRoutes(
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let qb: any = Model.query()
-      qb = qb.where(searchableCols[0]!, 'LIKE', `%${q}%`)
+      qb = qb.where(searchableCols[0] ?? '', 'LIKE', `%${q}%`)
       for (let i = 1; i < searchableCols.length; i++) {
-        qb = qb.orWhere(searchableCols[i]!, 'LIKE', `%${q}%`)
+        qb = qb.orWhere(searchableCols[i] ?? '', 'LIKE', `%${q}%`)
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

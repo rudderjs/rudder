@@ -1,4 +1,4 @@
-import type { FieldMeta, PanelI18n, NodeMap } from '@boostkit/panels'
+import type { PanelI18n } from '@boostkit/panels'
 import { ensureNodeMap } from '@boostkit/panels'
 import { Badge } from '@/components/ui/badge.js'
 

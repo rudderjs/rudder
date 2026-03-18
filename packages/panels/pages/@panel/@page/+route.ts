@@ -23,7 +23,7 @@ export const route: RouteSync = (pageContext) => {
 
   // Client-side: trust the URL shape, server validates.
   if (!import.meta.env.SSR) {
-    return { routeParams: { panel: panelSegment!, page: urlPath } }
+    return { routeParams: { panel: panelSegment ?? '', page: urlPath } }
   }
 
   // Server-side: find the first page whose slug pattern matches the URL path.
@@ -39,7 +39,7 @@ export const route: RouteSync = (pageContext) => {
         Object.entries(params).filter(([, v]) => v !== undefined)
       ) as Record<string, string>
       return {
-        routeParams: { panel: panelSegment!, page: PageClass.getSlug(), ...cleanParams },
+        routeParams: { panel: panelSegment ?? '', page: PageClass.getSlug(), ...cleanParams },
       }
     }
   }

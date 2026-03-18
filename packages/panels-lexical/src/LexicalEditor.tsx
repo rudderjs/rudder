@@ -246,7 +246,7 @@ function DragHandleLoader({ anchorRef }: { anchorRef: React.RefObject<HTMLDivEle
   const targetLineRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
-  // eslint-disable-next-line react-hooks/rules-of-hooks -- anchorRef.current is checked before use, Lexical plugin pattern
+   
   if (!mounted || !anchorRef.current) return null
 
   return (

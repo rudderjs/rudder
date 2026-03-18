@@ -154,6 +154,8 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
   const [page, setPage]    = useState(1)
   const [loading, setLoading] = useState(!initialData)
 
+  const throughMany = field.extra?.['throughMany'] === true
+
   // Load schema once — only if not provided via SSR
   useEffect(() => {
     if (initialData || !resourceSlug) return
@@ -163,6 +165,7 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
         setSchema(flattenFields(d.resourceMeta.fields).filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
       })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is SSR-only, intentionally excluded to prevent re-fetch loop
   }, [resourceSlug, pathSegment])
 
   // Load records when page changes (skip page 1 if SSR data already available)
@@ -170,7 +173,6 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
     if (page === 1 && initialData) return
     if (!resourceSlug || !foreignKey) { setLoading(false); return }
     setLoading(true)
-    const throughMany = field.extra?.['throughMany'] === true
     const relatedUrl  = `/${pathSegment}/api/${resourceSlug}/_related?fk=${encodeURIComponent(foreignKey)}&id=${encodeURIComponent(parentId)}&page=${page}${throughMany ? '&through=true' : ''}`
     fetch(relatedUrl)
       .then(r => r.json())
@@ -180,7 +182,8 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [resourceSlug, foreignKey, parentId, pathSegment, page])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is SSR-only, intentionally excluded to prevent re-fetch loop
+  }, [resourceSlug, foreignKey, parentId, pathSegment, page, throughMany])
 
   if (!resourceSlug) return null
 

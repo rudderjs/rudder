@@ -18,7 +18,7 @@ export function InlineEditCell({ record, field, slug, pathSegment, i18n }: Props
   const id = record['id'] as string
 
   // Sync localValue when record changes (e.g. after live reload)
-  useEffect(() => { setLocalValue(record[field.name]) }, [record[field.name]])
+  useEffect(() => { setLocalValue(record[field.name]) }, [record, field.name])
 
   const save = useCallback(async (newValue: unknown) => {
     if (newValue === record[field.name]) {
