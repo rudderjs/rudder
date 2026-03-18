@@ -299,7 +299,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
           if (el.type === 'widget') {
             return (
               <StandaloneWidget
-                key={`tw-${i}`}
+                key={`${activeIdx}-tw-${i}`}
                 widget={el}
                 panelPath={panelPath}
                 pathSegment={pathSegment}
@@ -309,13 +309,13 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
           }
           if (el.type === 'form') {
             return (
-              <FormElement key={`tf-${el.id ?? i}`} form={el} panelPath={panelPath} i18n={i18n} />
+              <FormElement key={`${activeIdx}-tf-${el.id ?? i}`} form={el} panelPath={panelPath} i18n={i18n} />
             )
           }
           if (el.type === 'dashboard') {
             return (
               <DashboardSection
-                key={`td-${el.id ?? i}`}
+                key={`${activeIdx}-td-${el.id ?? i}`}
                 dashboard={el}
                 pathSegment={pathSegment}
                 panelPath={panelPath}
@@ -324,7 +324,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
             )
           }
           return (
-            <WidgetRenderer key={i} element={el} panelPath={panelPath} i18n={i18n} />
+            <WidgetRenderer key={`${activeIdx}-${i}`} element={el} panelPath={panelPath} i18n={i18n} />
           )
         })}
       </div>

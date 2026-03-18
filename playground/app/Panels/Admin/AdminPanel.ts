@@ -93,22 +93,13 @@ export const adminPanel = Panel.make('admin')
     // ── Schema-level Tabs ──────────────────────────────────
     Tabs.make()
       .tab('Recent Content',
-        // Mode 1: resource-linked (existing)
         Table.make('Recent Articles')
-          .resource('articles')
-          .columns(['title', 'createdAt'])
-          .limit(5),
-      )
-      .tab('Users Table',
-        // Mode 2: model-backed with Column.make()
-        Table.make('All Users')
-          .fromModel(User)
+          .fromModel(Article)
+          // .columns(['title', 'createdAt'])
           .columns([
-            Column.make('name').label('Name').sortable().searchable(),
-            Column.make('email').label('Email').sortable().searchable(),
+            Column.make('title').label('Name').sortable().searchable(),
             Column.make('createdAt').label('Joined').date(),
           ])
-          .sortBy('createdAt', 'DESC')
           .limit(10),
       )
       .tab('Charts',
@@ -117,6 +108,18 @@ export const adminPanel = Panel.make('admin')
           .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
           .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
       )
+      .tab('Users Table',
+        Table.make('All Users')
+          .fromModel(User)
+          .columns([
+            Column.make('name').label('Name').sortable().searchable(),
+            Column.make('email').label('Email').sortable().searchable(),
+            Column.make('createdAt').label('Joined').date(),
+          ])
+          .sortBy('createdAt', 'DESC')
+          .limit(5),
+      )
+
       .tab('Links',
         List.make('Resources')
           .items([
