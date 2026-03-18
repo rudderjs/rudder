@@ -137,6 +137,155 @@ describe('Application', () => {
   })
 })
 
+// ─── Application.register() — dynamic provider registration ─
+
+describe('Application.register()', () => {
+  beforeEach(reset)
+
+  it('calls the provider register() immediately', async () => {
+    const a = Application.create({ env: 'production' })
+    const calls: string[] = []
+
+    class LateProvider extends ServiceProvider {
+      register() { calls.push('register') }
+    }
+
+    await a.register(LateProvider)
+    assert.deepStrictEqual(calls, ['register'])
+  })
+
+  it('calls boot() if the app is already booted', async () => {
+    const calls: string[] = []
+
+    class LateProvider extends ServiceProvider {
+      register() { calls.push('register') }
+      async boot() { calls.push('boot') }
+    }
+
+    const a = Application.create({ env: 'production' })
+    await a.bootstrap()
+    await a.register(LateProvider)
+    assert.deepStrictEqual(calls, ['register', 'boot'])
+  })
+
+  it('does NOT call boot() if the app has not yet booted', async () => {
+    const calls: string[] = []
+
+    class EarlyProvider extends ServiceProvider {
+      register() { calls.push('register') }
+      async boot() { calls.push('boot') }
+    }
+
+    const a = Application.create({ env: 'production' })
+    await a.register(EarlyProvider)
+    assert.deepStrictEqual(calls, ['register'])
+
+    // Now bootstrap — boot() should run as part of normal lifecycle
+    await a.bootstrap()
+    assert.deepStrictEqual(calls, ['register', 'register', 'boot'])
+  })
+
+  it('guards against duplicate class references', async () => {
+    const calls: string[] = []
+
+    class UniqueProvider extends ServiceProvider {
+      register() { calls.push('register') }
+    }
+
+    const a = Application.create({ env: 'production' })
+    await a.register(UniqueProvider)
+    await a.register(UniqueProvider)
+    assert.deepStrictEqual(calls, ['register'])
+  })
+
+  it('guards against duplicate factory providers by name', async () => {
+    const calls: string[] = []
+
+    function myFactory() {
+      return class MyFactoryProvider extends ServiceProvider {
+        register() { calls.push('register') }
+      }
+    }
+
+    const a = Application.create({ env: 'production' })
+    await a.register(myFactory()) // first call — registers
+    await a.register(myFactory()) // second call — different class ref, same name → skipped
+    assert.deepStrictEqual(calls, ['register'])
+  })
+
+  it('guards against providers already in the initial config', async () => {
+    const calls: string[] = []
+
+    class InitialProvider extends ServiceProvider {
+      register() { calls.push('register') }
+    }
+
+    const a = Application.create({ providers: [InitialProvider], env: 'production' })
+    await a.register(InitialProvider) // already in config → skipped
+    assert.deepStrictEqual(calls, [])
+  })
+
+  it('wraps boot errors with context', async () => {
+    class FailProvider extends ServiceProvider {
+      register() {}
+      async boot() { throw new Error('db down') }
+    }
+
+    const a = Application.create({ env: 'production' })
+    await a.bootstrap()
+    await assert.rejects(
+      () => a.register(FailProvider),
+      /Provider "FailProvider" failed to boot/,
+    )
+  })
+
+  it('returns the app instance for chaining', async () => {
+    class ChainProvider extends ServiceProvider {
+      register() {}
+    }
+
+    const a = Application.create({ env: 'production' })
+    const result = await a.register(ChainProvider)
+    assert.strictEqual(result, a)
+  })
+
+  it('a provider can register another provider from its own boot()', async () => {
+    const calls: string[] = []
+
+    class ChildProvider extends ServiceProvider {
+      register() { calls.push('child:register') }
+      async boot() { calls.push('child:boot') }
+    }
+
+    class ParentProvider extends ServiceProvider {
+      register() { calls.push('parent:register') }
+      async boot() {
+        calls.push('parent:boot')
+        await this.app.register(ChildProvider)
+      }
+    }
+
+    const a = Application.create({ providers: [ParentProvider], env: 'production' })
+    await a.bootstrap()
+    assert.deepStrictEqual(calls, [
+      'parent:register',
+      'parent:boot',
+      'child:register',
+      'child:boot',
+    ])
+  })
+
+  it('bindings from register() are immediately available', async () => {
+    class BindingProvider extends ServiceProvider {
+      register() { this.app.instance('dynamic-key', 'dynamic-value') }
+    }
+
+    const a = Application.create({ env: 'production' })
+    await a.register(BindingProvider)
+    assert.strictEqual(a.make('dynamic-key'), 'dynamic-value')
+  })
+})
+
 // ─── Container proxy methods ──────────────────────────────
 
 describe('Application container proxies', () => {

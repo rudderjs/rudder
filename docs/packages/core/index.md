@@ -143,6 +143,45 @@ export default [
 
 ---
 
+## Dynamic Provider Registration
+
+Providers can dynamically register other providers at runtime using `this.app.register()`. This enables modules to be self-contained, features to be conditionally loaded, and packages to compose sub-providers.
+
+```ts
+import { ServiceProvider } from '@boostkit/core'
+import { panels } from '@boostkit/panels'
+import { cache } from '@boostkit/cache'
+import { adminPanel } from '../Panels/Admin/AdminPanel.js'
+
+export class AppServiceProvider extends ServiceProvider {
+  register() {}
+
+  async boot() {
+    // A module can register its own panels
+    await this.app.register(panels([adminPanel]))
+
+    // Conditional features based on config
+    const config = this.app.make<{ get(k: string): unknown }>('config')
+    if (config.get('cache.enabled')) {
+      await this.app.register(cache(cacheConfig))
+    }
+  }
+}
+```
+
+### How it works
+
+| Scenario | Behaviour |
+|---|---|
+| Called **before** `bootstrap()` | `register()` runs immediately; `boot()` runs later during normal bootstrap |
+| Called **after** `bootstrap()` | Both `register()` and `boot()` run immediately |
+| Duplicate provider class | Silently skipped (by class reference or class name) |
+| Boot error | Wrapped with provider name context, same as initial providers |
+
+This is the same pattern as Laravel's `$this->app->register(Provider::class)` — a provider can bring its own sub-providers without the user touching `providers.ts`.
+
+---
+
 ## Re-exports
 
 `@boostkit/core` re-exports the following so you do not need to install them separately for common usage.

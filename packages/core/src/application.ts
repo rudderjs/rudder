@@ -18,11 +18,18 @@ export interface BootConfig {
 
 // ─── Application ───────────────────────────────────────────
 
+export type ProviderClass = new (app: Application) => ServiceProvider
+
 export class Application {
   private static instance: Application
   readonly container: Container
   private providers: ServiceProvider[] = []
   private booted = false
+
+  /** Tracks registered provider classes to prevent duplicates. */
+  private _registeredClasses = new Set<ProviderClass>()
+  /** Tracks registered provider names to prevent duplicates from factory functions. */
+  private _registeredNames   = new Set<string>()
 
   readonly name:  string
   readonly env:   string
@@ -44,8 +51,22 @@ export class Application {
     }
 
     for (const Provider of config.providers ?? []) {
+      this._trackProvider(Provider)
       this.providers.push(new Provider(this))
     }
+  }
+
+  /** Track a provider class for duplicate detection. */
+  private _trackProvider(Provider: ProviderClass): void {
+    this._registeredClasses.add(Provider)
+    if (Provider.name) this._registeredNames.add(Provider.name)
+  }
+
+  /** Check whether a provider class (or its name) has already been registered. */
+  private _isDuplicate(Provider: ProviderClass): boolean {
+    if (this._registeredClasses.has(Provider)) return true
+    if (Provider.name && this._registeredNames.has(Provider.name)) return true
+    return false
   }
 
   static create(config?: BootConfig): Application {
@@ -98,13 +119,50 @@ export class Application {
 
   // ── Lifecycle ─────────────────────────────────────────────
 
-  private register(): void {
+  /**
+   * Dynamically register a service provider at runtime.
+   *
+   * - Calls `register()` immediately so bindings are available.
+   * - If the application is already booted, calls `boot()` too.
+   * - Duplicate providers (by class reference or class name) are silently skipped.
+   *
+   * Works with both provider classes and factory return values:
+   * ```ts
+   * await this.app.register(MyServiceProvider)
+   * await this.app.register(cache(cacheConfig))
+   * ```
+   */
+  async register(Provider: ProviderClass): Promise<this> {
+    if (this._isDuplicate(Provider)) return this
+    this._trackProvider(Provider)
+
+    const instance = new Provider(this)
+    this.providers.push(instance)
+    instance.register()
+
+    if (this.booted) {
+      try {
+        await instance.boot?.()
+      } catch (err) {
+        const name  = instance.constructor.name || Provider.name || 'AnonymousProvider'
+        const cause = err instanceof Error ? err.message : String(err)
+        throw new Error(
+          `[BoostKit] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
+          { cause: err },
+        )
+      }
+    }
+
+    return this
+  }
+
+  private _registerAll(): void {
     for (const provider of this.providers) {
       provider.register()
     }
   }
 
-  private async boot(): Promise<void> {
+  private async _bootAll(): Promise<void> {
     for (const provider of this.providers) {
       try {
         await provider.boot?.()
@@ -122,8 +180,8 @@ export class Application {
 
   async bootstrap(): Promise<this> {
     if (this.booted) return this
-    this.register()
-    await this.boot()
+    this._registerAll()
+    await this._bootAll()
     return this
   }
 

@@ -10,7 +10,7 @@ export {
   resolve,
   defineConfig,
 } from './application.js'
-export type { BootConfig, ConfigureOptions, RoutingOptions, ErrorRenderer } from './application.js'
+export type { BootConfig, ConfigureOptions, RoutingOptions, ErrorRenderer, ProviderClass } from './application.js'
 
 // ─── DI ────────────────────────────────────────────────────
 

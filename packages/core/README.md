@@ -63,6 +63,36 @@ export default Application.configure({
 - `ConfigureOptions`
   - `server`, `config?`, `providers?`
 
+## Dynamic Provider Registration
+
+Providers can register other providers at runtime — useful for modules, conditional features, and package composition:
+
+```ts
+import { ServiceProvider } from '@boostkit/core'
+import { cache } from '@boostkit/cache'
+import { panels } from '@boostkit/panels'
+import { adminPanel } from '../Panels/Admin/AdminPanel.js'
+
+export class AppServiceProvider extends ServiceProvider {
+  register() {
+    // Static sub-provider
+  }
+
+  async boot() {
+    // Register panels from your own provider
+    await this.app.register(panels([adminPanel]))
+
+    // Conditional features
+    const config = this.app.make<{ get(k: string): unknown }>('config')
+    if (config.get('cache.enabled')) {
+      await this.app.register(cache(cacheConfig))
+    }
+  }
+}
+```
+
+`register()` calls the provider's `register()` immediately so bindings are available. If the app is already booted, `boot()` runs too. Duplicate providers (by class reference or class name) are silently skipped.
+
 ## Publishing Assets
 
 Service providers can declare publishable assets (pages, config files, migrations) that users copy into their app with `pnpm artisan vendor:publish`.
