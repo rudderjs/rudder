@@ -8,6 +8,12 @@ import { LexicalCollaboration } from '@lexical/react/LexicalCollaborationContext
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { $getRoot, $createParagraphNode, $createTextNode, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH } from 'lexical'
 
+interface YjsProvider {
+  awareness: { setLocalStateField(field: string, state: Record<string, unknown>): void }
+  once(event: string, callback: () => void): void
+  destroy(): void
+}
+
 interface Props {
   value:       string
   onChange:    (value: string) => void
@@ -45,7 +51,7 @@ export function CollaborativePlainText({
   // ── Per-field collaborative state ─────────────────────────
   const [collabReady, setCollabReady] = useState(false)
   const [providerSynced, setProviderSynced] = useState(false)
-  const collabRef = useRef<{ doc: any; provider: any } | null>(null)
+  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider } | null>(null)
 
   const fragmentName = `text:${fieldName}`
 
@@ -60,13 +66,14 @@ export function CollaborativePlainText({
       const wsUrl    = `${wsProto}://${window.location.host}${wsPath}`
       const roomName = `${docName}:${fragmentName}`
 
-      const provider = new ws.WebsocketProvider(wsUrl, roomName, doc, { connect: false })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
+      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
       provider.awareness.setLocalStateField('user', {
         name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
       })
 
-      ;(provider as any).once('synced', () => {
+      provider.once('synced', () => {
         if (!destroyed) setProviderSynced(true)
       })
 
@@ -87,9 +94,11 @@ export function CollaborativePlainText({
   const providerFactory = useMemo(() => {
     if (!collabReady || !collabRef.current) return undefined
     const { doc, provider } = collabRef.current
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical's ProviderFactory signature uses Map<string, any> internally
     return (_id: string, yjsDocMap: Map<string, any>) => {
       yjsDocMap.set(_id, doc)
-      return provider
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast to satisfy Lexical's Provider type
+      return provider as unknown as any
     }
   }, [collabReady])
 

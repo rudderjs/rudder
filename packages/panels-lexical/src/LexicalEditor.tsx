@@ -17,11 +17,20 @@ import { useEffect } from 'react'
 import { SlashCommandPlugin } from './lexical/SlashCommandPlugin.js'
 import { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 import { DraggableBlockPlugin_EXPERIMENTAL } from '@lexical/react/LexicalDraggableBlockPlugin'
-import { $getRoot, $getSelection, $isRangeSelection, $parseSerializedNode } from 'lexical'
+import { $getRoot, $getSelection, $isRangeSelection, $parseSerializedNode, type LexicalEditor as LexicalEditorType } from 'lexical'
 import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
 import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
 import type { BlockMeta } from '@boostkit/panels'
+
+// Minimal structural interface for a Yjs WebSocket provider.
+// y-websocket's own TypeScript types are incomplete (missing .once, .destroy),
+// so we define what we actually use rather than importing the class type directly.
+interface YjsProvider {
+  awareness: { setLocalStateField(field: string, state: Record<string, unknown>): void }
+  once(event: string, callback: () => void): void
+  destroy(): void
+}
 
 export interface Props {
   value:         unknown       // Lexical JSON state or null
@@ -33,7 +42,7 @@ export interface Props {
   /** Base document name — each editor creates room `${docName}:${fragmentName}` */
   docName?:      string | null
   fragmentName?: string
-  blocks?:       any[]
+  blocks?:       BlockMeta[]
   /** Stable user identity — passed to CollaborationPlugin so Lexical cursors match input/textarea cursors. */
   userName?:     string
   userColor?:    string
@@ -86,7 +95,7 @@ export function LexicalEditor({
   // multiple editors sharing one Y.Doc would bind to the same fragment.
   const [collabReady, setCollabReady] = useState(false)
   const [providerSynced, setProviderSynced] = useState(false)
-  const collabRef = useRef<{ doc: any; provider: any } | null>(null)
+  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider } | null>(null)
 
   useEffect(() => {
     if (!isCollab) return
@@ -100,14 +109,15 @@ export function LexicalEditor({
       const wsUrl    = `${wsProto}://${window.location.host}${wsPath}`
       const roomName = `${docName}:${fragmentName}`
 
-      const provider = new ws.WebsocketProvider(wsUrl, roomName, doc, { connect: false })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
+      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
       provider.awareness.setLocalStateField('user', {
         name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
       })
 
       // Mark synced after initial server handshake completes
-      ;(provider as any).once('synced', () => {
+      provider.once('synced', () => {
         if (!destroyed) setProviderSynced(true)
       })
 
@@ -130,26 +140,28 @@ export function LexicalEditor({
   const providerFactory = useMemo(() => {
     if (!collabReady || !collabRef.current) return undefined
     const { doc, provider } = collabRef.current
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical's ProviderFactory signature uses Map<string, any> internally
     return (_id: string, yjsDocMap: Map<string, any>) => {
       yjsDocMap.set(_id, doc)
-      return provider
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast to satisfy Lexical's Provider type which requires awareness/connect/disconnect/on/off
+      return provider as unknown as any
     }
   }, [collabReady])
 
   const blockRegistry = useMemo(() => {
     const map = new Map<string, BlockMeta>()
-    for (const b of (blocks ?? []) as BlockMeta[]) map.set(b.name, b)
+    for (const b of (blocks ?? [])) map.set(b.name, b)
     return map
   }, [blocks])
 
   const blockSlashItems = useMemo(() => {
     if (!blocks?.length) return undefined
-    return (blocks as BlockMeta[]).map(block => new SlashMenuOption(
+    return (blocks ?? []).map(block => new SlashMenuOption(
       block.label || block.name,
       {
         icon: block.icon || '[]',
         description: `Insert ${block.label || block.name}`,
-        onSelect: (editor: any) => {
+        onSelect: (editor: LexicalEditorType) => {
           editor.update(() => {
             const sel = $getSelection()
             if ($isRangeSelection(sel)) {
@@ -316,13 +328,13 @@ function SeedPlugin({ value }: { value: unknown }) {
       seeded.current = true
       try {
         const serialized = typeof value === 'string' ? JSON.parse(value) : value
-        const children = (serialized as any)?.root?.children
+        const children = (serialized as { root?: { children?: unknown[] } })?.root?.children
         if (Array.isArray(children) && children.length > 0) {
           editor.update(() => {
             const root = $getRoot()
             root.clear()
             for (const child of children) {
-              const node = $parseSerializedNode(child)
+              const node = $parseSerializedNode(child as import('lexical').SerializedLexicalNode)
               root.append(node)
             }
           })
