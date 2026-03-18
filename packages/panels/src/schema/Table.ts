@@ -3,21 +3,16 @@ import type { Column, ColumnMeta } from './Column.js'
 // ─── Table schema element ────────────────────────────────────
 // Two modes:
 //
-// Mode 1 — Resource-linked (existing, unchanged):
-//   Table.make('Recent Articles')
-//     .resource('articles')       // slug of a registered panel Resource
+//   Table.make('Recent Articles')       — resource-linked
+//     .fromResource(ArticleResource)
 //     .columns(['title', 'createdAt'])
 //     .limit(5)
 //
-// Mode 2 — Model-backed (new):
-//   Table.make('Users')
-//     .fromModel(User)            // ORM Model class directly
-//     .columns([
-//       Column.make('name').label('Name').sortable().searchable(),
-//       Column.make('email').label('Email').sortable(),
-//     ])
+//   Table.make('All Users')             — model-backed
+//     .fromModel(User)
+//     .columns([Column.make('name').sortable().searchable()])
 //     .limit(10)
-//     .reorderable('position')    // drag-to-reorder, saves to position field
+//     .reorderable('position')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ModelClass = { new(): any; query(): any }
@@ -25,50 +20,52 @@ type ModelClass = { new(): any; query(): any }
 type ResourceClass = { new(): any; getSlug(): string; model?: ModelClass }
 
 export interface PanelColumnMeta {
-  name:       string
-  label:      string
-  sortable?:  boolean
+  name:        string
+  label:       string
+  sortable?:   boolean
   searchable?: boolean
-  type?:      ColumnMeta['type']
-  format?:    string
-  href?:      string
+  type?:       ColumnMeta['type']
+  format?:     string
+  href?:       string
 }
 
 export interface TableElementMeta {
-  type:         'table'
-  title:        string
-  resource:     string
-  columns:      PanelColumnMeta[]
-  records:      unknown[]
-  href:         string
-  reorderable?: boolean
-  reorderEndpoint?: string
+  type:              'table'
+  title:             string
+  resource:          string
+  columns:           PanelColumnMeta[]
+  records:           unknown[]
+  href:              string
+  reorderable?:      boolean
+  reorderEndpoint?:  string
 }
 
 export interface TableConfig {
-  title:        string
-  resource:     string | undefined
+  title:          string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  model?:       any                  // direct model class (model-backed mode)
-  columns:      string[] | Column[]
-  limit:        number
-  sortBy:       string | undefined
-  sortDir:      'ASC' | 'DESC'
-  reorderable:  boolean
-  reorderField: string
+  resourceClass?: any              // fromResource() — Resource class
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  model?:         any              // fromModel() — direct model class
+  columns:        string[] | Column[]
+  limit:          number
+  sortBy:         string | undefined
+  sortDir:        'ASC' | 'DESC'
+  reorderable:    boolean
+  reorderField:   string
 }
 
 export class Table {
-  private _title:        string
-  private _resource?:    string
+  private _title:          string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private _model?:       any
-  private _columns:      string[] | Column[] = []
-  private _limit:        number              = 5
-  private _sortBy?:      string
-  private _sortDir:      'ASC' | 'DESC'      = 'DESC'
-  private _reorderable:  boolean             = false
-  private _reorderField: string              = 'position'
+  private _resourceClass?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _model?:         any
+  private _columns:        string[] | Column[] = []
+  private _limit:          number              = 5
+  private _sortBy?:        string
+  private _sortDir:        'ASC' | 'DESC'      = 'DESC'
+  private _reorderable:    boolean             = false
+  private _reorderField:   string              = 'position'
 
   protected constructor(title: string) {
     this._title = title
@@ -78,46 +75,43 @@ export class Table {
     return new Table(title)
   }
 
-  // ── Mode 1: resource-linked (existing) ─────────────────
-
-  /** Link to a registered panel Resource by its slug. */
-  resource(slug: string): this {
-    this._resource = slug
+  /**
+   * Use a Resource class as the data source.
+   * Inherits the Resource's model, default sort, and field labels.
+   *
+   * @example
+   * Table.make('Recent Articles')
+   *   .fromResource(ArticleResource)
+   *   .columns(['title', 'createdAt'])
+   *   .limit(5)
+   *
+   * // With explicit Column definitions:
+   * Table.make('Recent Articles')
+   *   .fromResource(ArticleResource)
+   *   .columns([Column.make('title').sortable(), Column.make('createdAt').date()])
+   */
+  fromResource(resourceClass: ResourceClass): this {
+    this._resourceClass = resourceClass
+    this._model         = resourceClass.model
     return this
   }
 
-  // ── Mode 2: model-backed (new) ──────────────────────────
-
   /**
-   * Use an ORM Model class directly as the data source.
+   * Use an ORM Model class directly as the data source (no Resource needed).
    * Define display columns with Column.make().
    *
    * @example
-   * Table.make('Users')
+   * Table.make('All Users')
    *   .fromModel(User)
-   *   .columns([Column.make('name').sortable(), Column.make('email')])
+   *   .columns([Column.make('name').sortable().searchable(), Column.make('email')])
+   *   .limit(10)
    */
   fromModel(model: ModelClass): this {
     this._model = model
     return this
   }
 
-  /**
-   * Use a Resource class as the data source (reuses its model + field definitions).
-   *
-   * @example
-   * Table.make('Recent Articles')
-   *   .fromResource(ArticleResource)
-   *   .columns([Column.make('title').sortable(), Column.make('createdAt').date()])
-   */
-  fromResource(resourceClass: ResourceClass): this {
-    this._model = resourceClass.model
-    return this
-  }
-
-  // ── Shared ──────────────────────────────────────────────
-
-  /** Accept string column names (existing) or Column instances (new). */
+  /** Column names (resolved via Resource fields) or Column instances. */
   columns(cols: string[] | Column[]): this {
     this._columns = cols
     return this
@@ -149,15 +143,15 @@ export class Table {
 
   getConfig(): TableConfig {
     return {
-      title:        this._title,
-      resource:     this._resource,
-      model:        this._model,
-      columns:      this._columns,
-      limit:        this._limit,
-      sortBy:       this._sortBy,
-      sortDir:      this._sortDir,
-      reorderable:  this._reorderable,
-      reorderField: this._reorderField,
+      title:         this._title,
+      resourceClass: this._resourceClass,
+      model:         this._model,
+      columns:       this._columns,
+      limit:         this._limit,
+      sortBy:        this._sortBy,
+      sortDir:       this._sortDir,
+      reorderable:   this._reorderable,
+      reorderField:  this._reorderField,
     }
   }
 }

@@ -1259,13 +1259,30 @@ describe('Table', () => {
     const c = Table.make('T').getConfig()
     assert.equal(c.limit, 5)
     assert.equal(c.sortDir, 'DESC')
-    assert.equal(c.resource, undefined)
+    assert.equal(c.resourceClass, undefined)
+    assert.equal(c.model, undefined)
   })
 
-  it('sets resource and columns', () => {
-    const c = Table.make('T').resource('posts').columns(['title', 'status']).getConfig()
-    assert.equal(c.resource, 'posts')
-    assert.deepEqual(c.columns, ['title', 'status'])
+  it('fromResource() stores resourceClass and model', () => {
+    class FakeModel { static query() { return {} } }
+    class FakeResource { static model = FakeModel; static getSlug() { return 'fakes' } }
+    const c = Table.make('T').fromResource(FakeResource as any).columns(['name']).getConfig()
+    assert.equal(c.resourceClass, FakeResource)
+    assert.equal(c.model, FakeModel)
+    assert.deepEqual(c.columns, ['name'])
+  })
+
+  it('fromModel() stores model only', () => {
+    class FakeModel { static query() { return {} } }
+    const c = Table.make('T').fromModel(FakeModel as any).getConfig()
+    assert.equal(c.model, FakeModel)
+    assert.equal(c.resourceClass, undefined)
+  })
+
+  it('reorderable() sets flag and field', () => {
+    const c = Table.make('T').reorderable('order').getConfig()
+    assert.equal(c.reorderable, true)
+    assert.equal(c.reorderField, 'order')
   })
 
   it('sets limit', () => {

@@ -86,6 +86,13 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   const [search, setSearch]   = useState('')
   const [dragging, setDragging] = useState<string | null>(null)
 
+  // Reset state when the element changes (e.g. navigating between tabs with different tables)
+  useEffect(() => {
+    setRecords(element.records as Record<string, unknown>[])
+    setSort(null)
+    setSearch('')
+  }, [element])
+
   // Client-side sort
   const sorted = sort
     ? [...records].sort((a, b) => {

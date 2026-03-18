@@ -110,7 +110,62 @@ export async function resolveSchema(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const config = (el as any).getConfig() as import('./schema/Table.js').TableConfig
 
-      // ── Mode 2: model-backed (.fromModel() / .fromResource()) ──
+      // ── fromResource(Class) — preferred resource-linked mode ───
+      if (config.resourceClass) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ResourceClass = config.resourceClass as any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const Model = ResourceClass.model as any
+        if (!Model) continue
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q: any = Model.query()
+        const sortCol = config.sortBy ?? ResourceClass.defaultSort
+        if (sortCol) {
+          const dir = config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir ?? 'DESC')
+          q = q.orderBy(sortCol, dir)
+        }
+        q = q.limit(config.limit)
+
+        let records: unknown[] = []
+        try { records = await q.get() } catch { /* empty model */ }
+
+        // Determine columns — Column[] or string[] resolved via Resource fields
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as any)?.toMeta === 'function'
+
+        let columns: import('./schema/Table.js').PanelColumnMeta[]
+        if (isColumnInstances) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          columns = (config.columns as any[]).map((col: any) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
+        } else {
+          const resource   = new ResourceClass()
+          const flatFields = flattenFields(resource.fields())
+          const names: string[] = config.columns.length > 0
+            ? config.columns as string[]
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            : flatFields.filter((f: any) => !f.isHiddenFrom('table') && f.getType() !== 'hasMany').map((f: any) => f.getName() as string).slice(0, 5)
+          columns = names.map((name) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const field = flatFields.find((f: any) => f.getName() === name)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return { name, label: field ? (field as any).getLabel() as string : titleCase(name) }
+          })
+        }
+
+        const slug = ResourceClass.getSlug?.() as string | undefined
+        result.push({
+          type:     'table',
+          title:    config.title,
+          resource: slug ?? '',
+          columns,
+          records,
+          href:     slug ? `${panel.getPath()}/${slug}` : '',
+        } satisfies TableElementMeta)
+        continue
+      }
+
+      // ── fromModel(Class) — model-backed, no resource ────────────
       if (config.model) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const Model = config.model as any
@@ -150,61 +205,6 @@ export async function resolveSchema(
         continue
       }
 
-      // ── Mode 1: resource-linked (.resource(slug)) ──────────────
-      if (!config.resource) continue
-
-      const ResourceClass = panel.getResources().find(
-        (R) => R.getSlug() === config.resource,
-      )
-      if (!ResourceClass) continue
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Model = (ResourceClass as any).model as any
-      if (!Model) continue
-
-      // Build query
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = Model.query()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sortCol = config.sortBy ?? (ResourceClass as any).defaultSort
-      if (sortCol) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dir = config.sortBy ? config.sortDir : ((ResourceClass as any).defaultSortDir ?? 'DESC')
-        q = q.orderBy(sortCol, dir)
-      }
-      q = q.limit(config.limit)
-
-      let records: unknown[] = []
-      try { records = await q.get() } catch { /* empty model */ }
-
-      // Determine columns
-      const resource   = new ResourceClass()
-      const flatFields = flattenFields(resource.fields())
-
-      const columnNames: string[] = config.columns.length > 0
-        ? config.columns as string[]
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        : flatFields
-            .filter((f: any) => !f.isHiddenFrom('table') && f.getType() !== 'hasMany')
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((f: any) => f.getName() as string)
-            .slice(0, 5)
-
-      const columns = columnNames.map((name) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const field = flatFields.find((f: any) => f.getName() === name)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return { name, label: field ? (field as any).getLabel() as string : titleCase(name) }
-      })
-
-      result.push({
-        type:     'table',
-        title:    config.title,
-        resource: config.resource,
-        columns,
-        records,
-        href:     `${panel.getPath()}/${config.resource}`,
-      } satisfies TableElementMeta)
       continue
     }
 
