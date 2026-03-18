@@ -25,6 +25,7 @@ Fields define how each column on a model is rendered in forms, tables, and the s
 | `RepeaterField` | repeater | Repeatable group of sub-fields (same schema) |
 | `BuilderField` | block picker | Multiple block types each with own schema |
 | `Block` | -- | Block type definition for use with `BuilderField` |
+| `RichContentField` | rich-text editor | Lexical rich-text with slash commands, blocks, and collaboration |
 | `FileField` | file input | Upload a file via `@boostkit/storage` |
 | `FileField.image()` | image upload | Upload an image -- shows preview thumbnail |
 | `RelationField` | select / chip multi-select | BelongsTo / belongsToMany relation |
