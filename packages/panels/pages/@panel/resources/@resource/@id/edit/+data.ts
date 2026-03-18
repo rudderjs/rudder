@@ -91,6 +91,7 @@ export async function data(pageContext: PageContextServer) {
   }
 
   // Ensure websocket is always included when needed
+  // eslint-disable-next-line prefer-const -- array is conditionally mutated below
   let liveProviders: string[] = [...fieldProviders]
   if (needsWebsocket) {
     if (!liveProviders.includes('websocket')) liveProviders.push('websocket')

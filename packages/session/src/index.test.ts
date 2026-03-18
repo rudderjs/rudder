@@ -309,17 +309,15 @@ describe('Session facade', () => {
   })
 
   it('regenerate() changes session ID', async () => {
-    let oldId!: string
-    let newId!: string
     await run(async () => {
       const s = (Session as unknown as { current(): SessionInstance }).current?.() ?? null
       // Test via instance
     })
     // Test through the middleware directly
     const { session: s } = await runRequest()
-    oldId = s.id()
+    const oldId = s.id()
     await s.regenerate()
-    newId = s.id()
+    const newId = s.id()
     assert.notStrictEqual(oldId, newId)
   })
 })

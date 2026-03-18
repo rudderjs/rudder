@@ -12,6 +12,7 @@ import { config as _config } from '@boostkit/support'
  *   interface AppConfig extends typeof configs {}
  * }
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AppConfig {}
 
 // ─── Path utilities ────────────────────────────────────────

@@ -4,7 +4,7 @@ import type { Widget, WidgetSize } from '../Widget.js'
 import { DashboardRegistry } from '../DashboardRegistry.js'
 
 export function mountDashboardRoutes(
-  router: { get: Function; put: Function },
+  router: { get: (...args: unknown[]) => void; put: (...args: unknown[]) => void },
   panel:  Panel,
   mw:     MiddlewareHandler[],
 ): void {

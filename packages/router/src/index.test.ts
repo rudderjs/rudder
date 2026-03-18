@@ -235,6 +235,7 @@ describe('@Controller', () => {
     class Ctrl {
       readonly tag = 'controller-instance'
       @Get('/test')
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       doIt() { capturedThis = this }
     }
     r.registerController(Ctrl)

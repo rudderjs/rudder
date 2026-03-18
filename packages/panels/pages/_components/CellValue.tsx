@@ -142,7 +142,7 @@ export function CellValue({ value, type, extra, displayTransformed, pathSegment,
   }
   if (type === 'richcontent') {
     const json = value as any
-    let text = ''
+    let text: string
     try {
       const extractText = (node: any): string => {
         if (node.text) return node.text

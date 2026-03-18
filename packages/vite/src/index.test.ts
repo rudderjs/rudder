@@ -41,7 +41,7 @@ describe('@boostkit/vite', () => {
   it('boostkit:config returns correct config shape', async () => {
     const plugins = await boostkit()
     const configPlugin = plugins.find(p => p.name === 'boostkit:config')!
-    const config = (configPlugin.config as Function)() as Record<string, unknown>
+    const config = (configPlugin.config as () => Record<string, unknown>)()
 
     // Check resolve alias
     assert.ok(config.resolve, 'should have resolve')
@@ -61,7 +61,7 @@ describe('@boostkit/vite', () => {
 
     // Check build config
     assert.ok(config.build, 'should have build config')
-    const build = config.build as { rollupOptions: { external: Function } }
+    const build = config.build as { rollupOptions: { external: (id: string) => boolean } }
     assert.equal(typeof build.rollupOptions.external, 'function', 'rollup external should be a function')
     assert.equal(build.rollupOptions.external('ioredis'), true, 'ioredis should be external in build')
     assert.equal(build.rollupOptions.external('react'), false, 'react should not be external')

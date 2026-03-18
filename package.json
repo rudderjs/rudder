@@ -1,11 +1,12 @@
 {
   "name": "boostkit",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.29.3",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "lint": "eslint packages/*/src packages/panels/pages packages/panels-lexical/src --ext .ts,.tsx",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
     "artisan": "tsx packages/cli/src/index.ts",
@@ -28,8 +29,12 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "tsx": "^4.21.0",
     "turbo": "^2.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.57.1"
   }
 }

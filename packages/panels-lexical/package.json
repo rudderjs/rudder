@@ -9,7 +9,10 @@
     "directory": "packages/panels-lexical"
   },
   "type": "module",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -26,6 +29,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
     "clean": "rm -rf dist"
   },
   "dependencies": {},
@@ -45,8 +49,12 @@
     "y-websocket": ">=2"
   },
   "peerDependenciesMeta": {
-    "yjs": { "optional": true },
-    "y-websocket": { "optional": true }
+    "yjs": {
+      "optional": true
+    },
+    "y-websocket": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@boostkit/core": "workspace:*",
