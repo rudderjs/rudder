@@ -2,25 +2,46 @@
 
 import { useState, useEffect } from 'react'
 import { WidgetRenderer } from './WidgetRenderer.js'
-import { icons as lucideIcons } from 'lucide-react'
-import type { PanelSchemaElementMeta, PanelI18n } from '@boostkit/panels'
+import type { WidgetRendererProps } from './WidgetRenderer.js'
+import type { PanelSchemaElementMeta, PanelI18n, ChartDataset, PanelColumnMeta, ListItem } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/panels'
+
+type WidgetRendererElement = WidgetRendererProps['element']
 
 export interface WidgetWithData extends WidgetMeta {
   data: unknown
 }
 
 // ── Icon — supports emoji and lucide icon names ─────────────────────────────
+// Icons are lazy-loaded via the shared cache in ResourceIcon (avoids bundling all ~2k icons).
+
+type IconComponent = React.ComponentType<{ className?: string }>
+let iconsCache: Record<string, IconComponent> | null = null
+let loadPromise: Promise<void> | null = null
+function loadIcons(): Promise<void> {
+  if (iconsCache) return Promise.resolve()
+  if (!loadPromise) {
+    loadPromise = import('lucide-react').then((mod) => {
+      iconsCache = mod.icons as Record<string, IconComponent>
+    }).catch(() => { iconsCache = {} })
+  }
+  return loadPromise
+}
 
 export function WidgetIcon({ icon, className }: { icon: string; className?: string }) {
+  const pascalName = icon.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
+  const [LucideIcon, setLucideIcon] = useState<IconComponent | null>(() =>
+    iconsCache?.[pascalName] ?? null,
+  )
+
+  useEffect(() => {
+    if (iconsCache) { setLucideIcon(() => iconsCache![pascalName] ?? null); return }
+    loadIcons().then(() => { setLucideIcon(() => iconsCache?.[pascalName] ?? null) }).catch(() => {})
+  }, [pascalName])
+
   if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(icon)) {
     return <span className={className}>{icon}</span>
   }
-  const pascalName = icon
-    .split('-')
-    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-    .join('') as keyof typeof lucideIcons
-  const LucideIcon = lucideIcons[pascalName]
   if (LucideIcon) return <LucideIcon className={className} />
   return <span className={className}>{icon}</span>
 }
@@ -61,37 +82,37 @@ export function WidgetCard({ widget, panelPath, i18n }: {
   }
 
   // Map other types to WidgetRenderer
-  let element: PanelSchemaElementMeta | null = null
+  let element: WidgetRendererElement | null = null
 
   if (widget.component === 'chart') {
     element = {
       type: 'chart',
       title: widget.label,
-      chartType: (data?.type as string) ?? 'line',
-      labels: (data?.labels as string[]) ?? [],
-      datasets: (data?.datasets as any[]) ?? [],
-      height: (data?.height as number) ?? Math.max((widget.defaultSize.h * 80) - 60, 180),
+      chartType: (data?.['type'] as string) ?? 'line',
+      labels: (data?.['labels'] as string[]) ?? [],
+      datasets: (data?.['datasets'] as ChartDataset[]) ?? [],
+      height: (data?.['height'] as number) ?? Math.max((widget.defaultSize.h * 80) - 60, 180),
     } as PanelSchemaElementMeta
   } else if (widget.component === 'table') {
     element = {
       type: 'table',
       title: widget.label,
       resource: '',
-      columns: (data?.columns as any[]) ?? [],
-      records: (data?.records as any[]) ?? [],
-      href: (data?.href as string) ?? '#',
-    }
+      columns: (data?.['columns'] as PanelColumnMeta[]) ?? [],
+      records: (data?.['records'] as unknown[]) ?? [],
+      href: (data?.['href'] as string) ?? '#',
+    } as PanelSchemaElementMeta
   } else if (widget.component === 'list') {
     element = {
       type: 'list',
       title: widget.label,
-      items: (data?.items as any[]) ?? [],
-      limit: (data?.limit as number) ?? 5,
+      items: (data?.['items'] as ListItem[]) ?? [],
+      limit: (data?.['limit'] as number) ?? 5,
     } as PanelSchemaElementMeta
   } else if (widget.component === 'stat-progress') {
-    element = { type: 'stat-progress', data: data ?? {} } as any
+    element = { type: 'stat-progress', data: data ?? {} }
   } else if (widget.component === 'user-card') {
-    element = { type: 'user-card', data: data ?? {} } as any
+    element = { type: 'user-card', data: data ?? {} }
   }
 
   if (!element) {

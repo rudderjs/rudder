@@ -298,32 +298,15 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
 
   // ── JSON ─────────────────────────────────────────────────
   if (field.type === 'json') {
-    const [jsonError, setJsonError] = useState<string | null>(null)
-    const rawValue = typeof value === 'string'
-      ? value
-      : JSON.stringify(value ?? {}, null, 2)
-
     return (
-      <div className="flex flex-col gap-1">
-        <textarea
-          name={field.name}
-          defaultValue={rawValue}
-          rows={(field.extra?.rows as number) ?? 6}
-          spellCheck={false}
-          disabled={isDisabled}
-          className={[inputCls, 'font-mono text-xs', jsonError ? 'border-destructive' : ''].join(' ')}
-          onChange={(e) => {
-            try {
-              JSON.parse(e.target.value)
-              setJsonError(null)
-              onChange(e.target.value)
-            } catch {
-              setJsonError(i18n.invalidJson)
-            }
-          }}
-        />
-        {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
-      </div>
+      <JsonFieldInput
+        field={field}
+        value={value}
+        onChange={onChange}
+        isDisabled={isDisabled}
+        inputCls={inputCls}
+        i18n={i18n}
+      />
     )
   }
 
@@ -333,7 +316,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     const addLabel = (field.extra?.addLabel as string) ?? i18n.addItem
     const maxItems = field.extra?.maxItems as number | undefined
     const nodeMap  = ensureNodeMap(value)
-    const root     = nodeMap.ROOT!
+    const root     = nodeMap.ROOT ?? { type: 'container', props: {}, parent: '', nodes: [] }
     const nodeIds  = root.nodes
 
     function emit(next: NodeMap) { onChange(next) }
@@ -414,215 +397,44 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
 
   // ── Builder ──────────────────────────────────────────────
   if (field.type === 'builder') {
-    const blockDefs = (field.extra?.blocks ?? []) as Array<{
-      name: string; label: string; icon?: string; schema: FieldMeta[]
-    }>
-    const addLabel  = (field.extra?.addLabel as string) ?? i18n.addBlock
-    const maxItems  = field.extra?.maxItems as number | undefined
-    const nodeMap   = ensureNodeMap(value)
-    const root      = nodeMap.ROOT!
-    const nodeIds   = root.nodes
-    const [pickerOpen, setPickerOpen] = useState(false)
-
-    function emit(next: NodeMap) { onChange(next) }
-
-    function handleAddBlock(blockName: string) {
-      const def = blockDefs.find((b) => b.name === blockName)
-      if (!def) return
-      const props: Record<string, unknown> = {}
-      for (const f of def.schema) props[f.name] = undefined
-      const { map } = addNode(nodeMap, blockName, props)
-      emit(map)
-      setPickerOpen(false)
-    }
-
-    function handleReorder(fromIndex: number, toIndex: number) {
-      const id = nodeIds[fromIndex]
-      if (!id) return
-      emit(reorderNode(nodeMap, id, fromIndex, toIndex))
-    }
-
-    const atMax = maxItems !== undefined && nodeIds.length >= maxItems
-
     return (
-      <div className="flex flex-col gap-3">
-        <SortableBlockList
-          nodeIds={nodeIds}
-          onReorder={handleReorder}
-          disabled={isDisabled}
-          renderNode={(id) => {
-            const node = nodeMap[id]
-            if (!node) return null
-            const def = blockDefs.find((b) => b.name === node.type)
-            return (
-              <div className="rounded-lg border border-input bg-card overflow-hidden">
-                {/* Block header */}
-                <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-input">
-                  <span className="flex items-center gap-2 text-xs font-medium">
-                    {def?.icon && <span>{def.icon}</span>}
-                    <span className="text-muted-foreground uppercase tracking-wide">
-                      {def?.label ?? node.type}
-                    </span>
-                  </span>
-                  {!isDisabled && (
-                    <button
-                      type="button"
-                      onClick={() => emit(removeNode(nodeMap, id))}
-                      className="px-1.5 py-0.5 text-xs text-destructive hover:underline"
-                    >{i18n.remove}</button>
-                  )}
-                </div>
-
-                {/* Block fields */}
-                <div className="p-4 flex flex-col gap-4">
-                  {(def?.schema ?? []).map((subField) => (
-                    <div key={subField.name} className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium">
-                        {subField.label}
-                        {subField.required && <span className="text-destructive ml-0.5">*</span>}
-                      </label>
-                      <FieldInput
-                        field={subField}
-                        value={node.props[subField.name]}
-                        onChange={(v) => emit(updateNodeProps(nodeMap, id, { [subField.name]: v }))}
-                        uploadBase={uploadBase}
-                        i18n={i18n}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          }}
-        />
-
-        {/* Block picker */}
-        {!atMax && !isDisabled && (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setPickerOpen((o) => !o)}
-              className="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-input text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors w-full justify-center"
-            >
-              <span className="text-base leading-none">+</span>
-              {addLabel}
-            </button>
-
-            {pickerOpen && (
-              <div className="absolute bottom-full mb-2 left-0 z-20 w-full rounded-lg border border-border bg-popover shadow-lg py-1 overflow-hidden">
-                {blockDefs.map((def) => (
-                  <button
-                    key={def.name}
-                    type="button"
-                    onClick={() => handleAddBlock(def.name)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                  >
-                    {def.icon && <span className="text-base shrink-0">{def.icon}</span>}
-                    <div>
-                      <p className="font-medium">{def.label}</p>
-                      <p className="text-xs text-muted-foreground">{def.schema.length} field{def.schema.length !== 1 ? 's' : ''}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <BuilderFieldInput
+        field={field}
+        value={value}
+        onChange={onChange}
+        uploadBase={uploadBase}
+        isDisabled={isDisabled}
+        i18n={i18n}
+      />
     )
   }
 
   // ── File / Image ─────────────────────────────────────────
   if (field.type === 'file' || field.type === 'image') {
-    const multiple  = !!(field.extra?.multiple)
-    const accept    = (field.extra?.accept    as string) || undefined
-    const disk      = (field.extra?.disk      as string) ?? 'local'
-    const directory = (field.extra?.directory as string) ?? 'uploads'
-    const urls      = multiple ? (Array.isArray(value) ? (value as string[]) : []) : []
-    const singleUrl = !multiple ? (value as string | undefined) : undefined
-    const [uploading, setUploading] = useState(false)
-
-    async function handleFiles(files: FileList | null) {
-      if (!files?.length) return
-      setUploading(true)
-      try {
-        const results: string[] = []
-        for (const f of Array.from(files)) {
-          const fd = new FormData()
-          fd.append('file', f)
-          fd.append('disk', disk)
-          fd.append('directory', directory)
-          const res = await fetch(`${uploadBase}/_upload`, { method: 'POST', body: fd })
-          const { url } = await res.json() as { url: string }
-          results.push(url)
-        }
-        onChange(multiple ? [...urls, ...results] : results[0])
-      } catch {
-        // upload failed — leave value unchanged
-      } finally {
-        setUploading(false)
-      }
-    }
-
     return (
-      <div className="flex flex-col gap-2">
-        {field.type === 'image' && singleUrl && (
-          <img src={singleUrl} alt="" className="max-h-32 w-auto rounded-md border border-input object-cover" />
-        )}
-        {field.type === 'image' && urls.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {urls.map((u) => (
-              <img key={u} src={u} alt="" className="h-20 w-20 rounded-md border border-input object-cover" />
-            ))}
-          </div>
-        )}
-        {!field.type.startsWith('image') && singleUrl && (
-          <a href={singleUrl} target="_blank" rel="noopener noreferrer"
-            className="text-sm text-primary underline break-all">
-            {singleUrl.split('/').pop()}
-          </a>
-        )}
-        <input
-          type="file"
-          accept={accept}
-          multiple={multiple}
-          disabled={uploading || isDisabled}
-          className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:text-sm file:bg-background file:text-foreground hover:file:bg-accent cursor-pointer disabled:opacity-50"
-          onChange={(e) => void handleFiles(e.target.files)}
-        />
-        {uploading && <p className="text-xs text-muted-foreground">{i18n.uploading}</p>}
-      </div>
+      <FileFieldInput
+        field={field}
+        value={value}
+        onChange={onChange}
+        uploadBase={uploadBase}
+        isDisabled={isDisabled}
+        i18n={i18n}
+      />
     )
   }
 
   // ── BelongsTo (single select, async options) ─────────────
   if (field.type === 'belongsTo') {
-    const resourceSlug = field.extra?.['resource'] as string | undefined
-    const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
-    const [opts, setOpts] = useState<Array<{ value: string; label: string }>>([])
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-      if (!resourceSlug || !uploadBase) { setLoading(false); return }
-      fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
-        .then(r => r.json())
-        .then((data) => { setOpts(data as Array<{ value: string; label: string }>); setLoading(false) })
-        .catch(() => setLoading(false))
-    }, [resourceSlug, labelField, uploadBase])
-
     return (
-      <select
-        name={field.name}
-        value={(value as string) ?? ''}
-        onChange={(e) => onChange(e.target.value || null)}
-        disabled={loading || isDisabled}
-        className={inputCls}
-      >
-        <option value="">{loading ? i18n.loading : i18n.none}</option>
-        {opts.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <BelongsToFieldInput
+        field={field}
+        value={value}
+        onChange={onChange}
+        uploadBase={uploadBase}
+        isDisabled={isDisabled}
+        inputCls={inputCls}
+        i18n={i18n}
+      />
     )
   }
 
@@ -653,7 +465,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
           wsPath={field.yjs ? (wsPath ?? null) : null}
           docName={field.yjs ? (docName ?? null) : null}
           fragmentName={`richcontent:${field.name}`}
-          {...((field.extra?.blocks as any[] | undefined) !== undefined ? { blocks: field.extra?.blocks as any[] } : {})}
+          {...(Array.isArray(field.extra?.['blocks']) ? { blocks: field.extra['blocks'] as unknown[] } : {})}
           {...(userName !== undefined ? { userName } : {})}
           {...(userColor !== undefined ? { userColor } : {})}
         />
@@ -742,6 +554,292 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
   )
 }
 
+// ── JsonFieldInput ────────────────────────────────────────
+
+interface JsonFieldInputProps {
+  field:      FieldMeta
+  value:      unknown
+  onChange:   (value: unknown) => void
+  isDisabled: boolean
+  inputCls:   string
+  i18n:       PanelI18n
+}
+
+function JsonFieldInput({ field, value, onChange, isDisabled, inputCls, i18n }: JsonFieldInputProps) {
+  const [jsonError, setJsonError] = useState<string | null>(null)
+  const rawValue = typeof value === 'string'
+    ? value
+    : JSON.stringify(value ?? {}, null, 2)
+
+  return (
+    <div className="flex flex-col gap-1">
+      <textarea
+        name={field.name}
+        defaultValue={rawValue}
+        rows={(field.extra?.rows as number) ?? 6}
+        spellCheck={false}
+        disabled={isDisabled}
+        className={[inputCls, 'font-mono text-xs', jsonError ? 'border-destructive' : ''].join(' ')}
+        onChange={(e) => {
+          try {
+            JSON.parse(e.target.value)
+            setJsonError(null)
+            onChange(e.target.value)
+          } catch {
+            setJsonError(i18n.invalidJson)
+          }
+        }}
+      />
+      {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
+    </div>
+  )
+}
+
+// ── BuilderFieldInput ─────────────────────────────────────
+
+interface BuilderFieldInputProps {
+  field:      FieldMeta
+  value:      unknown
+  onChange:   (value: unknown) => void
+  uploadBase: string
+  isDisabled: boolean
+  i18n:       PanelI18n
+}
+
+function BuilderFieldInput({ field, value, onChange, uploadBase, isDisabled, i18n }: BuilderFieldInputProps) {
+  const blockDefs = (field.extra?.blocks ?? []) as Array<{
+    name: string; label: string; icon?: string; schema: FieldMeta[]
+  }>
+  const addLabel  = (field.extra?.addLabel as string) ?? i18n.addBlock
+  const maxItems  = field.extra?.maxItems as number | undefined
+  const nodeMap   = ensureNodeMap(value)
+  const root      = nodeMap.ROOT ?? { type: 'container', props: {}, parent: '', nodes: [] }
+  const nodeIds   = root.nodes
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  function emit(next: NodeMap) { onChange(next) }
+
+  function handleAddBlock(blockName: string) {
+    const def = blockDefs.find((b) => b.name === blockName)
+    if (!def) return
+    const props: Record<string, unknown> = {}
+    for (const f of def.schema) props[f.name] = undefined
+    const { map } = addNode(nodeMap, blockName, props)
+    emit(map)
+    setPickerOpen(false)
+  }
+
+  function handleReorder(fromIndex: number, toIndex: number) {
+    const id = nodeIds[fromIndex]
+    if (!id) return
+    emit(reorderNode(nodeMap, id, fromIndex, toIndex))
+  }
+
+  const atMax = maxItems !== undefined && nodeIds.length >= maxItems
+
+  return (
+    <div className="flex flex-col gap-3">
+      <SortableBlockList
+        nodeIds={nodeIds}
+        onReorder={handleReorder}
+        disabled={isDisabled}
+        renderNode={(id) => {
+          const node = nodeMap[id]
+          if (!node) return null
+          const def = blockDefs.find((b) => b.name === node.type)
+          return (
+            <div className="rounded-lg border border-input bg-card overflow-hidden">
+              {/* Block header */}
+              <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-input">
+                <span className="flex items-center gap-2 text-xs font-medium">
+                  {def?.icon && <span>{def.icon}</span>}
+                  <span className="text-muted-foreground uppercase tracking-wide">
+                    {def?.label ?? node.type}
+                  </span>
+                </span>
+                {!isDisabled && (
+                  <button
+                    type="button"
+                    onClick={() => emit(removeNode(nodeMap, id))}
+                    className="px-1.5 py-0.5 text-xs text-destructive hover:underline"
+                  >{i18n.remove}</button>
+                )}
+              </div>
+
+              {/* Block fields */}
+              <div className="p-4 flex flex-col gap-4">
+                {(def?.schema ?? []).map((subField) => (
+                  <div key={subField.name} className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">
+                      {subField.label}
+                      {subField.required && <span className="text-destructive ml-0.5">*</span>}
+                    </label>
+                    <FieldInput
+                      field={subField}
+                      value={node.props[subField.name]}
+                      onChange={(v) => emit(updateNodeProps(nodeMap, id, { [subField.name]: v }))}
+                      uploadBase={uploadBase}
+                      i18n={i18n}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }}
+      />
+
+      {/* Block picker */}
+      {!atMax && !isDisabled && (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            className="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-input text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors w-full justify-center"
+          >
+            <span className="text-base leading-none">+</span>
+            {addLabel}
+          </button>
+
+          {pickerOpen && (
+            <div className="absolute bottom-full mb-2 left-0 z-20 w-full rounded-lg border border-border bg-popover shadow-lg py-1 overflow-hidden">
+              {blockDefs.map((def) => (
+                <button
+                  key={def.name}
+                  type="button"
+                  onClick={() => handleAddBlock(def.name)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                >
+                  {def.icon && <span className="text-base shrink-0">{def.icon}</span>}
+                  <div>
+                    <p className="font-medium">{def.label}</p>
+                    <p className="text-xs text-muted-foreground">{def.schema.length} field{def.schema.length !== 1 ? 's' : ''}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── FileFieldInput ────────────────────────────────────────
+
+interface FileFieldInputProps {
+  field:      FieldMeta
+  value:      unknown
+  onChange:   (value: unknown) => void
+  uploadBase: string
+  isDisabled: boolean
+  i18n:       PanelI18n
+}
+
+function FileFieldInput({ field, value, onChange, uploadBase, isDisabled, i18n }: FileFieldInputProps) {
+  const multiple  = !!(field.extra?.multiple)
+  const accept    = (field.extra?.accept    as string) || undefined
+  const disk      = (field.extra?.disk      as string) ?? 'local'
+  const directory = (field.extra?.directory as string) ?? 'uploads'
+  const urls      = multiple ? (Array.isArray(value) ? (value as string[]) : []) : []
+  const singleUrl = !multiple ? (value as string | undefined) : undefined
+  const [uploading, setUploading] = useState(false)
+
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return
+    setUploading(true)
+    try {
+      const results: string[] = []
+      for (const f of Array.from(files)) {
+        const fd = new FormData()
+        fd.append('file', f)
+        fd.append('disk', disk)
+        fd.append('directory', directory)
+        const res = await fetch(`${uploadBase}/_upload`, { method: 'POST', body: fd })
+        const { url } = await res.json() as { url: string }
+        results.push(url)
+      }
+      onChange(multiple ? [...urls, ...results] : results[0])
+    } catch {
+      // upload failed — leave value unchanged
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {field.type === 'image' && singleUrl && (
+        <img src={singleUrl} alt="" className="max-h-32 w-auto rounded-md border border-input object-cover" />
+      )}
+      {field.type === 'image' && urls.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {urls.map((u) => (
+            <img key={u} src={u} alt="" className="h-20 w-20 rounded-md border border-input object-cover" />
+          ))}
+        </div>
+      )}
+      {!field.type.startsWith('image') && singleUrl && (
+        <a href={singleUrl} target="_blank" rel="noopener noreferrer"
+          className="text-sm text-primary underline break-all">
+          {singleUrl.split('/').pop()}
+        </a>
+      )}
+      <input
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        disabled={uploading || isDisabled}
+        className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-input file:text-sm file:bg-background file:text-foreground hover:file:bg-accent cursor-pointer disabled:opacity-50"
+        onChange={(e) => void handleFiles(e.target.files)}
+      />
+      {uploading && <p className="text-xs text-muted-foreground">{i18n.uploading}</p>}
+    </div>
+  )
+}
+
+// ── BelongsToFieldInput ───────────────────────────────────
+
+interface BelongsToFieldInputProps {
+  field:      FieldMeta
+  value:      unknown
+  onChange:   (value: unknown) => void
+  uploadBase: string
+  isDisabled: boolean
+  inputCls:   string
+  i18n:       PanelI18n
+}
+
+function BelongsToFieldInput({ field, value, onChange, uploadBase, isDisabled, inputCls, i18n }: BelongsToFieldInputProps) {
+  const resourceSlug = field.extra?.['resource'] as string | undefined
+  const labelField   = (field.extra?.['displayField'] as string) ?? 'name'
+  const [opts, setOpts] = useState<Array<{ value: string; label: string }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!resourceSlug || !uploadBase) { setLoading(false); return }
+    fetch(`${uploadBase}/${resourceSlug}/_options?label=${labelField}`)
+      .then(r => r.json())
+      .then((data) => { setOpts(data as Array<{ value: string; label: string }>); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [resourceSlug, labelField, uploadBase])
+
+  return (
+    <select
+      name={field.name}
+      value={(value as string) ?? ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      disabled={loading || isDisabled}
+      className={inputCls}
+    >
+      <option value="">{loading ? i18n.loading : i18n.none}</option>
+      {opts.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  )
+}
+
 // ── BelongsToMany Combobox ────────────────────────────────
 
 interface Opt { value: string; label: string }
@@ -807,6 +905,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, 
   }, [focusedIdx, open])
 
   // Auto-generate slugs inside the create dialog
+  const createValuesKey = JSON.stringify(createValues)
   useEffect(() => {
     if (!createOpen || createSchema.length === 0) return
     const slugFields = createSchema.filter(f => f.type === 'slug' && f.extra?.['from'])
@@ -822,7 +921,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, 
       }
       return next
     })
-  }, [createOpen, createSchema, JSON.stringify(createValues)])
+  }, [createOpen, createSchema, createValuesKey])
 
   const filtered = useMemo(() =>
     opts.filter(o => o.label.toLowerCase().includes(query.toLowerCase())),
@@ -856,7 +955,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, 
     } else if (e.key === 'Enter' && open) {
       e.preventDefault()
       if (focusedIdx >= 0 && focusedIdx < filtered.length) {
-        toggle(filtered[focusedIdx]!.value)
+        toggle(filtered[focusedIdx]?.value ?? '')
       } else if (showCreate && focusedIdx === filtered.length) {
         void openCreateDialog()
       }

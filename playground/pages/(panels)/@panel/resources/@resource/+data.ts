@@ -1,11 +1,17 @@
 import { PanelRegistry } from '@boostkit/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@boostkit/panels'
 import { getSessionUser } from '../../../_lib/getSessionUser.js'
 
-function flattenFields(items: any[]): any[] {
-  const result: any[] = []
+/** A Field with an optional `.apply(record)` method (ComputedField). */
+interface ComputedFieldLike extends Field {
+  apply(record: RecordRow): unknown
+}
+
+function flattenFields(items: FieldOrGrouping[]): Field[] {
+  const result: Field[] = []
   for (const item of items) {
-    if ('getFields' in item) result.push(...flattenFields(item.getFields()))
-    else result.push(item)
+    if ('getFields' in item) result.push(...flattenFields((item as { getFields(): FieldOrGrouping[] }).getFields()))
+    else result.push(item as Field)
   }
   return result
 }
@@ -29,7 +35,7 @@ export async function data(pageContext: PageContextServer) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
   const params = new URLSearchParams(pageContext.urlOriginal.split('?')[1] ?? '')
-  const isLoadMore = (ResourceClass as any).paginationType === 'loadMore'
+  const isLoadMore = ResourceClass.paginationType === 'loadMore'
   const loadMoreTarget = isLoadMore ? Number(params.get('page') ?? 1) : 1
   const page   = isLoadMore ? 1 : Number(params.get('page') ?? 1)
   const sort   = params.get('sort') ?? undefined
@@ -40,8 +46,7 @@ export async function data(pageContext: PageContextServer) {
   let pagination: { total: number; currentPage: number; lastPage: number; perPage: number } | null = null
 
   if (Model) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = Model.query()
+    let q: QueryBuilderLike<RecordRow> = Model.query()
 
     // Tab filter — apply active tab's query modifier
     const activeTab = params.get('tab') ?? ''
@@ -49,11 +54,12 @@ export async function data(pageContext: PageContextServer) {
       const tabs = resource.tabs()
       const tab  = tabs.find((t) => t.getName() === activeTab)
       const tabQuery = tab?.getQueryFn()
-      if (tabQuery) q = tabQuery(q)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (tabQuery) q = tabQuery(q as any) as QueryBuilderLike<RecordRow>
     }
 
     // Soft deletes — filter by trashed status
-    const hasSoftDeletes = (ResourceClass as any).softDeletes === true
+    const hasSoftDeletes = ResourceClass.softDeletes
     const trashed        = params.get('trashed') === 'true'
     if (hasSoftDeletes) {
       if (trashed) {
@@ -64,7 +70,7 @@ export async function data(pageContext: PageContextServer) {
     }
 
     // Draftable — filter by draft status
-    const hasDraftable = (ResourceClass as any).draftable === true
+    const hasDraftable = ResourceClass.draftable
     const draftFilter  = params.get('draft')
     if (hasDraftable) {
       if (draftFilter === 'true') {
@@ -76,10 +82,10 @@ export async function data(pageContext: PageContextServer) {
 
     // Include belongsTo and belongsToMany relations so the table shows names instead of raw IDs
     for (const f of flattenFields(resource.fields())) {
-      const type = (f as any).getType?.() as string | undefined
-      const name = (f as any).getName() as string
+      const type = f.getType()
+      const name = f.getName()
       if (type === 'belongsTo') {
-        const rel = ((f as any)._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
+        const rel = ((f as unknown as { _extra: Record<string, unknown> })._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
         q = q.with(rel)
       } else if (type === 'belongsToMany') {
         q = q.with(name)
@@ -87,42 +93,42 @@ export async function data(pageContext: PageContextServer) {
     }
 
     if (sort) {
-      const sortableFields = flattenFields(resource.fields()).filter((f: any) => f.isSortable()).map((f: any) => f.getName())
+      const sortableFields = flattenFields(resource.fields()).filter((f) => f.isSortable()).map((f) => f.getName())
       if (sortableFields.includes(sort)) q = q.orderBy(sort, dir)
     }
 
     if (search) {
-      const cols = flattenFields(resource.fields()).filter((f: any) => f.isSearchable()).map((f: any) => f.getName())
+      const cols = flattenFields(resource.fields()).filter((f) => f.isSearchable()).map((f) => f.getName())
       if (cols.length > 0) {
-        q = q.where(cols[0]!, 'LIKE', `%${search}%`)
-        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i]!, `%${search}%`)
+        q = q.where(cols[0] ?? '', 'LIKE', `%${search}%`)
+        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i] ?? '', `%${search}%`)
       }
     }
 
     for (const filter of resource.filters()) {
       const value = params.get(`filter[${filter.getName()}]`)
       if (value !== null && value !== '') {
-        q = (filter as any).applyToQuery(q, value)
+        q = filter.applyToQuery(q, value) as QueryBuilderLike<RecordRow>
       }
     }
 
-    const perPage = Math.min(Number(params.get('perPage') ?? (ResourceClass as any).perPage ?? 15), 100)
+    const perPage = Math.min(Number(params.get('perPage') ?? ResourceClass.perPage ?? 15), 100)
 
     // In loadMore mode, fetch pages 1..N in a single query
     const effectivePerPage = isLoadMore && loadMoreTarget > 1 ? perPage * loadMoreTarget : perPage
     const result = await q.paginate(page, effectivePerPage)
-    const rawRecords: unknown[] = result.data
+    const rawRecords: RecordRow[] = result.data
 
     // Apply display transforms + computed fields
     const allFields = flattenFields(resource.fields())
-    const computedFields = allFields.filter((f: any) => f.getType?.() === 'computed' && typeof f.apply === 'function')
-    const displayFields  = allFields.filter((f: any) => typeof f.hasDisplay === 'function' && f.hasDisplay())
+    const computedFields = allFields.filter((f): f is ComputedFieldLike => f.getType() === 'computed' && typeof (f as unknown as ComputedFieldLike).apply === 'function')
+    const displayFields  = allFields.filter((f) => f.hasDisplay())
 
     if (computedFields.length || displayFields.length) {
-      records = (rawRecords as Record<string, unknown>[]).map((r: any) => {
-        const rec = { ...r }
-        for (const f of computedFields) rec[(f as any).getName()] = (f as any).apply(rec)
-        for (const f of displayFields)  rec[(f as any).getName()] = (f as any).applyDisplay(rec[(f as any).getName()], rec)
+      records = rawRecords.map((r) => {
+        const rec: RecordRow = { ...r }
+        for (const f of computedFields) rec[f.getName()] = f.apply(rec)
+        for (const f of displayFields)  rec[f.getName()] = f.applyDisplay(rec[f.getName()], rec)
         return rec
       })
     } else {

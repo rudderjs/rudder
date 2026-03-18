@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react'
 import { DndContext, closestCenter, DragOverlay, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { icons } from 'lucide-react'
-
-const GripVertical = icons['GripVertical'] ?? (() => null)
+import { GripVertical } from 'lucide-react'
 
 interface Props {
   /** Ordered node IDs. */

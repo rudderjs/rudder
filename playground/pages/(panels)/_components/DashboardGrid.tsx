@@ -17,9 +17,8 @@ import {
   useSortable,
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { WidgetSettingsDrawer } from './WidgetSettingsDrawer.js'
-import { WidgetCard, WidgetIcon } from './WidgetCard.js'
+import { WidgetCard } from './WidgetCard.js'
 import type { WidgetWithData } from './WidgetCard.js'
 import type { PanelI18n } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/panels'
@@ -205,10 +204,10 @@ export function DashboardGrid({
         const qs = tabQuery(tabId)
         const res = await fetch(`${base}/layout${qs}`)
         if (res.ok) {
-          const body = await res.json() as { layout: any[] }
+          const body = await res.json() as { layout: Array<{ widgetId: string; w?: unknown; size?: { w?: number }; settings?: Record<string, unknown> }> }
           if (body.layout.length > 0) {
             // Normalize: ensure each item has a numeric `w` (migrate from old format)
-            const normalized: DashboardLayoutItem[] = body.layout.map((item: any) => {
+            const normalized: DashboardLayoutItem[] = body.layout.map((item) => {
               const widgetDef = defaultWidgets.find(d => d.id === item.widgetId)
               return {
                 widgetId: item.widgetId,
@@ -253,7 +252,7 @@ export function DashboardGrid({
             }
           }
         } catch { /* poll failed */ }
-      }, pw.pollInterval!)
+      }, pw.pollInterval ?? 0)
       timers.push(timer)
     }
 
@@ -438,7 +437,7 @@ export function DashboardGrid({
                     {/* Edit controls */}
                     {editing && (
                       <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {widget!.settings && widget!.settings.length > 0 && (
+                        {widget?.settings && widget.settings.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setSettingsWidgetId(widgetId)}
@@ -481,7 +480,7 @@ export function DashboardGrid({
 
                     {/* Widget content */}
                     <div className="h-full">
-                      <WidgetCard widget={widget!} panelPath={panelPath} i18n={i18n} />
+                      {widget && <WidgetCard widget={widget} panelPath={panelPath} i18n={i18n} />}
                     </div>
                   </SortableWidget>
                 )

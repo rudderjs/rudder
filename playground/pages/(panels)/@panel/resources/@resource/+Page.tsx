@@ -80,7 +80,7 @@ export default function ResourceListPage() {
   const searchFields = allFields.filter((f) => f.searchable)
   const hasSearch    = searchFields.length > 0
   const hasFilters   = resourceMeta.filters.length > 0
-  const hasSoftDeletes = (resourceMeta as any).softDeletes === true
+  const hasSoftDeletes = resourceMeta.softDeletes === true
 
   // ── Live table auto-refresh (opt-in via Resource.live) ──
   useLiveTable({ enabled: resourceMeta.live, slug, pathSegment })
@@ -129,7 +129,7 @@ export default function ResourceListPage() {
   const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
   const currentSearch = urlParams.get('search') ?? ''
   const isTrashed     = urlParams.get('trashed') === 'true'
-  const draftFilter   = urlParams.get('draft') // 'true' | 'false' | null (all)
+  const _draftFilter  = urlParams.get('draft') // 'true' | 'false' | null (all)
   const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
 
   // Reset selection and loadMore state when navigating to a different resource
@@ -163,7 +163,7 @@ export default function ResourceListPage() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [isLoadMore, pathSegment, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoadMore, pathSegment, slug])  
 
   // Sync search input from URL on external navigation (back/forward button)
   // but NOT from our own debounced updates (which would overwrite user typing)
@@ -310,14 +310,14 @@ export default function ResourceListPage() {
         body:    JSON.stringify({ ids: selected }),
       })
       if (res.ok) {
-        toast.success((i18n as any).restoredRecordToast)
+        toast.success(i18n.restoredRecordToast)
         setSelected([])
         void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
       } else {
-        toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+        toast.error(i18n.restoreError ?? 'Failed to restore.')
       }
     } catch {
-      toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+      toast.error(i18n.restoreError ?? 'Failed to restore.')
     } finally {
       setBulkDeletePending(false)
     }
@@ -332,7 +332,7 @@ export default function ResourceListPage() {
         body:    JSON.stringify({ ids: selected }),
       })
       if (res.ok) {
-        toast.success((i18n as any).forceDeletedToast)
+        toast.success(i18n.forceDeletedToast)
         setSelected([])
         void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
       } else {
@@ -387,7 +387,7 @@ export default function ResourceListPage() {
         <div>
           <h1 className="text-xl font-semibold">
             {resourceMeta.label}
-            {isTrashed && <span className="text-muted-foreground ms-2 text-base font-normal">— {(i18n as any).trash}</span>}
+            {isTrashed && <span className="text-muted-foreground ms-2 text-base font-normal">— {i18n.trash}</span>}
           </h1>
           {pagination && (
             <p className="text-sm text-muted-foreground mt-0.5">{t(i18n.records, { n: pagination.total })}</p>
@@ -404,10 +404,10 @@ export default function ResourceListPage() {
                   : 'border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground',
               ].join(' ')}
             >
-              {isTrashed ? (i18n as any).exitTrash : (i18n as any).viewTrash}
+              {isTrashed ? i18n.exitTrash : i18n.viewTrash}
             </a>
           )}
-          {!isTrashed && (resourceMeta as any).draftable ? (
+          {!isTrashed && resourceMeta.draftable ? (
             <CreateDraftButton slug={slug} pathSegment={pathSegment} labelSingular={resourceMeta.labelSingular} i18n={i18n} />
           ) : !isTrashed ? (
             <a
@@ -423,14 +423,14 @@ export default function ResourceListPage() {
       {/* ── Trashed banner ─────────────────────────────────── */}
       {isTrashed && (
         <div className="mb-4 px-4 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400">
-          {(i18n as any).trashedBanner}
+          {i18n.trashedBanner}
         </div>
       )}
 
       {/* ── List tabs (hidden when viewing trash) ──────────────── */}
       {resourceMeta.tabs.length > 0 && !isTrashed && (() => {
         const activeTab  = urlParams.get('tab') ?? ''
-        const firstTab   = resourceMeta.tabs[0]!.name
+        const firstTab   = resourceMeta.tabs[0]?.name ?? ''
         const basePath   = `/${pathSegment}/resources/${slug}`
 
         function switchTab(name: string) {
@@ -568,14 +568,14 @@ export default function ResourceListPage() {
                   disabled={actionPending || bulkDeletePending}
                   className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-primary/10 text-primary hover:bg-primary/20"
                 >
-                  {bulkDeletePending ? i18n.loading : (i18n as any).bulkRestore}
+                  {bulkDeletePending ? i18n.loading : i18n.bulkRestore}
                 </button>
                 <button
                   onClick={() => setBulkDeleteConfirmOpen(true)}
                   disabled={actionPending || bulkDeletePending}
                   className="px-3 py-1 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-destructive/10 text-destructive hover:bg-destructive/20"
                 >
-                  {bulkDeletePending ? i18n.loading : (i18n as any).bulkForceDelete}
+                  {bulkDeletePending ? i18n.loading : i18n.bulkForceDelete}
                 </button>
               </>
             ) : (
@@ -673,9 +673,9 @@ export default function ResourceListPage() {
                             >
                               <CellValue value={resolveCellValue(record, f)} type={f.type} extra={f.extra} displayTransformed={f.displayTransformed} pathSegment={pathSegment} i18n={i18n} />
                             </a>
-                            {(resourceMeta as any).draftable && record['draftStatus'] === 'draft' && (
+                            {resourceMeta.draftable && record['draftStatus'] === 'draft' && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                {(i18n as any).draft ?? 'Draft'}
+                                {i18n.draft ?? 'Draft'}
                               </span>
                             )}
                           </span>
@@ -871,8 +871,8 @@ export default function ResourceListPage() {
           open
           onClose={() => setBulkDeleteConfirmOpen(false)}
           onConfirm={isTrashed ? handleBulkForceDelete : handleBulkDelete}
-          title={isTrashed ? (i18n as any).forceDelete : t(i18n.deleteSelected, { n: selected.length })}
-          message={isTrashed ? (i18n as any).forceDeleteConfirm : t(i18n.bulkDeleteConfirm, { n: selected.length })}
+          title={isTrashed ? i18n.forceDelete : t(i18n.deleteSelected, { n: selected.length })}
+          message={isTrashed ? i18n.forceDeleteConfirm : t(i18n.bulkDeleteConfirm, { n: selected.length })}
           danger
           confirmLabel={i18n.confirm}
           cancelLabel={i18n.cancel}
@@ -954,12 +954,12 @@ function RestoreRowButton({ slug, id, pathSegment, i18n }: { slug: string; id: s
     try {
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_restore`, { method: 'POST' })
       if (res.ok) {
-        toast.success((i18n as any).restoredRecordToast)
+        toast.success(i18n.restoredRecordToast)
       } else {
-        toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+        toast.error(i18n.restoreError ?? 'Failed to restore.')
       }
     } catch {
-      toast.error((i18n as any).restoreError ?? 'Failed to restore.')
+      toast.error(i18n.restoreError ?? 'Failed to restore.')
     }
     setPending(false)
     void navigate(window.location.pathname + window.location.search, { overwriteLastHistoryEntry: true })
@@ -971,7 +971,7 @@ function RestoreRowButton({ slug, id, pathSegment, i18n }: { slug: string; id: s
       disabled={pending}
       className="text-xs px-2.5 py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
     >
-      {(i18n as any).restoreRecord}
+      {i18n.restoreRecord}
     </button>
   )
 }
@@ -983,7 +983,7 @@ function ForceDeleteRowButton({ slug, id, pathSegment, i18n }: { slug: string; i
     try {
       const res = await fetch(`/${pathSegment}/api/${slug}/${id}/_force`, { method: 'DELETE' })
       if (res.ok) {
-        toast.success((i18n as any).forceDeletedToast)
+        toast.success(i18n.forceDeletedToast)
       } else {
         toast.error(i18n.deleteError)
       }
@@ -1000,14 +1000,14 @@ function ForceDeleteRowButton({ slug, id, pathSegment, i18n }: { slug: string; i
         onClick={() => setOpen(true)}
         className="text-xs px-2.5 py-1 rounded border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
       >
-        {(i18n as any).forceDelete}
+        {i18n.forceDelete}
       </button>
       <ConfirmDialog
         open={open}
         onClose={() => setOpen(false)}
         onConfirm={handleForceDelete}
-        title={(i18n as any).forceDelete}
-        message={(i18n as any).forceDeleteConfirm}
+        title={i18n.forceDelete}
+        message={i18n.forceDeleteConfirm}
         danger
         confirmLabel={i18n.confirm}
         cancelLabel={i18n.cancel}
@@ -1033,11 +1033,11 @@ function CreateDraftButton({ slug, pathSegment, labelSingular, i18n }: {
         const body = await res.json() as { data: { id: string } }
         void navigate(`/${pathSegment}/resources/${slug}/${body.data.id}/edit`)
       } else {
-        toast.error((i18n as any).saveError ?? 'Failed to create draft.')
+        toast.error(i18n.saveError ?? 'Failed to create draft.')
         setCreating(false)
       }
     } catch {
-      toast.error((i18n as any).saveError ?? 'Failed to create draft.')
+      toast.error(i18n.saveError ?? 'Failed to create draft.')
       setCreating(false)
     }
   }
@@ -1049,7 +1049,7 @@ function CreateDraftButton({ slug, pathSegment, labelSingular, i18n }: {
       disabled={creating}
       className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:opacity-90 transition-opacity shrink-0 disabled:opacity-50"
     >
-      {creating ? (i18n as any).loading : t(i18n.newButton, { label: labelSingular })}
+      {creating ? i18n.loading : t(i18n.newButton, { label: labelSingular })}
     </button>
   )
 }

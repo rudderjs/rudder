@@ -6,7 +6,7 @@ import { useConfig }   from 'vike-react/useConfig'
 import { navigate }    from 'vike/client/router'
 import { Breadcrumbs } from '../../../../_components/Breadcrumbs.js'
 import { CellValue, resolveCellValue } from '../../../../_components/CellValue.js'
-import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
+import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, RecordRow } from '@boostkit/panels'
 import {
   Table,
   TableBody,
@@ -81,8 +81,8 @@ export default function ShowPage() {
         {/* Resource widgets */}
         {widgetData && widgetData.length > 0 && (
           <div className="flex flex-col gap-4 mb-6">
-            {widgetData.map((el: any, i: number) => (
-              <WidgetRenderer key={i} element={el} panelPath={`/${pathSegment}`} i18n={i18n as any} />
+            {widgetData.map((el, i: number) => (
+              <WidgetRenderer key={i} element={el as import('@boostkit/panels').PanelSchemaElementMeta} panelPath={`/${pathSegment}`} i18n={i18n} />
             ))}
           </div>
         )}
@@ -133,7 +133,7 @@ export default function ShowPage() {
 
 interface RelatedRecord { id: string; [key: string]: unknown }
 interface PaginationMeta { total: number; currentPage: number; lastPage: number; perPage: number }
-interface HasManyInitialData { records: RelatedRecord[]; schema: FieldMeta[]; pagination: PaginationMeta }
+interface HasManyInitialData { records: RecordRow[]; schema: FieldMeta[]; pagination: PaginationMeta }
 
 interface HasManyTableProps {
   field:        FieldMeta
@@ -148,11 +148,13 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
   const resourceSlug = field.extra?.['resource'] as string | undefined
   const foreignKey   = field.extra?.['foreignKey'] as string | undefined
 
-  const [records, setRecords] = useState<RelatedRecord[]>(initialData?.records ?? [])
+  const [records, setRecords] = useState<RelatedRecord[]>((initialData?.records ?? []) as RelatedRecord[])
   const [schema,  setSchema]  = useState<FieldMeta[]>(initialData?.schema ?? [])
   const [pagination, setPagination] = useState<PaginationMeta | null>(initialData?.pagination ?? null)
   const [page, setPage]    = useState(1)
   const [loading, setLoading] = useState(!initialData)
+
+  const throughMany = field.extra?.['throughMany'] === true
 
   // Load schema once — only if not provided via SSR
   useEffect(() => {
@@ -163,6 +165,7 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
         setSchema(flattenFields(d.resourceMeta.fields).filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
       })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is SSR-only, intentionally excluded to prevent re-fetch loop
   }, [resourceSlug, pathSegment])
 
   // Load records when page changes (skip page 1 if SSR data already available)
@@ -170,7 +173,6 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
     if (page === 1 && initialData) return
     if (!resourceSlug || !foreignKey) { setLoading(false); return }
     setLoading(true)
-    const throughMany = field.extra?.['throughMany'] === true
     const relatedUrl  = `/${pathSegment}/api/${resourceSlug}/_related?fk=${encodeURIComponent(foreignKey)}&id=${encodeURIComponent(parentId)}&page=${page}${throughMany ? '&through=true' : ''}`
     fetch(relatedUrl)
       .then(r => r.json())
@@ -180,7 +182,8 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [resourceSlug, foreignKey, parentId, pathSegment, page])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is SSR-only, intentionally excluded to prevent re-fetch loop
+  }, [resourceSlug, foreignKey, parentId, pathSegment, page, throughMany])
 
   if (!resourceSlug) return null
 

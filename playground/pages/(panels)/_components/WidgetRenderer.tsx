@@ -3,8 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
 
+// Extended type to include custom widget types not in PanelSchemaElementMeta
+type WidgetRendererElement = PanelSchemaElementMeta
+  | { type: 'stat-progress'; data: Record<string, unknown> }
+  | { type: 'user-card'; data: Record<string, unknown> }
+
 export interface WidgetRendererProps {
-  element:    PanelSchemaElementMeta
+  element:    WidgetRendererElement
   panelPath:  string
   i18n:       PanelI18n
 }
@@ -40,12 +45,12 @@ export function WidgetRenderer({ element, panelPath, i18n }: WidgetRendererProps
     return <ListWidget element={element as ListElementMeta} />
   }
 
-  if ((element as any).type === 'stat-progress') {
-    return <StatProgressWidget data={(element as any).data ?? {}} />
+  if (element.type === 'stat-progress') {
+    return <StatProgressWidget data={element.data ?? {}} />
   }
 
-  if ((element as any).type === 'user-card') {
-    return <UserCardWidget data={(element as any).data ?? {}} />
+  if (element.type === 'user-card') {
+    return <UserCardWidget data={element.data ?? {}} />
   }
 
   return null
@@ -70,7 +75,7 @@ function StatCard({ stat }: { stat: PanelStatMeta }) {
 
 function StatsRow({ stats }: { stats: PanelStatMeta[] }) {
   // Single stat — render directly, filling the container
-  if (stats.length === 1) return <StatCard stat={stats[0]!} />
+  if (stats.length === 1 && stats[0]) return <StatCard stat={stats[0]} />
 
   return (
     <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(stats.length, 4)}`}>
@@ -105,7 +110,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
 
   // Client-side search (across all searchable columns)
   const searchableCols = element.columns
-    .filter((c: PanelColumnMeta) => (c as any).searchable)
+    .filter((c: PanelColumnMeta) => c.searchable)
     .map((c: PanelColumnMeta) => c.name)
 
   const filtered = search && searchableCols.length > 0
@@ -131,7 +136,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       if (from === -1 || to === -1) return prev
       const next = [...prev]
       const [item] = next.splice(from, 1)
-      next.splice(to, 0, item!)
+      if (item) next.splice(to, 0, item)
       // Persist order
       const ids = next.map((r) => String(r['id']))
       fetch(endpoint, {
@@ -144,7 +149,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     setDragging(null)
   }, [dragging])
 
-  const hasSearch = element.columns.some((c: PanelColumnMeta) => (c as any).searchable)
+  const hasSearch = element.columns.some((c: PanelColumnMeta) => c.searchable)
   const hasHref   = !!element.href
 
   return (
@@ -180,7 +185,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
               <tr className="border-b bg-muted/20">
                 {el.reorderable && <th className="w-6" />}
                 {element.columns.map((col: PanelColumnMeta) => {
-                  const sortable = (col as any).sortable as boolean | undefined
+                  const sortable = col.sortable
                   const isActive = sort?.col === col.name
                   return (
                     <th
@@ -208,14 +213,14 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
                     draggable={el.reorderable}
                     onDragStart={el.reorderable ? () => handleDragStart(id) : undefined}
                     onDragOver={el.reorderable ? handleDragOver : undefined}
-                    onDrop={el.reorderable && el.reorderEndpoint ? () => handleDrop(id, el.reorderEndpoint!) : undefined}
+                    onDrop={el.reorderable && el.reorderEndpoint ? () => handleDrop(id, el.reorderEndpoint ?? '') : undefined}
                   >
                     {el.reorderable && (
                       <td className="px-2 py-2.5 text-muted-foreground cursor-grab">⠿</td>
                     )}
                     {element.columns.map((col: PanelColumnMeta) => (
                       <td key={col.name} className="px-4 py-2.5 text-muted-foreground">
-                        {formatCellValue(record[col.name], col as any, i18n, panelPath)}
+                        {formatCellValue(record[col.name], col, i18n, panelPath)}
                       </td>
                     ))}
                     {hasHref && (
@@ -428,7 +433,7 @@ function UserCardWidget({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function formatCellValue(value: unknown, col: PanelColumnMeta & { type?: string; format?: string } | null, i18n: PanelI18n, _panelPath?: string): string {
+function formatCellValue(value: unknown, col: PanelColumnMeta | null, i18n: PanelI18n, _panelPath?: string): string {
   if (value === null || value === undefined) return '—'
   if (col?.type === 'boolean' || typeof value === 'boolean') return value ? i18n.yes : i18n.no
   if (col?.type === 'date' || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) || value instanceof Date) {

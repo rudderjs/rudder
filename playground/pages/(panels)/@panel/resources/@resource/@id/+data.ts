@@ -1,8 +1,23 @@
 import { PanelRegistry } from '@boostkit/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@boostkit/panels'
 import { getSessionUser } from '../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
+
+/** A Field with an optional `.apply(record)` method (ComputedField). */
+interface ComputedFieldLike extends Field {
+  apply(record: RecordRow): unknown
+}
+
+function flattenFields(items: FieldOrGrouping[]): Field[] {
+  const result: Field[] = []
+  for (const item of items) {
+    if ('getFields' in item) result.push(...flattenFields((item as { getFields(): FieldOrGrouping[] }).getFields()))
+    else result.push(item as Field)
+  }
+  return result
+}
 
 export async function data(pageContext: PageContextServer) {
   const { panel: pathSegment, resource: slug, id } = pageContext.routeParams as {
@@ -23,25 +38,16 @@ export async function data(pageContext: PageContextServer) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
-  function flattenFields(items: any[]): any[] {
-    const result: any[] = []
-    for (const item of items) {
-      if ('getFields' in item) result.push(...flattenFields(item.getFields()))
-      else result.push(item)
-    }
-    return result
-  }
 
-  let record   = null
+  let record: RecordRow | null = null
   if (Model) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = Model.query()
+    let q: QueryBuilderLike<RecordRow> = Model.query()
     for (const f of flattenFields(resource.fields())) {
-      const type = (f as any).getType?.() as string | undefined
-      const name = (f as any).getName() as string
+      const type = f.getType()
+      const name = f.getName()
       if (type === 'belongsTo') {
         // parentId → parent (or explicit relationName)
-        const rel = ((f as any)._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
+        const rel = ((f as unknown as { _extra: Record<string, unknown> })._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
         q = q.with(rel)
       } else if (type === 'belongsToMany') {
         // field name IS the relation name (e.g. 'categories')
@@ -53,61 +59,61 @@ export async function data(pageContext: PageContextServer) {
     // Apply display transforms + computed fields (same as API endpoint)
     if (record) {
       const allFields = flattenFields(resource.fields())
-      const computedFields = allFields.filter((f: any) => f.getType?.() === 'computed' && typeof f.apply === 'function')
-      const displayFields  = allFields.filter((f: any) => typeof f.hasDisplay === 'function' && f.hasDisplay())
+      const computedFields = allFields.filter((f): f is ComputedFieldLike => f.getType() === 'computed' && typeof (f as unknown as ComputedFieldLike).apply === 'function')
+      const displayFields  = allFields.filter((f) => f.hasDisplay())
 
       if (computedFields.length || displayFields.length) {
-        const rec = { ...record } as Record<string, unknown>
-        for (const f of computedFields) rec[(f as any).getName()] = (f as any).apply(rec)
-        for (const f of displayFields)  rec[(f as any).getName()] = (f as any).applyDisplay(rec[(f as any).getName()], rec)
+        const rec: RecordRow = { ...record }
+        for (const f of computedFields) rec[f.getName()] = f.apply(rec)
+        for (const f of displayFields)  rec[f.getName()] = f.applyDisplay(rec[f.getName()], rec)
         record = rec
       }
     }
   }
 
   // ── SSR HasMany relation data ──────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hasManyData: Record<string, { records: any[]; schema: any[]; pagination: { total: number; currentPage: number; lastPage: number; perPage: number } }> = {}
+  const hasManyData: Record<string, { records: RecordRow[]; schema: ReturnType<Field['toMeta']>[]; pagination: { total: number; currentPage: number; lastPage: number; perPage: number } }> = {}
 
   if (record) {
     for (const f of flattenFields(resource.fields())) {
-      if ((f as any).getType?.() !== 'hasMany') continue
-      const relSlug    = (f as any)._extra?.['resource'] as string | undefined
-      const fk         = (f as any)._extra?.['foreignKey'] as string | undefined
-      const throughMany = (f as any)._extra?.['throughMany'] === true
-      const fieldName  = (f as any).getName() as string
+      if (f.getType() !== 'hasMany') continue
+      const fExtra     = (f as unknown as { _extra: Record<string, unknown> })._extra
+      const relSlug    = fExtra?.['resource'] as string | undefined
+      const fk         = fExtra?.['foreignKey'] as string | undefined
+      const throughMany = fExtra?.['throughMany'] === true
+      const fieldName  = f.getName()
       if (!relSlug || !fk) continue
 
       const RelClass = panel.getResources().find((R) => R.getSlug() === relSlug)
       if (!RelClass) continue
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const RelModel = (RelClass as any).model as any
+      const RelModel = RelClass.model as any
       if (!RelModel) continue
 
       const relResource = new RelClass()
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = throughMany
+      let q: QueryBuilderLike<RecordRow> = throughMany
         ? RelModel.query().where(fk, { some: { id } })
         : RelModel.query().where(fk, id)
 
       // Eager-load belongsTo and belongsToMany relations so CellValue can display them
       for (const rf of flattenFields(relResource.fields())) {
-        const rfType = (rf as any).getType?.() as string | undefined
+        const rfType = rf.getType()
         if (rfType === 'belongsTo') {
-          const rname = (rf as any).getName() as string
-          const rel = ((rf as any)._extra?.['relationName'] as string) ?? (rname.endsWith('Id') ? rname.slice(0, -2) : rname)
+          const rname = rf.getName()
+          const rel = ((rf as unknown as { _extra: Record<string, unknown> })._extra?.['relationName'] as string) ?? (rname.endsWith('Id') ? rname.slice(0, -2) : rname)
           q = q.with(rel)
         } else if (rfType === 'belongsToMany') {
-          q = q.with((rf as any).getName() as string)
+          q = q.with(rf.getName())
         }
       }
 
       const result = await q.paginate(1, 15)
 
       const schema = flattenFields(relResource.fields())
-        .filter((rf: any) => !rf.isHiddenFrom?.('table') && rf.getType?.() !== 'hasMany')
-        .map((rf: any) => rf.toMeta())
+        .filter((rf) => !rf.isHiddenFrom('table') && rf.getType() !== 'hasMany')
+        .map((rf) => rf.toMeta())
 
       hasManyData[fieldName] = {
         records:    result.data,
@@ -125,8 +131,8 @@ export async function data(pageContext: PageContextServer) {
   // Resolve resource widgets for the show page
   let widgetData: unknown[] = []
   try {
-    const widgets = resource.widgets(record as Record<string, unknown> ?? undefined)
-    widgetData = widgets.map((w: any) => w.toMeta())
+    const widgets = resource.widgets(record ?? undefined)
+    widgetData = widgets.map((w) => w.toMeta())
   } catch { /* widgets() threw — skip */ }
 
   const sessionUser = await getSessionUser(pageContext)

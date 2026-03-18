@@ -1,19 +1,33 @@
-import { icons } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
-interface ResourceIconProps {
-  icon: string | undefined
-  className?: string
+type IconComponent = React.ComponentType<{ className?: string }>
+
+// Module-level cache — icons are loaded once on first use.
+let iconsCache: Record<string, IconComponent> | null = null
+let loadPromise: Promise<void> | null = null
+
+function loadIcons(): Promise<void> {
+  if (iconsCache) return Promise.resolve()
+  if (!loadPromise) {
+    loadPromise = import('lucide-react').then((mod) => {
+      iconsCache = mod.icons as Record<string, IconComponent>
+    }).catch(() => {
+      iconsCache = {}
+    })
+  }
+  return loadPromise
 }
 
-/**
- * Convert a kebab-case or camelCase icon name to PascalCase.
- * e.g. "file-text" → "FileText", "shoppingCart" → "ShoppingCart", "Users" → "Users"
- */
 function toPascalCase(name: string): string {
   return name
     .split('-')
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join('')
+}
+
+interface ResourceIconProps {
+  icon: string | undefined
+  className?: string
 }
 
 /**
@@ -29,26 +43,38 @@ function toPascalCase(name: string): string {
  *   Rendered as-is in a span.
  */
 export function ResourceIcon({ icon, className = 'size-4' }: ResourceIconProps) {
+  const [LucideIcon, setLucideIcon] = useState<IconComponent | null>(() => {
+    if (!icon || icon.startsWith('<svg') || /[^\x00-\x7F]/.test(icon)) return null // eslint-disable-line no-control-regex
+    if (iconsCache) return iconsCache[toPascalCase(icon)] ?? null
+    return null
+  })
+
+  useEffect(() => {
+    if (!icon || icon.startsWith('<svg') || /[^\x00-\x7F]/.test(icon)) return // eslint-disable-line no-control-regex
+    const pascalName = toPascalCase(icon)
+    if (iconsCache) {
+      setLucideIcon(() => iconsCache![pascalName] ?? null)
+      return
+    }
+    loadIcons().then(() => {
+      setLucideIcon(() => (iconsCache?.[pascalName]) ?? null)
+    }).catch(() => {})
+  }, [icon])
+
   if (!icon) return null
 
-  // Inline SVG
   if (icon.startsWith('<svg')) {
     return <span className={className} dangerouslySetInnerHTML={{ __html: icon }} />
   }
 
-  // Emoji or other non-ASCII — render as text
   // eslint-disable-next-line no-control-regex
   if (/[^\x00-\x7F]/.test(icon)) {
     return <span className={className}>{icon}</span>
   }
 
-  // Lucide icon lookup (PascalCase or kebab-case)
-  const pascalName = toPascalCase(icon)
-  const LucideIcon = (icons as Record<string, React.ComponentType<{ className?: string }>>)[pascalName]
   if (LucideIcon) {
     return <LucideIcon className={className} />
   }
 
-  // Fallback: render as text
   return <span className={className}>{icon}</span>
 }

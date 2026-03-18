@@ -28,9 +28,9 @@ export function useLiveTable(options: {
       }
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment
+         
         // @ts-expect-error — Vite resolves this runtime path; no static module declaration
-        const mod = await import('/src/BKSocket.ts') as any
+        const mod = await import('/src/BKSocket.ts') as { BKSocket: typeof BKSocket }
         BKSocket = mod.BKSocket
       } catch {
         return // BKSocket not available
