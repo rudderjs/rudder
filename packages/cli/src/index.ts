@@ -94,7 +94,7 @@ async function main(): Promise<void> {
       const root:   typeof cmds = []
       const groups: Record<string, typeof cmds> = {}
       for (const c of cmds) {
-        const ns = c.name().split(':')[0]!
+        const ns = c.name().split(':')[0] ?? c.name()
         if (!c.name().includes(':')) root.push(c)
         else groups[ns] = [...(groups[ns] ?? []), c]
       }
@@ -147,7 +147,6 @@ async function main(): Promise<void> {
           const entries = await fs.readdir(dir, { withFileTypes: true })
           const hasPage = entries.some(e => e.isFile() && e.name.startsWith('+Page.'))
           if (hasPage) {
-            const segment = path.basename(dir)
             const route   = base === '' ? '/' : base
             const relDir  = path.relative(pagesDir, dir)
             vikeRoutes.push({ route, dir: relDir })

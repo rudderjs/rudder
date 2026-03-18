@@ -70,7 +70,7 @@ function StatCard({ stat }: { stat: PanelStatMeta }) {
 
 function StatsRow({ stats }: { stats: PanelStatMeta[] }) {
   // Single stat — render directly, filling the container
-  if (stats.length === 1) return <StatCard stat={stats[0]!} />
+  if (stats.length === 1 && stats[0]) return <StatCard stat={stats[0]} />
 
   return (
     <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(stats.length, 4)}`}>
@@ -131,7 +131,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       if (from === -1 || to === -1) return prev
       const next = [...prev]
       const [item] = next.splice(from, 1)
-      next.splice(to, 0, item!)
+      if (item) next.splice(to, 0, item)
       // Persist order
       const ids = next.map((r) => String(r['id']))
       fetch(endpoint, {
@@ -208,7 +208,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
                     draggable={el.reorderable}
                     onDragStart={el.reorderable ? () => handleDragStart(id) : undefined}
                     onDragOver={el.reorderable ? handleDragOver : undefined}
-                    onDrop={el.reorderable && el.reorderEndpoint ? () => handleDrop(id, el.reorderEndpoint!) : undefined}
+                    onDrop={el.reorderable && el.reorderEndpoint ? () => handleDrop(id, el.reorderEndpoint ?? '') : undefined}
                   >
                     {el.reorderable && (
                       <td className="px-2 py-2.5 text-muted-foreground cursor-grab">⠿</td>

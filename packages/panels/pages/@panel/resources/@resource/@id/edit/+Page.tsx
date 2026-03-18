@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useData }   from 'vike-react/useData'
-import { navigate }  from 'vike/client/router'
 import { useConfig } from 'vike-react/useConfig'
 import { Breadcrumbs }      from '../../../../../_components/Breadcrumbs.js'
 import { EditToolbar }      from '../../../../../_components/edit/EditToolbar.js'
@@ -84,12 +83,12 @@ export default function EditPage() {
   const remoteSetValueRef = useRef<(name: string, value: unknown) => void>(() => {})
 
   const {
-    connected, synced, presences,
+    connected, synced: _synced, presences,
     setCollaborativeValue, syncAllFieldsToDoc,
-    getDoc, awareness, userName, userColor,
+    getDoc: _getDoc, awareness: _awareness, userName, userColor,
   } = useCollaborativeForm(
     yjs && docName
-      ? { docName: docName!, wsPath: wsLivePath ?? '', fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
+      ? { docName: docName, wsPath: wsLivePath ?? '', fields: collabFields, values: initialValues, getValues: () => currentValuesRef.current, setValue: (name, value) => remoteSetValueRef.current(name, value), providers: liveProviders as any }
       : null,
   )
 
@@ -99,7 +98,7 @@ export default function EditPage() {
   // ── Edit form state ──────────────────────────────────────
   const {
     values, errors, saving, activeVersionId, isRestorePreview,
-    setValue, setFormValue, resetForm, rejoinLive, handleSave, handleSubmit, restoreVersion,
+    setValue, setFormValue, resetForm: _resetForm, rejoinLive, handleSave, handleSubmit, restoreVersion,
   } = useEditForm({
     pathSegment, slug, id, initialValues, backHref,
     versioned, draftable, yjs, i18n,

@@ -59,7 +59,7 @@ export class MemoryPersistence implements LivePersistence {
 
   async getYDoc(docName: string): Promise<Y.Doc> {
     if (!this.docs.has(docName)) this.docs.set(docName, new Y.Doc())
-    return this.docs.get(docName)!
+    return this.docs.get(docName) ?? new Y.Doc()
   }
 
   async storeUpdate(docName: string, update: Uint8Array): Promise<void> {
@@ -244,7 +244,8 @@ function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
     }).catch(() => {})
     rooms.set(docName, { doc, clients: new Set(), ready, awarenessMap: new Map() })
   }
-  return rooms.get(docName)!
+  // rooms.get() is guaranteed non-null: key was inserted above if missing
+  return rooms.get(docName) as Room
 }
 
 // ─── WebSocket connection handler ────────────────────────────
@@ -300,7 +301,7 @@ async function handleConnection(
   onChange?:   LiveConfig['onChange'],
 ): Promise<void> {
   // Extract document name from URL path: /ws-live/my-doc → my-doc
-  const docName = (req.url ?? '/').split('?')[0]!.split('/').filter(Boolean).pop() ?? 'default'
+  const docName = ((req.url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
   const room    = getOrCreateRoom(docName, persistence)
   room.clients.add(ws)
 
@@ -412,7 +413,7 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
         | undefined
 
       g[LIVE_UPGRADE_KEY] = (req: IncomingMessage, socket: unknown, head: unknown) => {
-        const pathname = (req.url ?? '/').split('?')[0]!
+        const pathname = (req.url ?? '/').split('?')[0] ?? '/'
         if (pathname.startsWith(path)) {
           wss.handleUpgrade(req, socket as import('net').Socket, head as Buffer, (ws) => {
             wss.emit('connection', ws, req)

@@ -12,7 +12,6 @@ import { useFormPersist }   from '../../../../_hooks/useFormPersist.js'
 import { useFieldPersist }  from '../../../../_hooks/useFieldPersist.js'
 import { flattenFormFields, t } from '../../../../_lib/formHelpers.js'
 import type { SchemaItem }  from '../../../../_lib/formHelpers.js'
-import type { FieldMeta }   from '@boostkit/panels'
 import type { Data } from './+data.js'
 
 function generateSlug(str: string): string {
@@ -93,6 +92,7 @@ export default function CreatePage() {
   })
 
   // Auto-generate slug from source field
+  const valuesKey = Object.values(values).join(',')
   useEffect(() => {
     const slugFields = formFields.filter((f) => f.type === 'slug' && f.extra?.['from'])
     for (const slugField of slugFields) {
@@ -103,7 +103,8 @@ export default function CreatePage() {
         setValues((prev) => ({ ...prev, [slugField.name]: generateSlug(sourceValue) }))
       }
     }
-  }, [Object.values(values).join(',')])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is a stable serialization of values; formFields is stable from SSR
+  }, [valuesKey])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

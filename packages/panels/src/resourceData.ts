@@ -80,8 +80,8 @@ export async function resourceData(ctx: ResourceDataContext): Promise<ResourceDa
     if (search) {
       const cols = flattenFields(resource.fields()).filter((f) => f.isSearchable()).map((f) => f.getName())
       if (cols.length > 0) {
-        q = q.where(cols[0]!, 'LIKE', `%${search}%`)
-        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i]!, `%${search}%`)
+        q = q.where(cols[0] ?? '', 'LIKE', `%${search}%`)
+        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i] ?? '', `%${search}%`)
       }
     }
 

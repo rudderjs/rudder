@@ -14,8 +14,8 @@ function parseStack(stack: string): StackFrame[] {
            ?? raw.match(/^\s+at (.+?):(\d+):(\d+)$/)
     if (!m) return []
     const [func, file, line, col] = m.length === 5
-      ? [m[1]!, m[2]!, m[3]!, m[4]!]
-      : ['<anonymous>', m[1]!, m[2]!, m[3]!]
+      ? [m[1] ?? '', m[2] ?? '', m[3] ?? '', m[4] ?? '']
+      : ['<anonymous>', m[1] ?? '', m[2] ?? '', m[3] ?? '']
     const cleanFile = file.replace(/^file:\/\//, '')
     return [{
       func,

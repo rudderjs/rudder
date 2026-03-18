@@ -157,7 +157,7 @@ describe('SessionInstance — flash', () => {
   })
 
   it('flash value is gone after the request that reads it', async () => {
-    const { session: r1, setCookie: c1 } = await runRequest('', s => s.flash('msg', 'hello'))
+    const { session: _r1, setCookie: c1 } = await runRequest('', s => s.flash('msg', 'hello'))
     const cv1 = extractCookieValue(c1!)
     const { session: r2, setCookie: c2 } = await runRequest(`bk_sess=${cv1}`)
     assert.strictEqual(r2.getFlash('msg'), 'hello')
@@ -301,7 +301,7 @@ describe('Session facade', () => {
   })
 
   it('flash() + getFlash() (cross-request via instance)', async () => {
-    const { session: r1, setCookie } = await runRequest('', () => Session.flash('notice', 'ok'))
+    const { session: _r1, setCookie } = await runRequest('', () => Session.flash('notice', 'ok'))
     assert.ok(setCookie)
     const cookieValue = extractCookieValue(setCookie)
     const { session: r2 } = await runRequest(`bk_sess=${cookieValue}`)
@@ -310,7 +310,7 @@ describe('Session facade', () => {
 
   it('regenerate() changes session ID', async () => {
     await run(async () => {
-      const s = (Session as unknown as { current(): SessionInstance }).current?.() ?? null
+      const _s = (Session as unknown as { current(): SessionInstance }).current?.() ?? null
       // Test via instance
     })
     // Test through the middleware directly

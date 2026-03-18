@@ -78,9 +78,9 @@ export function mountResourceRoutes(
     if (search) {
       const searchableCols = flattenFields(resource.fields()).filter(f => f.isSearchable()).map(f => f.getName())
       if (searchableCols.length > 0) {
-        q = q.where(searchableCols[0]!, 'LIKE', `%${search}%`)
+        q = q.where(searchableCols[0] ?? '', 'LIKE', `%${search}%`)
         for (let i = 1; i < searchableCols.length; i++) {
-          q = q.orWhere(searchableCols[i]!, `%${search}%`)
+          q = q.orWhere(searchableCols[i] ?? '', `%${search}%`)
         }
       }
     }

@@ -4,9 +4,6 @@ import {
   auth,
   betterAuth,
   AuthMiddleware,
-  type AuthUser,
-  type AuthSession,
-  type AuthResult,
   type BetterAuthConfig,
   type AuthDbConfig,
 } from './index.js'

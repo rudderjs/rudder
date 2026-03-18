@@ -183,7 +183,7 @@ export async function resolveSchema(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as any)?.toMeta === 'function'
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const columns: import('./schema/Table.js').PanelColumnMeta[] = isColumnInstances
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ? (config.columns as any[]).map((col: any) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)

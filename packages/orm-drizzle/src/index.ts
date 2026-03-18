@@ -156,7 +156,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       .insert(this.table)
       .values(data)
       .returning()
-    return result[0]!
+    if (!result[0]) throw new Error('[BoostKit ORM Drizzle] create() returned no rows.')
+    return result[0]
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
@@ -166,7 +167,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       .set(data)
       .where(eq(pkCol as any, id))
       .returning()
-    return result[0]!
+    if (!result[0]) throw new Error('[BoostKit ORM Drizzle] update() returned no rows.')
+    return result[0]
   }
 
   async delete(id: number | string): Promise<void> {
@@ -241,7 +243,8 @@ class DrizzleAdapter implements OrmAdapter {
       }
     }
 
-    return new DrizzleAdapter(db!, config.tables ?? {}, config.primaryKey ?? 'id')
+    if (!db) throw new Error('[BoostKit ORM Drizzle] Failed to initialize database client.')
+    return new DrizzleAdapter(db, config.tables ?? {}, config.primaryKey ?? 'id')
   }
 
   query<T>(table: string): QueryBuilder<T> {

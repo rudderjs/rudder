@@ -220,7 +220,7 @@ export function auth(
             user: {
               create: {
                 after: async (user: { id: string; name: string; email: string }) => {
-                  await config.onUserCreated!(user)
+                  await config.onUserCreated(user)
                 },
               },
             },

@@ -203,7 +203,7 @@ export function makeModule(program: Command): void {
       try {
         await autoRegisterProvider(name, process.cwd())
         s2.stop('Provider registered in app/bootstrap/providers.ts')
-      } catch (e) {
+      } catch (_e) {
         s2.stop('Could not auto-register provider')
       }
 

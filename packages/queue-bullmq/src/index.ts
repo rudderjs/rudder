@@ -89,7 +89,8 @@ class BullMQAdapter implements QueueAdapter {
         prefix:     this.prefix,
       }))
     }
-    return this.queues.get(name)!
+    // .get() is safe: key was just inserted via .set() above if missing
+    return this.queues.get(name) as Queue
   }
 
   private async processor(bullJob: { name: string; data: Record<string, unknown> }): Promise<void> {

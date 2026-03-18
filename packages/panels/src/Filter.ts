@@ -68,7 +68,7 @@ export abstract class Filter {
       if (col === '_search') {
         const { value: sv, columns } = val as { value: string; columns: string[] }
         if (columns[0]) q = q.where(columns[0], 'LIKE', `%${sv}%`)
-        for (let i = 1; i < columns.length; i++) q = q.orWhere(columns[i]!, `%${sv}%`)
+        for (let i = 1; i < columns.length; i++) q = q.orWhere(columns[i] ?? '', `%${sv}%`)
       } else {
         q = q.where(col, val)
       }

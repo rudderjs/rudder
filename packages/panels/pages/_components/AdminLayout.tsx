@@ -102,6 +102,7 @@ function useSessionUser(initial?: SessionUser): SessionUser | null {
       .then(r => r.ok ? r.json() : null)
       .then((data: { user?: SessionUser } | null) => { if (data?.user) setUser(data.user) })
       .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: run once on mount, skip fetch when SSR user is provided
   }, [])
   return user
 }
@@ -224,7 +225,7 @@ function SidebarLogo({ branding, name, path }: { branding: PanelMeta['branding']
       {branding?.logo ? (
         <>
           {isSvg
-            ? <SvgMask src={branding.logo!} className="inline-block h-6 w-6 shrink-0" />
+            ? <SvgMask src={branding.logo} className="inline-block h-6 w-6 shrink-0" />
             : <img src={branding.logo} alt={title} className="h-6 w-6 shrink-0" />
           }
           <span className="text-sm font-semibold truncate group-data-[collapsible=icon]:hidden">{title}</span>

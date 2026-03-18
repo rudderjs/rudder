@@ -80,8 +80,9 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
   useEffect(() => {
     if (!options) return
+    const opts = options
     let destroyed = false
-    const providers = options.providers ?? ['websocket']
+    const providers = opts.providers ?? ['websocket']
     const useWebsocket = providers.includes('websocket')
     const useIndexeddb = providers.includes('indexeddb')
 
@@ -94,8 +95,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       docRef.current = doc
 
       const fieldsMap  = doc.getMap('fields')
-      const textFields = options!.fields.filter(f => f.yjs && f.textField)
-      const mapFields  = options!.fields.filter(f => f.yjs && !f.textField)
+      const textFields = opts.fields.filter(f => f.yjs && f.textField)
+      const mapFields  = opts.fields.filter(f => f.yjs && !f.textField)
 
       // Create Y.Text instances for text fields
       const yTexts = new Map<string, any>()
@@ -107,24 +108,25 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
 
       // Observe Y.Text changes → update React state
       for (const f of textFields) {
-        const yText = yTexts.get(f.name)!
+        const yText = yTexts.get(f.name)
+        if (!yText) continue
         yText.observe(() => {
           if (suppressRef.current.has(f.name)) {
             suppressRef.current.delete(f.name)
             return
           }
-          options!.setValue(f.name, yText.toString())
+          opts.setValue(f.name, yText.toString())
         })
       }
 
       // Observe Y.Map changes for non-text fields → update React state
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       fieldsMap.observe((event: any) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         event.keysChanged.forEach((key: string) => {
           if (suppressRef.current.has(key)) { suppressRef.current.delete(key); return }
           const field = mapFields.find(f => f.name === key)
-          if (field) options!.setValue(key, fieldsMap.get(key))
+          if (field) opts.setValue(key, fieldsMap.get(key))
         })
       })
 
@@ -133,10 +135,11 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
       function seedAfterSync() {
         if (destroyed) return
         // Use getValues() for latest form values (avoids stale closure after version restore)
-        const vals = options!.getValues?.() ?? options!.values
+        const vals = opts.getValues?.() ?? opts.values
         doc.transact(() => {
           for (const f of textFields) {
-            const yText = yTexts.get(f.name)!
+            const yText = yTexts.get(f.name)
+            if (!yText) continue
             const initVal = String(vals[f.name] ?? '')
             if (yText.length === 0 && initVal) {
               yText.insert(0, initVal)
@@ -153,7 +156,7 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         import('y-indexeddb' as any).then(({ IndexeddbPersistence }: any) => {
           if (destroyed) return
-          const idb = new IndexeddbPersistence(options!.docName, doc)
+          const idb = new IndexeddbPersistence(opts.docName, doc)
           idbRef.current = idb
 
           // If no WebSocket, seed after IDB syncs (restores offline data)
@@ -180,8 +183,8 @@ export function useCollaborativeForm(options: CollaborativeFormOptions | null): 
         if (destroyed) return
 
         const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
-        const wsUrl    = `${wsProto}://${window.location.host}${options!.wsPath}`
-        const wsProvider = new WebsocketProvider(wsUrl, options!.docName, doc)
+        const wsUrl    = `${wsProto}://${window.location.host}${opts.wsPath}`
+        const wsProvider = new WebsocketProvider(wsUrl, opts.docName, doc)
 
         providerRef.current  = wsProvider
         awarenessRef.current = wsProvider.awareness

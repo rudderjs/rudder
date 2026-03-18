@@ -37,9 +37,7 @@ function isDirty(current: Record<string, unknown>, initial: Record<string, unkno
 
 export function useAutosave(opts: UseAutosaveOptions) {
   const {
-    enabled, interval, endpoint, values, initialValues,
-    saving, isRestorePreview, syncAllFieldsToDoc, yjs,
-    onSaved, onValidationError,
+    enabled, interval, values, initialValues,
   } = opts
 
   const [status, setStatus] = useState<AutosaveStatus>('idle')
@@ -89,7 +87,7 @@ export function useAutosave(opts: UseAutosaveOptions) {
     } catch {
       setStatus('error')
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])  
 
   // ── Interval timer ──────────────────────────────────────────
   useEffect(() => {

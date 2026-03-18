@@ -309,7 +309,7 @@ describe('ExceptionConfigurator', () => {
   it('render() takes precedence over the default 422 for ValidationError subclass', async () => {
     class StrictValidationError extends ValidationError {}
     const exc = new ExceptionConfigurator()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     exc.render(StrictValidationError as any, () =>
       new Response(JSON.stringify({ message: 'custom' }), { status: 400 })
     )
@@ -320,13 +320,13 @@ describe('ExceptionConfigurator', () => {
 
   it('render() returns this for chaining', () => {
     const exc = new ExceptionConfigurator()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     assert.strictEqual(exc.render(Error as any, () => new Response(null, { status: 500 })), exc)
   })
 
   it('ignore() returns this for chaining', () => {
     const exc = new ExceptionConfigurator()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     assert.strictEqual(exc.ignore(Error as any), exc)
   })
 })

@@ -333,7 +333,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     const addLabel = (field.extra?.addLabel as string) ?? i18n.addItem
     const maxItems = field.extra?.maxItems as number | undefined
     const nodeMap  = ensureNodeMap(value)
-    const root     = nodeMap.ROOT!
+    const root     = nodeMap.ROOT ?? { type: 'container', props: {}, parent: '', nodes: [] }
     const nodeIds  = root.nodes
 
     function emit(next: NodeMap) { onChange(next) }
@@ -420,7 +420,7 @@ export function FieldInput({ field, value, onChange, uploadBase = '', i18n, disa
     const addLabel  = (field.extra?.addLabel as string) ?? i18n.addBlock
     const maxItems  = field.extra?.maxItems as number | undefined
     const nodeMap   = ensureNodeMap(value)
-    const root      = nodeMap.ROOT!
+    const root      = nodeMap.ROOT ?? { type: 'container', props: {}, parent: '', nodes: [] }
     const nodeIds   = root.nodes
     const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -807,6 +807,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, 
   }, [focusedIdx, open])
 
   // Auto-generate slugs inside the create dialog
+  const createValuesKey = JSON.stringify(createValues)
   useEffect(() => {
     if (!createOpen || createSchema.length === 0) return
     const slugFields = createSchema.filter(f => f.type === 'slug' && f.extra?.['from'])
@@ -822,7 +823,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, 
       }
       return next
     })
-  }, [createOpen, createSchema, JSON.stringify(createValues)])
+  }, [createOpen, createSchema, createValuesKey])
 
   const filtered = useMemo(() =>
     opts.filter(o => o.label.toLowerCase().includes(query.toLowerCase())),
@@ -856,7 +857,7 @@ function BelongsToManyCombobox({ field, value, onChange, uploadBase = '', i18n, 
     } else if (e.key === 'Enter' && open) {
       e.preventDefault()
       if (focusedIdx >= 0 && focusedIdx < filtered.length) {
-        toggle(filtered[focusedIdx]!.value)
+        toggle(filtered[focusedIdx]?.value ?? '')
       } else if (showCreate && focusedIdx === filtered.length) {
         void openCreateDialog()
       }

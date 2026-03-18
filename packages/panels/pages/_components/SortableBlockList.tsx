@@ -4,7 +4,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { icons } from 'lucide-react'
 
-const GripVertical = icons['GripVertical']!
+const GripVertical = icons['GripVertical'] ?? (() => null)
 
 interface Props {
   /** Ordered node IDs. */
@@ -47,7 +47,7 @@ export function SortableBlockList({ nodeIds, renderNode, onReorder, disabled }: 
     const fromIndex = nodeIds.indexOf(active.id as string)
     const toIndex = nodeIds.indexOf(over.id as string)
     if (fromIndex === -1 || toIndex === -1) return
-    onReorder!(fromIndex, toIndex)
+    onReorder(fromIndex, toIndex)
   }
 
   return (

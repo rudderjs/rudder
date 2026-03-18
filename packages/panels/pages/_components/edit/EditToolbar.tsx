@@ -22,7 +22,7 @@ interface Props {
 export function EditToolbar({
   yjs, versioned, draftable,
   connected, presences, recordStatus,
-  showHistory, onToggleHistory, i18n,
+  showHistory: _showHistory, onToggleHistory, i18n,
   autosave, autosaveStatus, autosaveDirty,
 }: Props) {
   if (!yjs && !versioned && !draftable && !autosave) return null

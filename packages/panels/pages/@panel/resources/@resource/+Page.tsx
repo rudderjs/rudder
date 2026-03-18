@@ -129,7 +129,7 @@ export default function ResourceListPage() {
   const currentDir    = (urlParams.get('dir') ?? resourceMeta.defaultSortDir ?? 'ASC') as 'ASC' | 'DESC'
   const currentSearch = urlParams.get('search') ?? ''
   const isTrashed     = urlParams.get('trashed') === 'true'
-  const draftFilter   = urlParams.get('draft') // 'true' | 'false' | null (all)
+  const _draftFilter  = urlParams.get('draft') // 'true' | 'false' | null (all)
   const hasActiveFilters = urlParams.has('search') || [...urlParams.keys()].some((k) => k.startsWith('filter['))
 
   // Reset selection and loadMore state when navigating to a different resource
@@ -163,7 +163,7 @@ export default function ResourceListPage() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [isLoadMore, pathSegment, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoadMore, pathSegment, slug])  
 
   // Sync search input from URL on external navigation (back/forward button)
   // but NOT from our own debounced updates (which would overwrite user typing)
@@ -430,7 +430,7 @@ export default function ResourceListPage() {
       {/* ── List tabs (hidden when viewing trash) ──────────────── */}
       {resourceMeta.tabs.length > 0 && !isTrashed && (() => {
         const activeTab  = urlParams.get('tab') ?? ''
-        const firstTab   = resourceMeta.tabs[0]!.name
+        const firstTab   = resourceMeta.tabs[0]?.name ?? ''
         const basePath   = `/${pathSegment}/resources/${slug}`
 
         function switchTab(name: string) {

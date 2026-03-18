@@ -344,7 +344,7 @@ describe('@boostkit/ws', () => {
       withServer(async (port) => {
         registerAuth('presence-gameroom', async () => ({ id: '2', name: 'Bob' }))
         const { ws: ws1, q: q1 } = await connect(port)
-        const { ws: ws2, q: q2 } = await connect(port)
+        const { ws: ws2, q: _q2 } = await connect(port)
 
         await send(ws1, q1, { type: 'subscribe', channel: 'presence-gameroom' })
         await q1.next()  // presence.members (ws1 alone)

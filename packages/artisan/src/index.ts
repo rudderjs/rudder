@@ -91,7 +91,7 @@ export function parseSignature(signature: string): ParsedSignature {
 
   for (const [, block] of signature.matchAll(/\{([^}]+)\}/g)) {
     // Strip inline description: {user : The user ID} → {user}
-    const trimmed = block!.split(':')[0]!.trim()
+    const trimmed = (block ?? '').split(':')[0]?.trim() ?? ''
 
     if (trimmed.startsWith('--')) {
       // Option: {--force} {--name=} {--name=default} {--N|name=}

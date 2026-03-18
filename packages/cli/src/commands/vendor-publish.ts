@@ -188,7 +188,7 @@ async function copyDir(src: string, dest: string, force: boolean): Promise<numbe
   if (srcStat.isFile()) {
     if (!force) {
       const { existsSync } = await import('node:fs')
-      const target = join(dest, src.split('/').pop()!)
+      const target = join(dest, src.split('/').pop() ?? '')
       if (existsSync(target)) return 1
     }
     await cp(src, dest, { recursive: true, force })

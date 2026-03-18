@@ -174,7 +174,7 @@ export async function validatePayload(
     const result = await field.runValidate(value, body)
     if (result !== true) {
       if (errors[name]) {
-        errors[name] = [...errors[name]!, result]
+        errors[name] = [...(errors[name] ?? []), result]
       } else {
         errors[name] = [result]
       }

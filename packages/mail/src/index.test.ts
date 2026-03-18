@@ -9,7 +9,6 @@ import {
   mail,
   type MailAdapter,
   type SendOptions,
-  type MailMessage,
 } from './index.js'
 
 // ─── Helpers ───────────────────────────────────────────────

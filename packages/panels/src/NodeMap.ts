@@ -155,7 +155,7 @@ export function moveNode(map: NodeMap, id: string, direction: -1 | 1): NodeMap {
   const idx   = nodes.indexOf(id)
   const other = idx + direction
   if (other < 0 || other >= nodes.length) return map
-  ;[nodes[idx], nodes[other]] = [nodes[other]!, nodes[idx]!]
+  ;[nodes[idx], nodes[other]] = [nodes[other] ?? nodes[idx], nodes[idx] ?? nodes[other]]
 
   return { ...map, [node.parent]: { ...parent, nodes } }
 }
@@ -183,13 +183,12 @@ export function reorderNode(map: NodeMap, id: string, fromIndex: number, toIndex
 export function arrayToNodeMap(
   blocks: Array<{ _type: string; [key: string]: unknown }>,
 ): NodeMap {
-  const map: NodeMap = {
-    ROOT: { type: 'container', props: {}, parent: '', nodes: [] },
-  }
+  const root: NodeData = { type: 'container', props: {}, parent: '', nodes: [] }
+  const map: NodeMap = { ROOT: root }
   for (const block of blocks) {
     const id = nodeId()
     const { _type, ...props } = block
-    map.ROOT!.nodes.push(id)
+    root.nodes.push(id)
     map[id] = { type: _type, props, parent: 'ROOT', nodes: [] }
   }
   return map
@@ -202,12 +201,11 @@ export function arrayToNodeMap(
 export function repeaterArrayToNodeMap(
   items: Array<Record<string, unknown>>,
 ): NodeMap {
-  const map: NodeMap = {
-    ROOT: { type: 'container', props: {}, parent: '', nodes: [] },
-  }
+  const root: NodeData = { type: 'container', props: {}, parent: '', nodes: [] }
+  const map: NodeMap = { ROOT: root }
   for (const item of items) {
     const id = nodeId()
-    map.ROOT!.nodes.push(id)
+    root.nodes.push(id)
     map[id] = { type: 'item', props: { ...item }, parent: 'ROOT', nodes: [] }
   }
   return map
@@ -224,8 +222,8 @@ export function nodeMapToArray(
   if (!root) return []
   return root.nodes
     .map(id => map[id])
-    .filter(Boolean)
-    .map(node => ({ _type: node!.type, ...node!.props }))
+    .filter((node): node is NodeData => node !== undefined)
+    .map(node => ({ _type: node.type, ...node.props }))
 }
 
 /**

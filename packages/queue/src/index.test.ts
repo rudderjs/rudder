@@ -250,11 +250,11 @@ describe('artisan commands — full adapter', () => {
     const mockFull: QueueAdapter = {
       async dispatch() {},
       async work(queues = 'default') { worked.push(queues) },
-      async status(q = 'default') {
+      async status(_q = 'default') {
         return { waiting: 2, active: 1, completed: 10, failed: 3, delayed: 0, paused: 0 }
       },
       async flush(q = 'default') { cleared.push(q) },
-      async failures(q = 'default', _limit?: number) {
+      async failures(_q = 'default', _limit?: number) {
         return [{ id: '1', name: 'TestJob', data: {}, error: 'boom', failedAt: new Date(), attempts: 3 }]
       },
       async retryFailed(q = 'default') { retried.push(q); return 1 },
