@@ -149,13 +149,13 @@ export function auth(
   class BetterAuthProvider extends ServiceProvider {
     register(): void {
       // Auth pages (framework-specific) — published to pages/(auth)/ route group
-      this.publishes({ from: new URL('../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages' })
-      this.publishes({ from: new URL('../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-react' })
-      this.publishes({ from: new URL('../pages/vue',   import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-vue' })
-      this.publishes({ from: new URL('../pages/solid', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-solid' })
+      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages' })
+      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-react' })
+      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/vue',   import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-vue' })
+      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/solid', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-solid' })
 
       // Auth schema (ORM + driver-specific)
-      const schemaDir = new URL('../schema', import.meta.url).pathname
+      const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
       this.publishes([
         { from: `${schemaDir}/auth.prisma`,            to: 'prisma/schema',   tag: 'auth-schema', orm: 'prisma' as const },
         { from: `${schemaDir}/auth.drizzle.sqlite.ts`, to: 'database/schema', tag: 'auth-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },

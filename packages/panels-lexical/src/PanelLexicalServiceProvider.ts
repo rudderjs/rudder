@@ -5,7 +5,7 @@ export class PanelLexicalServiceProvider extends ServiceProvider {
 
   boot(): void {
     this.publishes({
-      from: new URL('../pages', import.meta.url).pathname,
+      from: new URL(/* @vite-ignore */ '../pages', import.meta.url).pathname,
       to:   'pages/(panels)',
       tag:  'panels-lexical-pages',
     })

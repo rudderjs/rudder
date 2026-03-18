@@ -175,7 +175,7 @@ export const notify = (
 export function notifications(): new (app: Application) => ServiceProvider {
   class NotificationServiceProvider extends ServiceProvider {
     register(): void {
-      const schemaDir = new URL('../schema', import.meta.url).pathname
+      const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
       this.publishes([
         { from: `${schemaDir}/notification.prisma`,            to: 'prisma/schema',   tag: 'notification-schema', orm: 'prisma' as const },
         { from: `${schemaDir}/notification.drizzle.sqlite.ts`, to: 'database/schema', tag: 'notification-schema', orm: 'drizzle' as const, driver: 'sqlite' as const },
