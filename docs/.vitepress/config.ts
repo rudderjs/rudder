@@ -19,11 +19,12 @@ export default defineConfig({
       { text: 'Packages', link: '/packages/', activeMatch: '/packages/' },
       { text: 'CLI', link: '/cli/', activeMatch: '/cli/' },
       { text: 'Integrations', link: '/integrations/', activeMatch: '/integrations/' },
+      { text: 'Contributing', link: '/contributing/', activeMatch: '/contributing/' },
       {
         text: 'v0.1.0',
         items: [
           { text: 'Changelog', link: 'https://github.com/boostkitjs/boostkit/releases' },
-          { text: 'Contributing', link: 'https://github.com/boostkitjs/boostkit/blob/main/CONTRIBUTING.md' },
+          { text: 'Contributing Guide', link: '/contributing/' },
         ],
       },
     ],
@@ -196,6 +197,17 @@ export default defineConfig({
             { text: 'Authentication', link: '/integrations/auth' },
             { text: 'Notifications', link: '/integrations/notifications' },
             { text: 'Deployment', link: '/integrations/deployment' },
+          ],
+        },
+      ],
+
+      '/contributing/': [
+        {
+          text: 'Contributing',
+          items: [
+            { text: 'Overview', link: '/contributing/' },
+            { text: 'Creating a New Package', link: '/contributing/new-package' },
+            { text: 'Creating a Panels Extension', link: '/contributing/panels-extension' },
           ],
         },
       ],
