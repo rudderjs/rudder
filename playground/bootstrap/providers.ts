@@ -16,28 +16,34 @@ import { broadcasting } from '@boostkit/broadcast'
 import { live }   from '@boostkit/live'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
-import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
 import configs from '../config/index.js'
 
 export default [
+  // ── Infrastructure (order matters) ──────────────────────
   database(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
-  auth(configs.auth),       // auto-discovers 'prisma' from DI
+  auth(configs.auth),         // auto-discovers 'prisma' from DI
+  session(configs.session),
+  cache(configs.cache),
+
+  // ── Features ────────────────────────────────────────────
   queue(configs.queue),
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
   mail(configs.mail),
-  cache(configs.cache),
   storage(configs.storage),
-  session(configs.session),
   localization(configs.localization),
   scheduler(),
   notifications(),
-  panels([adminPanel]),   // auto-discovers Dashboard.make() elements from panel schemas
-  panelsLexical(),
   broadcasting(),
-  live(configs.live),   // /ws-live — Yjs CRDT sync (after broadcasting so upgrade handler chains correctly)
-  // User Providers
+  live(configs.live),         // /ws-live — Yjs CRDT sync (after broadcasting so upgrade handler chains correctly)
+
+  // ── Admin panels ────────────────────────────────────────
+  panels([adminPanel]),
+  panelsLexical(),
+
+  // ── Application ─────────────────────────────────────────
+  // AppServiceProvider dynamically registers module providers
+  // (e.g. TodoServiceProvider) via this.app.register()
   AppServiceProvider,
-  TodoServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
