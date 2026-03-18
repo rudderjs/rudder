@@ -737,10 +737,12 @@ interface FileFieldInputProps {
 }
 
 function FileFieldInput({ field, value, onChange, uploadBase, isDisabled, i18n }: FileFieldInputProps) {
-  const multiple  = !!(field.extra?.multiple)
-  const accept    = (field.extra?.accept    as string) || undefined
-  const disk      = (field.extra?.disk      as string) ?? 'local'
-  const directory = (field.extra?.directory as string) ?? 'uploads'
+  const multiple    = !!(field.extra?.multiple)
+  const accept      = (field.extra?.accept    as string) || undefined
+  const disk        = (field.extra?.disk      as string) ?? 'local'
+  const directory   = (field.extra?.directory as string) ?? 'uploads'
+  const shouldOptimize = !!(field.extra?.optimize)
+  const fieldConversions = (field.extra?.conversions as Array<Record<string, unknown>>) ?? []
   const urls      = multiple ? (Array.isArray(value) ? (value as string[]) : []) : []
   const singleUrl = !multiple ? (value as string | undefined) : undefined
   const [uploading, setUploading] = useState(false)
@@ -755,6 +757,8 @@ function FileFieldInput({ field, value, onChange, uploadBase, isDisabled, i18n }
         fd.append('file', f)
         fd.append('disk', disk)
         fd.append('directory', directory)
+        if (shouldOptimize) fd.append('optimize', 'true')
+        if (fieldConversions.length > 0) fd.append('conversions', JSON.stringify(fieldConversions))
         const res = await fetch(`${uploadBase}/_upload`, { method: 'POST', body: fd })
         const { url } = await res.json() as { url: string }
         results.push(url)
