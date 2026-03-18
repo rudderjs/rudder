@@ -1,0 +1,49 @@
+{
+  "name": "@boostkit/image",
+  "version": "0.0.1",
+  "description": "Fluent image processing for BoostKit — resize, crop, convert, optimize (sharp wrapper).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/boostkitjs/boostkit",
+    "directory": "packages/image"
+  },
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
+  },
+  "dependencies": {},
+  "optionalDependencies": {
+    "sharp": ">=0.33.0"
+  },
+  "peerDependencies": {
+    "@boostkit/storage": "*"
+  },
+  "peerDependenciesMeta": {
+    "@boostkit/storage": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@boostkit/storage": "workspace:*",
+    "@types/node": "^20.0.0",
+    "sharp": ">=0.33.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}
