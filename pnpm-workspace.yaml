@@ -1,7 +1,9 @@
 packages:
-  - 'packages/*'
-  - 'tests/*'
-  - 'create-boostkit-app'
-  - 'playground'
-  - 'playground-multi'
-  - 'docs'
+  - packages/*
+  - tests/*
+  - create-boostkit-app
+  - playground
+  - playground-multi
+  - docs
+
+onlyBuiltDependencies: sharp

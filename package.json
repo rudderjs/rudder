@@ -24,7 +24,8 @@
       "prisma",
       "msgpackr-extract",
       "protobufjs",
-      "better-sqlite3"
+      "better-sqlite3",
+      "sharp"
     ]
   },
   "devDependencies": {
