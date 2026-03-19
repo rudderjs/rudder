@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { DialogElementMeta, PanelI18n, PanelSchemaElementMeta } from '@boostkit/panels'
 import type { FormElementMeta } from '@boostkit/panels'
 import { FormElement } from './FormElement.js'
-import { WidgetRenderer } from './WidgetRenderer.js'
+import { SchemaElementRenderer } from './SchemaElementRenderer.js'
 
 interface DialogElementProps {
   dialog:     DialogElementMeta
@@ -77,7 +77,7 @@ export function DialogElement({ dialog, panelPath, i18n }: DialogElementProps) {
                   )
                 }
                 return (
-                  <WidgetRenderer key={i} element={el} panelPath={panelPath} i18n={i18n} />
+                  <SchemaElementRenderer key={i} element={el} panelPath={panelPath} i18n={i18n} />
                 )
               })}
             </div>

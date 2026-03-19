@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { FormElementMeta, PanelI18n } from '@boostkit/panels'
+import type { FormElementMeta, PanelI18n, FieldMeta } from '@boostkit/panels'
 import { FieldInput } from './FieldInput.js'
 
 interface FormElementProps {
@@ -66,26 +66,30 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
   return (
     <div className="rounded-xl border bg-card p-6">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {form.fields.map(field => (
-          <div key={field.name} className="flex flex-col gap-1.5">
-            {field.label && (
-              <label className="text-sm font-medium leading-none">
-                {field.label}
-                {field.required && <span className="text-destructive ml-0.5">*</span>}
-              </label>
-            )}
-            <FieldInput
-              field={field}
-              value={values[field.name] ?? ''}
-              onChange={v => handleChange(field.name, v)}
-              uploadBase={panelPath.replace(/\/$/, '') + '/api'}
-              i18n={i18n}
-            />
-            {fieldErrors[field.name] && (
-              <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
-            )}
-          </div>
-        ))}
+        {form.fields.map(item => {
+          const field = item as FieldMeta
+          if (!field.name) return null
+          return (
+            <div key={field.name} className="flex flex-col gap-1.5">
+              {field.label && (
+                <label className="text-sm font-medium leading-none">
+                  {field.label}
+                  {field.required && <span className="text-destructive ml-0.5">*</span>}
+                </label>
+              )}
+              <FieldInput
+                field={field}
+                value={values[field.name] ?? ''}
+                onChange={v => handleChange(field.name, v)}
+                uploadBase={panelPath.replace(/\/$/, '') + '/api'}
+                i18n={i18n}
+              />
+              {fieldErrors[field.name] && (
+                <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
+              )}
+            </div>
+          )
+        })}
 
         {serverError && (
           <p className="text-sm text-destructive">{serverError}</p>

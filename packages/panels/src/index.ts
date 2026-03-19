@@ -24,7 +24,7 @@ export type { GlobalMeta } from './Global.js'
 
 export { Section } from './Section.js'
 export type { SectionMeta } from './Section.js'
-export { Tabs } from './Tabs.js'
+export { Tab, Tabs } from './Tabs.js'
 export type { TabsMeta, TabMeta } from './Tabs.js'
 
 // ─── Field ─────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export type { RichContentEditorProps, CollaborativePlainTextProps } from './Edit
 
 // ─── Tabs ───────────────────────────────────────────────────
 
-export { Tab } from './Tab.js'
+export { ListTab } from './Tab.js'
 export type { ListTabMeta } from './Tab.js'
 
 // ─── Filters ───────────────────────────────────────────────

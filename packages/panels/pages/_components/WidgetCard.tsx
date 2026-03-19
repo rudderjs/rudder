@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { WidgetRenderer } from './WidgetRenderer.js'
-import type { WidgetRendererProps } from './WidgetRenderer.js'
+import { SchemaElementRenderer } from './SchemaElementRenderer.js'
+import type { SchemaElementRendererProps } from './SchemaElementRenderer.js'
 import type { PanelSchemaElementMeta, PanelI18n, ChartDataset, PanelColumnMeta, ListItem } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/panels'
 
-type WidgetRendererElement = WidgetRendererProps['element']
+type SchemaElementRendererElement = SchemaElementRendererProps['element']
 
 export interface WidgetWithData extends WidgetMeta {
   data: unknown
@@ -81,8 +81,8 @@ export function WidgetCard({ widget, panelPath, i18n }: {
     )
   }
 
-  // Map other types to WidgetRenderer
-  let element: WidgetRendererElement | null = null
+  // Map other types to SchemaElementRenderer
+  let element: SchemaElementRendererElement | null = null
 
   if (widget.component === 'chart') {
     element = {
@@ -124,7 +124,7 @@ export function WidgetCard({ widget, panelPath, i18n }: {
     )
   }
 
-  return <WidgetRenderer element={element} panelPath={panelPath} i18n={i18n} />
+  return <SchemaElementRenderer element={element} panelPath={panelPath} i18n={i18n} />
 }
 
 // ── Custom component loader ─────────────────────────────────────────────────

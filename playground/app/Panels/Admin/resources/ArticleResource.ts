@@ -17,7 +17,7 @@ import {
   RelationField,
   ComputedField,
   Action,
-  Tab,
+  ListTab,
   Stats,
   Stat,
 } from '@boostkit/panels'
@@ -220,9 +220,9 @@ export class ArticleResource extends Resource {
 
   tabs() {
     return [
-      Tab.make('all').label('All'),
-      Tab.make('published').label('Published').icon('circle-check').query((q: any) => q.where('draftStatus', 'published')),
-      Tab.make('draft').label('Drafts').icon('pencil-line').query((q: any) => q.where('draftStatus', 'draft')),
+      ListTab.make('all').label('All'),
+      ListTab.make('published').label('Published').icon('circle-check').query((q: any) => q.where('draftStatus', 'published')),
+      ListTab.make('draft').label('Drafts').icon('pencil-line').query((q: any) => q.where('draftStatus', 'draft')),
     ]
   }
 

@@ -10,7 +10,7 @@ export interface ListTabMeta {
 
 // ─── Tab Class ──────────────────────────────────────────────
 
-export class Tab {
+export class ListTab {
   private _name:     string
   private _label:    string
   private _icon?:    string
@@ -21,8 +21,8 @@ export class Tab {
     this._label = name.charAt(0).toUpperCase() + name.slice(1)
   }
 
-  static make(name: string): Tab {
-    return new Tab(name)
+  static make(name: string): ListTab {
+    return new ListTab(name)
   }
 
   /** Display label for the tab. Defaults to capitalized name. */

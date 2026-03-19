@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { Breadcrumbs }       from '../../_components/Breadcrumbs.js'
-import { WidgetRenderer }    from '../../_components/WidgetRenderer.js'
+import { SchemaElementRenderer }    from '../../_components/SchemaElementRenderer.js'
 import { DashboardGrid }     from '../../_components/DashboardGrid.js'
 import { StandaloneWidget }  from '../../_components/StandaloneWidget.js'
 import type { PanelSchemaElementMeta, PanelI18n, WidgetMeta } from '@boostkit/panels'
@@ -14,7 +14,7 @@ import type { Data } from './+data.js'
 
 type DashboardLayoutItem = DashboardGridProps['ssrLayout'] extends (infer T)[] | undefined ? T : never
 
-interface TabItem { label: string; elements?: SchemaElement[]; [key: string]: unknown }
+interface TabItem { label: string; elements?: SchemaElement[]; icon?: string; lazy?: boolean; badge?: string | number | null; [key: string]: unknown }
 
 type DashboardEl = {
   type: 'dashboard'; id: string; label?: string; editable: boolean
@@ -107,9 +107,10 @@ export default function SchemaPage() {
 
           // Schema-level Tabs
           if (el.type === 'tabs') {
-            const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[] }
-            if (tabsEl.tabs?.some((t: TabItem) => (t.elements?.length ?? 0) > 0)) {
-              return <SchemaTabs key={`t-${gi}`} id={tabsEl.id} tabs={tabsEl.tabs} urlSearch={urlSearch} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} />
+            const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[]; modelBacked?: boolean }
+            const isModelBacked = !!tabsEl.modelBacked
+            if (isModelBacked || tabsEl.tabs?.some((t: TabItem) => (t.elements?.length ?? 0) > 0)) {
+              return <SchemaTabs key={`t-${gi}`} id={tabsEl.id} tabs={tabsEl.tabs} urlSearch={urlSearch} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} modelBacked={isModelBacked} />
             }
           }
 
@@ -119,7 +120,7 @@ export default function SchemaPage() {
             return <DashboardSection key={`d-${dashEl.id ?? gi}`} dashboard={dashEl} pathSegment={pathSegment} panelPath={panelMeta.path} i18n={i18n} />
           }
 
-          return <WidgetRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
+          return <SchemaElementRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
         })}
       </div>
     </>
@@ -160,7 +161,7 @@ function SchemaSection({ section, panelPath, pathSegment: _pathSegment, i18n }: 
       {open && section.elements?.length && (
         <div className="p-5 flex flex-col gap-4">
           {section.elements.map((el: SchemaElement, i: number) => (
-            <WidgetRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+            <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
           ))}
         </div>
       )}
@@ -175,16 +176,20 @@ interface SchemaTabsProps {
   panelPath: string
   pathSegment: string
   i18n: PanelI18n & Record<string, string>
+  modelBacked?: boolean
 }
 
-function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment: _pathSegment, i18n }: SchemaTabsProps) {
+function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBacked }: SchemaTabsProps) {
+  const tabsId = id
   const paramKey = id ?? 'tab'
   const defaultSlug = slugify(tabs[0]?.label ?? '')
   const initialSlug = urlSearch?.[paramKey] ?? defaultSlug
   const [activeSlug, setActiveSlug] = useState<string>(initialSlug)
+  const [fetchedElements, setFetchedElements] = useState<Record<number, SchemaElement[]>>({})
+  const [loading, setLoading] = useState(false)
   const activeIdx = Math.max(0, tabs.findIndex((t: TabItem) => slugify(t.label) === activeSlug))
 
-  function switchTab(label: string) {
+  async function switchTab(label: string) {
     const slug = slugify(label)
     setActiveSlug(slug)
     if (typeof window !== 'undefined') {
@@ -193,22 +198,55 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment: _pathSegment,
       else url.searchParams.set(paramKey, slug)
       window.history.replaceState(null, '', url.pathname + url.search)
     }
+
+    // Fetch content for tabs that don't have elements yet (model-backed or static)
+    const idx = Math.max(0, tabs.findIndex(t => slugify(t.label) === slug))
+    const tab = tabs[idx]
+    if (tab && !tab.elements?.length && !fetchedElements[idx] && tabsId) {
+      // Model-backed uses record ID, static uses slugified label
+      const tabParam = modelBacked
+        ? (tab as Record<string, unknown>).id as string | undefined
+        : slugify(tab.label)
+      if (tabParam) {
+        try {
+          setLoading(true)
+          const res = await fetch(`/${pathSegment}/api/_tabs/${tabsId}?tab=${tabParam}`)
+          if (res.ok) {
+            const body = await res.json() as { tab?: { elements?: SchemaElement[] } }
+            if (body.tab?.elements) {
+              setFetchedElements(prev => ({ ...prev, [idx]: body.tab!.elements! }))
+            }
+          }
+        } catch { /* fetch failed */ }
+        finally { setLoading(false) }
+      }
+    }
   }
+
+  const activeElements = tabs[activeIdx]?.elements?.length
+    ? tabs[activeIdx]!.elements!
+    : fetchedElements[activeIdx] ?? []
 
   return (
     <div>
       <div className="flex items-center gap-1 mb-4">
         {tabs.map((tab: TabItem, idx: number) => (
-          <button key={idx} type="button" onClick={() => switchTab(tab.label)}
+          <button key={idx} type="button" onClick={() => void switchTab(tab.label)}
             className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors ${
               activeIdx === idx ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             }`}
-          >{tab.label}</button>
+          >{tab.label}{tab.badge != null && <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium">{tab.badge}</span>}</button>
         ))}
       </div>
+      {loading && activeElements.length === 0 && (
+        <div className="space-y-4">
+          <div className="h-32 rounded-xl bg-muted/30 animate-pulse" />
+          <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
+        </div>
+      )}
       <div className="flex flex-col gap-6">
-        {(tabs[activeIdx]?.elements ?? []).map((el: SchemaElement, i: number) => (
-          <WidgetRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+        {activeElements.map((el: SchemaElement, i: number) => (
+          <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
         ))}
       </div>
     </div>

@@ -16,7 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table.js'
 import { Badge } from '@/components/ui/badge.js'
-import { WidgetRenderer } from '../../../../_components/WidgetRenderer.js'
+import { SchemaElementRenderer } from '../../../../_components/SchemaElementRenderer.js'
 import type { Data }   from './+data.js'
 
 function t(template: string, vars: Record<string, string | number>): string {
@@ -82,7 +82,7 @@ export default function ShowPage() {
         {widgetData && widgetData.length > 0 && (
           <div className="flex flex-col gap-4 mb-6">
             {widgetData.map((el, i: number) => (
-              <WidgetRenderer key={i} element={el as import('@boostkit/panels').PanelSchemaElementMeta} panelPath={`/${pathSegment}`} i18n={i18n} />
+              <SchemaElementRenderer key={i} element={el as import('@boostkit/panels').PanelSchemaElementMeta} panelPath={`/${pathSegment}`} i18n={i18n} />
             ))}
           </div>
         )}
