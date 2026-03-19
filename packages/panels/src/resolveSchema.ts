@@ -155,8 +155,7 @@ export async function resolveSchema(
             const label = String(record[titleField] ?? record['id'] ?? 'Untitled')
             const tabId = String(record['id'] ?? i)
 
-            // Only resolve active tab's content on SSR — others load on demand
-            if (i === modelActiveTabIndex && contentFn) {
+            if (contentFn) {
               const items = contentFn(record)
               const tabPanel = Object.create(panel, {
                 getSchema: { value: () => items },
@@ -212,8 +211,8 @@ export async function resolveSchema(
           if (tab.hasFields()) {
             // Field tab — always include (lightweight)
             resolvedTabs.push(tabMeta)
-          } else if (i === activeTabIndex && !tab.isLazy()) {
-            // Active tab — resolve content for SSR
+          } else if (!tab.isLazy()) {
+            // Schema tab — resolve content for SSR (lazy tabs get empty elements)
             const items = tab.getItems()
             const tabPanel = Object.create(panel, {
               getSchema: { value: () => items },
@@ -222,7 +221,7 @@ export async function resolveSchema(
             tabMeta.elements = resolved
             resolvedTabs.push(tabMeta)
           } else {
-            // Other tabs — label/icon/badge only, content loaded on demand
+            // Lazy tab — label/icon/badge only, content loaded on demand
             resolvedTabs.push(tabMeta)
           }
         }
