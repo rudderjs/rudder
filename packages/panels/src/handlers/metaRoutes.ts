@@ -446,14 +446,11 @@ export function mountMetaRoutes(
     const { tab } = (req.body as { tab?: string | number }) ?? {}
     if (tab === undefined) return res.status(400).json({ message: 'Missing tab value.' })
 
-    try {
-      const sessionPkg = '@boostkit/session'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sessionModule = await import(/* @vite-ignore */ sessionPkg) as any as { Session: { put(key: string, value: unknown): void; all(): Record<string, unknown> } }
-      sessionModule.Session.put(`tabs:${tabsId}`, tab)
-      console.log('[panels] session.put OK:', JSON.stringify(sessionModule.Session.all()))
-    } catch (err) {
-      console.log('[panels] session.put FAILED:', (err as Error).message)
+    // Use req.session directly (set by SessionMiddleware in the middleware chain)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = (req as any).session as { put(key: string, value: unknown): void } | undefined
+    if (session) {
+      session.put(`tabs:${tabsId}`, tab)
     }
 
     return res.json({ success: true })

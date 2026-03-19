@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { Breadcrumbs }       from '../../_components/Breadcrumbs.js'
@@ -205,6 +205,31 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
   const [fetchedElements, setFetchedElements] = useState<Record<number, SchemaElement[]>>({})
   const [loading, setLoading] = useState(false)
   const activeIdx = Math.max(0, tabs.findIndex((t: TabItem) => slugify(t.label) === activeSlug))
+
+  // Fetch content for the restored tab if it wasn't SSR'd (localStorage/session restore)
+  useEffect(() => {
+    if (activeIdx === 0) return
+    const tab = tabs[activeIdx]
+    if (!tab || tab.elements?.length || fetchedElements[activeIdx]) return
+    if (!tabsId) return
+
+    const tabParam = modelBacked
+      ? (tab as Record<string, unknown>).id as string | undefined
+      : slugify(tab.label)
+    if (!tabParam) return
+
+    setLoading(true)
+    fetch(`/${pathSegment}/api/_tabs/${tabsId}?tab=${tabParam}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { tab?: { elements?: SchemaElement[] } } | null) => {
+        if (body?.tab?.elements) {
+          setFetchedElements(prev => ({ ...prev, [activeIdx]: body.tab!.elements! }))
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function switchTab(label: string) {
     const slug = slugify(label)

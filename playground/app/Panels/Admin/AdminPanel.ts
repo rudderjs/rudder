@@ -107,7 +107,7 @@ export const adminPanel = Panel.make('admin')
               { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
             ]),
         ]),
-    ]).persist('session'),
+    ]),  // persist defaults to 'localStorage' when ID is set
 
     // ── Dialog wrapping a Form ───────────────────────────────
     // Dialog.make('contact-modal')
