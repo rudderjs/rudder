@@ -22,6 +22,8 @@ export interface PanelContext {
   path:    string
   /** Route params extracted from the page's slug pattern. Optional params that weren't matched are `undefined`. */
   params:  Record<string, string | undefined>
+  /** URL search/query params (for persist='url' tabs). */
+  urlSearch?: Record<string, string>
 }
 
 // ─── Guard ─────────────────────────────────────────────────

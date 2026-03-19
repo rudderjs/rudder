@@ -438,6 +438,24 @@ export function mountMetaRoutes(
     }
   }, mw)
 
+  // Save active tab to server session (persist='session' mode)
+  router.post(`${apiBase}/_tabs/:tabsId/active`, async (req, res) => {
+    const tabsId = (req.params as Record<string, string> | undefined)?.['tabsId']
+    if (!tabsId) return res.status(400).json({ message: 'Missing tabsId.' })
+
+    const { tab } = (req.body as { tab?: string | number }) ?? {}
+    if (tab === undefined) return res.status(400).json({ message: 'Missing tab value.' })
+
+    try {
+      const sessionPkg = '@boostkit/session'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sessionModule = await import(/* @vite-ignore */ sessionPkg) as any as { Session: { put(key: string, value: unknown): void } }
+      sessionModule.Session.put(`tabs:${tabsId}`, tab)
+    } catch { /* session not available */ }
+
+    return res.json({ success: true })
+  }, mw)
+
   // Tabs data endpoint — used by lazy/poll model-backed tabs
   router.get(`${apiBase}/_tabs/:tabsId`, async (req, res) => {
     const tabsId = (req.params as Record<string, string> | undefined)?.['tabsId']

@@ -1,6 +1,9 @@
 import type { Field } from './Field.js'
 import type { FieldMeta } from './Field.js'
 
+// ─── Persist mode for Tabs ─────────────────────────────────────
+export type TabsPersistMode = false | 'localStorage' | 'url' | 'session'
+
 // ─── Generic item — any object (fields, schema elements, widgets) ──────
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface MetaItem {}
@@ -33,6 +36,9 @@ export interface TabsMeta {
   lazy?:      boolean
   pollInterval?: number
   modelBacked?:  boolean
+  persist?:   TabsPersistMode
+  /** SSR-resolved active tab index (for session/url modes). */
+  activeTab?: number
 }
 
 // ─── Tab — first-class schema tab ───────────────────────────
@@ -128,6 +134,7 @@ export class Tab {
 export class Tabs {
   private _tabs: Tab[] = []
   private _id?: string
+  private _persist: TabsPersistMode = false
 
   // ── Task 14: Model-backed tabs ─────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,7 +163,10 @@ export class Tabs {
 
   static make(id?: string, tabs?: Tab[]): Tabs {
     const instance = new Tabs()
-    if (id !== undefined) instance._id = id
+    if (id !== undefined) {
+      instance._id = id
+      instance._persist = 'localStorage'  // default when ID is set
+    }
     if (tabs) instance._tabs = tabs
     return instance
   }
@@ -296,6 +306,23 @@ export class Tabs {
   isLazy(): boolean { return this._lazy }
   getPollInterval(): number | undefined { return this._pollInterval }
 
+  // ── Persist mode ────────────────────────────────────────────
+
+  /**
+   * Control how the active tab is persisted across page loads.
+   *
+   * - `'localStorage'` — persists in browser localStorage (default when ID is set)
+   * - `'url'` — persists in URL query param (shareable, SSR active tab)
+   * - `'session'` — persists in server session (SSR active tab, clean URL)
+   * - `false` — no persistence, always starts on first tab
+   */
+  persist(mode: TabsPersistMode = 'localStorage'): this {
+    this._persist = mode
+    return this
+  }
+
+  getPersist(): TabsPersistMode { return this._persist }
+
   // ── Existing methods ──────────────────────────────────────
 
   /** @internal — flat field list for validation / query building (resource context). */
@@ -318,6 +345,7 @@ export class Tabs {
     if (this._lazy)      meta.lazy      = true
     if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
     if (this.isModelBacked()) meta.modelBacked = true
+    if (this._persist !== false) meta.persist = this._persist
     return meta
   }
 }

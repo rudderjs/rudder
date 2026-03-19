@@ -107,10 +107,10 @@ export default function SchemaPage() {
 
           // Schema-level Tabs
           if (el.type === 'tabs') {
-            const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[]; modelBacked?: boolean }
+            const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[]; modelBacked?: boolean; persist?: 'localStorage' | 'url' | 'session' | false; activeTab?: number }
             const isModelBacked = !!tabsEl.modelBacked
             if (isModelBacked || tabsEl.tabs?.some((t: TabItem) => (t.elements?.length ?? 0) > 0)) {
-              return <SchemaTabs key={`t-${gi}`} id={tabsEl.id} tabs={tabsEl.tabs} urlSearch={urlSearch} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} modelBacked={isModelBacked} />
+              return <SchemaTabs key={`t-${gi}`} id={tabsEl.id} tabs={tabsEl.tabs} urlSearch={urlSearch} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} modelBacked={isModelBacked} persist={tabsEl.persist} activeTab={tabsEl.activeTab} />
             }
           }
 
@@ -177,14 +177,31 @@ interface SchemaTabsProps {
   pathSegment: string
   i18n: PanelI18n & Record<string, string>
   modelBacked?: boolean
+  persist?: 'localStorage' | 'url' | 'session' | false
+  activeTab?: number
 }
 
-function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBacked }: SchemaTabsProps) {
+function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBacked, persist, activeTab: ssrActiveTab }: SchemaTabsProps) {
   const tabsId = id
-  const paramKey = id ?? 'tab'
   const defaultSlug = slugify(tabs[0]?.label ?? '')
-  const initialSlug = urlSearch?.[paramKey] ?? defaultSlug
-  const [activeSlug, setActiveSlug] = useState<string>(initialSlug)
+
+  // Determine initial active slug based on persist mode
+  const [activeSlug, setActiveSlug] = useState<string>(() => {
+    // SSR-resolved active tab takes priority (for url/session modes)
+    if (ssrActiveTab !== undefined && ssrActiveTab > 0 && tabs[ssrActiveTab]) {
+      return slugify(tabs[ssrActiveTab]!.label)
+    }
+    // URL mode — read from urlSearch
+    if (persist === 'url' && id && urlSearch?.[id]) {
+      return urlSearch[id]!
+    }
+    // localStorage — read on client only
+    if (persist === 'localStorage' && id && typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`tabs:${id}`)
+      if (stored) return stored
+    }
+    return defaultSlug
+  })
   const [fetchedElements, setFetchedElements] = useState<Record<number, SchemaElement[]>>({})
   const [loading, setLoading] = useState(false)
   const activeIdx = Math.max(0, tabs.findIndex((t: TabItem) => slugify(t.label) === activeSlug))
@@ -192,11 +209,24 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
   async function switchTab(label: string) {
     const slug = slugify(label)
     setActiveSlug(slug)
-    if (typeof window !== 'undefined') {
+
+    // Persist active tab based on mode
+    if (persist === 'url' && typeof window !== 'undefined' && id) {
       const url = new URL(window.location.href)
-      if (slug === slugify(tabs[0]?.label ?? '')) url.searchParams.delete(paramKey)
-      else url.searchParams.set(paramKey, slug)
+      if (slug === slugify(tabs[0]?.label ?? '')) {
+        url.searchParams.delete(id)
+      } else {
+        url.searchParams.set(id, slug)
+      }
       window.history.replaceState(null, '', url.pathname + url.search)
+    } else if (persist === 'localStorage' && id && typeof window !== 'undefined') {
+      localStorage.setItem(`tabs:${id}`, slug)
+    } else if (persist === 'session' && id) {
+      fetch(`/${pathSegment}/api/_tabs/${id}/active`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tab: slug }),
+      }).catch(() => {})  // fire-and-forget
     }
 
     // Fetch content for tabs that don't have elements yet (model-backed or static)

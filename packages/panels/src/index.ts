@@ -25,7 +25,7 @@ export type { GlobalMeta } from './Global.js'
 export { Section } from './Section.js'
 export type { SectionMeta } from './Section.js'
 export { Tab, Tabs } from './Tabs.js'
-export type { TabsMeta, TabMeta } from './Tabs.js'
+export type { TabsMeta, TabMeta, TabsPersistMode } from './Tabs.js'
 
 // ─── Field ─────────────────────────────────────────────────
 

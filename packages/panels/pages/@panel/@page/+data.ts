@@ -47,6 +47,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
     headers: (pageContext as PageContextServer & { headers?: Record<string, string> }).headers ?? {},
     path: pageContext.urlPathname,
     params: pageParams,
+    urlSearch: pageContext.urlParsed?.search ?? {},
   }
 
   // Call schema() directly — works for both overridden methods and define() definitions

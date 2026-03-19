@@ -35,6 +35,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
       headers: (pageContext as any).headers ?? {},
       path:    pageContext.urlPathname,
       params:  {},
+      urlSearch: pageContext.urlParsed?.search ?? {},
     })
   }
 

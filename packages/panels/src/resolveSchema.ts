@@ -22,7 +22,7 @@ import { FormRegistry } from './FormRegistry.js'
 import { TableRegistry } from './TableRegistry.js'
 import { StatsRegistry } from './StatsRegistry.js'
 import { TabsRegistry } from './TabsRegistry.js'
-import type { TabMeta, TabsMeta } from './Tabs.js'
+import type { TabMeta, TabsMeta, TabsPersistMode } from './Tabs.js'
 
 export type PanelSchemaElementMeta =
   | TextElementMeta
@@ -131,6 +131,7 @@ export async function resolveSchema(
         if (!Model) { continue }
 
         let resolvedTabs: TabMeta[] = []
+        let modelActiveTabIndex = 0
 
         if (!tabs.isLazy()) {
           // Query model records
@@ -145,13 +146,17 @@ export async function resolveSchema(
           const titleField = tabs.getTitleField()
           const contentFn = tabs.getContentFn()
 
+          // Determine active tab index based on persist mode
+          const persistMode = tabs.getPersist()
+          modelActiveTabIndex = await resolveActiveTabIndex(persistMode, tabs.getId(), records.map(r => String(r[titleField] ?? r['id'] ?? 'Untitled')), ctx)
+
           for (let i = 0; i < records.length; i++) {
             const record = records[i]!
             const label = String(record[titleField] ?? record['id'] ?? 'Untitled')
             const tabId = String(record['id'] ?? i)
 
-            // Only resolve first tab's content on SSR — others load on demand
-            if (i === 0 && contentFn) {
+            // Only resolve active tab's content on SSR — others load on demand
+            if (i === modelActiveTabIndex && contentFn) {
               const items = contentFn(record)
               const tabPanel = Object.create(panel, {
                 getSchema: { value: () => items },
@@ -176,6 +181,9 @@ export async function resolveSchema(
         if (tabs.isEditable()) meta.editable = true
         if (tabs.isLazy()) meta.lazy = true
         if (tabs.getPollInterval() !== undefined) meta.pollInterval = tabs.getPollInterval()!
+        const modelPersist = tabs.getPersist()
+        if (modelPersist !== false) meta.persist = modelPersist
+        if (modelActiveTabIndex > 0) meta.activeTab = modelActiveTabIndex
 
         result.push(meta as unknown as PanelSchemaElementMeta)
         continue
@@ -188,6 +196,11 @@ export async function resolveSchema(
       if (hasSchemaElements) {
         const resolvedTabs: TabMeta[] = []
 
+        // Determine active tab index based on persist mode
+        const persistMode = tabs.getPersist()
+        const tabLabels = rawTabs.map(t => t.getLabel())
+        const activeTabIndex = await resolveActiveTabIndex(persistMode, tabs.getId(), tabLabels, ctx)
+
         for (let i = 0; i < rawTabs.length; i++) {
           const tab = rawTabs[i]!
           const tabMeta = tab.toMeta()
@@ -199,8 +212,8 @@ export async function resolveSchema(
           if (tab.hasFields()) {
             // Field tab — always include (lightweight)
             resolvedTabs.push(tabMeta)
-          } else if (i === 0 && !tab.isLazy()) {
-            // First non-lazy tab — resolve content for SSR
+          } else if (i === activeTabIndex && !tab.isLazy()) {
+            // Active tab — resolve content for SSR
             const items = tab.getItems()
             const tabPanel = Object.create(panel, {
               getSchema: { value: () => items },
@@ -222,6 +235,9 @@ export async function resolveSchema(
         }
         if (tabs.isCreatable()) meta.creatable = true
         if (tabs.isEditable()) meta.editable = true
+        const staticPersist = tabs.getPersist()
+        if (staticPersist !== false) meta.persist = staticPersist
+        if (activeTabIndex > 0) meta.activeTab = activeTabIndex
         result.push(meta as unknown as PanelSchemaElementMeta)
       } else {
         // All-field tabs — resolve badges and pass through
@@ -660,4 +676,45 @@ function flattenFields(items: FieldOrGrouping[]): FieldOrGrouping[] {
 
 function titleCase(str: string): string {
   return str.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim()
+}
+
+/** Slugify a label for use as URL/storage key. */
+function slugifyLabel(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+/**
+ * Resolve the SSR active tab index based on persist mode.
+ * For 'url' mode reads from ctx.urlSearch, for 'session' mode reads from server session.
+ * Returns 0 (first tab) for 'localStorage', false, or when lookup fails.
+ */
+async function resolveActiveTabIndex(
+  persistMode: TabsPersistMode,
+  tabsId: string | undefined,
+  tabLabels: string[],
+  ctx: PanelContext,
+): Promise<number> {
+  if (persistMode === 'url' && tabsId) {
+    const urlSearch = ctx.urlSearch
+    if (urlSearch) {
+      const activeSlug = urlSearch[tabsId]
+      if (activeSlug) {
+        const idx = tabLabels.findIndex(label => slugifyLabel(label) === activeSlug)
+        if (idx >= 0) return idx
+      }
+    }
+  } else if (persistMode === 'session' && tabsId) {
+    try {
+      const sessionPkg = '@boostkit/session'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sessionModule = await import(/* @vite-ignore */ sessionPkg) as any as { Session: { get(key: string): unknown } }
+      const stored = sessionModule.Session.get(`tabs:${tabsId}`)
+      if (typeof stored === 'number') return stored
+      if (typeof stored === 'string') {
+        const idx = tabLabels.findIndex(label => slugifyLabel(label) === stored)
+        if (idx >= 0) return idx
+      }
+    } catch { /* session not available */ }
+  }
+  return 0
 }
