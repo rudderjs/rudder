@@ -99,7 +99,7 @@ export { Table }   from './schema/Table.js'
 export { Chart }   from './schema/Chart.js'
 export { List }    from './schema/List.js'
 export { Form }    from './schema/Form.js'
-export type { FormElementMeta, FormSubmitFn } from './schema/Form.js'
+export type { FormElementMeta, FormSubmitFn, FormItem } from './schema/Form.js'
 export { Column }  from './schema/Column.js'
 export type { ColumnMeta } from './schema/Column.js'
 export { Dialog }  from './schema/Dialog.js'
@@ -164,3 +164,15 @@ export type { DashboardMeta, DashboardTabMeta } from './Dashboard.js'
 
 // ─── Dashboard Registry ─────────────────────────────────
 export { DashboardRegistry } from './DashboardRegistry.js'
+
+// ─── Form Registry ──────────────────────────────────────
+export { FormRegistry } from './FormRegistry.js'
+
+// ─── Table Registry ─────────────────────────────────────
+export { TableRegistry } from './TableRegistry.js'
+
+// ─── Stats Registry ─────────────────────────────────────
+export { StatsRegistry } from './StatsRegistry.js'
+
+// ─── Tabs Registry ──────────────────────────────────────
+export { TabsRegistry } from './TabsRegistry.js'

@@ -1,4 +1,6 @@
-import type { Field, FieldMeta } from '../Field.js'
+import type { Field } from '../Field.js'
+import type { Section } from '../Section.js'
+import type { Tabs } from '../Tabs.js'
 import type { PanelContext } from '../types.js'
 
 // ─── Types ──────────────────────────────────────────────────
@@ -8,12 +10,19 @@ export type FormSubmitFn = (
   ctx: PanelContext,
 ) => Promise<void | Record<string, unknown>>
 
+/** A field, section, or tabs group — any valid child of a Form. */
+export type FormItem = Field | Section | Tabs
+
 export interface FormElementMeta {
   type:            'form'
   id:              string
-  fields:          FieldMeta[]
+  fields:          unknown[]      // FieldMeta | SectionMeta | TabsMeta
   submitLabel?:    string
   successMessage?: string
+  description?:    string
+  method?:         string
+  action?:         string
+  initialValues?:  Record<string, unknown>
 }
 
 // ─── Form class ─────────────────────────────────────────────
@@ -22,6 +31,7 @@ export interface FormElementMeta {
  * Standalone form schema element.
  * Can be embedded anywhere in a panel schema (homepage, Page, Section, Tab).
  * Uses the existing field system — all field types work.
+ * Sections and Tabs can be used to group fields.
  * NOT tied to a model/resource — general purpose.
  *
  * @example
@@ -38,10 +48,16 @@ export interface FormElementMeta {
  */
 export class Form {
   private _id:              string
-  private _fields:          Field[]         = []
+  private _fields:          FormItem[]      = []
   private _onSubmit?:       FormSubmitFn
   private _submitLabel?:    string
   private _successMessage?: string
+  private _description?:    string
+  private _method:          'POST' | 'PUT' = 'POST'
+  private _action?:         string
+  private _dataFn?:         (ctx: PanelContext) => Promise<Record<string, unknown>>
+  private _beforeSubmit?:   (data: Record<string, unknown>, ctx: PanelContext) => Promise<Record<string, unknown>>
+  private _afterSubmit?:    (result: Record<string, unknown>, ctx: PanelContext) => Promise<void>
 
   private constructor(id: string) {
     this._id = id
@@ -51,7 +67,7 @@ export class Form {
     return new Form(id)
   }
 
-  fields(fields: Field[]): this {
+  fields(fields: FormItem[]): this {
     this._fields = fields
     return this
   }
@@ -73,20 +89,65 @@ export class Form {
     return this
   }
 
+  /** Description text shown above the form fields. */
+  description(text: string): this {
+    this._description = text
+    return this
+  }
+
+  /** HTTP method for form submission. Default: POST. */
+  method(m: 'POST' | 'PUT'): this {
+    this._method = m
+    return this
+  }
+
+  /** Custom action URL. Overrides the default `_forms/:id/submit` endpoint. */
+  action(url: string): this {
+    this._action = url
+    return this
+  }
+
+  /**
+   * Provide initial values for the form fields.
+   * Called during SSR — the returned object populates field defaults.
+   */
+  data(fn: (ctx: PanelContext) => Promise<Record<string, unknown>>): this {
+    this._dataFn = fn
+    return this
+  }
+
+  /** Transform data before validation and submission. Return the transformed data. */
+  beforeSubmit(fn: (data: Record<string, unknown>, ctx: PanelContext) => Promise<Record<string, unknown>>): this {
+    this._beforeSubmit = fn
+    return this
+  }
+
+  /** Run after successful submission. */
+  afterSubmit(fn: (result: Record<string, unknown>, ctx: PanelContext) => Promise<void>): this {
+    this._afterSubmit = fn
+    return this
+  }
+
   getId(): string                        { return this._id }
-  getFields(): Field[]                   { return this._fields }
+  getFields(): FormItem[]                { return this._fields }
   getSubmitHandler(): FormSubmitFn | undefined { return this._onSubmit }
   getType(): 'form'                      { return 'form' }
+  getDataFn(): ((ctx: PanelContext) => Promise<Record<string, unknown>>) | undefined { return this._dataFn }
+  getBeforeSubmit(): ((data: Record<string, unknown>, ctx: PanelContext) => Promise<Record<string, unknown>>) | undefined { return this._beforeSubmit }
+  getAfterSubmit(): ((result: Record<string, unknown>, ctx: PanelContext) => Promise<void>) | undefined { return this._afterSubmit }
 
   /** @internal — serialized for the meta endpoint */
   toMeta(): FormElementMeta {
     const meta: FormElementMeta = {
       type:   'form',
       id:     this._id,
-      fields: this._fields.map(f => f.toMeta()),
+      fields: this._fields.map(f => (f as { toMeta(): unknown }).toMeta()),
     }
-    if (this._submitLabel   !== undefined) meta.submitLabel   = this._submitLabel
+    if (this._submitLabel    !== undefined) meta.submitLabel    = this._submitLabel
     if (this._successMessage !== undefined) meta.successMessage = this._successMessage
+    if (this._description    !== undefined) meta.description    = this._description
+    if (this._method !== 'POST')           meta.method          = this._method
+    if (this._action         !== undefined) meta.action          = this._action
     return meta
   }
 }

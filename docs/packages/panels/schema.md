@@ -32,6 +32,8 @@ Text.make('Manage your application from the sidebar.')
 
 Row of stat cards. Each stat has a label, value, optional description, and trend percentage. When a single stat is rendered, it fills the container without a grid wrapper.
 
+**Static mode** — inline stat values:
+
 ```ts
 import { Stats, Stat } from '@boostkit/panels'
 
@@ -43,20 +45,38 @@ Stats.make([
 ])
 ```
 
+**Async mode** — load data on the client with lazy loading and polling:
+
+```ts
+// Async stats with lazy loading and polling
+Stats.make('dashboard-stats')
+  .data(async (ctx) => [
+    { label: 'Users', value: await User.query().count() },
+    { label: 'Articles', value: await Article.query().count(), trend: 5 },
+    { label: 'Revenue', value: '$12,450', description: 'This month' },
+  ])
+  .poll(60000)  // refresh every minute
+```
+
 | Method | Description |
 |--------|-------------|
+| `Stats.make([...])` | Create with inline `Stat` instances (static mode) |
+| `Stats.make(id)` | Create with string ID for async mode |
 | `Stat.make(label)` | Create a stat with a label |
 | `.value(v)` | The primary display value (string or number) |
 | `.description(text)` | Secondary text below the value |
 | `.trend(n)` | Percentage change — positive shows ↑ green, negative shows ↓ red |
+| `.data(fn)` | Async function returning `PanelStatMeta[]` (async mode) |
+| `.lazy()` | Defer loading to client-side (shows skeleton) |
+| `.poll(ms)` | Re-fetch every N milliseconds |
 
 The `Stats` row auto-sizes: 1 stat = full width, 2 = two columns, 3 = three columns, 4 = four columns (max).
 
 ### `Table`
 
-Data table sourced from a Resource class or a raw ORM model. Supports client-side sort, search, and drag-to-reorder.
+Data table sourced from a Resource class, a raw ORM model, or static inline rows. Supports sort, search, pagination, lazy loading, polling, filters, and actions.
 
-Two modes:
+Three modes:
 
 **Resource-linked** — inherits the Resource's model, default sort, and field labels. "View all" links to the resource index.
 
@@ -99,14 +119,75 @@ Table.make('All Users')
   .reorderable('position')   // enable drag-to-reorder rows
 ```
 
+**Static rows** — inline data, no model or resource needed.
+
+```ts
+Table.make('Browser Stats')
+  .rows([
+    { name: 'Chrome', share: 65 },
+    { name: 'Firefox', share: 10 },
+    { name: 'Safari', share: 18 },
+  ])
+  .columns([Column.make('name'), Column.make('share').numeric()])
+```
+
 | Method | Description |
 |--------|-------------|
 | `.fromResource(Class)` | Use a Resource class as data source — inherits model, sort defaults, and field labels |
 | `.fromModel(Class)` | Use an ORM Model class directly as data source |
+| `.rows([...])` | Static inline data — no model or resource needed |
 | `.columns([...])` | Column names (`string[]`) or `Column` instances |
 | `.sortBy(col, dir)` | Server-side sort order (`'ASC'` or `'DESC'`) |
 | `.limit(n)` | Maximum rows to show (default: 5) |
 | `.reorderable(field?)` | Enable drag-to-reorder rows, saves to `field` (default: `'position'`) |
+| `.scope(fn)` | Custom query filter: `.scope(q => q.where('active', true))` |
+| `.description(text)` | Subtitle below the table title |
+| `.emptyMessage(text)` | Custom "no records" message |
+| `.href(pattern)` | Row click URL with `:field` placeholders |
+| `.searchable(cols?)` | Show search input — optionally restrict to specific columns |
+| `.paginated(mode?, perPage?)` | Enable pagination: `'pages'` or `'loadMore'` (default: `'pages'`, 15/page) |
+| `.lazy()` | Defer data loading to client-side (shows skeleton) |
+| `.poll(ms)` | Re-fetch data every N milliseconds |
+| `.id(id)` | Explicit ID for API endpoint (auto-generated from title if not set) |
+| `.filters([...])` | Attach `SelectFilter` / `SearchFilter` dropdowns |
+| `.actions([...])` | Attach bulk/row `Action` handlers |
+
+#### Pagination
+
+Tables support two pagination modes via `.paginated()`:
+
+```ts
+// Classic page-based pagination (default: 15 rows per page)
+Table.make('All Users')
+  .fromModel(User)
+  .columns([Column.make('name'), Column.make('email')])
+  .paginated('pages', 25)
+
+// "Load more" button — appends rows incrementally
+Table.make('Activity Log')
+  .fromModel(Activity)
+  .columns([Column.make('action'), Column.make('createdAt').date()])
+  .paginated('loadMore', 10)
+```
+
+When no `.paginated()` is called, the table renders all rows up to `.limit()` with no pagination controls.
+
+#### Lazy & Polling
+
+Use `.lazy()` to defer data loading to the client — the table renders a skeleton placeholder on initial SSR and fetches data via the API once mounted. Combine with `.poll(ms)` to keep data fresh.
+
+```ts
+Table.make('Live Orders')
+  .id('live-orders')
+  .fromModel(Order)
+  .columns([
+    Column.make('customer').sortable(),
+    Column.make('total').numeric(),
+    Column.make('status').badge(),
+  ])
+  .lazy()
+  .poll(5000)  // re-fetch every 5 seconds
+```
 
 ### `Column`
 
