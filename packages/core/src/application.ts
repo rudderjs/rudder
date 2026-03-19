@@ -134,7 +134,12 @@ export class Application {
    * await this.app.register(cache(cacheConfig))
    * ```
    */
-  async register(Provider: ProviderClass): Promise<this> {
+  async register(Provider: ProviderClass | ProviderClass[]): Promise<this> {
+    if (Array.isArray(Provider)) {
+      for (const P of Provider) await this.register(P)
+      return this
+    }
+
     if (this._isDuplicate(Provider)) return this
     this._trackProvider(Provider)
 
