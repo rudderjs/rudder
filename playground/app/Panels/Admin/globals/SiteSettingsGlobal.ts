@@ -3,7 +3,7 @@ import { Global, TextField, TextareaField, ToggleField, FileField, ColorField, S
 export class SiteSettingsGlobal extends Global {
   static slug  = 'site-settings'
   static label = 'Site Settings'
-  static icon  = '⚙️'
+  static icon  = 'settings'
 
   fields() {
     return [

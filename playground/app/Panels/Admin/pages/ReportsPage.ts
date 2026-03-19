@@ -8,7 +8,7 @@ import { Category } from '../../../Models/Category.js'
 export class ReportsPage extends Page {
   static slug  = 'reports/:id?'
   static label = 'Reports'
-  static icon  = 'bar-chart-3'
+  static icon  = 'chart-pie'
 
   static async schema({ params }: PanelContext) {
     return [
