@@ -274,43 +274,60 @@ List.make('Quick Links')
 | `.items([...])` | Array of `{ label, description?, href?, icon? }` |
 | `.limit(n)` | Maximum items to display (default: 5) |
 
-### `Tabs` (schema-level)
+### `Tab` and `Tabs` (schema-level)
 
-Group schema elements into tabbed sections on the panel landing page. Uses the same `Tabs.make().tab()` API as resource field tabs.
+Group schema elements into tabbed sections. `Tab` is a first-class exported class with its own API for icon, badge, and lazy loading. `Tabs` is the container that holds `Tab` instances.
 
-#### Static tabs
-
-Define tabs manually with `.tab()`:
+#### `Tab` — individual tab
 
 ```ts
-import { Tabs, Stats, Stat, Chart, Table, List } from '@boostkit/panels'
+import { Tab, Tabs, Stats, Stat, Chart, Table, Column } from '@boostkit/panels'
 
-Tabs.make()
-  .tab('Overview',
-    Stats.make([
-      Stat.make('Articles').value(await Article.query().count()),
-      Stat.make('Users').value(await User.query().count()),
+Tabs.make('content-tabs', [
+  Tab.make('Overview')
+    .icon('home')
+    .badge(async () => await Article.query().count())
+    .schema([
+      Stats.make([Stat.make('Total').value(42)]),
+      Table.make('Recent').fromModel(Article).columns([
+        Column.make('title').sortable(),
+        Column.make('createdAt').date(),
+      ]).lazy(),
     ]),
-  )
-  .tab('Charts',
-    Chart.make('Weekly Traffic')
-      .chartType('area')
-      .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
-      .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
-  )
-  .tab('Recent',
-    Table.make('Recent Articles')
-      .fromResource(ArticleResource)
-      .columns(['title', 'createdAt'])
-      .limit(5),
-  )
-  .tab('Links',
-    List.make('Resources')
-      .items([
-        { label: 'Docs', href: '/docs', icon: '📖' },
-        { label: 'GitHub', href: 'https://github.com/...', icon: '🐙' },
-      ]),
-  )
+  Tab.make('Charts')
+    .icon('bar-chart')
+    .schema([
+      Chart.make('Traffic').chartType('area')
+        .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])
+        .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290] }]),
+    ]),
+  Tab.make('Heavy Data')
+    .icon('database')
+    .lazy()  // entire tab loads on demand
+    .schema([
+      Table.make('All Records').fromModel(Record).columns([
+        Column.make('name').sortable().searchable(),
+      ]).paginated(),
+    ]),
+])
+```
+
+| Method | Description |
+|--------|-------------|
+| `Tab.make(label)` | Create a tab with a label |
+| `.schema(items[])` | Tab content -- fields or schema elements |
+| `.icon(name)` | Lucide icon name |
+| `.badge(value \| fn)` | Static or async badge value |
+| `.lazy()` | Skip SSR for this tab -- loads on demand |
+
+#### `.tab()` shorthand
+
+The `.tab()` shorthand still works for quick inline definitions:
+
+```ts
+Tabs.make()
+  .tab('Overview', Stats.make([...]), Chart.make(...)...)
+  .tab('Links', List.make(...)...)
 ```
 
 Each tab can contain any schema element type -- `Stats`, `Chart`, `Table`, `List`, `Heading`, `Text`, `Widget`, or even a `Dashboard`. The same `Tabs` class works in both contexts:
@@ -319,6 +336,10 @@ Each tab can contain any schema element type -- `Stats`, `Chart`, `Table`, `List
 |---------|---------|---------|
 | Resource fields | `Field` instances | `Tabs.make().tab('Content', TextField.make('title'))` |
 | Panel schema | Schema elements | `Tabs.make().tab('Charts', Chart.make('Revenue')...)` |
+
+#### SSR behavior
+
+All tabs' content is SSR'd by default. Tab switching is instant (no fetch). Use `.lazy()` on `Tab` or on inner elements (`Table`, `Stats`) to defer heavy queries.
 
 #### Model-backed tabs
 
@@ -362,17 +383,47 @@ Model-backed tabs are mutually exclusive with `.tab()` -- use one or the other.
 | `.onCreate(fn)` | Custom create handler |
 | `.canCreate(fn)` | Gate who can create tabs |
 | `.canEdit(fn)` | Gate who can edit tabs |
+| `.persist(mode)` | Control active tab persistence (see below) |
 | `.lazy()` | Defer tab loading to client-side |
 | `.poll(ms)` | Re-fetch tab data periodically |
 
-#### URL Persistence
+#### Tab Persistence (`.persist()`)
 
-**URL Persistence**: The active tab is persisted in the URL query string. Clicking "Charts" updates the URL to `?tab=charts`. Refreshing or sharing the URL opens the correct tab (SSR-compatible — no flash).
+Controls how the active tab is remembered across navigation and page refreshes:
 
-- Default `?tab=` param when using `Tabs.make()`
-- Named param when using `Tabs.make('analytics')` → `?analytics=charts`
-- First tab is the default — no query param in the URL
-- Multiple tab groups use separate param keys to avoid conflicts
+```ts
+Tabs.make('my-tabs', [...])
+  .persist('localStorage')  // remembers in browser (no URL change)
+  .persist('url')            // URL query param (?my-tabs=charts) — shareable, SSR
+  .persist('session')        // server session — SSR active tab, clean URL
+  .persist(false)            // no persistence (default)
+```
+
+| Mode | URL changes | SSR active tab | Survives refresh | Shareable |
+|------|------------|----------------|------------------|-----------|
+| `false` | No | First tab | No | No |
+| `'localStorage'` | No | First tab | Yes | No |
+| `'url'` | Yes | Yes | Yes | Yes |
+| `'session'` | No | Yes | Yes | No |
+
+Default: `false` (no persistence). Must explicitly opt in.
+
+#### `ListTab` — Resource list tabs
+
+For Resource list filtering tabs (e.g. All / Published / Draft), use `ListTab` -- distinct from the schema-level `Tab`:
+
+```ts
+import { ListTab } from '@boostkit/panels'
+
+// In Resource.tabs()
+tabs() {
+  return [
+    ListTab.make('all').label('All'),
+    ListTab.make('published').label('Published').query(q => q.where('status', 'published')),
+    ListTab.make('draft').label('Draft').query(q => q.where('status', 'draft')),
+  ]
+}
+```
 
 ---
 
@@ -488,19 +539,19 @@ Widgets render above the record fields on the show page. All schema element type
 
 ---
 
-## WidgetRenderer Component
+## SchemaElementRenderer Component
 
-The `WidgetRenderer` React component renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Also available for custom pages.
+The `SchemaElementRenderer` React component (renamed from `WidgetRenderer`) renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Also available for custom pages.
 
 ```tsx
-import { WidgetRenderer } from '@boostkit/panels/client'
+import { SchemaElementRenderer } from '@boostkit/panels/client'
 
 export default function CustomPage({ data }) {
-  return <WidgetRenderer widgets={data.widgets} panel="admin" />
+  return <SchemaElementRenderer widgets={data.widgets} panel="admin" />
 }
 ```
 
-`WidgetRenderer` handles all element types and renders the appropriate UI component for each (stat cards, charts, tables, lists, headings, text).
+`SchemaElementRenderer` handles all element types and renders the appropriate UI component for each (stat cards, charts, tables, lists, headings, text, tabs).
 
 ---
 
