@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
-import { WidgetRenderer } from '../_components/WidgetRenderer.js'
+import { SchemaElementRenderer } from '../_components/SchemaElementRenderer.js'
 import { DashboardGrid }  from '../_components/DashboardGrid.js'
 import { StandaloneWidget } from '../_components/StandaloneWidget.js'
 import { FormElement }   from '../_components/FormElement.js'
@@ -16,7 +16,7 @@ import type { Data } from './+data.js'
 // Runtime schema elements include types beyond PanelSchemaElementMeta (widget, dashboard, section, tabs).
 // These extra types are pushed via `as unknown as PanelSchemaElementMeta` in resolveSchema.
 type DashboardLayoutItem = DashboardGridProps['ssrLayout'] extends (infer T)[] | undefined ? T : never
-interface TabItem { label: string; elements?: SchemaElement[]; [key: string]: unknown }
+interface TabItem { label: string; elements?: SchemaElement[]; icon?: string; lazy?: boolean; badge?: string | number | null; [key: string]: unknown }
 
 type DashboardEl = {
   type: 'dashboard'; id: string; label?: string; editable: boolean
@@ -107,8 +107,9 @@ export default function PanelRootPage() {
 
         // Schema-level Tabs
         if (el.type === 'tabs') {
-          const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[] }
-          if (tabsEl.tabs?.some((t: TabItem) => (t.elements?.length ?? 0) > 0)) {
+          const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[]; modelBacked?: boolean }
+          const isModelBacked = !!tabsEl.modelBacked
+          if (isModelBacked || tabsEl.tabs?.some((t: TabItem) => (t.elements?.length ?? 0) > 0)) {
             return (
               <SchemaTabs
                 key={`tabs-${gi}`}
@@ -118,6 +119,7 @@ export default function PanelRootPage() {
                 panelPath={panelMeta.path}
                 pathSegment={pathSegment}
                 i18n={i18n}
+                modelBacked={isModelBacked}
               />
             )
           }
@@ -159,7 +161,7 @@ export default function PanelRootPage() {
           )
         }
         return (
-          <WidgetRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
+          <SchemaElementRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
         )
       })}
     </div>
@@ -273,6 +275,7 @@ interface SchemaTabsProps {
   panelPath: string
   pathSegment: string
   i18n: PanelI18n & Record<string, string>
+  modelBacked?: boolean
 }
 
 /** Slugify a label for use as URL param value. */
@@ -280,8 +283,9 @@ function slugify(str: string): string {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: SchemaTabsProps) {
+function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBacked }: SchemaTabsProps) {
   // URL query param key — named id or default 'tab'
+  const tabsId = id
   const paramKey = id ?? 'tab'
   const defaultSlug = slugify(tabs[0]?.label ?? '')
 
@@ -289,10 +293,12 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
   const initialSlug = urlSearch?.[paramKey] ?? defaultSlug
 
   const [activeSlug, setActiveSlug] = useState<string>(initialSlug)
+  const [fetchedElements, setFetchedElements] = useState<Record<number, SchemaElement[]>>({})
+  const [loading, setLoading] = useState(false)
 
   const activeIdx = Math.max(0, tabs.findIndex(t => slugify(t.label) === activeSlug))
 
-  function switchTab(label: string) {
+  async function switchTab(label: string) {
     const slug = slugify(label)
     setActiveSlug(slug)
 
@@ -306,7 +312,34 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
       }
       window.history.replaceState(null, '', url.pathname + url.search)
     }
+
+    // Fetch content for tabs that don't have elements yet (model-backed or static)
+    const idx = Math.max(0, tabs.findIndex(t => slugify(t.label) === slug))
+    const tab = tabs[idx]
+    if (tab && !tab.elements?.length && !fetchedElements[idx] && tabsId) {
+      // Model-backed uses record ID, static uses slugified label
+      const tabParam = modelBacked
+        ? (tab as Record<string, unknown>).id as string | undefined
+        : slugify(tab.label)
+      if (tabParam) {
+        try {
+          setLoading(true)
+          const res = await fetch(`/${pathSegment}/api/_tabs/${tabsId}?tab=${tabParam}`)
+          if (res.ok) {
+            const body = await res.json() as { tab?: { elements?: SchemaElement[] } }
+            if (body.tab?.elements) {
+              setFetchedElements(prev => ({ ...prev, [idx]: body.tab!.elements! }))
+            }
+          }
+        } catch { /* fetch failed */ }
+        finally { setLoading(false) }
+      }
+    }
   }
+
+  const activeElements = tabs[activeIdx]?.elements?.length
+    ? tabs[activeIdx]!.elements!
+    : fetchedElements[activeIdx] ?? []
 
   return (
     <div>
@@ -317,7 +350,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
             <button
               key={idx}
               type="button"
-              onClick={() => switchTab(tab.label)}
+              onClick={() => void switchTab(tab.label)}
               className={[
                 'inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors',
                 isActive
@@ -326,12 +359,21 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
               ].join(' ')}
             >
               {tab.label}
+              {tab.badge != null && (
+                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium">{tab.badge}</span>
+              )}
             </button>
           )
         })}
       </div>
+      {loading && activeElements.length === 0 && (
+        <div className="space-y-4">
+          <div className="h-32 rounded-xl bg-muted/30 animate-pulse" />
+          <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
+        </div>
+      )}
       <div className="flex flex-col gap-6">
-        {(tabs[activeIdx]?.elements ?? []).map((el: SchemaElement, i: number) => {
+        {activeElements.map((el: SchemaElement, i: number) => {
           if (el.type === 'widget') {
             return (
               <StandaloneWidget
@@ -361,7 +403,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n }: Schem
             )
           }
           return (
-            <WidgetRenderer key={`${activeIdx}-${i}`} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+            <SchemaElementRenderer key={`${activeIdx}-${i}`} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
           )
         })}
       </div>
@@ -426,7 +468,7 @@ function SchemaSection({ section, panelPath, pathSegment, i18n }: SchemaSectionP
                 )
               }
               return (
-                <WidgetRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+                <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
               )
             })}
           </div>

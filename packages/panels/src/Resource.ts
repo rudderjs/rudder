@@ -1,7 +1,7 @@
 import type { Field, FieldMeta } from './Field.js'
 import type { Filter } from './Filter.js'
 import type { Action } from './Action.js'
-import type { Tab, ListTabMeta } from './Tab.js'
+import type { ListTab, ListTabMeta } from './Tab.js'
 import type { Section, SectionMeta } from './Section.js'
 import type { Tabs, TabsMeta } from './Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
@@ -178,7 +178,7 @@ export class Resource {
   filters(): Filter[] { return [] }
 
   /** Define tab filters for the list view (e.g. All / Published / Draft). */
-  tabs(): Tab[] { return [] }
+  tabs(): ListTab[] { return [] }
 
   /** Define record actions (bulk or single). */
   actions(): Action[] { return [] }

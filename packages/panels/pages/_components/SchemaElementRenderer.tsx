@@ -4,17 +4,17 @@ import { useState, useEffect, useCallback } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
-type WidgetRendererElement = PanelSchemaElementMeta
+type SchemaElementRendererElement = PanelSchemaElementMeta
   | { type: 'stat-progress'; data: Record<string, unknown> }
   | { type: 'user-card'; data: Record<string, unknown> }
 
-export interface WidgetRendererProps {
-  element:    WidgetRendererElement
+export interface SchemaElementRendererProps {
+  element:    SchemaElementRendererElement
   panelPath:  string
   i18n:       PanelI18n
 }
 
-export function WidgetRenderer({ element, panelPath, i18n }: WidgetRendererProps) {
+export function SchemaElementRenderer({ element, panelPath, i18n }: SchemaElementRendererProps) {
   if (element.type === 'text') {
     return <p className="text-sm text-muted-foreground">{element.content}</p>
   }

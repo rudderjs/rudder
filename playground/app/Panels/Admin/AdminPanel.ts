@@ -1,4 +1,4 @@
-import { Panel, Heading, Text, Stats, Stat, Table, Column, Chart, List, Tabs, Section, Dashboard, Widget, Form, Dialog, TextField, TextareaField, EmailField } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Table, Column, Chart, List, Tab, Tabs, Section, Dashboard, Widget, Form, Dialog, TextField, TextareaField, EmailField } from '@boostkit/panels'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'
@@ -61,44 +61,53 @@ export const adminPanel = Panel.make('admin')
       ),
 
     // ── Schema-level Tabs ──────────────────────────────────
-    Tabs.make()
-      .tab('Recent Content',
-        Table.make('Recent Articles')
-          .fromModel(Article)
-          .columns([
-            Column.make('title').label('Title').sortable().searchable(),
-            Column.make('createdAt').label('Published').date(),
-          ])
-          .sortBy('createdAt', 'DESC')
-          .paginated('loadMore', 5)
-          .searchable()
-          .emptyMessage('No articles yet.'),
-      )
-      .tab('Charts',
-        Chart.make('Weekly Traffic')
-          .chartType('area')
-          .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
-          .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
-      )
-      .tab('Users Table',
-        Table.make('All Users')
-          .fromModel(User)
-          .columns([
-            Column.make('name').label('Name').sortable().searchable(),
-            Column.make('email').label('Email').sortable().searchable(),
-            Column.make('createdAt').label('Joined').date(),
-          ])
-          .sortBy('createdAt', 'DESC')
-          .paginated('pages', 5)
-          .searchable(),
-      )
-      .tab('Links',
-        List.make('Resources')
-          .items([
-            { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
-            { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
-          ]),
-      ),
+    Tabs.make('content-tabs', [
+      Tab.make('Recent Content')
+        .icon('file-text')
+        .schema([
+          Table.make('Recent Articles')
+            .fromModel(Article)
+            .columns([
+              Column.make('title').label('Title').sortable().searchable(),
+              Column.make('createdAt').label('Published').date(),
+            ])
+            .sortBy('createdAt', 'DESC')
+            .paginated('loadMore', 5)
+            .searchable()
+            .emptyMessage('No articles yet.'),
+        ]),
+      Tab.make('Charts')
+        .icon('bar-chart')
+        .schema([
+          Chart.make('Weekly Traffic')
+            .chartType('area')
+            .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+            .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
+        ]),
+      Tab.make('Users Table')
+        .icon('users')
+        .schema([
+          Table.make('All Users')
+            .fromModel(User)
+            .columns([
+              Column.make('name').label('Name').sortable().searchable(),
+              Column.make('email').label('Email').sortable().searchable(),
+              Column.make('createdAt').label('Joined').date(),
+            ])
+            .sortBy('createdAt', 'DESC')
+            .paginated('pages', 5)
+            .searchable(),
+        ]),
+      Tab.make('Links')
+        .icon('link')
+        .schema([
+          List.make('Resources')
+            .items([
+              { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
+              { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
+            ]),
+        ]),
+    ]),
 
     // ── Dialog wrapping a Form ───────────────────────────────
     Dialog.make('contact-modal')

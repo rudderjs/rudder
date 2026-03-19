@@ -121,11 +121,9 @@ export async function resolveSchema(
     if (type === 'tabs') {
       const tabs = el as Tabs
 
-      // Register for lazy/poll API endpoint
-      if (tabs.isModelBacked() || tabs.isLazy() || tabs.getPollInterval()) {
-        const tabsId = tabs.getId() ?? 'tabs'
-        TabsRegistry.register(panel.getName(), tabsId, tabs)
-      }
+      // Register for lazy/poll/on-demand API endpoint
+      const tabsId = tabs.getId() ?? 'tabs'
+      TabsRegistry.register(panel.getName(), tabsId, tabs)
 
       // ── Model-backed tabs ──
       if (tabs.isModelBacked()) {
@@ -147,19 +145,21 @@ export async function resolveSchema(
           const titleField = tabs.getTitleField()
           const contentFn = tabs.getContentFn()
 
-          for (const record of records) {
+          for (let i = 0; i < records.length; i++) {
+            const record = records[i]!
             const label = String(record[titleField] ?? record['id'] ?? 'Untitled')
+            const tabId = String(record['id'] ?? i)
 
-            if (contentFn) {
-              // Resolve content for each tab
+            // Only resolve first tab's content on SSR — others load on demand
+            if (i === 0 && contentFn) {
               const items = contentFn(record)
               const tabPanel = Object.create(panel, {
                 getSchema: { value: () => items },
               }) as Panel
               const resolved = await resolveSchema(tabPanel, ctx)
-              resolvedTabs.push({ label, fields: [], elements: resolved })
+              resolvedTabs.push({ label, fields: [], elements: resolved, id: tabId } as TabMeta)
             } else {
-              resolvedTabs.push({ label, fields: [] })
+              resolvedTabs.push({ label, fields: [], id: tabId } as TabMeta)
             }
           }
         }
@@ -181,39 +181,57 @@ export async function resolveSchema(
         continue
       }
 
-      // ── Static tabs (existing behavior) ──
+      // ── Static tabs ──
       const rawTabs = tabs.getTabs()
       const hasSchemaElements = rawTabs.some((t) => !t.hasFields())
 
       if (hasSchemaElements) {
-        const resolvedTabs = []
-        for (const tab of rawTabs) {
+        const resolvedTabs: TabMeta[] = []
+
+        for (let i = 0; i < rawTabs.length; i++) {
+          const tab = rawTabs[i]!
+          const tabMeta = tab.toMeta()
+
+          // Resolve badge value
+          const badge = await tab.resolveBadge()
+          if (badge !== undefined) tabMeta.badge = badge
+
           if (tab.hasFields()) {
-            resolvedTabs.push(tab.toMeta())
-          } else {
+            // Field tab — always include (lightweight)
+            resolvedTabs.push(tabMeta)
+          } else if (i === 0 && !tab.isLazy()) {
+            // First non-lazy tab — resolve content for SSR
             const items = tab.getItems()
             const tabPanel = Object.create(panel, {
               getSchema: { value: () => items },
             }) as Panel
             const resolved = await resolveSchema(tabPanel, ctx)
-            resolvedTabs.push({
-              label: tab.getLabel(),
-              fields: [],
-              elements: resolved,
-            })
+            tabMeta.elements = resolved
+            resolvedTabs.push(tabMeta)
+          } else {
+            // Other tabs — label/icon/badge only, content loaded on demand
+            resolvedTabs.push(tabMeta)
           }
         }
-        const tabsId = tabs.getId()
+
+        const staticTabsId = tabs.getId()
         const meta: TabsMeta = {
           type: 'tabs',
-          ...(tabsId && { id: tabsId }),
+          ...(staticTabsId && { id: staticTabsId }),
           tabs: resolvedTabs,
         }
         if (tabs.isCreatable()) meta.creatable = true
         if (tabs.isEditable()) meta.editable = true
         result.push(meta as unknown as PanelSchemaElementMeta)
       } else {
-        result.push(tabs.toMeta() as unknown as PanelSchemaElementMeta)
+        // All-field tabs — resolve badges and pass through
+        const allFieldMeta = tabs.toMeta()
+        for (let i = 0; i < rawTabs.length; i++) {
+          const tab = rawTabs[i]!
+          const badge = await tab.resolveBadge()
+          if (badge !== undefined && allFieldMeta.tabs[i]) allFieldMeta.tabs[i]!.badge = badge
+        }
+        result.push(allFieldMeta as unknown as PanelSchemaElementMeta)
       }
       continue
     }

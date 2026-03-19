@@ -455,12 +455,84 @@ export function mountMetaRoutes(
     if (!tabs) return res.status(404).json({ message: `Tabs "${tabsId}" not found.` })
 
     if (!tabs.isModelBacked()) {
-      return res.json({ tabs: tabs.getTabs().map(t => t.toMeta()) })
+      const url = new URL(req.url, 'http://localhost')
+      const tabSlug = url.searchParams.get('tab')
+
+      if (tabSlug) {
+        // Find the tab by slugified label
+        const allTabs = tabs.getTabs()
+        const tab = allTabs.find(t =>
+          t.getLabel().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') === tabSlug
+        )
+
+        if (tab && !tab.hasFields()) {
+          // Resolve this tab's schema elements on demand
+          const { resolveSchema: resolve } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
+          const items = tab.getItems()
+          const tabPanel = Object.create(panel, {
+            getSchema: { value: () => items },
+          })
+          const ctx = buildContext(req)
+          const elements = await resolve(tabPanel, ctx)
+
+          const tabMeta = tab.toMeta()
+          const badge = await tab.resolveBadge()
+
+          return res.json({
+            tab: {
+              label: tab.getLabel(),
+              elements,
+              ...(tabMeta.icon && { icon: tabMeta.icon }),
+              ...(badge !== undefined && { badge }),
+            },
+          })
+        }
+      }
+
+      // No specific tab requested — return all tab labels
+      const allTabs = tabs.getTabs()
+      const tabsMeta = await Promise.all(allTabs.map(async t => {
+        const meta = t.toMeta()
+        const badge = await t.resolveBadge()
+        if (badge !== undefined) meta.badge = badge
+        return meta
+      }))
+      return res.json({ tabs: tabsMeta })
     }
 
     const Model = tabs.getModel()
     if (!Model) return res.status(404).json({ message: 'No model configured.' })
 
+    const url = new URL(req.url, 'http://localhost')
+    const tabRecordId = url.searchParams.get('tab')
+
+    // ?tab=<recordId> — resolve a specific tab's content on demand
+    if (tabRecordId && tabs.getContentFn()) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let record: Record<string, unknown> | null = null
+      try { record = await (Model.query() as any).find(tabRecordId) } catch { /* not found */ }
+      if (!record) return res.status(404).json({ message: `Record "${tabRecordId}" not found.` })
+
+      const contentFn = tabs.getContentFn()!
+      const items = contentFn(record)
+
+      const { resolveSchema: resolve } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
+      const tabPanel = Object.create(panel, {
+        getSchema: { value: () => items },
+      })
+      const ctx = buildContext(req)
+      const elements = await resolve(tabPanel, ctx)
+
+      return res.json({
+        tab: {
+          id: String(record['id'] ?? ''),
+          label: String(record[tabs.getTitleField()] ?? record['id'] ?? 'Untitled'),
+          elements,
+        },
+      })
+    }
+
+    // No ?tab param — return all tab labels (no content, client fetches per-tab)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = Model.query()
     const scopeFn = tabs.getScope()
@@ -470,12 +542,10 @@ export function mountMetaRoutes(
     try { records = await q.get() } catch { /* empty */ }
 
     const titleField = tabs.getTitleField()
-    // Return records so the client can build tabs (content is resolved separately per-tab)
     return res.json({
       tabs: records.map(r => ({
         label: String(r[titleField] ?? r['id'] ?? 'Untitled'),
         id: String(r['id'] ?? ''),
-        record: r,
       })),
     })
   }, mw)

@@ -16,6 +16,12 @@ export interface TabMeta {
   id?: string
   /** Full record data (model-backed tabs only). */
   record?: Record<string, unknown>
+  /** Lucide icon name (optional). */
+  icon?: string
+  /** Never SSR this tab's content, even if it's the active tab. */
+  lazy?: boolean
+  /** Badge value — resolved at SSR time. */
+  badge?: string | number | null
 }
 
 export interface TabsMeta {
@@ -29,15 +35,54 @@ export interface TabsMeta {
   modelBacked?:  boolean
 }
 
-// ─── Tab ───────────────────────────────────────────────────
+// ─── Tab — first-class schema tab ───────────────────────────
 
-class Tab {
-  constructor(
-    private _label: string,
-    private _items: MetaItem[] = [],
-  ) {}
+export class Tab {
+  private _label: string
+  private _items: MetaItem[] = []
+  private _icon?: string
+  private _badge?: (() => Promise<string | number | null>) | string | number
+  private _lazy = false
 
-  getLabel():  string      { return this._label }
+  private constructor(label: string) {
+    this._label = label
+  }
+
+  static make(label: string): Tab {
+    return new Tab(label)
+  }
+
+  /** Tab content — fields or schema elements. */
+  schema(items: MetaItem[]): this {
+    this._items = items
+    return this
+  }
+
+  /** Lucide icon name. */
+  icon(icon: string): this {
+    this._icon = icon
+    return this
+  }
+
+  /** Badge value — static or async function. */
+  badge(value: (() => Promise<string | number | null>) | string | number): this {
+    this._badge = value
+    return this
+  }
+
+  /** Never SSR this tab's content, even if it's the active tab. */
+  lazy(): this {
+    this._lazy = true
+    return this
+  }
+
+  // ── Getters ──────────────────────────────────────────────
+
+  getLabel(): string { return this._label }
+  getItems(): MetaItem[] { return this._items }
+  getIcon(): string | undefined { return this._icon }
+  getBadge() { return this._badge }
+  isLazy(): boolean { return this._lazy }
 
   /** Get items as Field[] (for resource field context). */
   getFields(): Field[] {
@@ -46,27 +91,35 @@ class Tab {
     )
   }
 
-  /** Get all raw items. */
-  getItems(): MetaItem[] { return this._items }
-
   /** Check if this tab contains fields (resource context) or schema elements (panel context). */
   hasFields(): boolean { return this._items.length > 0 && this.getFields().length === this._items.length }
 
   toMeta(): TabMeta {
+    const meta: TabMeta = {
+      label: this._label,
+      fields: [],
+    }
+    if (this._icon) meta.icon = this._icon
+    if (this._lazy) meta.lazy = true
+
     // Field context — all items are fields with toMeta()
     if (this.hasFields()) {
-      return {
-        label:  this._label,
-        fields: this.getFields().map((f) => f.toMeta()),
-      }
+      meta.fields = this.getFields().map((f) => f.toMeta())
+      return meta
     }
 
     // Schema element context — return label only, elements resolved by resolveSchema
-    return {
-      label: this._label,
-      fields: [],
-      elements: [], // placeholder — resolveSchema fills this in
+    meta.elements = [] // placeholder — resolveSchema fills this in
+    return meta
+  }
+
+  /** @internal — resolve async badge value. */
+  async resolveBadge(): Promise<string | number | null | undefined> {
+    if (this._badge === undefined) return undefined
+    if (typeof this._badge === 'function') {
+      try { return await this._badge() } catch { return null }
     }
+    return this._badge
   }
 }
 
@@ -101,10 +154,11 @@ export class Tabs {
   private _lazy = false
   private _pollInterval?: number
 
-  static make(id?: string): Tabs {
-    const tabs = new Tabs()
-    if (id !== undefined) tabs._id = id
-    return tabs
+  static make(id?: string, tabs?: Tab[]): Tabs {
+    const instance = new Tabs()
+    if (id !== undefined) instance._id = id
+    if (tabs) instance._tabs = tabs
+    return instance
   }
 
   getId(): string | undefined { return this._id }
@@ -126,7 +180,7 @@ export class Tabs {
    *   .tab('Activity', Table.make('Recent')..., List.make('Links')...)
    */
   tab(label: string, ...items: MetaItem[]): this {
-    this._tabs.push(new Tab(label, items))
+    this._tabs.push(Tab.make(label).schema(items))
     return this
   }
 
