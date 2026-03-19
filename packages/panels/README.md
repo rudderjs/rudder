@@ -210,25 +210,51 @@ fields() {
 
 ### Tabs
 
-Divide fields into tabs within a single card:
+Divide fields into tabs within a single card. Each tab is a `Tab` instance with its own schema, icon, badge, and lazy-loading control.
 
 ```ts
-import { Tabs, TextField, TextareaField } from '@boostkit/panels'
+import { Tabs, Tab, TextField, TextareaField } from '@boostkit/panels'
 
 fields() {
   return [
-    Tabs.make()
-      .tab('General',
-        TextField.make('name').required(),
-        TextareaField.make('bio'),
-      )
-      .tab('Preferences',
-        SelectField.make('theme').options(['light', 'dark']),
-        BooleanField.make('newsletter'),
-      ),
+    Tabs.make('profile', [
+      Tab.make('general')
+        .label('General')
+        .icon('user')
+        .schema(
+          TextField.make('name').required(),
+          TextareaField.make('bio'),
+        ),
+      Tab.make('preferences')
+        .label('Preferences')
+        .badge('3')
+        .schema(
+          SelectField.make('theme').options(['light', 'dark']),
+          BooleanField.make('newsletter'),
+        ),
+      Tab.make('analytics')
+        .label('Analytics')
+        .lazy()                           // defer heavy content to client-side
+        .schema(
+          Stats.make([Stat.make('Views').value(1234)]),
+          Chart.make('Activity').chartType('line'),
+        ),
+    ])
+      .persist('localStorage'),           // remember active tab across navigations
   ]
 }
 ```
+
+**Persist modes** control how the active tab is remembered:
+
+| Mode | Description |
+|------|-------------|
+| `false` | No persistence (default) — resets on navigation |
+| `'localStorage'` | Persist across sessions via `localStorage` |
+| `'url'` | Store active tab in URL query params |
+| `'session'` | Persist for the current session via `sessionStorage` |
+
+**SSR behavior** — all tabs are server-rendered by default. Use `.lazy()` on a `Tab` (or on individual schema elements inside a tab) to defer heavy content to client-side rendering with a skeleton placeholder.
 
 **Model-backed tabs** -- generate tabs dynamically from database records:
 
@@ -247,10 +273,23 @@ Tabs.make('projects')
   .poll(30000)                           // re-fetch every 30s
 ```
 
+#### `Tab` class
+
 | Method | Description |
 |--------|-------------|
-| `Tabs.make(id?)` | Create a tabs group. Pass an ID for model-backed or lazy/poll tabs |
-| `.tab(label, ...items)` | Add a static tab with fields or schema elements |
+| `Tab.make(key)` | Create a tab with a unique key |
+| `.label(text)` | Display label |
+| `.icon(name)` | Lucide icon name shown before the label |
+| `.badge(text)` | Badge text shown after the label (e.g. count) |
+| `.schema(...items)` | Fields or schema elements inside this tab |
+| `.lazy()` | Defer this tab's content to client-side rendering |
+
+#### `Tabs` container
+
+| Method | Description |
+|--------|-------------|
+| `Tabs.make(id, tabs?)` | Create a tabs group. Optionally pass an array of `Tab` instances |
+| `.persist(mode)` | Active tab persistence: `false`, `'localStorage'`, `'url'`, `'session'` |
 | `.fromModel(Model)` | Generate tabs from model records |
 | `.fromResource(Resource)` | Generate tabs from a Resource's model |
 | `.title(field)` | Model field used as tab label (default: `'name'`) |
@@ -457,7 +496,7 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 | `Dialog.make(id)` | Modal dialog wrapper — `.trigger(label)`, `.title()`, `.description()`, `.schema([...elements])` |
 | `Chart.make(title)` | Chart -- `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
 | `List.make(title)` | Item list card -- `.items([{ label, description?, href?, icon? }])`, `.limit(n)` |
-| `Tabs.make()` | Tabbed sections -- `.tab(label, ...elements)`, `.fromModel()`, `.fromResource()`, `.title()`, `.scope()`, `.content()`, `.creatable()`, `.editable()`, `.lazy()`, `.poll()` |
+| `Tabs.make(id, tabs?)` | Tabbed sections -- accepts `Tab` instances via constructor or `.fromModel()`. `Tab`: `.label()`, `.icon()`, `.badge()`, `.schema()`, `.lazy()`. `Tabs`: `.persist()`, `.fromModel()`, `.fromResource()`, `.lazy()`, `.poll()` |
 | `Widget.make(id)` | Dashboard widget -- standalone or inside `Dashboard.make()` |
 | `Dashboard.make(id)` | User-customizable dashboard grid -- drag-and-drop, per-user layout |
 
@@ -700,18 +739,18 @@ The `:label` and `:labelSingular` placeholders are replaced with the resource's 
 
 ## Tab Filters
 
-Define filtered views as tabs above the table. Users click a tab to apply a preset query filter.
+Define filtered views as tabs above the resource table. Users click a tab to apply a preset query filter. These use `ListTab` (not `Tab`, which is for layout grouping).
 
 ```ts
-import { Tab } from '@boostkit/panels'
+import { ListTab } from '@boostkit/panels'
 
 export class ArticleResource extends Resource {
   tabs() {
     return [
-      Tab.make('all').label('All'),
-      Tab.make('published').label('Published').icon('circle-check')
+      ListTab.make('all').label('All'),
+      ListTab.make('published').label('Published').icon('circle-check')
         .query((q) => q.where('draftStatus', 'published')),
-      Tab.make('draft').label('Drafts').icon('pencil-line')
+      ListTab.make('draft').label('Drafts').icon('pencil-line')
         .query((q) => q.where('draftStatus', 'draft')),
     ]
   }
@@ -720,7 +759,7 @@ export class ArticleResource extends Resource {
 
 | Method | Description |
 |--------|-------------|
-| `Tab.make(key)` | Create a tab with a unique key |
+| `ListTab.make(key)` | Create a list tab with a unique key |
 | `.label(text)` | Display label |
 | `.icon(name)` | Lucide icon name shown before the label |
 | `.query(fn)` | Query callback — receives the ORM query builder |
@@ -1334,17 +1373,17 @@ export class ArticleResource extends Resource {
 
 Widgets render above the record fields on the show page. All schema element types are supported: `Stats`, `Chart`, `List`, `Table`, `Text`, `Heading`.
 
-### WidgetRenderer Component
+### SchemaElementRenderer Component
 
-The `WidgetRenderer` React component renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Available for custom pages:
+The `SchemaElementRenderer` React component renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Available for custom pages:
 
 ```tsx
-import { WidgetRenderer } from '@boostkit/panels/client'
+import { SchemaElementRenderer } from '@boostkit/panels/client'
 
-<WidgetRenderer widgets={widgetData} panel="admin" />
+<SchemaElementRenderer widgets={widgetData} panel="admin" />
 ```
 
-`WidgetRenderer` handles all element types and renders the appropriate UI component for each (stat cards, charts, tables, lists, headings, text).
+`SchemaElementRenderer` handles all element types and renders the appropriate UI component for each (stat cards, charts, tables, lists, headings, text).
 
 ---
 
