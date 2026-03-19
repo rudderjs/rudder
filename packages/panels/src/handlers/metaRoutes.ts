@@ -449,9 +449,12 @@ export function mountMetaRoutes(
     try {
       const sessionPkg = '@boostkit/session'
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sessionModule = await import(/* @vite-ignore */ sessionPkg) as any as { Session: { put(key: string, value: unknown): void } }
+      const sessionModule = await import(/* @vite-ignore */ sessionPkg) as any as { Session: { put(key: string, value: unknown): void; all(): Record<string, unknown> } }
       sessionModule.Session.put(`tabs:${tabsId}`, tab)
-    } catch { /* session not available */ }
+      console.log('[panels] session.put OK:', JSON.stringify(sessionModule.Session.all()))
+    } catch (err) {
+      console.log('[panels] session.put FAILED:', (err as Error).message)
+    }
 
     return res.json({ success: true })
   }, mw)

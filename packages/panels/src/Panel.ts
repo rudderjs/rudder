@@ -5,6 +5,9 @@ import type { Global, GlobalMeta } from './Global.js'
 import { getPanelI18n, getPanelDir, getActiveLocale } from './i18n/index.js'
 import type { PanelI18n } from './i18n/index.js'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PanelMiddlewareHandler = (...args: any[]) => any
+
 type PanelSchemaElement = { getType(): string }
 
 type PanelSchemaDefinition =
@@ -39,6 +42,7 @@ export class Panel {
   protected _layout:    PanelLayout = 'sidebar'
   protected _locale?:   string
   protected _schema?:   PanelSchemaDefinition
+  protected _middleware: PanelMiddlewareHandler[] = []
 
   protected constructor(name: string) {
     this._name = name
@@ -67,6 +71,19 @@ export class Panel {
    */
   guard(fn: PanelGuard): this {
     this._guard = fn
+    return this
+  }
+
+  /**
+   * Middleware applied to all panel API routes.
+   * Use this to add SessionMiddleware, CSRF, etc.
+   *
+   * @example
+   * Panel.make('admin')
+   *   .middleware([SessionMiddleware()])
+   */
+  middleware(handlers: PanelMiddlewareHandler[]): this {
+    this._middleware = handlers
     return this
   }
 
@@ -138,6 +155,7 @@ export class Panel {
   getName(): string { return this._name }
   getPath(): string { return this._path }
   getGuard(): PanelGuard | undefined { return this._guard }
+  getMiddleware(): PanelMiddlewareHandler[] { return this._middleware }
   getBranding(): BrandingOptions { return this._branding }
   getResources(): (typeof Resource)[] { return this._resources }
   getGlobals(): (typeof Global)[] { return this._globals }
