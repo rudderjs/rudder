@@ -278,6 +278,10 @@ List.make('Quick Links')
 
 Group schema elements into tabbed sections on the panel landing page. Uses the same `Tabs.make().tab()` API as resource field tabs.
 
+#### Static tabs
+
+Define tabs manually with `.tab()`:
+
 ```ts
 import { Tabs, Stats, Stat, Chart, Table, List } from '@boostkit/panels'
 
@@ -315,6 +319,53 @@ Each tab can contain any schema element type -- `Stats`, `Chart`, `Table`, `List
 |---------|---------|---------|
 | Resource fields | `Field` instances | `Tabs.make().tab('Content', TextField.make('title'))` |
 | Panel schema | Schema elements | `Tabs.make().tab('Charts', Chart.make('Revenue')...)` |
+
+#### Model-backed tabs
+
+Generate tabs dynamically from model records. Each record becomes a tab, with its content defined via `.content()`.
+
+```ts
+// Model-backed tabs — each Project record becomes a tab
+Tabs.make('projects')
+  .fromModel(Project)
+  .title('name')
+  .scope(q => q.where('active', true))
+  .content((record) => [
+    Stats.make([
+      Stat.make('Tasks').value(record.taskCount),
+      Stat.make('Members').value(record.memberCount),
+    ]),
+    Table.make('Tasks')
+      .fromModel(Task)
+      .scope(q => q.where('projectId', record.id))
+      .columns([Column.make('title').sortable(), Column.make('status').badge()])
+      .limit(10),
+  ])
+  .creatable()
+  .editable()
+```
+
+Model-backed tabs are mutually exclusive with `.tab()` -- use one or the other.
+
+#### Method reference
+
+| Method | Description |
+|--------|-------------|
+| `.tab(label, ...elements)` | Add a static tab with content (mutually exclusive with `.fromModel()`) |
+| `.fromModel(Model)` | Generate tabs from model records (mutually exclusive with `.tab()`) |
+| `.fromResource(Resource)` | Generate tabs from a Resource's model |
+| `.title(field)` | Model field to use as tab label (default: `'name'`) |
+| `.scope(fn)` | Filter which records appear as tabs |
+| `.content(fn)` | Content for each tab -- receives the record |
+| `.creatable()` | Show [+] button to create new tabs/records |
+| `.editable()` | Allow renaming tab labels |
+| `.onCreate(fn)` | Custom create handler |
+| `.canCreate(fn)` | Gate who can create tabs |
+| `.canEdit(fn)` | Gate who can edit tabs |
+| `.lazy()` | Defer tab loading to client-side |
+| `.poll(ms)` | Re-fetch tab data periodically |
+
+#### URL Persistence
 
 **URL Persistence**: The active tab is persisted in the URL query string. Clicking "Charts" updates the URL to `?tab=charts`. Refreshing or sharing the URL opens the correct tab (SSR-compatible — no flash).
 
@@ -490,10 +541,44 @@ Form.make('contact')
 
 | Method | Description |
 |--------|-------------|
-| `.fields([...])` | Array of `Field` instances |
+| `.fields([...])` | Array of `Field | Section | Tabs` — supports grouping fields in sections |
 | `.onSubmit(fn)` | Async handler called with form data on submit |
 | `.submitLabel(text)` | Submit button label (default: `'Submit'`) |
 | `.successMessage(text)` | Message shown after successful submit |
+| `.description(text)` | Description text above the form fields |
+| `.method('PUT')` | HTTP method (default: `'POST'`) |
+| `.action(url)` | Custom submit URL (overrides default endpoint) |
+| `.data(fn)` | Pre-populate form with initial values from async function |
+| `.beforeSubmit(fn)` | Transform data before submission |
+| `.afterSubmit(fn)` | Run after successful submission |
+
+**Advanced example** — pre-populated settings form with sections and lifecycle hooks:
+
+```ts
+Form.make('settings')
+  .description('Update your profile settings')
+  .method('PUT')
+  .data(async (ctx) => {
+    const user = await User.query().find(ctx.user.id)
+    return { name: user.name, email: user.email }
+  })
+  .fields([
+    Section.make('Profile').schema(
+      TextField.make('name').required(),
+      EmailField.make('email').required(),
+    ),
+    Section.make('Preferences').schema(
+      BooleanField.make('notifications'),
+    ),
+  ])
+  .beforeSubmit(async (data) => ({ ...data, updatedAt: new Date() }))
+  .afterSubmit(async (result, ctx) => {
+    await logActivity('settings.updated', ctx.user.id)
+  })
+  .onSubmit(async (data, ctx) => {
+    await User.query().update(ctx.user.id, data)
+  })
+```
 
 ---
 

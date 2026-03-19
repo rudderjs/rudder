@@ -36,130 +36,89 @@ export const adminPanel = Panel.make('admin')
     Heading.make(`Welcome back${ctx.user?.name ? `, ${ctx.user.name}` : ''}.`),
     Text.make('Here\'s a quick overview of your content.'),
     
-    Stats.make([
-      Stat.make('Total Articles').value(await Article.query().count()),
-      Stat.make('Total Categories').value(await Category.query().count()),
-      Stat.make('Total Todos').value(await Todo.query().count()),
-      Stat.make('Total Users').value(await User.query().count()),
-    ]),
+    // ── Async Stats with auto-refresh ──────────────────────
+    Stats.make('overview-stats')
+      .data(async () => [
+        { label: 'Total Articles', value: await Article.query().count(), trend: 5 },
+        { label: 'Total Categories', value: await Category.query().count() },
+        { label: 'Total Todos', value: await Todo.query().count(), description: 'Including completed' },
+        { label: 'Total Users', value: await User.query().count() },
+      ])
+      .poll(60000),
 
-    // ── Standalone widgets (ssr, static, no customization) ──────────
-    // Widget.make('articles-overview')
-    //   .label('Published Articles')
-    //   .component('stat')
-    //   .defaultSize({ w: 3, h: 1 })
-    //   .icon('newspaper')
-    //   // .lazy()
-    //   .data(async () => ({
-    //     value: await Article.query().count(),
-    //     trend: 8,
-    //     description: 'Total published articles',
-    //   })),
-
-    // Widget.make('todo-progress')
-    //   .label('Todo Progress')
-    //   .component('stat-progress')
-    //   .defaultSize({ w: 4, h: 1 })
-    //   .icon('list-checks')
-    //   .data(async () => ({
-    //     value: await Todo.query().where('completed', true).count(),
-    //     max: await Todo.query().count(),
-    //     label: 'Tasks completed',
-    //   })),
-
-    // Widget.make('total-users-static')
-    //   .label('Total Users')
-    //   .component('stat')
-    //   .defaultSize({ w: 4, h: 2 })
-    //   .icon('users')
-    //   .data(async () => ({
-    //     value: await User.query().count(),
-    //   })),
-
-    // ── Schema-level Tabs ──────────────────────────────────────
     // ── Schema-level Section (collapsible card) ─────────────
-    // Section.make('Analytics')
-    //   .description('Traffic and content metrics')
-    //   .collapsible()
-    //   .schema(
-    //     Chart.make('Content Growth')
-    //       .chartType('line')
-    //       .labels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'])
-    //       .datasets([
-    //         { label: 'Articles', data: [5, 12, 18, 25, 33, 42] },
-    //         { label: 'Users', data: [2, 4, 6, 8, 12, 15] },
-    //       ]),
-    //   ),
+    Section.make('Analytics')
+      .description('Traffic and content metrics')
+      .collapsible()
+      .schema(
+        Chart.make('Content Growth')
+          .chartType('line')
+          .labels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'])
+          .datasets([
+            { label: 'Articles', data: [5, 12, 18, 25, 33, 42] },
+            { label: 'Users', data: [2, 4, 6, 8, 12, 15] },
+          ]),
+      ),
 
     // ── Schema-level Tabs ──────────────────────────────────
-    // Tabs.make()
-    //   .tab('Recent Content',
-    //     Table.make('Recent Articles')
-    //       .fromModel(Article)
-    //       // .columns(['title', 'createdAt'])
-    //       .columns([
-    //         Column.make('title').label('Name').sortable().searchable(),
-    //         Column.make('createdAt').label('Joined').date(),
-    //       ])
-    //       .limit(10),
-    //   )
-    //   .tab('Charts',
-    //     Chart.make('Weekly Traffic')
-    //       .chartType('area')
-    //       .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
-    //       .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
-    //   )
-    //   .tab('Users Table',
-    //     Table.make('All Users')
-    //       .fromModel(User)
-    //       .columns([
-    //         Column.make('name').label('Name').sortable().searchable(),
-    //         Column.make('email').label('Email').sortable().searchable(),
-    //         Column.make('createdAt').label('Joined').date(),
-    //       ])
-    //       .sortBy('createdAt', 'DESC')
-    //       .limit(5),
-    //   )
-    //   .tab('Links',
-    //     List.make('Resources')
-    //       .items([
-    //         { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
-    //         { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
-    //       ]),
-    //   ),
+    Tabs.make()
+      .tab('Recent Content',
+        Table.make('Recent Articles')
+          .fromModel(Article)
+          .columns([
+            Column.make('title').label('Title').sortable().searchable(),
+            Column.make('createdAt').label('Published').date(),
+          ])
+          .sortBy('createdAt', 'DESC')
+          .paginated('loadMore', 5)
+          .searchable()
+          .emptyMessage('No articles yet.'),
+      )
+      .tab('Charts',
+        Chart.make('Weekly Traffic')
+          .chartType('area')
+          .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+          .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
+      )
+      .tab('Users Table',
+        Table.make('All Users')
+          .fromModel(User)
+          .columns([
+            Column.make('name').label('Name').sortable().searchable(),
+            Column.make('email').label('Email').sortable().searchable(),
+            Column.make('createdAt').label('Joined').date(),
+          ])
+          .sortBy('createdAt', 'DESC')
+          .paginated('pages', 5)
+          .searchable(),
+      )
+      .tab('Links',
+        List.make('Resources')
+          .items([
+            { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
+            { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
+          ]),
+      ),
 
     // ── Dialog wrapping a Form ───────────────────────────────
-    // Dialog.make('contact-modal')
-    //   .trigger('Contact Support')
-    //   .title('Send a Message')
-    //   .description('We\'ll get back to you within 24 hours.')
-    //   .schema([
-    //     Form.make('contact-modal-form')
-    //       .fields([
-    //         TextField.make('name').label('Your Name').required(),
-    //         EmailField.make('email').label('Email Address').required(),
-    //         TextareaField.make('message').label('Message').required(),
-    //       ])
-    //       .submitLabel('Send Message')
-    //       .successMessage('Message sent!')
-    //       .onSubmit(async (data) => {
-    //         console.log('[contact modal form]', data)
-    //       }),
-    //   ]),
-
-    // ── Standalone Form ─────────────────────────────────────
-    // Form.make('contact')
-    //   .fields([
-    //     TextField.make('name').label('Your Name').required(),
-    //     EmailField.make('email').label('Email Address').required(),
-    //     TextareaField.make('message').label('Message').required(),
-    //   ])
-    //   .submitLabel('Send Message')
-    //   .successMessage('Message sent! We\'ll get back to you shortly.')
-    //   .onSubmit(async (data) => {
-    //     // Example: await Mail.to('admin@example.com').send(new ContactMail(data))
-    //     console.log('[contact form]', data)
-    //   }),
+    Dialog.make('contact-modal')
+      .trigger('Contact Support')
+      .title('Send a Message')
+      .description('We\'ll get back to you within 24 hours.')
+      .schema([
+        Form.make('contact-modal-form')
+          .description('We typically respond within one business day.')
+          .fields([
+            TextField.make('name').label('Your Name').required(),
+            EmailField.make('email').label('Email Address').required(),
+            TextareaField.make('message').label('Message').required(),
+          ])
+          .submitLabel('Send Message')
+          .successMessage('Message sent!')
+          .onSubmit(async (data) => {
+            console.log('[contact modal form]', data)
+          }),
+      ]),
 
     // ── User-customizable dashboard (drag/resize/settings) ───
     Dashboard.make('overview')

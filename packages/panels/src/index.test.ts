@@ -2558,3 +2558,497 @@ describe('Dashboard.tab()', () => {
     assert.equal(meta.widgets[0]!.label, 'W')
   })
 })
+
+// ─── Mock classes for model/resource-backed tests ─────────────
+
+class MockModel {
+  static query() { return { get: async () => [], count: async () => 0 } }
+}
+class MockResource {
+  static model = MockModel
+  static getSlug() { return 'mocks' }
+  fields() { return [] }
+}
+
+// ─── Table enhancements ──────────────────────────────────────
+
+describe('Table enhancements', () => {
+  it('rows() stores static data in config', () => {
+    const data = [{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }]
+    const c = Table.make('Browsers').rows(data).getConfig()
+    assert.deepEqual(c.rows, data)
+  })
+
+  it('scope() stores scope function', () => {
+    const fn = (q: unknown) => q
+    const c = Table.make('T').scope(fn).getConfig()
+    assert.equal(c.scope, fn)
+  })
+
+  it('description() stored in config', () => {
+    const c = Table.make('T').description('A table').getConfig()
+    assert.equal(c.description, 'A table')
+  })
+
+  it('emptyMessage() stored in config', () => {
+    const c = Table.make('T').emptyMessage('Nothing here').getConfig()
+    assert.equal(c.emptyMessage, 'Nothing here')
+  })
+
+  it('href() stored in config', () => {
+    const c = Table.make('T').href('/all-posts').getConfig()
+    assert.equal(c.href, '/all-posts')
+  })
+
+  it('searchable() with no args sets searchable=true', () => {
+    const c = Table.make('T').searchable().getConfig()
+    assert.equal(c.searchable, true)
+    assert.equal(c.searchColumns, undefined)
+  })
+
+  it('searchable(columns) stores specific columns', () => {
+    const c = Table.make('T').searchable(['name', 'email']).getConfig()
+    assert.equal(c.searchable, true)
+    assert.deepEqual(c.searchColumns, ['name', 'email'])
+  })
+
+  it('paginated() defaults to pages mode with perPage=15', () => {
+    const c = Table.make('T').paginated().getConfig()
+    assert.equal(c.paginationType, 'pages')
+    assert.equal(c.perPage, 15)
+  })
+
+  it('paginated(loadMore, 10) stores mode and perPage', () => {
+    const c = Table.make('T').paginated('loadMore', 10).getConfig()
+    assert.equal(c.paginationType, 'loadMore')
+    assert.equal(c.perPage, 10)
+  })
+
+  it('lazy() sets lazy=true', () => {
+    const t = Table.make('T').lazy()
+    assert.equal(t.isLazy(), true)
+    assert.equal(t.getConfig().lazy, true)
+  })
+
+  it('poll() stores poll interval', () => {
+    const t = Table.make('T').poll(5000)
+    assert.equal(t.getPollInterval(), 5000)
+    assert.equal(t.getConfig().pollInterval, 5000)
+  })
+
+  it('id() stores custom ID', () => {
+    const t = Table.make('T').id('my-table')
+    assert.equal(t.getId(), 'my-table')
+    assert.equal(t.getConfig().id, 'my-table')
+  })
+
+  it('getId() auto-generates from title when not set', () => {
+    assert.equal(Table.make('Recent Posts').getId(), 'recent-posts')
+    assert.equal(Table.make('All Users').getId(), 'all-users')
+  })
+
+  it('filters() stores filters', () => {
+    const f = SelectFilter.make('status')
+    const t = Table.make('T').filters([f])
+    assert.deepEqual(t.getFilters(), [f])
+    assert.deepEqual(t.getConfig().filters, [f])
+  })
+
+  it('actions() stores actions', () => {
+    const a = Action.make('delete')
+    const t = Table.make('T').actions([a])
+    assert.deepEqual(t.getActions(), [a])
+    assert.deepEqual(t.getConfig().actions, [a])
+  })
+
+  it('getConfig() returns all fields together', () => {
+    const scopeFn = (q: unknown) => q
+    const c = Table.make('Full Table')
+      .fromModel(MockModel as any)
+      .columns([Column.make('name'), Column.make('email')])
+      .limit(20)
+      .sortBy('name', 'ASC')
+      .scope(scopeFn)
+      .description('desc')
+      .emptyMessage('empty')
+      .href('/full')
+      .searchable(['name'])
+      .paginated('loadMore', 25)
+      .lazy()
+      .poll(3000)
+      .id('full-tbl')
+      .getConfig()
+
+    assert.equal(c.title, 'Full Table')
+    assert.equal(c.model, MockModel)
+    assert.equal(c.limit, 20)
+    assert.equal(c.sortBy, 'name')
+    assert.equal(c.sortDir, 'ASC')
+    assert.equal(c.scope, scopeFn)
+    assert.equal(c.description, 'desc')
+    assert.equal(c.emptyMessage, 'empty')
+    assert.equal(c.href, '/full')
+    assert.equal(c.searchable, true)
+    assert.deepEqual(c.searchColumns, ['name'])
+    assert.equal(c.paginationType, 'loadMore')
+    assert.equal(c.perPage, 25)
+    assert.equal(c.lazy, true)
+    assert.equal(c.pollInterval, 3000)
+    assert.equal(c.id, 'full-tbl')
+  })
+})
+
+// ─── Form enhancements ──────────────────────────────────────
+
+describe('Form enhancements', () => {
+  it('make() creates a form with given ID', () => {
+    const f = Form.make('contact')
+    assert.equal(f.getId(), 'contact')
+    assert.equal(f.getType(), 'form')
+  })
+
+  it('description() stored in meta', () => {
+    const meta = Form.make('x').description('Fill this out').toMeta()
+    assert.equal(meta.description, 'Fill this out')
+  })
+
+  it('method(PUT) stored in meta', () => {
+    const meta = Form.make('x').method('PUT').toMeta()
+    assert.equal(meta.method, 'PUT')
+  })
+
+  it('method defaults to POST and is omitted from meta', () => {
+    const meta = Form.make('x').toMeta()
+    assert.equal(meta.method, undefined)
+  })
+
+  it('action() stored in meta', () => {
+    const meta = Form.make('x').action('/api/custom').toMeta()
+    assert.equal(meta.action, '/api/custom')
+  })
+
+  it('fields() accepts mixed Field and Section items', () => {
+    const f = Form.make('x').fields([
+      TextField.make('a'),
+      Section.make('S').schema(TextField.make('b')),
+    ])
+    assert.equal(f.getFields().length, 2)
+  })
+
+  it('toMeta() serializes fields', () => {
+    const meta = Form.make('x')
+      .fields([TextField.make('name')])
+      .submitLabel('Send')
+      .successMessage('Done!')
+      .toMeta()
+    assert.equal(meta.type, 'form')
+    assert.equal(meta.id, 'x')
+    assert.equal(meta.fields.length, 1)
+    assert.equal(meta.submitLabel, 'Send')
+    assert.equal(meta.successMessage, 'Done!')
+  })
+
+  it('data() stores data function', () => {
+    const fn = async () => ({ name: 'test' })
+    const f = Form.make('x').data(fn)
+    assert.equal(f.getDataFn(), fn)
+  })
+
+  it('beforeSubmit() stores hook', () => {
+    const fn = async (data: Record<string, unknown>) => data
+    const f = Form.make('x').beforeSubmit(fn)
+    assert.equal(f.getBeforeSubmit(), fn)
+  })
+
+  it('afterSubmit() stores hook', () => {
+    const fn = async () => {}
+    const f = Form.make('x').afterSubmit(fn)
+    assert.equal(f.getAfterSubmit(), fn)
+  })
+
+  it('onSubmit() stores submit handler', () => {
+    const fn = async () => {}
+    const f = Form.make('x').onSubmit(fn)
+    assert.equal(f.getSubmitHandler(), fn)
+  })
+})
+
+// ─── Stats enhancements ─────────────────────────────────────
+
+describe('Stats enhancements', () => {
+  it('Stats.make(Stat[]) backwards compatible', () => {
+    const s = Stats.make([Stat.make('Users').value(42)])
+    assert.equal(s.getStats().length, 1)
+    assert.equal(s.getStats()[0]!.toMeta().label, 'Users')
+    assert.equal(s.getStats()[0]!.toMeta().value, 42)
+  })
+
+  it('Stats.make(string) sets id for async mode', () => {
+    const s = Stats.make('my-stats')
+    assert.equal(s.getId(), 'my-stats')
+  })
+
+  it('data() stores data function', () => {
+    const fn = async () => [{ label: 'X', value: 1 }]
+    const s = Stats.make('s').data(fn)
+    assert.equal(s.getDataFn(), fn)
+  })
+
+  it('lazy() sets lazy', () => {
+    const s = Stats.make('s').lazy()
+    assert.equal(s.isLazy(), true)
+  })
+
+  it('poll() stores poll interval', () => {
+    const s = Stats.make('s').poll(10000)
+    assert.equal(s.getPollInterval(), 10000)
+  })
+
+  it('getId() auto-generates from stat labels when no id set', () => {
+    const s = Stats.make([Stat.make('Users').value(1), Stat.make('Posts').value(2)])
+    const id = s.getId()
+    assert.ok(id.includes('users'))
+    assert.ok(id.includes('posts'))
+  })
+
+  it('toMeta() includes id when set', () => {
+    const meta = Stats.make('dash-stats').toMeta()
+    assert.equal(meta.id, 'dash-stats')
+  })
+
+  it('toMeta() includes lazy when set', () => {
+    const meta = Stats.make('s').lazy().toMeta()
+    assert.equal(meta.lazy, true)
+  })
+
+  it('toMeta() includes pollInterval when set', () => {
+    const meta = Stats.make('s').poll(5000).toMeta()
+    assert.equal(meta.pollInterval, 5000)
+  })
+
+  it('toMeta() omits id/lazy/pollInterval when not set (static mode)', () => {
+    const meta = Stats.make([Stat.make('X').value(1)]).toMeta()
+    assert.equal(meta.id, undefined)
+    assert.equal(meta.lazy, undefined)
+    assert.equal(meta.pollInterval, undefined)
+  })
+})
+
+// ─── Tabs enhancements ──────────────────────────────────────
+
+describe('Tabs enhancements', () => {
+  it('fromModel() sets model', () => {
+    const t = Tabs.make('x').fromModel(MockModel as any)
+    assert.equal(t.getModel(), MockModel)
+    assert.equal(t.isModelBacked(), true)
+  })
+
+  it('fromResource() sets model from resource', () => {
+    const t = Tabs.make('x').fromResource(MockResource as any)
+    assert.equal(t.getModel(), MockModel)
+    assert.equal(t.getResourceClass(), MockResource)
+    assert.equal(t.isModelBacked(), true)
+  })
+
+  it('title() stores title field', () => {
+    const t = Tabs.make('x').title('label')
+    assert.equal(t.getTitleField(), 'label')
+  })
+
+  it('title defaults to name', () => {
+    assert.equal(Tabs.make('x').getTitleField(), 'name')
+  })
+
+  it('scope() stores scope function', () => {
+    const fn = (q: unknown) => q
+    const t = Tabs.make('x').scope(fn)
+    assert.equal(t.getScope(), fn)
+  })
+
+  it('content() stores content function', () => {
+    const fn = () => []
+    const t = Tabs.make('x').content(fn)
+    assert.equal(t.getContentFn(), fn)
+  })
+
+  it('creatable() sets flag', () => {
+    const t = Tabs.make('x').creatable()
+    assert.equal(t.isCreatable(), true)
+  })
+
+  it('editable() sets flag', () => {
+    const t = Tabs.make('x').editable()
+    assert.equal(t.isEditable(), true)
+  })
+
+  it('lazy() sets flag', () => {
+    const t = Tabs.make('x').lazy()
+    assert.equal(t.isLazy(), true)
+  })
+
+  it('poll() stores interval', () => {
+    const t = Tabs.make('x').poll(5000)
+    assert.equal(t.getPollInterval(), 5000)
+  })
+
+  it('isModelBacked() returns false when no model set', () => {
+    assert.equal(Tabs.make('x').isModelBacked(), false)
+  })
+
+  it('toMeta() includes modelBacked when model set', () => {
+    const meta = Tabs.make('x').fromModel(MockModel as any).toMeta()
+    assert.equal(meta.modelBacked, true)
+  })
+
+  it('toMeta() includes creatable/editable when set', () => {
+    const meta = Tabs.make('x').creatable().editable().toMeta()
+    assert.equal(meta.creatable, true)
+    assert.equal(meta.editable, true)
+  })
+
+  it('toMeta() includes lazy/pollInterval when set', () => {
+    const meta = Tabs.make('x').lazy().poll(3000).toMeta()
+    assert.equal(meta.lazy, true)
+    assert.equal(meta.pollInterval, 3000)
+  })
+
+  it('toMeta() omits optional fields when not set', () => {
+    const meta = Tabs.make().toMeta()
+    assert.equal(meta.creatable, undefined)
+    assert.equal(meta.editable, undefined)
+    assert.equal(meta.lazy, undefined)
+    assert.equal(meta.pollInterval, undefined)
+    assert.equal(meta.modelBacked, undefined)
+  })
+
+  it('getId() returns id when set', () => {
+    assert.equal(Tabs.make('my-tabs').getId(), 'my-tabs')
+  })
+
+  it('getId() returns undefined when not set', () => {
+    assert.equal(Tabs.make().getId(), undefined)
+  })
+})
+
+// ─── TableRegistry ──────────────────────────────────────────
+
+describe('TableRegistry', () => {
+  beforeEach(() => TableRegistry.reset())
+
+  it('register and get', () => {
+    const t = Table.make('Posts')
+    TableRegistry.register('admin', 'posts', t)
+    assert.equal(TableRegistry.get('admin', 'posts'), t)
+  })
+
+  it('get returns undefined for missing entry', () => {
+    assert.equal(TableRegistry.get('admin', 'nope'), undefined)
+  })
+
+  it('reset clears all entries', () => {
+    TableRegistry.register('admin', 'posts', Table.make('Posts'))
+    TableRegistry.reset()
+    assert.equal(TableRegistry.get('admin', 'posts'), undefined)
+  })
+
+  it('different panels have separate namespaces', () => {
+    const t1 = Table.make('A')
+    const t2 = Table.make('B')
+    TableRegistry.register('admin', 'tbl', t1)
+    TableRegistry.register('user', 'tbl', t2)
+    assert.equal(TableRegistry.get('admin', 'tbl'), t1)
+    assert.equal(TableRegistry.get('user', 'tbl'), t2)
+  })
+})
+
+// ─── StatsRegistry ──────────────────────────────────────────
+
+describe('StatsRegistry', () => {
+  beforeEach(() => StatsRegistry.reset())
+
+  it('register and get', () => {
+    const s = Stats.make('dash')
+    StatsRegistry.register('admin', 'dash', s)
+    assert.equal(StatsRegistry.get('admin', 'dash'), s)
+  })
+
+  it('get returns undefined for missing entry', () => {
+    assert.equal(StatsRegistry.get('admin', 'nope'), undefined)
+  })
+
+  it('reset clears all entries', () => {
+    StatsRegistry.register('admin', 'dash', Stats.make('dash'))
+    StatsRegistry.reset()
+    assert.equal(StatsRegistry.get('admin', 'dash'), undefined)
+  })
+})
+
+// ─── TabsRegistry ───────────────────────────────────────────
+
+describe('TabsRegistry', () => {
+  beforeEach(() => TabsRegistry.reset())
+
+  it('register and get', () => {
+    const t = Tabs.make('projects')
+    TabsRegistry.register('admin', 'projects', t)
+    assert.equal(TabsRegistry.get('admin', 'projects'), t)
+  })
+
+  it('get returns undefined for missing entry', () => {
+    assert.equal(TabsRegistry.get('admin', 'nope'), undefined)
+  })
+
+  it('reset clears all entries', () => {
+    TabsRegistry.register('admin', 'projects', Tabs.make('projects'))
+    TabsRegistry.reset()
+    assert.equal(TabsRegistry.get('admin', 'projects'), undefined)
+  })
+})
+
+// ─── FormRegistry ───────────────────────────────────────────
+
+describe('FormRegistry', () => {
+  beforeEach(() => FormRegistry.reset())
+
+  it('register and get handler', () => {
+    const handler = async () => {}
+    FormRegistry.register('admin', 'contact', handler)
+    assert.equal(FormRegistry.get('admin', 'contact'), handler)
+  })
+
+  it('get returns undefined for missing entry', () => {
+    assert.equal(FormRegistry.get('admin', 'nope'), undefined)
+  })
+
+  it('registerHooks stores before/after submit hooks', () => {
+    const handler = async () => {}
+    const before = async (d: Record<string, unknown>) => d
+    const after = async () => {}
+    FormRegistry.register('admin', 'f1', handler)
+    FormRegistry.registerHooks('admin', 'f1', { beforeSubmit: before, afterSubmit: after })
+    const entry = FormRegistry.getEntry('admin', 'f1')
+    assert.ok(entry)
+    assert.equal(entry!.handler, handler)
+    assert.equal(entry!.beforeSubmit, before)
+    assert.equal(entry!.afterSubmit, after)
+  })
+
+  it('registerHooks creates entry when none exists', () => {
+    const before = async (d: Record<string, unknown>) => d
+    FormRegistry.registerHooks('admin', 'f2', { beforeSubmit: before })
+    const entry = FormRegistry.getEntry('admin', 'f2')
+    assert.ok(entry)
+    assert.equal(entry!.beforeSubmit, before)
+    assert.equal(typeof entry!.handler, 'function')
+  })
+
+  it('getEntry returns undefined for missing entry', () => {
+    assert.equal(FormRegistry.getEntry('admin', 'nope'), undefined)
+  })
+
+  it('reset clears all entries', () => {
+    FormRegistry.register('admin', 'f1', async () => {})
+    FormRegistry.reset()
+    assert.equal(FormRegistry.get('admin', 'f1'), undefined)
+  })
+})

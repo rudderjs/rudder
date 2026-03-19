@@ -230,10 +230,36 @@ fields() {
 }
 ```
 
+**Model-backed tabs** -- generate tabs dynamically from database records:
+
+```ts
+Tabs.make('projects')
+  .fromModel(Project)
+  .title('name')                         // field used as tab label (default: 'name')
+  .scope((q) => q.where('active', true)) // filter records
+  .content((record) => [                 // schema per tab
+    Stats.make([Stat.make('Tasks').value(record.taskCount)]),
+    Table.make('Members').fromModel(Member).scope(q => q.where('projectId', record.id)),
+  ])
+  .creatable()                           // show [+] button to add tabs
+  .editable()                            // allow renaming tab labels
+  .lazy()                                // defer loading to client-side
+  .poll(30000)                           // re-fetch every 30s
+```
+
 | Method | Description |
 |--------|-------------|
-| `Tabs.make()` | Create a tabs group |
-| `.tab(label, ...fields)` | Add a tab with the given label and fields |
+| `Tabs.make(id?)` | Create a tabs group. Pass an ID for model-backed or lazy/poll tabs |
+| `.tab(label, ...items)` | Add a static tab with fields or schema elements |
+| `.fromModel(Model)` | Generate tabs from model records |
+| `.fromResource(Resource)` | Generate tabs from a Resource's model |
+| `.title(field)` | Model field used as tab label (default: `'name'`) |
+| `.scope(fn)` | Filter which records appear as tabs |
+| `.content(fn)` | Schema elements to render inside each model-backed tab |
+| `.creatable()` | Show a button to create new tabs/records |
+| `.editable()` | Allow renaming/editing tab labels |
+| `.lazy()` | Defer loading to client-side (skeleton on SSR) |
+| `.poll(ms)` | Re-fetch tab data every N milliseconds |
 
 ---
 
@@ -423,15 +449,15 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 |---|---|
 | `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `1`) |
 | `Text.make(content)` | Paragraph of text |
-| `Stats.make([...stats])` | Row of stat cards |
+| `Stats.make([...stats])` | Row of stat cards. Also accepts a string ID for async mode: `.data(fn)`, `.lazy()`, `.poll(ms)` |
 | `Stat.make(label)` | Single stat -- `.value(n)`, `.description(text)`, `.trend(n)` (positive=↑, negative=↓) |
-| `Table.make(title)` | Data table -- `.fromResource(Class)` or `.fromModel(Class)`, `.columns([...])`, `.limit(n)`, `.sortBy(col, dir)`, `.reorderable()` |
+| `Table.make(title)` | Data table -- `.fromResource()`, `.fromModel()`, `.rows([...])`, `.columns()`, `.limit()`, `.sortBy()`, `.scope()`, `.searchable()`, `.paginated()`, `.lazy()`, `.poll()`, `.filters()`, `.actions()`, `.reorderable()` |
 | `Column.make(name)` | Typed display column for `Table.make()` — `.label()`, `.sortable()`, `.searchable()`, `.date()`, `.badge()`, `.href()` |
-| `Form.make(id)` | Standalone form with submit handler — `.fields([...])`, `.onSubmit(fn)`, `.submitLabel()`, `.successMessage()` |
+| `Form.make(id)` | Standalone form — `.fields()`, `.onSubmit()`, `.description()`, `.method()`, `.action()`, `.data()`, `.beforeSubmit()`, `.afterSubmit()`, `.submitLabel()`, `.successMessage()` |
 | `Dialog.make(id)` | Modal dialog wrapper — `.trigger(label)`, `.title()`, `.description()`, `.schema([...elements])` |
 | `Chart.make(title)` | Chart -- `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
 | `List.make(title)` | Item list card -- `.items([{ label, description?, href?, icon? }])`, `.limit(n)` |
-| `Tabs.make()` | Tabbed sections -- `.tab(label, ...elements)` groups schema elements into tabs |
+| `Tabs.make()` | Tabbed sections -- `.tab(label, ...elements)`, `.fromModel()`, `.fromResource()`, `.title()`, `.scope()`, `.content()`, `.creatable()`, `.editable()`, `.lazy()`, `.poll()` |
 | `Widget.make(id)` | Dashboard widget -- standalone or inside `Dashboard.make()` |
 | `Dashboard.make(id)` | User-customizable dashboard grid -- drag-and-drop, per-user layout |
 
@@ -479,6 +505,132 @@ List.make('Quick Links')
   ])
   .limit(5)                   // default: 5, truncates items
 ```
+
+### `Table`
+
+Data tables support three modes: resource-linked, model-backed, and static rows.
+
+```ts
+import { Table, Column, Filter, Action } from '@boostkit/panels'
+
+// Resource-linked — inherits model + field labels
+Table.make('Recent Articles')
+  .fromResource(ArticleResource)
+  .columns(['title', 'status', 'createdAt'])
+  .scope((q) => q.where('status', 'published'))
+  .limit(5)
+
+// Model-backed — direct model with Column definitions
+Table.make('All Users')
+  .fromModel(User)
+  .columns([Column.make('name').sortable().searchable(), Column.make('email')])
+  .paginated('pages', 25)
+  .searchable(['name', 'email'])
+  .filters([Filter.make('role').options(['admin', 'user'])])
+  .actions([Action.make('deactivate').label('Deactivate').bulk().handler(async (records) => { /* ... */ })])
+  .lazy()
+  .poll(30000)
+
+// Static rows — no model needed
+Table.make('Browsers')
+  .rows([{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }])
+  .columns([Column.make('name'), Column.make('share')])
+```
+
+| Method | Description |
+|--------|-------------|
+| `Table.make(title)` | Create a table element |
+| `.fromResource(Class)` | Use a Resource class as the data source |
+| `.fromModel(Class)` | Use an ORM Model class directly |
+| `.rows([...])` | Provide static row data (no model needed) |
+| `.columns([...])` | Column names (strings) or `Column` instances |
+| `.limit(n)` | Max rows to display (default: `5`) |
+| `.sortBy(col, dir)` | Default sort column and direction |
+| `.scope(fn)` | Custom query scope: `(query) => query.where(...)` |
+| `.searchable(cols?)` | Enable search input. Optionally restrict to specific columns |
+| `.paginated(mode, perPage)` | Enable pagination: `'pages'` or `'loadMore'` (default per-page: `15`) |
+| `.filters([...])` | Attach filter dropdowns to the table header |
+| `.actions([...])` | Attach bulk/row actions |
+| `.reorderable(field?)` | Enable drag-to-reorder (saves to `field`, default: `'position'`) |
+| `.lazy()` | Defer data loading to client-side (skeleton on SSR) |
+| `.poll(ms)` | Re-fetch table data every N milliseconds |
+| `.id(id)` | Unique ID (auto-generated from title if not set) |
+| `.description(text)` | Subtitle below the table title |
+| `.emptyMessage(text)` | Custom empty state text |
+| `.href(url)` | Override the "View all" header link |
+
+### `Stats`
+
+Display stat cards with static or async data.
+
+```ts
+import { Stats, Stat } from '@boostkit/panels'
+
+// Static stats
+Stats.make([
+  Stat.make('Users').value(42).trend(12),
+  Stat.make('Revenue').value('$8,200').description('This month'),
+])
+
+// Async stats — computed at render time or via client-side fetch
+Stats.make('dashboard-stats')
+  .data(async (ctx) => [
+    { label: 'Users', value: await User.query().count() },
+    { label: 'Posts', value: await Post.query().count(), trend: 5 },
+  ])
+  .lazy()       // defer to client-side
+  .poll(60000)  // refresh every 60s
+```
+
+| Method | Description |
+|--------|-------------|
+| `Stats.make(stats\|id)` | Pass `Stat[]` for static mode, or a string ID for async mode |
+| `.stats([...])` | Set static stats (alternative to constructor) |
+| `.data(fn)` | Async function returning `PanelStatMeta[]` — overrides static stats |
+| `.lazy()` | Defer loading to client-side (skeleton cards on SSR) |
+| `.poll(ms)` | Re-fetch stats every N milliseconds |
+| `.id(id)` | Unique ID (required for lazy/poll; auto-generated otherwise) |
+
+### `Form`
+
+Standalone form with custom submit handling. Supports `Section` and `Tabs` as field grouping.
+
+```ts
+import { Form, TextField, EmailField, TextareaField, Section } from '@boostkit/panels'
+
+Form.make('contact')
+  .description('Send us a message')
+  .fields([
+    Section.make('Your Details').schema(
+      TextField.make('name').label('Name').required(),
+      EmailField.make('email').label('Email').required(),
+    ),
+    TextareaField.make('message').label('Message'),
+  ])
+  .data(async (ctx) => ({ email: ctx.user?.email }))  // pre-fill from context
+  .beforeSubmit(async (data) => ({ ...data, source: 'admin' }))
+  .onSubmit(async (data, ctx) => {
+    await Mail.to('admin@example.com').send(new ContactMail(data))
+  })
+  .afterSubmit(async (result, ctx) => { /* post-submit logic */ })
+  .method('POST')
+  .submitLabel('Send Message')
+  .successMessage('Thanks! We will be in touch.')
+```
+
+| Method | Description |
+|--------|-------------|
+| `Form.make(id)` | Create a form with a unique ID |
+| `.fields([...])` | Form fields — accepts `Field`, `Section`, and `Tabs` instances |
+| `.onSubmit(fn)` | Submit handler: `(data, ctx) => Promise<void>` |
+| `.description(text)` | Description shown above the form fields |
+| `.method(m)` | HTTP method: `'POST'` (default) or `'PUT'` |
+| `.action(url)` | Custom action URL (overrides default `_forms/:id/submit`) |
+| `.data(fn)` | Provide initial values: `(ctx) => Promise<Record<string, unknown>>` |
+| `.beforeSubmit(fn)` | Transform data before validation/submission |
+| `.afterSubmit(fn)` | Run after successful submission |
+| `.submitLabel(text)` | Submit button label (default: `'Submit'`) |
+| `.successMessage(text)` | Message shown after success |
 
 ---
 
