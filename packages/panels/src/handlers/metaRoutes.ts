@@ -7,6 +7,7 @@ import { FormRegistry } from '../FormRegistry.js'
 import { TableRegistry } from '../TableRegistry.js'
 import { StatsRegistry } from '../StatsRegistry.js'
 import { TabsRegistry } from '../TabsRegistry.js'
+import { debugWarn } from '../debug.js'
 
 // Lazy-load @boostkit/image (optional peer — not a dependency of panels)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,7 +138,7 @@ export function mountMetaRoutes(
         const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
         const ctx = buildContext(req)
         await resolveSchema(panel, ctx)
-      } catch { /* best-effort */ }
+      } catch (e) { debugWarn('registry.warmup', e) }
       table = TableRegistry.get(panel.getName(), tableId)
     }
 
@@ -260,7 +261,7 @@ export function mountMetaRoutes(
         const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
         const ctx = buildContext(req)
         await resolveSchema(panel, ctx)
-      } catch { /* best-effort */ }
+      } catch (e) { debugWarn('registry.warmup', e) }
     }
 
     table = TableRegistry.get(panel.getName(), tableId)
@@ -305,7 +306,7 @@ export function mountMetaRoutes(
         const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
         const ctx = buildContext(req)
         await resolveSchema(panel, ctx)
-      } catch { /* best-effort */ }
+      } catch (e) { debugWarn('registry.warmup', e) }
       entry = FormRegistry.getEntry(panel.getName(), formId)
     }
 
@@ -417,7 +418,7 @@ export function mountMetaRoutes(
         const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
         const ctx = buildContext(req)
         await resolveSchema(panel, ctx)
-      } catch { /* best-effort */ }
+      } catch (e) { debugWarn('registry.warmup', e) }
       stats = StatsRegistry.get(panel.getName(), statsId)
     }
 
@@ -467,7 +468,7 @@ export function mountMetaRoutes(
         const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
         const ctx = buildContext(req)
         await resolveSchema(panel, ctx)
-      } catch { /* best-effort */ }
+      } catch (e) { debugWarn('registry.warmup', e) }
       tabs = TabsRegistry.get(panel.getName(), tabsId)
     }
     if (!tabs) return res.status(404).json({ message: `Tabs "${tabsId}" not found.` })
@@ -579,7 +580,7 @@ export function mountMetaRoutes(
         const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
         const ctx = buildContext(req)
         await resolveSchema(panel, ctx)
-      } catch { /* best-effort */ }
+      } catch (e) { debugWarn('registry.warmup', e) }
       tabs = TabsRegistry.get(panel.getName(), tabsId)
     }
     if (!tabs) return res.status(404).json({ message: `Tabs "${tabsId}" not found.` })

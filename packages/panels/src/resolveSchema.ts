@@ -18,6 +18,7 @@ import type { Dashboard, DashboardTab } from './Dashboard.js'
 import type { FieldOrGrouping } from './Resource.js'
 import type { Field } from './Field.js'
 import type { Column } from './schema/Column.js'
+import { debugWarn } from './debug.js'
 import { FormRegistry } from './FormRegistry.js'
 import { TableRegistry } from './TableRegistry.js'
 import { StatsRegistry } from './StatsRegistry.js'
@@ -282,60 +283,15 @@ export async function resolveSchema(
           try { records = await q.get() } catch { /* empty model */ }
         }
 
-        // Pagination — count total records for page calculation
-        let paginationMeta: TableElementMeta['pagination']
-        if (config.paginationType && !config.lazy) {
-          let total = records.length
-          try {
-            const countQ = config.scope ? config.scope(Model.query()) : Model.query()
-            total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
-          } catch { /* fallback to records.length */ }
-          paginationMeta = {
-            total,
-            currentPage: 1,
-            perPage:     config.perPage,
-            lastPage:    Math.ceil(total / config.perPage),
-            type:        config.paginationType,
-          }
-        }
-
-        // Determine columns — Column[] or string[] resolved via Resource fields
-        const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as { toMeta?: unknown })?.toMeta === 'function'
-
-        let columns: import('./schema/Table.js').PanelColumnMeta[]
-        if (isColumnInstances) {
-          columns = (config.columns as Column[]).map((col) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
-        } else {
-          const resource   = new ResourceClass()
-          const flatFields = flattenFields(resource.fields())
-          const names: string[] = config.columns.length > 0
-            ? config.columns as string[]
-            : flatFields.filter((f): f is Field => isField(f) && !f.isHiddenFrom('table') && f.getType() !== 'hasMany').map((f) => (f as Field).getName()).slice(0, 5)
-          columns = names.map((name) => {
-            const field = flatFields.find((f): f is Field => isField(f) && (f as Field).getName() === name)
-            return { name, label: field ? field.getLabel() : titleCase(name) }
-          })
-        }
-
+        const columns = resolveColumns(config.columns, ResourceClass)
+        const pagination = await resolvePagination(config, Model, records.length)
         const slug = ResourceClass.getSlug?.() as string | undefined
-        const tableMeta: TableElementMeta = {
-          type:     'table',
-          title:    config.title,
+
+        result.push(buildTableMeta(config, columns, records, tableId, {
           resource: slug ?? '',
-          columns,
-          records,
-          href:     config.href ?? (slug ? `${panel.getPath()}/${slug}` : ''),
-          id:       tableId,
-        }
-        if (config.description)  tableMeta.description  = config.description
-        if (config.emptyMessage) tableMeta.emptyMessage = config.emptyMessage
-        if (config.searchable)   { tableMeta.searchable = true; tableMeta.searchColumns = config.searchColumns }
-        if (config.filters.length > 0) tableMeta.filters = config.filters.map(f => f.toMeta())
-        if (config.actions.length > 0) tableMeta.actions = config.actions.map(a => a.toMeta())
-        if (config.lazy)         tableMeta.lazy         = true
-        if (config.pollInterval) tableMeta.pollInterval = config.pollInterval
-        if (paginationMeta)      tableMeta.pagination   = paginationMeta
-        result.push(tableMeta)
+          href: slug ? `${panel.getPath()}/${slug}` : '',
+          pagination,
+        }))
         continue
       }
 
@@ -347,7 +303,6 @@ export async function resolveSchema(
 
         // Skip query for lazy tables — data will be fetched client-side
         if (!config.lazy) {
-          // Build query
           let q: QueryBuilderLike<RecordRow> = Model.query()
           if (config.scope) q = config.scope(q)
           if (config.sortBy) q = q.orderBy(config.sortBy, config.sortDir)
@@ -357,101 +312,33 @@ export async function resolveSchema(
           try { records = await q.get() } catch { /* empty model */ }
         }
 
-        // Pagination
-        let modelPagination: TableElementMeta['pagination']
-        if (config.paginationType && !config.lazy) {
-          let total = records.length
-          try {
-            const countQ = config.scope ? config.scope(Model.query()) : Model.query()
-            total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
-          } catch { /* fallback to records.length */ }
-          modelPagination = {
-            total,
-            currentPage: 1,
-            perPage:     config.perPage,
-            lastPage:    Math.ceil(total / config.perPage),
-            type:        config.paginationType,
-          }
-        }
+        const columns = resolveColumns(config.columns)
+        const pagination = await resolvePagination(config, Model, records.length)
 
-        // Determine columns — accept Column[] or string[]
-        const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as { toMeta?: unknown })?.toMeta === 'function'
-
-        const columns: import('./schema/Table.js').PanelColumnMeta[] = isColumnInstances
-          ? (config.columns as Column[]).map((col) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
-          : (config.columns as string[]).map((name) => ({ name, label: titleCase(name) }))
-
-        const meta: TableElementMeta = {
-          type:     'table',
-          title:    config.title,
-          resource: '',
-          columns,
-          records,
-          href:     config.href ?? '',
-          id:       tableId,
-        }
-        if (config.description)  meta.description  = config.description
-        if (config.emptyMessage) meta.emptyMessage = config.emptyMessage
-        if (config.reorderable) {
-          meta.reorderable      = true
-          meta.reorderEndpoint  = `${panel.getApiBase()}/_tables/reorder`
-        }
-        if (config.searchable)   { meta.searchable = true; meta.searchColumns = config.searchColumns }
-        if (config.filters.length > 0) meta.filters = config.filters.map(f => f.toMeta())
-        if (config.actions.length > 0) meta.actions = config.actions.map(a => a.toMeta())
-        if (config.lazy)         meta.lazy         = true
-        if (config.pollInterval) meta.pollInterval = config.pollInterval
-        if (modelPagination)     meta.pagination   = modelPagination
-        result.push(meta as PanelSchemaElementMeta)
+        result.push(buildTableMeta(config, columns, records, tableId, {
+          reorderEndpoint: config.reorderable ? `${panel.getApiBase()}/_tables/reorder` : undefined,
+          pagination,
+        }))
         continue
       }
 
       // ── .rows([...]) — static data, no model ─────────────────
       if (config.rows) {
-        const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as { toMeta?: unknown })?.toMeta === 'function'
-
-        const columns: import('./schema/Table.js').PanelColumnMeta[] = isColumnInstances
-          ? (config.columns as Column[]).map((col) => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
-          : (config.columns as string[]).map((name) => ({ name, label: titleCase(name) }))
+        const columns = resolveColumns(config.columns)
 
         // Lazy tables skip data — empty records array
         const staticRecords = config.lazy ? [] : config.rows
 
         // Pagination for static rows — slice the array
-        const staticRows = config.paginationType
+        const records = config.paginationType
           ? staticRecords.slice(0, config.perPage)
           : staticRecords
 
-        let staticPagination: TableElementMeta['pagination']
-        if (config.paginationType && !config.lazy) {
-          const total = config.rows.length
-          staticPagination = {
-            total,
-            currentPage: 1,
-            perPage:     config.perPage,
-            lastPage:    Math.ceil(total / config.perPage),
-            type:        config.paginationType,
-          }
-        }
+        const pagination = config.paginationType && !config.lazy
+          ? { total: config.rows.length, currentPage: 1, perPage: config.perPage, lastPage: Math.ceil(config.rows.length / config.perPage), type: config.paginationType } as TableElementMeta['pagination']
+          : undefined
 
-        const meta: TableElementMeta = {
-          type:     'table',
-          title:    config.title,
-          resource: '',
-          columns,
-          records:  staticRows,
-          href:     config.href ?? '',
-          id:       tableId,
-        }
-        if (config.description)  meta.description  = config.description
-        if (config.emptyMessage) meta.emptyMessage = config.emptyMessage
-        if (config.searchable)   { meta.searchable = true; meta.searchColumns = config.searchColumns }
-        if (config.filters.length > 0) meta.filters = config.filters.map(f => f.toMeta())
-        if (config.actions.length > 0) meta.actions = config.actions.map(a => a.toMeta())
-        if (config.lazy)         meta.lazy         = true
-        if (config.pollInterval) meta.pollInterval = config.pollInterval
-        if (staticPagination)    meta.pagination   = staticPagination
-        result.push(meta as PanelSchemaElementMeta)
+        result.push(buildTableMeta(config, columns, records as RecordRow[], tableId, { pagination }))
         continue
       }
 
@@ -520,7 +407,7 @@ export async function resolveSchema(
               }
             }
           }
-        } catch { /* DB not available */ }
+        } catch (e) { debugWarn('dashboard.layout', e) }
       }
 
       result.push(meta as unknown as PanelSchemaElementMeta)
@@ -568,7 +455,7 @@ export async function resolveSchema(
       if (dataFn) {
         try {
           formMeta.initialValues = await dataFn(ctx)
-        } catch { /* data resolution failed */ }
+        } catch (e) { debugWarn('form.data', e) }
       }
 
       result.push(formMeta as PanelSchemaElementMeta)
@@ -586,7 +473,8 @@ export async function resolveSchema(
         if (dataFn) {
           try {
             meta.data = await dataFn({ user: ctx.user })
-          } catch {
+          } catch (e) {
+            debugWarn('widget.data', e)
             meta.data = null
           }
         }
@@ -611,7 +499,7 @@ export async function resolveSchema(
       if (dataFn && !stats.isLazy?.()) {
         try {
           meta.stats = await dataFn(ctx)
-        } catch { /* data resolution failed */ }
+        } catch (e) { debugWarn('stats.data', e) }
       } else if (stats.isLazy?.()) {
         meta.stats = []
       }
@@ -620,7 +508,50 @@ export async function resolveSchema(
       continue
     }
 
-    // All other element types (text, heading, chart, list, etc.)
+    // Chart — resolve async data, handle lazy/poll
+    if (type === 'chart') {
+      const chart = el as unknown as { getDataFn?(): ((ctx: PanelContext) => Promise<unknown>) | undefined; isLazy?(): boolean; getPollInterval?(): number | undefined; getId?(): string; toMeta(): ChartElementMeta }
+      const dataFn = chart.getDataFn?.()
+      const meta = chart.toMeta() as ChartElementMeta & { data?: unknown }
+
+      if (dataFn && !chart.isLazy?.()) {
+        try {
+          const resolved = await dataFn(ctx) as { labels?: string[]; datasets?: unknown[] }
+          if (resolved) {
+            if (Array.isArray(resolved.labels)) meta.labels = resolved.labels
+            if (Array.isArray(resolved.datasets)) meta.datasets = resolved.datasets as ChartElementMeta['datasets']
+          }
+        } catch (e) { debugWarn('chart.data', e) }
+      } else if (chart.isLazy?.()) {
+        meta.labels = []
+        meta.datasets = []
+      }
+
+      result.push(meta as unknown as PanelSchemaElementMeta)
+      continue
+    }
+
+    // List — resolve async data, handle lazy/poll
+    if (type === 'list') {
+      const list = el as unknown as { getDataFn?(): ((ctx: PanelContext) => Promise<unknown>) | undefined; isLazy?(): boolean; getPollInterval?(): number | undefined; getId?(): string; toMeta(): ListElementMeta }
+      const dataFn = list.getDataFn?.()
+      const meta = list.toMeta() as ListElementMeta & { data?: unknown }
+
+      if (dataFn && !list.isLazy?.()) {
+        try {
+          const resolved = await dataFn(ctx)
+          if (Array.isArray(resolved)) meta.items = resolved
+          else if (resolved && typeof resolved === 'object' && 'items' in resolved) meta.items = (resolved as { items: unknown[] }).items as ListElementMeta['items']
+        } catch (e) { debugWarn('list.data', e) }
+      } else if (list.isLazy?.()) {
+        meta.items = []
+      }
+
+      result.push(meta as unknown as PanelSchemaElementMeta)
+      continue
+    }
+
+    // All other element types (text, heading, etc.)
     // — pass through their toMeta() directly
     if (typeof (el as SchemaElementLike).toMeta === 'function') {
       result.push((el as SchemaElementLike).toMeta() as unknown as PanelSchemaElementMeta)
@@ -645,7 +576,8 @@ async function resolveWidgetData(widgets: Widget[], ctx: PanelContext): Promise<
       if (dataFn) {
         try {
           meta.data = await dataFn({ user: ctx.user })
-        } catch {
+        } catch (e) {
+          debugWarn('widget.data', e)
           meta.data = null
         }
       }
@@ -717,4 +649,92 @@ async function resolveActiveTabIndex(
     }
   }
   return 0
+}
+
+/** Resolve Column[] or string[] into PanelColumnMeta[]. Optionally uses Resource fields for labels. */
+function resolveColumns(
+  columns: import('./schema/Table.js').TableConfig['columns'],
+  resourceClass?: ResourceLike,
+): import('./schema/Table.js').PanelColumnMeta[] {
+  const isColumnInstances = columns.length > 0 && typeof (columns[0] as { toMeta?: unknown })?.toMeta === 'function'
+
+  if (isColumnInstances) {
+    return (columns as Column[]).map(col => col.toMeta() as import('./schema/Table.js').PanelColumnMeta)
+  }
+
+  if (resourceClass) {
+    const resource = new resourceClass()
+    const flatFields2 = flattenFields(resource.fields())
+    const names: string[] = columns.length > 0
+      ? columns as string[]
+      : flatFields2.filter((f): f is Field => isField(f) && !f.isHiddenFrom('table') && f.getType() !== 'hasMany').map(f => (f as Field).getName()).slice(0, 5)
+    return names.map(name => {
+      const field = flatFields2.find((f): f is Field => isField(f) && (f as Field).getName() === name)
+      return { name, label: field ? field.getLabel() : titleCase(name) }
+    })
+  }
+
+  return (columns as string[]).map(name => ({ name, label: titleCase(name) }))
+}
+
+/** Build pagination meta for a table. */
+async function resolvePagination(
+  config: import('./schema/Table.js').TableConfig,
+  model: ModelLike | undefined,
+  recordCount: number,
+): Promise<TableElementMeta['pagination']> {
+  if (!config.paginationType || config.lazy) return undefined
+
+  let total = recordCount
+  if (model) {
+    try {
+      const countQ = config.scope ? config.scope(model.query()) : model.query()
+      total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
+    } catch { /* fallback to recordCount */ }
+  }
+
+  return {
+    total,
+    currentPage: 1,
+    perPage:     config.perPage,
+    lastPage:    Math.ceil(total / config.perPage),
+    type:        config.paginationType,
+  }
+}
+
+/** Assemble the final TableElementMeta from config + resolved data. */
+function buildTableMeta(
+  config: import('./schema/Table.js').TableConfig,
+  columns: import('./schema/Table.js').PanelColumnMeta[],
+  records: RecordRow[],
+  tableId: string,
+  opts: {
+    resource?: string | undefined
+    href?: string | undefined
+    reorderEndpoint?: string | undefined
+    pagination?: TableElementMeta['pagination']
+  },
+): TableElementMeta {
+  const meta: TableElementMeta = {
+    type:     'table',
+    title:    config.title,
+    resource: opts.resource ?? '',
+    columns,
+    records,
+    href:     config.href ?? opts.href ?? '',
+    id:       tableId,
+  }
+  if (config.description)  meta.description  = config.description
+  if (config.emptyMessage) meta.emptyMessage = config.emptyMessage
+  if (config.reorderable && opts.reorderEndpoint) {
+    meta.reorderable     = true
+    meta.reorderEndpoint = opts.reorderEndpoint
+  }
+  if (config.searchable)          { meta.searchable = true; meta.searchColumns = config.searchColumns }
+  if (config.filters.length > 0) meta.filters = config.filters.map(f => f.toMeta())
+  if (config.actions.length > 0) meta.actions = config.actions.map(a => a.toMeta())
+  if (config.lazy)                meta.lazy         = true
+  if (config.pollInterval)        meta.pollInterval = config.pollInterval
+  if (opts.pagination)            meta.pagination   = opts.pagination
+  return meta
 }

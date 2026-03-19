@@ -1,5 +1,6 @@
 import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import { debugWarn } from './debug.js'
 import { PanelRegistry } from './PanelRegistry.js'
 import { DashboardRegistry } from './DashboardRegistry.js'
 import {
@@ -47,7 +48,7 @@ export class PanelServiceProvider extends ServiceProvider {
     let sessionMw: MiddlewareHandler | undefined
     try {
       sessionMw = this.app.make<MiddlewareHandler>('session.middleware')
-    } catch { /* @boostkit/session not configured */ }
+    } catch (e) { debugWarn('session.autodetect', e) }
 
     for (const panel of PanelRegistry.all()) {
       const mw = [

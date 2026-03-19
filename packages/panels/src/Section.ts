@@ -28,12 +28,19 @@ export class Section {
   private _collapsed:    boolean = false
   private _columns:      1 | 2 | 3 = 1
   private _items:        SchemaItem[] = []
+  private _id?:          string
 
   static make(title: string): Section {
     const s = new Section()
     s._title = title
     return s
   }
+
+  /** Unique ID for the section. */
+  id(id: string): this { this._id = id; return this }
+
+  /** Get the section ID, or undefined if not set. */
+  getId(): string | undefined { return this._id }
 
   description(text: string): this      { this._description = text; return this }
   collapsible(val = true): this        { this._collapsible = val; return this }

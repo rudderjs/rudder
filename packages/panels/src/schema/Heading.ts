@@ -1,14 +1,16 @@
 // ─── Heading schema element ─────────────────────────────────
 
 export interface HeadingElementMeta {
-  type:    'heading'
-  content: string
-  level:   1 | 2 | 3
+  type:         'heading'
+  content:      string
+  level:        1 | 2 | 3
+  description?: string
 }
 
 export class Heading {
-  private _content: string
-  private _level: 1 | 2 | 3 = 1
+  private _content:     string
+  private _level:       1 | 2 | 3 = 1
+  private _description?: string
 
   protected constructor(content: string) {
     this._content = content
@@ -23,9 +25,17 @@ export class Heading {
     return this
   }
 
+  /** Optional description displayed below the heading. */
+  description(text: string): this {
+    this._description = text
+    return this
+  }
+
   getType(): 'heading' { return 'heading' }
 
   toMeta(): HeadingElementMeta {
-    return { type: 'heading', content: this._content, level: this._level }
+    const meta: HeadingElementMeta = { type: 'heading', content: this._content, level: this._level }
+    if (this._description !== undefined) meta.description = this._description
+    return meta
   }
 }
