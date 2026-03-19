@@ -43,8 +43,24 @@ export class PanelServiceProvider extends ServiceProvider {
       }
     }
 
+    // Auto-detect session middleware if @boostkit/session is configured
+    let sessionMw: MiddlewareHandler | undefined
+    try {
+      const sessionConfig = this.app.make('session.config')
+      if (sessionConfig) {
+        const sessionPkg = '@boostkit/session'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { sessionMiddleware } = await import(/* @vite-ignore */ sessionPkg) as any
+        sessionMw = sessionMiddleware(sessionConfig) as MiddlewareHandler
+      }
+    } catch { /* @boostkit/session not installed or not configured */ }
+
     for (const panel of PanelRegistry.all()) {
-      const mw = buildPanelMiddleware(panel)
+      const mw = [
+        ...(sessionMw ? [sessionMw] : []),
+        ...panel.getMiddleware(),
+        ...buildPanelMiddleware(panel),
+      ]
 
       mountMetaRoutes(router, panel, mw)
 
