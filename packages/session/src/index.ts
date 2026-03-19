@@ -59,6 +59,7 @@ export class SessionInstance {
   private _flash:     Record<string, unknown>
   private _flashNext: Record<string, unknown>
   private _id:        string
+  private _dirty = false
   private readonly _driver: InternalDriver
   private readonly _config: SessionConfig
 
@@ -77,19 +78,23 @@ export class SessionInstance {
 
   put(key: string, value: unknown): void {
     this._data[key] = value
+    this._dirty = true
   }
 
   forget(key: string): void {
     delete this._data[key]
+    this._dirty = true
   }
 
   flush(): void {
     this._data = {}
+    this._dirty = true
   }
 
   /** Store a value that will be readable on the *next* request via getFlash(). */
   flash(key: string, value: unknown): void {
     this._flashNext[key] = value
+    this._dirty = true
   }
 
   /** Read a flash value set by the *previous* request. */
@@ -112,9 +117,15 @@ export class SessionInstance {
   async regenerate(): Promise<void> {
     await this._driver.destroy(this._id)
     this._id = randomUUID()
+    this._dirty = true
   }
 
+  /** Whether the session data has been modified since loading. */
+  isDirty(): boolean { return this._dirty }
+
   async save(res: AppResponse): Promise<void> {
+    if (!this._dirty) return  // skip Set-Cookie if session wasn't modified
+
     const payload: SessionPayload = {
       id:         this._id,
       data:       this._data,
@@ -123,11 +134,19 @@ export class SessionInstance {
     const ttl         = this._config.lifetime * 60
     const cookieValue = await this._driver.persist(payload, ttl)
     const cookieStr   = buildCookieHeader(this._config.cookie.name, cookieValue, this._config)
-    // Write directly to the underlying server context (res.raw = Hono's c).
-    // Hono v4 applies headers to c.res even after it has already been set,
-    // which is necessary because the route handler calls res.json() before
-    // this middleware's save() runs.
-    ;(res.raw as Record<string, unknown> & { header(k: string, v: string): void }).header('Set-Cookie', cookieStr)
+    const c = res.raw as Record<string, unknown> & { header(k: string, v: string): void; res?: Response }
+    if (c.res) {
+      // Response already finalized — clone with Set-Cookie header
+      const newHeaders = new Headers(c.res.headers)
+      newHeaders.append('Set-Cookie', cookieStr)
+      c.res = new Response(c.res.body, {
+        status: c.res.status,
+        statusText: c.res.statusText,
+        headers: newHeaders,
+      })
+    } else {
+      c.header('Set-Cookie', cookieStr)
+    }
   }
 }
 
@@ -378,6 +397,7 @@ export function session(config: SessionConfig): new (app: Application) => Servic
 
     boot(): void {
       this.app.instance('session.config', config)
+      this.app.instance('session.middleware', sessionMiddleware(config))
     }
   }
 

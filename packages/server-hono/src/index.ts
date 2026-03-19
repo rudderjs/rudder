@@ -211,8 +211,10 @@ class HonoAdapter implements ServerAdapter {
       }
 
       // Run middleware chain with the handler as the final step.
-      // If any middleware short-circuits (doesn't call next), the handler never runs.
-      let response: Response | undefined
+      // Middleware and handler share the same `res` so headers set by middleware
+      // (e.g. Set-Cookie from SessionMiddleware) are included in the final response.
+      // We always return `c.res` at the end — middleware that runs after the handler
+      // (like session.save()) can modify `c.res` and their changes will be included.
       const middleware = [...route.middleware]
       let idx = 0
 
@@ -221,18 +223,19 @@ class HonoAdapter implements ServerAdapter {
         if (fn) {
           await fn(req, res, next)
         } else {
-          // All middleware passed — run the handler with a fresh response context
-          // so its status/headers are independent of any middleware state
-          const handlerRes = normalizeResponse(c)
-          const result = await route.handler(req, handlerRes)
-          if (result instanceof Response)                    response = result
-          else if (result !== undefined && result !== null)  response = c.json(result) as Response
-          else                                               response = c.res as Response
+          // All middleware passed — run the handler with the same res
+          const result = await route.handler(req, res)
+          if (result instanceof Response) {
+            c.res = result
+          } else if (result !== undefined && result !== null) {
+            c.res = c.json(result) as Response
+          }
+          // else: handler called res.json()/res.send() which already set c.res
         }
       }
 
       await next()
-      return response ?? c.res as Response
+      return c.res as Response
     })
   }
 
