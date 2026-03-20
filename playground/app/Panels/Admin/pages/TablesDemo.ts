@@ -1,4 +1,4 @@
-import { Page, Heading, Text, Table, Column } from '@boostkit/panels'
+import { Page, Heading, Text, Table, Column, SelectFilter, Action } from '@boostkit/panels'
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
@@ -28,7 +28,17 @@ export class TablesDemo extends Page {
         .paginated('pages', 3)
         .searchable()
         .emptyMessage('No articles found.')
-        .remember('url'),
+        .remember('url')
+        .filters([
+          SelectFilter.make('draftStatus').label('Status').options([
+            { label: 'Published', value: 'published' },
+            { label: 'Draft', value: 'draft' },
+          ]),
+        ])
+        .actions([
+          Action.make('publish').label('Publish').bulk(),
+          Action.make('delete').label('Delete').destructive().confirm('Delete selected articles?').bulk(),
+        ]),
 
       // ── Load More pagination + remember(localStorage) ──────
       Heading.make('Load More Table (localStorage)').level(2),

@@ -137,8 +137,17 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     })
   }
 
+  // ── Filters & Actions ──
+  const filters = (element as { filters?: Array<{ name: string; type: string; label: string; extra: Record<string, unknown> }> }).filters ?? []
+  const actions = (element as { actions?: Array<{ name: string; label: string; icon?: string; destructive: boolean; requiresConfirm: boolean; confirmMessage?: string; bulk: boolean; row: boolean }> }).actions ?? []
+  const hasBulkActions = actions.some(a => a.bulk)
+  const hasRowActions = actions.some(a => a.row)
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({})
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [actionLoading, setActionLoading] = useState(false)
+
   // ── Shared fetch function — all table state changes go through API ──
-  async function fetchTable(opts: { page?: number; search?: string; sort?: string; dir?: string; append?: boolean } = {}) {
+  async function fetchTable(opts: { page?: number; search?: string; sort?: string; dir?: string; append?: boolean; filters?: Record<string, string> } = {}) {
     if (!tableId) return
     setLoadingMore(true)
     try {
@@ -148,6 +157,11 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       if (opts.search !== undefined ? opts.search : search) params.set('search', opts.search !== undefined ? opts.search : search)
       if (opts.sort) { params.set('sort', opts.sort); params.set('dir', opts.dir ?? 'asc') }
       else if (sort) { params.set('sort', sort.col); params.set('dir', sort.dir) }
+      // Add filter params
+      const filtersToApply = opts.filters ?? activeFilters
+      for (const [k, v] of Object.entries(filtersToApply)) {
+        if (v) params.set(`filter[${k}]`, v)
+      }
       const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
       if (res.ok) {
         const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
@@ -161,6 +175,40 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       }
     } catch { /* fetch failed */ }
     finally { setLoadingMore(false); setRestoring(false) }
+  }
+
+  function handleFilterChange(filterName: string, value: string) {
+    const newFilters = { ...activeFilters }
+    if (value) newFilters[filterName] = value
+    else delete newFilters[filterName]
+    setActiveFilters(newFilters)
+
+    if (hasPagination) {
+      // Fetch with filters applied
+      void fetchTable({ page: 1, filters: newFilters })
+      setCurrentPage(1)
+      saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: 1, ...Object.fromEntries(Object.entries(newFilters).map(([k, v]) => [`filter_${k}`, v])) })
+    } else {
+      saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: currentPage, ...Object.fromEntries(Object.entries(newFilters).map(([k, v]) => [`filter_${k}`, v])) })
+    }
+  }
+
+  async function executeAction(actionName: string, ids: string[]) {
+    if (!tableId) return
+    setActionLoading(true)
+    try {
+      const res = await fetch(`/${pathSegment}/api/_tables/${tableId}/action/${actionName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (res.ok) {
+        setSelectedIds(new Set())
+        // Refresh table data
+        void fetchTable({ page: currentPage })
+      }
+    } catch { /* action failed */ }
+    finally { setActionLoading(false) }
   }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
@@ -178,12 +226,20 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       const cached = tableStateCache.get(tableId)
       const state = Object.keys(restored).length > 0 ? restored : cached ?? {}
       const restoredPage = state.page ? Number(state.page) : 1
-      if (restoredPage > 1 || state.search || state.sort) {
+      // Restore filters from element change
+      const restoredFiltersOnChange: Record<string, string> = {}
+      for (const [k, v] of Object.entries(state)) {
+        if (k.startsWith('filter_')) restoredFiltersOnChange[k.slice(7)] = String(v)
+      }
+      const hasRestoredFiltersOnChange = Object.keys(restoredFiltersOnChange).length > 0
+      if (restoredPage > 1 || state.search || state.sort || hasRestoredFiltersOnChange) {
+        if (hasRestoredFiltersOnChange) setActiveFilters(restoredFiltersOnChange)
         void fetchTable({
           page: restoredPage,
           search: state.search ? String(state.search) : '',
           sort: state.sort as string,
           dir: state.dir as string,
+          filters: restoredFiltersOnChange,
         })
         setSort(state.sort ? { col: String(state.sort), dir: (state.dir as 'asc' | 'desc') ?? 'asc' } : null)
         setSearch(state.search ? String(state.search) : '')
@@ -194,6 +250,8 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     setRecords(element.records as Record<string, unknown>[])
     setSort(null)
     setSearch('')
+    setActiveFilters({})
+    setSelectedIds(new Set())
     setPagination(element.pagination)
     setCurrentPage(1)
     setLazyLoaded(!isLazy)
@@ -208,12 +266,23 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     const source = Object.keys(persisted).length > 0 ? persisted : cached ?? {}
     const restoredPage = source.page ? Number(source.page) : 1
     const restoredSearch = source.search ? String(source.search) : ''
+    // Restore filters from persisted state
+    const restoredFilters: Record<string, string> = {}
+    for (const [k, v] of Object.entries(source)) {
+      if (k.startsWith('filter_')) {
+        restoredFilters[k.slice(7)] = String(v)
+      }
+    }
+    if (Object.keys(restoredFilters).length > 0) {
+      setActiveFilters(restoredFilters)
+    }
     const ssrPage = element.pagination?.currentPage ?? 1
     // Skip if SSR already has the right data (url/session on initial page load)
-    if (restoredPage === ssrPage && !restoredSearch && !source.sort) return
-    if (restoredPage <= 1 && !restoredSearch && !source.sort) return
+    const hasRestoredFilters = Object.keys(restoredFilters).length > 0
+    if (restoredPage === ssrPage && !restoredSearch && !source.sort && !hasRestoredFilters) return
+    if (restoredPage <= 1 && !restoredSearch && !source.sort && !hasRestoredFilters) return
     setRestoring(true)
-    void fetchTable({ page: restoredPage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string })
+    void fetchTable({ page: restoredPage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string, filters: restoredFilters })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -255,6 +324,12 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     if (search && searchableCols.length > 0) {
       result = result.filter(r => searchableCols.some(col => String(r[col] ?? '').toLowerCase().includes(search.toLowerCase())))
     }
+    // Client-side filters for non-paginated tables
+    for (const [filterName, filterValue] of Object.entries(activeFilters)) {
+      if (filterValue) {
+        result = result.filter(r => String(r[filterName] ?? '') === filterValue)
+      }
+    }
     return result
   })()
 
@@ -268,11 +343,13 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       void fetchTable({ page: 1, sort: next.col, dir: next.dir })
       setCurrentPage(1)
     }
-    saveRememberState({ sort: next.col, dir: next.dir, search, page: hasPagination ? 1 : currentPage })
+    const filterState = Object.fromEntries(Object.entries(activeFilters).map(([k, v]) => [`filter_${k}`, v]))
+    saveRememberState({ sort: next.col, dir: next.dir, search, page: hasPagination ? 1 : currentPage, ...filterState })
   }
 
   function handleSearchChange(value: string) {
     setSearch(value)
+    const filterState = Object.fromEntries(Object.entries(activeFilters).map(([k, v]) => [`filter_${k}`, v]))
     // Debounce search — wait 300ms before fetching
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     if (hasPagination) {
@@ -280,10 +357,10 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
         // Reset to page 1 on search
         void fetchTable({ page: 1, search: value })
         setCurrentPage(1)
-        saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: 1 })
+        saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: 1, ...filterState })
       }, 300)
     } else {
-      saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: currentPage })
+      saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: currentPage, ...filterState })
     }
   }
 
@@ -293,7 +370,8 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     } else {
       void fetchTable({ page })
     }
-    saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page })
+    const filterState = Object.fromEntries(Object.entries(activeFilters).map(([k, v]) => [`filter_${k}`, v]))
+    saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page, ...filterState })
   }
 
   // Reorder via drag-and-drop (simple pointer-based, no dnd-kit dependency in this renderer)
@@ -365,6 +443,72 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
         </div>
       </div>
 
+      {/* Filters */}
+      {filters.length > 0 && (
+        <div className="flex items-center gap-2 px-5 py-2 border-b bg-muted/10 flex-wrap">
+          {filters.map(filter => {
+            if (filter.type === 'select') {
+              const options = (filter.extra?.options ?? []) as Array<{ label: string; value: string | number | boolean }>
+              return (
+                <select
+                  key={filter.name}
+                  value={activeFilters[filter.name] ?? ''}
+                  onChange={(e) => handleFilterChange(filter.name, e.target.value)}
+                  className="h-7 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">{filter.label}</option>
+                  {options.map(opt => (
+                    <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
+                  ))}
+                </select>
+              )
+            }
+            return null
+          })}
+          {Object.keys(activeFilters).length > 0 && (
+            <button
+              onClick={() => { setActiveFilters({}); if (hasPagination) void fetchTable({ page: 1, filters: {} }) }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              {i18n.clearFilters ?? 'Clear filters'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-5 py-2 border-b bg-primary/5">
+          <span className="text-xs text-muted-foreground">
+            {i18n.selected?.replace(':n', String(selectedIds.size)) ?? `${selectedIds.size} selected`}
+          </span>
+          {actions.filter(a => a.bulk).map(action => (
+            <button
+              key={action.name}
+              onClick={() => {
+                if (action.requiresConfirm) {
+                  if (confirm(action.confirmMessage ?? 'Are you sure?')) {
+                    void executeAction(action.name, [...selectedIds])
+                  }
+                } else {
+                  void executeAction(action.name, [...selectedIds])
+                }
+              }}
+              disabled={actionLoading}
+              className={`text-xs px-2 py-1 rounded ${action.destructive ? 'text-red-500 hover:bg-red-500/10' : 'text-muted-foreground hover:bg-accent'}`}
+            >
+              {action.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-muted-foreground hover:text-foreground ml-auto"
+          >
+            {i18n.clearSelection ?? 'Clear'}
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       {displayRecords.length === 0 ? (
         <p className="px-5 py-4 text-sm text-muted-foreground">{element.emptyMessage ?? i18n.noRecordsFound}</p>
@@ -373,6 +517,19 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/20">
+                {hasBulkActions && (
+                  <th className="w-8 px-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === displayRecords.length && displayRecords.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedIds(new Set(displayRecords.map(r => String(r['id'] ?? ''))))
+                        else setSelectedIds(new Set())
+                      }}
+                      className="rounded border-muted-foreground/50"
+                    />
+                  </th>
+                )}
                 {el.reorderable && <th className="w-6" />}
                 {element.columns.map((col: PanelColumnMeta) => {
                   const sortable = col.sortable
@@ -390,6 +547,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
                     </th>
                   )
                 })}
+                {hasRowActions && <th className="w-20" />}
                 {hasHref && <th className="w-8" />}
               </tr>
             </thead>
@@ -405,6 +563,21 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
                     onDragOver={el.reorderable ? handleDragOver : undefined}
                     onDrop={el.reorderable && el.reorderEndpoint ? () => handleDrop(id, el.reorderEndpoint ?? '') : undefined}
                   >
+                    {hasBulkActions && (
+                      <td className="px-2 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedIds)
+                            if (e.target.checked) next.add(id)
+                            else next.delete(id)
+                            setSelectedIds(next)
+                          }}
+                          className="rounded border-muted-foreground/50"
+                        />
+                      </td>
+                    )}
                     {el.reorderable && (
                       <td className="px-2 py-2.5 text-muted-foreground cursor-grab">⠿</td>
                     )}
@@ -413,6 +586,29 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
                         {formatCellValue(record[col.name], col, i18n, panelPath)}
                       </td>
                     ))}
+                    {hasRowActions && (
+                      <td className="px-2 py-2.5 text-right">
+                        <div className="flex items-center gap-1 justify-end">
+                          {actions.filter(a => a.row).map(action => (
+                            <button
+                              key={action.name}
+                              onClick={() => {
+                                if (action.requiresConfirm) {
+                                  if (confirm(action.confirmMessage ?? 'Are you sure?')) {
+                                    void executeAction(action.name, [id])
+                                  }
+                                } else {
+                                  void executeAction(action.name, [id])
+                                }
+                              }}
+                              className={`text-xs px-1.5 py-0.5 rounded ${action.destructive ? 'text-red-500 hover:bg-red-500/10' : 'text-muted-foreground hover:bg-accent'}`}
+                            >
+                              {action.label}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    )}
                     {hasHref && (
                       <td className="px-4 py-2.5 text-right">
                         <a
