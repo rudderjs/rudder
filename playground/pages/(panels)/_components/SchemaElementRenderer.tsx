@@ -86,6 +86,9 @@ function StatsRow({ stats }: { stats: PanelStatMeta[] }) {
   )
 }
 
+// Client-side cache for table state — survives tab switches within the same page
+const tableStateCache = new Map<string, Record<string, unknown>>()
+
 function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n }) {
   const el = element as typeof element & { reorderable?: boolean; reorderEndpoint?: string }
   const tableId = element.id as string | undefined
@@ -104,28 +107,48 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   const ssrSearch = (element as { activeSearch?: string }).activeSearch
   const ssrSort = (element as { activeSort?: { col: string; dir: string } }).activeSort
 
+  // Check in-memory cache for tab-switch restore
+  const cachedState = tableId ? tableStateCache.get(tableId) : undefined
+
   const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
   const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(
     ssrSort ? { col: ssrSort.col, dir: ssrSort.dir.toLowerCase() as 'asc' | 'desc' }
     : initialState.sort ? { col: String(initialState.sort), dir: (initialState.dir as 'asc' | 'desc') ?? 'asc' }
+    : cachedState?.sort ? { col: String(cachedState.sort), dir: (cachedState.dir as 'asc' | 'desc') ?? 'asc' }
     : null,
   )
-  const [search, setSearch]   = useState(ssrSearch ?? (initialState.search ? String(initialState.search) : ''))
+  const [search, setSearch]   = useState(
+    ssrSearch ?? (initialState.search ? String(initialState.search) : (cachedState?.search ? String(cachedState.search) : '')),
+  )
   const [dragging, setDragging] = useState<string | null>(null)
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
   const [currentPage, setCurrentPage] = useState(
     element.pagination?.currentPage && element.pagination.currentPage > 1
       ? element.pagination.currentPage  // SSR'd page (url/session persist)
-      : initialState.page ? Number(initialState.page)  // client-restored page (localStorage/url on re-mount)
+      : initialState.page ? Number(initialState.page)  // client-restored page (localStorage/url)
+      : cachedState?.page ? Number(cachedState.page)   // in-memory cache (tab switch)
       : 1,
   )
   const [loadingMore, setLoadingMore] = useState(false)
   const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Detect if we need to restore from cache (stale SSR data)
+  const needsRestore = (() => {
+    const source = Object.keys(initialState).length > 0 ? initialState : cachedState
+    if (!source) return false
+    const ssrPage = element.pagination?.currentPage ?? 1
+    const restoredPage = source.page ? Number(source.page) : 1
+    return restoredPage !== ssrPage || !!source.search || !!source.sort
+  })()
+  const [restoring, setRestoring] = useState(needsRestore)
+
   // ── Remember: save state on change ──
   function saveRememberState(state: Record<string, unknown>) {
-    if (!rememberMode || !tableId) return
+    if (!tableId) return
+    // Always cache in memory (survives tab switches)
+    tableStateCache.set(tableId, state)
+    if (!rememberMode) return
     saveClientState(rememberMode as PersistMode, `table:${tableId}`, state, {
       pathSegment,
       apiPath: `/api/_tables/${tableId}/remember`,
@@ -156,7 +179,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
         setCurrentPage(p)
       }
     } catch { /* fetch failed */ }
-    finally { setLoadingMore(false) }
+    finally { setLoadingMore(false); setRestoring(false) }
   }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
@@ -164,6 +187,29 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   useEffect(() => {
     if (elementRef.current === element) return
     elementRef.current = element
+
+    // Restore from persisted state or in-memory cache instead of resetting
+    if (tableId) {
+      const restored = rememberMode
+        ? readClientState(rememberMode as PersistMode, `table:${tableId}`, tableId)
+        : {}
+      // Fall back to in-memory cache (works for session mode and non-remember tables during tab switches)
+      const cached = tableStateCache.get(tableId)
+      const state = Object.keys(restored).length > 0 ? restored : cached ?? {}
+      const restoredPage = state.page ? Number(state.page) : 1
+      if (restoredPage > 1 || state.search || state.sort) {
+        void fetchTable({
+          page: restoredPage,
+          search: state.search ? String(state.search) : '',
+          sort: state.sort as string,
+          dir: state.dir as string,
+        })
+        setSort(state.sort ? { col: String(state.sort), dir: (state.dir as 'asc' | 'desc') ?? 'asc' } : null)
+        setSearch(state.search ? String(state.search) : '')
+        return
+      }
+    }
+
     setRecords(element.records as Record<string, unknown>[])
     setSort(null)
     setSearch('')
@@ -174,14 +220,18 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
 
   // ── Restore remembered state — fetch if client state differs from SSR ──
   useEffect(() => {
-    if (!rememberMode || !tableId) return
-    const restoredPage = initialState.page ? Number(initialState.page) : 1
-    const restoredSearch = initialState.search ? String(initialState.search) : ''
+    if (!tableId) return
+    // Check persisted state, then fall back to in-memory cache (tab switch)
+    const persisted = rememberMode ? readClientState(rememberMode as PersistMode, `table:${tableId}`, tableId) : {}
+    const cached = tableStateCache.get(tableId)
+    const source = Object.keys(persisted).length > 0 ? persisted : cached ?? {}
+    const restoredPage = source.page ? Number(source.page) : 1
+    const restoredSearch = source.search ? String(source.search) : ''
     const ssrPage = element.pagination?.currentPage ?? 1
     // Skip if SSR already has the right data (url/session on initial page load)
-    if (restoredPage === ssrPage && !restoredSearch && !initialState.sort) return
-    if (restoredPage <= 1 && !restoredSearch && !initialState.sort) return
-    void fetchTable({ page: restoredPage, search: restoredSearch, sort: initialState.sort as string, dir: initialState.dir as string })
+    if (restoredPage === ssrPage && !restoredSearch && !source.sort) return
+    if (restoredPage <= 1 && !restoredSearch && !source.sort) return
+    void fetchTable({ page: restoredPage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -207,20 +257,6 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     const timer = setInterval(() => void fetchTable(), interval)
     return () => clearInterval(timer)
   }, [tableId, currentPage, search, sort, pathSegment, element.pollInterval])
-
-  // ── Lazy skeleton ──
-  if (!lazyLoaded) {
-    return (
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="px-5 py-3 border-b bg-muted/40">
-          <div className="h-4 w-32 bg-muted/40 rounded animate-pulse" />
-        </div>
-        <div className="p-4 space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted/20 rounded animate-pulse" />)}
-        </div>
-      </div>
-    )
-  }
 
   // For non-paginated tables, sort and search client-side
   const displayRecords = hasPagination ? records : (() => {
@@ -304,6 +340,20 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
 
   const hasSearch = !!element.searchable || element.columns.some((c: PanelColumnMeta) => c.searchable)
   const hasHref   = !!element.href
+
+  // ── Lazy skeleton or restoring state ──
+  if (!lazyLoaded || restoring) {
+    return (
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="px-5 py-3 border-b bg-muted/40">
+          <p className="text-sm font-semibold">{element.title}</p>
+        </div>
+        <div className="p-4 space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted/20 rounded animate-pulse" />)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
