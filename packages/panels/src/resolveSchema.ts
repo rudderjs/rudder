@@ -260,6 +260,22 @@ export async function resolveSchema(
       const tableId = (el as unknown as { getId(): string }).getId()
       TableRegistry.register(panel.getName(), tableId, el as unknown as import('./schema/Table.js').Table)
 
+      // Read URL-persisted state for remember('url') tables
+      let urlPage = 1
+      let urlSort: string | undefined
+      let urlSortDir: 'ASC' | 'DESC' | undefined
+      let urlSearch: string | undefined
+      if (config.remember === 'url' && ctx.urlSearch) {
+        const p = ctx.urlSearch[`${tableId}_page`]
+        if (p) urlPage = parseInt(p) || 1
+        const s = ctx.urlSearch[`${tableId}_sort`]
+        if (s) urlSort = s
+        const d = ctx.urlSearch[`${tableId}_dir`]
+        if (d) urlSortDir = d.toUpperCase() as 'ASC' | 'DESC'
+        const q = ctx.urlSearch[`${tableId}_search`]
+        if (q) urlSearch = q
+      }
+
       // ── fromResource(Class) — preferred resource-linked mode ───
       if (config.resourceClass) {
         const ResourceClass = config.resourceClass as ResourceLike
@@ -272,19 +288,31 @@ export async function resolveSchema(
         if (!config.lazy) {
           let q: QueryBuilderLike<RecordRow> = Model.query()
           if (config.scope) q = config.scope(q)
-          const sortCol = config.sortBy ?? ResourceClass.defaultSort
+
+          // Apply search from URL
+          if (urlSearch && config.searchable) {
+            const searchCols = config.searchColumns ?? (config.columns as Column[]).filter(c => typeof (c as { toMeta?: unknown }).toMeta === 'function' && (c as Column).toMeta().searchable).map(c => (c as Column).toMeta().name)
+            if (searchCols.length > 0) {
+              q = q.where(searchCols[0] ?? '', 'LIKE', `%${urlSearch}%`)
+              for (let si = 1; si < searchCols.length; si++) q = q.orWhere(searchCols[si] ?? '', 'LIKE', `%${urlSearch}%`)
+            }
+          }
+
+          const sortCol = urlSort ?? config.sortBy ?? ResourceClass.defaultSort
           if (sortCol) {
-            const dir = config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir ?? 'DESC')
+            const dir = urlSortDir ?? (config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir ?? 'DESC'))
             q = q.orderBy(sortCol, dir)
           }
           const queryLimit = config.paginationType ? config.perPage : config.limit
+          const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
           q = q.limit(queryLimit)
+          if (offset > 0) q = q.offset(offset)
 
           try { records = await q.get() } catch { /* empty model */ }
         }
 
         const columns = resolveColumns(config.columns, ResourceClass)
-        const pagination = await resolvePagination(config, Model, records.length)
+        const pagination = await resolvePagination(config, Model, records.length, urlPage)
         const slug = ResourceClass.getSlug?.() as string | undefined
 
         result.push(buildTableMeta(config, columns, records, tableId, {
@@ -305,15 +333,28 @@ export async function resolveSchema(
         if (!config.lazy) {
           let q: QueryBuilderLike<RecordRow> = Model.query()
           if (config.scope) q = config.scope(q)
-          if (config.sortBy) q = q.orderBy(config.sortBy, config.sortDir)
+
+          // Apply search from URL
+          if (urlSearch && config.searchable) {
+            const searchCols = config.searchColumns ?? (config.columns as Column[]).filter(c => typeof (c as { toMeta?: unknown }).toMeta === 'function' && (c as Column).toMeta().searchable).map(c => (c as Column).toMeta().name)
+            if (searchCols.length > 0) {
+              q = q.where(searchCols[0] ?? '', 'LIKE', `%${urlSearch}%`)
+              for (let si = 1; si < searchCols.length; si++) q = q.orWhere(searchCols[si] ?? '', 'LIKE', `%${urlSearch}%`)
+            }
+          }
+
+          const sortCol = urlSort ?? config.sortBy
+          if (sortCol) q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
           const modelLimit = config.paginationType ? config.perPage : config.limit
+          const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
           q = q.limit(modelLimit)
+          if (offset > 0) q = q.offset(offset)
 
           try { records = await q.get() } catch { /* empty model */ }
         }
 
         const columns = resolveColumns(config.columns)
-        const pagination = await resolvePagination(config, Model, records.length)
+        const pagination = await resolvePagination(config, Model, records.length, urlPage)
 
         result.push(buildTableMeta(config, columns, records, tableId, {
           reorderEndpoint: config.reorderable ? `${panel.getApiBase()}/_tables/reorder` : undefined,
@@ -330,12 +371,13 @@ export async function resolveSchema(
         const staticRecords = config.lazy ? [] : config.rows
 
         // Pagination for static rows — slice the array
+        const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
         const records = config.paginationType
-          ? staticRecords.slice(0, config.perPage)
+          ? staticRecords.slice(offset, offset + config.perPage)
           : staticRecords
 
         const pagination = config.paginationType && !config.lazy
-          ? { total: config.rows.length, currentPage: 1, perPage: config.perPage, lastPage: Math.ceil(config.rows.length / config.perPage), type: config.paginationType } as TableElementMeta['pagination']
+          ? { total: config.rows.length, currentPage: urlPage, perPage: config.perPage, lastPage: Math.ceil(config.rows.length / config.perPage), type: config.paginationType } as TableElementMeta['pagination']
           : undefined
 
         result.push(buildTableMeta(config, columns, records as RecordRow[], tableId, { pagination }))
@@ -682,6 +724,7 @@ async function resolvePagination(
   config: import('./schema/Table.js').TableConfig,
   model: ModelLike | undefined,
   recordCount: number,
+  currentPage = 1,
 ): Promise<TableElementMeta['pagination']> {
   if (!config.paginationType || config.lazy) return undefined
 
@@ -695,7 +738,7 @@ async function resolvePagination(
 
   return {
     total,
-    currentPage: 1,
+    currentPage,
     perPage:     config.perPage,
     lastPage:    Math.ceil(total / config.perPage),
     type:        config.paginationType,

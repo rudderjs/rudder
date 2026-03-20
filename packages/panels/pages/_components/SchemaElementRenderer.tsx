@@ -123,7 +123,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   const [search, setSearch]   = useState(initialState.search ? String(initialState.search) : '')
   const [dragging, setDragging] = useState<string | null>(null)
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(element.pagination?.currentPage ?? 1)
   const [loadingMore, setLoadingMore] = useState(false)
   const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
 
