@@ -294,6 +294,7 @@ Tabs.make('projects')
 | `.persist(mode)` | Active tab persistence: `false`, `'localStorage'`, `'url'`, `'session'` |
 | `.fromModel(Model)` | Generate tabs from model records |
 | `.fromResource(Resource)` | Generate tabs from a Resource's model |
+| `.fromArray(data)` | Generate tabs from a static array or async function (same `DataSource<T>` type as Table) |
 | `.title(field)` | Model field used as tab label (default: `'name'`) |
 | `.scope(fn)` | Filter which records appear as tabs |
 | `.content(fn)` | Schema elements to render inside each model-backed tab |
@@ -492,13 +493,13 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 | `Text.make(content)` | Paragraph of text |
 | `Stats.make([...stats])` | Row of stat cards. Also accepts a string ID for async mode: `.data(fn)`, `.lazy()`, `.poll(ms)` |
 | `Stat.make(label)` | Single stat -- `.value(n)`, `.description(text)`, `.trend(n)` (positive=↑, negative=↓) |
-| `Table.make(title)` | Data table -- `.fromResource()`, `.fromModel()`, `.rows([...])`, `.columns()`, `.limit()`, `.sortBy()`, `.scope()`, `.searchable()`, `.paginated()`, `.remember()`, `.lazy()`, `.poll()`, `.filters()`, `.actions()`, `.reorderable()` |
+| `Table.make(title)` | Data table -- `.fromResource()`, `.fromModel()`, `.fromArray()`, `.columns()`, `.limit()`, `.sortBy()`, `.scope()`, `.searchable()`, `.paginated()`, `.remember()`, `.lazy()`, `.poll()`, `.filters()`, `.actions()`, `.reorderable()` |
 | `Column.make(name)` | Typed display column for `Table.make()` — `.label()`, `.sortable()`, `.searchable()`, `.date()`, `.badge()`, `.href()` |
 | `Form.make(id)` | Standalone form — `.fields()`, `.onSubmit()`, `.description()`, `.method()`, `.action()`, `.data()`, `.beforeSubmit()`, `.afterSubmit()`, `.submitLabel()`, `.successMessage()` |
 | `Dialog.make(id)` | Modal dialog wrapper — `.trigger(label)`, `.title()`, `.description()`, `.schema([...elements])` |
 | `Chart.make(title)` | Chart -- `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
 | `List.make(title)` | Item list card -- `.items([{ label, description?, href?, icon? }])`, `.limit(n)` |
-| `Tabs.make(id, tabs?)` | Tabbed sections -- accepts `Tab` instances via constructor or `.fromModel()`. `Tab`: `.label()`, `.icon()`, `.badge()`, `.schema()`, `.lazy()`. `Tabs`: `.persist()`, `.fromModel()`, `.fromResource()`, `.lazy()`, `.poll()` |
+| `Tabs.make(id, tabs?)` | Tabbed sections -- accepts `Tab` instances via constructor or `.fromModel()`. `Tab`: `.label()`, `.icon()`, `.badge()`, `.schema()`, `.lazy()`. `Tabs`: `.persist()`, `.fromModel()`, `.fromResource()`, `.fromArray()`, `.lazy()`, `.poll()` |
 | `Widget.make(id)` | Dashboard widget -- standalone or inside `Dashboard.make()` |
 | `Dashboard.make(id)` | User-customizable dashboard grid -- drag-and-drop, per-user layout |
 
@@ -549,7 +550,7 @@ List.make('Quick Links')
 
 ### `Table`
 
-Data tables support three modes: resource-linked, model-backed, and static rows.
+Data tables support three data source methods: `.fromResource()`, `.fromModel()`, and `.fromArray()`.
 
 ```ts
 import { Table, Column, Filter, Action } from '@boostkit/panels'
@@ -572,10 +573,30 @@ Table.make('All Users')
   .lazy()
   .poll(30000)
 
-// Static rows — no model needed
+// Array data — static array or async function
 Table.make('Browsers')
-  .rows([{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }])
-  .columns([Column.make('name'), Column.make('share')])
+  .fromArray([
+    { name: 'Chrome', share: 65 },
+    { name: 'Firefox', share: 10 },
+    { name: 'Safari', share: 18 },
+  ])
+  .columns([Column.make('name'), Column.make('share').numeric()])
+
+// Async array — function receives PanelContext, works with .lazy() and .poll()
+Table.make('Top Customers')
+  .fromArray(async (ctx) => {
+    const rows = await db.query('SELECT name, total FROM customers ORDER BY total DESC LIMIT 10')
+    return rows
+  })
+  .columns([Column.make('name'), Column.make('total').numeric()])
+  .lazy()
+  .poll(60000)
+```
+
+`DataSource<T>` is exported from `@boostkit/panels` — the union type accepted by `.fromArray()`:
+
+```ts
+type DataSource<T> = T[] | ((ctx: PanelContext) => T[] | Promise<T[]>)
 ```
 
 | Method | Description |
@@ -583,7 +604,7 @@ Table.make('Browsers')
 | `Table.make(title)` | Create a table element |
 | `.fromResource(Class)` | Use a Resource class as the data source |
 | `.fromModel(Class)` | Use an ORM Model class directly |
-| `.rows([...])` | Provide static row data (no model needed) |
+| `.fromArray(data)` | Static array or async function returning rows — no model needed. Async functions receive `PanelContext` |
 | `.columns([...])` | Column names (strings) or `Column` instances |
 | `.limit(n)` | Max rows to display (default: `5`) |
 | `.sortBy(col, dir)` | Default sort column and direction |

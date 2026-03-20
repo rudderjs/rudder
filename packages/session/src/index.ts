@@ -70,6 +70,8 @@ export class SessionInstance {
     this._flashNext = {}
     this._driver    = driver
     this._config    = config
+    // Flash data was consumed — mark dirty so save() clears it from the cookie
+    if (Object.keys(payload.flash_next).length > 0) this._dirty = true
   }
 
   get<T>(key: string, fallback?: T): T | undefined {
@@ -122,6 +124,9 @@ export class SessionInstance {
 
   /** Whether the session data has been modified since loading. */
   isDirty(): boolean { return this._dirty }
+
+  /** @internal — force the session to be saved (e.g. new sessions, flash consumption). */
+  markDirty(): void { this._dirty = true }
 
   async save(res: AppResponse): Promise<void> {
     if (!this._dirty) return  // skip Set-Cookie if session wasn't modified
@@ -349,6 +354,8 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
     const cookieValue  = parseCookie(cookieHeader, config.cookie.name)
     const payload      = await driver.load(cookieValue)
     const session      = new SessionInstance(payload, driver, config)
+    // New session (no cookie yet) — always write Set-Cookie to establish the session
+    if (!cookieValue) session.markDirty()
 
     // Store on the underlying server context (req.raw = Hono's c) so that any
     // normalizeRequest(c) call — including the one in registerRoute — sees it.

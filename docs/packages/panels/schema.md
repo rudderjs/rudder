@@ -74,9 +74,9 @@ The `Stats` row auto-sizes: 1 stat = full width, 2 = two columns, 3 = three colu
 
 ### `Table`
 
-Data table sourced from a Resource class, a raw ORM model, or static inline rows. Supports sort, search, pagination, lazy loading, polling, filters, and actions.
+Data table sourced from a Resource class, a raw ORM model, or an array. Supports sort, search, pagination, lazy loading, polling, filters, and actions.
 
-Three modes:
+Three data source methods:
 
 **Resource-linked** — inherits the Resource's model, default sort, and field labels. "View all" links to the resource index.
 
@@ -119,23 +119,40 @@ Table.make('All Users')
   .reorderable('position')   // enable drag-to-reorder rows
 ```
 
-**Static rows** — inline data, no model or resource needed.
+**Array data** — static array or async function. No model or resource needed.
 
 ```ts
+// Static array
 Table.make('Browser Stats')
-  .rows([
+  .fromArray([
     { name: 'Chrome', share: 65 },
     { name: 'Firefox', share: 10 },
     { name: 'Safari', share: 18 },
   ])
   .columns([Column.make('name'), Column.make('share').numeric()])
+
+// Async function — receives PanelContext, works with .lazy() and .poll()
+Table.make('Top Customers')
+  .fromArray(async (ctx) => {
+    const rows = await db.query('SELECT name, total FROM customers ORDER BY total DESC LIMIT 10')
+    return rows
+  })
+  .columns([Column.make('name'), Column.make('total').numeric()])
+  .lazy()
+  .poll(60000)
+```
+
+`DataSource<T>` is exported from `@boostkit/panels`:
+
+```ts
+type DataSource<T> = T[] | ((ctx: PanelContext) => T[] | Promise<T[]>)
 ```
 
 | Method | Description |
 |--------|-------------|
 | `.fromResource(Class)` | Use a Resource class as data source — inherits model, sort defaults, and field labels |
 | `.fromModel(Class)` | Use an ORM Model class directly as data source |
-| `.rows([...])` | Static inline data — no model or resource needed |
+| `.fromArray(data)` | Static array or async function returning rows. Async functions receive `PanelContext` |
 | `.columns([...])` | Column names (`string[]`) or `Column` instances |
 | `.sortBy(col, dir)` | Server-side sort order (`'ASC'` or `'DESC'`) |
 | `.limit(n)` | Maximum rows to show (default: 5) |
@@ -401,6 +418,7 @@ Model-backed tabs are mutually exclusive with `.tab()` -- use one or the other.
 | `.tab(label, ...elements)` | Add a static tab with content (mutually exclusive with `.fromModel()`) |
 | `.fromModel(Model)` | Generate tabs from model records (mutually exclusive with `.tab()`) |
 | `.fromResource(Resource)` | Generate tabs from a Resource's model |
+| `.fromArray(data)` | Generate tabs from a static array or async function (`DataSource<T>`) |
 | `.title(field)` | Model field to use as tab label (default: `'name'`) |
 | `.scope(fn)` | Filter which records appear as tabs |
 | `.content(fn)` | Content for each tab -- receives the record |
