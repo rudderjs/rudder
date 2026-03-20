@@ -2573,10 +2573,16 @@ class MockResource {
 // ─── Table enhancements ──────────────────────────────────────
 
 describe('Table enhancements', () => {
-  it('rows() stores static data in config', () => {
+  it('fromArray() stores static data in config', () => {
     const data = [{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }]
-    const c = Table.make('Browsers').rows(data).getConfig()
+    const c = Table.make('Browsers').fromArray(data).getConfig()
     assert.deepEqual(c.rows, data)
+  })
+
+  it('fromArray() stores async function in config', () => {
+    const fn = async () => [{ name: 'Chrome' }]
+    const c = Table.make('Test').fromArray(fn).getConfig()
+    assert.equal(typeof c.rows, 'function')
   })
 
   it('scope() stores scope function', () => {
@@ -3403,5 +3409,78 @@ describe('debugWarn', () => {
 
   it('handles string errors', () => {
     assert.doesNotThrow(() => debugWarn('test', 'string error'))
+  })
+})
+
+// ─── DataSource / resolveDataSource ──────────────────────────────────────────
+
+describe('resolveDataSource', () => {
+  it('resolves static array', async () => {
+    const { resolveDataSource } = await import('./datasource.js')
+    const data = [{ a: 1 }, { a: 2 }]
+    const ctx = { user: undefined, headers: {}, path: '/', params: {} }
+    const result = await resolveDataSource(data, ctx)
+    assert.deepEqual(result, data)
+  })
+
+  it('resolves async function', async () => {
+    const { resolveDataSource } = await import('./datasource.js')
+    const fn = async () => [{ a: 1 }, { a: 2 }]
+    const ctx = { user: undefined, headers: {}, path: '/', params: {} }
+    const result = await resolveDataSource(fn, ctx)
+    assert.deepEqual(result, [{ a: 1 }, { a: 2 }])
+  })
+
+  it('passes context to async function', async () => {
+    const { resolveDataSource } = await import('./datasource.js')
+    const fn = async (ctx: { user: unknown }) => [{ user: ctx.user }]
+    const ctx = { user: { id: '1' }, headers: {}, path: '/', params: {} }
+    const result = await resolveDataSource(fn, ctx as import('./types.js').PanelContext)
+    assert.deepEqual(result, [{ user: { id: '1' } }])
+  })
+})
+
+// ─── Tabs.fromArray ──────────────────────────────────────────────────────────
+
+describe('Tabs fromArray', () => {
+  it('fromArray stores static data', () => {
+    const data = [{ id: '1', name: 'A' }]
+    const t = Tabs.make('test').fromArray(data)
+    assert.equal(t.isArrayBacked(), true)
+    assert.equal(t.isDynamic(), true)
+    assert.deepEqual(t.getDataSource(), data)
+  })
+
+  it('fromArray stores async function', () => {
+    const fn = async () => [{ id: '1', name: 'A' }]
+    const t = Tabs.make('test').fromArray(fn)
+    assert.equal(t.isArrayBacked(), true)
+    assert.equal(typeof t.getDataSource(), 'function')
+  })
+
+  it('isArrayBacked false by default', () => {
+    assert.equal(Tabs.make('test').isArrayBacked(), false)
+  })
+
+  it('isDynamic true for model-backed', () => {
+    const MockModel = { query: () => ({}) }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t = Tabs.make('test').fromModel(MockModel as any)
+    assert.equal(t.isDynamic(), true)
+    assert.equal(t.isModelBacked(), true)
+    assert.equal(t.isArrayBacked(), false)
+  })
+
+  it('isDynamic false for static tabs', () => {
+    assert.equal(Tabs.make('test').isDynamic(), false)
+  })
+
+  it('title and content work with fromArray', () => {
+    const t = Tabs.make('test')
+      .fromArray([{ id: '1', name: 'A' }])
+      .title('name')
+      .content(() => [])
+    assert.equal(t.getTitleField(), 'name')
+    assert.ok(t.getContentFn())
   })
 })

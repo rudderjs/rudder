@@ -192,11 +192,6 @@ export class Table {
     return this
   }
 
-  /** @deprecated Use `.fromArray()` instead. */
-  rows(data: DataSource): this {
-    this._rows = data
-    return this
-  }
 
   /**
    * Apply a custom scope to the query before sort/limit.

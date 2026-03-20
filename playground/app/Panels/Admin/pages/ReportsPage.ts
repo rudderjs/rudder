@@ -28,7 +28,7 @@ export class ReportsPage extends Page {
 
       // ── Static data table ──────────────────────────────────
       Table.make('Browser Stats')
-        .rows([
+        .fromArray([
           { browser: 'Chrome', share: 65, trend: 2.1 },
           { browser: 'Safari', share: 18, trend: -0.5 },
           { browser: 'Firefox', share: 10, trend: -1.2 },

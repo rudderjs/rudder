@@ -11,7 +11,7 @@ export class TablesDemo extends Page {
   static async schema(_ctx: PanelContext) {
     return [
       Heading.make('Table Examples'),
-      Text.make('Demonstrates all Table features: pagination, search, sort, remember, lazy, scope, static rows.'),
+      Text.make('Demonstrates all Table features: pagination, search, sort, remember, lazy, scope, fromArray.'),
 
       // ── Pages pagination + search + remember(url) ──────────
       Heading.make('Paginated Table (pages + URL persist)').level(2),
@@ -86,12 +86,12 @@ export class TablesDemo extends Page {
         .limit(5)
         .emptyMessage('No published articles yet.'),
 
-      // ── Static rows ────────────────────────────────────────
+      // ── Static array ─────────────────────────────────────────
       Heading.make('Static Data Table').level(2),
-      Text.make('No model — data provided inline via .rows().'),
+      Text.make('No model — data provided inline via .fromArray().'),
 
       Table.make('Browser Market Share')
-        .rows([
+        .fromArray([
           { browser: 'Chrome', share: 65, trend: '+2.1%' },
           { browser: 'Safari', share: 18, trend: '-0.5%' },
           { browser: 'Firefox', share: 10, trend: '-1.2%' },
