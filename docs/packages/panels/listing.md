@@ -98,17 +98,55 @@ TextField.make('name').sortable()
 `SelectFilter` renders a `<select>` dropdown in the toolbar:
 
 ```ts
-import { SelectFilter } from '@boostkit/panels'
+import { SelectFilter, SearchFilter } from '@boostkit/panels'
 
-// URL: /admin/api/users?filter[role]=admin
+// Simple — column = value (default, column name = filter name)
 SelectFilter.make('role')
   .label('Role')
-  .column('role')     // column name — defaults to filter name
   .options([
     { label: 'Admin', value: 'admin' },
     { label: 'User',  value: 'user' },
   ])
+
+// Explicit column name
+SelectFilter.make('status')
+  .label('Status')
+  .column('draftStatus')   // query: WHERE draftStatus = value
+  .options([
+    { label: 'Published', value: 'published' },
+    { label: 'Draft', value: 'draft' },
+  ])
+
+// Custom query — full control over the filter logic
+SelectFilter.make('period')
+  .label('Period')
+  .options([
+    { label: 'Last 7 days', value: '7d' },
+    { label: 'Last 30 days', value: '30d' },
+    { label: 'This year', value: 'year' },
+  ])
+  .query((q, value) => {
+    const days = value === '7d' ? 7 : value === '30d' ? 30 : 365
+    return q.where('createdAt', '>', new Date(Date.now() - days * 86400000).toISOString())
+  })
 ```
+
+`SearchFilter` renders a text input that searches across multiple columns:
+
+```ts
+SearchFilter.make('search')
+  .columns('title', 'excerpt', 'body')
+```
+
+| Method | Description |
+|--------|-------------|
+| `SelectFilter.make(name)` | Create a select dropdown filter |
+| `.label(text)` | Display label |
+| `.column(name)` | Column to filter on (defaults to filter name) |
+| `.options([...])` | `{ label, value }[]` — dropdown options |
+| `.query(fn)` | Custom query callback: `(q, value) => q.where(...)` |
+| `SearchFilter.make(name?)` | Create a text search filter (default name: `'search'`) |
+| `.columns(...names)` | Columns to search across (OR) |
 
 Multiple filters compose with AND logic.
 
@@ -119,17 +157,17 @@ Multiple filters compose with AND logic.
 Tab filters provide a pill-style tab bar above the table for quick, predefined query scopes. Define them via the `tabs()` method on your resource:
 
 ```ts
-import { Tab } from '@boostkit/panels'
+import { ListTab } from '@boostkit/panels'
 
 export class ArticleResource extends Resource {
   // ...
 
   tabs() {
     return [
-      Tab.make('all').label('All'),
-      Tab.make('published').label('Published').icon('circle-check')
+      ListTab.make('all').label('All'),
+      ListTab.make('published').label('Published').icon('circle-check')
         .query((q) => q.where('draftStatus', 'published')),
-      Tab.make('draft').label('Drafts').icon('pencil-line')
+      ListTab.make('draft').label('Drafts').icon('pencil-line')
         .query((q) => q.where('draftStatus', 'draft')),
     ]
   }
