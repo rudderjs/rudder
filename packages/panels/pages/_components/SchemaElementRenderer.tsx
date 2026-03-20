@@ -86,17 +86,148 @@ function StatsRow({ stats }: { stats: PanelStatMeta[] }) {
 
 function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n }) {
   const el = element as typeof element & { reorderable?: boolean; reorderEndpoint?: string }
+  const tableId = element.id as string | undefined
+  const pathSegment = panelPath.replace(/^\//, '')
+  const isLazy = !!element.lazy
+  const rememberMode = element.remember as string | undefined
+
+  // ── Remember: read initial persisted state ──
+  const [initialState] = useState(() => {
+    if (!rememberMode || !tableId) return {} as Record<string, unknown>
+    if (rememberMode === 'localStorage' && typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`table:${tableId}`)
+        if (stored) return JSON.parse(stored) as Record<string, unknown>
+      } catch { /* ignore */ }
+    }
+    if (rememberMode === 'url' && typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      const state: Record<string, unknown> = {}
+      const sortParam = url.searchParams.get(`${tableId}_sort`)
+      const dirParam = url.searchParams.get(`${tableId}_dir`)
+      const pageParam = url.searchParams.get(`${tableId}_page`)
+      const searchParam = url.searchParams.get(`${tableId}_search`)
+      if (sortParam) state.sort = sortParam
+      if (dirParam) state.dir = dirParam
+      if (pageParam) state.page = parseInt(pageParam)
+      if (searchParam) state.search = searchParam
+      return state
+    }
+    return {} as Record<string, unknown>
+  })
+
   const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
-  const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null)
-  const [search, setSearch]   = useState('')
+  const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(
+    initialState.sort ? { col: String(initialState.sort), dir: (initialState.dir as 'asc' | 'desc') ?? 'asc' } : null,
+  )
+  const [search, setSearch]   = useState(initialState.search ? String(initialState.search) : '')
   const [dragging, setDragging] = useState<string | null>(null)
+  const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
+  const [currentPage, setCurrentPage] = useState(initialState.page ? Number(initialState.page) : 1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
+
+  // ── Remember: save state on change ──
+  function saveRememberState(state: Record<string, unknown>) {
+    if (!rememberMode || !tableId) return
+    if (rememberMode === 'localStorage' && typeof window !== 'undefined') {
+      localStorage.setItem(`table:${tableId}`, JSON.stringify(state))
+    } else if (rememberMode === 'url' && typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      for (const [k, v] of Object.entries(state)) {
+        if (v !== undefined && v !== null && v !== '') {
+          url.searchParams.set(`${tableId}_${k}`, String(v))
+        } else {
+          url.searchParams.delete(`${tableId}_${k}`)
+        }
+      }
+      window.history.replaceState(null, '', url.pathname + url.search)
+    }
+    // session mode: fire-and-forget POST (implement later when session persist is stable)
+  }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
   useEffect(() => {
     setRecords(element.records as Record<string, unknown>[])
     setSort(null)
     setSearch('')
+    setPagination(element.pagination)
+    setCurrentPage(1)
+    setLazyLoaded(!isLazy)
   }, [element])
+
+  // ── Lazy loading ──
+  useEffect(() => {
+    if (!isLazy || lazyLoaded || !tableId) return
+    fetch(`/${pathSegment}/api/_tables/${tableId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { records: Record<string, unknown>[]; pagination?: typeof pagination } | null) => {
+        if (body) {
+          setRecords(body.records)
+          if (body.pagination) setPagination(body.pagination)
+        }
+        setLazyLoaded(true)
+      })
+      .catch(() => setLazyLoaded(true))
+  }, [isLazy, lazyLoaded, tableId, pathSegment])
+
+  // ── Polling ──
+  useEffect(() => {
+    const interval = element.pollInterval as number | undefined
+    if (!interval || !tableId) return
+    const timer = setInterval(async () => {
+      try {
+        const params = new URLSearchParams()
+        params.set('page', String(currentPage))
+        if (search) params.set('search', search)
+        const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
+        if (res.ok) {
+          const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
+          setRecords(body.records)
+          if (body.pagination) setPagination(body.pagination)
+        }
+      } catch { /* poll failed */ }
+    }, interval)
+    return () => clearInterval(timer)
+  }, [tableId, currentPage, search, pathSegment, element.pollInterval])
+
+  // ── Pagination fetch ──
+  async function fetchPage(page: number) {
+    if (!tableId) return
+    setLoadingMore(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('page', String(page))
+      if (search) params.set('search', search)
+      const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
+      if (res.ok) {
+        const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
+        if (pagination?.type === 'loadMore') {
+          setRecords(prev => [...prev, ...body.records])
+        } else {
+          setRecords(body.records)
+        }
+        if (body.pagination) setPagination(body.pagination)
+        setCurrentPage(page)
+        saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page })
+      }
+    } catch { /* fetch failed */ }
+    finally { setLoadingMore(false) }
+  }
+
+  // ── Lazy skeleton ──
+  if (!lazyLoaded) {
+    return (
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="px-5 py-3 border-b bg-muted/40">
+          <div className="h-4 w-32 bg-muted/40 rounded animate-pulse" />
+        </div>
+        <div className="p-4 space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted/20 rounded animate-pulse" />)}
+        </div>
+      </div>
+    )
+  }
 
   // Client-side sort
   const sorted = sort
@@ -118,11 +249,18 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     : sorted
 
   function toggleSort(colName: string) {
-    setSort((prev) =>
-      prev?.col === colName
-        ? { col: colName, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { col: colName, dir: 'asc' },
-    )
+    setSort((prev) => {
+      const next = prev?.col === colName
+        ? { col: colName, dir: (prev.dir === 'asc' ? 'desc' : 'asc') as 'asc' | 'desc' }
+        : { col: colName, dir: 'asc' as const }
+      saveRememberState({ sort: next.col, dir: next.dir, search, page: currentPage })
+      return next
+    })
+  }
+
+  function handleSearchChange(value: string) {
+    setSearch(value)
+    saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: currentPage })
   }
 
   // Reorder via drag-and-drop (simple pointer-based, no dnd-kit dependency in this renderer)
@@ -149,21 +287,26 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     setDragging(null)
   }, [dragging])
 
-  const hasSearch = element.columns.some((c: PanelColumnMeta) => c.searchable)
+  const hasSearch = !!element.searchable || element.columns.some((c: PanelColumnMeta) => c.searchable)
   const hasHref   = !!element.href
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/40">
-        <p className="text-sm font-semibold">{element.title}</p>
+        <div>
+          <p className="text-sm font-semibold">{element.title}</p>
+          {element.description && (
+            <p className="text-xs text-muted-foreground mt-0.5">{element.description}</p>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           {hasSearch && (
             <input
               type="search"
               placeholder={i18n.search ?? 'Search…'}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="h-7 rounded-md border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
             />
           )}
@@ -177,7 +320,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
 
       {/* Table */}
       {filtered.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-muted-foreground">{i18n.noRecordsFound}</p>
+        <p className="px-5 py-4 text-sm text-muted-foreground">{element.emptyMessage ?? i18n.noRecordsFound}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -238,6 +381,38 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination: pages mode */}
+      {pagination && pagination.type === 'pages' && pagination.lastPage > 1 && (
+        <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/20">
+          <p className="text-xs text-muted-foreground">
+            {i18n.showing?.replace(':n', String(records.length)).replace(':total', String(pagination.total)) ?? `Showing ${records.length} of ${pagination.total}`}
+          </p>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: pagination.lastPage }, (_, i) => i + 1).map(page => (
+              <button
+                key={page}
+                onClick={() => fetchPage(page)}
+                className={`px-2.5 py-1 text-xs rounded ${page === currentPage ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
+              >
+                {page}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pagination: loadMore mode */}
+      {pagination && pagination.type === 'loadMore' && records.length < pagination.total && (
+        <div className="px-5 py-3 border-t">
+          <button
+            onClick={() => fetchPage(currentPage + 1)}
+            className="w-full text-center text-sm text-muted-foreground hover:text-foreground py-1.5"
+          >
+            {loadingMore ? (i18n.loading ?? 'Loading…') : (i18n.loadMore ?? 'Load more')}
+          </button>
         </div>
       )}
     </div>

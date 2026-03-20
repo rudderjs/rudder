@@ -20,6 +20,8 @@ import type { Action, ActionMeta, ActionHandler } from '../Action.js'
 //     .rows([{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }])
 //     .columns([Column.make('name'), Column.make('share')])
 
+export type TableRememberMode = false | 'localStorage' | 'url' | 'session'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ModelClass = { new(): any; query(): any }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +55,7 @@ export interface TableElementMeta {
   lazy?:             boolean
   pollInterval?:     number
   id?:               string
+  remember?:         'localStorage' | 'url' | 'session'
   pagination?: {
     total:       number
     currentPage: number
@@ -89,6 +92,7 @@ export interface TableConfig {
   lazy?:          boolean | undefined
   pollInterval?:  number | undefined
   id?:            string | undefined
+  remember?:      TableRememberMode | undefined
 }
 
 export class Table {
@@ -116,6 +120,7 @@ export class Table {
   private _lazy:           boolean = false
   private _pollInterval?:  number
   private _id?:            string
+  private _remember:       TableRememberMode = false
   private _filters:        Filter[] = []
   private _actions:        Action[] = []
 
@@ -278,6 +283,21 @@ export class Table {
     return this
   }
 
+  /**
+   * Persist table navigation state (page, sort, search, filters) across page loads.
+   *
+   * - `'localStorage'` — browser localStorage
+   * - `'url'` — URL query params (shareable)
+   * - `'session'` — server session
+   * - `false` — no persistence (default)
+   */
+  remember(mode: TableRememberMode = 'localStorage'): this {
+    this._remember = mode
+    return this
+  }
+
+  getRemember(): TableRememberMode { return this._remember }
+
   /** Attach filter dropdowns to the table header. */
   filters(filters: Filter[]): this {
     this._filters = filters
@@ -324,6 +344,7 @@ export class Table {
       lazy:           this._lazy || undefined,
       pollInterval:   this._pollInterval,
       id:             this.getId(),
+      remember:       this._remember || undefined,
     }
   }
 }

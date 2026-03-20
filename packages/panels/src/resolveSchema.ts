@@ -736,5 +736,6 @@ function buildTableMeta(
   if (config.lazy)                meta.lazy         = true
   if (config.pollInterval)        meta.pollInterval = config.pollInterval
   if (opts.pagination)            meta.pagination   = opts.pagination
+  if (config.remember)            meta.remember     = config.remember
   return meta
 }

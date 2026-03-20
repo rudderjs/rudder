@@ -110,6 +110,7 @@ export type {
   StatsElementMeta,
   PanelStatMeta,
   TableElementMeta,
+  TableRememberMode,
   PanelColumnMeta,
   ChartElementMeta,
   ChartDataset,

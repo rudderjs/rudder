@@ -72,9 +72,10 @@ export const adminPanel = Panel.make('admin')
               Column.make('createdAt').label('Published').date(),
             ])
             .sortBy('createdAt', 'DESC')
-            .paginated('loadMore', 5)
+            .paginated('pages', 2)
             .searchable()
-            .emptyMessage('No articles yet.'),
+            .emptyMessage('No articles yet.')
+            .remember('localStorage'),
         ]),
       Tab.make('Charts')
         .icon('bar-chart')
@@ -107,7 +108,7 @@ export const adminPanel = Panel.make('admin')
               { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
             ]),
         ]),
-    ]).persist('url'),
+    ]).persist('localStorage'),
 
     // ── Dialog wrapping a Form ───────────────────────────────
     // Dialog.make('contact-modal')
