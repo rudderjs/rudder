@@ -126,6 +126,21 @@ export function mountMetaRoutes(
     }
   }, mw)
 
+  // Save table navigation state to session (remember='session' mode)
+  router.post(`${apiBase}/_tables/:tableId/remember`, async (req, res) => {
+    const tableId = (req.params as Record<string, string> | undefined)?.['tableId']
+    if (!tableId) return res.status(400).json({ message: 'Missing tableId.' })
+
+    const state = (req.body as Record<string, unknown> | undefined) ?? {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = (req as any).session as { put(key: string, value: unknown): void } | undefined
+    if (session) {
+      session.put(`table:${tableId}`, state)
+    }
+
+    return res.json({ success: true })
+  }, mw)
+
   // Table data endpoint — used by lazy, poll, paginated tables
   router.get(`${apiBase}/_tables/:tableId`, async (req, res) => {
     const tableId = (req.params as Record<string, string> | undefined)?.['tableId']

@@ -260,7 +260,7 @@ export async function resolveSchema(
       const tableId = (el as unknown as { getId(): string }).getId()
       TableRegistry.register(panel.getName(), tableId, el as unknown as import('./schema/Table.js').Table)
 
-      // Read URL-persisted state for remember('url') tables
+      // Read persisted state for remember('url') or remember('session') tables
       let urlPage = 1
       let urlSort: string | undefined
       let urlSortDir: 'ASC' | 'DESC' | undefined
@@ -274,6 +274,16 @@ export async function resolveSchema(
         if (d) urlSortDir = d.toUpperCase() as 'ASC' | 'DESC'
         const q = ctx.urlSearch[`${tableId}_search`]
         if (q) urlSearch = q
+      } else if (config.remember === 'session' && ctx.sessionGet) {
+        try {
+          const stored = ctx.sessionGet(`table:${tableId}`) as Record<string, unknown> | undefined
+          if (stored) {
+            if (stored.page) urlPage = Number(stored.page) || 1
+            if (stored.sort) urlSort = String(stored.sort)
+            if (stored.dir) urlSortDir = String(stored.dir).toUpperCase() as 'ASC' | 'DESC'
+            if (stored.search) urlSearch = String(stored.search)
+          }
+        } catch { /* session not available */ }
       }
 
       // ── fromResource(Class) — preferred resource-linked mode ───

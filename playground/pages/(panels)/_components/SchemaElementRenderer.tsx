@@ -142,8 +142,13 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
         }
       }
       window.history.replaceState(null, '', url.pathname + url.search)
+    } else if (rememberMode === 'session') {
+      fetch(`/${pathSegment}/api/_tables/${tableId}/remember`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state),
+      }).catch(() => {})  // fire-and-forget
     }
-    // session mode: fire-and-forget POST (implement later when session persist is stable)
   }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
