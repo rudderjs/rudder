@@ -343,7 +343,6 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
     // Persist active tab based on mode
     if (persist && id) {
       if (persist === 'url') {
-        // Tabs URL mode uses direct param (not prefix pattern)
         if (typeof window !== 'undefined') {
           const url = new URL(window.location.href)
           if (slug === slugify(tabs[0]?.label ?? '')) {
@@ -353,11 +352,16 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
           }
           window.history.replaceState(null, '', url.pathname + url.search)
         }
-      } else {
-        saveClientState(persist as PersistMode, `tabs:${id}`, { tab: slug }, {
-          pathSegment,
-          apiPath: `/api/_tabs/${id}/active`,
-        })
+      } else if (persist === 'localStorage') {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`tabs:${id}`, slug)
+        }
+      } else if (persist === 'session') {
+        fetch(`/${pathSegment}/api/_tabs/${id}/active`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tab: slug }),
+        }).catch(() => {})
       }
     }
 
