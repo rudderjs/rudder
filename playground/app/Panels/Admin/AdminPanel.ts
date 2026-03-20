@@ -11,6 +11,7 @@ import { TablesDemo }     from './pages/TablesDemo.js'
 import { TabsDemo }       from './pages/TabsDemo.js'
 import { FormsDemo }      from './pages/FormsDemo.js'
 import { SectionsDemo }   from './pages/SectionsDemo.js'
+import { DialogsDemo }    from './pages/DialogsDemo.js'
 
 import { Article }    from 'App/Models/Article.js'
 import { Category }   from 'App/Models/Category.js'
@@ -149,6 +150,7 @@ export const adminPanel = Panel.make('admin')
     TabsDemo,
     FormsDemo,
     SectionsDemo,
+    DialogsDemo,
     ReportsPage,
     MediaPage,
     CustomPage,

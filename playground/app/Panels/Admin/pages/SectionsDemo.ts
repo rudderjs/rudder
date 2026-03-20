@@ -1,4 +1,4 @@
-import { Page, Heading, Text, Section, Stats, Stat, Chart, List, Table, Column, Tab, Tabs } from '@boostkit/panels'
+import { Page, Heading, Text, Section, Stats, Stat, Chart, List, Table, Column, Tab, Tabs, Dialog, Form, TextField, TextareaField } from '@boostkit/panels'
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 
@@ -145,6 +145,51 @@ export class SectionsDemo extends Page {
                   .datasets([{ label: 'Views', data: [45, 120, 89, 200, 156, 80, 40] }]),
               ]),
           ]),
+        ),
+
+      // ── Section with Dialog ────────────────────────────────
+      Heading.make('Section with Dialog').level(2),
+      Text.make('A dialog button inside a section card.'),
+
+      Section.make('Quick Actions')
+        .description('Common actions available from this section.')
+        .schema(
+          Text.make('Click the button below to open a feedback form in a modal.'),
+          Dialog.make('section-dialog')
+            .trigger('Send Feedback')
+            .title('Feedback')
+            .description('Tell us what you think.')
+            .schema([
+              Form.make('section-feedback')
+                .fields([
+                  TextField.make('subject').label('Subject').required(),
+                  TextareaField.make('message').label('Message').required(),
+                ])
+                .submitLabel('Send')
+                .successMessage('Thanks for your feedback!')
+                .onSubmit(async (data) => {
+                  console.log('[section feedback]', data)
+                }),
+            ]),
+        ),
+
+      // ── Section with Form ──────────────────────────────────
+      Heading.make('Section with Form').level(2),
+      Text.make('A standalone form rendered inside a section card.'),
+
+      Section.make('Contact Us')
+        .schema(
+          Form.make('section-contact')
+            .description('Send us a message directly from this section.')
+            .fields([
+              TextField.make('name').label('Name').required(),
+              TextareaField.make('message').label('Message').required(),
+            ])
+            .submitLabel('Send')
+            .successMessage('Message sent!')
+            .onSubmit(async (data) => {
+              console.log('[section contact]', data)
+            }),
         ),
     ]
   }

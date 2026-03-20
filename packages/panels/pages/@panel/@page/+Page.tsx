@@ -8,7 +8,8 @@ import { SchemaElementRenderer }    from '../../_components/SchemaElementRendere
 import { DashboardGrid }     from '../../_components/DashboardGrid.js'
 import { StandaloneWidget }  from '../../_components/StandaloneWidget.js'
 import { FormElement }       from '../../_components/FormElement.js'
-import type { PanelSchemaElementMeta, PanelI18n, FormElementMeta, WidgetMeta } from '@boostkit/panels'
+import { DialogElement }     from '../../_components/DialogElement.js'
+import type { PanelSchemaElementMeta, PanelI18n, FormElementMeta, DialogElementMeta, WidgetMeta } from '@boostkit/panels'
 import type { WidgetWithData } from '../../_components/WidgetCard.js'
 import type { DashboardGridProps } from '../../_components/DashboardGrid.js'
 import type { Data } from './+data.js'
@@ -119,6 +120,16 @@ export default function SchemaPage() {
           if (el.type === 'dashboard') {
             const dashEl = el as DashboardEl
             return <DashboardSection key={`d-${dashEl.id ?? gi}`} dashboard={dashEl} pathSegment={pathSegment} panelPath={panelMeta.path} i18n={i18n} />
+          }
+
+          // Form
+          if (el.type === 'form') {
+            return <FormElement key={`f-${(el as { id?: string }).id ?? gi}`} form={el as FormElementMeta} panelPath={panelMeta.path} i18n={i18n} />
+          }
+
+          // Dialog
+          if (el.type === 'dialog') {
+            return <DialogElement key={`dl-${(el as { id?: string }).id ?? gi}`} dialog={el as DialogElementMeta} panelPath={panelMeta.path} i18n={i18n} />
           }
 
           return <SchemaElementRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
