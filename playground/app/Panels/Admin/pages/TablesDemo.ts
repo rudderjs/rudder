@@ -2,11 +2,14 @@ import { Page, Heading, Text, Table, Column, SelectFilter, Action } from '@boost
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
+import { PaginationDemo }   from './tables/PaginationDemo.js'
+import { ExternalDataDemo } from './tables/ExternalDataDemo.js'
 
 export class TablesDemo extends Page {
   static slug  = 'tables-demo'
   static label = 'Tables Demo'
   static icon  = 'table'
+  static pages = [PaginationDemo, ExternalDataDemo]
 
   static async schema(_ctx: PanelContext) {
     return [

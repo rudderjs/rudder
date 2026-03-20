@@ -31,7 +31,7 @@ async function warmUpRegistries(panel: Panel, req: AppRequest): Promise<void> {
   }
 
   // Resolve all page schemas
-  for (const PageClass of panel.getPages()) {
+  for (const PageClass of panel.getAllPages()) {
     if (!PageClass.hasSchema()) continue
     try {
       const elements = await PageClass.schema(ctx)

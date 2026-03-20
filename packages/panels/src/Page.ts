@@ -11,10 +11,12 @@ type PageSchemaDefinition =
 // ─── Page meta (for UI / meta endpoint) ────────────────────
 
 export interface PageMeta {
-  slug:       string
-  label:      string
-  icon:       string | undefined
-  hasSchema:  boolean
+  slug:              string
+  label:             string
+  icon:              string | undefined
+  hasSchema:         boolean
+  navigationParent?: string
+  children?:         PageMeta[]
 }
 
 // ─── Page base class ────────────────────────────────────────
@@ -28,6 +30,30 @@ export class Page {
 
   /** Optional icon string shown in the sidebar. */
   static icon?: string
+
+  /**
+   * Sub-pages — structurally nested under this page.
+   * Slugs are relative to the parent (e.g. parent 'tables-demo' + child 'pagination' → 'tables-demo/pagination').
+   *
+   * @example
+   * export class TablesDemo extends Page {
+   *   static slug = 'tables-demo'
+   *   static pages = [PaginationDemo, ExternalDataDemo]
+   * }
+   */
+  static pages: (typeof Page)[] = []
+
+  /**
+   * Visual-only sidebar nesting — group this page under another page's label.
+   * The page keeps its own slug/URL. Only affects sidebar display.
+   *
+   * @example
+   * export class FormsDemo extends Page {
+   *   static slug = 'forms-demo'
+   *   static navigationParent = 'Tables Demo'
+   * }
+   */
+  static navigationParent?: string
 
   /** Stored schema definition — set via define(). */
   protected static _schemaDef?: PageSchemaDefinition
@@ -156,12 +182,20 @@ export class Page {
   }
 
   /** @internal */
-  static toMeta(): PageMeta {
-    return {
-      slug:      this.getSlug(),
+  static toMeta(parentSlug?: string): PageMeta {
+    const ownSlug = this.getSlug()
+    const fullSlug = parentSlug ? `${parentSlug}/${ownSlug}` : ownSlug
+
+    const meta: PageMeta = {
+      slug:      fullSlug,
       label:     this.getLabel(),
       icon:      this.icon,
       hasSchema: this.hasSchema(),
     }
+    if (this.navigationParent) meta.navigationParent = this.navigationParent
+    if (this.pages.length > 0) {
+      meta.children = this.pages.map(P => P.toMeta(fullSlug))
+    }
+    return meta
   }
 }

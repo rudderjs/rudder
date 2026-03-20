@@ -33,7 +33,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
   if (!panel) throw render(404)
 
-  const PageClass = panel.getPages().find((P) => P.getSlug() === pageSlug)
+  const PageClass = panel.getAllPages().find((P) => P.getSlug() === pageSlug)
   if (!PageClass) throw render(404)
 
   // If this page doesn't have a schema, it should be handled by a Vike page file

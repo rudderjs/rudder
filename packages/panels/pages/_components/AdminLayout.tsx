@@ -18,9 +18,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar.js'
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from '@/components/ui/collapsible.js'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,12 +52,14 @@ interface Props {
 }
 
 interface NavItem {
-  slug:             string
-  label:            string
-  icon:             string | undefined
-  href:             string
-  kind:             'resource' | 'global' | 'page'
-  navigationGroup?: string | undefined
+  slug:              string
+  label:             string
+  icon:              string | undefined
+  href:              string
+  kind:              'resource' | 'global' | 'page'
+  navigationGroup?:  string | undefined
+  navigationParent?: string | undefined
+  children?:         NavItem[]
 }
 
 interface SessionUser {
@@ -72,11 +82,24 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
       href: `${path}/globals/${g.slug}`,
       kind: 'global' as const,
     })),
-    ...panelMeta.pages.map((p) => ({
-      slug: p.slug, label: p.label, icon: p.icon,
-      href: `${path}/${p.slug}`,
-      kind: 'page' as const,
-    })),
+    ...panelMeta.pages.map((p) => {
+      const item: NavItem = {
+        slug: p.slug, label: p.label, icon: p.icon,
+        href: `${path}/${p.slug}`,
+        kind: 'page' as const,
+        navigationParent: (p as { navigationParent?: string }).navigationParent,
+      }
+      // Add structural children from Page.pages
+      const children = (p as { children?: typeof panelMeta.pages }).children
+      if (children && children.length > 0) {
+        item.children = children.map(c => ({
+          slug: c.slug, label: c.label, icon: c.icon,
+          href: `${path}/${c.slug}`,
+          kind: 'page' as const,
+        }))
+      }
+      return item
+    }),
   ]
 }
 
@@ -326,7 +349,73 @@ function SidebarNavigation({ items, currentSlug, badges, panelMeta }: {
         renderGroup(label, groupItems)
       )}
       {globalItems.length > 0 && renderGroup('Settings', globalItems)}
-      {pageItems.length > 0 && renderGroup('Pages', pageItems)}
+      {pageItems.length > 0 && (() => {
+        // Separate top-level pages from visually-nested pages (navigationParent)
+        const topPages = pageItems.filter(p => !p.navigationParent)
+        const visualChildren = pageItems.filter(p => !!p.navigationParent)
+
+        // Build parent label → visual children map
+        const visualChildMap = new Map<string, NavItem[]>()
+        for (const child of visualChildren) {
+          const list = visualChildMap.get(child.navigationParent!) ?? []
+          list.push(child)
+          visualChildMap.set(child.navigationParent!, list)
+        }
+
+        function renderPageWithChildren(item: NavItem) {
+          // Merge structural children (item.children) + visual children (navigationParent)
+          const allChildren = [
+            ...(item.children ?? []),
+            ...(visualChildMap.get(item.label) ?? []),
+          ]
+
+          if (allChildren.length > 0) {
+            const isParentActive = item.slug === currentSlug
+            const isChildActive = allChildren.some(c => c.slug === currentSlug)
+            return (
+              <Collapsible key={item.slug} defaultOpen={isParentActive || isChildActive}>
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton tooltip={item.label}>
+                      <ResourceIcon icon={item.icon} />
+                      <span>{item.label}</span>
+                      <svg className="ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton render={<a href={item.href} />} isActive={isParentActive}>
+                          <span>Overview</span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      {allChildren.map(child => (
+                        <SidebarMenuSubItem key={child.slug}>
+                          <SidebarMenuSubButton render={<a href={child.href} />} isActive={child.slug === currentSlug}>
+                            <span>{child.label}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            )
+          }
+          return renderItem(item)
+        }
+
+        return (
+          <SidebarGroup>
+            <SidebarGroupLabel>Pages</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {topPages.map(renderPageWithChildren)}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )
+      })()}
     </>
   )
 }

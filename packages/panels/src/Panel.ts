@@ -160,6 +160,31 @@ export class Panel {
   getResources(): (typeof Resource)[] { return this._resources }
   getGlobals(): (typeof Global)[] { return this._globals }
   getPages(): (typeof Page)[] { return this._pages }
+
+  /** Get all pages including nested sub-pages (flat list). Sub-page slugs are prefixed with parent slug. */
+  getAllPages(): (typeof Page)[] {
+    const result: (typeof Page)[] = []
+    function collect(pages: (typeof Page)[], parentSlug?: string) {
+      for (const P of pages) {
+        if (parentSlug) {
+          // Create a proxy with the full slug
+          const fullSlug = `${parentSlug}/${P.getSlug()}`
+          const ProxyPage = Object.create(P) as typeof Page
+          Object.defineProperty(ProxyPage, 'slug', { value: fullSlug, writable: true })
+          // Preserve static methods by delegating
+          result.push(ProxyPage)
+        } else {
+          result.push(P)
+        }
+        if (P.pages.length > 0) {
+          const pSlug = parentSlug ? `${parentSlug}/${P.getSlug()}` : P.getSlug()
+          collect(P.pages, pSlug)
+        }
+      }
+    }
+    collect(this._pages)
+    return result
+  }
   getLayout(): PanelLayout { return this._layout }
   getSchema(): PanelSchemaDefinition | undefined { return this._schema }
   hasSchema(): boolean { return this._schema !== undefined }

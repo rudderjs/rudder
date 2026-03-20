@@ -30,7 +30,7 @@ export const route: RouteSync = (pageContext) => {
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${panelSegment}`)
   if (!panel) return false
 
-  for (const PageClass of panel.getPages()) {
+  for (const PageClass of panel.getAllPages()) {
     if (!PageClass.hasSchema()) continue
     const params = PageClass.matchPath(urlPath)
     if (params !== null) {
