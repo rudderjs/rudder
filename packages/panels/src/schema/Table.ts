@@ -60,6 +60,7 @@ export interface TableElementMeta {
   remember?:         'localStorage' | 'url' | 'session'
   activeSearch?:     string
   activeSort?:       { col: string; dir: string }
+  activeFilters?:    Record<string, string>
   pagination?: {
     total:       number
     currentPage: number

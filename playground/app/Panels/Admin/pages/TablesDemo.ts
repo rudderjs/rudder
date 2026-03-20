@@ -67,6 +67,12 @@ export class TablesDemo extends Page {
           Column.make('role').label('Role').badge(),
           Column.make('createdAt').label('Joined').date(),
         ])
+        .filters([
+          SelectFilter.make('role').label('Role').options([
+            { label: 'Admin', value: 'admin' },
+            { label: 'User', value: 'user' },
+          ]),
+        ])
         .paginated('pages', 2)
         .searchable()
         .remember('session'),
@@ -118,6 +124,54 @@ export class TablesDemo extends Page {
         ])
         .sortBy('createdAt', 'DESC')
         .limit(5),
+
+      // ── Async fromArray (external API) ─────────────────────
+      Heading.make('External API Table').level(2),
+      Text.make('Data fetched from JSONPlaceholder API at SSR time via .fromArray(async fn). Supports .lazy() and .poll().'),
+
+      Table.make('GitHub-style Users')
+        .fromArray(async () => {
+          const res = await fetch('https://jsonplaceholder.typicode.com/users')
+          const users = await res.json() as Array<{ id: number; name: string; email: string; company: { name: string }; address: { city: string } }>
+          return users.map(u => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            company: u.company.name,
+            city: u.address.city,
+          }))
+        })
+        .columns([
+          Column.make('name').label('Name').sortable().searchable(),
+          Column.make('email').label('Email').sortable().searchable(),
+          Column.make('company').label('Company').sortable(),
+          Column.make('city').label('City').sortable(),
+        ])
+        .searchable()
+        .description('10 users from jsonplaceholder.typicode.com — SSR\'d'),
+
+      // ── Lazy external API ──────────────────────────────────
+      Heading.make('Lazy External API Table').level(2),
+      Text.make('Same API but with .lazy() — shows skeleton on SSR, fetches client-side after mount.'),
+
+      Table.make('Posts (Lazy)')
+        .fromArray(async () => {
+          const res = await fetch('https://jsonplaceholder.typicode.com/posts')
+          const posts = await res.json() as Array<{ id: number; title: string; userId: number }>
+          return posts.slice(0, 20).map(p => ({
+            id: p.id,
+            title: p.title,
+            author: `User ${p.userId}`,
+          }))
+        })
+        .columns([
+          Column.make('title').label('Title').sortable().searchable(),
+          Column.make('author').label('Author').sortable(),
+        ])
+        .paginated('pages', 5)
+        .searchable()
+        .lazy()
+        .description('20 posts from jsonplaceholder.typicode.com — lazy loaded'),
     ]
   }
 }

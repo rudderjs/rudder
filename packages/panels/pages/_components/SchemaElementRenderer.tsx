@@ -106,6 +106,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   // SSR provides activeSearch/activeSort for url/session persist modes
   const ssrSearch = (element as { activeSearch?: string }).activeSearch
   const ssrSort = (element as { activeSort?: { col: string; dir: string } }).activeSort
+  const ssrFilters = (element as { activeFilters?: Record<string, string> }).activeFilters
 
   const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
   const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(
@@ -142,7 +143,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   const actions = (element as { actions?: Array<{ name: string; label: string; icon?: string; destructive: boolean; requiresConfirm: boolean; confirmMessage?: string; bulk: boolean; row: boolean }> }).actions ?? []
   const hasBulkActions = actions.some(a => a.bulk)
   const hasRowActions = actions.some(a => a.row)
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({})
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(ssrFilters ?? {})
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState(false)
 

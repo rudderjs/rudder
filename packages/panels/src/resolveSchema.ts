@@ -327,6 +327,14 @@ export async function resolveSchema(
       const urlSortDir = persisted?.dir ? String(persisted.dir).toUpperCase() as 'ASC' | 'DESC' : undefined
       const urlSearch = persisted?.search ? String(persisted.search) : undefined
 
+      // Extract persisted filters (stored as filter_<name> keys)
+      const persistedFilters: Record<string, string> = {}
+      if (persisted) {
+        for (const [k, v] of Object.entries(persisted)) {
+          if (k.startsWith('filter_')) persistedFilters[k.slice(7)] = String(v)
+        }
+      }
+
       // ── fromResource(Class) — preferred resource-linked mode ───
       if (config.resourceClass) {
         const ResourceClass = config.resourceClass as ResourceLike
@@ -350,6 +358,13 @@ export async function resolveSchema(
             for (let si = 1; si < searchFilter.columns.length; si++) q = q.orWhere(searchFilter.columns[si]!, 'LIKE', `%${searchFilter.search}%`)
           }
 
+          // Apply persisted filters
+          for (const [filterName, filterValue] of Object.entries(persistedFilters)) {
+            const filter = config.filters.find(f => f.getName() === filterName)
+            if (filter) q = filter.applyToQuery(q, filterValue)
+            else q = q.where(filterName, filterValue)
+          }
+
           const sortCol = urlSort ?? config.sortBy ?? ResourceClass.defaultSort
           if (sortCol) {
             const dir = urlSortDir ?? (config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir ?? 'DESC'))
@@ -364,7 +379,7 @@ export async function resolveSchema(
         }
 
         const columns = resolveColumns(config.columns, ResourceClass)
-        const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter)
+        const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter, persistedFilters, config.filters)
         const slug = ResourceClass.getSlug?.() as string | undefined
 
         result.push(buildTableMeta(config, columns, records, tableId, {
@@ -373,6 +388,7 @@ export async function resolveSchema(
           pagination,
           activeSearch: urlSearch,
           activeSort: urlSort ? { col: urlSort, dir: urlSortDir ?? config.sortDir } : undefined,
+          activeFilters: Object.keys(persistedFilters).length > 0 ? persistedFilters : undefined,
         }))
         continue
       }
@@ -398,6 +414,13 @@ export async function resolveSchema(
             for (let si = 1; si < searchFilter2.columns.length; si++) q = q.orWhere(searchFilter2.columns[si]!, 'LIKE', `%${searchFilter2.search}%`)
           }
 
+          // Apply persisted filters
+          for (const [filterName, filterValue] of Object.entries(persistedFilters)) {
+            const filter = config.filters.find(f => f.getName() === filterName)
+            if (filter) q = filter.applyToQuery(q, filterValue)
+            else q = q.where(filterName, filterValue)
+          }
+
           const sortCol = urlSort ?? config.sortBy
           if (sortCol) q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
           const modelLimit = config.paginationType ? config.perPage : config.limit
@@ -409,13 +432,14 @@ export async function resolveSchema(
         }
 
         const columns = resolveColumns(config.columns)
-        const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter2)
+        const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter2, persistedFilters, config.filters)
 
         result.push(buildTableMeta(config, columns, records, tableId, {
           reorderEndpoint: config.reorderable ? `${panel.getApiBase()}/_tables/reorder` : undefined,
           pagination,
           activeSearch: urlSearch,
           activeSort: urlSort ? { col: urlSort, dir: urlSortDir ?? config.sortDir } : undefined,
+          activeFilters: Object.keys(persistedFilters).length > 0 ? persistedFilters : undefined,
         }))
         continue
       }
@@ -786,6 +810,8 @@ async function resolvePagination(
   recordCount: number,
   currentPage = 1,
   searchFilter?: { search: string; columns: string[] },
+  persistedFilters?: Record<string, string>,
+  filterDefs?: import('./Filter.js').Filter[],
 ): Promise<TableElementMeta['pagination']> {
   if (!config.paginationType || config.lazy) return undefined
 
@@ -798,6 +824,14 @@ async function resolvePagination(
         countQ = countQ.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
         for (let i = 1; i < searchFilter.columns.length; i++) {
           countQ = countQ.orWhere(searchFilter.columns[i]!, 'LIKE', `%${searchFilter.search}%`)
+        }
+      }
+      // Apply persisted filters to count query
+      if (persistedFilters && filterDefs) {
+        for (const [filterName, filterValue] of Object.entries(persistedFilters)) {
+          const filter = filterDefs.find(f => f.getName() === filterName)
+          if (filter) countQ = filter.applyToQuery(countQ, filterValue)
+          else countQ = countQ.where(filterName, filterValue)
         }
       }
       total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
@@ -826,6 +860,7 @@ function buildTableMeta(
     pagination?: TableElementMeta['pagination']
     activeSearch?: string | undefined
     activeSort?: { col: string; dir: string } | undefined
+    activeFilters?: Record<string, string> | undefined
   },
 ): TableElementMeta {
   const meta: TableElementMeta = {
@@ -852,5 +887,6 @@ function buildTableMeta(
   if (config.remember)            meta.remember     = config.remember
   if (opts.activeSearch)          meta.activeSearch  = opts.activeSearch
   if (opts.activeSort)            meta.activeSort   = opts.activeSort
+  if (opts.activeFilters)         meta.activeFilters = opts.activeFilters
   return meta
 }
