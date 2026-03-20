@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
@@ -123,7 +123,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   const [search, setSearch]   = useState(initialState.search ? String(initialState.search) : '')
   const [dragging, setDragging] = useState<string | null>(null)
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
-  const [currentPage, setCurrentPage] = useState(initialState.page ? Number(initialState.page) : 1)
+  const [currentPage, setCurrentPage] = useState(1)
   const [loadingMore, setLoadingMore] = useState(false)
   const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
 
@@ -147,7 +147,11 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
+  // Skip initial mount — initialState already set the correct values
+  const elementRef = useRef(element)
   useEffect(() => {
+    if (elementRef.current === element) return  // skip initial mount
+    elementRef.current = element
     setRecords(element.records as Record<string, unknown>[])
     setSort(null)
     setSearch('')
@@ -155,6 +159,27 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     setCurrentPage(1)
     setLazyLoaded(!isLazy)
   }, [element])
+
+  // ── Restore remembered state — fetch correct page/search if not default ──
+  useEffect(() => {
+    const restoredPage = initialState.page ? Number(initialState.page) : 1
+    const restoredSearch = initialState.search ? String(initialState.search) : ''
+    if ((restoredPage <= 1 && !restoredSearch) || !tableId) return
+    const params = new URLSearchParams()
+    params.set('page', String(restoredPage))
+    if (restoredSearch) params.set('search', restoredSearch)
+    fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { records: Record<string, unknown>[]; pagination?: typeof pagination } | null) => {
+        if (body) {
+          setRecords(body.records)
+          if (body.pagination) setPagination(body.pagination)
+          setCurrentPage(restoredPage)
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Lazy loading ──
   useEffect(() => {
