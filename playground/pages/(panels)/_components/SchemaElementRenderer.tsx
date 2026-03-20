@@ -107,41 +107,22 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   const ssrSearch = (element as { activeSearch?: string }).activeSearch
   const ssrSort = (element as { activeSort?: { col: string; dir: string } }).activeSort
 
-  // Check in-memory cache for tab-switch restore
-  const cachedState = tableId ? tableStateCache.get(tableId) : undefined
-
   const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
   const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(
     ssrSort ? { col: ssrSort.col, dir: ssrSort.dir.toLowerCase() as 'asc' | 'desc' }
-    : initialState.sort ? { col: String(initialState.sort), dir: (initialState.dir as 'asc' | 'desc') ?? 'asc' }
-    : cachedState?.sort ? { col: String(cachedState.sort), dir: (cachedState.dir as 'asc' | 'desc') ?? 'asc' }
     : null,
   )
-  const [search, setSearch]   = useState(
-    ssrSearch ?? (initialState.search ? String(initialState.search) : (cachedState?.search ? String(cachedState.search) : '')),
-  )
+  const [search, setSearch]   = useState(ssrSearch ?? '')
   const [dragging, setDragging] = useState<string | null>(null)
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
-  const [currentPage, setCurrentPage] = useState(
-    element.pagination?.currentPage && element.pagination.currentPage > 1
-      ? element.pagination.currentPage  // SSR'd page (url/session persist)
-      : initialState.page ? Number(initialState.page)  // client-restored page (localStorage/url)
-      : cachedState?.page ? Number(cachedState.page)   // in-memory cache (tab switch)
-      : 1,
-  )
+  const [currentPage, setCurrentPage] = useState(element.pagination?.currentPage ?? 1)
   const [loadingMore, setLoadingMore] = useState(false)
   const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Detect if we need to restore from cache (stale SSR data)
-  const needsRestore = (() => {
-    const source = Object.keys(initialState).length > 0 ? initialState : cachedState
-    if (!source) return false
-    const ssrPage = element.pagination?.currentPage ?? 1
-    const restoredPage = source.page ? Number(source.page) : 1
-    return restoredPage !== ssrPage || !!source.search || !!source.sort
-  })()
-  const [restoring, setRestoring] = useState(needsRestore)
+  // Start as false to avoid hydration mismatch (localStorage/cache not available during SSR)
+  const [restoring, setRestoring] = useState(false)
 
   // ── Remember: save state on change ──
   function saveRememberState(state: Record<string, unknown>) {
@@ -231,6 +212,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     // Skip if SSR already has the right data (url/session on initial page load)
     if (restoredPage === ssrPage && !restoredSearch && !source.sort) return
     if (restoredPage <= 1 && !restoredSearch && !source.sort) return
+    setRestoring(true)
     void fetchTable({ page: restoredPage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

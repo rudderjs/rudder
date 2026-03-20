@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest } from '@boostkit/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { ModelClass, QueryBuilderLike, RecordRow } from '../types.js'
@@ -15,6 +15,32 @@ async function importImage(): Promise<{ image: (input: Buffer) => any }> {
   const pkg = '@boostkit/image'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return import(/* @vite-ignore */ pkg) as any
+}
+
+/**
+ * Warm up all registries by resolving the panel schema AND all page schemas.
+ * Tables/Stats/Tabs/Forms on custom Pages need this to be found by API endpoints.
+ */
+async function warmUpRegistries(panel: Panel, req: AppRequest): Promise<void> {
+  const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
+  const ctx = buildContext(req)
+
+  // Resolve main panel schema
+  if (panel.hasSchema()) {
+    await resolveSchema(panel, ctx)
+  }
+
+  // Resolve all page schemas
+  for (const PageClass of panel.getPages()) {
+    if (!PageClass.hasSchema()) continue
+    try {
+      const elements = await PageClass.schema(ctx)
+      const pagePanel = Object.create(panel, {
+        getSchema: { value: () => elements },
+      })
+      await resolveSchema(pagePanel, ctx)
+    } catch { /* page schema failed */ }
+  }
 }
 
 export function mountMetaRoutes(
@@ -150,9 +176,7 @@ export function mountMetaRoutes(
     if (!table) {
       // Table not yet registered — warm up by evaluating schema
       try {
-        const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
-        const ctx = buildContext(req)
-        await resolveSchema(panel, ctx)
+        await warmUpRegistries(panel, req)
       } catch (e) { debugWarn('registry.warmup', e) }
       table = TableRegistry.get(panel.getName(), tableId)
     }
@@ -299,9 +323,7 @@ export function mountMetaRoutes(
     if (!table) {
       // Warm up
       try {
-        const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
-        const ctx = buildContext(req)
-        await resolveSchema(panel, ctx)
+        await warmUpRegistries(panel, req)
       } catch (e) { debugWarn('registry.warmup', e) }
     }
 
@@ -344,9 +366,7 @@ export function mountMetaRoutes(
     if (!entry) {
       // Entry not yet registered — try to warm up by evaluating the schema
       try {
-        const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
-        const ctx = buildContext(req)
-        await resolveSchema(panel, ctx)
+        await warmUpRegistries(panel, req)
       } catch (e) { debugWarn('registry.warmup', e) }
       entry = FormRegistry.getEntry(panel.getName(), formId)
     }
@@ -456,9 +476,7 @@ export function mountMetaRoutes(
     if (!stats) {
       // Warm up by evaluating schema
       try {
-        const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
-        const ctx = buildContext(req)
-        await resolveSchema(panel, ctx)
+        await warmUpRegistries(panel, req)
       } catch (e) { debugWarn('registry.warmup', e) }
       stats = StatsRegistry.get(panel.getName(), statsId)
     }
@@ -506,9 +524,7 @@ export function mountMetaRoutes(
     let tabs = TabsRegistry.get(panel.getName(), tabsId)
     if (!tabs) {
       try {
-        const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
-        const ctx = buildContext(req)
-        await resolveSchema(panel, ctx)
+        await warmUpRegistries(panel, req)
       } catch (e) { debugWarn('registry.warmup', e) }
       tabs = TabsRegistry.get(panel.getName(), tabsId)
     }
@@ -618,9 +634,7 @@ export function mountMetaRoutes(
     let tabs = TabsRegistry.get(panel.getName(), tabsId)
     if (!tabs) {
       try {
-        const { resolveSchema } = await import('../resolveSchema.js') as { resolveSchema: typeof import('../resolveSchema.js').resolveSchema }
-        const ctx = buildContext(req)
-        await resolveSchema(panel, ctx)
+        await warmUpRegistries(panel, req)
       } catch (e) { debugWarn('registry.warmup', e) }
       tabs = TabsRegistry.get(panel.getName(), tabsId)
     }

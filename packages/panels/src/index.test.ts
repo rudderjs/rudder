@@ -3052,3 +3052,356 @@ describe('FormRegistry', () => {
     assert.equal(FormRegistry.get('admin', 'f1'), undefined)
   })
 })
+
+// ─── createRegistry ────────────────────────────────────────
+
+import { createRegistry } from './BaseRegistry.js'
+
+describe('createRegistry', () => {
+  it('register and get by panelName:id', () => {
+    const reg = createRegistry<string>()
+    reg.register('admin', 'foo', 'bar')
+    assert.equal(reg.get('admin', 'foo'), 'bar')
+  })
+
+  it('get returns undefined for missing entry', () => {
+    const reg = createRegistry<string>()
+    assert.equal(reg.get('admin', 'missing'), undefined)
+  })
+
+  it('reset clears all entries', () => {
+    const reg = createRegistry<string>()
+    reg.register('admin', 'foo', 'bar')
+    reg.reset()
+    assert.equal(reg.get('admin', 'foo'), undefined)
+  })
+
+  it('different panels are isolated', () => {
+    const reg = createRegistry<string>()
+    reg.register('admin', 'foo', 'bar')
+    assert.equal(reg.get('other', 'foo'), undefined)
+  })
+})
+
+// ─── persist helpers ───────────────────────────────────────
+
+import { readPersistedState, slugify as slugifyPersist } from './persist.js'
+
+describe('persist helpers', () => {
+  it('slugify converts to lowercase with hyphens', () => {
+    assert.equal(slugifyPersist('Recent Content'), 'recent-content')
+    assert.equal(slugifyPersist('Hello World!'), 'hello-world')
+  })
+
+  it('readPersistedState returns undefined for localStorage mode', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {} }
+    assert.equal(readPersistedState('localStorage', 'key', ctx), undefined)
+  })
+
+  it('readPersistedState returns undefined for false mode', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {} }
+    assert.equal(readPersistedState(false, 'key', ctx), undefined)
+  })
+
+  it('readPersistedState reads from urlSearch for url mode', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {}, urlSearch: { 'my-table_page': '3', 'my-table_sort': 'name' } }
+    const state = readPersistedState('url', 'table:my-table', ctx, 'my-table')
+    assert.deepEqual(state, { page: '3', sort: 'name' })
+  })
+
+  it('readPersistedState returns undefined when no matching URL params', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {}, urlSearch: { 'other_page': '3' } }
+    const state = readPersistedState('url', 'table:my-table', ctx, 'my-table')
+    assert.equal(state, undefined)
+  })
+
+  it('readPersistedState reads from sessionGet for session mode', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {}, sessionGet: (key: string) => key === 'table:foo' ? { page: 2, sort: 'name' } : undefined }
+    const state = readPersistedState('session', 'table:foo', ctx)
+    assert.deepEqual(state, { page: 2, sort: 'name' })
+  })
+
+  it('readPersistedState wraps string session value', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {}, sessionGet: (key: string) => key === 'tabs:my-tabs' ? 'charts' : undefined }
+    const state = readPersistedState('session', 'tabs:my-tabs', ctx)
+    assert.deepEqual(state, { value: 'charts' })
+  })
+
+  it('readPersistedState returns undefined when sessionGet throws', () => {
+    const ctx = { user: undefined, headers: {}, path: '/', params: {}, sessionGet: () => { throw new Error('no session') } }
+    const state = readPersistedState('session', 'key', ctx)
+    assert.equal(state, undefined)
+  })
+})
+
+// ─── Table remember ────────────────────────────────────────
+
+describe('Table remember', () => {
+  it('defaults to false', () => {
+    const t = Table.make('Test')
+    assert.equal(t.getRemember(), false)
+  })
+
+  it('remember() defaults to localStorage', () => {
+    const t = Table.make('Test').remember()
+    assert.equal(t.getRemember(), 'localStorage')
+  })
+
+  it('remember(url) sets url mode', () => {
+    const t = Table.make('Test').remember('url')
+    assert.equal(t.getRemember(), 'url')
+  })
+
+  it('remember(session) sets session mode', () => {
+    const t = Table.make('Test').remember('session')
+    assert.equal(t.getRemember(), 'session')
+  })
+
+  it('remember(false) disables', () => {
+    const t = Table.make('Test').remember('url').remember(false)
+    assert.equal(t.getRemember(), false)
+  })
+
+  it('getConfig includes remember', () => {
+    const config = Table.make('Test').remember('url').getConfig()
+    assert.equal(config.remember, 'url')
+  })
+
+  it('getConfig remember is undefined when false', () => {
+    const config = Table.make('Test').getConfig()
+    assert.equal(config.remember, undefined)
+  })
+})
+
+// ─── Tab (schema tab) ──────────────────────────────────────
+
+import { Tab } from './Tabs.js'
+
+describe('Tab (schema tab)', () => {
+  it('make creates with label', () => {
+    const t = Tab.make('Overview')
+    assert.equal(t.getLabel(), 'Overview')
+  })
+
+  it('schema sets items', () => {
+    const items = [{ getType: () => 'text' }]
+    const t = Tab.make('Test').schema(items)
+    assert.equal(t.getItems().length, 1)
+  })
+
+  it('icon sets icon name', () => {
+    const t = Tab.make('Test').icon('home')
+    assert.equal(t.getIcon(), 'home')
+  })
+
+  it('badge with static value', () => {
+    const t = Tab.make('Test').badge(42)
+    assert.equal(t.getBadge(), 42)
+  })
+
+  it('badge with async function', async () => {
+    const t = Tab.make('Test').badge(async () => 99)
+    const resolved = await t.resolveBadge()
+    assert.equal(resolved, 99)
+  })
+
+  it('lazy sets flag', () => {
+    const t = Tab.make('Test').lazy()
+    assert.equal(t.isLazy(), true)
+  })
+
+  it('defaults: no icon, no badge, not lazy', () => {
+    const t = Tab.make('Test')
+    assert.equal(t.getIcon(), undefined)
+    assert.equal(t.getBadge(), undefined)
+    assert.equal(t.isLazy(), false)
+  })
+
+  it('toMeta includes icon and lazy when set', () => {
+    const meta = Tab.make('Test').icon('star').lazy().toMeta()
+    assert.equal(meta.icon, 'star')
+    assert.equal(meta.lazy, true)
+  })
+
+  it('toMeta omits icon and lazy when not set', () => {
+    const meta = Tab.make('Test').toMeta()
+    assert.equal(meta.icon, undefined)
+    assert.equal(meta.lazy, undefined)
+  })
+
+  it('hasFields returns false for schema elements', () => {
+    const t = Tab.make('Test').schema([{ getType: () => 'chart' }])
+    assert.equal(t.hasFields(), false)
+  })
+})
+
+// ─── Tabs with Tab array ───────────────────────────────────
+
+describe('Tabs with Tab array', () => {
+  it('accepts Tab array in constructor', () => {
+    const tabs = Tabs.make('my-tabs', [
+      Tab.make('A').schema([]),
+      Tab.make('B').schema([]),
+    ])
+    assert.equal(tabs.getTabs().length, 2)
+    assert.equal(tabs.getTabs()[0]?.getLabel(), 'A')
+  })
+
+  it('.tab() shorthand still works', () => {
+    const tabs = Tabs.make().tab('A').tab('B')
+    assert.equal(tabs.getTabs().length, 2)
+  })
+
+  it('persist defaults to false', () => {
+    const tabs = Tabs.make('test')
+    assert.equal(tabs.getPersist(), false)
+  })
+
+  it('persist(session) sets mode', () => {
+    const tabs = Tabs.make('test').persist('session')
+    assert.equal(tabs.getPersist(), 'session')
+  })
+
+  it('toMeta includes persist when not false', () => {
+    const meta = Tabs.make('test').persist('url').toMeta()
+    assert.equal(meta.persist, 'url')
+  })
+
+  it('toMeta omits persist when false', () => {
+    const meta = Tabs.make('test').toMeta()
+    assert.equal(meta.persist, undefined)
+  })
+})
+
+// ─── ListTab ───────────────────────────────────────────────
+
+import { ListTab } from './Tab.js'
+
+describe('ListTab', () => {
+  it('make creates with name', () => {
+    const t = ListTab.make('published')
+    assert.equal(t.getName(), 'published')
+  })
+
+  it('label auto-capitalizes', () => {
+    const t = ListTab.make('published')
+    assert.equal(t.getLabel(), 'Published')
+  })
+
+  it('label can be overridden', () => {
+    const t = ListTab.make('published').label('All Published')
+    assert.equal(t.getLabel(), 'All Published')
+  })
+
+  it('icon sets icon', () => {
+    const t = ListTab.make('test').icon('check')
+    const meta = t.toMeta()
+    assert.equal(meta.icon, 'check')
+  })
+
+  it('query stores function', () => {
+    const fn = (q: any) => q
+    const t = ListTab.make('test').query(fn)
+    assert.equal(t.getQueryFn(), fn)
+  })
+})
+
+// ─── Chart enhancements ───────────────────────────────────
+
+describe('Chart enhancements', () => {
+  it('id sets and getId auto-generates', () => {
+    assert.equal(Chart.make('Revenue').getId(), 'revenue')
+    assert.equal(Chart.make('Revenue').id('custom').getId(), 'custom')
+  })
+
+  it('description sets value', () => {
+    const meta = Chart.make('Test').description('A chart').toMeta()
+    assert.equal(meta.description, 'A chart')
+  })
+
+  it('lazy sets flag', () => {
+    const c = Chart.make('Test').lazy()
+    assert.equal(c.isLazy(), true)
+    assert.equal(c.toMeta().lazy, true)
+  })
+
+  it('poll sets interval', () => {
+    const c = Chart.make('Test').poll(5000)
+    assert.equal(c.getPollInterval(), 5000)
+    assert.equal(c.toMeta().pollInterval, 5000)
+  })
+
+  it('data stores function', () => {
+    const fn = async () => ({ labels: [], datasets: [] })
+    const c = Chart.make('Test').data(fn)
+    assert.equal(c.getDataFn(), fn)
+  })
+})
+
+// ─── List enhancements ────────────────────────────────────
+
+describe('List enhancements', () => {
+  it('id and getId', () => {
+    assert.equal(List.make('Links').getId(), 'links')
+    assert.equal(List.make('Links').id('custom').getId(), 'custom')
+  })
+
+  it('description', () => {
+    const meta = List.make('Test').description('A list').items([]).toMeta()
+    assert.equal(meta.description, 'A list')
+  })
+
+  it('lazy', () => {
+    assert.equal(List.make('Test').lazy().isLazy(), true)
+  })
+
+  it('poll', () => {
+    assert.equal(List.make('Test').poll(3000).getPollInterval(), 3000)
+  })
+
+  it('data stores function', () => {
+    const fn = async () => [{ label: 'x' }]
+    assert.equal(List.make('Test').data(fn).getDataFn(), fn)
+  })
+})
+
+// ─── Section id ────────────────────────────────────────────
+
+describe('Section id', () => {
+  it('id sets value', () => {
+    const s = Section.make('Test').id('my-section')
+    assert.equal(s.getId(), 'my-section')
+  })
+
+  it('id defaults to undefined', () => {
+    assert.equal(Section.make('Test').getId(), undefined)
+  })
+})
+
+// ─── Heading description ──────────────────────────────────
+
+describe('Heading description', () => {
+  it('description sets value', () => {
+    const meta = Heading.make('Title').description('Subtitle').toMeta()
+    assert.equal(meta.description, 'Subtitle')
+  })
+
+  it('description omitted when not set', () => {
+    const meta = Heading.make('Title').toMeta()
+    assert.equal(meta.description, undefined)
+  })
+})
+
+// ─── debugWarn ─────────────────────────────────────────────
+
+import { debugWarn } from './debug.js'
+
+describe('debugWarn', () => {
+  it('does not throw', () => {
+    assert.doesNotThrow(() => debugWarn('test', new Error('test error')))
+  })
+
+  it('handles string errors', () => {
+    assert.doesNotThrow(() => debugWarn('test', 'string error'))
+  })
+})
