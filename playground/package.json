@@ -10,7 +10,9 @@
     "start": "node ./dist/server/index.mjs",
     "preview": "pids=$(lsof -ti :3000 2>/dev/null); if [ -n \"$pids\" ]; then kill -9 $pids; fi; node ./dist/server/index.mjs",
     "typecheck": "tsc --noEmit",
-    "artisan": "tsx node_modules/@boostkit/cli/src/index.ts"
+    "artisan": "tsx node_modules/@boostkit/cli/src/index.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
@@ -21,9 +23,9 @@
     "@boostkit/cache": "workspace:*",
     "@boostkit/contracts": "workspace:*",
     "@boostkit/core": "workspace:*",
+    "@boostkit/image": "workspace:*",
     "@boostkit/live": "workspace:*",
     "@boostkit/localization": "workspace:*",
-    "@boostkit/image": "workspace:*",
     "@boostkit/mail": "workspace:*",
     "@boostkit/media": "workspace:*",
     "@boostkit/middleware": "workspace:*",
@@ -84,6 +86,7 @@
   },
   "devDependencies": {
     "@boostkit/cli": "workspace:*",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

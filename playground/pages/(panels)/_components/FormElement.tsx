@@ -11,7 +11,7 @@ interface FormElementProps {
 }
 
 export function FormElement({ form, panelPath, i18n }: FormElementProps) {
-  const [values,       setValues]       = useState<Record<string, unknown>>({})
+  const [values,       setValues]       = useState<Record<string, unknown>>(form.initialValues ?? {})
   const [submitting,   setSubmitting]   = useState(false)
   const [submitted,    setSubmitted]    = useState(false)
   const [serverError,  setServerError]  = useState<string | null>(null)
