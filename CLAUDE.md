@@ -151,7 +151,7 @@ boostkit/
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource CRUD, 25+ field types, schema elements (Table/fromResource/fromModel, Column, Form, Dialog, Section, Tabs), draftRecovery, rememberTable, widgets, versioning, collaboration, dashboard builder |
+| `@boostkit/panels` | 0.0.3 | Admin panel: Resource CRUD, 25+ field types, schema elements (Table/fromResource/fromModel/fromArray, Column, Form, Dialog, Section, Tab/Tabs, Stats, Chart, List), draftRecovery, rememberTable, filters, actions, persist(url/session/localStorage), lazy, poll, DataSource, dashboard builder, versioning, collaboration |
 | `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@boostkit/media` | 0.0.1 | Media library panels extension — file browser, uploads, folders, preview, image conversions |
 
