@@ -582,12 +582,48 @@ export async function resolveSchema(
 
       const formMeta = form.toMeta() as FormElementMeta & { initialValues?: Record<string, unknown> }
 
-      // Resolve initial values if data function provided
+      // Resolve initial values: field defaults → persist(url/session) → .data(fn)
+      // Priority: .data(fn) > persist restored > field .default()
+      const initialValues: Record<string, unknown> = {}
+
+      // 1. Resolve field defaults (static only — functions resolved client-side)
+      const formFields = (form as unknown as { getFields?(): Array<{ getName(): string; resolveDefault(ctx: unknown): unknown; getPersistMode(): unknown }> }).getFields?.() ?? []
+      for (const field of formFields) {
+        if (typeof field.getName !== 'function') continue
+        const def = field.resolveDefault(ctx)
+        if (def !== undefined) initialValues[field.getName()] = def
+      }
+
+      // 2. Resolve persist(url/session) values from SSR context
+      const formId = form.getId()
+      for (const field of formFields) {
+        if (typeof field.getName !== 'function' || typeof field.getPersistMode !== 'function') continue
+        const mode = field.getPersistMode()
+        const fieldName = field.getName()
+
+        if (mode === 'url' && ctx.urlSearch) {
+          const urlKey = `${formId}_${fieldName}`
+          const urlValue = ctx.urlSearch[urlKey]
+          if (urlValue !== undefined) initialValues[fieldName] = urlValue
+        } else if (mode === 'session' && ctx.sessionGet) {
+          try {
+            const sessionValue = ctx.sessionGet(`form:${formId}:${fieldName}`)
+            if (sessionValue !== undefined) initialValues[fieldName] = sessionValue
+          } catch { /* session not available */ }
+        }
+      }
+
+      // 3. .data(fn) overrides everything
       const dataFn = (form as unknown as { getDataFn?(): ((ctx: PanelContext) => Promise<Record<string, unknown>>) | undefined }).getDataFn?.()
       if (dataFn) {
         try {
-          formMeta.initialValues = await dataFn(ctx)
+          const dataValues = await dataFn(ctx)
+          Object.assign(initialValues, dataValues)
         } catch (e) { debugWarn('form.data', e) }
+      }
+
+      if (Object.keys(initialValues).length > 0) {
+        formMeta.initialValues = initialValues
       }
 
       result.push(formMeta as PanelSchemaElementMeta)

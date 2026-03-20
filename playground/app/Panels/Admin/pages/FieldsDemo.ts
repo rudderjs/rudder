@@ -174,6 +174,54 @@ export class FieldsDemo extends Page {
         .submitLabel('Save Profile')
         .successMessage('Profile saved!')
         .onSubmit(async (data) => { console.log('[sectioned]', data) }),
+
+      // ── Persist Fields ─────────────────────────────────────
+      Heading.make('Field Persist Modes').level(2),
+      Text.make('Fields with .persist() — values survive refresh. Try typing, then refresh.'),
+
+      Heading.make('persist(\'url\') — URL Query Params').level(3),
+      Text.make('Field values saved in URL. Shareable and SSR\'d.'),
+
+      Form.make('persist-url')
+        .fields([
+          TextField.make('search').label('Search Query').persist('url'),
+          SelectField.make('category').label('Category').persist('url').default('all').options([
+            { label: 'All', value: 'all' },
+            { label: 'Technology', value: 'tech' },
+            { label: 'Design', value: 'design' },
+          ]),
+        ])
+        .submitLabel('Apply')
+        .successMessage('Applied!')
+        .onSubmit(async (data) => { console.log('[persist-url]', data) }),
+
+      Heading.make('persist(\'session\') — Server Session').level(3),
+      Text.make('Field values saved in server session. SSR\'d on refresh, clean URL.'),
+
+      Form.make('persist-session')
+        .fields([
+          TextField.make('notes').label('Notes').persist('session'),
+          SelectField.make('theme').label('Theme').persist('session').default('system').options([
+            { label: 'Light', value: 'light' },
+            { label: 'Dark', value: 'dark' },
+            { label: 'System', value: 'system' },
+          ]),
+        ])
+        .submitLabel('Save')
+        .successMessage('Saved!')
+        .onSubmit(async (data) => { console.log('[persist-session]', data) }),
+
+      Heading.make('persist(\'localStorage\') — Browser Storage').level(3),
+      Text.make('Field values saved in browser localStorage. Survives refresh.'),
+
+      Form.make('persist-local')
+        .fields([
+          TextField.make('draft').label('Draft Text').persist('localStorage'),
+          NumberField.make('fontSize').label('Font Size').persist('localStorage').default(16),
+        ])
+        .submitLabel('Save')
+        .successMessage('Saved!')
+        .onSubmit(async (data) => { console.log('[persist-local]', data) }),
     ]
   }
 }

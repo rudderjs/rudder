@@ -362,6 +362,23 @@ export function mountMetaRoutes(
   }, mw)
 
   // Form submit endpoint — used by Form.make().onSubmit()
+  // Form field persist endpoint — save field value to session (persist='session' mode)
+  router.post(`${apiBase}/_forms/:formId/persist`, async (req, res) => {
+    const formId = (req.params as Record<string, string> | undefined)?.['formId']
+    if (!formId) return res.status(400).json({ message: 'Missing formId.' })
+
+    const { field, value } = (req.body as { field?: string; value?: unknown }) ?? {}
+    if (!field) return res.status(400).json({ message: 'Missing field name.' })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = (req as any).session as { put(key: string, value: unknown): void } | undefined
+    if (session) {
+      session.put(`form:${formId}:${field}`, value)
+    }
+
+    return res.json({ success: true })
+  }, mw)
+
   router.post(`${apiBase}/_forms/:formId/submit`, async (req, res) => {
     const formId = (req.params as Record<string, string> | undefined)?.['formId']
     if (!formId) return res.status(400).json({ message: 'Missing formId.' })

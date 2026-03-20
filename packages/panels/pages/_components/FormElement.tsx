@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { FormElementMeta, PanelI18n, FieldMeta } from '@boostkit/panels'
 import { FieldInput } from './FieldInput.js'
 
@@ -11,27 +11,108 @@ interface FormElementProps {
 }
 
 export function FormElement({ form, panelPath, i18n }: FormElementProps) {
-  // Merge field defaults with form-level initialValues
+  const pathSegment = panelPath.replace(/^\//, '')
+
+  // Build a map of field persist modes for quick lookup
+  const fieldPersistModes = new Map<string, string>()
+  for (const item of form.fields) {
+    const field = item as FieldMeta
+    if (field.name && field.persist) {
+      fieldPersistModes.set(field.name, typeof field.persist === 'string' ? field.persist : 'yjs')
+    }
+  }
+
+  // Merge: field defaults → localStorage/url restored → SSR initialValues
   const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const defaults: Record<string, unknown> = {}
+    const result: Record<string, unknown> = {}
+
+    // 1. Field defaults (static)
     for (const item of form.fields) {
       const field = item as FieldMeta
       if (field.name && field.defaultValue !== undefined) {
-        defaults[field.name] = field.defaultValue
+        result[field.name] = field.defaultValue
       }
     }
-    // Form.data() initialValues override field defaults
+
+    // 2. Restore from localStorage (client-side only)
+    if (typeof window !== 'undefined') {
+      for (const [fieldName, mode] of fieldPersistModes) {
+        if (mode === 'localStorage') {
+          try {
+            const stored = localStorage.getItem(`form:${form.id}:${fieldName}`)
+            if (stored !== null) result[fieldName] = JSON.parse(stored)
+          } catch { /* ignore */ }
+        }
+        // URL mode: read from current URL search params
+        if (mode === 'url') {
+          const url = new URL(window.location.href)
+          const urlKey = `${form.id}_${fieldName}`
+          const urlValue = url.searchParams.get(urlKey)
+          if (urlValue !== null) result[fieldName] = urlValue
+        }
+      }
+    }
+
+    // 3. SSR initialValues override everything (includes .data(fn), url/session from SSR)
     const initial = (form as { initialValues?: Record<string, unknown> }).initialValues
-    return { ...defaults, ...initial }
+    if (initial) Object.assign(result, initial)
+
+    return result
   })
   const [submitting,   setSubmitting]   = useState(false)
   const [submitted,    setSubmitted]    = useState(false)
   const [serverError,  setServerError]  = useState<string | null>(null)
   const [fieldErrors,  setFieldErrors]  = useState<Record<string, string>>({})
 
+  // Restore localStorage values after hydration (SSR can't read localStorage)
+  useEffect(() => {
+    const restored: Record<string, unknown> = {}
+    for (const [fieldName, mode] of fieldPersistModes) {
+      if (mode === 'localStorage') {
+        try {
+          const stored = localStorage.getItem(`form:${form.id}:${fieldName}`)
+          if (stored !== null) restored[fieldName] = JSON.parse(stored)
+        } catch { /* ignore */ }
+      }
+    }
+    if (Object.keys(restored).length > 0) {
+      setValues(prev => ({ ...prev, ...restored }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Persist a field value based on its persist mode
+  const persistFieldValue = useCallback((name: string, value: unknown) => {
+    const mode = fieldPersistModes.get(name)
+    if (!mode) return
+
+    if (mode === 'localStorage' && typeof window !== 'undefined') {
+      localStorage.setItem(`form:${form.id}:${name}`, JSON.stringify(value))
+    }
+
+    if (mode === 'url' && typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      const urlKey = `${form.id}_${name}`
+      const strValue = value === null || value === undefined || value === '' ? null : String(value)
+      if (strValue) url.searchParams.set(urlKey, strValue)
+      else url.searchParams.delete(urlKey)
+      window.history.replaceState(null, '', url.pathname + url.search)
+    }
+
+    if (mode === 'session') {
+      fetch(`/${pathSegment}/api/_forms/${form.id}/persist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: name, value }),
+      }).catch(() => {}) // fire-and-forget
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.id, pathSegment])
+
   function handleChange(name: string, value: unknown) {
     setValues(prev => ({ ...prev, [name]: value }))
     setFieldErrors(prev => { const n = { ...prev }; delete n[name]; return n })
+    persistFieldValue(name, value)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,10 +121,12 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
     setServerError(null)
 
     const apiBase = panelPath.replace(/\/$/, '') + '/api'
+    const submitUrl = (form as { action?: string }).action ?? `${apiBase}/_forms/${form.id}/submit`
+    const submitMethod = (form as { method?: string }).method ?? 'POST'
 
     try {
-      const res = await fetch(`${apiBase}/_forms/${form.id}/submit`, {
-        method:  'POST',
+      const res = await fetch(submitUrl, {
+        method:  submitMethod,
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(values),
       })
@@ -77,6 +160,9 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
 
   return (
     <div className="rounded-xl border bg-card p-6">
+      {(form as { description?: string }).description && (
+        <p className="text-sm text-muted-foreground mb-4">{(form as { description?: string }).description}</p>
+      )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {form.fields.map(item => {
           const field = item as FieldMeta
