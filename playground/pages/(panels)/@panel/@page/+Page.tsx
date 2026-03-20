@@ -194,6 +194,9 @@ function SchemaSection({ section, panelPath, pathSegment, i18n, urlSearch }: Sch
             if (el.type === 'form') {
               return <FormElement key={`sf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
             }
+            if (el.type === 'dialog') {
+              return <DialogElement key={`sd-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} i18n={i18n} />
+            }
             if (el.type === 'section') {
               return <SchemaSection key={`ss-${i}`} section={el as SchemaSectionProps['section']} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} urlSearch={urlSearch} />
             }
