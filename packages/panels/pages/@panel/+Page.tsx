@@ -102,6 +102,7 @@ export default function PanelRootPage() {
                 panelPath={panelMeta.path}
                 pathSegment={pathSegment}
                 i18n={i18n}
+                urlSearch={urlSearch}
               />
             )
           }
@@ -412,7 +413,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
             >
               {tab.label}
               {tab.badge != null && (
-                <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium">{tab.badge}</span>
+                <span className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-medium ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{tab.badge}</span>
               )}
             </button>
           )
@@ -470,9 +471,10 @@ interface SchemaSectionProps {
   panelPath: string
   pathSegment: string
   i18n: PanelI18n & Record<string, string>
+  urlSearch?: Record<string, string>
 }
 
-function SchemaSection({ section, panelPath, pathSegment, i18n }: SchemaSectionProps) {
+function SchemaSection({ section, panelPath, pathSegment, i18n, urlSearch }: SchemaSectionProps) {
   const [open, setOpen] = useState(!section.collapsed)
 
   return (
@@ -517,6 +519,40 @@ function SchemaSection({ section, panelPath, pathSegment, i18n }: SchemaSectionP
               if (el.type === 'form') {
                 return (
                   <FormElement key={`sf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
+                )
+              }
+              if (el.type === 'tabs') {
+                const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[]; modelBacked?: boolean; persist?: 'localStorage' | 'url' | 'session' | false; activeTab?: number }
+                return (
+                  <SchemaTabs
+                    key={`st-${tabsEl.id ?? i}`}
+                    id={tabsEl.id}
+                    tabs={tabsEl.tabs}
+                    urlSearch={urlSearch}
+                    panelPath={panelPath}
+                    pathSegment={pathSegment}
+                    i18n={i18n}
+                    modelBacked={!!tabsEl.modelBacked}
+                    persist={tabsEl.persist}
+                    activeTab={tabsEl.activeTab}
+                  />
+                )
+              }
+              if (el.type === 'dialog') {
+                return (
+                  <DialogElement key={`sd-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} i18n={i18n} />
+                )
+              }
+              if (el.type === 'section') {
+                return (
+                  <SchemaSection
+                    key={`ss-${i}`}
+                    section={el as SchemaSectionProps['section']}
+                    panelPath={panelPath}
+                    pathSegment={pathSegment}
+                    i18n={i18n}
+                    urlSearch={urlSearch}
+                  />
                 )
               }
               return (

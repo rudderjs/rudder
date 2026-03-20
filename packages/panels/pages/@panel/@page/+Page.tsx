@@ -7,7 +7,8 @@ import { Breadcrumbs }       from '../../_components/Breadcrumbs.js'
 import { SchemaElementRenderer }    from '../../_components/SchemaElementRenderer.js'
 import { DashboardGrid }     from '../../_components/DashboardGrid.js'
 import { StandaloneWidget }  from '../../_components/StandaloneWidget.js'
-import type { PanelSchemaElementMeta, PanelI18n, WidgetMeta } from '@boostkit/panels'
+import { FormElement }       from '../../_components/FormElement.js'
+import type { PanelSchemaElementMeta, PanelI18n, FormElementMeta, WidgetMeta } from '@boostkit/panels'
 import type { WidgetWithData } from '../../_components/WidgetCard.js'
 import type { DashboardGridProps } from '../../_components/DashboardGrid.js'
 import type { Data } from './+data.js'
@@ -101,7 +102,7 @@ export default function SchemaPage() {
           if (el.type === 'section') {
             const sectionEl = el as { type: 'section'; title: string; description?: string; collapsible: boolean; collapsed: boolean; columns: number; elements?: SchemaElement[] }
             if (sectionEl.elements?.length) {
-              return <SchemaSection key={`s-${gi}`} section={sectionEl} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} />
+              return <SchemaSection key={`s-${gi}`} section={sectionEl} panelPath={panelMeta.path} pathSegment={pathSegment} i18n={i18n} urlSearch={urlSearch} />
             }
           }
 
@@ -138,9 +139,10 @@ interface SchemaSectionProps {
   panelPath: string
   pathSegment: string
   i18n: PanelI18n & Record<string, string>
+  urlSearch?: Record<string, string>
 }
 
-function SchemaSection({ section, panelPath, pathSegment: _pathSegment, i18n }: SchemaSectionProps) {
+function SchemaSection({ section, panelPath, pathSegment, i18n, urlSearch }: SchemaSectionProps) {
   const [open, setOpen] = useState(!section.collapsed)
   return (
     <div className="rounded-xl border bg-card">
@@ -160,9 +162,32 @@ function SchemaSection({ section, panelPath, pathSegment: _pathSegment, i18n }: 
       </div>
       {open && section.elements?.length && (
         <div className="p-5 flex flex-col gap-4">
-          {section.elements.map((el: SchemaElement, i: number) => (
-            <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
-          ))}
+          {section.elements.map((el: SchemaElement, i: number) => {
+            if (el.type === 'tabs') {
+              const tabsEl = el as { type: 'tabs'; id?: string; tabs: TabItem[]; modelBacked?: boolean; persist?: 'localStorage' | 'url' | 'session' | false; activeTab?: number }
+              return (
+                <SchemaTabs
+                  key={`st-${tabsEl.id ?? i}`}
+                  id={tabsEl.id}
+                  tabs={tabsEl.tabs}
+                  urlSearch={urlSearch}
+                  panelPath={panelPath}
+                  pathSegment={pathSegment}
+                  i18n={i18n}
+                  modelBacked={!!tabsEl.modelBacked}
+                  persist={tabsEl.persist}
+                  activeTab={tabsEl.activeTab}
+                />
+              )
+            }
+            if (el.type === 'form') {
+              return <FormElement key={`sf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
+            }
+            if (el.type === 'section') {
+              return <SchemaSection key={`ss-${i}`} section={el as SchemaSectionProps['section']} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} urlSearch={urlSearch} />
+            }
+            return <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+          })}
         </div>
       )}
     </div>
@@ -290,7 +315,7 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
             className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors ${
               activeIdx === idx ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             }`}
-          >{tab.label}{tab.badge != null && <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium">{tab.badge}</span>}</button>
+          >{tab.label}{tab.badge != null && <span className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-medium ${activeIdx === idx ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{tab.badge}</span>}</button>
         ))}
       </div>
       {loading && activeElements.length === 0 && (

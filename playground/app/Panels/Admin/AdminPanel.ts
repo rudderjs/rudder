@@ -7,9 +7,10 @@ import { SiteSettingsGlobal }   from './globals/SiteSettingsGlobal.js'
 import { CustomPage }    from './pages/CustomPage.js'
 import { ReportsPage }   from './pages/ReportsPage.js'
 import { MediaPage }     from './pages/MediaPage.js'
-import { TablesDemo }    from './pages/TablesDemo.js'
-import { TabsDemo }      from './pages/TabsDemo.js'
-import { FormsDemo }     from './pages/FormsDemo.js'
+import { TablesDemo }     from './pages/TablesDemo.js'
+import { TabsDemo }       from './pages/TabsDemo.js'
+import { FormsDemo }      from './pages/FormsDemo.js'
+import { SectionsDemo }   from './pages/SectionsDemo.js'
 
 import { Article }    from 'App/Models/Article.js'
 import { Category }   from 'App/Models/Category.js'
@@ -147,6 +148,7 @@ export const adminPanel = Panel.make('admin')
     TablesDemo,
     TabsDemo,
     FormsDemo,
+    SectionsDemo,
     ReportsPage,
     MediaPage,
     CustomPage,
