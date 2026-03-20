@@ -960,6 +960,41 @@ export default function DashboardPage() {
 
 The panel layout (`AdminLayout`) is applied automatically via the shared `+Layout.tsx`.
 
+### Sub-Pages
+
+Pages can register child pages via `static pages = [...]`. Sub-page slugs are relative to the parent:
+
+```ts
+export class TablesDemo extends Page {
+  static slug = 'tables-demo'
+  static label = 'Tables Demo'
+  static icon = 'table'
+  static pages = [PaginationDemo, ExternalDataDemo]
+
+  static async schema() { ... }
+}
+
+// URL: /admin/tables-demo/pagination
+export class PaginationDemo extends Page {
+  static slug = 'pagination'
+  static label = 'Pagination'
+  static icon = 'list'
+
+  static async schema() { ... }
+}
+```
+
+The sidebar renders sub-pages as a collapsible tree. Sub-pages can nest recursively, and dynamic slugs with params work on sub-pages (e.g. `static slug = 'item/:id'`). Only top-level pages need to be registered in `Panel.pages([...])`.
+
+**Visual-only nesting** -- use `static navigationParent` to group a page under another in the sidebar without structural ownership (the page keeps its own URL):
+
+```ts
+export class FormsDemo extends Page {
+  static slug = 'forms-demo'              // keeps its own URL: /admin/forms-demo
+  static navigationParent = 'Tables Demo' // just sidebar nesting
+}
+```
+
 ---
 
 ## Custom Resource Views

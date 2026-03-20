@@ -169,6 +169,67 @@ interface PanelContext {
 
 ---
 
+## Sub-Pages
+
+Pages can register child pages via `static pages = [...]`. Sub-page slugs are relative to the parent — the framework builds the full URL automatically.
+
+```ts
+// Parent page
+export class TablesDemo extends Page {
+  static slug = 'tables-demo'
+  static label = 'Tables Demo'
+  static icon = 'table'
+  static pages = [PaginationDemo, ExternalDataDemo]
+
+  static async schema() { ... }
+}
+
+// Sub-page — slug is relative (tables-demo/pagination)
+export class PaginationDemo extends Page {
+  static slug = 'pagination'
+  static label = 'Pagination'
+  static icon = 'list'
+
+  static async schema() { ... }
+}
+```
+
+The sidebar renders sub-pages as a collapsible tree:
+
+```
+Pages
+  Tables Demo          → /admin/tables-demo
+    ├── Pagination     → /admin/tables-demo/pagination
+    └── External Data  → /admin/tables-demo/external-data
+  Tabs Demo
+  Forms Demo
+```
+
+### Key Points
+
+- `static pages = [...]` — structural: parent owns children, relative slugs, auto URL nesting
+- Sub-pages can have their own sub-pages (recursive)
+- Dynamic slugs with params work on sub-pages (e.g. `static slug = 'item/:id'`)
+- Only top-level pages need to be registered in `Panel.pages([...])`
+
+### Visual-Only Nesting (navigationParent)
+
+For sidebar grouping without structural ownership, use `static navigationParent`. The page keeps its own URL — only the sidebar position changes:
+
+```ts
+export class FormsDemo extends Page {
+  static slug = 'forms-demo'              // keeps its own URL: /admin/forms-demo
+  static navigationParent = 'Tables Demo' // just sidebar nesting
+}
+```
+
+| Property | Structural? | URL | Sidebar |
+|---|---|---|---|
+| `static pages = [...]` | Yes — parent owns children | Relative slug appended to parent | Collapsible tree |
+| `static navigationParent` | No — visual only | Page keeps its own slug | Nested under named parent |
+
+---
+
 ## Vike-Backed Pages
 
 Pages without a `schema()` method render via a Vike page file. Create `+Page.tsx` at the static path after publishing:

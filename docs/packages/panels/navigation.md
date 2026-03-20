@@ -55,6 +55,40 @@ Badge values are resolved server-side via the `GET /{panel}/api/_badges` endpoin
 
 ---
 
+## Sub-Page Nesting
+
+Pages support two styles of sidebar nesting.
+
+### Structural Sub-Pages (`static pages`)
+
+Register child pages via `static pages = [...]` on the parent. Sub-page slugs are relative — the full URL is built automatically:
+
+```ts
+export class TablesDemo extends Page {
+  static slug = 'tables-demo'
+  static pages = [PaginationDemo, ExternalDataDemo]
+}
+
+export class PaginationDemo extends Page {
+  static slug = 'pagination'   // URL: /admin/tables-demo/pagination
+}
+```
+
+The sidebar renders these as a collapsible tree under the parent. Sub-pages can nest recursively. Only top-level pages need to be registered in `Panel.pages([...])`.
+
+### Visual-Only Nesting (`navigationParent`)
+
+For sidebar grouping without URL nesting, use `static navigationParent`. The page keeps its own slug — only the sidebar position changes:
+
+```ts
+export class FormsDemo extends Page {
+  static slug = 'forms-demo'              // URL: /admin/forms-demo (unchanged)
+  static navigationParent = 'Tables Demo' // appears nested under Tables Demo in sidebar
+}
+```
+
+---
+
 ## Guard
 
 Restrict access to an entire panel using `.guard()`:
