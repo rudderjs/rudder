@@ -75,7 +75,7 @@ export const adminPanel = Panel.make('admin')
             .paginated('pages', 2)
             .searchable()
             .emptyMessage('No articles yet.')
-            .remember('url'),
+            .remember('localStorage'),
         ]),
       Tab.make('Charts')
         .icon('bar-chart')
