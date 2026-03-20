@@ -1,4 +1,4 @@
-import { Page, Heading, Text, Table, Column, Section } from '@boostkit/panels'
+import { Page, Heading, Text, Table, Column } from '@boostkit/panels'
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
@@ -14,6 +14,9 @@ export class TablesDemo extends Page {
       Text.make('Demonstrates all Table features: pagination, search, sort, remember, lazy, scope, static rows.'),
 
       // ── Pages pagination + search + remember(url) ──────────
+      Heading.make('Paginated Table (pages + URL persist)').level(2),
+      Text.make('Search, sort, and pagination state persists in the URL. Try searching, sorting, then sharing the URL.'),
+
       Table.make('Articles (URL)')
         .fromModel(Article)
         .columns([
@@ -27,8 +30,10 @@ export class TablesDemo extends Page {
         .emptyMessage('No articles found.')
         .remember('url'),
 
-
       // ── Load More pagination + remember(localStorage) ──────
+      Heading.make('Load More Table (localStorage)').level(2),
+      Text.make('Click "Load more" to append records. State saved in localStorage.'),
+
       Table.make('Articles (Load More)')
         .fromModel(Article)
         .columns([
@@ -40,8 +45,10 @@ export class TablesDemo extends Page {
         .searchable()
         .remember('localStorage'),
 
-
       // ── Session persist ────────────────────────────────────
+      Heading.make('Session Persist Table').level(2),
+      Text.make('Page/sort/search state saved in server session. SSR\'d correctly on refresh.'),
+
       Table.make('Users (Session)')
         .fromModel(User)
         .columns([
@@ -54,8 +61,10 @@ export class TablesDemo extends Page {
         .searchable()
         .remember('session'),
 
-
       // ── Scoped table ───────────────────────────────────────
+      Heading.make('Scoped Table').level(2),
+      Text.make('Only shows published articles using .scope().'),
+
       Table.make('Published Articles')
         .fromModel(Article)
         .scope(q => q.where('draftStatus', 'published'))
@@ -68,6 +77,9 @@ export class TablesDemo extends Page {
         .emptyMessage('No published articles yet.'),
 
       // ── Static rows ────────────────────────────────────────
+      Heading.make('Static Data Table').level(2),
+      Text.make('No model — data provided inline via .rows().'),
+
       Table.make('Browser Market Share')
         .rows([
           { browser: 'Chrome', share: 65, trend: '+2.1%' },
@@ -84,8 +96,10 @@ export class TablesDemo extends Page {
         .searchable()
         .description('Estimated global browser market share'),
 
-
       // ── No persistence (default) ───────────────────────────
+      Heading.make('Simple Table (no persist)').level(2),
+      Text.make('Basic table with no state persistence. Resets on every page load.'),
+
       Table.make('Recent 5 Articles')
         .fromModel(Article)
         .columns([
