@@ -1,0 +1,179 @@
+import {
+  Page, Heading, Text, Form, Section,
+  TextField, EmailField, PasswordField, NumberField,
+  TextareaField, SelectField, BooleanField, ToggleField,
+  DateField, ColorField, TagsField, SlugField,
+  JsonField, HiddenField, FileField,
+} from '@boostkit/panels'
+import type { PanelContext } from '@boostkit/panels'
+
+export class FieldsDemo extends Page {
+  static slug  = 'fields-demo'
+  static label = 'Fields Demo'
+  static icon  = 'text-cursor-input'
+
+  static async schema(_ctx: PanelContext) {
+    return [
+      Heading.make('Field Types'),
+      Text.make('All available field types with configuration examples.'),
+
+      // ── Text Fields ────────────────────────────────────────
+      Heading.make('Text Fields').level(2),
+      Text.make('TextField, EmailField, PasswordField, TextareaField.'),
+
+      Form.make('text-fields')
+        .fields([
+          TextField.make('name').label('Name').required(),
+          TextField.make('title').label('Title with Default').default('Untitled'),
+          EmailField.make('email').label('Email').required(),
+          PasswordField.make('password').label('Password').required(),
+          TextareaField.make('bio').label('Bio'),
+        ])
+        .submitLabel('Submit Text Fields')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[text fields]', data) }),
+
+      // ── Number & Date ──────────────────────────────────────
+      Heading.make('Number & Date Fields').level(2),
+      Text.make('NumberField, DateField.'),
+
+      Form.make('number-date')
+        .fields([
+          NumberField.make('age').label('Age').default(25),
+          NumberField.make('price').label('Price ($)'),
+          DateField.make('birthday').label('Birthday'),
+          DateField.make('startDate').label('Start Date').default(new Date().toISOString().split('T')[0]),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[number-date]', data) }),
+
+      // ── Select & Boolean ───────────────────────────────────
+      Heading.make('Select, Boolean & Toggle').level(2),
+      Text.make('SelectField with options, BooleanField checkbox, ToggleField switch.'),
+
+      Form.make('select-boolean')
+        .fields([
+          SelectField.make('role').label('Role').default('user').options([
+            { label: 'Admin', value: 'admin' },
+            { label: 'Editor', value: 'editor' },
+            { label: 'User', value: 'user' },
+          ]),
+          SelectField.make('categories').label('Categories (Multi)').options([
+            { label: 'Technology', value: 'tech' },
+            { label: 'Design', value: 'design' },
+            { label: 'Business', value: 'business' },
+            { label: 'Science', value: 'science' },
+          ]).multiple(),
+          BooleanField.make('active').label('Active'),
+          ToggleField.make('featured').label('Featured Article'),
+          ToggleField.make('notifications').label('Email Notifications').default(true),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[select-boolean]', data) }),
+
+      // ── Slug & Tags ────────────────────────────────────────
+      Heading.make('Slug & Tags').level(2),
+      Text.make('SlugField auto-generates from another field. TagsField for comma-separated values.'),
+
+      Form.make('slug-tags')
+        .fields([
+          TextField.make('articleTitle').label('Article Title'),
+          SlugField.make('slug').label('URL Slug').from('articleTitle'),
+          TagsField.make('tags').label('Tags'),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[slug-tags]', data) }),
+
+      // ── Color & JSON ───────────────────────────────────────
+      Heading.make('Color & JSON').level(2),
+      Text.make('ColorField color picker. JsonField for raw JSON editing.'),
+
+      Form.make('color-json')
+        .fields([
+          ColorField.make('primaryColor').label('Primary Color').default('#3b82f6'),
+          ColorField.make('accentColor').label('Accent Color'),
+          JsonField.make('metadata').label('Metadata (JSON)').default('{\n  "key": "value"\n}'),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[color-json]', data) }),
+
+      // ── File Upload ────────────────────────────────────────
+      Heading.make('File Upload').level(2),
+      Text.make('FileField for file and image uploads.'),
+
+      Form.make('file-upload')
+        .fields([
+          FileField.make('avatar').label('Profile Picture').image().accept('image/*').maxSize(5),
+          FileField.make('document').label('Document').accept('.pdf,.doc,.docx'),
+        ])
+        .submitLabel('Upload')
+        .successMessage('Uploaded!')
+        .onSubmit(async (data) => { console.log('[file-upload]', data) }),
+
+      // ── Conditional Fields ─────────────────────────────────
+      Heading.make('Conditional Fields').level(2),
+      Text.make('Fields that show/hide based on other field values using .showWhen() and .hideWhen().'),
+
+      Form.make('conditional')
+        .fields([
+          SelectField.make('contactMethod').label('Contact Method').options([
+            { label: 'Email', value: 'email' },
+            { label: 'Phone', value: 'phone' },
+            { label: 'None', value: 'none' },
+          ]).default('email'),
+          EmailField.make('contactEmail').label('Email Address').showWhen('contactMethod', 'email'),
+          TextField.make('contactPhone').label('Phone Number').showWhen('contactMethod', 'phone'),
+          ToggleField.make('newsletter').label('Subscribe to Newsletter').hideWhen('contactMethod', 'none'),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[conditional]', data) }),
+
+      // ── Hidden Field ───────────────────────────────────────
+      Heading.make('Hidden Field').level(2),
+      Text.make('HiddenField is not visible but included in form data.'),
+
+      Form.make('hidden-field')
+        .fields([
+          HiddenField.make('formType').default('demo'),
+          TextField.make('comment').label('Comment'),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted! (check console for hidden value)')
+        .onSubmit(async (data) => { console.log('[hidden-field]', data) }),
+
+      // ── With Sections ──────────────────────────────────────
+      Heading.make('Fields in Sections').level(2),
+      Text.make('Fields grouped into collapsible sections.'),
+
+      Form.make('sectioned')
+        .fields([
+          Section.make('Personal Info').schema(
+            TextField.make('firstName').label('First Name').required(),
+            TextField.make('lastName').label('Last Name').required(),
+            EmailField.make('personalEmail').label('Email'),
+          ),
+          Section.make('Address').collapsible().collapsed().schema(
+            TextField.make('street').label('Street'),
+            TextField.make('city').label('City'),
+            TextField.make('zip').label('ZIP Code'),
+          ),
+          Section.make('Preferences').collapsible().schema(
+            ToggleField.make('darkMode').label('Dark Mode').default(true),
+            SelectField.make('language').label('Language').default('en').options([
+              { label: 'English', value: 'en' },
+              { label: 'Arabic', value: 'ar' },
+              { label: 'Spanish', value: 'es' },
+            ]),
+          ),
+        ])
+        .submitLabel('Save Profile')
+        .successMessage('Profile saved!')
+        .onSubmit(async (data) => { console.log('[sectioned]', data) }),
+    ]
+  }
+}
