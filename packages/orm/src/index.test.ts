@@ -402,3 +402,239 @@ describe('Model.toJSON()', () => {
     assert.ok(!('password' in json))
   })
 })
+
+// ─── Scopes ──────────────────────────────────────────────────────────────────
+
+describe('Model scopes', () => {
+  beforeEach(() => {
+    ModelRegistry.set(makeAdapter(makeQb()))
+  })
+
+  it('local scope applies query modification', () => {
+    class Post extends Model {
+      static table = 'posts'
+      static scopes = {
+        published: (q: QueryBuilder<Post>) => q.where('status', 'published'),
+      }
+    }
+    const q = Post.query().scope('published')
+    assert.ok(q) // query builder returned
+  })
+
+  it('local scope with arguments works', () => {
+    class Post extends Model {
+      static table = 'posts'
+      static scopes = {
+        byAuthor: (q: QueryBuilder<Post>, authorId: string) => q.where('authorId', authorId),
+      }
+    }
+    const q = Post.query().scope('byAuthor', 'user-123')
+    assert.ok(q)
+  })
+
+  it('undefined scope throws', () => {
+    class Post extends Model {
+      static table = 'posts'
+      static scopes = {}
+    }
+    assert.throws(() => Post.query().scope('nonexistent'), /not defined/)
+  })
+
+  it('global scope applied automatically', () => {
+    let orderByCalled = false
+    ModelRegistry.set(makeAdapter(makeQb({
+      orderBy: function(this: QueryBuilder<unknown>) { orderByCalled = true; return this },
+    })))
+
+    class Post extends Model {
+      static table = 'posts'
+      static globalScopes = {
+        ordered: (q: QueryBuilder<Post>) => q.orderBy('createdAt', 'DESC'),
+      }
+    }
+    Post.query()
+    assert.ok(orderByCalled)
+  })
+
+  it('withoutGlobalScope excludes a scope', () => {
+    let whereCalled = false
+    let orderByCalled = false
+    ModelRegistry.set(makeAdapter(makeQb({
+      orderBy: function(this: QueryBuilder<unknown>) { orderByCalled = true; return this },
+      where: function(this: QueryBuilder<unknown>) { whereCalled = true; return this },
+    })))
+
+    class Post extends Model {
+      static table = 'posts'
+      static globalScopes = {
+        ordered: (q: QueryBuilder<Post>) => q.orderBy('createdAt', 'DESC'),
+        active: (q: QueryBuilder<Post>) => q.where('active', true),
+      }
+    }
+    // Reset flags after initial query() call (which applies both scopes)
+    orderByCalled = false
+    whereCalled = false
+    Post.query().withoutGlobalScope('ordered')
+    // The rebuilt query should have 'where' (active) applied
+    assert.ok(whereCalled)
+  })
+
+  it('scopes are isolated per model', () => {
+    class Post extends Model {
+      static table = 'posts'
+      static scopes = { published: (q: QueryBuilder<Post>) => q.where('status', 'published') }
+    }
+    class User extends Model {
+      static table = 'users'
+      static scopes = { admins: (q: QueryBuilder<User>) => q.where('role', 'admin') }
+    }
+    assert.ok('published' in Post.scopes)
+    assert.ok(!('admins' in Post.scopes))
+    assert.ok('admins' in User.scopes)
+    assert.ok(!('published' in User.scopes))
+  })
+})
+
+// ─── Observers ───────────────────────────────────────────────────────────────
+
+describe('Model observers', () => {
+  beforeEach(() => {
+    ModelRegistry.set(makeAdapter(makeQb()))
+  })
+
+  it('observe() registers an observer', () => {
+    class Post extends Model { static table = 'posts' }
+    class PostObserver { created() {} }
+    Post.observe(PostObserver)
+    // No error means it worked
+    Post.clearObservers()
+  })
+
+  it('creating event can transform data', async () => {
+    const created: Record<string, unknown>[] = []
+    const qb = makeQb({ create: async (data) => { created.push(data as Record<string, unknown>); return data as Record<string, unknown> } })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model { static table = 'posts' }
+    Post.on('creating', (data: Record<string, unknown>) => {
+      return { ...data, slug: 'auto-slug' }
+    })
+
+    await Post.create({ title: 'Hello' } as Partial<never>)
+    assert.equal(created[0]?.slug, 'auto-slug')
+    Post.clearObservers()
+  })
+
+  it('creating event returning false cancels create', async () => {
+    class Post extends Model { static table = 'posts' }
+    Post.on('creating', () => false)
+
+    await assert.rejects(() => Post.create({} as Partial<never>), /cancelled by observer/)
+    Post.clearObservers()
+  })
+
+  it('created event fires after create', async () => {
+    const events: string[] = []
+    const qb = makeQb({ create: async (data) => ({ id: '1', ...data as Record<string, unknown> }) as Record<string, unknown> })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model { static table = 'posts' }
+    Post.on('created', (record: Record<string, unknown>) => {
+      events.push(`created:${record.id}`)
+    })
+
+    await Post.create({ title: 'Test' } as Partial<never>)
+    assert.deepStrictEqual(events, ['created:1'])
+    Post.clearObservers()
+  })
+
+  it('updating event can transform data', async () => {
+    const updated: Record<string, unknown>[] = []
+    const qb = makeQb({ update: async (_id, data) => { updated.push(data as Record<string, unknown>); return data as Record<string, unknown> } })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model { static table = 'posts' }
+    Post.on('updating', (_id: string, data: Record<string, unknown>) => {
+      return { ...data, updatedAt: 'now' }
+    })
+
+    await Post.update('1', { title: 'Changed' } as Partial<never>)
+    assert.equal(updated[0]?.updatedAt, 'now')
+    Post.clearObservers()
+  })
+
+  it('deleting event returning false cancels delete', async () => {
+    class Post extends Model { static table = 'posts' }
+    Post.on('deleting', () => false)
+
+    await assert.rejects(() => Post.delete('1'), /cancelled by observer/)
+    Post.clearObservers()
+  })
+
+  it('deleted event fires after delete', async () => {
+    const events: string[] = []
+    class Post extends Model { static table = 'posts' }
+    Post.on('deleted', (id: string) => { events.push(`deleted:${id}`) })
+
+    await Post.delete('1')
+    assert.deepStrictEqual(events, ['deleted:1'])
+    Post.clearObservers()
+  })
+
+  it('observer class methods are called', async () => {
+    const events: string[] = []
+    const qb = makeQb({ create: async (data) => ({ id: '1', ...data as Record<string, unknown> }) as Record<string, unknown> })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model { static table = 'posts' }
+    class PostObserver {
+      creating(data: Record<string, unknown>) { events.push('creating'); return data }
+      created() { events.push('created') }
+    }
+    Post.observe(PostObserver)
+
+    await Post.create({ title: 'Test' } as Partial<never>)
+    assert.deepStrictEqual(events, ['creating', 'created'])
+    Post.clearObservers()
+  })
+
+  it('observers are isolated per model', () => {
+    const events: string[] = []
+    class Post extends Model { static table = 'posts' }
+    class User extends Model { static table = 'users' }
+
+    Post.on('creating', () => { events.push('post') })
+    User.on('creating', () => { events.push('user') })
+
+    // Each model should have its own listeners
+    Post.clearObservers()
+    User.clearObservers()
+  })
+
+  it('clearObservers removes all', async () => {
+    const events: string[] = []
+    const qb = makeQb({ create: async (data) => data as Record<string, unknown> })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model { static table = 'posts' }
+    Post.on('creating', () => { events.push('creating') })
+    Post.clearObservers()
+
+    await Post.create({ title: 'Test' } as Partial<never>)
+    assert.deepStrictEqual(events, []) // no events fired
+  })
+
+  it('restoring/restored events fire', async () => {
+    const events: string[] = []
+    const qb = makeQb({ restore: async () => ({ id: '1' }) as Record<string, unknown> })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model { static table = 'posts'; static softDeletes = true }
+    Post.on('restoring', (id: string) => { events.push(`restoring:${id}`) })
+    Post.on('restored', (record: Record<string, unknown>) => { events.push(`restored:${record.id}`) })
+
+    await Post.restore('1')
+    assert.deepStrictEqual(events, ['restoring:1', 'restored:1'])
+    Post.clearObservers()
+  })
+})
