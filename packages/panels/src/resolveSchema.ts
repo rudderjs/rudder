@@ -370,8 +370,11 @@ export async function resolveSchema(
             const dir = urlSortDir ?? (config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir ?? 'DESC'))
             q = q.orderBy(sortCol, dir)
           }
-          const queryLimit = config.paginationType ? config.perPage : config.limit
-          const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
+          // loadMore: fetch all records up to the current page (page * perPage)
+          // pages: fetch just one page with offset
+          const isLoadMore = config.paginationType === 'loadMore'
+          const queryLimit = config.paginationType ? (isLoadMore ? urlPage * config.perPage : config.perPage) : config.limit
+          const offset = config.paginationType && !isLoadMore ? (urlPage - 1) * config.perPage : 0
           q = q.limit(queryLimit)
           if (offset > 0) q = q.offset(offset)
 
@@ -423,8 +426,9 @@ export async function resolveSchema(
 
           const sortCol = urlSort ?? config.sortBy
           if (sortCol) q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
-          const modelLimit = config.paginationType ? config.perPage : config.limit
-          const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
+          const isLoadMore2 = config.paginationType === 'loadMore'
+          const modelLimit = config.paginationType ? (isLoadMore2 ? urlPage * config.perPage : config.perPage) : config.limit
+          const offset = config.paginationType && !isLoadMore2 ? (urlPage - 1) * config.perPage : 0
           q = q.limit(modelLimit)
           if (offset > 0) q = q.offset(offset)
 
@@ -455,9 +459,11 @@ export async function resolveSchema(
         }
 
         // Pagination — slice the resolved array
-        const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
+        const isLoadMore3 = config.paginationType === 'loadMore'
+        const offset = config.paginationType && !isLoadMore3 ? (urlPage - 1) * config.perPage : 0
+        const sliceEnd = isLoadMore3 ? urlPage * config.perPage : offset + config.perPage
         const records = config.paginationType
-          ? allRecords.slice(offset, offset + config.perPage)
+          ? allRecords.slice(offset, sliceEnd)
           : allRecords
 
         const pagination = config.paginationType && !config.lazy

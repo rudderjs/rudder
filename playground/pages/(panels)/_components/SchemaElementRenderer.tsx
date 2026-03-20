@@ -278,12 +278,47 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       setActiveFilters(restoredFilters)
     }
     const ssrPage = element.pagination?.currentPage ?? 1
-    // Skip if SSR already has the right data (url/session on initial page load)
+    const isLoadMore = element.pagination?.type === 'loadMore'
     const hasRestoredFilters = Object.keys(restoredFilters).length > 0
-    if (restoredPage === ssrPage && !restoredSearch && !source.sort && !hasRestoredFilters) return
-    if (restoredPage <= 1 && !restoredSearch && !source.sort && !hasRestoredFilters) return
+
+    // For loadMore mode with localStorage: fetch all pages up to the saved page
+    // (url/session modes are SSR'd with all records already)
+    if (isLoadMore && restoredPage > 1 && tableId && rememberMode === 'localStorage') {
+      setRestoring(true)
+      ;(async () => {
+        try {
+          let allRecords: Record<string, unknown>[] = [...(element.records as Record<string, unknown>[])]
+          let lastPagination = element.pagination
+          // Page 1 is already SSR'd, fetch pages 2..restoredPage
+          for (let p = 2; p <= restoredPage; p++) {
+            const params = new URLSearchParams()
+            params.set('page', String(p))
+            if (restoredSearch) params.set('search', restoredSearch)
+            if (source.sort) { params.set('sort', String(source.sort)); params.set('dir', String(source.dir ?? 'asc')) }
+            for (const [k, v] of Object.entries(restoredFilters)) params.set(`filter[${k}]`, v)
+            const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
+            if (res.ok) {
+              const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof lastPagination }
+              allRecords = [...allRecords, ...body.records]
+              if (body.pagination) lastPagination = body.pagination
+            }
+          }
+          setRecords(allRecords)
+          if (lastPagination) setPagination(lastPagination)
+          setCurrentPage(restoredPage)
+        } catch { /* restore failed */ }
+        finally { setRestoring(false) }
+      })()
+      return
+    }
+
+    // For pages mode: fetch the specific page
+    const effectivePage = restoredPage
+    // Skip if SSR already has the right data (url/session on initial page load)
+    if (effectivePage === ssrPage && !restoredSearch && !source.sort && !hasRestoredFilters) return
+    if (effectivePage <= 1 && !restoredSearch && !source.sort && !hasRestoredFilters) return
     setRestoring(true)
-    void fetchTable({ page: restoredPage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string, filters: restoredFilters })
+    void fetchTable({ page: effectivePage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string, filters: restoredFilters })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
