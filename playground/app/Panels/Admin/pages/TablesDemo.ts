@@ -17,28 +17,28 @@ export class TablesDemo extends Page {
       Heading.make('Paginated Table (pages + URL persist)').level(2),
       Text.make('Search, sort, and pagination state persists in the URL. Try searching, sorting, then sharing the URL.'),
 
-      // Table.make('Articles (URL)')
-      //   .fromModel(Article)
-      //   .columns([
-      //     Column.make('title').label('Title').sortable().searchable(),
-      //     Column.make('draftStatus').label('Status').badge().sortable(),
-      //     Column.make('createdAt').label('Created').date().sortable(),
-      //   ])
-      //   .sortBy('createdAt', 'DESC')
-      //   .paginated('pages', 3)
-      //   .searchable()
-      //   .emptyMessage('No articles found.')
-      //   .remember('url')
-      //   .filters([
-      //     SelectFilter.make('draftStatus').label('Status').options([
-      //       { label: 'Published', value: 'published' },
-      //       { label: 'Draft', value: 'draft' },
-      //     ]),
-      //   ])
-      //   .actions([
-      //     Action.make('publish').label('Publish').bulk(),
-      //     Action.make('delete').label('Delete').destructive().confirm('Delete selected articles?').bulk(),
-      //   ]),
+      Table.make('Articles (URL)')
+        .fromModel(Article)
+        .columns([
+          Column.make('title').label('Title').sortable().searchable(),
+          Column.make('draftStatus').label('Status').badge().sortable(),
+          Column.make('createdAt').label('Created').date().sortable(),
+        ])
+        .sortBy('createdAt', 'DESC')
+        .paginated('pages', 3)
+        .searchable()
+        .emptyMessage('No articles found.')
+        .remember('url')
+        .filters([
+          SelectFilter.make('draftStatus').label('Status').options([
+            { label: 'Published', value: 'published' },
+            { label: 'Draft', value: 'draft' },
+          ]),
+        ])
+        .actions([
+          Action.make('publish').label('Publish').bulk(),
+          Action.make('delete').label('Delete').destructive().confirm('Delete selected articles?').bulk(),
+        ]),
 
       // ── Load More pagination + remember(localStorage) ──────
       Heading.make('Load More Table (localStorage)').level(2),
