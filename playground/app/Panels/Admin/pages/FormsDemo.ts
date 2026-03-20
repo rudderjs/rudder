@@ -27,6 +27,25 @@ export class FormsDemo extends Page {
           console.log('[contact form]', data)
         }),
 
+      // ── Form with field defaults ─────────────────────────────
+      Heading.make('Form with Field Defaults').level(2),
+      Text.make('Fields with .default() values — pre-filled on load.'),
+
+      Form.make('defaults-demo')
+        .fields([
+          TextField.make('title').label('Title').default('Untitled Article'),
+          SelectField.make('status').label('Status').default('draft').options([
+            { label: 'Draft', value: 'draft' },
+            { label: 'Published', value: 'published' },
+          ]),
+          NumberField.make('priority').label('Priority').default(5),
+        ])
+        .submitLabel('Create')
+        .successMessage('Created!')
+        .onSubmit(async (data) => {
+          console.log('[defaults form]', data)
+        }),
+
       // ── Form with sections ─────────────────────────────────
       Heading.make('Form with Sections').level(2),
       Text.make('Fields grouped into sections inside a form.'),

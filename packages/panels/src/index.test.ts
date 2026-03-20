@@ -1845,6 +1845,46 @@ describe('Field — persist()', () => {
   })
 })
 
+// ─── Field — default() ──────────────────────────────────────
+
+describe('Field — default()', () => {
+  it('static default value', () => {
+    const f = TextField.make('status').default('draft')
+    assert.equal(f.resolveDefault(), 'draft')
+  })
+
+  it('function default value', () => {
+    const f = TextField.make('name').default((ctx: { user: string }) => ctx.user)
+    assert.equal(f.resolveDefault({ user: 'John' }), 'John')
+  })
+
+  it('default undefined when not set', () => {
+    assert.equal(TextField.make('x').resolveDefault(), undefined)
+  })
+
+  it('static default in toMeta()', () => {
+    const meta = TextField.make('status').default('draft').toMeta()
+    assert.equal(meta.defaultValue, 'draft')
+  })
+
+  it('function default NOT in toMeta() (resolved server-side)', () => {
+    const meta = TextField.make('name').default(() => 'computed').toMeta()
+    assert.equal(meta.defaultValue, undefined)
+  })
+
+  it('number default', () => {
+    const f = NumberField.make('priority').default(5)
+    assert.equal(f.resolveDefault(), 5)
+    assert.equal(f.toMeta().defaultValue, 5)
+  })
+
+  it('boolean default', () => {
+    const f = BooleanField.make('active').default(true)
+    assert.equal(f.resolveDefault(), true)
+    assert.equal(f.toMeta().defaultValue, true)
+  })
+})
+
 // ─── Resource — autosave & draftRecovery ──────────────────
 
 describe('Resource — autosave', () => {

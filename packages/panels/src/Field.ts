@@ -34,6 +34,7 @@ export interface FieldMeta {
   yjs?:                boolean
   persist?:            'localStorage' | string[]
   yjsProviders?:      string[]
+  defaultValue?:       unknown
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -56,6 +57,7 @@ export abstract class Field {
   protected _yjs = false
   protected _yjsProviders: string[] = []
   protected _persist: false | 'localStorage' | string[] = false
+  protected _default?: unknown | ((ctx: unknown) => unknown)
 
   constructor(name: string) {
     this._name = name
@@ -71,6 +73,29 @@ export abstract class Field {
   required(value = true): this {
     this._required = value
     return this
+  }
+
+  /**
+   * Default value for create forms. Static value or function.
+   *
+   * @example
+   * SelectField.make('status').default('draft')
+   * DateField.make('publishedAt').default(() => new Date())
+   * TextField.make('author').default(ctx => ctx.user?.name)
+   */
+  default(value: unknown | ((ctx: unknown) => unknown)): this {
+    this._default = value
+    return this
+  }
+
+  /** @internal */
+  getDefault(): unknown | ((ctx: unknown) => unknown) | undefined { return this._default }
+
+  /** @internal — resolve default value (handles functions). */
+  resolveDefault(ctx?: unknown): unknown {
+    if (this._default === undefined) return undefined
+    if (typeof this._default === 'function') return (this._default as (ctx: unknown) => unknown)(ctx)
+    return this._default
   }
 
   /** Show in forms but not editable. Excluded from create / edit payloads. */
@@ -386,6 +411,10 @@ export abstract class Field {
     if (this._yjs) meta.yjs = true
     if (this._yjsProviders.length > 0) meta.yjsProviders = this._yjsProviders
     if (this._persist !== false) meta.persist = this._persist
+    // Static defaults are serialized directly; function defaults resolved by resolveSchema
+    if (this._default !== undefined && typeof this._default !== 'function') {
+      meta.defaultValue = this._default
+    }
     return meta
   }
 }

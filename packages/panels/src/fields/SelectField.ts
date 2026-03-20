@@ -7,7 +7,6 @@ export interface SelectOption {
 
 export class SelectField extends Field {
   protected _options: SelectOption[] = []
-  protected _default?: string | number | boolean
   protected _multiple = false
 
   static make(name: string): SelectField {
@@ -25,9 +24,10 @@ export class SelectField extends Field {
     return this
   }
 
-  default(value: string | number | boolean): this {
-    this._default = value
-    this._extra['default'] = value
+  /** @override — also stores in extra for backwards compat. */
+  override default(value: unknown | ((ctx: unknown) => unknown)): this {
+    super.default(value)
+    if (typeof value !== 'function') this._extra['default'] = value
     return this
   }
 

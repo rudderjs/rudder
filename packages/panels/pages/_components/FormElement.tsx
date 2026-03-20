@@ -11,7 +11,19 @@ interface FormElementProps {
 }
 
 export function FormElement({ form, panelPath, i18n }: FormElementProps) {
-  const [values,       setValues]       = useState<Record<string, unknown>>({})
+  // Merge field defaults with form-level initialValues
+  const [values, setValues] = useState<Record<string, unknown>>(() => {
+    const defaults: Record<string, unknown> = {}
+    for (const item of form.fields) {
+      const field = item as FieldMeta
+      if (field.name && field.defaultValue !== undefined) {
+        defaults[field.name] = field.defaultValue
+      }
+    }
+    // Form.data() initialValues override field defaults
+    const initial = (form as { initialValues?: Record<string, unknown> }).initialValues
+    return { ...defaults, ...initial }
+  })
   const [submitting,   setSubmitting]   = useState(false)
   const [submitted,    setSubmitted]    = useState(false)
   const [serverError,  setServerError]  = useState<string | null>(null)
