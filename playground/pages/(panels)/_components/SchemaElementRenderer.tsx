@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
+import { readClientState, saveClientState } from '../_lib/persist.js'
+import type { PersistMode } from '../_lib/persist.js'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
 type SchemaElementRendererElement = PanelSchemaElementMeta
@@ -94,68 +96,73 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   // ── Remember: read initial persisted state ──
   const [initialState] = useState(() => {
     if (!rememberMode || !tableId) return {} as Record<string, unknown>
-    if (rememberMode === 'localStorage' && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`table:${tableId}`)
-        if (stored) return JSON.parse(stored) as Record<string, unknown>
-      } catch { /* ignore */ }
-    }
-    if (rememberMode === 'url' && typeof window !== 'undefined') {
-      const url = new URL(window.location.href)
-      const state: Record<string, unknown> = {}
-      const sortParam = url.searchParams.get(`${tableId}_sort`)
-      const dirParam = url.searchParams.get(`${tableId}_dir`)
-      const pageParam = url.searchParams.get(`${tableId}_page`)
-      const searchParam = url.searchParams.get(`${tableId}_search`)
-      if (sortParam) state.sort = sortParam
-      if (dirParam) state.dir = dirParam
-      if (pageParam) state.page = parseInt(pageParam)
-      if (searchParam) state.search = searchParam
-      return state
-    }
-    return {} as Record<string, unknown>
+    return readClientState(rememberMode as PersistMode, `table:${tableId}`, tableId)
   })
+
+  const hasPagination = !!element.pagination
+  // SSR provides activeSearch/activeSort for url/session persist modes
+  const ssrSearch = (element as { activeSearch?: string }).activeSearch
+  const ssrSort = (element as { activeSort?: { col: string; dir: string } }).activeSort
 
   const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
   const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(
-    initialState.sort ? { col: String(initialState.sort), dir: (initialState.dir as 'asc' | 'desc') ?? 'asc' } : null,
+    ssrSort ? { col: ssrSort.col, dir: ssrSort.dir.toLowerCase() as 'asc' | 'desc' }
+    : initialState.sort ? { col: String(initialState.sort), dir: (initialState.dir as 'asc' | 'desc') ?? 'asc' }
+    : null,
   )
-  const [search, setSearch]   = useState(initialState.search ? String(initialState.search) : '')
+  const [search, setSearch]   = useState(ssrSearch ?? (initialState.search ? String(initialState.search) : ''))
   const [dragging, setDragging] = useState<string | null>(null)
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
-  const [currentPage, setCurrentPage] = useState(element.pagination?.currentPage ?? 1)
+  const [currentPage, setCurrentPage] = useState(
+    element.pagination?.currentPage && element.pagination.currentPage > 1
+      ? element.pagination.currentPage  // SSR'd page (url/session persist)
+      : initialState.page ? Number(initialState.page)  // client-restored page (localStorage/url on re-mount)
+      : 1,
+  )
   const [loadingMore, setLoadingMore] = useState(false)
   const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Remember: save state on change ──
   function saveRememberState(state: Record<string, unknown>) {
     if (!rememberMode || !tableId) return
-    if (rememberMode === 'localStorage' && typeof window !== 'undefined') {
-      localStorage.setItem(`table:${tableId}`, JSON.stringify(state))
-    } else if (rememberMode === 'url' && typeof window !== 'undefined') {
-      const url = new URL(window.location.href)
-      for (const [k, v] of Object.entries(state)) {
-        if (v !== undefined && v !== null && v !== '') {
-          url.searchParams.set(`${tableId}_${k}`, String(v))
+    saveClientState(rememberMode as PersistMode, `table:${tableId}`, state, {
+      pathSegment,
+      apiPath: `/api/_tables/${tableId}/remember`,
+      urlPrefix: tableId,
+    })
+  }
+
+  // ── Shared fetch function — all table state changes go through API ──
+  async function fetchTable(opts: { page?: number; search?: string; sort?: string; dir?: string; append?: boolean } = {}) {
+    if (!tableId) return
+    setLoadingMore(true)
+    try {
+      const params = new URLSearchParams()
+      const p = opts.page ?? currentPage
+      params.set('page', String(p))
+      if (opts.search !== undefined ? opts.search : search) params.set('search', opts.search !== undefined ? opts.search : search)
+      if (opts.sort) { params.set('sort', opts.sort); params.set('dir', opts.dir ?? 'asc') }
+      else if (sort) { params.set('sort', sort.col); params.set('dir', sort.dir) }
+      const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
+      if (res.ok) {
+        const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
+        if (opts.append) {
+          setRecords(prev => [...prev, ...body.records])
         } else {
-          url.searchParams.delete(`${tableId}_${k}`)
+          setRecords(body.records)
         }
+        if (body.pagination) setPagination(body.pagination)
+        setCurrentPage(p)
       }
-      window.history.replaceState(null, '', url.pathname + url.search)
-    } else if (rememberMode === 'session') {
-      fetch(`/${pathSegment}/api/_tables/${tableId}/remember`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state),
-      }).catch(() => {})  // fire-and-forget
-    }
+    } catch { /* fetch failed */ }
+    finally { setLoadingMore(false) }
   }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
-  // Skip initial mount — initialState already set the correct values
   const elementRef = useRef(element)
   useEffect(() => {
-    if (elementRef.current === element) return  // skip initial mount
+    if (elementRef.current === element) return
     elementRef.current = element
     setRecords(element.records as Record<string, unknown>[])
     setSort(null)
@@ -165,24 +172,16 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     setLazyLoaded(!isLazy)
   }, [element])
 
-  // ── Restore remembered state — fetch correct page/search if not default ──
+  // ── Restore remembered state — fetch if client state differs from SSR ──
   useEffect(() => {
+    if (!rememberMode || !tableId) return
     const restoredPage = initialState.page ? Number(initialState.page) : 1
     const restoredSearch = initialState.search ? String(initialState.search) : ''
-    if ((restoredPage <= 1 && !restoredSearch) || !tableId) return
-    const params = new URLSearchParams()
-    params.set('page', String(restoredPage))
-    if (restoredSearch) params.set('search', restoredSearch)
-    fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((body: { records: Record<string, unknown>[]; pagination?: typeof pagination } | null) => {
-        if (body) {
-          setRecords(body.records)
-          if (body.pagination) setPagination(body.pagination)
-          setCurrentPage(restoredPage)
-        }
-      })
-      .catch(() => {})
+    const ssrPage = element.pagination?.currentPage ?? 1
+    // Skip if SSR already has the right data (url/session on initial page load)
+    if (restoredPage === ssrPage && !restoredSearch && !initialState.sort) return
+    if (restoredPage <= 1 && !restoredSearch && !initialState.sort) return
+    void fetchTable({ page: restoredPage, search: restoredSearch, sort: initialState.sort as string, dir: initialState.dir as string })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -205,45 +204,9 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   useEffect(() => {
     const interval = element.pollInterval as number | undefined
     if (!interval || !tableId) return
-    const timer = setInterval(async () => {
-      try {
-        const params = new URLSearchParams()
-        params.set('page', String(currentPage))
-        if (search) params.set('search', search)
-        const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
-        if (res.ok) {
-          const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
-          setRecords(body.records)
-          if (body.pagination) setPagination(body.pagination)
-        }
-      } catch { /* poll failed */ }
-    }, interval)
+    const timer = setInterval(() => void fetchTable(), interval)
     return () => clearInterval(timer)
-  }, [tableId, currentPage, search, pathSegment, element.pollInterval])
-
-  // ── Pagination fetch ──
-  async function fetchPage(page: number) {
-    if (!tableId) return
-    setLoadingMore(true)
-    try {
-      const params = new URLSearchParams()
-      params.set('page', String(page))
-      if (search) params.set('search', search)
-      const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
-      if (res.ok) {
-        const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
-        if (pagination?.type === 'loadMore') {
-          setRecords(prev => [...prev, ...body.records])
-        } else {
-          setRecords(body.records)
-        }
-        if (body.pagination) setPagination(body.pagination)
-        setCurrentPage(page)
-        saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page })
-      }
-    } catch { /* fetch failed */ }
-    finally { setLoadingMore(false) }
-  }
+  }, [tableId, currentPage, search, sort, pathSegment, element.pollInterval])
 
   // ── Lazy skeleton ──
   if (!lazyLoaded) {
@@ -259,38 +222,60 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     )
   }
 
-  // Client-side sort
-  const sorted = sort
-    ? [...records].sort((a, b) => {
+  // For non-paginated tables, sort and search client-side
+  const displayRecords = hasPagination ? records : (() => {
+    let result = records
+    if (sort) {
+      result = [...result].sort((a, b) => {
         const av = a[sort.col] ?? ''
         const bv = b[sort.col] ?? ''
         const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
         return sort.dir === 'asc' ? cmp : -cmp
       })
-    : records
-
-  // Client-side search (across all searchable columns)
-  const searchableCols = element.columns
-    .filter((c: PanelColumnMeta) => c.searchable)
-    .map((c: PanelColumnMeta) => c.name)
-
-  const filtered = search && searchableCols.length > 0
-    ? sorted.filter((r) => searchableCols.some((col) => String(r[col] ?? '').toLowerCase().includes(search.toLowerCase())))
-    : sorted
+    }
+    const searchableCols = element.columns.filter((c: PanelColumnMeta) => c.searchable).map((c: PanelColumnMeta) => c.name)
+    if (search && searchableCols.length > 0) {
+      result = result.filter(r => searchableCols.some(col => String(r[col] ?? '').toLowerCase().includes(search.toLowerCase())))
+    }
+    return result
+  })()
 
   function toggleSort(colName: string) {
-    setSort((prev) => {
-      const next = prev?.col === colName
-        ? { col: colName, dir: (prev.dir === 'asc' ? 'desc' : 'asc') as 'asc' | 'desc' }
-        : { col: colName, dir: 'asc' as const }
-      saveRememberState({ sort: next.col, dir: next.dir, search, page: currentPage })
-      return next
-    })
+    const next = sort?.col === colName
+      ? { col: colName, dir: (sort.dir === 'asc' ? 'desc' : 'asc') as 'asc' | 'desc' }
+      : { col: colName, dir: 'asc' as const }
+    setSort(next)
+    if (hasPagination) {
+      // Server-side sort — fetch page 1 with new sort
+      void fetchTable({ page: 1, sort: next.col, dir: next.dir })
+      setCurrentPage(1)
+    }
+    saveRememberState({ sort: next.col, dir: next.dir, search, page: hasPagination ? 1 : currentPage })
   }
 
   function handleSearchChange(value: string) {
     setSearch(value)
-    saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: currentPage })
+    // Debounce search — wait 300ms before fetching
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    if (hasPagination) {
+      searchTimerRef.current = setTimeout(() => {
+        // Reset to page 1 on search
+        void fetchTable({ page: 1, search: value })
+        setCurrentPage(1)
+        saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: 1 })
+      }, 300)
+    } else {
+      saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: currentPage })
+    }
+  }
+
+  function handlePageChange(page: number) {
+    if (pagination?.type === 'loadMore') {
+      void fetchTable({ page, append: true })
+    } else {
+      void fetchTable({ page })
+    }
+    saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page })
   }
 
   // Reorder via drag-and-drop (simple pointer-based, no dnd-kit dependency in this renderer)
@@ -349,7 +334,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {displayRecords.length === 0 ? (
         <p className="px-5 py-4 text-sm text-muted-foreground">{element.emptyMessage ?? i18n.noRecordsFound}</p>
       ) : (
         <div className="overflow-x-auto">
@@ -377,7 +362,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
               </tr>
             </thead>
             <tbody>
-              {filtered.map((record, i) => {
+              {displayRecords.map((record, i) => {
                 const id = String(record['id'] ?? i)
                 return (
                   <tr
@@ -424,7 +409,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
             {Array.from({ length: pagination.lastPage }, (_, i) => i + 1).map(page => (
               <button
                 key={page}
-                onClick={() => fetchPage(page)}
+                onClick={() => handlePageChange(page)}
                 className={`px-2.5 py-1 text-xs rounded ${page === currentPage ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
               >
                 {page}
@@ -438,7 +423,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
       {pagination && pagination.type === 'loadMore' && records.length < pagination.total && (
         <div className="px-5 py-3 border-t">
           <button
-            onClick={() => fetchPage(currentPage + 1)}
+            onClick={() => handlePageChange(currentPage + 1)}
             className="w-full text-center text-sm text-muted-foreground hover:text-foreground py-1.5"
           >
             {loadingMore ? (i18n.loading ?? 'Loading…') : (i18n.loadMore ?? 'Load more')}

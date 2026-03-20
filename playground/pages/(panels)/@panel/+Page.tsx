@@ -12,6 +12,8 @@ import type { PanelSchemaElementMeta, PanelI18n, FormElementMeta, DialogElementM
 import type { WidgetWithData } from '../_components/WidgetCard.js'
 import type { DashboardGridProps } from '../_components/DashboardGrid.js'
 import type { Data } from './+data.js'
+import { saveClientState, slugify } from '../_lib/persist.js'
+import type { PersistMode } from '../_lib/persist.js'
 
 // Runtime schema elements include types beyond PanelSchemaElementMeta (widget, dashboard, section, tabs).
 // These extra types are pushed via `as unknown as PanelSchemaElementMeta` in resolveSchema.
@@ -282,11 +284,6 @@ interface SchemaTabsProps {
   activeTab?: number
 }
 
-/** Slugify a label for use as URL param value. */
-function slugify(str: string): string {
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-}
-
 function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBacked, persist, activeTab: ssrActiveTab }: SchemaTabsProps) {
   const tabsId = id
   const paramKey = id ?? 'tab'
@@ -344,22 +341,24 @@ function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, modelBa
     setActiveSlug(slug)
 
     // Persist active tab based on mode
-    if (persist === 'url' && typeof window !== 'undefined' && id) {
-      const url = new URL(window.location.href)
-      if (slug === slugify(tabs[0]?.label ?? '')) {
-        url.searchParams.delete(id)
+    if (persist && id) {
+      if (persist === 'url') {
+        // Tabs URL mode uses direct param (not prefix pattern)
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href)
+          if (slug === slugify(tabs[0]?.label ?? '')) {
+            url.searchParams.delete(id)
+          } else {
+            url.searchParams.set(id, slug)
+          }
+          window.history.replaceState(null, '', url.pathname + url.search)
+        }
       } else {
-        url.searchParams.set(id, slug)
+        saveClientState(persist as PersistMode, `tabs:${id}`, { value: slug }, {
+          pathSegment,
+          apiPath: `/api/_tabs/${id}/active`,
+        })
       }
-      window.history.replaceState(null, '', url.pathname + url.search)
-    } else if (persist === 'localStorage' && id && typeof window !== 'undefined') {
-      localStorage.setItem(`tabs:${id}`, slug)
-    } else if (persist === 'session' && id) {
-      fetch(`/${pathSegment}/api/_tabs/${id}/active`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tab: slug }),
-      }).catch(() => {})  // fire-and-forget
     }
 
     // Fetch content for tabs that don't have elements yet (model-backed or static)

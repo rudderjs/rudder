@@ -57,6 +57,8 @@ export interface TableElementMeta {
   pollInterval?:     number
   id?:               string
   remember?:         'localStorage' | 'url' | 'session'
+  activeSearch?:     string
+  activeSort?:       { col: string; dir: string }
   pagination?: {
     total:       number
     currentPage: number

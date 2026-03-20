@@ -235,7 +235,11 @@ export function mountMetaRoutes(
       }
     }
 
-    if (config.sortBy) q = q.orderBy(config.sortBy, config.sortDir)
+    // Sort — use query params if provided, fall back to config default
+    const sortParam = url.searchParams.get('sort')
+    const dirParam = url.searchParams.get('dir')?.toUpperCase() as 'ASC' | 'DESC' | undefined
+    const sortCol = sortParam ?? config.sortBy
+    if (sortCol) q = q.orderBy(sortCol, dirParam ?? config.sortDir)
 
     const perPage = config.paginationType ? config.perPage : config.limit
     const offset = (page - 1) * perPage
@@ -248,7 +252,29 @@ export function mountMetaRoutes(
     if (config.paginationType) {
       let total = records.length
       try {
-        const countQ = config.scope ? config.scope(Model.query()) : Model.query()
+        let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(Model.query()) : Model.query()
+        // Apply search filter to count query
+        if (search && config.searchable) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const countSearchCols = config.searchColumns ?? (config.columns as any[])
+            .filter((c: { toMeta?: () => { searchable?: boolean } }) => typeof c !== 'string' && c.toMeta?.()?.searchable)
+            .map((c: { toMeta: () => { name: string } }) => c.toMeta().name)
+          if (countSearchCols.length > 0) {
+            countQ = countQ.where(countSearchCols[0] ?? '', 'LIKE', `%${search}%`)
+            for (let i = 1; i < countSearchCols.length; i++) {
+              countQ = countQ.orWhere(countSearchCols[i] ?? '', 'LIKE', `%${search}%`)
+            }
+          }
+        }
+        // Apply filters to count query
+        for (const [key, value] of url.searchParams.entries()) {
+          const match = key.match(/^filter\[(.+)\]$/)
+          if (match) {
+            const filterName = match[1]
+            const filter = config.filters.find(f => f.getName() === filterName)
+            if (filter) countQ = filter.applyToQuery(countQ, value)
+          }
+        }
         total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
       } catch { /* fallback */ }
       pagination = {

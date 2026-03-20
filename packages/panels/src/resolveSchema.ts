@@ -283,17 +283,18 @@ export async function resolveSchema(
         let records: RecordRow[] = []
 
         // Skip query for lazy tables — data will be fetched client-side
+        // Resolve search columns for query + count
+        const searchCols = resolveSearchColumns(config)
+        const searchFilter = urlSearch && searchCols.length > 0 ? { search: urlSearch, columns: searchCols } : undefined
+
         if (!config.lazy) {
           let q: QueryBuilderLike<RecordRow> = Model.query()
           if (config.scope) q = config.scope(q)
 
-          // Apply search from URL
-          if (urlSearch && config.searchable) {
-            const searchCols = config.searchColumns ?? (config.columns as Column[]).filter(c => typeof (c as { toMeta?: unknown }).toMeta === 'function' && (c as Column).toMeta().searchable).map(c => (c as Column).toMeta().name)
-            if (searchCols.length > 0) {
-              q = q.where(searchCols[0] ?? '', 'LIKE', `%${urlSearch}%`)
-              for (let si = 1; si < searchCols.length; si++) q = q.orWhere(searchCols[si] ?? '', 'LIKE', `%${urlSearch}%`)
-            }
+          // Apply search
+          if (searchFilter) {
+            q = q.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
+            for (let si = 1; si < searchFilter.columns.length; si++) q = q.orWhere(searchFilter.columns[si]!, 'LIKE', `%${searchFilter.search}%`)
           }
 
           const sortCol = urlSort ?? config.sortBy ?? ResourceClass.defaultSort
@@ -310,13 +311,15 @@ export async function resolveSchema(
         }
 
         const columns = resolveColumns(config.columns, ResourceClass)
-        const pagination = await resolvePagination(config, Model, records.length, urlPage)
+        const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter)
         const slug = ResourceClass.getSlug?.() as string | undefined
 
         result.push(buildTableMeta(config, columns, records, tableId, {
           resource: slug ?? '',
           href: slug ? `${panel.getPath()}/${slug}` : '',
           pagination,
+          activeSearch: urlSearch,
+          activeSort: urlSort ? { col: urlSort, dir: urlSortDir ?? config.sortDir } : undefined,
         }))
         continue
       }
@@ -327,18 +330,19 @@ export async function resolveSchema(
 
         let records: RecordRow[] = []
 
+        // Resolve search columns for query + count
+        const searchCols2 = resolveSearchColumns(config)
+        const searchFilter2 = urlSearch && searchCols2.length > 0 ? { search: urlSearch, columns: searchCols2 } : undefined
+
         // Skip query for lazy tables — data will be fetched client-side
         if (!config.lazy) {
           let q: QueryBuilderLike<RecordRow> = Model.query()
           if (config.scope) q = config.scope(q)
 
-          // Apply search from URL
-          if (urlSearch && config.searchable) {
-            const searchCols = config.searchColumns ?? (config.columns as Column[]).filter(c => typeof (c as { toMeta?: unknown }).toMeta === 'function' && (c as Column).toMeta().searchable).map(c => (c as Column).toMeta().name)
-            if (searchCols.length > 0) {
-              q = q.where(searchCols[0] ?? '', 'LIKE', `%${urlSearch}%`)
-              for (let si = 1; si < searchCols.length; si++) q = q.orWhere(searchCols[si] ?? '', 'LIKE', `%${urlSearch}%`)
-            }
+          // Apply search
+          if (searchFilter2) {
+            q = q.where(searchFilter2.columns[0]!, 'LIKE', `%${searchFilter2.search}%`)
+            for (let si = 1; si < searchFilter2.columns.length; si++) q = q.orWhere(searchFilter2.columns[si]!, 'LIKE', `%${searchFilter2.search}%`)
           }
 
           const sortCol = urlSort ?? config.sortBy
@@ -352,11 +356,13 @@ export async function resolveSchema(
         }
 
         const columns = resolveColumns(config.columns)
-        const pagination = await resolvePagination(config, Model, records.length, urlPage)
+        const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter2)
 
         result.push(buildTableMeta(config, columns, records, tableId, {
           reorderEndpoint: config.reorderable ? `${panel.getApiBase()}/_tables/reorder` : undefined,
           pagination,
+          activeSearch: urlSearch,
+          activeSort: urlSort ? { col: urlSort, dir: urlSortDir ?? config.sortDir } : undefined,
         }))
         continue
       }
@@ -645,6 +651,15 @@ function flattenFields(items: FieldOrGrouping[]): FieldOrGrouping[] {
   return result
 }
 
+/** Extract searchable column names from table config. */
+function resolveSearchColumns(config: import('./schema/Table.js').TableConfig): string[] {
+  if (!config.searchable) return []
+  if (config.searchColumns) return config.searchColumns
+  return (config.columns as Column[])
+    .filter(c => typeof (c as { toMeta?: unknown }).toMeta === 'function' && (c as Column).toMeta().searchable)
+    .map(c => (c as Column).toMeta().name)
+}
+
 function titleCase(str: string): string {
   return str.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim()
 }
@@ -714,13 +729,21 @@ async function resolvePagination(
   model: ModelLike | undefined,
   recordCount: number,
   currentPage = 1,
+  searchFilter?: { search: string; columns: string[] },
 ): Promise<TableElementMeta['pagination']> {
   if (!config.paginationType || config.lazy) return undefined
 
   let total = recordCount
   if (model) {
     try {
-      const countQ = config.scope ? config.scope(model.query()) : model.query()
+      let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(model.query()) : model.query()
+      // Apply search filter to count query
+      if (searchFilter && searchFilter.search && searchFilter.columns.length > 0) {
+        countQ = countQ.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
+        for (let i = 1; i < searchFilter.columns.length; i++) {
+          countQ = countQ.orWhere(searchFilter.columns[i]!, 'LIKE', `%${searchFilter.search}%`)
+        }
+      }
       total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
     } catch { /* fallback to recordCount */ }
   }
@@ -745,6 +768,8 @@ function buildTableMeta(
     href?: string | undefined
     reorderEndpoint?: string | undefined
     pagination?: TableElementMeta['pagination']
+    activeSearch?: string | undefined
+    activeSort?: { col: string; dir: string } | undefined
   },
 ): TableElementMeta {
   const meta: TableElementMeta = {
@@ -769,5 +794,7 @@ function buildTableMeta(
   if (config.pollInterval)        meta.pollInterval = config.pollInterval
   if (opts.pagination)            meta.pagination   = opts.pagination
   if (config.remember)            meta.remember     = config.remember
+  if (opts.activeSearch)          meta.activeSearch  = opts.activeSearch
+  if (opts.activeSort)            meta.activeSort   = opts.activeSort
   return meta
 }
