@@ -30,6 +30,8 @@ export type { TabsMeta, TabMeta, TabsPersistMode } from './Tabs.js'
 // ─── Persist helpers ──────────────────────────────────────────
 
 export type { PersistMode } from './persist.js'
+export type { DataSource } from './datasource.js'
+export { resolveDataSource } from './datasource.js'
 
 // ─── Field ─────────────────────────────────────────────────
 

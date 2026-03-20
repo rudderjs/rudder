@@ -188,18 +188,23 @@ export function mountMetaRoutes(
     const page = parseInt(url.searchParams.get('page') as string) || 1
     const search = url.searchParams.get('search')?.trim() ?? ''
 
-    // --- Static rows ---
+    // --- fromArray() / rows() — static array or async function ---
     if (config.rows) {
-      let filtered = config.rows
-      // Client-side search for static rows
+      // Resolve data source
+      const { resolveDataSource: resolveDS } = await import('../datasource.js')
+      const ctx = buildContext(req)
+      const allRows = await resolveDS(config.rows, ctx)
+
+      let filtered = allRows
+      // Search for array rows
       if (search && config.searchable) {
         const cols = config.searchColumns ?? (config.columns as Array<{ getName?: () => string } | string>).map(c => typeof c === 'string' ? c : (c as { getName?: () => string }).getName?.() ?? '')
-        filtered = config.rows.filter(row =>
+        filtered = allRows.filter(row =>
           cols.some(col => String(row[col as string] ?? '').toLowerCase().includes(search.toLowerCase()))
         )
       }
 
-      // Apply filters for static rows
+      // Apply filters
       for (const [key, value] of url.searchParams.entries()) {
         const match = key.match(/^filter\[(.+)\]$/)
         if (match) {

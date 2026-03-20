@@ -24,6 +24,7 @@ import { TableRegistry } from './TableRegistry.js'
 import { StatsRegistry } from './StatsRegistry.js'
 import { TabsRegistry } from './TabsRegistry.js'
 import { readPersistedState, slugify as slugifyPersist } from './persist.js'
+import { resolveDataSource } from './datasource.js'
 import type { PersistMode } from './persist.js'
 import type { TabMeta, TabsMeta, TabsPersistMode } from './Tabs.js'
 
@@ -186,6 +187,58 @@ export async function resolveSchema(
         const modelPersist = tabs.getPersist()
         if (modelPersist !== false) meta.persist = modelPersist
         if (modelActiveTabIndex > 0) meta.activeTab = modelActiveTabIndex
+
+        result.push(meta as unknown as PanelSchemaElementMeta)
+        continue
+      }
+
+      // ── Array-backed tabs (fromArray) ──
+      if (tabs.isArrayBacked()) {
+        const dataSource = tabs.getDataSource()!
+        let resolvedTabs: TabMeta[] = []
+        let arrayActiveTabIndex = 0
+
+        if (!tabs.isLazy()) {
+          let records: Record<string, unknown>[] = []
+          try { records = await resolveDataSource(dataSource, ctx) } catch { /* empty */ }
+
+          const titleField = tabs.getTitleField()
+          const contentFn = tabs.getContentFn()
+
+          const persistMode = tabs.getPersist()
+          arrayActiveTabIndex = await resolveActiveTabIndex(persistMode, tabs.getId(), records.map(r => String(r[titleField] ?? r['id'] ?? 'Untitled')), ctx)
+
+          for (let i = 0; i < records.length; i++) {
+            const record = records[i]!
+            const label = String(record[titleField] ?? record['id'] ?? 'Untitled')
+            const tabId = String(record['id'] ?? i)
+
+            if (contentFn) {
+              const items = contentFn(record)
+              const tabPanel = Object.create(panel, {
+                getSchema: { value: () => items },
+              }) as Panel
+              const resolved = await resolveSchema(tabPanel, ctx)
+              resolvedTabs.push({ label, fields: [], elements: resolved, id: tabId } as TabMeta)
+            } else {
+              resolvedTabs.push({ label, fields: [], id: tabId } as TabMeta)
+            }
+          }
+        }
+
+        const arrayTabsId = tabs.getId()
+        const meta: TabsMeta = {
+          type: 'tabs',
+          ...(arrayTabsId && { id: arrayTabsId }),
+          tabs: resolvedTabs,
+        }
+        if (tabs.isCreatable()) meta.creatable = true
+        if (tabs.isEditable()) meta.editable = true
+        if (tabs.isLazy()) meta.lazy = true
+        if (tabs.getPollInterval() !== undefined) meta.pollInterval = tabs.getPollInterval()!
+        const arrayPersist = tabs.getPersist()
+        if (arrayPersist !== false) meta.persist = arrayPersist
+        if (arrayActiveTabIndex > 0) meta.activeTab = arrayActiveTabIndex
 
         result.push(meta as unknown as PanelSchemaElementMeta)
         continue
@@ -367,21 +420,24 @@ export async function resolveSchema(
         continue
       }
 
-      // ── .rows([...]) — static data, no model ─────────────────
+      // ── .fromArray() / .rows() — static array or async function ──
       if (config.rows) {
         const columns = resolveColumns(config.columns)
 
-        // Lazy tables skip data — empty records array
-        const staticRecords = config.lazy ? [] : config.rows
+        // Resolve data source (static array or async function)
+        let allRecords: Record<string, unknown>[] = []
+        if (!config.lazy) {
+          allRecords = await resolveDataSource(config.rows, ctx)
+        }
 
-        // Pagination for static rows — slice the array
+        // Pagination — slice the resolved array
         const offset = config.paginationType ? (urlPage - 1) * config.perPage : 0
         const records = config.paginationType
-          ? staticRecords.slice(offset, offset + config.perPage)
-          : staticRecords
+          ? allRecords.slice(offset, offset + config.perPage)
+          : allRecords
 
         const pagination = config.paginationType && !config.lazy
-          ? { total: config.rows.length, currentPage: urlPage, perPage: config.perPage, lastPage: Math.ceil(config.rows.length / config.perPage), type: config.paginationType } as TableElementMeta['pagination']
+          ? { total: allRecords.length, currentPage: urlPage, perPage: config.perPage, lastPage: Math.ceil(allRecords.length / config.perPage), type: config.paginationType } as TableElementMeta['pagination']
           : undefined
 
         result.push(buildTableMeta(config, columns, records as RecordRow[], tableId, { pagination }))

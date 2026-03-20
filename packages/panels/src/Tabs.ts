@@ -1,6 +1,7 @@
 import type { Field } from './Field.js'
 import type { FieldMeta } from './Field.js'
 import type { PersistMode } from './persist.js'
+import type { DataSource } from './datasource.js'
 
 // ─── Persist mode for Tabs ─────────────────────────────────────
 export type TabsPersistMode = PersistMode
@@ -137,7 +138,9 @@ export class Tabs {
   private _id?: string
   private _persist: TabsPersistMode = false
 
-  // ── Task 14: Model-backed tabs ─────────────────────────────
+  // ── Data sources ─────────────────────────────────────────
+  private _dataSource?: DataSource
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _model?: { new(): any; query(): any }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,6 +218,28 @@ export class Tabs {
     return this
   }
 
+  /**
+   * Generate tabs from a static array or async function.
+   * Each record becomes a tab. Use `.title()` to specify the label field
+   * and `.content()` for per-record content.
+   *
+   * @example
+   * // Static array
+   * Tabs.make('projects').fromArray([
+   *   { id: '1', name: 'Alpha' },
+   *   { id: '2', name: 'Beta' },
+   * ]).title('name').content((record) => [...])
+   *
+   * // Async function (SSR'd, supports .lazy())
+   * Tabs.make('projects').fromArray(async (ctx) => {
+   *   return fetch('/api/projects').then(r => r.json())
+   * }).title('name').content((record) => [...])
+   */
+  fromArray(source: DataSource): this {
+    this._dataSource = source
+    return this
+  }
+
   /** Which model field to use as the tab label. Default: 'name'. */
   title(field: string): this {
     this._titleField = field
@@ -250,8 +275,11 @@ export class Tabs {
   // ── Task 14: Getters ───────────────────────────────────────
 
   isModelBacked(): boolean { return !!(this._model || this._resourceClass) }
+  isArrayBacked(): boolean { return !!this._dataSource }
+  isDynamic(): boolean { return this.isModelBacked() || this.isArrayBacked() }
   getModel() { return this._model }
   getResourceClass() { return this._resourceClass }
+  getDataSource() { return this._dataSource }
   getTitleField(): string { return this._titleField ?? 'name' }
   getScope() { return this._scope }
   getContentFn() { return this._schemaFn }

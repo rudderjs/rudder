@@ -1,6 +1,7 @@
 import type { Column, ColumnMeta } from './Column.js'
 import type { Filter, FilterMeta } from '../Filter.js'
 import type { Action, ActionMeta, ActionHandler } from '../Action.js'
+import type { DataSource } from '../datasource.js'
 import type { PersistMode } from '../persist.js'
 
 // ─── Table schema element ────────────────────────────────────
@@ -74,7 +75,7 @@ export interface TableConfig {
   resourceClass?: any              // fromResource() — Resource class
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   model?:         any              // fromModel() — direct model class
-  rows?:          Record<string, unknown>[] | undefined  // static rows — no model needed
+  rows?:          DataSource | undefined  // static array or async function — no model needed
   columns:        string[] | Column[]
   limit:          number
   sortBy:         string | undefined
@@ -104,7 +105,7 @@ export class Table {
   private _resourceClass?: any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _model?:         any
-  private _rows?:          Record<string, unknown>[]
+  private _rows?:          DataSource
   private _columns:        string[] | Column[] = []
   private _limit:          number              = 5
   private _sortBy?:        string
@@ -172,14 +173,27 @@ export class Table {
   }
 
   /**
-   * Provide static row data — no model or resource needed.
+   * Provide data from a static array or async function — no model or resource needed.
    *
    * @example
+   * // Static array
    * Table.make('Browsers')
-   *   .rows([{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }])
-   *   .columns([Column.make('name'), Column.make('share')])
+   *   .fromArray([{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }])
+   *
+   * // Async function (SSR'd, supports .lazy() and .poll())
+   * Table.make('External Data')
+   *   .fromArray(async (ctx) => {
+   *     const res = await fetch('https://api.example.com/stats')
+   *     return res.json()
+   *   })
    */
-  rows(data: Record<string, unknown>[]): this {
+  fromArray(data: DataSource): this {
+    this._rows = data
+    return this
+  }
+
+  /** @deprecated Use `.fromArray()` instead. */
+  rows(data: DataSource): this {
     this._rows = data
     return this
   }
