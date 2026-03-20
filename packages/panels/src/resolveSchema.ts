@@ -23,6 +23,8 @@ import { FormRegistry } from './FormRegistry.js'
 import { TableRegistry } from './TableRegistry.js'
 import { StatsRegistry } from './StatsRegistry.js'
 import { TabsRegistry } from './TabsRegistry.js'
+import { readPersistedState, slugify as slugifyPersist } from './persist.js'
+import type { PersistMode } from './persist.js'
 import type { TabMeta, TabsMeta, TabsPersistMode } from './Tabs.js'
 
 export type PanelSchemaElementMeta =
@@ -261,30 +263,16 @@ export async function resolveSchema(
       TableRegistry.register(panel.getName(), tableId, el as unknown as import('./schema/Table.js').Table)
 
       // Read persisted state for remember('url') or remember('session') tables
-      let urlPage = 1
-      let urlSort: string | undefined
-      let urlSortDir: 'ASC' | 'DESC' | undefined
-      let urlSearch: string | undefined
-      if (config.remember === 'url' && ctx.urlSearch) {
-        const p = ctx.urlSearch[`${tableId}_page`]
-        if (p) urlPage = parseInt(p) || 1
-        const s = ctx.urlSearch[`${tableId}_sort`]
-        if (s) urlSort = s
-        const d = ctx.urlSearch[`${tableId}_dir`]
-        if (d) urlSortDir = d.toUpperCase() as 'ASC' | 'DESC'
-        const q = ctx.urlSearch[`${tableId}_search`]
-        if (q) urlSearch = q
-      } else if (config.remember === 'session' && ctx.sessionGet) {
-        try {
-          const stored = ctx.sessionGet(`table:${tableId}`) as Record<string, unknown> | undefined
-          if (stored) {
-            if (stored.page) urlPage = Number(stored.page) || 1
-            if (stored.sort) urlSort = String(stored.sort)
-            if (stored.dir) urlSortDir = String(stored.dir).toUpperCase() as 'ASC' | 'DESC'
-            if (stored.search) urlSearch = String(stored.search)
-          }
-        } catch { /* session not available */ }
-      }
+      const persisted = readPersistedState(
+        config.remember ?? false,
+        `table:${tableId}`,
+        ctx,
+        tableId,
+      )
+      const urlPage = persisted?.page ? Number(persisted.page) || 1 : 1
+      const urlSort = persisted?.sort ? String(persisted.sort) : undefined
+      const urlSortDir = persisted?.dir ? String(persisted.dir).toUpperCase() as 'ASC' | 'DESC' : undefined
+      const urlSearch = persisted?.search ? String(persisted.search) : undefined
 
       // ── fromResource(Class) — preferred resource-linked mode ───
       if (config.resourceClass) {
@@ -661,18 +649,13 @@ function titleCase(str: string): string {
   return str.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim()
 }
 
-/** Slugify a label for use as URL/storage key. */
-function slugifyLabel(str: string): string {
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-}
-
 /**
  * Resolve the SSR active tab index based on persist mode.
  * For 'url' mode reads from ctx.urlSearch, for 'session' mode reads from server session.
  * Returns 0 (first tab) for 'localStorage', false, or when lookup fails.
  */
 async function resolveActiveTabIndex(
-  persistMode: TabsPersistMode,
+  persistMode: PersistMode,
   tabsId: string | undefined,
   tabLabels: string[],
   ctx: PanelContext,
@@ -682,22 +665,18 @@ async function resolveActiveTabIndex(
     if (urlSearch) {
       const activeSlug = urlSearch[tabsId]
       if (activeSlug) {
-        const idx = tabLabels.findIndex(label => slugifyLabel(label) === activeSlug)
+        const idx = tabLabels.findIndex(label => slugifyPersist(label) === activeSlug)
         if (idx >= 0) return idx
       }
     }
   } else if (persistMode === 'session' && tabsId) {
-    // Use sessionGet from PanelContext (provided by +data.ts during Vike SSR)
-    const sessionGet = ctx.sessionGet
-    if (sessionGet) {
-      try {
-        const stored = sessionGet(`tabs:${tabsId}`)
-        if (typeof stored === 'number') return stored
-        if (typeof stored === 'string') {
-          const idx = tabLabels.findIndex(label => slugifyLabel(label) === stored)
-          if (idx >= 0) return idx
-        }
-      } catch { /* session not available */ }
+    const state = readPersistedState('session', `tabs:${tabsId}`, ctx)
+    if (state) {
+      const slug = state.value ? String(state.value) : undefined
+      if (typeof slug === 'string') {
+        const idx = tabLabels.findIndex(label => slugifyPersist(label) === slug)
+        if (idx >= 0) return idx
+      }
     }
   }
   return 0

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
+import { readClientState, saveClientState } from '../_lib/persist.js'
+import type { PersistMode } from '../_lib/persist.js'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
 type SchemaElementRendererElement = PanelSchemaElementMeta
@@ -94,26 +96,7 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   // ── Remember: read initial persisted state ──
   const [initialState] = useState(() => {
     if (!rememberMode || !tableId) return {} as Record<string, unknown>
-    if (rememberMode === 'localStorage' && typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`table:${tableId}`)
-        if (stored) return JSON.parse(stored) as Record<string, unknown>
-      } catch { /* ignore */ }
-    }
-    if (rememberMode === 'url' && typeof window !== 'undefined') {
-      const url = new URL(window.location.href)
-      const state: Record<string, unknown> = {}
-      const sortParam = url.searchParams.get(`${tableId}_sort`)
-      const dirParam = url.searchParams.get(`${tableId}_dir`)
-      const pageParam = url.searchParams.get(`${tableId}_page`)
-      const searchParam = url.searchParams.get(`${tableId}_search`)
-      if (sortParam) state.sort = sortParam
-      if (dirParam) state.dir = dirParam
-      if (pageParam) state.page = parseInt(pageParam)
-      if (searchParam) state.search = searchParam
-      return state
-    }
-    return {} as Record<string, unknown>
+    return readClientState(rememberMode as PersistMode, `table:${tableId}`, tableId)
   })
 
   const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
@@ -130,25 +113,11 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
   // ── Remember: save state on change ──
   function saveRememberState(state: Record<string, unknown>) {
     if (!rememberMode || !tableId) return
-    if (rememberMode === 'localStorage' && typeof window !== 'undefined') {
-      localStorage.setItem(`table:${tableId}`, JSON.stringify(state))
-    } else if (rememberMode === 'url' && typeof window !== 'undefined') {
-      const url = new URL(window.location.href)
-      for (const [k, v] of Object.entries(state)) {
-        if (v !== undefined && v !== null && v !== '') {
-          url.searchParams.set(`${tableId}_${k}`, String(v))
-        } else {
-          url.searchParams.delete(`${tableId}_${k}`)
-        }
-      }
-      window.history.replaceState(null, '', url.pathname + url.search)
-    } else if (rememberMode === 'session') {
-      fetch(`/${pathSegment}/api/_tables/${tableId}/remember`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state),
-      }).catch(() => {})  // fire-and-forget
-    }
+    saveClientState(rememberMode as PersistMode, `table:${tableId}`, state, {
+      pathSegment,
+      apiPath: `/api/_tables/${tableId}/remember`,
+      urlPrefix: tableId,
+    })
   }
 
   // Reset state when the element changes (e.g. navigating between tabs with different tables)

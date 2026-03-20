@@ -1,8 +1,9 @@
 import type { Field } from './Field.js'
 import type { FieldMeta } from './Field.js'
+import type { PersistMode } from './persist.js'
 
 // ─── Persist mode for Tabs ─────────────────────────────────────
-export type TabsPersistMode = false | 'localStorage' | 'url' | 'session'
+export type TabsPersistMode = PersistMode
 
 // ─── Generic item — any object (fields, schema elements, widgets) ──────
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

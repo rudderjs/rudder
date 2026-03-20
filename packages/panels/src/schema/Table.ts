@@ -1,6 +1,7 @@
 import type { Column, ColumnMeta } from './Column.js'
 import type { Filter, FilterMeta } from '../Filter.js'
 import type { Action, ActionMeta, ActionHandler } from '../Action.js'
+import type { PersistMode } from '../persist.js'
 
 // ─── Table schema element ────────────────────────────────────
 // Three modes:
@@ -20,7 +21,7 @@ import type { Action, ActionMeta, ActionHandler } from '../Action.js'
 //     .rows([{ name: 'Chrome', share: 65 }, { name: 'Firefox', share: 10 }])
 //     .columns([Column.make('name'), Column.make('share')])
 
-export type TableRememberMode = false | 'localStorage' | 'url' | 'session'
+export type TableRememberMode = PersistMode
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ModelClass = { new(): any; query(): any }

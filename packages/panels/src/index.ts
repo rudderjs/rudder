@@ -27,6 +27,10 @@ export type { SectionMeta } from './Section.js'
 export { Tab, Tabs } from './Tabs.js'
 export type { TabsMeta, TabMeta, TabsPersistMode } from './Tabs.js'
 
+// ─── Persist helpers ──────────────────────────────────────────
+
+export type { PersistMode } from './persist.js'
+
 // ─── Field ─────────────────────────────────────────────────
 
 export { Field } from './Field.js'
