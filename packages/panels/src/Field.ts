@@ -32,7 +32,7 @@ export interface FieldMeta {
   conditions?:         Condition[]
   displayTransformed?: boolean
   yjs?:                boolean
-  persist?:            'localStorage' | string[]
+  persist?:            'localStorage' | 'url' | 'session' | string[]
   yjsProviders?:      string[]
   defaultValue?:       unknown
 }
@@ -56,7 +56,7 @@ export abstract class Field {
   protected _displayFn?: (value: unknown, record: unknown) => unknown
   protected _yjs = false
   protected _yjsProviders: string[] = []
-  protected _persist: false | 'localStorage' | string[] = false
+  protected _persist: false | 'localStorage' | 'url' | 'session' | string[] = false
   protected _default?: unknown | ((ctx: unknown) => unknown)
 
   constructor(name: string) {
@@ -313,15 +313,22 @@ export abstract class Field {
    *
    * @example
    * .persist()                          // localStorage (silent save/restore)
+   * .persist('url')                     // URL query param (shareable, SSR'd)
+   * .persist('session')                 // server session (SSR'd, clean URL)
+   * .persist('localStorage')            // browser localStorage
    * .persist('indexeddb')               // y-indexeddb (Yjs offline persistence)
    * .persist('websocket')              // y-websocket (Yjs real-time sync)
    * .persist(['websocket', 'indexeddb']) // both Yjs providers
    */
-  persist(mode?: 'indexeddb' | 'websocket' | ('indexeddb' | 'websocket')[]): this {
+  persist(mode?: 'localStorage' | 'url' | 'session' | 'indexeddb' | 'websocket' | ('indexeddb' | 'websocket')[]): this {
     if (mode === undefined) {
       this._persist = 'localStorage'
+    } else if (mode === 'url' || mode === 'session') {
+      this._persist = mode
     } else if (Array.isArray(mode)) {
       this._persist = mode
+    } else if (mode === 'localStorage') {
+      this._persist = 'localStorage'
     } else {
       this._persist = [mode]
     }
@@ -339,7 +346,7 @@ export abstract class Field {
   isPersist(): boolean { return this._persist !== false }
 
   /** @internal */
-  getPersistMode(): false | 'localStorage' | string[] { return this._persist }
+  getPersistMode(): false | 'localStorage' | 'url' | 'session' | string[] { return this._persist }
 
   /** @internal */
   getYjsProviders(): string[] { return this._yjsProviders }
