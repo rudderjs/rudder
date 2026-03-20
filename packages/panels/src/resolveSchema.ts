@@ -626,6 +626,44 @@ export async function resolveSchema(
         formMeta.initialValues = initialValues
       }
 
+      // 4. Detect collaborative fields and set up Yjs config
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const yjsFields = formFields.filter((f: any) => typeof f.isYjs === 'function' && f.isYjs())
+      if (yjsFields.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const needsWebsocket = yjsFields.some((f: any) => {
+          const providers: string[] = typeof f.getYjsProviders === 'function' ? f.getYjsProviders() : []
+          return providers.includes('websocket')
+        })
+
+        const docName = `form:${formId}`
+        formMeta.yjs = true
+        formMeta.wsLivePath = needsWebsocket ? '/ws-live' : null
+        formMeta.docName = docName
+
+        // Collect all providers
+        const providers = new Set<string>()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const f of yjsFields) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const fp: string[] = typeof (f as any).getYjsProviders === 'function' ? (f as any).getYjsProviders() : []
+          for (const p of fp) providers.add(p)
+        }
+        formMeta.liveProviders = [...providers]
+
+        // Seed Y.Doc with initial values (server-side)
+        if (needsWebsocket && Object.keys(initialValues).length > 0) {
+          try {
+            const livePkg = '@boostkit/live'
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { Live } = await import(/* @vite-ignore */ livePkg) as any
+            if (Live?.seed) {
+              await Live.seed(docName, initialValues)
+            }
+          } catch { /* @boostkit/live not available */ }
+        }
+      }
+
       result.push(formMeta as PanelSchemaElementMeta)
       continue
     }

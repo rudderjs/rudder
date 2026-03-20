@@ -23,6 +23,11 @@ export interface FormElementMeta {
   method?:         string
   action?:         string
   initialValues?:  Record<string, unknown>
+  /** Yjs collaborative editing config (SSR-resolved) */
+  yjs?:            boolean
+  wsLivePath?:     string | null
+  docName?:        string | null
+  liveProviders?:  string[]
 }
 
 // ─── Form class ─────────────────────────────────────────────

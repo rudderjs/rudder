@@ -222,6 +222,21 @@ export class FieldsDemo extends Page {
         .submitLabel('Save')
         .successMessage('Saved!')
         .onSubmit(async (data) => { console.log('[persist-local]', data) }),
+
+      // ── Collaborative Fields ───────────────────────────────
+      Heading.make('Collaborative Fields').level(2),
+      Text.make('Fields with .persist(\'websocket\') — real-time sync across browser tabs. Open this page in two tabs to see live collaboration.'),
+
+      Form.make('collab-demo')
+        .description('Try editing in two browser tabs — changes sync in real-time.')
+        .fields([
+          TextField.make('title').label('Collaborative Title').persist('websocket'),
+          TextareaField.make('notes').label('Collaborative Notes').persist('websocket'),
+          ToggleField.make('published').label('Published').persist('websocket'),
+        ])
+        .submitLabel('Save')
+        .successMessage('Saved!')
+        .onSubmit(async (data) => { console.log('[collab form]', data) }),
     ]
   }
 }
