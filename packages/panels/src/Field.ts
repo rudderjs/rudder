@@ -36,6 +36,7 @@ export interface FieldMeta {
   yjsProviders?:      string[]
   defaultValue?:       unknown
   from?:               string[]
+  debounce?:           number
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -61,6 +62,7 @@ export abstract class Field {
   protected _default?: unknown | ((ctx: unknown) => unknown)
   protected _from?: string[]
   protected _reactiveComputeFn?: (values: Record<string, unknown>) => unknown
+  protected _debounce?: number
 
   constructor(name: string) {
     this._name = name
@@ -131,10 +133,21 @@ export abstract class Field {
     return this
   }
 
+  /**
+   * Debounce time in ms before triggering .derive() recomputation.
+   * Default: 200ms. Only applies to fields with .from() + .derive().
+   */
+  debounce(ms: number): this {
+    this._debounce = ms
+    return this
+  }
+
   /** @internal */
   getFrom(): string[] | undefined { return this._from }
   /** @internal */
   getDeriveFn(): ((values: Record<string, unknown>) => unknown) | undefined { return this._reactiveComputeFn }
+  /** @internal */
+  getDebounce(): number { return this._debounce ?? 200 }
 
   /** Show in forms but not editable. Excluded from create / edit payloads. */
   readonly(value = true): this {
@@ -460,7 +473,10 @@ export abstract class Field {
     if (this._default !== undefined && typeof this._default !== 'function') {
       meta.defaultValue = this._default
     }
-    if (this._from && this._from.length > 0) meta.from = this._from
+    if (this._from && this._from.length > 0) {
+      meta.from = this._from
+      if (this._debounce !== undefined) meta.debounce = this._debounce
+    }
     return meta
   }
 }

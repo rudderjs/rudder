@@ -27,13 +27,13 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
   }
 
   // Build dependency map: when field X changes, recompute fields Y, Z
-  const computeDeps = new Map<string, Array<{ fieldName: string; from: string[] }>>()
+  const computeDeps = new Map<string, Array<{ fieldName: string; from: string[]; debounce: number }>>()
   for (const item of form.fields) {
-    const field = item as FieldMeta
+    const field = item as FieldMeta & { debounce?: number }
     if (field.name && field.from && field.from.length > 0) {
       for (const dep of field.from) {
         const list = computeDeps.get(dep) ?? []
-        list.push({ fieldName: field.name, from: field.from })
+        list.push({ fieldName: field.name, from: field.from, debounce: field.debounce ?? 200 })
         computeDeps.set(dep, list)
       }
     }
@@ -251,7 +251,7 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
               }
             })
             .catch(() => {})
-        }, 200)
+        }, dep.debounce)
         computeTimerRef.current.set(dep.fieldName, timer)
       }
     }

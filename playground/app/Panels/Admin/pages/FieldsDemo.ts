@@ -266,6 +266,32 @@ export class FieldsDemo extends Page {
         .submitLabel('Submit')
         .successMessage('Submitted!')
         .onSubmit(async (data) => { console.log('[derived form]', data) }),
+
+      // ── Persist + Derive combined ──────────────────────────
+      Heading.make('Persist + Derive Combined').level(2),
+      Text.make('Title persists in URL. Slug auto-derives from title. Share the URL — both values SSR correctly.'),
+
+      Form.make('persist-derive')
+        .fields([
+          TextField.make('title').label('Article Title').persist('url'),
+          TextField.make('slug').label('URL Slug (derived from title)')
+            .from('title')
+            .derive(({ title }) => String(title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
+            .debounce(300),
+          TextareaField.make('content').label('Content').persist('url'),
+          TextField.make('readTime').label('Read Time (derived)')
+            .from('content')
+            .derive(({ content }) => {
+              const words = String(content ?? '').trim().split(/\s+/).filter(Boolean).length
+              const minutes = Math.max(1, Math.ceil(words / 200))
+              return `${minutes} min read`
+            })
+            .debounce(500)
+            .readonly(),
+        ])
+        .submitLabel('Publish')
+        .successMessage('Published!')
+        .onSubmit(async (data) => { console.log('[persist-derive]', data) }),
     ]
   }
 }
