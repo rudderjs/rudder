@@ -14,6 +14,10 @@ export interface ColumnMeta {
   href?:      string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ComputeFn = (record: Record<string, any>) => unknown
+type DisplayFn = (value: unknown, record?: Record<string, unknown>) => unknown
+
 export class Column {
   private _name:       string
   private _label:      string
@@ -22,6 +26,8 @@ export class Column {
   private _type:       ColumnMeta['type'] = 'string'
   private _format?:    string
   private _href?:      string
+  private _computeFn?: ComputeFn
+  private _displayFn?: DisplayFn
 
   private constructor(name: string) {
     this._name  = name
@@ -45,7 +51,34 @@ export class Column {
   /** Make column values clickable links. Use ':value' as a placeholder for the cell value. */
   href(pattern: string): this       { this._href       = pattern; return this }
 
+  /**
+   * Compute a derived value from the full record. Runs server-side (SSR + API).
+   * The computed value replaces the column's value in the record before rendering.
+   *
+   * @example
+   * Column.make('wordCount')
+   *   .compute((record) => record.content?.split(/\s+/).length ?? 0)
+   */
+  compute(fn: ComputeFn): this {
+    this._computeFn = fn
+    return this
+  }
+
+  /**
+   * Format the column value for display. Runs server-side (SSR + API).
+   *
+   * @example
+   * Column.make('price').display((v) => `$${((v as number) / 100).toFixed(2)}`)
+   * Column.make('wordCount').compute(r => r.body?.split(/\s+/).length).display(v => `${v} words`)
+   */
+  display(fn: DisplayFn): this {
+    this._displayFn = fn
+    return this
+  }
+
   getName(): string  { return this._name }
+  getComputeFn(): ComputeFn | undefined { return this._computeFn }
+  getDisplayFn(): DisplayFn | undefined { return this._displayFn }
 
   toMeta(): ColumnMeta {
     const meta: ColumnMeta = {

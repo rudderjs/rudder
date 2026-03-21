@@ -244,14 +244,14 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
 
   if (submitted) {
     return (
-      <div className="rounded-xl border bg-card p-6">
+      <div>
         <p className="text-sm text-muted-foreground">{form.successMessage ?? 'Submitted successfully.'}</p>
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl border bg-card p-6">
+    <div>
       {(form as { description?: string }).description && (
         <p className="text-sm text-muted-foreground mb-4">{(form as { description?: string }).description}</p>
       )}

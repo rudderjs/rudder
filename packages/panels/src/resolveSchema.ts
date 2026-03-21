@@ -927,6 +927,31 @@ async function resolvePagination(
   }
 }
 
+/** Apply Column.compute() and Column.display() transforms to records (server-side). */
+function applyColumnTransforms(
+  config: import('./schema/Table.js').TableConfig,
+  records: RecordRow[],
+): RecordRow[] {
+  const cols = config.columns
+  const isColumnInstances = cols.length > 0 && typeof (cols[0] as { getComputeFn?: unknown })?.getComputeFn === 'function'
+  if (!isColumnInstances) return records
+
+  const columnList = cols as Column[]
+  const hasTransforms = columnList.some(c => c.getComputeFn() || c.getDisplayFn())
+  if (!hasTransforms) return records
+
+  return records.map(record => {
+    const row = { ...record }
+    for (const col of columnList) {
+      const computeFn = col.getComputeFn()
+      if (computeFn) row[col.getName()] = computeFn(row as Record<string, unknown>)
+      const displayFn = col.getDisplayFn()
+      if (displayFn) row[col.getName()] = displayFn(row[col.getName()], row as Record<string, unknown>)
+    }
+    return row
+  })
+}
+
 /** Assemble the final TableElementMeta from config + resolved data. */
 function buildTableMeta(
   config: import('./schema/Table.js').TableConfig,
@@ -943,12 +968,13 @@ function buildTableMeta(
     activeFilters?: Record<string, string> | undefined
   },
 ): TableElementMeta {
+  const transformedRecords = applyColumnTransforms(config, records)
   const meta: TableElementMeta = {
     type:     'table',
     title:    config.title,
     resource: opts.resource ?? '',
     columns,
-    records,
+    records:  transformedRecords,
     href:     config.href ?? opts.href ?? '',
     id:       tableId,
   }

@@ -315,6 +315,21 @@ export function mountMetaRoutes(
       }
     }
 
+    // Apply Column.compute() + .display() transforms
+    const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as { getComputeFn?: unknown })?.getComputeFn === 'function'
+    if (isColumnInstances) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cols = config.columns as Array<{ getName(): string; getComputeFn?(): ((r: any) => unknown) | undefined; getDisplayFn?(): ((v: unknown, r?: any) => unknown) | undefined }>
+      for (const record of records) {
+        for (const col of cols) {
+          const computeFn = col.getComputeFn?.()
+          if (computeFn) (record as Record<string, unknown>)[col.getName()] = computeFn(record)
+          const displayFn = col.getDisplayFn?.()
+          if (displayFn) (record as Record<string, unknown>)[col.getName()] = displayFn((record as Record<string, unknown>)[col.getName()], record)
+        }
+      }
+    }
+
     return res.json({ records, pagination })
   }, mw)
 

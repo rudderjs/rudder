@@ -128,6 +128,29 @@ export class TablesDemo extends Page {
         .sortBy('createdAt', 'DESC')
         .limit(5),
 
+      // ── Column compute + display ──────────────────────────
+      Heading.make('Computed & Formatted Columns').level(2),
+      Text.make('Column.compute() derives values from record. Column.display() formats for output. Both run server-side.'),
+
+      Table.make('Articles with Computed Columns')
+        .fromModel(Article)
+        .columns([
+          Column.make('title').label('Title').sortable(),
+          Column.make('wordCount').label('Words')
+            .compute((r) => {
+              const text = String(r['excerpt'] ?? '')
+              return text.trim() ? text.trim().split(/\s+/).length : 0
+            })
+            .display((v) => `${v} words`),
+          Column.make('status').label('Status')
+            .compute((r) => String(r['draftStatus'] ?? 'unknown'))
+            .display((v) => String(v).toUpperCase())
+            .badge(),
+          Column.make('createdAt').label('Created').date(),
+        ])
+        .sortBy('createdAt', 'DESC')
+        .limit(5).paginated(),
+
       // ── Async fromArray (external API) ─────────────────────
       Heading.make('External API Table').level(2),
       Text.make('Data fetched from JSONPlaceholder API at SSR time via .fromArray(async fn). Supports .lazy() and .poll().'),
