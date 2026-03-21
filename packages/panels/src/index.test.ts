@@ -3524,3 +3524,104 @@ describe('Tabs fromArray', () => {
     assert.ok(t.getContentFn())
   })
 })
+
+// ── Field — from/derive/debounce ──────────────────────────────────
+
+describe('Field — from/derive/debounce', () => {
+  it('from() sets dependencies', () => {
+    const f = TextField.make('slug').from('title')
+    assert.deepEqual(f.getFrom(), ['title'])
+  })
+
+  it('from() with multiple deps', () => {
+    const f = TextField.make('full').from('first', 'last')
+    assert.deepEqual(f.getFrom(), ['first', 'last'])
+  })
+
+  it('derive() stores function', () => {
+    const fn = ({ title }: Record<string, unknown>) => String(title).toLowerCase()
+    const f = TextField.make('slug').from('title').derive(fn)
+    assert.ok(f.getDeriveFn())
+  })
+
+  it('debounce() sets value', () => {
+    assert.equal(TextField.make('x').from('y').debounce(500).getDebounce(), 500)
+  })
+
+  it('debounce defaults to 200', () => {
+    assert.equal(TextField.make('x').getDebounce(), 200)
+  })
+
+  it('from in toMeta()', () => {
+    const meta = TextField.make('slug').from('title').toMeta()
+    assert.deepEqual(meta.from, ['title'])
+  })
+
+  it('from not in toMeta when not set', () => {
+    assert.equal(TextField.make('x').toMeta().from, undefined)
+  })
+
+  it('debounce in toMeta when from is set', () => {
+    const meta = TextField.make('x').from('y').debounce(300).toMeta()
+    assert.equal(meta.debounce, 300)
+  })
+})
+
+// ── Column compute/display ────────────────────────────────────────
+
+describe('Column compute/display', () => {
+  it('compute stores function', () => {
+    const fn = (r: Record<string, unknown>) => r.title
+    const col = Column.make('x').compute(fn)
+    assert.equal(col.getComputeFn(), fn)
+  })
+
+  it('display stores function', () => {
+    const fn = (v: unknown) => `$${v}`
+    const col = Column.make('x').display(fn)
+    assert.equal(col.getDisplayFn(), fn)
+  })
+
+  it('compute not set by default', () => {
+    assert.equal(Column.make('x').getComputeFn(), undefined)
+  })
+
+  it('display not set by default', () => {
+    assert.equal(Column.make('x').getDisplayFn(), undefined)
+  })
+})
+
+// ── Table live ────────────────────────────────────────────────────
+
+describe('Table live', () => {
+  it('live() sets flag', () => {
+    const t = Table.make('Test').live()
+    assert.equal(t.isLive(), true)
+  })
+
+  it('defaults to not live', () => {
+    assert.equal(Table.make('Test').isLive(), false)
+  })
+
+  it('live in getConfig()', () => {
+    assert.equal(Table.make('Test').live().getConfig().live, true)
+  })
+})
+
+// ── ComputeRegistry ──────────────────────────────────────────────
+
+import { ComputeRegistry } from './ComputeRegistry.js'
+
+describe('ComputeRegistry', () => {
+  it('register and get', () => {
+    ComputeRegistry.register('admin', 'form:slug', { from: ['title'], compute: ({ title }) => title })
+    const entry = ComputeRegistry.get('admin', 'form:slug')
+    assert.ok(entry)
+    assert.deepEqual(entry!.from, ['title'])
+    ComputeRegistry.reset()
+  })
+
+  it('returns undefined for missing', () => {
+    assert.equal(ComputeRegistry.get('admin', 'missing'), undefined)
+  })
+})
