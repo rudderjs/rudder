@@ -639,7 +639,14 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
                                 ))
                               }}
                             />
-                          : formatCellValue(record[col.name], col, i18n, panelPath)
+                          : col.href
+                            ? <a
+                                href={col.href.replace(/:(\w+)/g, (_, key) => encodeURIComponent(String(record[key] ?? '')))}
+                                className="text-primary hover:underline"
+                              >
+                                {formatCellValue(record[col.name], col, i18n, panelPath)}
+                              </a>
+                            : formatCellValue(record[col.name], col, i18n, panelPath)
                         }
                       </td>
                     ))}
