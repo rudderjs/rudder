@@ -275,6 +275,16 @@ export function mountTableRoutes(
       } else {
         return res.status(400).json({ message: 'No save handler configured.' })
       }
+      // Broadcast live update if table has .live()
+      if (table.isLive()) {
+        try {
+          const broadcastPkg = '@boostkit/broadcast'
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
+          broadcast(`live:table:${tableId}`, 'refresh', { field, recordId })
+        } catch { /* @boostkit/broadcast not available */ }
+      }
+
       return res.json({ success: true })
     } catch (err) {
       return res.status(500).json({ success: false, message: String(err) })

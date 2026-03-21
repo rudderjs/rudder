@@ -1,4 +1,4 @@
-import { Page, Heading, Text, Table, Column, SelectFilter, Action, SelectField, TextareaField } from '@boostkit/panels'
+import { Page, Heading, Text, Table, Column, SelectFilter, Action, SelectField, TextareaField, TagsField, ColorField, ToggleField } from '@boostkit/panels'
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
@@ -159,6 +159,28 @@ export class TablesDemo extends Page {
             }),
         ]),
 
+      // ── Live + Editable ─────────────────────────────────────
+      Heading.make('Live + Editable Table').level(2),
+      Text.make('Real-time sync + inline editing. Open in two tabs — edit a cell in one, see it update instantly in the other.'),
+
+      Table.make('Live Editable Articles')
+        .fromModel(Article)
+        .columns([
+          Column.make('title').label('Title').sortable().searchable().editable(),
+          Column.make('draftStatus').label('Status').badge().editable(
+            SelectField.make('draftStatus').options([
+              { label: 'Draft', value: 'draft' },
+              { label: 'Published', value: 'published' },
+            ]),
+          ),
+          Column.make('featured').label('Featured').editable(ToggleField.make('featured')),
+          Column.make('createdAt').label('Created').date(),
+        ])
+        .sortBy('createdAt', 'DESC')
+        .paginated('pages', 5)
+        .searchable()
+        .live(),
+
       // ── Column compute + display ──────────────────────────
       Heading.make('Computed & Formatted Columns').level(2),
       Text.make('Column.compute() derives values from record. Column.display() formats for output. Both run server-side.'),
@@ -247,6 +269,32 @@ export class TablesDemo extends Page {
           ),
           Column.make('createdAt').label('Joined').date(),
         ])
+        .paginated('pages', 5)
+        .searchable(),
+
+      // ── Editable Articles (model-backed, auto-save) ───────────
+      Heading.make('Editable Articles (Model)').level(2),
+      Text.make('Edit article fields directly in the table. Saves to database automatically via Model.update(). Try all three edit modes.'),
+
+      Table.make('Editable Articles')
+        .fromModel(Article)
+        .columns([
+          Column.make('title').label('Title').sortable().searchable().editable(),
+          Column.make('slug').label('Slug').editable(),
+          Column.make('draftStatus').label('Status').badge().editable(
+            SelectField.make('draftStatus').options([
+              { label: 'Draft', value: 'draft' },
+              { label: 'Published', value: 'published' },
+              { label: 'Archived', value: 'archived' },
+            ]),
+          ),
+          Column.make('featured').label('Featured').editable(ToggleField.make('featured')),
+          Column.make('accentColor').label('Color').editable(ColorField.make('accentColor')),
+          Column.make('excerpt').label('Excerpt').editable(TextareaField.make('excerpt'), 'popover'),
+          Column.make('tags').label('Tags').editable(TagsField.make('tags'), 'popover'),
+          Column.make('createdAt').label('Created').date(),
+        ])
+        .sortBy('createdAt', 'DESC')
         .paginated('pages', 5)
         .searchable(),
 
