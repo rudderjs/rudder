@@ -110,7 +110,7 @@ boostkit/
 │   ├── live/           # Real-time collaborative document sync via Yjs CRDT — /ws-live endpoint
 │   │                   #   Built-in: MemoryPersistence. Optional: livePrisma(), liveRedis()
 │   ├── panels/         # Admin panel builder — Resource CRUD, schema elements (Stats, Chart, Table, List, Tabs,
-│   │                   #   Section, Form, Dialog, Column), WidgetRenderer, Resource.widgets(), draftRecovery,
+│   │                   #   Section, Form, Dialog, Column, Heading, Text, Code), WidgetRenderer, Resource.widgets(), draftRecovery,
 │   │                   #   rememberTable, autosave, Yjs field persist, inline editing (Column.editable())
 │   │                   #   + Dashboard builder: Widget, Dashboard, drag-and-drop, per-user layout, settings, lazy/polling
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
@@ -151,7 +151,7 @@ boostkit/
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource CRUD, 25+ field types, schema elements (Table/fromResource/fromModel/fromArray, Column, Form, Dialog, Section, Tab/Tabs, Stats, Chart, List), draftRecovery, rememberTable, filters, actions, persist(url/session/localStorage), lazy, poll, DataSource, dashboard builder, versioning, collaboration, inline editing (Column.editable: inline/popover/modal) |
+| `@boostkit/panels` | 0.0.3 | Admin panel: Resource CRUD, 25+ field types, schema elements (Table/fromResource/fromModel/fromArray, Column, Form, Dialog, Section, Tab/Tabs, Stats, Chart, List, Heading, Text, Code), draftRecovery, rememberTable, filters, actions, persist(url/session/localStorage), lazy, poll, DataSource, dashboard builder, versioning, collaboration, inline editing (Column.editable: inline/popover/modal) |
 | `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@boostkit/media` | 0.0.1 | Media library panels extension — file browser, uploads, folders, preview, image conversions |
 
