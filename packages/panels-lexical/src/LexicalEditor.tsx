@@ -175,18 +175,22 @@ export function LexicalEditor({
 
   const collabActive = isCollab && collabReady && !!providerFactory
 
+  // Match CollaborativePlainText pattern exactly:
+  // useMemo with collabReady dependency so LexicalComposer mounts fresh when collab is ready
   const initialConfig = useMemo(() => ({
     namespace: fragmentName,
     nodes: [...EDITOR_NODES],
     theme: THEME,
     editable: !disabled,
-    ...(collabActive
-      ? { editorState: null }  // CollaborationPlugin hydrates from Y.js; SeedPlugin handles DB fallback
-      : value ? { editorState: JSON.stringify(value) } : {}),
+    ...(collabReady
+      ? { editorState: null }
+      : (value && typeof value === 'object' && 'root' in (value as Record<string, unknown>))
+        ? { editorState: JSON.stringify(value) }
+        : {}),
     onError: (error: Error) => console.error('[LexicalEditor]', error),
-  }), [fragmentName, disabled, collabActive]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [fragmentName, disabled, collabReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show loading state while waiting for Y.Doc + WS setup
+  // Show loading state while waiting for Y.Doc + WS setup (same pattern as CollaborativePlainText)
   if (isCollab && !collabReady) {
     return (
       <div className="min-h-[200px] rounded-lg border border-input bg-background p-3 flex items-center justify-center text-sm text-muted-foreground">

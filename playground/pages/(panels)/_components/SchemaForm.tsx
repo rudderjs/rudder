@@ -335,7 +335,10 @@ export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
       {(form as { description?: string }).description && (
         <p className="text-sm text-muted-foreground mb-4">{(form as { description?: string }).description}</p>
       )}
-      {formYjs.yjs && (
+      {formYjs.yjs && form.fields.some(f => {
+        const field = f as FieldMeta
+        return field.yjs && !TEXT_TYPES.has(field.type)
+      }) && (
         <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
           <span className={`w-2 h-2 rounded-full ${collabConnected ? 'bg-green-500' : 'bg-red-400'}`} />
           <span>{collabConnected ? i18n.connectedLive ?? 'Connected' : i18n.disconnectedLive ?? 'Disconnected'}</span>

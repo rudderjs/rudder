@@ -483,6 +483,47 @@ LIMIT 10;`).language('sql').title('Top Articles by Comments').lineNumbers(),
         SelectField.make('type').options([...]),
       ]),
   ])`).language('typescript').title('Rich Content API'),
+
+      // ── Collaborative Rich Content ────────────────────────────
+      Heading.make('Collaborative Rich Content').level(2),
+      Text.make('Open this page in two browser tabs — type in one, see it appear instantly in the other. Uses Yjs CRDT via @boostkit/live WebSocket.'),
+
+      Form.make('collab-richcontent')
+        .description('Real-time collaborative editor. Try editing in two tabs simultaneously.')
+        .fields([
+          RichContentField.make('content').label('Collaborative Content')
+            .placeholder('Start typing — changes sync in real-time...')
+            .collaborative()
+            .blocks([
+              Block.make('note')
+                .label('Note')
+                .icon('📌')
+                .schema([
+                  TextareaField.make('text').label('Note Text').required(),
+                  SelectField.make('color').label('Color').default('blue').options([
+                    { label: 'Blue', value: 'blue' },
+                    { label: 'Yellow', value: 'yellow' },
+                    { label: 'Green', value: 'green' },
+                    { label: 'Red', value: 'red' },
+                  ]),
+                ]),
+            ]),
+        ])
+        .submitLabel('Save')
+        .successMessage('Saved!')
+        .onSubmit(async (data) => { console.log('[collab richcontent]', data) }),
+
+      Code.make(`RichContentField.make('content')
+  .label('Collaborative Content')
+  .placeholder('Start typing...')
+  .collaborative()  // enables Yjs real-time sync
+  .blocks([
+    Block.make('note').label('Note').icon('📌')
+      .schema([
+        TextareaField.make('text').required(),
+        SelectField.make('color').options([...]),
+      ]),
+  ])`).language('typescript').title('Collaborative Rich Content API'),
     ]
   }
 }

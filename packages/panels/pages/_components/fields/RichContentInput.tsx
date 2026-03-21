@@ -1,14 +1,36 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import { editorRegistry } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
 export function RichContentInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
-  const RichEditor = editorRegistry.richcontent
+
+  // Wait for editorRegistry to be populated by registerLexical() (async dynamic import).
+  // SSR: always null. Client: poll until available, then render the real editor.
+  const [RichEditor, setRichEditor] = useState<typeof editorRegistry.richcontent>(null)
+  useEffect(() => {
+    // Already available (e.g. client-side navigation after import completed)
+    if (editorRegistry.richcontent) {
+      setRichEditor(() => editorRegistry.richcontent)
+      return
+    }
+    // Poll until registerLexical() completes
+    const interval = setInterval(() => {
+      if (editorRegistry.richcontent) {
+        setRichEditor(() => editorRegistry.richcontent)
+        clearInterval(interval)
+      }
+    }, 50)
+    return () => clearInterval(interval)
+  }, [])
+
   if (RichEditor) {
     return (
       <RichEditor
-        value={value}
+        value={value || undefined}
         onChange={onChange}
         {...((field.extra?.placeholder as string | undefined) !== undefined ? { placeholder: field.extra?.placeholder as string } : {})}
         disabled={isDisabled}
@@ -21,15 +43,11 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
       />
     )
   }
+
+  // Fallback: shown during SSR and while waiting for registerLexical()
   return (
-    <textarea
-      name={field.name}
-      value={typeof value === 'string' ? value : (value ? JSON.stringify(value, null, 2) : '')}
-      onChange={(e) => onChange(e.target.value)}
-      rows={8}
-      disabled={isDisabled}
-      placeholder={(field.extra?.placeholder as string) ?? 'Rich content editor not installed. Install @boostkit/panels-lexical for rich editing.'}
-      className={INPUT_CLS}
-    />
+    <div className="min-h-[200px] rounded-lg border border-input bg-background p-3 flex items-center justify-center text-sm text-muted-foreground animate-pulse">
+      Loading editor…
+    </div>
   )
 }
