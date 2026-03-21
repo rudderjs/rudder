@@ -42,13 +42,79 @@ TextField.make('name')
   .readonly()               // visible but not editable; excluded from payloads
   .sortable()               // clickable column header -> ?sort=name&dir=ASC
   .searchable()             // included in search -> WHERE name LIKE '%foo%'
+  .default('value')         // default value for create forms (static or function)
   .collaborative()          // shorthand for .persist('websocket') — real-time Yjs sync
-  .persist()                // survive page reload (localStorage, indexeddb, or websocket)
+  .persist()                // survive page reload (localStorage, url, session, or websocket)
   .hideFrom('table' | 'create' | 'edit' | 'view')
   .hideFromTable()
   .hideFromCreate()
   .hideFromEdit()
 ```
+
+---
+
+## Default Values
+
+Set initial values for create forms using `.default()`. Accepts a static value or a function.
+
+```ts
+TextField.make('status').default('draft')
+SelectField.make('role').default('user')
+DateField.make('startDate').default(() => new Date().toISOString())
+```
+
+| Method | Description |
+|--------|-------------|
+| `.default(value)` | Static default value for create forms |
+| `.default(fn)` | Function default -- resolved server-side, receives context |
+
+**Priority**: `.data(fn)` on Form > field `.persist()` restored value > `.default()`. On the edit page, the existing record value always takes precedence.
+
+---
+
+## Field Persistence (`.persist()`)
+
+Control how individual field values survive page reloads, share across tabs, or sync in real-time. All modes use a single `.persist()` method.
+
+```ts
+TextField.make('q').persist('url')              // URL query param — shareable, SSR'd
+TextField.make('draft').persist('session')       // server session — SSR'd, clean URL
+TextField.make('note').persist('localStorage')   // browser storage (default when no arg)
+TextField.make('note').persist()                 // same as 'localStorage'
+TextField.make('content').persist('websocket')   // Yjs real-time collaboration
+TextField.make('content').persist(['websocket', 'indexeddb'])  // Yjs + offline
+```
+
+| Mode | Mechanism | SSR | Shareable | Survives refresh |
+|------|-----------|-----|-----------|------------------|
+| `'localStorage'` | Browser localStorage | No | No | Yes |
+| `'url'` | URL query param | Yes | Yes | Yes |
+| `'session'` | Server session | Yes | No | Yes |
+| `'indexeddb'` | y-indexeddb (Yjs offline) | No | No | Yes |
+| `'websocket'` | y-websocket (Yjs real-time) | No | Synced | While connected |
+| `['websocket', 'indexeddb']` | Both Yjs providers | No | Synced | Yes |
+
+`.persist()` is independent from `draftRecovery`. Use `draftRecovery` for full-form backup with a restore banner. Use `.persist()` for individual fields that should quietly survive page reloads or sync across editors.
+
+---
+
+## Collaborative Fields in Forms
+
+Standalone `Form.make()` elements support collaborative editing via `.persist('websocket')`. Each collaborative field opens a WebSocket connection for real-time sync across browser tabs and users.
+
+```ts
+Form.make('collab-notes')
+  .fields([
+    TextField.make('title').persist('websocket'),
+    TextareaField.make('notes').persist('websocket'),
+    ToggleField.make('published').persist('websocket'),
+  ])
+```
+
+- Text fields get per-field Y.Doc with character-level CRDT sync
+- Non-text fields (toggle, select, date, etc.) sync via a shared Y.Map (last-write-wins)
+- The form shows connection status and presence count when collaborative fields are present
+- Works in both standalone forms and resource create/edit forms
 
 ---
 

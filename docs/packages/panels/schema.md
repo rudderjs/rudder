@@ -259,6 +259,25 @@ Column.make('name').label('Name').href('/admin/resources/users/:id')
 | `.badge()` | Render as a badge |
 | `.image()` | Render as a small thumbnail |
 | `.href(pattern)` | Wrap cell in a link; use `:id` as placeholder |
+| `.compute(fn)` | Derive value from the full record — runs server-side |
+| `.display(fn)` | Format value for display — runs server-side |
+
+#### Computed & Display Columns
+
+Use `.compute()` to create derived columns from the full record, and `.display()` to format any column value. Both run server-side before the response is sent.
+
+```ts
+// Derived column — value computed from record fields
+Column.make('wordCount').label('Words')
+  .compute((record) => record.title?.split(/\s+/).length ?? 0)
+  .display((v) => `${v} words`)
+
+// Display-only — format an existing value
+Column.make('price').label('Price')
+  .display((v) => `$${((v as number) / 100).toFixed(2)}`)
+```
+
+`.compute(fn)` receives the full record and returns a derived value. `.display(fn)` receives the raw (or computed) value and returns a formatted string. Chain both to derive and format in one column.
 
 ### `Chart`
 
@@ -648,6 +667,19 @@ Form.make('contact')
 | `.data(fn)` | Pre-populate form with initial values from async function |
 | `.beforeSubmit(fn)` | Transform data before submission |
 | `.afterSubmit(fn)` | Run after successful submission |
+
+**Collaborative form** — real-time sync across tabs/users via `.persist('websocket')`:
+
+```ts
+Form.make('collab-notes')
+  .fields([
+    TextField.make('title').persist('websocket'),
+    TextareaField.make('notes').persist('websocket'),
+    ToggleField.make('published').persist('websocket'),
+  ])
+```
+
+Text fields get per-field Y.Doc with character-level CRDT sync. Non-text fields (toggle, select, date) sync via a shared Y.Map (last-write-wins). The form shows connection status and presence count when collaborative fields are present.
 
 **Advanced example** — pre-populated settings form with sections and lifecycle hooks:
 

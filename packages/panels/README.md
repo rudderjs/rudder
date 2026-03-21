@@ -150,8 +150,9 @@ TextField.make('name')
   .readonly()           // show in form, not editable; excluded from payloads
   .sortable()           // allow sorting by this column in the table
   .searchable()         // include in global search (LIKE query)
+  .default('value')     // default value for create forms (static or function)
   .collaborative()      // shorthand for .persist('websocket') — real-time Yjs sync
-  .persist()            // survive page reload (localStorage, indexeddb, or websocket)
+  .persist()            // survive page reload (localStorage, url, session, or websocket)
   .hideFrom('table' | 'create' | 'edit' | 'view')
   .hideFromTable()
   .hideFromCreate()
@@ -494,7 +495,7 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 | `Stats.make([...stats])` | Row of stat cards. Also accepts a string ID for async mode: `.data(fn)`, `.lazy()`, `.poll(ms)` |
 | `Stat.make(label)` | Single stat -- `.value(n)`, `.description(text)`, `.trend(n)` (positive=↑, negative=↓) |
 | `Table.make(title)` | Data table -- `.fromResource()`, `.fromModel()`, `.fromArray()`, `.columns()`, `.limit()`, `.sortBy()`, `.scope()`, `.searchable()`, `.paginated()`, `.remember()`, `.lazy()`, `.poll()`, `.filters()`, `.actions()`, `.reorderable()` |
-| `Column.make(name)` | Typed display column for `Table.make()` — `.label()`, `.sortable()`, `.searchable()`, `.date()`, `.badge()`, `.href()` |
+| `Column.make(name)` | Typed display column for `Table.make()` — `.label()`, `.sortable()`, `.searchable()`, `.date()`, `.badge()`, `.href()`, `.compute(fn)`, `.display(fn)` |
 | `Form.make(id)` | Standalone form — `.fields()`, `.onSubmit()`, `.description()`, `.method()`, `.action()`, `.data()`, `.beforeSubmit()`, `.afterSubmit()`, `.submitLabel()`, `.successMessage()` |
 | `Dialog.make(id)` | Modal dialog wrapper — `.trigger(label)`, `.title()`, `.description()`, `.schema([...elements])` |
 | `Chart.make(title)` | Chart -- `.chartType('line'\|'bar'\|'area'\|'pie'\|'doughnut')`, `.labels([...])`, `.datasets([...])`, `.height(n)` |
@@ -621,6 +622,28 @@ type DataSource<T> = T[] | ((ctx: PanelContext) => T[] | Promise<T[]>)
 | `.emptyMessage(text)` | Custom empty state text |
 | `.href(url)` | Override the "View all" header link |
 | `.remember(mode)` | Persist table state: `false` (default), `'localStorage'`, `'url'`, `'session'` |
+
+#### Column Computed & Display
+
+Use `.compute()` on a `Column` to derive values from the full record, and `.display()` to format any column value. Both run server-side.
+
+```ts
+// Derived column — value computed from record fields
+Column.make('wordCount').label('Words')
+  .compute((record) => record.title?.split(/\s+/).length ?? 0)
+  .display((v) => `${v} words`)
+
+// Display-only — format an existing value
+Column.make('price').label('Price')
+  .display((v) => `$${((v as number) / 100).toFixed(2)}`)
+```
+
+| Method | Description |
+|--------|-------------|
+| `.compute(fn)` | Derive value from the full record (server-side) |
+| `.display(fn)` | Format value for display (server-side) |
+
+`.compute()` creates derived columns that have no database backing. `.display()` formats existing or computed values. Chain both to derive and format in one column.
 
 #### Table State Persistence (`.remember()`)
 
@@ -1550,6 +1573,12 @@ fields() {
     // localStorage — silent save/restore per field
     TextField.make('title').persist(),
 
+    // URL query param — shareable, SSR'd
+    TextField.make('q').persist('url'),
+
+    // Server session — SSR'd, clean URL
+    TextField.make('draft').persist('session'),
+
     // y-indexeddb — Yjs offline persistence (survives refresh)
     TextField.make('body').persist('indexeddb'),
 
@@ -1562,14 +1591,50 @@ fields() {
 }
 ```
 
-| Mode | Mechanism |
-|---|---|
-| `.persist()` | localStorage — silent save/restore per field |
-| `.persist('indexeddb')` | y-indexeddb — Y.Doc survives browser refresh |
-| `.persist('websocket')` | y-websocket — real-time sync between editors |
-| `.persist(['websocket', 'indexeddb'])` | Both — real-time + offline persistence |
+| Mode | Mechanism | SSR | Shareable |
+|---|---|---|---|
+| `.persist()` | localStorage — silent save/restore per field | No | No |
+| `.persist('url')` | URL query param — shareable links | Yes | Yes |
+| `.persist('session')` | Server session — clean URL, SSR'd | Yes | No |
+| `.persist('indexeddb')` | y-indexeddb — Y.Doc survives browser refresh | No | No |
+| `.persist('websocket')` | y-websocket — real-time sync between editors | No | Synced |
+| `.persist(['websocket', 'indexeddb'])` | Both — real-time + offline persistence | No | Synced |
 
 `.persist()` is independent from `draftRecovery`. Use `draftRecovery` for full-form backup with a restore banner. Use `.persist()` for individual fields that should quietly survive page reloads.
+
+### Default Values (`.default()`)
+
+Set initial values for create forms. Accepts a static value or a function.
+
+```ts
+TextField.make('status').default('draft')
+SelectField.make('role').default('user')
+DateField.make('startDate').default(() => new Date().toISOString())
+```
+
+| Method | Description |
+|--------|-------------|
+| `.default(value)` | Static default value for create forms |
+| `.default(fn)` | Function default — resolved server-side |
+
+**Priority**: `.data(fn)` on Form > field `.persist()` restored value > `.default()`. On the edit page, the existing record value always takes precedence.
+
+### Collaborative Fields in Forms
+
+Standalone `Form.make()` elements support collaborative editing via `.persist('websocket')`:
+
+```ts
+Form.make('collab-notes')
+  .fields([
+    TextField.make('title').persist('websocket'),
+    TextareaField.make('notes').persist('websocket'),
+    ToggleField.make('published').persist('websocket'),
+  ])
+```
+
+- Text fields get per-field Y.Doc with character-level CRDT sync
+- Non-text fields (toggle, select, date) sync via a shared Y.Map (last-write-wins)
+- Shows connection status and presence count when collaborative fields are present
 
 ### Collaborative Editing
 
