@@ -233,7 +233,7 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
         const existing = computeTimerRef.current.get(dep.fieldName)
         if (existing) clearTimeout(existing)
 
-        const timer = setTimeout(() => {
+        const doCompute = () => {
           const depValues: Record<string, unknown> = {}
           const current = valuesRef.current
           for (const f of dep.from) depValues[f] = current[f]
@@ -251,8 +251,14 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
               }
             })
             .catch(() => {})
-        }, dep.debounce)
-        computeTimerRef.current.set(dep.fieldName, timer)
+        }
+
+        if (dep.debounce <= 0) {
+          doCompute()
+        } else {
+          const timer = setTimeout(doCompute, dep.debounce)
+          computeTimerRef.current.set(dep.fieldName, timer)
+        }
       }
     }
     setFieldErrors(prev => { const n = { ...prev }; delete n[name]; return n })

@@ -249,6 +249,7 @@ export class FieldsDemo extends Page {
           TextField.make('fullName').label('Full Name (derived)')
             .from('firstName', 'lastName')
             .derive(({ firstName, lastName }) => `${firstName ?? ''} ${lastName ?? ''}`.trim())
+            .debounce(0)
             .readonly(),
           TextField.make('articleTitle').label('Article Title'),
           TextField.make('slug').label('URL Slug (derived, editable)')
