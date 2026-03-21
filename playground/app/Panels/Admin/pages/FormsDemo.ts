@@ -116,6 +116,45 @@ export class FormsDemo extends Page {
           console.log('[hooks-demo] received:', data)
         }),
 
+      // ── Form with Server Validation ────────────────────────
+      Heading.make('Server Validation').level(2),
+      Text.make('All .required() and .validate() rules run server-side. Try submitting empty fields or invalid values.'),
+
+      Form.make('validation-demo')
+        .fields([
+          TextField.make('username').label('Username').required()
+            .validate(async (value) => {
+              const v = String(value ?? '')
+              if (v.length < 3) return 'Username must be at least 3 characters.'
+              if (!/^[a-z0-9_]+$/.test(v)) return 'Username can only contain lowercase letters, numbers, and underscores.'
+              return true
+            }),
+          EmailField.make('email').label('Email').required()
+            .validate(async (value) => {
+              const v = String(value ?? '')
+              if (v && !v.includes('@')) return 'Please enter a valid email address.'
+              return true
+            }),
+          NumberField.make('age').label('Age').required()
+            .validate(async (value) => {
+              const n = Number(value)
+              if (isNaN(n) || n < 18) return 'Must be at least 18.'
+              if (n > 120) return 'Must be 120 or less.'
+              return true
+            }),
+          TextareaField.make('bio').label('Bio')
+            .validate(async (value) => {
+              const v = String(value ?? '')
+              if (v.length > 200) return `Bio must be 200 characters or less (currently ${v.length}).`
+              return true
+            }),
+        ])
+        .submitLabel('Register')
+        .successMessage('Registration successful!')
+        .onSubmit(async (data) => {
+          console.log('[validation form]', data)
+        }),
+
       // ── Dialog with Form ───────────────────────────────────
       Heading.make('Dialog with Form').level(2),
       Text.make('A modal dialog wrapping a form. Click the button to open.'),
