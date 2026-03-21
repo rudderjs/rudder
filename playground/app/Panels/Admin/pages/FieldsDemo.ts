@@ -4,6 +4,7 @@ import {
   TextareaField, SelectField, BooleanField, ToggleField,
   DateField, ColorField, TagsField, SlugField,
   JsonField, HiddenField, FileField,
+  RepeaterField, BuilderField, RichContentField, Block,
 } from '@boostkit/panels'
 import type { PanelContext } from '@boostkit/panels'
 
@@ -323,6 +324,165 @@ LEFT JOIN comments c ON c.article_id = a.id
 GROUP BY a.id
 ORDER BY comments DESC
 LIMIT 10;`).language('sql').title('Top Articles by Comments').lineNumbers(),
+
+      // ── Repeater Field ────────────────────────────────────────
+      Heading.make('Repeater Field').level(2),
+      Text.make('RepeaterField renders a list of repeatable field groups. Add, remove, and reorder items with drag-and-drop.'),
+
+      Form.make('repeater-demo')
+        .fields([
+          RepeaterField.make('features').label('Features').addLabel('Add Feature').maxItems(5).schema([
+            TextField.make('title').label('Title').required(),
+            TextareaField.make('description').label('Description'),
+            SelectField.make('status').label('Status').default('planned').options([
+              { label: 'Planned', value: 'planned' },
+              { label: 'In Progress', value: 'in-progress' },
+              { label: 'Done', value: 'done' },
+            ]),
+          ]),
+        ])
+        .submitLabel('Save Features')
+        .successMessage('Features saved!')
+        .onSubmit(async (data) => { console.log('[repeater]', data) }),
+
+      Code.make(`RepeaterField.make('features')
+  .label('Features')
+  .addLabel('Add Feature')
+  .maxItems(5)
+  .schema([
+    TextField.make('title').label('Title').required(),
+    TextareaField.make('description').label('Description'),
+    SelectField.make('status').label('Status').options([...]),
+  ])`).language('typescript').title('Repeater API'),
+
+      // ── Builder Field ─────────────────────────────────────────
+      Heading.make('Builder Field').level(2),
+      Text.make('BuilderField is a page/content builder. Users pick from block types, each with its own fields. Drag to reorder.'),
+
+      Form.make('builder-demo')
+        .fields([
+          BuilderField.make('pageContent').label('Page Content').addLabel('Add Block').blocks([
+            Block.make('hero')
+              .label('Hero Section')
+              .icon('🦸')
+              .schema([
+                TextField.make('title').label('Headline').required(),
+                TextareaField.make('subtitle').label('Subtitle'),
+                SelectField.make('alignment').label('Alignment').default('center').options([
+                  { label: 'Left', value: 'left' },
+                  { label: 'Center', value: 'center' },
+                  { label: 'Right', value: 'right' },
+                ]),
+              ]),
+            Block.make('textBlock')
+              .label('Text Block')
+              .icon('📝')
+              .schema([
+                TextareaField.make('content').label('Content').required(),
+              ]),
+            Block.make('callToAction')
+              .label('Call to Action')
+              .icon('📣')
+              .schema([
+                TextField.make('title').label('Title').required(),
+                TextField.make('buttonText').label('Button Text').default('Learn More'),
+                TextField.make('url').label('URL'),
+                SelectField.make('style').label('Style').default('primary').options([
+                  { label: 'Primary', value: 'primary' },
+                  { label: 'Outline', value: 'outline' },
+                  { label: 'Ghost', value: 'ghost' },
+                ]),
+              ]),
+            Block.make('features')
+              .label('Features Grid')
+              .icon('✨')
+              .schema([
+                TextField.make('title').label('Section Title'),
+                NumberField.make('columns').label('Columns').default(3),
+              ]),
+            Block.make('testimonial')
+              .label('Testimonial')
+              .icon('💬')
+              .schema([
+                TextareaField.make('quote').label('Quote').required(),
+                TextField.make('author').label('Author Name').required(),
+                TextField.make('role').label('Role / Company'),
+              ]),
+          ]),
+        ])
+        .submitLabel('Save Page')
+        .successMessage('Page content saved!')
+        .onSubmit(async (data) => { console.log('[builder]', data) }),
+
+      Code.make(`BuilderField.make('pageContent')
+  .label('Page Content')
+  .addLabel('Add Block')
+  .blocks([
+    Block.make('hero')
+      .label('Hero Section')
+      .icon('🦸')
+      .schema([
+        TextField.make('title').label('Headline').required(),
+        TextareaField.make('subtitle').label('Subtitle'),
+      ]),
+    Block.make('callToAction')
+      .label('Call to Action')
+      .icon('📣')
+      .schema([
+        TextField.make('title').required(),
+        TextField.make('buttonText').default('Learn More'),
+        TextField.make('url'),
+      ]),
+  ])`).language('typescript').title('Builder API'),
+
+      // ── Rich Content Field ────────────────────────────────────
+      Heading.make('Rich Content Field (Lexical)').level(2),
+      Text.make('RichContentField renders a Lexical rich-text editor. Requires @boostkit/panels-lexical. Supports custom blocks and real-time collaboration.'),
+
+      Form.make('richcontent-demo')
+        .fields([
+          RichContentField.make('article').label('Article Content')
+            .placeholder('Start writing...')
+            .blocks([
+              Block.make('callout')
+                .label('Callout')
+                .icon('💡')
+                .schema([
+                  TextField.make('title').label('Title'),
+                  TextareaField.make('content').label('Content').required(),
+                  SelectField.make('type').label('Type').default('info').options([
+                    { label: 'Info', value: 'info' },
+                    { label: 'Warning', value: 'warning' },
+                    { label: 'Success', value: 'success' },
+                    { label: 'Error', value: 'error' },
+                  ]),
+                ]),
+              Block.make('embed')
+                .label('Embed')
+                .icon('🔗')
+                .schema([
+                  TextField.make('url').label('URL').required(),
+                  TextField.make('caption').label('Caption'),
+                ]),
+            ]),
+        ])
+        .submitLabel('Save Article')
+        .successMessage('Article saved!')
+        .onSubmit(async (data) => { console.log('[richcontent]', data) }),
+
+      Code.make(`RichContentField.make('article')
+  .label('Article Content')
+  .placeholder('Start writing...')
+  .blocks([
+    Block.make('callout')
+      .label('Callout')
+      .icon('💡')
+      .schema([
+        TextField.make('title'),
+        TextareaField.make('content').required(),
+        SelectField.make('type').options([...]),
+      ]),
+  ])`).language('typescript').title('Rich Content API'),
     ]
   }
 }
