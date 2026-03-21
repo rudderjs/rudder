@@ -17,7 +17,7 @@ export class TablesDemo extends Page {
       Heading.make('Table Examples'),
       Text.make('Demonstrates all Table features: pagination, search, sort, remember, lazy, scope, fromArray.'),
 
-      // ── Pages pagination + search + remember(url) ──────────
+      // ── Pages pagination + search + remember(url) + live ──────────
       Heading.make('Paginated Table (pages + URL persist)').level(2),
       Text.make('Search, sort, and pagination state persists in the URL. Try searching, sorting, then sharing the URL.'),
 
