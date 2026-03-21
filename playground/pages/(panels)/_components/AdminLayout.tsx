@@ -385,10 +385,8 @@ function SidebarNavigation({ items, currentSlug, badges, panelMeta }: {
                       <ResourceIcon icon={item.icon} />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
-                    <CollapsibleTrigger asChild>
-                      <button className="p-1.5 rounded hover:bg-accent shrink-0">
-                        <svg className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                      </button>
+                    <CollapsibleTrigger className="p-1.5 rounded hover:bg-accent shrink-0 cursor-pointer">
+                      <svg className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                     </CollapsibleTrigger>
                   </div>
                   <CollapsibleContent>

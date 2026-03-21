@@ -35,6 +35,7 @@ export interface FieldMeta {
   persist?:            'localStorage' | 'url' | 'session' | string[]
   yjsProviders?:      string[]
   defaultValue?:       unknown
+  from?:               string[]
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -58,6 +59,8 @@ export abstract class Field {
   protected _yjsProviders: string[] = []
   protected _persist: false | 'localStorage' | 'url' | 'session' | string[] = false
   protected _default?: unknown | ((ctx: unknown) => unknown)
+  protected _from?: string[]
+  protected _reactiveComputeFn?: (values: Record<string, unknown>) => unknown
 
   constructor(name: string) {
     this._name = name
@@ -97,6 +100,41 @@ export abstract class Field {
     if (typeof this._default === 'function') return (this._default as (ctx: unknown) => unknown)(ctx)
     return this._default
   }
+
+  /**
+   * Declare field dependencies — this field auto-fills when the named fields change.
+   * Used with `.compute()` to derive the value reactively.
+   *
+   * @example
+   * TextField.make('slug').from('title')
+   *   .compute(({ title }) => title.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+   *
+   * NumberField.make('total').from('price', 'quantity')
+   *   .compute(({ price, quantity }) => price * quantity)
+   */
+  from(...fields: string[]): this {
+    this._from = fields
+    return this
+  }
+
+  /**
+   * Derive this field's value from its dependencies (declared via `.from()`).
+   * Runs on every dependency change (debounced). The field remains editable unless `.readonly()`.
+   *
+   * @example
+   * TextField.make('preview').from('title', 'status')
+   *   .derive(({ title, status }) => `${title} [${status}]`)
+   *   .readonly()
+   */
+  derive(fn: (values: Record<string, unknown>) => unknown): this {
+    this._reactiveComputeFn = fn
+    return this
+  }
+
+  /** @internal */
+  getFrom(): string[] | undefined { return this._from }
+  /** @internal */
+  getDeriveFn(): ((values: Record<string, unknown>) => unknown) | undefined { return this._reactiveComputeFn }
 
   /** Show in forms but not editable. Excluded from create / edit payloads. */
   readonly(value = true): this {
@@ -422,6 +460,7 @@ export abstract class Field {
     if (this._default !== undefined && typeof this._default !== 'function') {
       meta.defaultValue = this._default
     }
+    if (this._from && this._from.length > 0) meta.from = this._from
     return meta
   }
 }

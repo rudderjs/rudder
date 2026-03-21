@@ -26,6 +26,20 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
     }
   }
 
+  // Build dependency map: when field X changes, recompute fields Y, Z
+  const computeDeps = new Map<string, Array<{ fieldName: string; from: string[] }>>()
+  for (const item of form.fields) {
+    const field = item as FieldMeta
+    if (field.name && field.from && field.from.length > 0) {
+      for (const dep of field.from) {
+        const list = computeDeps.get(dep) ?? []
+        list.push({ fieldName: field.name, from: field.from })
+        computeDeps.set(dep, list)
+      }
+    }
+  }
+  const computeTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
   // Merge: field defaults → localStorage/url restored → SSR initialValues
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     const result: Record<string, unknown> = {}
@@ -203,8 +217,44 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.id, pathSegment])
 
+  // Ref to track latest values for compute without state updater
+  const valuesRef = useRef(values)
+  valuesRef.current = values
+
   function handleChange(name: string, value: unknown) {
-    setValues(prev => ({ ...prev, [name]: value }))
+    const next = { ...valuesRef.current, [name]: value }
+    valuesRef.current = next
+    setValues(next)
+
+    // Trigger recomputation for dependent fields (debounced)
+    const dependents = computeDeps.get(name)
+    if (dependents && dependents.length > 0) {
+      for (const dep of dependents) {
+        const existing = computeTimerRef.current.get(dep.fieldName)
+        if (existing) clearTimeout(existing)
+
+        const timer = setTimeout(() => {
+          const depValues: Record<string, unknown> = {}
+          const current = valuesRef.current
+          for (const f of dep.from) depValues[f] = current[f]
+
+          fetch(`/${pathSegment}/api/_forms/${form.id}/compute/${dep.fieldName}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(depValues),
+          })
+            .then(r => r.ok ? r.json() : null)
+            .then((body: { value?: unknown } | null) => {
+              if (body?.value !== undefined) {
+                valuesRef.current = { ...valuesRef.current, [dep.fieldName]: body.value }
+                setValues(valuesRef.current)
+              }
+            })
+            .catch(() => {})
+        }, 200)
+        computeTimerRef.current.set(dep.fieldName, timer)
+      }
+    }
     setFieldErrors(prev => { const n = { ...prev }; delete n[name]; return n })
     persistFieldValue(name, value)
 
