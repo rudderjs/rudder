@@ -136,12 +136,12 @@ export class TablesDemo extends Page {
         .fromModel(Article)
         .columns([
           Column.make('title').label('Title').sortable(),
-          Column.make('wordCount').label('Words')
+          Column.make('wordCount').label('Title Words')
             .compute((r) => {
-              const text = String(r['excerpt'] ?? '')
+              const text = String(r['title'] ?? '')
               return text.trim() ? text.trim().split(/\s+/).length : 0
             })
-            .display((v) => `${v} words`),
+            .display((v) => `${v} ${Number(v) === 1 ? 'word' : 'words'}`),
           Column.make('status').label('Status')
             .compute((r) => String(r['draftStatus'] ?? 'unknown'))
             .display((v) => String(v).toUpperCase())
@@ -149,7 +149,7 @@ export class TablesDemo extends Page {
           Column.make('createdAt').label('Created').date(),
         ])
         .sortBy('createdAt', 'DESC')
-        .limit(5).paginated(),
+        .limit(20),
 
       // ── Async fromArray (external API) ─────────────────────
       Heading.make('External API Table').level(2),
