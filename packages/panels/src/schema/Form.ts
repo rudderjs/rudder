@@ -28,6 +28,8 @@ export interface FormElementMeta {
   wsLivePath?:     string | null
   docName?:        string | null
   liveProviders?:  string[]
+  /** True when field was placed directly in schema (no Form wrapper) */
+  standalone?:     boolean
 }
 
 // ─── Form class ─────────────────────────────────────────────

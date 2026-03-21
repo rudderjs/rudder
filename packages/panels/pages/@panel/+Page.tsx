@@ -6,8 +6,8 @@ import { useConfig } from 'vike-react/useConfig'
 import { SchemaElementRenderer } from '../_components/SchemaElementRenderer.js'
 import { DashboardGrid }  from '../_components/DashboardGrid.js'
 import { StandaloneWidget } from '../_components/StandaloneWidget.js'
-import { FormElement }   from '../_components/FormElement.js'
-import { DialogElement } from '../_components/DialogElement.js'
+import { SchemaForm }   from '../_components/SchemaForm.js'
+import { SchemaDialog } from '../_components/SchemaDialog.js'
 import { SchemaTabs } from '../_components/SchemaTabs.js'
 import { SchemaSection } from '../_components/SchemaSection.js'
 import type { PanelSchemaElementMeta, PanelI18n, FormElementMeta, DialogElementMeta, WidgetMeta } from '@boostkit/panels'
@@ -125,7 +125,7 @@ export default function PanelRootPage() {
 
         if (el.type === 'form') {
           return (
-            <FormElement
+            <SchemaForm
               key={`form-${(el as { id?: string }).id ?? gi}`}
               form={el as FormElementMeta}
               panelPath={panelMeta.path}
@@ -136,7 +136,7 @@ export default function PanelRootPage() {
 
         if (el.type === 'dialog') {
           return (
-            <DialogElement
+            <SchemaDialog
               key={`dialog-${(el as { id?: string }).id ?? gi}`}
               dialog={el as DialogElementMeta}
               panelPath={panelMeta.path}

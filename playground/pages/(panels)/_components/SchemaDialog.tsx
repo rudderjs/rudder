@@ -1,19 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import type { DialogElementMeta, PanelI18n, PanelSchemaElementMeta } from '@boostkit/panels'
+import type { SchemaDialogMeta, PanelI18n, PanelSchemaElementMeta } from '@boostkit/panels'
 import type { FormElementMeta } from '@boostkit/panels'
-import { FormElement } from './FormElement.js'
+import { SchemaForm } from './SchemaForm.js'
 import { SchemaElementRenderer } from './SchemaElementRenderer.js'
 
-interface DialogElementProps {
-  dialog:     DialogElementMeta
+interface SchemaDialogProps {
+  dialog:     SchemaDialogMeta
   panelPath:  string
   pathSegment: string
   i18n:       PanelI18n
 }
 
-export function DialogElement({ dialog, panelPath, i18n }: DialogElementProps) {
+export function SchemaDialog({ dialog, panelPath, i18n }: SchemaDialogProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -68,7 +68,7 @@ export function DialogElement({ dialog, panelPath, i18n }: DialogElementProps) {
               {(dialog.elements as PanelSchemaElementMeta[]).map((el, i: number) => {
                 if (el.type === 'form') {
                   return (
-                    <FormElement
+                    <SchemaForm
                       key={`df-${(el as FormElementMeta).id ?? i}`}
                       form={el as FormElementMeta}
                       panelPath={panelPath}

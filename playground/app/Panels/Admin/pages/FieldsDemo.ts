@@ -20,6 +20,7 @@ export class FieldsDemo extends Page {
       // ── Text Fields ────────────────────────────────────────
       Heading.make('Text Fields').level(2),
       Text.make('TextField, EmailField, PasswordField, TextareaField.'),
+      TextField.make('test').label('Test field'),
 
       Form.make('text-fields')
         .fields([

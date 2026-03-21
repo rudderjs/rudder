@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { SchemaElementRenderer } from './SchemaElementRenderer.js'
 import { StandaloneWidget } from './StandaloneWidget.js'
-import { FormElement } from './FormElement.js'
-import { DialogElement } from './DialogElement.js'
+import { SchemaForm } from './SchemaForm.js'
+import { SchemaDialog } from './SchemaDialog.js'
 import { SchemaTabs } from './SchemaTabs.js'
 import type { PanelSchemaElementMeta, FormElementMeta, DialogElementMeta } from '@boostkit/panels'
 import type { WidgetWithData } from './WidgetCard.js'
@@ -64,7 +64,7 @@ export function SchemaSection({ section, panelPath, pathSegment, i18n, urlSearch
               }
               if (el.type === 'form') {
                 return (
-                  <FormElement key={`sf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
+                  <SchemaForm key={`sf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
                 )
               }
               if (el.type === 'tabs') {
@@ -87,7 +87,7 @@ export function SchemaSection({ section, panelPath, pathSegment, i18n, urlSearch
               }
               if (el.type === 'dialog') {
                 return (
-                  <DialogElement key={`sd-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
+                  <SchemaDialog key={`sd-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
                 )
               }
               if (el.type === 'section') {

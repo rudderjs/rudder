@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { FormElementMeta, PanelI18n, FieldMeta } from '@boostkit/panels'
+import type { SchemaFormMeta, PanelI18n, FieldMeta } from '@boostkit/panels'
 import { FieldInput } from './FieldInput.js'
 
-interface FormElementProps {
-  form:       FormElementMeta
+interface SchemaFormProps {
+  form:       SchemaFormMeta
   panelPath:  string
   i18n:       PanelI18n
 }
@@ -13,9 +13,10 @@ interface FormElementProps {
 // Text-based field types that get per-field Y.Doc (not shared Y.Map)
 const TEXT_TYPES = new Set(['text', 'textarea', 'email', 'richcontent', 'content'])
 
-export function FormElement({ form, panelPath, i18n }: FormElementProps) {
+export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
   const pathSegment = panelPath.replace(/^\//, '')
-  const formYjs = form as FormElementMeta & { yjs?: boolean; wsLivePath?: string | null; docName?: string | null; liveProviders?: string[] }
+  const isStandalone = (form as SchemaFormMeta & { standalone?: boolean }).standalone === true
+  const formYjs = form as SchemaFormMeta & { yjs?: boolean; wsLivePath?: string | null; docName?: string | null; liveProviders?: string[] }
 
   // Build a map of field persist modes for quick lookup
   const fieldPersistModes = new Map<string, string>()
@@ -298,7 +299,7 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
     }
   }
 
-  if (submitted) {
+  if (!isStandalone && submitted) {
     return (
       <div>
         <p className="text-sm text-muted-foreground">{form.successMessage ?? 'Submitted successfully.'}</p>
@@ -320,44 +321,77 @@ export function FormElement({ form, panelPath, i18n }: FormElementProps) {
           )}
         </div>
       )}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {form.fields.map(item => {
-          const field = item as FieldMeta
-          if (!field.name) return null
-          return (
-            <div key={field.name} className="flex flex-col gap-1.5">
-              {field.label && (
-                <label className="text-sm font-medium leading-none">
-                  {field.label}
-                  {field.required && <span className="text-destructive ml-0.5">*</span>}
-                </label>
-              )}
-              <FieldInput
-                field={field}
-                value={values[field.name] ?? ''}
-                onChange={v => handleChange(field.name, v)}
-                uploadBase={panelPath.replace(/\/$/, '') + '/api'}
-                i18n={i18n}
-                {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
-                {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
-                {...(userName ? { userName } : {})}
-                {...(userColor ? { userColor } : {})}
-              />
-              {fieldErrors[field.name] && (
-                <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
-              )}
-            </div>
-          )
-        })}
-        {serverError && <p className="text-sm text-destructive">{serverError}</p>}
-        <div>
-          <button type="submit" disabled={submitting}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-          >
-            {submitting ? '...' : (form.submitLabel ?? 'Submit')}
-          </button>
+      {isStandalone ? (
+        <div className="flex flex-col gap-4">
+          {form.fields.map(item => {
+            const field = item as FieldMeta
+            if (!field.name) return null
+            return (
+              <div key={field.name} className="flex flex-col gap-1.5">
+                {field.label && (
+                  <label className="text-sm font-medium leading-none">
+                    {field.label}
+                    {field.required && <span className="text-destructive ml-0.5">*</span>}
+                  </label>
+                )}
+                <FieldInput
+                  field={field}
+                  value={values[field.name] ?? ''}
+                  onChange={v => handleChange(field.name, v)}
+                  uploadBase={panelPath.replace(/\/$/, '') + '/api'}
+                  i18n={i18n}
+                  {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
+                  {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
+                  {...(userName ? { userName } : {})}
+                  {...(userColor ? { userColor } : {})}
+                />
+                {fieldErrors[field.name] && (
+                  <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
+                )}
+              </div>
+            )
+          })}
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {form.fields.map(item => {
+            const field = item as FieldMeta
+            if (!field.name) return null
+            return (
+              <div key={field.name} className="flex flex-col gap-1.5">
+                {field.label && (
+                  <label className="text-sm font-medium leading-none">
+                    {field.label}
+                    {field.required && <span className="text-destructive ml-0.5">*</span>}
+                  </label>
+                )}
+                <FieldInput
+                  field={field}
+                  value={values[field.name] ?? ''}
+                  onChange={v => handleChange(field.name, v)}
+                  uploadBase={panelPath.replace(/\/$/, '') + '/api'}
+                  i18n={i18n}
+                  {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
+                  {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
+                  {...(userName ? { userName } : {})}
+                  {...(userColor ? { userColor } : {})}
+                />
+                {fieldErrors[field.name] && (
+                  <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
+                )}
+              </div>
+            )
+          })}
+          {serverError && <p className="text-sm text-destructive">{serverError}</p>}
+          <div>
+            <button type="submit" disabled={submitting}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            >
+              {submitting ? '...' : (form.submitLabel ?? 'Submit')}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }

@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { SchemaElementRenderer } from './SchemaElementRenderer.js'
 import { StandaloneWidget } from './StandaloneWidget.js'
-import { FormElement } from './FormElement.js'
-import { DialogElement } from './DialogElement.js'
+import { SchemaForm } from './SchemaForm.js'
+import { SchemaDialog } from './SchemaDialog.js'
 import type { PanelSchemaElementMeta, FormElementMeta, DialogElementMeta } from '@boostkit/panels'
 import type { WidgetWithData } from './WidgetCard.js'
 import { slugify } from '../_lib/persist.js'
@@ -181,12 +181,12 @@ export function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, 
           }
           if (el.type === 'form') {
             return (
-              <FormElement key={`${activeIdx}-tf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
+              <SchemaForm key={`${activeIdx}-tf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
             )
           }
           if (el.type === 'dialog') {
             return (
-              <DialogElement key={`${activeIdx}-td-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
+              <SchemaDialog key={`${activeIdx}-td-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
             )
           }
           if (el.type === 'dashboard' && renderDashboard) {
