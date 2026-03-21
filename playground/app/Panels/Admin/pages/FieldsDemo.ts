@@ -237,6 +237,35 @@ export class FieldsDemo extends Page {
         .submitLabel('Save')
         .successMessage('Saved!')
         .onSubmit(async (data) => { console.log('[collab form]', data) }),
+
+      // ── Reactive Derived Fields ────────────────────────────
+      Heading.make('Reactive Derived Fields').level(2),
+      Text.make('Fields with .from() + .derive() — auto-compute from other fields as you type.'),
+
+      Form.make('derived-demo')
+        .fields([
+          TextField.make('firstName').label('First Name').default('John'),
+          TextField.make('lastName').label('Last Name').default('Doe'),
+          TextField.make('fullName').label('Full Name (derived)')
+            .from('firstName', 'lastName')
+            .derive(({ firstName, lastName }) => `${firstName ?? ''} ${lastName ?? ''}`.trim())
+            .readonly(),
+          TextField.make('articleTitle').label('Article Title'),
+          TextField.make('slug').label('URL Slug (derived, editable)')
+            .from('articleTitle')
+            .derive(({ articleTitle }) => String(articleTitle ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')),
+          TextareaField.make('body').label('Body'),
+          TextField.make('wordCount').label('Word Count (derived)')
+            .from('body')
+            .derive(({ body }) => {
+              const words = String(body ?? '').trim().split(/\s+/).filter(Boolean).length
+              return `${words} ${words === 1 ? 'word' : 'words'}`
+            })
+            .readonly(),
+        ])
+        .submitLabel('Submit')
+        .successMessage('Submitted!')
+        .onSubmit(async (data) => { console.log('[derived form]', data) }),
     ]
   }
 }

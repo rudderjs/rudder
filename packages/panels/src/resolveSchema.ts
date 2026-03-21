@@ -20,6 +20,7 @@ import type { Field } from './Field.js'
 import type { Column } from './schema/Column.js'
 import { debugWarn } from './debug.js'
 import { FormRegistry } from './FormRegistry.js'
+import { ComputeRegistry } from './ComputeRegistry.js'
 import { TableRegistry } from './TableRegistry.js'
 import { StatsRegistry } from './StatsRegistry.js'
 import { TabsRegistry } from './TabsRegistry.js'
@@ -622,11 +623,32 @@ export async function resolveSchema(
         } catch (e) { debugWarn('form.data', e) }
       }
 
+      // 4. Register compute functions and compute initial values
+      for (const field of formFields) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const f = field as any
+        if (typeof f.getFrom === 'function' && typeof f.getDeriveFn === 'function') {
+          const fromFields = f.getFrom() as string[] | undefined
+          const computeFn = f.getDeriveFn() as ((values: Record<string, unknown>) => unknown) | undefined
+          if (fromFields && fromFields.length > 0 && computeFn) {
+            const fieldName = f.getName() as string
+            // Register for API recomputation
+            ComputeRegistry.register(panel.getName(), `${formId}:${fieldName}`, { from: fromFields, compute: computeFn })
+            // Compute initial value from current initialValues
+            const depValues: Record<string, unknown> = {}
+            for (const dep of fromFields) depValues[dep] = initialValues[dep]
+            try {
+              initialValues[fieldName] = computeFn(depValues)
+            } catch { /* compute failed */ }
+          }
+        }
+      }
+
       if (Object.keys(initialValues).length > 0) {
         formMeta.initialValues = initialValues
       }
 
-      // 4. Detect collaborative fields and set up Yjs config
+      // 5. Detect collaborative fields and set up Yjs config
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const yjsFields = formFields.filter((f: any) => typeof f.isYjs === 'function' && f.isYjs())
       if (yjsFields.length > 0) {
