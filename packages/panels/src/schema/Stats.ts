@@ -15,6 +15,7 @@ export interface StatsElementMeta {
   stats:         PanelStatMeta[]
   lazy?:         boolean
   pollInterval?: number
+  live?:         boolean
 }
 
 export class Stat {
@@ -60,6 +61,7 @@ export class Stats {
   private _stats: Stat[] = []
   private _dataFn?: (ctx: PanelContext) => Promise<PanelStatMeta[]>
   private _lazy = false
+  private _live = false
   private _pollInterval?: number
   private _id?: string
 
@@ -112,6 +114,12 @@ export class Stats {
     return this
   }
 
+  /** Enable real-time updates via WebSocket. */
+  live(): this {
+    this._live = true
+    return this
+  }
+
   /** Re-fetch stats every N milliseconds. */
   poll(ms: number): this {
     this._pollInterval = ms
@@ -124,6 +132,7 @@ export class Stats {
 
   getDataFn(): ((ctx: PanelContext) => Promise<PanelStatMeta[]>) | undefined { return this._dataFn }
   isLazy(): boolean { return this._lazy }
+  isLive(): boolean { return this._live }
   getPollInterval(): number | undefined { return this._pollInterval }
   getStats(): Stat[] { return this._stats }
   getType(): 'stats' { return 'stats' }
@@ -137,6 +146,7 @@ export class Stats {
     if (id) meta.id = id
     if (this._lazy) meta.lazy = true
     if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
+    if (this._live) meta.live = true
     return meta
   }
 }

@@ -370,6 +370,17 @@ export function mountMetaRoutes(
 
     try {
       await action.execute(records)
+
+      // Broadcast live update if table has .live()
+      if (table.isLive()) {
+        try {
+          const broadcastPkg = '@boostkit/broadcast'
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
+          broadcast(`live:table:${tableId}`, 'refresh', { action: actionName })
+        } catch { /* @boostkit/broadcast not available */ }
+      }
+
       return res.json({ success: true })
     } catch (err) {
       return res.status(422).json({ message: String(err) })

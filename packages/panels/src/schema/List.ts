@@ -16,6 +16,7 @@ export interface ListElementMeta {
   description?:  string
   lazy?:         boolean
   pollInterval?: number
+  live?:         boolean
 }
 
 export class List {
@@ -25,6 +26,7 @@ export class List {
   private _id?:          string
   private _description?: string
   private _lazy          = false
+  private _live          = false
   private _pollInterval?: number
   private _dataFn?:      (ctx: PanelContext) => Promise<ListItem[]>
 
@@ -64,6 +66,12 @@ export class List {
     return this
   }
 
+  /** Enable real-time updates via WebSocket. */
+  live(): this {
+    this._live = true
+    return this
+  }
+
   /** Re-fetch list data every N milliseconds. */
   poll(ms: number): this {
     this._pollInterval = ms
@@ -82,6 +90,7 @@ export class List {
 
   getDataFn(): ((ctx: PanelContext) => Promise<ListItem[]>) | undefined { return this._dataFn }
   isLazy(): boolean { return this._lazy }
+  isLive(): boolean { return this._live }
   getPollInterval(): number | undefined { return this._pollInterval }
   getType(): 'list' { return 'list' }
 
@@ -97,6 +106,7 @@ export class List {
     if (this._description !== undefined) meta.description = this._description
     if (this._lazy) meta.lazy = true
     if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
+    if (this._live) meta.live = true
     return meta
   }
 }

@@ -56,6 +56,8 @@ export interface TableElementMeta {
   actions?:          ActionMeta[]
   lazy?:             boolean
   pollInterval?:     number
+  live?:             boolean
+  liveChannel?:      string
   id?:               string
   remember?:         'localStorage' | 'url' | 'session'
   activeSearch?:     string
@@ -96,6 +98,7 @@ export interface TableConfig {
   actions:        Action[]
   lazy?:          boolean | undefined
   pollInterval?:  number | undefined
+  live?:          boolean | undefined
   id?:            string | undefined
   remember?:      TableRememberMode | undefined
 }
@@ -124,6 +127,7 @@ export class Table {
   private _perPage:        number  = 15
   private _lazy:           boolean = false
   private _pollInterval?:  number
+  private _live:           boolean = false
   private _id?:            string
   private _remember:       TableRememberMode = false
   private _filters:        Filter[] = []
@@ -297,6 +301,16 @@ export class Table {
   }
 
   /**
+   * Enable real-time updates via WebSocket.
+   * When data changes on the server, the table refreshes automatically.
+   * Uses @boostkit/broadcast for push notifications.
+   */
+  live(): this {
+    this._live = true
+    return this
+  }
+
+  /**
    * Persist table navigation state (page, sort, search, filters) across page loads.
    *
    * - `'localStorage'` — browser localStorage
@@ -328,6 +342,7 @@ export class Table {
 
   isLazy(): boolean { return this._lazy }
   getPollInterval(): number | undefined { return this._pollInterval }
+  isLive(): boolean { return this._live }
   getId(): string { return this._id ?? this._title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') }
 
   getType(): 'table' { return 'table' }
@@ -356,6 +371,7 @@ export class Table {
       actions:        this._actions,
       lazy:           this._lazy || undefined,
       pollInterval:   this._pollInterval,
+      live:           this._live || undefined,
       id:             this.getId(),
       remember:       this._remember || undefined,
     }

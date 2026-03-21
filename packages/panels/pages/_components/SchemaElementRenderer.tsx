@@ -346,6 +346,56 @@ function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchem
     return () => clearInterval(timer)
   }, [tableId, currentPage, search, sort, pathSegment, element.pollInterval])
 
+  // ── Live updates via WebSocket ──
+  useEffect(() => {
+    const liveChannel = (element as { liveChannel?: string }).liveChannel
+    const isLive = (element as { live?: boolean }).live
+    if (!isLive || !liveChannel) return
+
+    let destroyed = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let socket: any = null
+
+    ;(async () => {
+      try {
+        // Dynamic import — BKSocket is a publishable client file
+        const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+        const wsUrl = `${wsProto}://${window.location.host}/ws`
+
+        // Simple WebSocket subscription to the live channel
+        const ws = new WebSocket(wsUrl)
+        socket = ws
+
+        ws.onopen = () => {
+          if (destroyed) { ws.close(); return }
+          ws.send(JSON.stringify({ type: 'subscribe', channel: liveChannel }))
+        }
+
+        ws.onmessage = (event: MessageEvent) => {
+          if (destroyed) return
+          try {
+            const msg = JSON.parse(String(event.data)) as { type: string; event?: string; channel?: string }
+            if (msg.type === 'event' && msg.channel === liveChannel) {
+              // Refetch table data
+              void fetchTable()
+            }
+          } catch { /* ignore non-JSON */ }
+        }
+
+        ws.onclose = () => { socket = null }
+      } catch { /* WebSocket not available */ }
+    })()
+
+    return () => {
+      destroyed = true
+      if (socket) {
+        try { socket.send(JSON.stringify({ type: 'unsubscribe', channel: liveChannel })) } catch { /* ignore */ }
+        socket.close()
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(element as { liveChannel?: string }).liveChannel])
+
   // For non-paginated tables, sort and search client-side
   const displayRecords = hasPagination ? records : (() => {
     let result = records

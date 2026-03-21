@@ -994,5 +994,6 @@ function buildTableMeta(
   if (opts.activeSearch)          meta.activeSearch  = opts.activeSearch
   if (opts.activeSort)            meta.activeSort   = opts.activeSort
   if (opts.activeFilters)         meta.activeFilters = opts.activeFilters
+  if (config.live)                { meta.live = true; meta.liveChannel = `live:table:${tableId}` }
   return meta
 }

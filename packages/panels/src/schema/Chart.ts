@@ -24,6 +24,7 @@ export interface ChartElementMeta {
   description?:  string
   lazy?:         boolean
   pollInterval?: number
+  live?:         boolean
 }
 
 export class Chart {
@@ -35,6 +36,7 @@ export class Chart {
   private _id?:          string
   private _description?: string
   private _lazy          = false
+  private _live          = false
   private _pollInterval?: number
   private _dataFn?:      (ctx: PanelContext) => Promise<ChartDataResult>
 
@@ -84,6 +86,12 @@ export class Chart {
     return this
   }
 
+  /** Enable real-time updates via WebSocket. */
+  live(): this {
+    this._live = true
+    return this
+  }
+
   /** Re-fetch chart data every N milliseconds. */
   poll(ms: number): this {
     this._pollInterval = ms
@@ -102,6 +110,7 @@ export class Chart {
 
   getDataFn(): ((ctx: PanelContext) => Promise<ChartDataResult>) | undefined { return this._dataFn }
   isLazy(): boolean { return this._lazy }
+  isLive(): boolean { return this._live }
   getPollInterval(): number | undefined { return this._pollInterval }
   getType(): 'chart' { return 'chart' }
 
@@ -119,6 +128,7 @@ export class Chart {
     if (this._description !== undefined) meta.description = this._description
     if (this._lazy) meta.lazy = true
     if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
+    if (this._live) meta.live = true
     return meta
   }
 }

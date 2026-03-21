@@ -128,6 +128,36 @@ export class TablesDemo extends Page {
         .sortBy('createdAt', 'DESC')
         .limit(5),
 
+      // ── Live table ───────────────────────────────────────
+      Heading.make('Live Table (WebSocket)').level(2),
+      Text.make('Real-time updates via WebSocket. Execute an action — the table refreshes automatically across all open tabs.'),
+
+      Table.make('Live Articles')
+        .fromModel(Article)
+        .columns([
+          Column.make('title').label('Title').sortable().searchable(),
+          Column.make('draftStatus').label('Status').badge(),
+          Column.make('createdAt').label('Created').date(),
+        ])
+        .sortBy('createdAt', 'DESC')
+        .paginated('pages', 3)
+        .searchable()
+        .live()
+        .actions([
+          Action.make('publish').label('Publish').bulk()
+            .handler(async (records) => {
+              for (const record of records as any[]) {
+                await Article.query().update(record.id, { draftStatus: 'published', publishedAt: new Date() } as any)
+              }
+            }),
+          Action.make('delete').label('Delete').destructive().confirm('Delete?').bulk()
+            .handler(async (records) => {
+              for (const record of records as any[]) {
+                await Article.query().delete(record.id)
+              }
+            }),
+        ]),
+
       // ── Column compute + display ──────────────────────────
       Heading.make('Computed & Formatted Columns').level(2),
       Text.make('Column.compute() derives values from record. Column.display() formats for output. Both run server-side.'),
