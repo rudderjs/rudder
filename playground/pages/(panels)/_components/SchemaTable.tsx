@@ -653,24 +653,42 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
                     {hasRowActions && (
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center gap-1 justify-end">
-                          {actions.filter(a => a.row).map(action => (
-                            <button
-                              key={action.name}
-                              onClick={() => {
-                                if (action.requiresConfirm) {
-                                  if (confirm(action.confirmMessage ?? 'Are you sure?')) {
+                          {actions.filter(a => a.row).map(action => {
+                            // Navigation action — render as link
+                            if ((action as typeof action & { url?: string }).url) {
+                              const resolvedUrl = (action as typeof action & { url: string }).url
+                                .replace(/:(\w+)/g, (_, key) => encodeURIComponent(String(record[key] ?? '')))
+                              return (
+                                <a
+                                  key={action.name}
+                                  href={resolvedUrl}
+                                  title={action.label}
+                                  className="p-1 rounded transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+                                >
+                                  <span className="text-xs">{action.label}</span>
+                                </a>
+                              )
+                            }
+                            // Server action — render as button
+                            return (
+                              <button
+                                key={action.name}
+                                onClick={() => {
+                                  if (action.requiresConfirm) {
+                                    if (confirm(action.confirmMessage ?? 'Are you sure?')) {
+                                      void executeAction(action.name, [id])
+                                    }
+                                  } else {
                                     void executeAction(action.name, [id])
                                   }
-                                } else {
-                                  void executeAction(action.name, [id])
-                                }
-                              }}
-                              title={action.label}
-                              className={`p-1 rounded transition-colors ${action.destructive ? 'text-red-500 hover:bg-red-500/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
-                            >
-                              <span className="text-xs">{action.label}</span>
-                            </button>
-                          ))}
+                                }}
+                                title={action.label}
+                                className={`p-1 rounded transition-colors ${action.destructive ? 'text-red-500 hover:bg-red-500/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+                              >
+                                <span className="text-xs">{action.label}</span>
+                              </button>
+                            )
+                          })}
                         </div>
                       </td>
                     )}

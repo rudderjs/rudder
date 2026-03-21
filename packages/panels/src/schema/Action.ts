@@ -9,6 +9,7 @@ export interface ActionMeta {
   confirmMessage:  string | undefined
   bulk:            boolean
   row:             boolean
+  url?:            string
 }
 
 // ─── Action handler type ───────────────────────────────────
@@ -27,6 +28,7 @@ export class Action {
   protected _bulk            = true
   protected _row             = false
   protected _handler?:       ActionHandler
+  protected _url?:           string
 
   constructor(name: string) {
     this._name = name
@@ -76,6 +78,12 @@ export class Action {
     return this
   }
 
+  /** Client-side navigation instead of server handler. Supports :param placeholders. */
+  url(pattern: string): this {
+    this._url = pattern
+    return this
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName(): string  { return this._name }
@@ -105,6 +113,7 @@ export class Action {
       confirmMessage:  this._confirm,
       bulk:            this._bulk,
       row:             this._row,
+      ...(this._url !== undefined ? { url: this._url } : {}),
     }
   }
 }

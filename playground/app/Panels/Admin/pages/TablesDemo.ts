@@ -24,7 +24,7 @@ export class TablesDemo extends Page {
       Table.make('Articles (URL)')
         .fromModel(Article)
         .columns([
-          Column.make('title').label('Title').sortable().searchable(),
+          Column.make('title').label('Title').sortable().searchable().href('/admin/articles/:id'),
           Column.make('draftStatus').label('Status').badge().sortable(),
           Column.make('createdAt').label('Created').date().sortable(),
         ])
@@ -33,6 +33,7 @@ export class TablesDemo extends Page {
         .searchable()
         .emptyMessage('No articles found.')
         .remember('url')
+        .live()
         .filters([
           SelectFilter.make('draftStatus').label('Status').options([
             { label: 'Published', value: 'published' },
@@ -40,8 +41,20 @@ export class TablesDemo extends Page {
           ]),
         ])
         .actions([
-          Action.make('publish').label('Publish').bulk(),
-          Action.make('delete').label('Delete').destructive().confirm('Delete selected articles?').bulk(),
+          Action.make('edit').label('Edit').icon('pencil').row().url('/admin/articles/:id/edit'),
+          Action.make('view').label('View').icon('eye').row().url('/admin/articles/:id'),
+          Action.make('publish').label('Publish').bulk()
+            .handler(async (records) => {
+              for (const record of records as any[]) {
+                await Article.query().update(record.id, { draftStatus: 'published', publishedAt: new Date() } as any)
+              }
+            }),
+          Action.make('delete').label('Delete').destructive().confirm('Delete selected articles?').bulk()
+            .handler(async (records) => {
+              for (const record of records as any[]) {
+                await Article.query().delete(record.id)
+              }
+            }),
         ]),
 
       // ── Load More pagination + remember(localStorage) ──────
