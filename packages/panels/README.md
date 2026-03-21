@@ -492,6 +492,7 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 |---|---|
 | `Heading.make(text)` | Section heading. `.level(1\|2\|3)` controls size (default: `1`) |
 | `Text.make(content)` | Paragraph of text |
+| `Code.make(code)` | Syntax-highlighted code block (shiki, lazy). `.language(lang)`, `.title(text)`, `.lineNumbers()` |
 | `Stats.make([...stats])` | Row of stat cards. Also accepts a string ID for async mode: `.data(fn)`, `.lazy()`, `.poll(ms)` |
 | `Stat.make(label)` | Single stat -- `.value(n)`, `.description(text)`, `.trend(n)` (positive=↑, negative=↓) |
 | `Table.make(title)` | Data table -- `.fromResource()`, `.fromModel()`, `.fromArray()`, `.columns()`, `.limit()`, `.sortBy()`, `.scope()`, `.searchable()`, `.paginated()`, `.remember()`, `.lazy()`, `.poll()`, `.filters()`, `.actions()`, `.reorderable()` |

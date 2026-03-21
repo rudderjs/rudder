@@ -28,6 +28,25 @@ Text.make('Logged in as admin@example.com')
 Text.make('Manage your application from the sidebar.')
 ```
 
+### `Code`
+
+Syntax-highlighted code block. Lazy-loaded — no SSR cost. Uses shiki with a dual theme (github-light / github-dark-high-contrast). Includes a copy button.
+
+```ts
+import { Code } from '@boostkit/panels'
+
+Code.make('const x = 1').language('typescript').title('Example')
+Code.make('pnpm install').language('bash')
+Code.make('SELECT * FROM users').language('sql').lineNumbers()
+```
+
+| Method | Description |
+|--------|-------------|
+| `Code.make(code)` | Create a code block with the given source string |
+| `.language(lang)` | Syntax language (e.g. `'typescript'`, `'bash'`, `'sql'`, `'json'`) |
+| `.title(text)` | Optional title bar above the code block |
+| `.lineNumbers()` | Show line numbers |
+
 ### `Stats`
 
 Row of stat cards. Each stat has a label, value, optional description, and trend percentage. When a single stat is rendered, it fills the container without a grid wrapper.
