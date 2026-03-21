@@ -92,7 +92,8 @@ export function mountFormRoutes(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
           for (const tableId of entry.refreshes) {
-            broadcast(`live:table:${tableId}`, 'refresh', { source: 'form', formId })
+            const slug = tableId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+            broadcast(`live:table:${slug}`, 'refresh', { source: 'form', formId })
           }
         } catch { /* @boostkit/broadcast not available */ }
       }

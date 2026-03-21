@@ -301,8 +301,24 @@ export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
 
   if (!isStandalone && submitted) {
     return (
-      <div>
+      <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">{form.successMessage ?? 'Submitted successfully.'}</p>
+        <div>
+          <button
+            type="button"
+            onClick={() => { setSubmitted(false); setValues(() => {
+              const result: Record<string, unknown> = {}
+              for (const item of form.fields) {
+                const field = item as FieldMeta
+                if (field.name && field.defaultValue !== undefined) result[field.name] = field.defaultValue
+              }
+              return result
+            }) }}
+            className="text-sm text-primary hover:underline"
+          >
+            {i18n.submitAnother ?? 'Submit another'}
+          </button>
+        </div>
       </div>
     )
   }
