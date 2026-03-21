@@ -1,4 +1,4 @@
-import type { Stats } from './schema/Stats.js'
+import type { Stats } from '../schema/Stats.js'
 import { createRegistry } from './BaseRegistry.js'
 
 /**

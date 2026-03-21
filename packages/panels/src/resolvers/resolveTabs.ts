@@ -1,10 +1,10 @@
 import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike } from '../types.js'
-import type { Tabs } from '../Tabs.js'
-import type { TabMeta, TabsMeta } from '../Tabs.js'
+import type { Tabs } from '../schema/Tabs.js'
+import type { TabMeta, TabsMeta } from '../schema/Tabs.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { ResolveSchemaFn, ModelLike } from './types.js'
-import { TabsRegistry } from '../TabsRegistry.js'
+import { TabsRegistry } from '../registries/TabsRegistry.js'
 import { resolveDataSource } from '../datasource.js'
 import { resolveActiveTabIndex } from './helpers.js'
 

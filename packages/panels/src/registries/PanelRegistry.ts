@@ -1,4 +1,4 @@
-import type { Panel } from './Panel.js'
+import type { Panel } from '../Panel.js'
 
 // ─── Panel Registry (global singleton) ─────────────────────
 

@@ -1,4 +1,4 @@
-import type { Table } from './schema/Table.js'
+import type { Table } from '../schema/Table.js'
 import { createRegistry } from './BaseRegistry.js'
 
 /**

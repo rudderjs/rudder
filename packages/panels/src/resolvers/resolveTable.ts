@@ -3,7 +3,7 @@ import type { PanelContext, SchemaElementLike, QueryBuilderLike, RecordRow } fro
 import type { TableElementMeta } from '../schema/index.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { ConfigurableElement, ResourceLike, ModelLike } from './types.js'
-import { TableRegistry } from '../TableRegistry.js'
+import { TableRegistry } from '../registries/TableRegistry.js'
 import { readPersistedState } from '../persist.js'
 import { resolveDataSource } from '../datasource.js'
 import { resolveColumns, resolvePagination, resolveSearchColumns, buildTableMeta } from './helpers.js'

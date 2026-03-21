@@ -1,4 +1,4 @@
-import type { Tabs } from './Tabs.js'
+import type { Tabs } from '../schema/Tabs.js'
 import { createRegistry } from './BaseRegistry.js'
 
 /**

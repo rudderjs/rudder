@@ -1,12 +1,12 @@
 import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike } from '../types.js'
-import type { Dashboard, DashboardTab } from '../Dashboard.js'
-import type { Widget } from '../Widget.js'
+import type { Dashboard, DashboardTab } from '../schema/Dashboard.js'
+import type { Widget } from '../schema/Widget.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { AppLike } from './types.js'
 import { debugWarn } from '../debug.js'
 
-type WidgetMetaWithData = import('../Widget.js').WidgetMeta & { type: 'widget'; data?: unknown }
+type WidgetMetaWithData = import('../schema/Widget.js').WidgetMeta & { type: 'widget'; data?: unknown }
 
 async function resolveWidgetData(widgets: Widget[], ctx: PanelContext): Promise<WidgetMetaWithData[]> {
   return Promise.all(
@@ -37,11 +37,11 @@ export async function resolveDashboard(
   const dashboard = el as Dashboard
   // We extend DashboardMeta with optional SSR-only fields (savedLayout, savedTabLayouts)
   // that are added at runtime and sent to the client as part of the serialized meta.
-  const meta = dashboard.toMeta() as import('../Dashboard.js').DashboardMeta & {
+  const meta = dashboard.toMeta() as import('../schema/Dashboard.js').DashboardMeta & {
     savedLayout?: unknown[]
     savedTabLayouts?: Record<string, unknown[]>
     widgets: WidgetMetaWithData[]
-    tabs?: (import('../Dashboard.js').DashboardTabMeta & { widgets: WidgetMetaWithData[] })[]
+    tabs?: (import('../schema/Dashboard.js').DashboardTabMeta & { widgets: WidgetMetaWithData[] })[]
   }
 
   // Resolve top-level widget data

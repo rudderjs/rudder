@@ -9,7 +9,7 @@ export async function resolveWidget(
 ): Promise<PanelSchemaElementMeta> {
   const widget = el as WidgetElement
   // Extend WidgetMeta with the runtime-populated `data` field (SSR-only, not in static type)
-  const meta = widget.toMeta() as import('../Widget.js').WidgetMeta & { type: 'widget'; data?: unknown }
+  const meta = widget.toMeta() as import('../schema/Widget.js').WidgetMeta & { type: 'widget'; data?: unknown }
 
   if (!meta.lazy) {
     const dataFn = widget.getDataFn?.()

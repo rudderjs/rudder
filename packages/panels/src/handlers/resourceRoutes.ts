@@ -2,7 +2,7 @@ import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { Resource } from '../Resource.js'
-import type { Action } from '../Action.js'
+import type { Action } from '../schema/Action.js'
 import type { ModelClass, QueryBuilderLike, RecordRow } from '../types.js'
 import {
   flattenFields, relationName, buildContext,

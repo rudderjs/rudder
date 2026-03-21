@@ -1,6 +1,6 @@
-import type { Field } from '../Field.js'
-import type { Section } from '../Section.js'
-import type { Tabs } from '../Tabs.js'
+import type { Field } from './Field.js'
+import type { Section } from './Section.js'
+import type { Tabs } from './Tabs.js'
 import type { PanelContext } from '../types.js'
 
 // ─── Types ──────────────────────────────────────────────────

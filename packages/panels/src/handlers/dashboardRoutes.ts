@@ -1,10 +1,10 @@
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { Panel } from '../Panel.js'
-import type { Widget, WidgetSize } from '../Widget.js'
-import type { Dashboard, DashboardTab } from '../Dashboard.js'
+import type { Widget, WidgetSize } from '../schema/Widget.js'
+import type { Dashboard, DashboardTab } from '../schema/Dashboard.js'
 import type { PanelUser } from '../types.js'
 import type { RouterLike } from './types.js'
-import { DashboardRegistry } from '../DashboardRegistry.js'
+import { DashboardRegistry } from '../registries/DashboardRegistry.js'
 
 // ── Minimal structural type for dynamically-resolved app/auth ──
 

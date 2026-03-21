@@ -1,4 +1,4 @@
-import type { QueryBuilderLike, RecordRow } from './types.js'
+import type { QueryBuilderLike, RecordRow } from '../types.js'
 
 // ─── Tab Meta (serialized to client) ────────────────────────
 

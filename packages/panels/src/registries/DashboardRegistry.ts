@@ -1,4 +1,4 @@
-import type { Dashboard } from './Dashboard.js'
+import type { Dashboard } from '../schema/Dashboard.js'
 
 export class DashboardRegistry {
   private static _dashboards: Map<string, Dashboard> = new Map()

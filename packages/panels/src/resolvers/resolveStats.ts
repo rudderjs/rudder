@@ -2,7 +2,7 @@ import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike } from '../types.js'
 import type { StatsElementMeta, PanelStatMeta } from '../schema/index.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
-import { StatsRegistry } from '../StatsRegistry.js'
+import { StatsRegistry } from '../registries/StatsRegistry.js'
 import { debugWarn } from '../debug.js'
 
 export async function resolveStats(

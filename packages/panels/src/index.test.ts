@@ -5,33 +5,33 @@ import assert from 'node:assert/strict'
 import { Panel } from './Panel.js'
 import { Page } from './Page.js'
 import { Resource } from './Resource.js'
-import { Field } from './Field.js'
-import { SelectFilter, SearchFilter } from './Filter.js'
-import { Action } from './Action.js'
-import { PanelRegistry } from './PanelRegistry.js'
-import { TextField }    from './fields/TextField.js'
-import { EmailField }   from './fields/EmailField.js'
-import { NumberField }  from './fields/NumberField.js'
-import { TextareaField } from './fields/TextareaField.js'
-import { SelectField }  from './fields/SelectField.js'
-import { BooleanField } from './fields/BooleanField.js'
-import { DateField }    from './fields/DateField.js'
-import { RelationField } from './fields/RelationField.js'
-import { HasMany }       from './fields/HasMany.js'
-import { PasswordField } from './fields/PasswordField.js'
-import { SlugField }     from './fields/SlugField.js'
-import { TagsField }     from './fields/TagsField.js'
-import { HiddenField }   from './fields/HiddenField.js'
-import { ToggleField }   from './fields/ToggleField.js'
-import { ColorField }    from './fields/ColorField.js'
-import { JsonField }     from './fields/JsonField.js'
-import { RepeaterField } from './fields/RepeaterField.js'
-import { BuilderField }  from './fields/BuilderField.js'
-import { FileField }     from './fields/FileField.js'
-import { ComputedField } from './fields/ComputedField.js'
-import { Block }         from './Block.js'
-import { Section }       from './Section.js'
-import { Tabs }          from './Tabs.js'
+import { Field } from './schema/Field.js'
+import { SelectFilter, SearchFilter } from './schema/Filter.js'
+import { Action } from './schema/Action.js'
+import { PanelRegistry } from './registries/PanelRegistry.js'
+import { TextField }    from './schema/fields/TextField.js'
+import { EmailField }   from './schema/fields/EmailField.js'
+import { NumberField }  from './schema/fields/NumberField.js'
+import { TextareaField } from './schema/fields/TextareaField.js'
+import { SelectField }  from './schema/fields/SelectField.js'
+import { BooleanField } from './schema/fields/BooleanField.js'
+import { DateField }    from './schema/fields/DateField.js'
+import { RelationField } from './schema/fields/RelationField.js'
+import { HasMany }       from './schema/fields/HasMany.js'
+import { PasswordField } from './schema/fields/PasswordField.js'
+import { SlugField }     from './schema/fields/SlugField.js'
+import { TagsField }     from './schema/fields/TagsField.js'
+import { HiddenField }   from './schema/fields/HiddenField.js'
+import { ToggleField }   from './schema/fields/ToggleField.js'
+import { ColorField }    from './schema/fields/ColorField.js'
+import { JsonField }     from './schema/fields/JsonField.js'
+import { RepeaterField } from './schema/fields/RepeaterField.js'
+import { BuilderField }  from './schema/fields/BuilderField.js'
+import { FileField }     from './schema/fields/FileField.js'
+import { ComputedField } from './schema/fields/ComputedField.js'
+import { Block }         from './schema/Block.js'
+import { Section }       from './schema/Section.js'
+import { Tabs }          from './schema/Tabs.js'
 import { Text }    from './schema/Text.js'
 import { Heading } from './schema/Heading.js'
 import { Stats, Stat } from './schema/Stats.js'
@@ -40,14 +40,14 @@ import { Column }  from './schema/Column.js'
 import { Form }    from './schema/Form.js'
 import { Chart }   from './schema/Chart.js'
 import { List }    from './schema/List.js'
-import { TableRegistry }  from './TableRegistry.js'
-import { FormRegistry }   from './FormRegistry.js'
-import { StatsRegistry }  from './StatsRegistry.js'
-import { TabsRegistry }   from './TabsRegistry.js'
+import { TableRegistry }  from './registries/TableRegistry.js'
+import { FormRegistry }   from './registries/FormRegistry.js'
+import { StatsRegistry }  from './registries/StatsRegistry.js'
+import { TabsRegistry }   from './registries/TabsRegistry.js'
 import { getPanelI18n, getPanelDir, getActiveLocale } from './i18n/index.js'
-import { Widget } from './Widget.js'
-import { Dashboard } from './Dashboard.js'
-import { DashboardRegistry } from './DashboardRegistry.js'
+import { Widget } from './schema/Widget.js'
+import { Dashboard } from './schema/Dashboard.js'
+import { DashboardRegistry } from './registries/DashboardRegistry.js'
 import { buildDefaultLayout } from './PanelServiceProvider.js'
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -3101,7 +3101,7 @@ describe('FormRegistry', () => {
 
 // ─── createRegistry ────────────────────────────────────────
 
-import { createRegistry } from './BaseRegistry.js'
+import { createRegistry } from './registries/BaseRegistry.js'
 
 describe('createRegistry', () => {
   it('register and get by panelName:id', () => {
@@ -3221,7 +3221,7 @@ describe('Table remember', () => {
 
 // ─── Tab (schema tab) ──────────────────────────────────────
 
-import { Tab } from './Tabs.js'
+import { Tab } from './schema/Tabs.js'
 
 describe('Tab (schema tab)', () => {
   it('make creates with label', () => {
@@ -3321,7 +3321,7 @@ describe('Tabs with Tab array', () => {
 
 // ─── ListTab ───────────────────────────────────────────────
 
-import { ListTab } from './Tab.js'
+import { ListTab } from './schema/Tab.js'
 
 describe('ListTab', () => {
   it('make creates with name', () => {
@@ -3610,7 +3610,7 @@ describe('Table live', () => {
 
 // ── ComputeRegistry ──────────────────────────────────────────────
 
-import { ComputeRegistry } from './ComputeRegistry.js'
+import { ComputeRegistry } from './registries/ComputeRegistry.js'
 
 describe('ComputeRegistry', () => {
   it('register and get', () => {

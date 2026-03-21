@@ -3,8 +3,8 @@ import type { PanelContext, SchemaElementLike } from '../types.js'
 import type { FormElementMeta } from '../schema/Form.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { FormElement } from './types.js'
-import { FormRegistry } from '../FormRegistry.js'
-import { ComputeRegistry } from '../ComputeRegistry.js'
+import { FormRegistry } from '../registries/FormRegistry.js'
+import { ComputeRegistry } from '../registries/ComputeRegistry.js'
 import { debugWarn } from '../debug.js'
 
 export async function resolveForm(

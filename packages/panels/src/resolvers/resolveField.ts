@@ -1,9 +1,9 @@
 import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike } from '../types.js'
 import type { FormElementMeta } from '../schema/Form.js'
-import type { Field } from '../Field.js'
+import type { Field } from '../schema/Field.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
-import { ComputeRegistry } from '../ComputeRegistry.js'
+import { ComputeRegistry } from '../registries/ComputeRegistry.js'
 
 export async function resolveField(
   el: SchemaElementLike,

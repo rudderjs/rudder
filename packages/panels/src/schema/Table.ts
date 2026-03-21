@@ -1,6 +1,6 @@
 import type { Column, ColumnMeta } from './Column.js'
-import type { Filter, FilterMeta } from '../Filter.js'
-import type { Action, ActionMeta, ActionHandler } from '../Action.js'
+import type { Filter, FilterMeta } from './Filter.js'
+import type { Action, ActionMeta, ActionHandler } from './Action.js'
 import type { DataSource } from '../datasource.js'
 import type { PersistMode } from '../persist.js'
 

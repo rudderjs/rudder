@@ -1,5 +1,5 @@
-import type { FormSubmitFn } from './schema/Form.js'
-import type { PanelContext } from './types.js'
+import type { FormSubmitFn } from '../schema/Form.js'
+import type { PanelContext } from '../types.js'
 import { createRegistry } from './BaseRegistry.js'
 
 interface FormEntry {

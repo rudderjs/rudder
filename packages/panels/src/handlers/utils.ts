@@ -1,9 +1,9 @@
 import type { AppRequest } from '@boostkit/core'
-import type { Field } from '../Field.js'
+import type { Field } from '../schema/Field.js'
 import type { Resource, FieldOrGrouping } from '../Resource.js'
 import type { Global } from '../Global.js'
 import type { PanelContext } from '../types.js'
-import { ComputedField } from '../fields/ComputedField.js'
+import { ComputedField } from '../schema/fields/ComputedField.js'
 
 /** Derive the Prisma relation name from a RelationField. */
 export function relationName(field: Field): string {

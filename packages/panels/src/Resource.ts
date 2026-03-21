@@ -1,9 +1,9 @@
-import type { Field, FieldMeta } from './Field.js'
-import type { Filter } from './Filter.js'
-import type { Action } from './Action.js'
-import type { ListTab, ListTabMeta } from './Tab.js'
-import type { Section, SectionMeta } from './Section.js'
-import type { Tabs, TabsMeta } from './Tabs.js'
+import type { Field, FieldMeta } from './schema/Field.js'
+import type { Filter } from './schema/Filter.js'
+import type { Action } from './schema/Action.js'
+import type { ListTab, ListTabMeta } from './schema/Tab.js'
+import type { Section, SectionMeta } from './schema/Section.js'
+import type { Tabs, TabsMeta } from './schema/Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
 
 // ─── Schema item — field, section, or tabs group ───────────

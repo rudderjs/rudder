@@ -1,7 +1,7 @@
-import { PanelRegistry } from './PanelRegistry.js'
+import { PanelRegistry } from './registries/PanelRegistry.js'
 import type { PanelMeta } from './Panel.js'
 import type { ResourceMeta, FieldOrGrouping } from './Resource.js'
-import type { Field } from './Field.js'
+import type { Field } from './schema/Field.js'
 
 function flattenFields(items: FieldOrGrouping[]): Field[] {
   const result: Field[] = []

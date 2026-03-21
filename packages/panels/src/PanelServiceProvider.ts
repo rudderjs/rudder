@@ -1,8 +1,8 @@
 import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import { debugWarn } from './debug.js'
-import { PanelRegistry } from './PanelRegistry.js'
-import { DashboardRegistry } from './DashboardRegistry.js'
+import { PanelRegistry } from './registries/PanelRegistry.js'
+import { DashboardRegistry } from './registries/DashboardRegistry.js'
 import {
   buildPanelMiddleware,
   mountMetaRoutes,

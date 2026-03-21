@@ -2,7 +2,7 @@ import type { TableElementMeta, PanelStatMeta } from '../schema/index.js'
 import type { PanelContext, QueryBuilderLike, RecordRow } from '../types.js'
 import type { Column } from '../schema/Column.js'
 import type { FieldOrGrouping } from '../Resource.js'
-import type { Field } from '../Field.js'
+import type { Field } from '../schema/Field.js'
 import type { PersistMode } from '../persist.js'
 import { readPersistedState, slugify as slugifyPersist } from '../persist.js'
 import type { ResourceLike, ModelLike } from './types.js'
@@ -75,7 +75,7 @@ export async function resolvePagination(
   currentPage = 1,
   searchFilter?: { search: string; columns: string[] },
   persistedFilters?: Record<string, string>,
-  filterDefs?: import('../Filter.js').Filter[],
+  filterDefs?: import('../schema/Filter.js').Filter[],
 ): Promise<TableElementMeta['pagination']> {
   if (!config.paginationType || config.lazy) return undefined
 

@@ -23,7 +23,7 @@ export interface DialogElement extends SchemaElementLike {
 /** Minimal interface for a Widget schema element. */
 export interface WidgetElement extends SchemaElementLike {
   getDataFn?(): ((ctx?: unknown, settings?: Record<string, unknown>) => Promise<unknown>) | undefined
-  toMeta(): import('../Widget.js').WidgetMeta & { type: 'widget' }
+  toMeta(): import('../schema/Widget.js').WidgetMeta & { type: 'widget' }
 }
 
 /** Minimal interface for a Resource class (static shape). */

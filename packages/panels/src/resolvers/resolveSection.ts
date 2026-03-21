@@ -1,6 +1,6 @@
 import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike } from '../types.js'
-import type { Section } from '../Section.js'
+import type { Section } from '../schema/Section.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { ResolveSchemaFn } from './types.js'
 

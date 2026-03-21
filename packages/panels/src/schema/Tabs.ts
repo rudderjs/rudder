@@ -1,7 +1,7 @@
 import type { Field } from './Field.js'
 import type { FieldMeta } from './Field.js'
-import type { PersistMode } from './persist.js'
-import type { DataSource } from './datasource.js'
+import type { PersistMode } from '../persist.js'
+import type { DataSource } from '../datasource.js'
 
 // ─── Persist mode for Tabs ─────────────────────────────────────
 export type TabsPersistMode = PersistMode
