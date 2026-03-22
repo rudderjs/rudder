@@ -208,4 +208,5 @@ export class Panel {
       i18n:      getPanelI18n(locale),
     }
   }
+
 }

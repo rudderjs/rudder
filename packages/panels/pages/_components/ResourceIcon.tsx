@@ -76,5 +76,6 @@ export function ResourceIcon({ icon, className = 'size-4' }: ResourceIconProps) 
     return <LucideIcon className={className} />
   }
 
-  return <span className={className}>{icon}</span>
+  // Empty placeholder while loading — prevents text flash
+  return <span className={className} />
 }

@@ -1,6 +1,6 @@
 import { render }                              from 'vike/abort'
 import type { PageContextServer }              from 'vike/types'
-import { PanelRegistry, resolveSchema }        from '@boostkit/panels'
+import { PanelRegistry, resolveSchema } from '@boostkit/panels'
 import type { PanelMeta, PanelSchemaElementMeta } from '@boostkit/panels'
 import { getSessionUser }                      from '../_lib/getSessionUser.js'
 import type { SessionUser }                    from '../_lib/getSessionUser.js'

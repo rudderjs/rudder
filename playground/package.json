@@ -66,6 +66,7 @@
     "dotenv": "^16.4.0",
     "lexical": "^0.41.0",
     "lucide-react": "^0.575.0",
+    "lucide-static": "^0.577.0",
     "quill-delta": "^5.1.0",
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",
