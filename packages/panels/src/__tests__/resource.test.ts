@@ -15,14 +15,19 @@ import { SelectFilter, SearchFilter } from '../schema/Filter.js'
 import { Action }       from '../schema/Action.js'
 import { Section }      from '../schema/Section.js'
 import { Tabs }         from '../schema/Tabs.js'
+import { Tab }          from '../schema/Tabs.js'
 import { Stats, Stat }  from '../schema/Stats.js'
+import { Table }        from '../schema/Table.js'
+import { Form }         from '../schema/Form.js'
+import { Column }       from '../schema/Column.js'
+import { ListTab }      from '../schema/Tab.js'
 
 // ─── Helpers ────────────────────────────────────────────────
 
 function makeResource(name = 'Post', fields: Field[] = []) {
   class R extends Resource {
     static label = name + 's'
-    fields() { return fields }
+    form(form: Form) { return form.fields(fields) }
   }
   Object.defineProperty(R, 'name', { value: name + 'Resource' })
   return R
@@ -161,55 +166,59 @@ describe('Action.row()', () => {
 
 describe('Resource', () => {
   it('getSlug() derives from class name (removes Resource suffix, pluralises)', () => {
-    class TodoResource extends Resource { fields() { return [] } }
+    class TodoResource extends Resource {}
     assert.equal(TodoResource.getSlug(), 'todos')
   })
 
   it('getSlug() handles multi-word class names', () => {
-    class BlogPostResource extends Resource { fields() { return [] } }
+    class BlogPostResource extends Resource {}
     assert.equal(BlogPostResource.getSlug(), 'blog-posts')
   })
 
   it('getSlug() uses static slug override', () => {
     class X extends Resource {
       static slug = 'custom-slug'
-      fields() { return [] }
+
     }
     assert.equal(X.getSlug(), 'custom-slug')
   })
 
   it('getLabel() derives from class name', () => {
-    class BlogPostResource extends Resource { fields() { return [] } }
+    class BlogPostResource extends Resource {}
     assert.equal(BlogPostResource.getLabel(), 'Blog Post')
   })
 
   it('getLabel() uses static label override', () => {
     class X extends Resource {
       static label = 'My Items'
-      fields() { return [] }
+
     }
     assert.equal(X.getLabel(), 'My Items')
   })
 
   it('getLabelSingular() strips trailing s', () => {
-    class TodoResource extends Resource { fields() { return [] } }
+    class TodoResource extends Resource {}
     assert.equal(TodoResource.getLabelSingular(), 'Todo')
   })
 
   it('getLabelSingular() uses static override', () => {
     class X extends Resource {
       static labelSingular = 'Entry'
-      fields() { return [] }
+
     }
     assert.equal(X.getLabelSingular(), 'Entry')
   })
 
   it('toMeta() includes fields, filters, actions', () => {
     class PostResource extends Resource {
+      static model = MockModel as any
       static label = 'Posts'
-      fields() { return [TextField.make('title')] }
-      filters() { return [SelectFilter.make('status').options(['draft', 'published'])] }
-      actions() { return [Action.make('publish').label('Publish').handler(async () => {})] }
+      table(table: Table) {
+        return table
+          .filters([SelectFilter.make('status').options(['draft', 'published'])])
+          .actions([Action.make('publish').label('Publish').handler(async () => {})])
+      }
+      form(form: Form) { return form.fields([TextField.make('title')]) }
     }
     const meta = new PostResource().toMeta()
     assert.equal(meta.label, 'Posts')
@@ -227,29 +236,22 @@ describe('Resource', () => {
     assert.equal(await r.policy('viewAny', ctx), true)
     assert.equal(await r.policy('delete',  ctx), true)
   })
-
-  it('filters() defaults to []', () => {
-    assert.deepEqual(new (makeResource())().filters(), [])
-  })
-
-  it('actions() defaults to []', () => {
-    assert.deepEqual(new (makeResource())().actions(), [])
-  })
 })
 
 // ─── Resource defaultSort ────────────────────────────────────
 
 describe('Resource.defaultSort', () => {
   it('defaultSort defaults to undefined', () => {
-    class R extends Resource { fields() { return [] } }
-    assert.equal(R.defaultSort, undefined)
+    class R extends Resource {
+      static model = MockModel as any
+    }
+    assert.equal(new R().toMeta().defaultSort, undefined)
   })
 
-  it('defaultSort and defaultSortDir appear in meta', () => {
+  it('defaultSort and defaultSortDir appear in meta via table()', () => {
     class R extends Resource {
-      static defaultSort    = 'createdAt'
-      static defaultSortDir = 'DESC' as const
-      fields() { return [] }
+      static model = MockModel as any
+      table(table: Table) { return table.sortBy('createdAt', 'DESC') }
     }
     const meta = new R().toMeta()
     assert.equal(meta.defaultSort, 'createdAt')
@@ -262,10 +264,10 @@ describe('Resource.defaultSort', () => {
 describe('Resource with Section/Tabs', () => {
   it('toMeta() includes section metas in fields array', () => {
     class R extends Resource {
-      fields() {
-        return [
+      form(form: Form) {
+        return form.fields([
           Section.make('Info').schema(TextField.make('name'), EmailField.make('email')),
-        ]
+        ])
       }
     }
     const meta = new R().toMeta()
@@ -276,12 +278,12 @@ describe('Resource with Section/Tabs', () => {
 
   it('toMeta() includes tabs metas in fields array', () => {
     class R extends Resource {
-      fields() {
-        return [
+      form(form: Form) {
+        return form.fields([
           Tabs.make()
             .tab('A', TextField.make('x'))
             .tab('B', BooleanField.make('y')),
-        ]
+        ])
       }
     }
     const meta = new R().toMeta()
@@ -322,7 +324,7 @@ describe('resourceData', () => {
     const { resourceData, PanelRegistry, Panel, Resource, TextField } = await import('../index.js')
     PanelRegistry.reset()
     class PostResource extends Resource {
-      fields() { return [TextField.make('title')] }
+      form(form: Form) { return form.fields([TextField.make('title')]) }
     }
     PanelRegistry.register(Panel.make('blog').path('/blog').resources([PostResource]))
     const result = await resourceData({ panel: 'blog', resource: 'posts', url: '/blog/posts' })
@@ -337,14 +339,14 @@ describe('resourceData', () => {
 
 describe('Resource — navigation group', () => {
   it('navigationGroup defaults to undefined', () => {
-    class R extends Resource { fields() { return [] } }
+    class R extends Resource {}
     assert.strictEqual(new R().toMeta().navigationGroup, undefined)
   })
 
   it('navigationGroup is included in meta when set', () => {
     class R extends Resource {
       static navigationGroup = 'Content'
-      fields() { return [] }
+
     }
     assert.strictEqual(new R().toMeta().navigationGroup, 'Content')
   })
@@ -352,14 +354,14 @@ describe('Resource — navigation group', () => {
 
 describe('Resource — navigation badge color', () => {
   it('navigationBadgeColor defaults to undefined', () => {
-    class R extends Resource { fields() { return [] } }
+    class R extends Resource {}
     assert.strictEqual(new R().toMeta().navigationBadgeColor, undefined)
   })
 
   it('navigationBadgeColor is included in meta when set', () => {
     class R extends Resource {
       static navigationBadgeColor = 'danger' as const
-      fields() { return [] }
+
     }
     assert.strictEqual(new R().toMeta().navigationBadgeColor, 'danger')
   })
@@ -369,7 +371,7 @@ describe('Resource — navigation badge color', () => {
 
 describe('Resource — autosave', () => {
   it('defaults to autosave=false', () => {
-    class R extends Resource { fields() { return [] } }
+    class R extends Resource {}
     const meta = new R().toMeta()
     assert.equal(meta.autosave, false)
     assert.equal(meta.autosaveInterval, 30000)
@@ -378,7 +380,7 @@ describe('Resource — autosave', () => {
   it('static autosave = true', () => {
     class R extends Resource {
       static autosave = true
-      fields() { return [] }
+
     }
     const meta = new R().toMeta()
     assert.equal(meta.autosave, true)
@@ -388,7 +390,7 @@ describe('Resource — autosave', () => {
   it('static autosave = { interval: 10000 }', () => {
     class R extends Resource {
       static autosave = { interval: 10000 }
-      fields() { return [] }
+
     }
     const meta = new R().toMeta()
     assert.equal(meta.autosave, true)
@@ -398,7 +400,7 @@ describe('Resource — autosave', () => {
   it('static autosave object without interval uses default', () => {
     class R extends Resource {
       static autosave = {} as { interval?: number }
-      fields() { return [] }
+
     }
     const meta = new R().toMeta()
     assert.equal(meta.autosave, true)
@@ -408,7 +410,7 @@ describe('Resource — autosave', () => {
 
 describe('Resource — draftRecovery', () => {
   it('defaults to false', () => {
-    class R extends Resource { fields() { return [] } }
+    class R extends Resource {}
     const meta = new R().toMeta()
     assert.equal(meta.draftRecovery, false)
   })
@@ -416,7 +418,7 @@ describe('Resource — draftRecovery', () => {
   it('static draftRecovery = true', () => {
     class R extends Resource {
       static draftRecovery = true
-      fields() { return [] }
+
     }
     const meta = new R().toMeta()
     assert.equal(meta.draftRecovery, true)
@@ -428,45 +430,45 @@ describe('Resource — draftRecovery', () => {
 describe('Resource — yjs flag', () => {
   it('yjs=false when no fields use yjs', () => {
     class R extends Resource {
-      fields() { return [TextField.make('title')] }
+      form(form: Form) { return form.fields([TextField.make('title')]) }
     }
     assert.equal(new R().toMeta().yjs, false)
   })
 
   it('yjs=true when a field has .collaborative()', () => {
     class R extends Resource {
-      fields() { return [TextField.make('title').collaborative()] }
+      form(form: Form) { return form.fields([TextField.make('title').collaborative()]) }
     }
     assert.equal(new R().toMeta().yjs, true)
   })
 
   it('yjs=true when a field has .persist("websocket")', () => {
     class R extends Resource {
-      fields() { return [TextField.make('title').persist('websocket')] }
+      form(form: Form) { return form.fields([TextField.make('title').persist('websocket')]) }
     }
     assert.equal(new R().toMeta().yjs, true)
   })
 
   it('yjs=true when a field has .persist("indexeddb")', () => {
     class R extends Resource {
-      fields() { return [TextField.make('title').persist('indexeddb')] }
+      form(form: Form) { return form.fields([TextField.make('title').persist('indexeddb')]) }
     }
     assert.equal(new R().toMeta().yjs, true)
   })
 
   it('yjs=false when field only has .persist() (localStorage)', () => {
     class R extends Resource {
-      fields() { return [TextField.make('title').persist()] }
+      form(form: Form) { return form.fields([TextField.make('title').persist()]) }
     }
     assert.equal(new R().toMeta().yjs, false)
   })
 
   it('yjs derived through Section grouping', () => {
     class R extends Resource {
-      fields() {
-        return [Section.make('Content').schema(
+      form(form: Form) {
+        return form.fields([Section.make('Content').schema(
           TextField.make('title').persist('websocket'),
-        )]
+        )])
       }
     }
     assert.equal(new R().toMeta().yjs, true)
@@ -474,10 +476,10 @@ describe('Resource — yjs flag', () => {
 
   it('yjs derived through Tabs grouping', () => {
     class R extends Resource {
-      fields() {
-        return [Tabs.make().tab('Main',
+      form(form: Form) {
+        return form.fields([Tabs.make().tab('Main',
           TextField.make('title').collaborative(),
-        )]
+        )])
       }
     }
     assert.equal(new R().toMeta().yjs, true)
@@ -488,19 +490,23 @@ describe('Resource — yjs flag', () => {
 
 describe('Resource — empty state', () => {
   it('emptyState fields default to undefined', () => {
-    class R extends Resource { fields() { return [] } }
+    class R extends Resource {}
     const meta = new R().toMeta()
     assert.strictEqual(meta.emptyStateIcon, undefined)
     assert.strictEqual(meta.emptyStateHeading, undefined)
     assert.strictEqual(meta.emptyStateDescription, undefined)
   })
 
-  it('emptyState fields are included in meta when set', () => {
+  it('emptyState fields are included in meta when set via table()', () => {
     class R extends Resource {
-      static emptyStateIcon = '📝'
-      static emptyStateHeading = 'No :label yet'
-      static emptyStateDescription = 'Create your first article to get started.'
-      fields() { return [] }
+      static model = MockModel as any
+      table(table: Table) {
+        return table.emptyState({
+          icon: '📝',
+          heading: 'No :label yet',
+          description: 'Create your first article to get started.',
+        })
+      }
     }
     const meta = new R().toMeta()
     assert.strictEqual(meta.emptyStateIcon, '📝')
@@ -509,37 +515,35 @@ describe('Resource — empty state', () => {
   })
 })
 
-// ─── Resource — widgets() ────────────────────────────────────
+// ─── Resource — detail() ────────────────────────────────────
 
-describe('Resource — widgets()', () => {
+describe('Resource — detail()', () => {
   it('defaults to empty array', () => {
-    class R extends Resource { fields() { return [] } }
-    assert.deepEqual(new R().widgets(), [])
+    class R extends Resource {}
+    assert.deepEqual(new R().detail(), [])
   })
 
   it('returns schema elements when overridden', () => {
     class R extends Resource {
-      fields() { return [] }
-      widgets() {
+      detail() {
         return [Stats.make([Stat.make('Views').value(42)])]
       }
     }
-    const w = new R().widgets()
-    assert.equal(w.length, 1)
-    assert.equal((w[0] as any).getType(), 'stats')
+    const d = new R().detail()
+    assert.equal(d.length, 1)
+    assert.equal((d[0] as any).getType(), 'stats')
   })
 
   it('receives record parameter', () => {
     class R extends Resource {
-      fields() { return [] }
-      widgets(record?: Record<string, unknown>) {
+      detail(record?: Record<string, unknown>) {
         return [
           Stats.make([Stat.make('Title Length').value(String(record?.title ?? '').length)]),
         ]
       }
     }
-    const w = new R().widgets({ title: 'Hello World' })
-    const meta = (w[0] as any).toMeta()
+    const d = new R().detail({ title: 'Hello World' })
+    const meta = (d[0] as any).toMeta()
     assert.equal(meta.stats[0].value, 11)
   })
 })
@@ -818,29 +822,164 @@ describe('search — searchable field detection', () => {
     assert.equal(searchable.length, 0)
   })
 
-  it('resource with no searchable fields returns empty array', () => {
+  it('resource with no searchable form fields returns empty array', () => {
     class NoSearchResource extends Resource {
-      fields() { return [TextField.make('title'), NumberField.make('count')] }
+      form(form: Form) { return form.fields([TextField.make('title'), NumberField.make('count')]) }
     }
     const resource = new NoSearchResource()
-    const cols = resource.fields().filter(f => (f as Field).isSearchable())
+    const formFields = resource._resolveForm().getFields() as Field[]
+    const cols = formFields.filter(f => f.isSearchable())
     assert.equal(cols.length, 0)
   })
 
-  it('resource with searchable fields returns them', () => {
+  it('resource with searchable form fields returns them', () => {
     class SearchResource extends Resource {
-      fields() {
-        return [
+      form(form: Form) {
+        return form.fields([
           TextField.make('title').searchable(),
           TextField.make('body').searchable(),
           TextField.make('slug'),
-        ]
+        ])
       }
     }
     const resource = new SearchResource()
-    const cols = resource.fields()
-      .filter(f => (f as Field).isSearchable())
-      .map(f => (f as Field).getName())
+    const formFields = resource._resolveForm().getFields() as Field[]
+    const cols = formFields
+      .filter(f => f.isSearchable())
+      .map(f => f.getName())
     assert.deepEqual(cols, ['title', 'body'])
+  })
+})
+
+// ─── Mock model for _resolveTable tests ─────────────────────
+
+class MockModel {
+  static query() { return { get: async () => [], count: async () => 0 } }
+}
+
+// ─── Resource — new table()/form()/detail() API ─────────────
+
+describe('Resource — table() override', () => {
+  it('_resolveTable() uses table() when overridden', () => {
+    class PostResource extends Resource {
+      static model = MockModel as any
+      table(table: Table) {
+        return table
+          .columns([Column.make('title').sortable()])
+          .searchable(['title'])
+          .softDeletes()
+      }
+
+    }
+    const table = new PostResource()._resolveTable()
+    const config = table.getConfig()
+    assert.equal(config.columns.length, 1)
+    assert.equal(config.searchable, true)
+    assert.equal(config.softDeletes, true)
+  })
+
+  it('table() receives pre-configured Table with model', () => {
+    class PostResource extends Resource {
+      static model = MockModel as any
+      table(table: Table) {
+        // Verify the table already has the model wired
+        assert.equal(table.getConfig().model, MockModel)
+        return table
+      }
+
+    }
+    new PostResource()._resolveTable()
+  })
+
+  it('table() with tabs', () => {
+    class PostResource extends Resource {
+      static model = MockModel as any
+      table(table: Table) {
+        return table.tabs([
+          Tab.make('All'),
+          Tab.make('Published').scope((q: any) => q.where('status', 'published')),
+        ])
+      }
+
+    }
+    const config = new PostResource()._resolveTable().getConfig()
+    assert.equal(config.tabs.length, 2)
+    assert.equal(config.tabs[0]?.getLabel(), 'All')
+    assert.ok(config.tabs[1]?.getScope())
+  })
+})
+
+describe('Resource — form() override', () => {
+  it('_resolveForm() uses form() when overridden', () => {
+    class PostResource extends Resource {
+      static model = MockModel as any
+      form(form: Form) {
+        return form.fields([
+          TextField.make('title').required(),
+          TextField.make('body'),
+        ])
+      }
+
+    }
+    const form = new PostResource()._resolveForm()
+    assert.equal(form.getFields().length, 2)
+  })
+
+  it('form() receives Form with resource slug as ID', () => {
+    class PostResource extends Resource {
+      static model = MockModel as any
+      form(form: Form) {
+        assert.equal(form.getId(), 'posts')
+        return form
+      }
+
+    }
+    new PostResource()._resolveForm()
+  })
+})
+
+describe('Resource — detail() override', () => {
+  it('detail() defaults to empty array', () => {
+    class R extends Resource {
+      static model = MockModel as any
+
+    }
+    assert.deepEqual(new R().detail(), [])
+  })
+
+  it('detail() can return schema elements', () => {
+    class R extends Resource {
+      static model = MockModel as any
+
+      detail(record?: Record<string, unknown>) {
+        return [Stats.make([Stat.make('Views').value(Number(record?.views ?? 0))])]
+      }
+    }
+    const elements = new R().detail({ views: 42 })
+    assert.equal(elements.length, 1)
+    assert.equal(elements[0]!.getType(), 'stats')
+  })
+})
+
+describe('Resource — toMeta integration', () => {
+  it('toMeta() derives config from table() and form()', () => {
+    class PostResource extends Resource {
+      static model = MockModel as any
+      table(table: Table) {
+        return table
+          .softDeletes()
+          .titleField('title')
+          .emptyState({ icon: 'file', heading: 'No posts' })
+      }
+      form(form: Form) {
+        return form.fields([TextField.make('title')])
+      }
+    }
+    const meta = new PostResource().toMeta()
+    assert.equal(meta.softDeletes, true)
+    assert.equal(meta.titleField, 'title')
+    assert.equal(meta.emptyStateIcon, 'file')
+    assert.equal(meta.emptyStateHeading, 'No posts')
+    assert.equal(meta.fields.length, 1)
   })
 })

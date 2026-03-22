@@ -3,7 +3,7 @@ import type { PanelMeta } from './Panel.js'
 import type { ResourceMeta, FieldOrGrouping } from './Resource.js'
 import type { Field } from './schema/Field.js'
 
-function flattenFields(items: FieldOrGrouping[]): Field[] {
+function flattenFields(items: (Field | { getFields(): Field[] })[]): Field[] {
   const result: Field[] = []
   for (const item of items) {
     if ('getFields' in item) {
@@ -48,11 +48,17 @@ export async function resourceData(ctx: ResourceDataContext): Promise<ResourceDa
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
-  const params         = new URLSearchParams(url.split('?')[1] ?? '')
+  const params = new URLSearchParams(url.split('?')[1] ?? '')
+
+  // Resolve table/form for config
+  const table       = Model ? resource._resolveTable() : undefined
+  const tableConfig = table?.getConfig()
+  const formFields  = flattenFields(resource._resolveForm().getFields() as FieldOrGrouping[])
+
   const page           = Number(params.get('page') ?? 1)
-  const perPage        = Math.min(Number(params.get('perPage') ?? ResourceClass.perPage), 100)
-  const sortDefault    = ResourceClass.defaultSort
-  const sortDirDefault = ResourceClass.defaultSortDir ?? 'ASC'
+  const perPage        = Math.min(Number(params.get('perPage') ?? tableConfig?.perPage ?? 15), 100)
+  const sortDefault    = tableConfig?.sortBy
+  const sortDirDefault = tableConfig?.sortDir ?? 'ASC'
   const sort           = params.get('sort') ?? sortDefault
   const dir            = (params.get('dir') ?? sortDirDefault).toUpperCase() as 'ASC' | 'DESC'
   const search         = params.get('search') ?? undefined
@@ -65,7 +71,7 @@ export async function resourceData(ctx: ResourceDataContext): Promise<ResourceDa
     let q: any = Model.query()
 
     // Include belongsTo relations so the table can display names instead of raw IDs
-    for (const f of flattenFields(resource.fields()).filter(f => f.getType() === 'belongsTo')) {
+    for (const f of formFields.filter(f => f.getType() === 'belongsTo')) {
       const extra = f.toMeta().extra
       const name  = f.getName()
       const rel   = (extra['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
@@ -73,19 +79,21 @@ export async function resourceData(ctx: ResourceDataContext): Promise<ResourceDa
     }
 
     if (sort) {
-      const sortableFields = flattenFields(resource.fields()).filter((f) => f.isSortable()).map((f) => f.getName())
+      const sortableFields = formFields.filter((f) => f.isSortable()).map((f) => f.getName())
       if (sortableFields.includes(sort)) q = q.orderBy(sort, dir)
     }
 
     if (search) {
-      const cols = flattenFields(resource.fields()).filter((f) => f.isSearchable()).map((f) => f.getName())
+      const cols = tableConfig?.searchColumns
+        ?? formFields.filter((f) => f.isSearchable()).map((f) => f.getName())
       if (cols.length > 0) {
         q = q.where(cols[0] ?? '', 'LIKE', `%${search}%`)
         for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i] ?? '', `%${search}%`)
       }
     }
 
-    for (const filter of resource.filters()) {
+    const filters = tableConfig?.filters ?? []
+    for (const filter of filters) {
       const value = params.get(`filter[${filter.getName()}]`)
       if (value !== null && value !== '') {
         q = filter.applyToQuery(q, value)

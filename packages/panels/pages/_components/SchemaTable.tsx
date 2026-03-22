@@ -10,7 +10,31 @@ import { TableEditCell } from './TableEditCell.js'
 // Client-side cache for table state — survives tab switches within the same page
 const tableStateCache = new Map<string, Record<string, unknown>>()
 
-export function SchemaTable({ element, panelPath, i18n }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n }) {
+/** Resource-context props — optional, additive. When provided, SchemaTable renders resource-level UI. */
+export interface SchemaTableResourceProps {
+  /** Tab bar items — each tab can filter the table. */
+  tabs?: { label: string; icon?: string; scope?: boolean }[]
+  /** Active tab label — synced from URL or state. */
+  activeTab?: string
+  /** Callback when user switches tabs. */
+  onTabChange?: (label: string) => void
+  /** Show soft-delete trash toggle. */
+  softDeletes?: boolean
+  /** Whether currently showing trashed records. */
+  isTrashed?: boolean
+  /** Callback when trash toggle changes. */
+  onTrashedChange?: (trashed: boolean) => void
+  /** Show "+ Create" button. Pass URL string or true for auto-href. */
+  createUrl?: string | boolean
+  /** Custom empty state config (icon, heading, description). */
+  emptyState?: { icon?: string; heading?: string; description?: string }
+  /** Resource slug — when set, enables resource mode (fetch from resource API, resource action endpoint). */
+  resourceSlug?: string
+  /** Row click href pattern. Use :id placeholder. e.g. '/admin/resources/articles/:id' */
+  rowHref?: string
+}
+
+export function SchemaTable({ element, panelPath, i18n, resource }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n; resource?: SchemaTableResourceProps }) {
   const el = element as typeof element & { reorderable?: boolean; reorderEndpoint?: string }
   const tableId = element.id as string | undefined
   const pathSegment = panelPath.replace(/^\//, '')
@@ -73,10 +97,12 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
   const sortRef = useRef(sort)
   const searchRef = useRef(search)
   const activeFiltersRef = useRef(activeFilters)
+  const activeTabRef = useRef(resource?.activeTab)
   currentPageRef.current = currentPage
   sortRef.current = sort
   searchRef.current = search
   activeFiltersRef.current = activeFilters
+  activeTabRef.current = resource?.activeTab
 
   // ── Shared fetch function — all table state changes go through API ──
   async function fetchTable(opts: { page?: number; search?: string; sort?: string; dir?: string; append?: boolean; filters?: Record<string, string> } = {}) {
@@ -94,9 +120,31 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
       for (const [k, v] of Object.entries(filtersToApply)) {
         if (v) params.set(`filter[${k}]`, v)
       }
-      const res = await fetch(`/${pathSegment}/api/_tables/${tableId}?${params}`)
+      // Resource mode: include tab and trashed params
+      if (resource?.resourceSlug) {
+        const currentActiveTab = activeTabRef.current
+        if (currentActiveTab && resource.tabs && resource.tabs.length > 0) {
+          const name = currentActiveTab.toLowerCase().replace(/\s+/g, '-')
+          if (resource.tabs[0]?.label !== currentActiveTab) params.set('tab', name)
+        }
+        if (resource.isTrashed) params.set('trashed', 'true')
+      }
+      const fetchBase = resource?.resourceSlug
+        ? `/${pathSegment}/api/${resource.resourceSlug}`
+        : `/${pathSegment}/api/_tables/${tableId}`
+      const res = await fetch(`${fetchBase}?${params}`)
       if (res.ok) {
-        const body = await res.json() as { records: Record<string, unknown>[]; pagination?: typeof pagination }
+        const raw = await res.json() as Record<string, unknown>
+        // Resource API returns { data, meta }, table API returns { records, pagination }
+        const body = resource?.resourceSlug
+          ? {
+              records: raw.data as Record<string, unknown>[],
+              pagination: raw.meta ? {
+                ...(raw.meta as Record<string, unknown>),
+                type: pagination?.type ?? 'pages',  // preserve the pagination type from initial SSR data
+              } as typeof pagination : undefined,
+            }
+          : raw as { records: Record<string, unknown>[]; pagination?: typeof pagination }
         if (opts.append) {
           setRecords(prev => [...prev, ...body.records])
         } else {
@@ -129,7 +177,10 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
     if (!tableId) return
     setActionLoading(true)
     try {
-      const res = await fetch(`/${pathSegment}/api/_tables/${tableId}/action/${actionName}`, {
+      const actionBase = resource?.resourceSlug
+        ? `/${pathSegment}/api/${resource.resourceSlug}/_action/${actionName}`
+        : `/${pathSegment}/api/_tables/${tableId}/action/${actionName}`
+      const res = await fetch(actionBase, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
@@ -422,7 +473,8 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
   }, [dragging])
 
   const hasSearch = !!element.searchable || element.columns.some((c: PanelColumnMeta) => c.searchable)
-  const hasHref   = !!element.href
+  const hasHref      = !!element.href
+  const showViewAll  = hasHref && !resource?.resourceSlug  // hide "View all" link in resource mode
 
   // ── Lazy skeleton or restoring state ──
   if (!lazyLoaded || restoring) {
@@ -438,18 +490,82 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
     )
   }
 
+  // Use custom empty state from resource props or element config
+  const emptyStateCfg = resource?.emptyState ?? (element as { emptyState?: { icon?: string; heading?: string; description?: string } }).emptyState
+
   return (
     <div>
-      {/* Title + description — outside the table card */}
-      <div className="mb-1">
-        <p className="text-sm font-semibold">{element.title}</p>
-        {element.description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{element.description}</p>
-        )}
-      </div>
+      {/* Title + create button — hidden in resource mode (page header handles these) */}
+      {!resource?.resourceSlug && (
+        <div className="mb-1 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">{element.title}</p>
+            {element.description && (
+              <p className="text-xs text-muted-foreground mt-0.5">{element.description}</p>
+            )}
+          </div>
+          {resource?.createUrl && (
+            <a
+              href={typeof resource.createUrl === 'string' ? resource.createUrl : `${panelPath}/resources/${element.resource}/create`}
+              className="px-3 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:opacity-90 transition-opacity"
+            >
+              + {i18n.create?.replace(':singular', '') ?? 'Create'}
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Tabs bar — resource context (matches SchemaTabs pill style) */}
+      {resource?.tabs && resource.tabs.length > 0 && (
+        <div className="flex items-center gap-1 mb-4">
+          {resource.tabs.map((tab) => {
+            const isActive = resource.activeTab === tab.label
+            return (
+              <button
+                key={tab.label}
+                type="button"
+                onClick={() => {
+                  activeTabRef.current = tab.label
+                  resource.onTabChange?.(tab.label)
+                  if (resource.resourceSlug) void fetchTable({ page: 1 })
+                }}
+                className={[
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground font-medium'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                ].join(' ')}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Soft-delete trash toggle — resource context (outline button style) */}
+      {resource?.softDeletes && (
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => resource.onTrashedChange?.(!resource.isTrashed)}
+            className={[
+              'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors',
+              resource.isTrashed
+                ? 'border-primary text-primary bg-primary/10 hover:bg-primary/20 font-medium'
+                : 'border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+            ].join(' ')}
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+            </svg>
+            {resource.isTrashed ? (i18n.exitTrash ?? 'Exit trash') : (i18n.viewTrash ?? 'View trash')}
+          </button>
+        </div>
+      )}
 
       {/* Toolbar: search + filters + view all — outside the table card */}
-      {(hasSearch || filters.length > 0 || hasHref) && (
+      {(hasSearch || filters.length > 0 || showViewAll) && (
         <div className="py-2.5 flex items-center gap-3 flex-wrap">
           {hasSearch && (
             <div className="relative">
@@ -496,7 +612,7 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
               {i18n.clearFilters ?? 'Clear filters'}
             </button>
           )}
-          {hasHref && (
+          {showViewAll && (
             <a href={element.href} className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto">
               {i18n.viewAll}
             </a>
@@ -543,11 +659,20 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
       <div className="rounded-xl border overflow-hidden">
       {displayRecords.length === 0 ? (
         <div className="px-5 py-12 text-center">
-          <svg className="mx-auto h-10 w-10 text-muted-foreground/40 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-          </svg>
-          <p className="text-sm font-medium text-muted-foreground">{element.emptyMessage ?? i18n.noRecordsFound}</p>
-          {search && <p className="text-xs text-muted-foreground/60 mt-1">{i18n.noResultsHint ?? 'Try adjusting your search or filters.'}</p>}
+          {emptyStateCfg?.icon ? (
+            <span className="block text-3xl mb-3">{emptyStateCfg.icon}</span>
+          ) : (
+            <svg className="mx-auto h-10 w-10 text-muted-foreground/40 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-2.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+          )}
+          <p className="text-sm font-medium text-muted-foreground">
+            {emptyStateCfg?.heading ?? element.emptyMessage ?? i18n.noRecordsFound}
+          </p>
+          {emptyStateCfg?.description && (
+            <p className="text-xs text-muted-foreground/60 mt-1">{emptyStateCfg.description}</p>
+          )}
+          {!emptyStateCfg?.description && search && <p className="text-xs text-muted-foreground/60 mt-1">{i18n.noResultsHint ?? 'Try adjusting your search or filters.'}</p>}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -576,17 +701,13 @@ export function SchemaTable({ element, panelPath, i18n }: { element: Extract<Pan
                       onClick={sortable ? () => toggleSort(col.name) : undefined}
                     >
                       {col.label}
-                      {sortable && isActive && (
-                        <svg className="inline ml-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          {sort?.dir === 'asc'
-                            ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                            : <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          }
-                        </svg>
-                      )}
-                      {sortable && !isActive && (
-                        <svg className="inline ml-1 h-3 w-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                      {sortable && (
+                        <svg
+                          width="10" height="12" viewBox="0 0 10 12" fill="none"
+                          className={`inline ml-1 ${isActive ? 'opacity-100' : 'opacity-30'}`}
+                        >
+                          <path d="M5 1L2 4h6L5 1Z" fill="currentColor" opacity={!isActive || sort?.dir === 'asc' ? 1 : 0.3} />
+                          <path d="M5 11L2 8h6L5 11Z" fill="currentColor" opacity={!isActive || sort?.dir === 'desc' ? 1 : 0.3} />
                         </svg>
                       )}
                     </th>

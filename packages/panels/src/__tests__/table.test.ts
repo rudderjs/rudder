@@ -6,6 +6,8 @@ import { Table }        from '../schema/Table.js'
 import { Column }       from '../schema/Column.js'
 import { SelectFilter } from '../schema/Filter.js'
 import { Action }       from '../schema/Action.js'
+import { Tab }          from '../schema/Tabs.js'
+import { ListTab }      from '../schema/Tab.js'
 
 // ─── Mock classes ──────────────────────────────────────────
 
@@ -385,5 +387,75 @@ describe('Column compute/display', () => {
 
   it('display not set by default', () => {
     assert.equal(Column.make('x').getDisplayFn(), undefined)
+  })
+})
+
+// ─── Table tabs ─────────────────────────────────────────────
+
+describe('Table tabs', () => {
+  it('tabs() stores Tab array', () => {
+    const tabs = [Tab.make('All'), Tab.make('Published').scope((q: any) => q)]
+    const t = Table.make('T').tabs(tabs)
+    assert.equal(t.getTabs().length, 2)
+    assert.equal(t.getTabs()[0]?.getLabel(), 'All')
+  })
+
+  it('getTabs() defaults to empty', () => {
+    assert.deepEqual(Table.make('T').getTabs(), [])
+  })
+
+  it('getConfig includes tabs', () => {
+    const tabs = [Tab.make('All')]
+    const c = Table.make('T').tabs(tabs).getConfig()
+    assert.equal(c.tabs.length, 1)
+  })
+
+  it('listTabs() stores ListTab array', () => {
+    const tabs = [ListTab.make('all'), ListTab.make('active')]
+    const t = Table.make('T').listTabs(tabs)
+    assert.equal(t.getListTabs().length, 2)
+  })
+})
+
+// ─── Table resource methods ─────────────────────────────────
+
+describe('Table resource methods', () => {
+  it('softDeletes() sets flag', () => {
+    const c = Table.make('T').softDeletes().getConfig()
+    assert.equal(c.softDeletes, true)
+  })
+
+  it('softDeletes(false) unsets flag', () => {
+    const c = Table.make('T').softDeletes(false).getConfig()
+    assert.equal(c.softDeletes, false)
+  })
+
+  it('titleField() stores field name', () => {
+    const c = Table.make('T').titleField('name').getConfig()
+    assert.equal(c.titleField, 'name')
+  })
+
+  it('emptyState() stores config', () => {
+    const es = { icon: 'inbox', heading: 'No items', description: 'Create one' }
+    const c = Table.make('T').emptyState(es).getConfig()
+    assert.deepEqual(c.emptyState, es)
+  })
+
+  it('creatable() defaults to true', () => {
+    const c = Table.make('T').creatable().getConfig()
+    assert.equal(c.creatableUrl, true)
+  })
+
+  it('creatable(url) stores custom URL', () => {
+    const c = Table.make('T').creatable('/admin/posts/create').getConfig()
+    assert.equal(c.creatableUrl, '/admin/posts/create')
+  })
+
+  it('defaults: no softDeletes, no titleField, no emptyState, no creatable', () => {
+    const c = Table.make('T').getConfig()
+    assert.equal(c.softDeletes, false)
+    assert.equal(c.titleField, undefined)
+    assert.equal(c.emptyState, undefined)
+    assert.equal(c.creatableUrl, undefined)
   })
 })

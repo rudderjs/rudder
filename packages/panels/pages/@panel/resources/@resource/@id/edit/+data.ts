@@ -5,10 +5,10 @@ import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
 
-function flattenFields(items: FieldOrGrouping[]): Field[] {
+function flattenFields(items: (Field | { getFields(): Field[] })[]): Field[] {
   const result: Field[] = []
   for (const item of items) {
-    if ('getFields' in item) result.push(...flattenFields((item as { getFields(): FieldOrGrouping[] }).getFields()))
+    if ('getFields' in item) result.push(...flattenFields(item.getFields()))
     else result.push(item as Field)
   }
   return result
@@ -29,11 +29,12 @@ export async function data(pageContext: PageContextServer) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
+  const formFields = flattenFields(resource._resolveForm().getFields() as FieldOrGrouping[])
 
   let record: RecordRow | null = null
   if (Model) {
     let q: QueryBuilderLike<RecordRow> = Model.query()
-    for (const f of flattenFields(resource.fields())) {
+    for (const f of formFields) {
       const type = f.getType()
       const name = f.getName()
       if (type === 'belongsTo') {
@@ -50,13 +51,11 @@ export async function data(pageContext: PageContextServer) {
   const versioned     = ResourceClass.versioned
   const draftable     = ResourceClass.draftable
 
-  const allFields = flattenFields(resource.fields())
-
   // Yjs needed if any field has .collaborative() or .persist('websocket'|'indexeddb')
-  const needsYjs = allFields.some((f) => f.isYjs())
+  const needsYjs = formFields.some((f) => f.isYjs())
 
   // Check if any field actually needs websocket (vs indexeddb-only)
-  const needsWebsocket = allFields.some((f) => {
+  const needsWebsocket = formFields.some((f) => {
     const providers: string[] = f.getYjsProviders()
     return providers.includes('websocket')
   })
@@ -67,7 +66,7 @@ export async function data(pageContext: PageContextServer) {
       const { Live } = await import('@boostkit/live')
       const docName = `panel:${slug}:${id}`
       const fieldData: Record<string, unknown> = {}
-      for (const f of allFields) {
+      for (const f of formFields) {
         const name = f.getName()
         if (name in record) {
           fieldData[name] = record[name]
@@ -81,7 +80,7 @@ export async function data(pageContext: PageContextServer) {
 
   // Collect Yjs providers needed by fields
   const fieldProviders = new Set<string>()
-  for (const f of allFields) {
+  for (const f of formFields) {
     const providers: string[] = f.getYjsProviders()
     for (const p of providers) fieldProviders.add(p)
   }

@@ -281,6 +281,20 @@ describe('ListTab', () => {
   })
 })
 
+// ─── Tab scope ──────────────────────────────────────────────
+
+describe('Tab scope', () => {
+  it('scope() stores function', () => {
+    const fn = (q: unknown) => q
+    const t = Tab.make('Published').scope(fn)
+    assert.equal(t.getScope(), fn)
+  })
+
+  it('getScope() returns undefined by default', () => {
+    assert.equal(Tab.make('All').getScope(), undefined)
+  })
+})
+
 // ─── Tabs fromArray ──────────────────────────────────────────
 
 describe('Tabs fromArray', () => {

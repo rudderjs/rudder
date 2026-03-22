@@ -51,6 +51,8 @@ export class Tab {
   private _icon?: string
   private _badge?: (() => Promise<string | number | null>) | string | number
   private _lazy = false
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _scope?: (query: any) => any
 
   private constructor(label: string) {
     this._label = label
@@ -84,6 +86,19 @@ export class Tab {
     return this
   }
 
+  /**
+   * Apply a query scope when this tab is active in a Table.
+   * Used with Table.tabs() for filtered table views.
+   *
+   * @example
+   * Tab.make('Published').scope((q) => q.where('status', 'published'))
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope(fn: (query: any) => any): this {
+    this._scope = fn
+    return this
+  }
+
   // ── Getters ──────────────────────────────────────────────
 
   getLabel(): string { return this._label }
@@ -91,6 +106,8 @@ export class Tab {
   getIcon(): string | undefined { return this._icon }
   getBadge() { return this._badge }
   isLazy(): boolean { return this._lazy }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getScope(): ((query: any) => any) | undefined { return this._scope }
 
   /** Get items as Field[] (for resource field context). */
   getFields(): Field[] {

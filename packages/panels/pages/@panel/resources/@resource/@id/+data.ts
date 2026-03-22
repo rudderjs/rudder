@@ -10,10 +10,10 @@ interface ComputedFieldLike extends Field {
   apply(record: RecordRow): unknown
 }
 
-function flattenFields(items: FieldOrGrouping[]): Field[] {
+function flattenFields(items: (Field | { getFields(): Field[] })[]): Field[] {
   const result: Field[] = []
   for (const item of items) {
-    if ('getFields' in item) result.push(...flattenFields((item as { getFields(): FieldOrGrouping[] }).getFields()))
+    if ('getFields' in item) result.push(...flattenFields(item.getFields()))
     else result.push(item as Field)
   }
   return result
@@ -38,11 +38,12 @@ export async function data(pageContext: PageContextServer) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any
+  const formFields = flattenFields(resource._resolveForm().getFields() as FieldOrGrouping[])
 
   let record: RecordRow | null = null
   if (Model) {
     let q: QueryBuilderLike<RecordRow> = Model.query()
-    for (const f of flattenFields(resource.fields())) {
+    for (const f of formFields) {
       const type = f.getType()
       const name = f.getName()
       if (type === 'belongsTo') {
@@ -58,9 +59,8 @@ export async function data(pageContext: PageContextServer) {
 
     // Apply display transforms + computed fields (same as API endpoint)
     if (record) {
-      const allFields = flattenFields(resource.fields())
-      const computedFields = allFields.filter((f): f is ComputedFieldLike => f.getType() === 'computed' && typeof (f as unknown as ComputedFieldLike).apply === 'function')
-      const displayFields  = allFields.filter((f) => f.hasDisplay())
+      const computedFields = formFields.filter((f): f is ComputedFieldLike => f.getType() === 'computed' && typeof (f as unknown as ComputedFieldLike).apply === 'function')
+      const displayFields  = formFields.filter((f) => f.hasDisplay())
 
       if (computedFields.length || displayFields.length) {
         const rec: RecordRow = { ...record }
@@ -75,7 +75,7 @@ export async function data(pageContext: PageContextServer) {
   const hasManyData: Record<string, { records: RecordRow[]; schema: ReturnType<Field['toMeta']>[]; pagination: { total: number; currentPage: number; lastPage: number; perPage: number } }> = {}
 
   if (record) {
-    for (const f of flattenFields(resource.fields())) {
+    for (const f of formFields) {
       if (f.getType() !== 'hasMany') continue
       const fExtra     = (f as unknown as { _extra: Record<string, unknown> })._extra
       const relSlug    = fExtra?.['resource'] as string | undefined
@@ -92,13 +92,14 @@ export async function data(pageContext: PageContextServer) {
       if (!RelModel) continue
 
       const relResource = new RelClass()
+      const relFormFields = flattenFields(relResource._resolveForm().getFields() as FieldOrGrouping[])
 
       let q: QueryBuilderLike<RecordRow> = throughMany
         ? RelModel.query().where(fk, { some: { id } })
         : RelModel.query().where(fk, id)
 
       // Eager-load belongsTo and belongsToMany relations so CellValue can display them
-      for (const rf of flattenFields(relResource.fields())) {
+      for (const rf of relFormFields) {
         const rfType = rf.getType()
         if (rfType === 'belongsTo') {
           const rname = rf.getName()
@@ -111,7 +112,7 @@ export async function data(pageContext: PageContextServer) {
 
       const result = await q.paginate(1, 15)
 
-      const schema = flattenFields(relResource.fields())
+      const schema = relFormFields
         .filter((rf) => !rf.isHiddenFrom('table') && rf.getType() !== 'hasMany')
         .map((rf) => rf.toMeta())
 
@@ -128,12 +129,18 @@ export async function data(pageContext: PageContextServer) {
     }
   }
 
-  // Resolve resource widgets for the show page
+  // Resolve resource detail widgets for the show page (new API: detail(), legacy: widgets())
   let widgetData: unknown[] = []
   try {
-    const widgets = resource.widgets(record ?? undefined)
-    widgetData = widgets.map((w) => w.toMeta())
-  } catch { /* widgets() threw — skip */ }
+    const detailElements = resource.detail(record ?? undefined)
+    if (detailElements.length > 0) {
+      widgetData = detailElements.map((w) => w.toMeta())
+    } else {
+      // Legacy fallback: widgets()
+      const widgets = resource.widgets(record ?? undefined)
+      widgetData = widgets.map((w) => w.toMeta())
+    }
+  } catch { /* detail()/widgets() threw — skip */ }
 
   const sessionUser = await getSessionUser(pageContext)
   return { panelMeta, resourceMeta, record, pathSegment, slug, id, hasManyData, widgetData, sessionUser }

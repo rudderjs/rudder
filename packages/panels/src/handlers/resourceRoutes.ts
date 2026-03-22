@@ -33,8 +33,13 @@ export function mountResourceRoutes(
     if (!await resource.policy('viewAny', ctx)) return res.status(403).json({ message: 'Forbidden.' })
     if (!Model) return res.status(500).json({ message: `Resource "${slug}" has no model defined.` })
 
+    // Resolve table and form config
+    const table       = resource._resolveTable()
+    const tableConfig = table.getConfig()
+    const formFields  = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
+
     const page    = Number((req.query as Record<string, string>)['page']    ?? 1)
-    const perPage = Math.min(Number((req.query as Record<string, string>)['perPage'] ?? ResourceClass.perPage), 100)
+    const perPage = Math.min(Number((req.query as Record<string, string>)['perPage'] ?? tableConfig.perPage), 100)
 
     const url    = new URL(req.url, 'http://localhost')
     const sort   = url.searchParams.get('sort') ?? undefined
@@ -43,8 +48,23 @@ export function mountResourceRoutes(
 
     let q: QueryBuilderLike<RecordRow> = Model.query()
 
+    // Tab filter — apply active tab's query scope
+    const activeTab = url.searchParams.get('tab') ?? ''
+    if (activeTab) {
+      const tabs = tableConfig.tabs
+      const tab = tabs.find((t) => t.getLabel().toLowerCase().replace(/\s+/g, '-') === activeTab)
+      const tabScope = tab?.getScope()
+      if (tabScope) {
+        q = tabScope(q) as QueryBuilderLike<RecordRow>
+      } else {
+        const listTab = tableConfig.listTabs.find((t) => t.getName() === activeTab)
+        const tabQuery = listTab?.getQueryFn()
+        if (tabQuery) q = tabQuery(q) as QueryBuilderLike<RecordRow>
+      }
+    }
+
     // Soft deletes — filter by trashed status
-    const hasSoftDeletes = ResourceClass.softDeletes === true
+    const hasSoftDeletes = tableConfig.softDeletes
     const trashed        = url.searchParams.get('trashed') === 'true'
     if (hasSoftDeletes) {
       if (trashed) {
@@ -67,13 +87,13 @@ export function mountResourceRoutes(
     }
 
     // Include belongsTo relations so the table can show display names
-    for (const f of flattenFields(resource.fields()).filter(f => f.getType() === 'belongsTo')) {
+    for (const f of formFields.filter(f => f.getType() === 'belongsTo')) {
       q = q.with(relationName(f))
     }
 
     // Sort — only on fields marked sortable()
     if (sort) {
-      const sortableFields = flattenFields(resource.fields()).filter(f => f.isSortable()).map(f => f.getName())
+      const sortableFields = formFields.filter(f => f.isSortable()).map(f => f.getName())
       if (sortableFields.includes(sort)) {
         q = q.orderBy(sort, dir)
       }
@@ -81,7 +101,8 @@ export function mountResourceRoutes(
 
     // Search — LIKE across all searchable fields (OR)
     if (search) {
-      const searchableCols = flattenFields(resource.fields()).filter(f => f.isSearchable()).map(f => f.getName())
+      const searchableCols = tableConfig.searchColumns
+        ?? formFields.filter(f => f.isSearchable()).map(f => f.getName())
       if (searchableCols.length > 0) {
         q = q.where(searchableCols[0] ?? '', 'LIKE', `%${search}%`)
         for (let i = 1; i < searchableCols.length; i++) {
@@ -91,7 +112,7 @@ export function mountResourceRoutes(
     }
 
     // Filters — ?filter[field]=value
-    for (const filter of resource.filters()) {
+    for (const filter of tableConfig.filters) {
       const value = url.searchParams.get(`filter[${filter.getName()}]`)
       if (value !== null && value !== '') {
         q = filter.applyToQuery(q, value)
@@ -101,9 +122,8 @@ export function mountResourceRoutes(
     const result = await q.paginate(page, perPage)
 
     // Strip unreadable fields from each record
-    const allFields = flattenFields(resource.fields())
     const readableNames = new Set(
-      allFields.filter(f => f.canRead(ctx)).map(f => f.getName())
+      formFields.filter(f => f.canRead(ctx)).map(f => f.getName())
     )
     readableNames.add('id')
     result.data = (result.data as Record<string, unknown>[]).map((r) =>
@@ -143,7 +163,8 @@ export function mountResourceRoutes(
       : Model.query().where(fk, id)
 
     // Include belongsTo and belongsToMany relations so display values are available
-    for (const f of flattenFields(new ResourceClass().fields())) {
+    const relFormFields = flattenFields(new ResourceClass()._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
+    for (const f of relFormFields) {
       if (f.getType() === 'belongsTo')    q = q.with(relationName(f))
       if (f.getType() === 'belongsToMany') q = q.with(f.getName())
     }
@@ -192,7 +213,8 @@ export function mountResourceRoutes(
     const id     = param(req, 'id')
 
     // Include belongsToMany relations so the edit form can populate multi-selects
-    const manyRelations = flattenFields(new ResourceClass().fields())
+    const showFormFields = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
+    const manyRelations = showFormFields
       .filter(f => f.getType() === 'belongsToMany')
       .map(f => f.getName())
 
@@ -203,9 +225,8 @@ export function mountResourceRoutes(
     if (!record) return res.status(404).json({ message: 'Record not found.' })
 
     // Strip unreadable fields
-    const allFieldsForShow = flattenFields(resource.fields())
     const readableNamesForShow = new Set(
-      allFieldsForShow.filter(f => f.canRead(ctx)).map(f => f.getName())
+      showFormFields.filter(f => f.canRead(ctx)).map(f => f.getName())
     )
     readableNamesForShow.add('id')
     const filteredRecord = Object.fromEntries(
@@ -270,7 +291,8 @@ export function mountResourceRoutes(
     const exists = await Model.find(id)
     if (!exists) return res.status(404).json({ message: 'Record not found.' })
 
-    if (ResourceClass.softDeletes) {
+    const delSoftDeletes = resource._resolveTable().getConfig().softDeletes
+    if (delSoftDeletes) {
       await Model.query().update(id, { deletedAt: new Date() })
     } else {
       await Model.query().delete(id)
@@ -289,11 +311,12 @@ export function mountResourceRoutes(
     const { ids } = req.body as { ids?: string[] }
     if (!ids?.length) return res.status(422).json({ message: 'No records selected.' })
 
+    const bulkSoftDeletes = resource._resolveTable().getConfig().softDeletes
     let deleted = 0
     for (const id of ids) {
       const exists = await Model.find(id)
       if (exists) {
-        if (ResourceClass.softDeletes) {
+        if (bulkSoftDeletes) {
           await Model.query().update(id, { deletedAt: new Date() })
         } else {
           await Model.query().delete(id)
@@ -313,7 +336,8 @@ export function mountResourceRoutes(
     if (!await resource.policy('update', ctx)) return res.status(403).json({ message: 'Forbidden.' })
 
     const actionName = param(req, 'action')
-    const action     = resource.actions().find((a: Action) => a.getName() === actionName)
+    const tableActions = resource._resolveTable().getConfig().actions
+    const action       = tableActions.find((a: Action) => a.getName() === actionName)
     if (!action) return res.status(404).json({ message: `Action "${actionName}" not found.` })
 
     const { ids } = req.body as { ids?: string[] }
@@ -334,7 +358,8 @@ export function mountResourceRoutes(
   }, mw)
 
   // ── Soft-delete routes (restore + force delete) ───
-  if (ResourceClass.softDeletes) {
+  const resolvedSoftDeletes = new ResourceClass()._resolveTable().getConfig().softDeletes
+  if (resolvedSoftDeletes) {
     // POST /panel/api/resource/:id/_restore — restore a soft-deleted record
     router.post(`${base}/:id/_restore`, async (req: AppRequest, res: AppResponse) => {
       const resource = new ResourceClass()
@@ -415,7 +440,8 @@ export function mountResourceRoutes(
   }
 
   // ── Version routes (versioned or collaborative resources) ───
-  const hasCollabFields = flattenFields(new ResourceClass().fields()).some(f => f.isYjs())
+  const versionResource = new ResourceClass()
+  const hasCollabFields = flattenFields(versionResource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[]).some(f => f.isYjs())
   if (ResourceClass.versioned || hasCollabFields) {
     mountVersionRoutes(router, panel, ResourceClass, mw)
   }

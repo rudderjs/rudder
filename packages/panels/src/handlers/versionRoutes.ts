@@ -32,7 +32,8 @@ export function mountVersionRoutes(
 ): void {
   const slug     = ResourceClass.getSlug()
   const base     = `${panel.getApiBase()}/${slug}`
-  const isCollab = flattenFields(new ResourceClass().fields()).some(f => f.isYjs())
+  const versionResource = new ResourceClass()
+  const isCollab = flattenFields(versionResource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[]).some(f => f.isYjs())
 
   // GET /{panel}/api/{resource}/{id}/_versions — list
   router.get(`${base}/:id/_versions`, async (req: AppRequest, res: AppResponse) => {
@@ -136,7 +137,8 @@ export function mountVersionRoutes(
       await Live.clearDocument(docName)
 
       const resource = new ResourceClass()
-      const collabFields = flattenFields(resource.fields()).filter(f => f.isYjs())
+      const vFormFields = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
+      const collabFields = vFormFields.filter(f => f.isYjs())
 
       for (const f of collabFields) {
         const type = f.getType()
@@ -151,7 +153,7 @@ export function mountVersionRoutes(
         const record = await SyncModel.find(id)
         if (record) {
           const fieldData: Record<string, unknown> = {}
-          for (const f of flattenFields(resource.fields())) {
+          for (const f of vFormFields) {
             const name = f.getName()
             if (name in record) {
               fieldData[name] = record[name]

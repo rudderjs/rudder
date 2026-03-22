@@ -1,20 +1,6 @@
-import { PanelRegistry } from '@boostkit/panels'
-import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@boostkit/panels'
+import { PanelRegistry, resolveTable } from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelUser } from '@boostkit/panels'
 import { getSessionUser } from '../../../_lib/getSessionUser.js'
-
-/** A Field with an optional `.apply(record)` method (ComputedField). */
-interface ComputedFieldLike extends Field {
-  apply(record: RecordRow): unknown
-}
-
-function flattenFields(items: FieldOrGrouping[]): Field[] {
-  const result: Field[] = []
-  for (const item of items) {
-    if ('getFields' in item) result.push(...flattenFields((item as { getFields(): FieldOrGrouping[] }).getFields()))
-    else result.push(item as Field)
-  }
-  return result
-}
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
@@ -31,122 +17,61 @@ export async function data(pageContext: PageContextServer) {
   const resource     = new ResourceClass()
   const resourceMeta = resource.toMeta()
   const panelMeta    = panel.toMeta()
+  const sessionUser  = await getSessionUser(pageContext)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const Model  = ResourceClass.model as any
-  const params = new URLSearchParams(pageContext.urlOriginal.split('?')[1] ?? '')
-  const isLoadMore = ResourceClass.paginationType === 'loadMore'
-  const loadMoreTarget = isLoadMore ? Number(params.get('page') ?? 1) : 1
-  const page   = isLoadMore ? 1 : Number(params.get('page') ?? 1)
-  const sort   = params.get('sort') ?? undefined
-  const dir    = (params.get('dir') ?? 'ASC').toUpperCase() as 'ASC' | 'DESC'
-  const search = params.get('search') ?? undefined
-
-  let records: unknown[]  = []
-  let pagination: { total: number; currentPage: number; lastPage: number; perPage: number } | null = null
-
-  if (Model) {
-    let q: QueryBuilderLike<RecordRow> = Model.query()
-
-    // Tab filter — apply active tab's query modifier
-    const activeTab = params.get('tab') ?? ''
-    if (activeTab) {
-      const tabs = resource.tabs()
-      const tab  = tabs.find((t) => t.getName() === activeTab)
-      const tabQuery = tab?.getQueryFn()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (tabQuery) q = tabQuery(q as any) as QueryBuilderLike<RecordRow>
-    }
-
-    // Soft deletes — filter by trashed status
-    const hasSoftDeletes = ResourceClass.softDeletes
-    const trashed        = params.get('trashed') === 'true'
-    if (hasSoftDeletes) {
-      if (trashed) {
-        q = q.where('deletedAt', '!=', null)
-      } else {
-        q = q.where('deletedAt', null)
+  // ── Build PanelContext with session support (for persist='session') ──
+  let sessionGet: ((key: string) => unknown) | undefined
+  try {
+    const { app: getApp } = await import('@boostkit/core') as { app(): { make<T>(key: string): T } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionConfig = getApp().make<any>('session.config')
+    if (sessionConfig?.secret && sessionConfig?.cookie?.name) {
+      const cookieHeader = ((pageContext as any).headers?.cookie ?? '') as string
+      const cookieName = sessionConfig.cookie.name as string
+      const match = cookieHeader.split(';').map((c: string) => c.trim()).find((c: string) => c.startsWith(`${cookieName}=`))
+      if (match) {
+        const cookieValue = decodeURIComponent(match.slice(cookieName.length + 1))
+        const { createHmac } = await import('node:crypto')
+        const dotIdx = cookieValue.lastIndexOf('.')
+        if (dotIdx !== -1) {
+          const b64 = cookieValue.slice(0, dotIdx)
+          const hmac = cookieValue.slice(dotIdx + 1)
+          const expected = createHmac('sha256', sessionConfig.secret as string).update(b64).digest('base64url')
+          if (expected === hmac) {
+            const payload = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8')) as { data: Record<string, unknown> }
+            sessionGet = (key: string) => payload.data[key]
+          }
+        }
       }
     }
+  } catch { /* session not available */ }
 
-    // Draftable — filter by draft status
-    const hasDraftable = ResourceClass.draftable
-    const draftFilter  = params.get('draft')
-    if (hasDraftable) {
-      if (draftFilter === 'true') {
-        q = q.where('draftStatus', 'draft')
-      } else if (draftFilter === 'false') {
-        q = q.where('draftStatus', 'published')
-      }
+  const ctx = {
+    user: sessionUser as PanelUser | undefined,
+    headers: (pageContext as PageContextServer & { headers?: Record<string, string> }).headers ?? {},
+    path: pageContext.urlPathname,
+    params: {},
+    urlSearch: pageContext.urlParsed?.search ?? {},
+    sessionGet,
+  }
+
+  // ── Resolve the resource's table through the same pipeline as standalone tables ──
+  // This gives us: SSR records, pagination, persist state (session/url/localStorage),
+  // search, sort, filters — all handled by resolveTable()
+  let tableElement: PanelSchemaElementMeta | null = null
+  if (ResourceClass.model) {
+    const table = resource._resolveTable()
+    tableElement = await resolveTable(table as any, panel, ctx)
+
+    // Override href for resource row links
+    if (tableElement && 'href' in tableElement) {
+      (tableElement as any).href = `/${pathSegment}/resources/${slug}`
     }
-
-    // Include belongsTo and belongsToMany relations so the table shows names instead of raw IDs
-    for (const f of flattenFields(resource.fields())) {
-      const type = f.getType()
-      const name = f.getName()
-      if (type === 'belongsTo') {
-        const rel = ((f as unknown as { _extra: Record<string, unknown> })._extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
-        q = q.with(rel)
-      } else if (type === 'belongsToMany') {
-        q = q.with(name)
-      }
-    }
-
-    if (sort) {
-      const sortableFields = flattenFields(resource.fields()).filter((f) => f.isSortable()).map((f) => f.getName())
-      if (sortableFields.includes(sort)) q = q.orderBy(sort, dir)
-    }
-
-    if (search) {
-      const cols = flattenFields(resource.fields()).filter((f) => f.isSearchable()).map((f) => f.getName())
-      if (cols.length > 0) {
-        q = q.where(cols[0] ?? '', 'LIKE', `%${search}%`)
-        for (let i = 1; i < cols.length; i++) q = q.orWhere(cols[i] ?? '', `%${search}%`)
-      }
-    }
-
-    for (const filter of resource.filters()) {
-      const value = params.get(`filter[${filter.getName()}]`)
-      if (value !== null && value !== '') {
-        q = filter.applyToQuery(q, value) as QueryBuilderLike<RecordRow>
-      }
-    }
-
-    const perPage = Math.min(Number(params.get('perPage') ?? ResourceClass.perPage ?? 15), 100)
-
-    // In loadMore mode, fetch pages 1..N in a single query
-    const effectivePerPage = isLoadMore && loadMoreTarget > 1 ? perPage * loadMoreTarget : perPage
-    const result = await q.paginate(page, effectivePerPage)
-    const rawRecords: RecordRow[] = result.data
-
-    // Apply display transforms + computed fields
-    const allFields = flattenFields(resource.fields())
-    const computedFields = allFields.filter((f): f is ComputedFieldLike => f.getType() === 'computed' && typeof (f as unknown as ComputedFieldLike).apply === 'function')
-    const displayFields  = allFields.filter((f) => f.hasDisplay())
-
-    if (computedFields.length || displayFields.length) {
-      records = rawRecords.map((r) => {
-        const rec: RecordRow = { ...r }
-        for (const f of computedFields) rec[f.getName()] = f.apply(rec)
-        for (const f of displayFields)  rec[f.getName()] = f.applyDisplay(rec[f.getName()], rec)
-        return rec
-      })
-    } else {
-      records = rawRecords
-    }
-
-    // For loadMore, report pagination in terms of the original perPage batch size
-    const totalRecords = result.total
-    const actualLastPage = Math.ceil(totalRecords / perPage)
-    pagination = {
-      total:       totalRecords,
-      currentPage: isLoadMore ? loadMoreTarget : result.currentPage,
-      lastPage:    isLoadMore ? actualLastPage : result.lastPage,
-      perPage,
+    // Override resource slug for API endpoint routing
+    if (tableElement && 'resource' in tableElement) {
+      (tableElement as any).resource = slug
     }
   }
 
-  const sessionUser = await getSessionUser(pageContext)
-  const urlSearch = pageContext.urlOriginal.split('?')[1] ?? ''
-  return { panelMeta, resourceMeta, records, pagination, pathSegment, slug, sessionUser, urlSearch }
+  return { panelMeta, resourceMeta, tableElement, pathSegment, slug, sessionUser }
 }

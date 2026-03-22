@@ -3,6 +3,8 @@ import type { Filter, FilterMeta } from './Filter.js'
 import type { Action, ActionMeta, ActionHandler } from './Action.js'
 import type { DataSource } from '../datasource.js'
 import type { PersistMode } from '../persist.js'
+import type { Tab } from './Tabs.js'
+import type { ListTab } from './Tab.js'
 
 // ─── Table schema element ────────────────────────────────────
 // Three modes:
@@ -76,6 +78,11 @@ export interface TableElementMeta {
     lastPage:    number
     type:        'pages' | 'loadMore'
   }
+  tabs?:         { label: string; icon?: string; scope?: boolean }[]
+  softDeletes?:  boolean
+  titleField?:   string
+  emptyState?:   { icon?: string; heading?: string; description?: string }
+  creatableUrl?: string | boolean
 }
 
 export interface TableConfig {
@@ -108,6 +115,12 @@ export interface TableConfig {
   id?:            string | undefined
   remember?:      TableRememberMode | undefined
   onSave?:        TableSaveHandler | undefined
+  tabs:           Tab[]
+  listTabs:       ListTab[]
+  softDeletes:    boolean
+  titleField?:    string | undefined
+  emptyState?:    { icon?: string; heading?: string; description?: string } | undefined
+  creatableUrl?:  string | boolean | undefined
 }
 
 export class Table {
@@ -140,6 +153,12 @@ export class Table {
   private _filters:        Filter[] = []
   private _actions:        Action[] = []
   private _onSaveFn?:      TableSaveHandler
+  private _tabs:           Tab[] = []
+  private _listTabs:       ListTab[] = []
+  private _softDeletes:    boolean = false
+  private _titleField?:    string
+  private _emptyState?:    { icon?: string; heading?: string; description?: string }
+  private _creatableUrl?:  string | boolean
 
   protected constructor(title: string) {
     this._title = title
@@ -353,6 +372,45 @@ export class Table {
 
   getOnSave(): TableSaveHandler | undefined { return this._onSaveFn }
 
+  /** Add Tab-based filter tabs to the table (schema tabs with scope). */
+  tabs(tabs: Tab[]): this {
+    this._tabs = tabs
+    return this
+  }
+
+  /** Add ListTab-based filter tabs to the table (legacy resource tabs). */
+  listTabs(tabs: ListTab[]): this {
+    this._listTabs = tabs
+    return this
+  }
+
+  getTabs(): Tab[] { return this._tabs }
+  getListTabs(): ListTab[] { return this._listTabs }
+
+  /** Enable soft-delete support (trashed/active toggle). */
+  softDeletes(value = true): this {
+    this._softDeletes = value
+    return this
+  }
+
+  /** Set the field used as the record's display title. */
+  titleField(name: string): this {
+    this._titleField = name
+    return this
+  }
+
+  /** Configure the empty state when no records exist. */
+  emptyState(config: { icon?: string; heading?: string; description?: string }): this {
+    this._emptyState = config
+    return this
+  }
+
+  /** Show a "+ Create" button. Pass a URL or true for auto-generated URL. */
+  creatable(url: string | boolean = true): this {
+    this._creatableUrl = url
+    return this
+  }
+
   getFilters(): Filter[] { return this._filters }
   getActions(): Action[] { return this._actions }
 
@@ -391,6 +449,12 @@ export class Table {
       id:             this.getId(),
       remember:       this._remember || undefined,
       onSave:         this._onSaveFn,
+      tabs:           this._tabs,
+      listTabs:       this._listTabs,
+      softDeletes:    this._softDeletes,
+      titleField:     this._titleField,
+      emptyState:     this._emptyState,
+      creatableUrl:   this._creatableUrl,
     }
   }
 }

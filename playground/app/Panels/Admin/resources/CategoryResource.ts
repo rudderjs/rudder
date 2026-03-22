@@ -1,4 +1,4 @@
-import { Resource, TextField, SlugField, RelationField, HasMany } from '@boostkit/panels'
+import { Resource, TextField, SlugField, RelationField, HasMany, Table, Form, Column } from '@boostkit/panels'
 import { Category } from '../../../Models/Category.js'
 
 export class CategoryResource extends Resource {
@@ -7,13 +7,21 @@ export class CategoryResource extends Resource {
   static label         = 'Categories'
   static labelSingular = 'Category'
   static icon          = 'folder-tree'
-  static titleField    = 'name'
-  static defaultSort   = 'name'
 
   static navigationGroup = 'Content'
 
-  fields() {
-    return [
+  table(table: Table) {
+    return table
+      .columns([
+        Column.make('name').sortable().searchable(),
+        Column.make('slug'),
+      ])
+      .sortBy('name', 'ASC')
+      .titleField('name')
+  }
+
+  form(form: Form) {
+    return form.fields([
       TextField.make('name')
         .label('Name')
         .required()
@@ -40,6 +48,6 @@ export class CategoryResource extends Resource {
         .resource('articles')
         .foreignKey('categories')
         .throughMany(),
-    ]
+    ])
   }
 }

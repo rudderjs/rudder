@@ -17,7 +17,10 @@ import {
   RelationField,
   ComputedField,
   Action,
-  ListTab,
+  Tab,
+  Table,
+  Form,
+  Column,
   Stats,
   Stat,
 } from '@boostkit/panels'
@@ -28,28 +31,86 @@ export class ArticleResource extends Resource {
   static label          = 'Articles'
   static labelSingular  = 'Article'
   static icon           = 'file-text'
-  static titleField     = 'title'
-  static defaultSort    = 'createdAt'
-  static defaultSortDir = 'DESC' as const
-  static rememberTable = true
-  static draftRecovery = false
-  // static autosave          = { interval: 10000 }
-  static perPage = 5
-  static perPageOptions = [5,10, 15, 25, 50, 100]
-  static live          = true
-  static versioned     = true
-  static draftable     = true
-  static softDeletes   = true
+  static perPageOptions = [5, 10, 15, 25, 50, 100]
+  static live           = true
+  static versioned      = true
+  static draftable      = true
 
-  static navigationGroup     = 'Content'
-  static navigationBadge     = async () => await Article.query().count()
+  static navigationGroup      = 'Content'
+  static navigationBadge      = async () => await Article.query().count()
   static navigationBadgeColor = 'primary' as const
-  static emptyStateIcon       = 'file-text'
-  static emptyStateHeading    = 'No :label yet'
-  static emptyStateDescription = 'Write your first article to share with the world.'
 
-  fields() {
-    return [
+  table(table: Table) {
+    return table
+      .columns([
+        Column.make('title').sortable().searchable(),
+        Column.make('slug'),
+        Column.make('featured').boolean(),
+        Column.make('publishedAt').date(),
+        Column.make('createdAt').date().sortable(),
+        Column.make('wordCount'),
+      ])
+      .sortBy('createdAt', 'DESC')
+      .titleField('title')
+      .softDeletes()
+      .searchable(['title'])
+      .paginated('pages', 5)
+      .remember('session')
+      .emptyState({
+        icon: 'file-text',
+        heading: 'No :label yet',
+        description: 'Write your first article to share with the world.',
+      })
+      .tabs([
+        Tab.make('All'),
+        Tab.make('Published').icon('circle-check').scope((q: any) => q.where('draftStatus', 'published')),
+        Tab.make('Drafts').icon('pencil-line').scope((q: any) => q.where('draftStatus', 'draft')),
+      ])
+      .filters([
+        SelectFilter.make('featured')
+          .label('Featured')
+          .options([
+            { label: 'Featured',     value: true  },
+            { label: 'Not featured', value: false },
+          ]),
+      ])
+      .actions([
+        Action.make('publish')
+          .label('Publish')
+          .bulk()
+          .handler(async (records) => {
+            for (const record of records as Article[]) {
+              await Article.query().update(record.id, {
+                draftStatus: 'published',
+                publishedAt: new Date(),
+              } as any)
+            }
+          }),
+
+        Action.make('unpublish')
+          .label('Revert to Draft')
+          .bulk()
+          .handler(async (records) => {
+            for (const record of records as Article[]) {
+              await Article.query().update(record.id, { draftStatus: 'draft' } as any)
+            }
+          }),
+
+        Action.make('delete')
+          .label('Delete')
+          .destructive()
+          .confirm('Permanently delete selected articles? This cannot be undone.')
+          .bulk()
+          .handler(async (records) => {
+            for (const record of records as Article[]) {
+              await Article.query().delete(record.id)
+            }
+          }),
+      ])
+  }
+
+  form(form: Form) {
+    return form.fields([
       // ── Content ──────────────────────────────────────────────
       TextField.make('title')
         .label('Title')
@@ -62,7 +123,6 @@ export class ArticleResource extends Resource {
         .label('Slug')
         .from('title')
         .required()
-        // Per-field validation: unique slug check
         .validate(async (value, data) => {
           const q = Article.query().where('slug', value as string)
           if (data['id']) (q as any).where('id', '!=', data['id'])
@@ -88,75 +148,68 @@ export class ArticleResource extends Resource {
         .disk('public')
         .directory('articles'),
 
-        // ContentField.make('content')
-        //   .label('Content')
-        //   .placeholder('Start writing...'),
-          // .collaborative(),
-
-        RichContentField.make('content')
-          .label('Content (Lexical)')
-          .placeholder('Start writing your article…')
-          .blocks([
-            Block.make('callToAction')
-              .label('Call to Action')
-              .icon('📣')
-              .schema([
-                TextField.make('title').label('Title').required(),
-                TextField.make('buttonText').label('Button Text'),
-                TextField.make('url').label('URL'),
-                SelectField.make('style').label('Style').options([
-                  { value: 'primary', label: 'Primary' },
-                  { value: 'outline', label: 'Outline' },
-                ]),
+      RichContentField.make('content')
+        .label('Content (Lexical)')
+        .placeholder('Start writing your article…')
+        .blocks([
+          Block.make('callToAction')
+            .label('Call to Action')
+            .icon('📣')
+            .schema([
+              TextField.make('title').label('Title').required(),
+              TextField.make('buttonText').label('Button Text'),
+              TextField.make('url').label('URL'),
+              SelectField.make('style').label('Style').options([
+                { value: 'primary', label: 'Primary' },
+                { value: 'outline', label: 'Outline' },
               ]),
-            Block.make('video')
-              .label('Video Embed')
-              .icon('🎬')
-              .schema([
-                TextField.make('url').label('URL').required(),
-                TextField.make('caption').label('Caption'),
+            ]),
+          Block.make('video')
+            .label('Video Embed')
+            .icon('🎬')
+            .schema([
+              TextField.make('url').label('URL').required(),
+              TextField.make('caption').label('Caption'),
+            ]),
+        ])
+        .collaborative(),
+
+      RichContentField.make('body')
+        .label('Body (Lexical)')
+        .placeholder('Start writing your article…')
+        .blocks([
+          Block.make('callToAction')
+            .label('Call to Action')
+            .icon('📣')
+            .schema([
+              TextField.make('title').label('Title').required(),
+              TextField.make('buttonText').label('Button Text'),
+              TextField.make('url').label('URL'),
+              SelectField.make('style').label('Style').options([
+                { value: 'primary', label: 'Primary' },
+                { value: 'outline', label: 'Outline' },
               ]),
-          ])
-          .collaborative(),
+            ]),
+          Block.make('video')
+            .label('Video Embed')
+            .icon('🎬')
+            .schema([
+              TextField.make('url').label('URL').required(),
+              TextField.make('caption').label('Caption'),
+            ]),
+        ])
+        .collaborative(),
 
-        RichContentField.make('body')
-          .label('Body (Lexical)')
-          .placeholder('Start writing your article…')
-          .blocks([
-            Block.make('callToAction')
-              .label('Call to Action')
-              .icon('📣')
-              .schema([
-                TextField.make('title').label('Title').required(),
-                TextField.make('buttonText').label('Button Text'),
-                TextField.make('url').label('URL'),
-                SelectField.make('style').label('Style').options([
-                  { value: 'primary', label: 'Primary' },
-                  { value: 'outline', label: 'Outline' },
-                ]),
-              ]),
-            Block.make('video')
-              .label('Video Embed')
-              .icon('🎬')
-              .schema([
-                TextField.make('url').label('URL').required(),
-                TextField.make('caption').label('Caption'),
-              ]),
-          ])
-          .collaborative(),
+      TagsField.make('tags')
+        .label('Tags')
+        .placeholder('Add a tag…'),
 
-        TagsField.make('tags')
-          .label('Tags')
-          .placeholder('Add a tag…'),
-
-        RelationField.make('categories')
-          .label('Categories')
-          .resource('categories')
-          .displayField('name')
-          .multiple()
-          .creatable(),
-          // .hideFromTable(),
-
+      RelationField.make('categories')
+        .label('Categories')
+        .resource('categories')
+        .displayField('name')
+        .multiple()
+        .creatable(),
 
       // ── Publishing ────────────────────────────────────────────
       Section.make('Publishing')
@@ -182,7 +235,6 @@ export class ArticleResource extends Resource {
             .readonly()
             .hideFromCreate()
             .hideFromEdit()
-            // Display transformer: format date for table/show
             .display((v) =>
               v ? new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(v as string)) : '—'
             ),
@@ -214,66 +266,10 @@ export class ArticleResource extends Resource {
           return text.trim() ? text.trim().split(/\s+/).length : 0
         })
         .display((v) => `${v} words`),
-
-    ]
+    ])
   }
 
-  tabs() {
-    return [
-      ListTab.make('all').label('All'),
-      ListTab.make('published').label('Published').icon('circle-check').query((q: any) => q.where('draftStatus', 'published')),
-      ListTab.make('draft').label('Drafts').icon('pencil-line').query((q: any) => q.where('draftStatus', 'draft')),
-    ]
-  }
-
-  filters() {
-    return [
-      SelectFilter.make('featured')
-        .label('Featured')
-        .options([
-          { label: 'Featured',     value: true  },
-          { label: 'Not featured', value: false },
-        ]),
-    ]
-  }
-
-  actions() {
-    return [
-      Action.make('publish')
-        .label('Publish')
-        .bulk()
-        .handler(async (records) => {
-          for (const record of records as Article[]) {
-            await Article.query().update(record.id, {
-              draftStatus: 'published',
-              publishedAt: new Date(),
-            } as any)
-          }
-        }),
-
-      Action.make('unpublish')
-        .label('Revert to Draft')
-        .bulk()
-        .handler(async (records) => {
-          for (const record of records as Article[]) {
-            await Article.query().update(record.id, { draftStatus: 'draft' } as any)
-          }
-        }),
-
-      Action.make('delete')
-        .label('Delete')
-        .destructive()
-        .confirm('Permanently delete selected articles? This cannot be undone.')
-        .bulk()
-        .handler(async (records) => {
-          for (const record of records as Article[]) {
-            await Article.query().delete(record.id)
-          }
-        }),
-    ]
-  }
-
-  widgets(record?: Record<string, unknown>) {
+  detail(record?: Record<string, unknown>) {
     return [
       Stats.make([
         Stat.make('Slug').value(String(record?.slug ?? '—')),

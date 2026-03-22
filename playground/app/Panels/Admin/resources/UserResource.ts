@@ -1,4 +1,4 @@
-import { Resource, TextField, EmailField, SelectField, DateField, SelectFilter } from '@boostkit/panels'
+import { Resource, TextField, EmailField, SelectField, DateField, SelectFilter, Table, Form, Column } from '@boostkit/panels'
 import { User } from '../../../Models/User.js'
 
 export class UserResource extends Resource {
@@ -11,8 +11,26 @@ export class UserResource extends Resource {
   static navigationBadge      = async () => await User.query().count()
   static navigationBadgeColor = 'gray' as const
 
-  fields() {
-    return [
+  table(table: Table) {
+    return table
+      .columns([
+        Column.make('name').sortable().searchable(),
+        Column.make('email').sortable().searchable(),
+        Column.make('role'),
+        Column.make('createdAt').date().sortable(),
+      ])
+      .filters([
+        SelectFilter.make('role')
+          .label('Role')
+          .options([
+            { label: 'User',  value: 'user' },
+            { label: 'Admin', value: 'admin' },
+          ]),
+      ])
+  }
+
+  form(form: Form) {
+    return form.fields([
       TextField.make('name')
         .label('Name')
         .required()
@@ -36,17 +54,6 @@ export class UserResource extends Resource {
         .hideFromCreate()
         .hideFromEdit()
         .readonly(),
-    ]
-  }
-
-  filters() {
-    return [
-      SelectFilter.make('role')
-        .label('Role')
-        .options([
-          { label: 'User',  value: 'user' },
-          { label: 'Admin', value: 'admin' },
-        ]),
-    ]
+    ])
   }
 }

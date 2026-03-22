@@ -131,6 +131,7 @@ export type {
 
 export { resolveSchema } from './resolveSchema.js'
 export type { PanelSchemaElementMeta } from './resolveSchema.js'
+export { resolveTable } from './resolvers/resolveTable.js'
 
 // ─── Registries ─────────────────────────────────────────────
 

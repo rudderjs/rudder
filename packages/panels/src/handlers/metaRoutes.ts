@@ -56,10 +56,11 @@ export function mountMetaRoutes(
       const Model = ResourceClass.model as ModelClass<RecordRow> | undefined
       if (!Model) continue
 
-      const resource       = new ResourceClass()
-      const searchableCols = flattenFields(resource.fields())
-        .filter(f => f.isSearchable())
-        .map(f => f.getName())
+      const resource   = new ResourceClass()
+      const tableConfig = resource._resolveTable().getConfig()
+      const formFields = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
+      const searchableCols = tableConfig.searchColumns
+        ?? formFields.filter(f => f.isSearchable()).map(f => f.getName())
 
       if (searchableCols.length === 0) continue
 
@@ -72,7 +73,7 @@ export function mountMetaRoutes(
       const rows: RecordRow[] = await qb.limit(limit).all()
       if (rows.length === 0) continue
 
-      const titleField: string = ResourceClass.titleField ?? 'id'
+      const titleField: string = tableConfig.titleField ?? 'id'
       results.push({
         resource: ResourceClass.getSlug(),
         label:    ResourceClass.label ?? ResourceClass.getSlug(),

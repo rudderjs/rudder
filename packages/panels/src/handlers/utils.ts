@@ -50,7 +50,8 @@ export function coercePayload(
   mode: 'create' | 'update' = 'update',
 ): Record<string, unknown> {
   const result = { ...body }
-  for (const field of flattenFields(resource.fields())) {
+  const formFields = flattenFields(resource._resolveForm().getFields() as FieldOrGrouping[])
+  for (const field of formFields) {
     const name = field.getName()
     if (!(name in result)) continue
     const val  = result[name]
@@ -133,7 +134,7 @@ export async function validatePayload(
   body: Record<string, unknown>,
   mode: 'create' | 'update',
 ): Promise<Record<string, string[]> | null> {
-  const fields = flattenFields(resource.fields())
+  const fields = flattenFields(resource._resolveForm().getFields() as FieldOrGrouping[])
   const errors: Record<string, string[]> = {}
 
   // Skip required-field validation for draft saves
@@ -162,7 +163,7 @@ export async function validatePayload(
   // Per-field custom validators — skip entirely for drafts
   if (isDraft) return Object.keys(errors).length > 0 ? errors : null
 
-  for (const field of flattenFields(resource.fields())) {
+  for (const field of fields) {
     if (!field.hasValidate()) continue
     if (field.isReadonly()) continue
     const name = field.getName()
@@ -262,7 +263,7 @@ export async function validateFormPayload(
 }
 
 export function applyTransforms(resource: Resource, records: unknown[]): unknown[] {
-  const fields = flattenFields(resource.fields())
+  const fields = flattenFields(resource._resolveForm().getFields() as FieldOrGrouping[])
   const displayFields  = fields.filter(f => f.hasDisplay())
   // Duck-type instead of instanceof — Vite SSR may load separate class instances
   const computedFields = fields.filter((f): f is ComputedField => f.getType() === 'computed' && 'apply' in f)
