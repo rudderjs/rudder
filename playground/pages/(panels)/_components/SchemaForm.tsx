@@ -3,17 +3,31 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { SchemaFormMeta, PanelI18n, FieldMeta } from '@boostkit/panels'
 import { FieldInput } from './FieldInput.js'
+import { SchemaRenderer } from './edit/SchemaRenderer.js'
+import type { SchemaItem } from '../_lib/formHelpers.js'
 
 interface SchemaFormProps {
   form:       SchemaFormMeta
   panelPath:  string
   i18n:       PanelI18n
+  /** Called after successful submit. Return a URL string to navigate there. */
+  onSuccess?: (data: unknown) => string | void
+  /** Custom submit URL (overrides form.action). */
+  submitUrl?: string
+  /** Custom submit method (overrides form.method). */
+  submitMethod?: string
+  /** Pre-populate form values (merged with form initialValues). */
+  prefill?: Record<string, unknown>
+  /** Mode: 'create' or 'edit' — controls which fields are hidden. Default: 'create'. */
+  mode?: 'create' | 'edit'
+  /** Cancel URL — shows a cancel link next to submit. */
+  cancelUrl?: string
 }
 
 // Text-based field types that get per-field Y.Doc (not shared Y.Map)
 const TEXT_TYPES = new Set(['text', 'textarea', 'email', 'richcontent', 'content'])
 
-export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
+export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submitMethod, prefill, mode = 'create', cancelUrl }: SchemaFormProps) {
   const pathSegment = panelPath.replace(/^\//, '')
   const isStandalone = (form as SchemaFormMeta & { standalone?: boolean }).standalone === true
   const formYjs = form as SchemaFormMeta & { yjs?: boolean; wsLivePath?: string | null; docName?: string | null; liveProviders?: string[] }
@@ -55,14 +69,14 @@ export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
 
     // 2. Restore from localStorage (client-side only)
     if (typeof window !== 'undefined') {
-      for (const [fieldName, mode] of fieldPersistModes) {
-        if (mode === 'localStorage') {
+      for (const [fieldName, persistMode] of fieldPersistModes) {
+        if (persistMode === 'localStorage') {
           try {
             const stored = localStorage.getItem(`form:${form.id}:${fieldName}`)
             if (stored !== null) result[fieldName] = JSON.parse(stored)
           } catch { /* ignore */ }
         }
-        if (mode === 'url') {
+        if (persistMode === 'url') {
           const url = new URL(window.location.href)
           const urlKey = `${form.id}_${fieldName}`
           const urlValue = url.searchParams.get(urlKey)
@@ -74,6 +88,9 @@ export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
     // 3. SSR initialValues override everything
     const initial = (form as { initialValues?: Record<string, unknown> }).initialValues
     if (initial) Object.assign(result, initial)
+
+    // 4. Prefill values (from URL params or explicit prop)
+    if (prefill) Object.assign(result, prefill)
 
     return result
   })
@@ -281,16 +298,25 @@ export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
     setSubmitting(true)
     setServerError(null)
     const apiBase = panelPath.replace(/\/$/, '') + '/api'
-    const submitUrl = (form as { action?: string }).action ?? `${apiBase}/_forms/${form.id}/submit`
-    const submitMethod = (form as { method?: string }).method ?? 'POST'
+    const effectiveUrl = submitUrl ?? (form as { action?: string }).action ?? `${apiBase}/_forms/${form.id}/submit`
+    const effectiveMethod = submitMethod ?? (form as { method?: string }).method ?? 'POST'
     try {
-      const res = await fetch(submitUrl, { method: submitMethod, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) })
+      const res = await fetch(effectiveUrl, { method: effectiveMethod, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) })
       if (res.ok) {
+        const responseData = await res.json().catch(() => ({}))
+        // Navigation/toast via onSuccess callback
+        if (onSuccess) {
+          const navigateTo = onSuccess(responseData)
+          if (typeof navigateTo === 'string') {
+            const { navigate } = await import('vike/client/router')
+            void navigate(navigateTo)
+            return
+          }
+        }
         setSubmitted(true)
       } else {
         const body = await res.json() as { message?: string; errors?: Record<string, string | string[]> }
         if (body.errors) {
-          // Flatten string[] to first error string
           const flat: Record<string, string> = {}
           for (const [k, v] of Object.entries(body.errors)) {
             flat[k] = Array.isArray(v) ? v[0] ?? '' : v
@@ -349,72 +375,47 @@ export function SchemaForm({ form, panelPath, i18n }: SchemaFormProps) {
       )}
       {isStandalone ? (
         <div className="flex flex-col gap-4">
-          {form.fields.map(item => {
-            const field = item as FieldMeta
-            if (!field.name) return null
-            return (
-              <div key={field.name} className="flex flex-col gap-1.5">
-                {field.label && (
-                  <label className="text-sm font-medium leading-none">
-                    {field.label}
-                    {field.required && <span className="text-destructive ml-0.5">*</span>}
-                  </label>
-                )}
-                <FieldInput
-                  field={field}
-                  value={values[field.name] ?? ''}
-                  onChange={v => handleChange(field.name, v)}
-                  uploadBase={panelPath.replace(/\/$/, '') + '/api'}
-                  i18n={i18n}
-                  {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
-                  {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
-                  {...(userName ? { userName } : {})}
-                  {...(userColor ? { userColor } : {})}
-                />
-                {fieldErrors[field.name] && (
-                  <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
-                )}
-              </div>
-            )
-          })}
+          <SchemaRenderer
+            schema={form.fields as SchemaItem[]}
+            values={values}
+            errors={Object.fromEntries(Object.entries(fieldErrors).map(([k, v]) => [k, [v]]))}
+            setValue={(name, value) => handleChange(name, value)}
+            uploadBase={panelPath.replace(/\/$/, '') + '/api'}
+            i18n={i18n as PanelI18n & Record<string, string>}
+            mode={mode}
+            {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
+            {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
+            {...(userName ? { userName } : {})}
+            {...(userColor ? { userColor } : {})}
+          />
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {form.fields.map(item => {
-            const field = item as FieldMeta
-            if (!field.name) return null
-            return (
-              <div key={field.name} className="flex flex-col gap-1.5">
-                {field.label && (
-                  <label className="text-sm font-medium leading-none">
-                    {field.label}
-                    {field.required && <span className="text-destructive ml-0.5">*</span>}
-                  </label>
-                )}
-                <FieldInput
-                  field={field}
-                  value={values[field.name] ?? ''}
-                  onChange={v => handleChange(field.name, v)}
-                  uploadBase={panelPath.replace(/\/$/, '') + '/api'}
-                  i18n={i18n}
-                  {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
-                  {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
-                  {...(userName ? { userName } : {})}
-                  {...(userColor ? { userColor } : {})}
-                />
-                {fieldErrors[field.name] && (
-                  <p className="text-xs text-destructive">{fieldErrors[field.name]}</p>
-                )}
-              </div>
-            )
-          })}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <SchemaRenderer
+            schema={form.fields as SchemaItem[]}
+            values={values}
+            errors={Object.fromEntries(Object.entries(fieldErrors).map(([k, v]) => [k, [v]]))}
+            setValue={(name, value) => handleChange(name, value)}
+            uploadBase={panelPath.replace(/\/$/, '') + '/api'}
+            i18n={i18n as PanelI18n & Record<string, string>}
+            mode={mode}
+            {...(formYjs.yjs && formYjs.wsLivePath ? { wsPath: formYjs.wsLivePath } : {})}
+            {...(formYjs.yjs && formYjs.docName ? { docName: formYjs.docName } : {})}
+            {...(userName ? { userName } : {})}
+            {...(userColor ? { userColor } : {})}
+          />
           {serverError && <p className="text-sm text-destructive">{serverError}</p>}
-          <div>
+          <div className="flex items-center gap-3">
             <button type="submit" disabled={submitting}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
             >
-              {submitting ? '...' : (form.submitLabel ?? 'Submit')}
+              {submitting ? '...' : (form.submitLabel ?? i18n.save ?? 'Submit')}
             </button>
+            {cancelUrl && (
+              <a href={cancelUrl} className="px-5 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                {i18n.cancel ?? 'Cancel'}
+              </a>
+            )}
           </div>
         </form>
       )}
