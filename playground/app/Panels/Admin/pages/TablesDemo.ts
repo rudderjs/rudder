@@ -1,4 +1,5 @@
 import { Page, Heading, Text, Table, Column, SelectFilter, Action, SelectField, TextareaField, TagsField, ColorField, ToggleField, Form, TextField } from '@boostkit/panels'
+import { Table as TableIcon } from 'lucide-static'
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
@@ -9,7 +10,7 @@ import { InlineEditDemo }   from './tables/InlineEditDemo.js'
 export class TablesDemo extends Page {
   static slug  = 'tables-demo'
   static label = 'Tables Demo'
-  static icon  = 'table'
+  static icon  = TableIcon
   static pages = [PaginationDemo, ExternalDataDemo, InlineEditDemo]
 
   static async schema(_ctx: PanelContext) {

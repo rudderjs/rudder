@@ -42,7 +42,8 @@ interface ResourceIconProps {
  * - Emoji / plain text: `"📦"`, `"✨"`
  *   Rendered as-is in a span.
  */
-export function ResourceIcon({ icon, className = 'size-4' }: ResourceIconProps) {
+export function ResourceIcon({ icon: rawIcon, className = 'size-4' }: ResourceIconProps) {
+  const icon = rawIcon?.trim()
   const [LucideIcon, setLucideIcon] = useState<IconComponent | null>(() => {
     if (!icon || icon.startsWith('<svg') || /[^\x00-\x7F]/.test(icon)) return null // eslint-disable-line no-control-regex
     if (iconsCache) return iconsCache[toPascalCase(icon)] ?? null
