@@ -89,12 +89,16 @@ export async function resolveTable(
     const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter, persistedFilters, config.filters)
     const slug = ResourceClass.getSlug?.() as string | undefined
 
+    // Active sort: persisted sort → table default sort → undefined
+    const effectiveSortCol = urlSort ?? config.sortBy ?? (ResourceClass.defaultSort as string | undefined)
+    const effectiveSortDir = urlSortDir ?? (config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir as string | undefined) ?? 'DESC')
+
     return buildTableMeta(config, columns, records, tableId, {
       resource: slug ?? '',
       href: slug ? `${panel.getPath()}/${slug}` : '',
       pagination,
       activeSearch: urlSearch,
-      activeSort: urlSort ? { col: urlSort, dir: urlSortDir ?? config.sortDir } : undefined,
+      activeSort: effectiveSortCol ? { col: effectiveSortCol, dir: effectiveSortDir } : undefined,
       activeFilters: Object.keys(persistedFilters).length > 0 ? persistedFilters : undefined,
     })
   }
@@ -141,11 +145,14 @@ export async function resolveTable(
     const columns = resolveColumns(config.columns)
     const pagination = await resolvePagination(config, Model, records.length, urlPage, searchFilter2, persistedFilters, config.filters)
 
+    const modelSortCol = urlSort ?? config.sortBy
+    const modelSortDir = urlSortDir ?? config.sortDir
+
     return buildTableMeta(config, columns, records, tableId, {
       reorderEndpoint: config.reorderable ? `${panel.getApiBase()}/_tables/reorder` : undefined,
       pagination,
       activeSearch: urlSearch,
-      activeSort: urlSort ? { col: urlSort, dir: urlSortDir ?? config.sortDir } : undefined,
+      activeSort: modelSortCol ? { col: modelSortCol, dir: modelSortDir } : undefined,
       activeFilters: Object.keys(persistedFilters).length > 0 ? persistedFilters : undefined,
     })
   }

@@ -1,4 +1,4 @@
-import { PanelRegistry, resolveTable } from '@boostkit/panels'
+import { PanelRegistry, resolveTable, resolveActiveTabIndex } from '@boostkit/panels'
 import type { PanelSchemaElementMeta, PanelUser } from '@boostkit/panels'
 import { getSessionUser } from '../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
@@ -55,23 +55,75 @@ export async function data(pageContext: PageContextServer) {
     sessionGet,
   }
 
-  // ── Resolve the resource's table through the same pipeline as standalone tables ──
-  // This gives us: SSR records, pagination, persist state (session/url/localStorage),
-  // search, sort, filters — all handled by resolveTable()
+  // ── Resolve the resource's table ──
   let tableElement: PanelSchemaElementMeta | null = null
+  let tabsElement: PanelSchemaElementMeta | null = null
+
   if (ResourceClass.model) {
     const table = resource._resolveTable()
-    tableElement = await resolveTable(table as any, panel, ctx)
+    const tableConfig = table.getConfig()
 
-    // Override href for resource row links
-    if (tableElement && 'href' in tableElement) {
-      (tableElement as any).href = `/${pathSegment}/resources/${slug}`
-    }
-    // Override resource slug for API endpoint routing
-    if (tableElement && 'resource' in tableElement) {
-      (tableElement as any).resource = slug
+    if (tableConfig.tabs.length > 0) {
+      // ── Tabs mode: build TabsMeta with per-tab resolved Table ──
+      // Each tab gets its own Table clone with independent scope, ID, and persist.
+      // We build the TabsMeta directly (not via resolveTabs) because each table
+      // is already resolved through resolveTable() with SSR data + persist state.
+      const tabsId = `${slug}-tabs`
+      const resolvedTabs: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] }[] = []
+
+      for (const tab of tableConfig.tabs) {
+        const tabName = tab.getLabel().toLowerCase().replace(/\s+/g, '-')
+        const tabTableId = `${slug}-${tabName}`
+
+        // Clone table with tab's scope and unique ID
+        const tabTable = table._cloneWithScope(tabTableId, tab.getScope())
+
+        // Resolve through the standard table pipeline (SSR data, persist, etc.)
+        const resolvedTable = await resolveTable(tabTable as any, panel, ctx)
+
+        // Override href for resource row links
+        if (resolvedTable && 'href' in resolvedTable) {
+          (resolvedTable as any).href = `/${pathSegment}/resources/${slug}`
+        }
+        if (resolvedTable && 'resource' in resolvedTable) {
+          (resolvedTable as any).resource = slug
+        }
+
+        const tabMeta: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] } = {
+          label: tab.getLabel(),
+          fields: [],
+          elements: resolvedTable ? [resolvedTable] : [],
+        }
+        const icon = tab.getIcon()
+        if (icon) tabMeta.icon = icon
+        resolvedTabs.push(tabMeta)
+      }
+
+      // Resolve active tab from session/url persist (same as resolveTabs does for Pages)
+      const persistMode = (tableConfig.remember || 'session') as import('@boostkit/panels').PersistMode
+      const tabLabels = tableConfig.tabs.map(t => t.getLabel())
+      const activeTabIndex = await resolveActiveTabIndex(persistMode, tabsId, tabLabels, ctx)
+
+      tabsElement = {
+        type: 'tabs',
+        id: tabsId,
+        tabs: resolvedTabs,
+        persist: persistMode,
+        ...(activeTabIndex > 0 ? { activeTab: activeTabIndex } : {}),
+      } as unknown as PanelSchemaElementMeta
+
+    } else {
+      // ── No tabs: single table ──
+      tableElement = await resolveTable(table as any, panel, ctx)
+
+      if (tableElement && 'href' in tableElement) {
+        (tableElement as any).href = `/${pathSegment}/resources/${slug}`
+      }
+      if (tableElement && 'resource' in tableElement) {
+        (tableElement as any).resource = slug
+      }
     }
   }
 
-  return { panelMeta, resourceMeta, tableElement, pathSegment, slug, sessionUser }
+  return { panelMeta, resourceMeta, tableElement, tabsElement, pathSegment, slug, sessionUser }
 }

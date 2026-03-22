@@ -166,37 +166,46 @@ export function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, 
           <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
         </div>
       )}
-      <div className="flex flex-col gap-6">
-        {activeElements.map((el: SchemaElement, i: number) => {
-          if (el.type === 'widget') {
-            return (
-              <StandaloneWidget
-                key={`${activeIdx}-tw-${i}`}
-                widget={el as unknown as WidgetWithData}
-                panelPath={panelPath}
-                pathSegment={pathSegment}
-                i18n={i18n}
-              />
-            )
-          }
-          if (el.type === 'form') {
-            return (
-              <SchemaForm key={`${activeIdx}-tf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
-            )
-          }
-          if (el.type === 'dialog') {
-            return (
-              <SchemaDialog key={`${activeIdx}-td-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
-            )
-          }
-          if (el.type === 'dashboard' && renderDashboard) {
-            return renderDashboard(el as DashboardEl, i)
-          }
-          return (
-            <SchemaElementRenderer key={`${activeIdx}-${i}`} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
-          )
-        })}
-      </div>
+      {/* Render all tabs but hide inactive — prevents unmount/remount flash */}
+      {tabs.map((tab, tabIdx) => {
+        const tabElements = tab.elements?.length
+          ? tab.elements
+          : fetchedElements[tabIdx] ?? []
+        const isActive = tabIdx === activeIdx
+        return (
+          <div key={tabIdx} className={isActive ? 'flex flex-col gap-6' : 'hidden'}>
+            {tabElements.map((el: SchemaElement, i: number) => {
+              if (el.type === 'widget') {
+                return (
+                  <StandaloneWidget
+                    key={`${tabIdx}-tw-${i}`}
+                    widget={el as unknown as WidgetWithData}
+                    panelPath={panelPath}
+                    pathSegment={pathSegment}
+                    i18n={i18n}
+                  />
+                )
+              }
+              if (el.type === 'form') {
+                return (
+                  <SchemaForm key={`${tabIdx}-tf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
+                )
+              }
+              if (el.type === 'dialog') {
+                return (
+                  <SchemaDialog key={`${tabIdx}-td-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
+                )
+              }
+              if (el.type === 'dashboard' && renderDashboard) {
+                return renderDashboard(el as DashboardEl, i)
+              }
+              return (
+                <SchemaElementRenderer key={`${tabIdx}-${i}`} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+              )
+            })}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -457,4 +457,50 @@ export class Table {
       creatableUrl:   this._creatableUrl,
     }
   }
+
+  /**
+   * @internal — Create a copy of this table with a different scope and ID.
+   * Used by Resource to create per-tab Table instances from a shared base config.
+   * The copy inherits columns, filters, actions, pagination, searchable, remember, etc.
+   * Tabs are NOT copied (the clone is one tab's content).
+   */
+  _cloneWithScope(id: string, scopeFn?: (query: any) => any): Table {
+    const clone = Table.make(this._title)
+    // Copy data source
+    if (this._resourceClass) clone.fromResource(this._resourceClass)
+    else if (this._model) clone.fromModel(this._model)
+    else if (this._rows) clone.fromArray(this._rows)
+    // Copy display config
+    clone._columns       = this._columns
+    clone._limit         = this._limit
+    clone._sortDir       = this._sortDir
+    clone._reorderable   = this._reorderable
+    clone._reorderField  = this._reorderField
+    clone._searchable    = this._searchable
+    clone._perPage       = this._perPage
+    clone._lazy          = this._lazy
+    clone._live          = this._live
+    clone._remember      = this._remember
+    clone._filters       = this._filters
+    clone._actions       = this._actions
+    clone._softDeletes   = this._softDeletes
+    // Copy optional fields only if set
+    if (this._sortBy)         clone._sortBy         = this._sortBy
+    if (this._description)    clone._description    = this._description
+    if (this._emptyMessage)   clone._emptyMessage   = this._emptyMessage
+    if (this._href)           clone._href           = this._href
+    if (this._searchColumns)  clone._searchColumns  = this._searchColumns
+    if (this._paginationType) clone._paginationType = this._paginationType
+    if (this._pollInterval)   clone._pollInterval   = this._pollInterval
+    if (this._onSaveFn)       clone._onSaveFn       = this._onSaveFn
+    if (this._titleField)     clone._titleField     = this._titleField
+    if (this._emptyState)     clone._emptyState     = this._emptyState
+    if (this._creatableUrl)   clone._creatableUrl   = this._creatableUrl
+    // Apply overrides
+    clone._id = id
+    if (scopeFn) clone._scope = scopeFn
+    else if (this._scope) clone._scope = this._scope
+    // Don't copy tabs — this clone IS one tab's table
+    return clone
+  }
 }

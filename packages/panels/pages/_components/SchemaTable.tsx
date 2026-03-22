@@ -11,13 +11,10 @@ import { TableEditCell } from './TableEditCell.js'
 const tableStateCache = new Map<string, Record<string, unknown>>()
 
 /** Resource-context props — optional, additive. When provided, SchemaTable renders resource-level UI. */
+/** Resource-context props for SchemaTable — enables resource API mode. */
 export interface SchemaTableResourceProps {
-  /** Tab bar items — each tab can filter the table. */
-  tabs?: { label: string; icon?: string; scope?: boolean }[]
-  /** Active tab label — synced from URL or state. */
-  activeTab?: string
-  /** Callback when user switches tabs. */
-  onTabChange?: (label: string) => void
+  /** Resource slug — enables resource mode (fetch from resource API, resource action endpoint). */
+  resourceSlug?: string
   /** Show soft-delete trash toggle. */
   softDeletes?: boolean
   /** Whether currently showing trashed records. */
@@ -28,10 +25,6 @@ export interface SchemaTableResourceProps {
   createUrl?: string | boolean
   /** Custom empty state config (icon, heading, description). */
   emptyState?: { icon?: string; heading?: string; description?: string }
-  /** Resource slug — when set, enables resource mode (fetch from resource API, resource action endpoint). */
-  resourceSlug?: string
-  /** Row click href pattern. Use :id placeholder. e.g. '/admin/resources/articles/:id' */
-  rowHref?: string
 }
 
 export function SchemaTable({ element, panelPath, i18n, resource }: { element: Extract<PanelSchemaElementMeta, { type: 'table' }>; panelPath: string; i18n: PanelI18n; resource?: SchemaTableResourceProps }) {
@@ -40,6 +33,8 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
   const pathSegment = panelPath.replace(/^\//, '')
   const isLazy = !!element.lazy
   const rememberMode = element.remember as string | undefined
+  // Auto-detect resource mode: use resource API when element.resource is set (from resource table)
+  const resourceSlug = resource?.resourceSlug ?? (element.resource || undefined)
 
   // ── Remember: read initial persisted state ──
   const [initialState] = useState(() => {
@@ -53,22 +48,48 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
   const ssrSort = (element as { activeSort?: { col: string; dir: string } }).activeSort
   const ssrFilters = (element as { activeFilters?: Record<string, string> }).activeFilters
 
-  const [records, setRecords] = useState<Record<string, unknown>[]>(element.records as Record<string, unknown>[])
+  // On client-side tab switches, read in-memory cache to initialize state correctly (avoids flash)
+  const cachedState = typeof window !== 'undefined' && tableId ? tableStateCache.get(tableId) : undefined
+  const cachedFilters: Record<string, string> = {}
+  if (cachedState) {
+    for (const [k, v] of Object.entries(cachedState)) {
+      if (k.startsWith('filter_')) cachedFilters[k.slice(7)] = String(v)
+    }
+  }
+
+  // If cached state differs from SSR, we'll restore — start with empty records to avoid flash of stale data
+  const needsRestore = !!cachedState && (
+    (cachedState.page && Number(cachedState.page) > 1) ||
+    !!cachedState.search ||
+    !!cachedState.sort ||
+    Object.keys(cachedFilters).length > 0
+  )
+  const [records, setRecords] = useState<Record<string, unknown>[]>(
+    needsRestore ? [] : (element.records as Record<string, unknown>[])
+  )
   const [sort, setSort]       = useState<{ col: string; dir: 'asc' | 'desc' } | null>(
     ssrSort ? { col: ssrSort.col, dir: ssrSort.dir.toLowerCase() as 'asc' | 'desc' }
+    : cachedState?.sort ? { col: String(cachedState.sort), dir: (String(cachedState.dir ?? 'asc').toLowerCase() as 'asc' | 'desc') }
     : null,
   )
-  const [search, setSearch]   = useState(ssrSearch ?? '')
+  const [search, setSearch]   = useState(ssrSearch ?? (cachedState?.search ? String(cachedState.search) : ''))
   const [dragging, setDragging] = useState<string | null>(null)
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)
-  const [currentPage, setCurrentPage] = useState(element.pagination?.currentPage ?? 1)
+  const [currentPage, setCurrentPage] = useState(cachedState?.page ? Number(cachedState.page) : (element.pagination?.currentPage ?? 1))
   const [loadingMore, setLoadingMore] = useState(false)
   const [lazyLoaded, setLazyLoaded] = useState(!isLazy)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Detect if we need to restore from cache (stale SSR data)
-  // Start as false to avoid hydration mismatch (localStorage/cache not available during SSR)
-  const [restoring, setRestoring] = useState(false)
+  // On client-side tab switches, check in-memory cache synchronously to avoid flash
+  const [restoring, setRestoring] = useState(() => {
+    if (typeof window === 'undefined' || !tableId) return false
+    const cached = tableStateCache.get(tableId)
+    if (!cached) return false
+    // If cached state differs from SSR (page > 1, has search/sort/filters), show skeleton
+    return !!(cached.page && Number(cached.page) > 1) || !!cached.search || !!cached.sort ||
+      Object.keys(cached).some(k => k.startsWith('filter_'))
+  })
 
   // ── Remember: save state on change ──
   function saveRememberState(state: Record<string, unknown>) {
@@ -88,7 +109,7 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
   const actions = (element as { actions?: Array<{ name: string; label: string; icon?: string; destructive: boolean; requiresConfirm: boolean; confirmMessage?: string; bulk: boolean; row: boolean }> }).actions ?? []
   const hasBulkActions = actions.some(a => a.bulk)
   const hasRowActions = actions.some(a => a.row)
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(ssrFilters ?? {})
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(ssrFilters ?? (Object.keys(cachedFilters).length > 0 ? cachedFilters : {}))
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -97,12 +118,10 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
   const sortRef = useRef(sort)
   const searchRef = useRef(search)
   const activeFiltersRef = useRef(activeFilters)
-  const activeTabRef = useRef(resource?.activeTab)
   currentPageRef.current = currentPage
   sortRef.current = sort
   searchRef.current = search
   activeFiltersRef.current = activeFilters
-  activeTabRef.current = resource?.activeTab
 
   // ── Shared fetch function — all table state changes go through API ──
   async function fetchTable(opts: { page?: number; search?: string; sort?: string; dir?: string; append?: boolean; filters?: Record<string, string> } = {}) {
@@ -120,23 +139,18 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
       for (const [k, v] of Object.entries(filtersToApply)) {
         if (v) params.set(`filter[${k}]`, v)
       }
-      // Resource mode: include tab and trashed params
-      if (resource?.resourceSlug) {
-        const currentActiveTab = activeTabRef.current
-        if (currentActiveTab && resource.tabs && resource.tabs.length > 0) {
-          const name = currentActiveTab.toLowerCase().replace(/\s+/g, '-')
-          if (resource.tabs[0]?.label !== currentActiveTab) params.set('tab', name)
-        }
-        if (resource.isTrashed) params.set('trashed', 'true')
+      // Resource mode: include trashed param
+      if (resourceSlug && resource?.isTrashed) {
+        params.set('trashed', 'true')
       }
-      const fetchBase = resource?.resourceSlug
-        ? `/${pathSegment}/api/${resource.resourceSlug}`
+      const fetchBase = resourceSlug
+        ? `/${pathSegment}/api/${resourceSlug}`
         : `/${pathSegment}/api/_tables/${tableId}`
       const res = await fetch(`${fetchBase}?${params}`)
       if (res.ok) {
         const raw = await res.json() as Record<string, unknown>
         // Resource API returns { data, meta }, table API returns { records, pagination }
-        const body = resource?.resourceSlug
+        const body = resourceSlug
           ? {
               records: raw.data as Record<string, unknown>[],
               pagination: raw.meta ? {
@@ -177,8 +191,8 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
     if (!tableId) return
     setActionLoading(true)
     try {
-      const actionBase = resource?.resourceSlug
-        ? `/${pathSegment}/api/${resource.resourceSlug}/_action/${actionName}`
+      const actionBase = resourceSlug
+        ? `/${pathSegment}/api/${resourceSlug}/_action/${actionName}`
         : `/${pathSegment}/api/_tables/${tableId}/action/${actionName}`
       const res = await fetch(actionBase, {
         method: 'POST',
@@ -194,11 +208,20 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
     finally { setActionLoading(false) }
   }
 
+  // Track whether the restore effect already handled initial mount
+  const restoredOnMountRef = useRef(false)
+
   // Reset state when the element changes (e.g. navigating between tabs with different tables)
   const elementRef = useRef(element)
   useEffect(() => {
     if (elementRef.current === element) return
     elementRef.current = element
+
+    // Skip if the restore effect already fetched on this mount cycle
+    if (restoredOnMountRef.current) {
+      restoredOnMountRef.current = false
+      return
+    }
 
     // Restore from persisted state or in-memory cache instead of resetting
     if (tableId) {
@@ -266,6 +289,7 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
     // For loadMore mode with localStorage: fetch all pages up to the saved page
     // (url/session modes are SSR'd with all records already)
     if (isLoadMore && restoredPage > 1 && tableId && rememberMode === 'localStorage') {
+      restoredOnMountRef.current = true
       setRestoring(true)
       ;(async () => {
         try {
@@ -299,6 +323,7 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
     // Skip if SSR already has the right data (url/session on initial page load)
     if (effectivePage === ssrPage && !restoredSearch && !source.sort && !hasRestoredFilters) return
     if (effectivePage <= 1 && !restoredSearch && !source.sort && !hasRestoredFilters) return
+    restoredOnMountRef.current = true
     setRestoring(true)
     void fetchTable({ page: effectivePage, search: restoredSearch, sort: source.sort as string, dir: source.dir as string, filters: restoredFilters })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -474,13 +499,13 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
 
   const hasSearch = !!element.searchable || element.columns.some((c: PanelColumnMeta) => c.searchable)
   const hasHref      = !!element.href
-  const showViewAll  = hasHref && !resource?.resourceSlug  // hide "View all" link in resource mode
+  const showViewAll  = hasHref && !resourceSlug  // hide "View all" link in resource mode
 
   // ── Lazy skeleton or restoring state ──
   if (!lazyLoaded || restoring) {
     return (
       <div>
-        <p className="text-sm font-semibold mb-3">{element.title}</p>
+        {!resourceSlug && <p className="text-sm font-semibold mb-3">{element.title}</p>}
         <div className="rounded-xl border overflow-hidden">
           <div className="p-4 space-y-3">
             {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted/20 rounded animate-pulse" />)}
@@ -496,7 +521,7 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
   return (
     <div>
       {/* Title + create button — hidden in resource mode (page header handles these) */}
-      {!resource?.resourceSlug && (
+      {!resourceSlug && (
         <div className="mb-1 flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold">{element.title}</p>
@@ -512,55 +537,6 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
               + {i18n.create?.replace(':singular', '') ?? 'Create'}
             </a>
           )}
-        </div>
-      )}
-
-      {/* Tabs bar — resource context (matches SchemaTabs pill style) */}
-      {resource?.tabs && resource.tabs.length > 0 && (
-        <div className="flex items-center gap-1 mb-4">
-          {resource.tabs.map((tab) => {
-            const isActive = resource.activeTab === tab.label
-            return (
-              <button
-                key={tab.label}
-                type="button"
-                onClick={() => {
-                  activeTabRef.current = tab.label
-                  resource.onTabChange?.(tab.label)
-                  if (resource.resourceSlug) void fetchTable({ page: 1 })
-                }}
-                className={[
-                  'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                ].join(' ')}
-              >
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Soft-delete trash toggle — resource context (outline button style) */}
-      {resource?.softDeletes && (
-        <div className="flex items-center gap-2 mb-3">
-          <button
-            type="button"
-            onClick={() => resource.onTrashedChange?.(!resource.isTrashed)}
-            className={[
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors',
-              resource.isTrashed
-                ? 'border-primary text-primary bg-primary/10 hover:bg-primary/20 font-medium'
-                : 'border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-            ].join(' ')}
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-            </svg>
-            {resource.isTrashed ? (i18n.exitTrash ?? 'Exit trash') : (i18n.viewTrash ?? 'View trash')}
-          </button>
         </div>
       )}
 
