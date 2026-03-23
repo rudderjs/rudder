@@ -51,8 +51,8 @@ export type { BlockMeta } from './Block.js'
 export { Widget } from './Widget.js'
 export type { WidgetSize, WidgetMeta, WidgetSettingsField } from './Widget.js'
 
-export { Dashboard, DashboardTab } from './Dashboard.js'
-export type { DashboardMeta, DashboardTabMeta } from './Dashboard.js'
+export { Dashboard } from './Dashboard.js'
+export type { DashboardMeta } from './Dashboard.js'
 
 export { ListTab } from './Tab.js'
 export type { ListTabMeta } from './Tab.js'

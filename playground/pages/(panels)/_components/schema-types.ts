@@ -7,7 +7,7 @@ export interface TabItem { label: string; elements?: SchemaElement[]; icon?: str
 
 export type DashboardEl = {
   type: 'dashboard'; id: string; label?: string; editable: boolean
-  widgets: unknown[]; tabs?: unknown[]; savedLayout?: unknown[]; savedTabLayouts?: Record<string, unknown[]>
+  widgets: unknown[]; savedLayout?: unknown[]
 }
 
 export type SchemaElement = PanelSchemaElementMeta | {
@@ -22,7 +22,5 @@ export type SchemaElement = PanelSchemaElementMeta | {
 } | {
   type: 'dialog'; id?: string; [key: string]: unknown
 }
-
-export interface DashboardTabItem { id: string; label: string; widgets: unknown[]; [key: string]: unknown }
 
 export type I18nExtended = PanelI18n & Record<string, string>

@@ -1,4 +1,4 @@
-import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Dashboard, Widget } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@boostkit/panels'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'
@@ -122,34 +122,25 @@ export const adminPanel = Panel.make('admin')
               { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
             ]),
           ]),
-      ])
-      .tabs([
-        Dashboard.tab('content').label('Content').widgets([
-          Widget.make('recent-articles')
-            .label('Recent Articles')
-            .large()
-            .schema(async () => [
-              Table.make('Recent Articles')
-                .columns([
-                  Column.make('title').label('Title'),
-                  Column.make('createdAt').label('Date'),
-                ])
-                .fromArray(await Article.query().orderBy('createdAt', 'DESC').limit(5).get())
-                .href('/admin/articles'),
-            ]),
-        ]),
-        Dashboard.tab('charts').label('Charts').widgets([
-          Widget.make('traffic-chart')
-            .label('Weekly Traffic')
-            .defaultSize({ w: 12, h: 3 })
-            .schema(() => [
-              Chart.make('Weekly Traffic')
-                .chartType('area')
-                .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
-                .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
-            ]),
-        ]),
       ]),
+
+    Tabs.make(undefined, [
+      Tab.make('Content').schema([
+        Table.make('Recent Articles')
+          .columns([
+            Column.make('title').label('Title'),
+            Column.make('createdAt').label('Date'),
+          ])
+          .fromArray(async () => Article.query().orderBy('createdAt', 'DESC').limit(5).get())
+          .href('/admin/articles'),
+      ]),
+      Tab.make('Charts').schema([
+        Chart.make('Weekly Traffic')
+          .chartType('area')
+          .labels(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+          .datasets([{ label: 'Visitors', data: [120, 230, 180, 350, 290, 150, 90] }]),
+      ]),
+    ]),
   ])
   .pages([
     TablesDemo,

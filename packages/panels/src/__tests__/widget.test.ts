@@ -228,13 +228,12 @@ describe('Dashboard schema element', () => {
     assert.equal(Dashboard.make('main').getType(), 'dashboard')
   })
 
-  it('defaults — editable, no widgets, no tabs, no label', () => {
+  it('defaults — editable, no widgets, no label', () => {
     const d = Dashboard.make('main')
     assert.equal(d.getId(), 'main')
     assert.equal(d.getLabel(), undefined)
     assert.equal(d.isEditable(), true)
     assert.deepEqual(d.getWidgets(), [])
-    assert.equal(d.getTabs(), undefined)
   })
 
   it('label + editable', () => {
@@ -243,41 +242,12 @@ describe('Dashboard schema element', () => {
     assert.equal(d.isEditable(), false)
   })
 
-  it('widgets only (no tabs)', () => {
+  it('widgets', () => {
     const d = Dashboard.make('x').widgets([Widget.make('a'), Widget.make('b')])
     assert.equal(d.getWidgets().length, 2)
-    assert.equal(d.getTabs(), undefined)
   })
 
-  it('tabs only (no top-level widgets)', () => {
-    const d = Dashboard.make('x').tabs([
-      Dashboard.tab('t1').label('Tab 1').widgets([Widget.make('a')]),
-      Dashboard.tab('t2').label('Tab 2').widgets([Widget.make('b')]),
-    ])
-    assert.equal(d.getWidgets().length, 0)
-    assert.equal(d.getTabs()!.length, 2)
-    assert.equal(d.getTabs()![0]!.getLabel(), 'Tab 1')
-  })
-
-  it('widgets + tabs combined', () => {
-    const d = Dashboard.make('x')
-      .widgets([Widget.make('top')])
-      .tabs([Dashboard.tab('t1').widgets([Widget.make('inner')])])
-    assert.equal(d.getWidgets().length, 1)
-    assert.equal(d.getTabs()!.length, 1)
-  })
-
-  it('getAllWidgets() collects from top-level + tabs', () => {
-    const d = Dashboard.make('x')
-      .widgets([Widget.make('a')])
-      .tabs([
-        Dashboard.tab('t1').widgets([Widget.make('b'), Widget.make('c')]),
-        Dashboard.tab('t2').widgets([Widget.make('d')]),
-      ])
-    assert.equal(d.getAllWidgets().length, 4)
-  })
-
-  it('toMeta() — widgets only', () => {
+  it('toMeta() — widgets', () => {
     const meta = Dashboard.make('main').label('Overview')
       .widgets([Widget.make('a').label('A')])
       .toMeta()
@@ -286,47 +256,11 @@ describe('Dashboard schema element', () => {
     assert.equal(meta.label, 'Overview')
     assert.equal(meta.editable, true)
     assert.equal(meta.widgets.length, 1)
-    assert.equal(meta.tabs, undefined)
   })
 
   it('toMeta() — no label omits it', () => {
     const meta = Dashboard.make('x').toMeta()
     assert.equal(meta.label, undefined)
-  })
-
-  it('toMeta() — with tabs', () => {
-    const meta = Dashboard.make('x')
-      .widgets([Widget.make('top')])
-      .tabs([Dashboard.tab('t1').label('Tab 1').widgets([Widget.make('inner')])])
-      .toMeta()
-    assert.equal(meta.widgets.length, 1)
-    assert.equal(meta.tabs!.length, 1)
-    assert.equal(meta.tabs![0]!.id, 't1')
-    assert.equal(meta.tabs![0]!.label, 'Tab 1')
-    assert.equal(meta.tabs![0]!.widgets.length, 1)
-  })
-})
-
-// ─── Dashboard.tab() ─────────────────────────────────────
-
-describe('Dashboard.tab()', () => {
-  it('creates a tab with id', () => {
-    const tab = Dashboard.tab('overview')
-    assert.equal(tab.getId(), 'overview')
-  })
-
-  it('fluent API', () => {
-    const tab = Dashboard.tab('x').label('Analytics').widgets([Widget.make('a')])
-    assert.equal(tab.getLabel(), 'Analytics')
-    assert.equal(tab.getWidgets().length, 1)
-  })
-
-  it('toMeta()', () => {
-    const meta = Dashboard.tab('t1').label('Tab').widgets([Widget.make('w1').label('W')]).toMeta()
-    assert.equal(meta.id, 't1')
-    assert.equal(meta.label, 'Tab')
-    assert.equal(meta.widgets.length, 1)
-    assert.equal(meta.widgets[0]!.label, 'W')
   })
 })
 

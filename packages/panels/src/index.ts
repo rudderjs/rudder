@@ -194,5 +194,5 @@ export { Widget } from './schema/Widget.js'
 export type { WidgetSize, WidgetMeta, WidgetSettingsField, WidgetSchemaFn } from './schema/Widget.js'
 
 // ─── Dashboard ──────────────────────────────────────────
-export { Dashboard, DashboardTab } from './schema/Dashboard.js'
-export type { DashboardMeta, DashboardTabMeta } from './schema/Dashboard.js'
+export { Dashboard } from './schema/Dashboard.js'
+export type { DashboardMeta } from './schema/Dashboard.js'

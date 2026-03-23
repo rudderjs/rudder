@@ -1,7 +1,7 @@
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { Panel } from '../Panel.js'
 import type { Widget, WidgetSize, WidgetMeta } from '../schema/Widget.js'
-import type { Dashboard, DashboardTab } from '../schema/Dashboard.js'
+import type { Dashboard } from '../schema/Dashboard.js'
 import type { PanelUser, PanelContext, SchemaElementLike } from '../types.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { RouterLike } from './types.js'
@@ -47,7 +47,6 @@ async function resolveWidgetSchema(
   if (schemaFn) {
     try {
       const elements = await schemaFn(ctx, settings)
-      // Lazily import resolveSchema to avoid circular deps
       const { resolveSchema } = await import('../resolveSchema.js')
       const innerPanel = Object.create(panel, {
         getSchema: { value: () => elements },
@@ -111,7 +110,6 @@ export function mountDashboardRoutes(
     let dashboard: Dashboard | undefined = DashboardRegistry.get(panelName, params['dashId'] ?? '')
 
     if (!dashboard) {
-      // Resolve async schema to discover dashboards
       const schema = typeof schemaDef === 'function'
         ? await schemaDef(ctx)
         : schemaDef ?? []
@@ -126,20 +124,11 @@ export function mountDashboardRoutes(
 
     if (!dashboard) return res.status(404).json({ error: 'Dashboard not found' })
 
-    // Determine which widgets to return (top-level or tab)
-    const tabId = query['tab']
-    let widgets: Widget[] = dashboard.getWidgets()
-    if (tabId) {
-      const tab = dashboard.getTabs()?.find((t: DashboardTab) => t.getId() === tabId)
-      if (tab) widgets = tab.getWidgets()
-    }
-
-    // Parse per-widget settings from query
     const settingsStr = query['settings']
     const settings = settingsStr ? JSON.parse(settingsStr) as Record<string, unknown> : undefined
 
     const results = await Promise.all(
-      widgets.map(widget => resolveWidgetSchema(widget, panel, ctx, settings))
+      dashboard.getWidgets().map(widget => resolveWidgetSchema(widget, panel, ctx, settings))
     )
 
     return res.json({ widgets: results })
@@ -149,13 +138,10 @@ export function mountDashboardRoutes(
   router.get(`${base}/:dashId/layout`, async (req: AppRequest, res: AppResponse) => {
     const userId = await resolveUserId(req)
     const params = req.params as Record<string, string>
-    const query  = req.query as Record<string, string | undefined>
     const dashId = params['dashId'] ?? ''
-    const tabId  = query['tab']
-    const layoutKey = tabId ? `${dashId}:${tabId}` : dashId
 
     if (!userId) {
-      return res.json({ layout: getDefaultLayout(panelName, dashId, tabId) })
+      return res.json({ layout: getDefaultLayout(panelName, dashId) })
     }
 
     try {
@@ -163,7 +149,7 @@ export function mountDashboardRoutes(
       const prisma = app().make('prisma') as PrismaLayoutClient | null
       if (prisma?.panelDashboardLayout) {
         const record = await prisma.panelDashboardLayout.findFirst({
-          where: { userId, panel: panelName, dashboardId: layoutKey },
+          where: { userId, panel: panelName, dashboardId: dashId },
         })
         if (record) {
           return res.json({ layout: JSON.parse(record.layout) })
@@ -171,7 +157,7 @@ export function mountDashboardRoutes(
       }
     } catch { /* DB not available — fall through to default */ }
 
-    return res.json({ layout: getDefaultLayout(panelName, dashId, tabId) })
+    return res.json({ layout: getDefaultLayout(panelName, dashId) })
   }, mw)
 
   // PUT /_dashboard/:dashId/layout — save user's layout
@@ -182,10 +168,7 @@ export function mountDashboardRoutes(
     }
 
     const params = req.params as Record<string, string>
-    const query  = req.query as Record<string, string | undefined>
     const dashId = params['dashId'] ?? ''
-    const tabId  = query['tab']
-    const layoutKey = tabId ? `${dashId}:${tabId}` : dashId
     const body = req.body as { layout?: unknown }
     if (!body?.layout || !Array.isArray(body.layout)) {
       return res.status(400).json({ error: 'Invalid layout' })
@@ -196,8 +179,8 @@ export function mountDashboardRoutes(
       const prisma = app().make('prisma') as PrismaLayoutClient | null
       if (prisma?.panelDashboardLayout) {
         await prisma.panelDashboardLayout.upsert({
-          where: { userId_panel_dashboardId: { userId, panel: panelName, dashboardId: layoutKey } },
-          create: { userId, panel: panelName, dashboardId: layoutKey, layout: JSON.stringify(body.layout) },
+          where: { userId_panel_dashboardId: { userId, panel: panelName, dashboardId: dashId } },
+          create: { userId, panel: panelName, dashboardId: dashId, layout: JSON.stringify(body.layout) },
           update: { layout: JSON.stringify(body.layout) },
         })
       }
@@ -244,17 +227,8 @@ export function buildDefaultLayout(widgets: Widget[]): Array<{ widgetId: string;
   }))
 }
 
-function getDefaultLayout(panelName: string, dashId: string, tabId?: string): unknown[] {
+function getDefaultLayout(panelName: string, dashId: string): unknown[] {
   const dashboard = DashboardRegistry.get(panelName, dashId)
   if (!dashboard) return []
-
-  let widgets: Widget[]
-  if (tabId) {
-    const tab = dashboard.getTabs()?.find((t: DashboardTab) => t.getId() === tabId)
-    widgets = tab ? tab.getWidgets() : []
-  } else {
-    widgets = dashboard.getWidgets()
-  }
-
-  return buildDefaultLayout(widgets)
+  return buildDefaultLayout(dashboard.getWidgets())
 }
