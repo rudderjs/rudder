@@ -25,6 +25,21 @@ export const adminPanel = Panel.make('admin')
   .globals([SiteSettingsGlobal])
 ```
 
+### Plugins
+
+Extend panels with `.use()`:
+
+```ts
+import { media } from '@boostkit/media/server'
+import { panelsLexical } from '@boostkit/panels-lexical/server'
+
+export const adminPanel = Panel.make('admin')
+  .path('/admin')
+  .use(panelsLexical())
+  .use(media({ conversions: [{ name: 'thumb', width: 200, format: 'webp' }] }))
+  .resources([UserResource])
+```
+
 ```ts
 // bootstrap/providers.ts
 import { panels } from '@boostkit/panels'
@@ -361,10 +376,42 @@ Tabs.make('settings-tabs')
 
 ```ts
 Chart.make('Revenue')
-  .type('bar')
+  .chartType('bar')
   .labels(['Jan', 'Feb', 'Mar'])
-  .dataset('Sales', [100, 200, 150])
+  .datasets([{ label: 'Sales', data: [100, 200, 150] }])
 ```
+
+### Dashboard & Widgets
+
+Customizable widget grid with drag-and-drop, per-user layout, and polling:
+
+```ts
+Dashboard.make('overview')
+  .label('Overview')
+  .widgets([
+    Widget.make('total-users')
+      .label('Total Users')
+      .small()
+      .icon('users')
+      .schema(async () => [
+        Stats.make([Stat.make('Users').value(await User.query().count())]),
+      ]),
+
+    Widget.make('revenue-chart')
+      .label('Revenue')
+      .defaultSize({ w: 8, h: 3 })
+      .schema(() => [
+        Chart.make('Revenue')
+          .chartType('bar')
+          .labels(['Jan', 'Feb', 'Mar'])
+          .datasets([{ label: 'Sales', data: [100, 200, 150] }]),
+      ]),
+  ])
+```
+
+Widget sizing: `.small()` (3 cols), `.medium()` (6), `.large()` (12), or `.defaultSize({ w, h })`.
+
+Widgets support `.lazy()` (client-side fetch), `.poll(ms)` (auto-refresh), `.settings([...])` (user-configurable), and `.render(path)` (custom React component).
 
 ---
 
