@@ -36,6 +36,7 @@ import { resolveStats }     from './resolvers/resolveStats.js'
 import { resolveChart }     from './resolvers/resolveChart.js'
 import { resolveList }      from './resolvers/resolveList.js'
 import { resolveField }     from './resolvers/resolveField.js'
+import { validateSerializable } from '@boostkit/support'
 
 export type PanelSchemaElementMeta =
   | TextElementMeta
@@ -58,12 +59,17 @@ export type PanelSchemaElementMeta =
 
 // ─── Schema resolver ───────────────────────────────────────
 
+let resolveDepth = 0
+
 export async function resolveSchema(
   panel: Panel,
   ctx: PanelContext,
 ): Promise<PanelSchemaElementMeta[]> {
+  resolveDepth++
+  const isTopLevel = resolveDepth === 1
+
   const schemaDef = panel.getSchema()
-  if (!schemaDef) return []
+  if (!schemaDef) { resolveDepth--; return [] }
 
   const elements: SchemaElementLike[] = typeof schemaDef === 'function'
     ? await (schemaDef as (ctx: PanelContext) => Promise<SchemaElementLike[]>)(ctx)
@@ -257,5 +263,9 @@ export async function resolveSchema(
     }
   }
 
+  resolveDepth--
+  if (isTopLevel) {
+    validateSerializable(result, 'resolveSchema', 'panels')
+  }
   return result
 }

@@ -258,6 +258,72 @@ export async function resolveOptionalPeer<T = Record<string, unknown>>(specifier
   return import(/* @vite-ignore */ resolved) as Promise<T>
 }
 
+// ─── validateSerializable ──────────────────────────────────
+
+const isDev = typeof process !== 'undefined' && process.env?.['NODE_ENV'] !== 'production'
+
+/**
+ * Dev-mode validation: walk a data tree and warn about values that will fail
+ * SSR serialization (functions, Dates, Maps, class instances, etc.).
+ * Zero cost in production.
+ *
+ * @param data  - The object tree to validate
+ * @param label - A label for the error message (e.g. 'resolveSchema')
+ * @param tag   - Optional prefix tag for the log (defaults to 'boostkit')
+ */
+export function validateSerializable(data: unknown, label: string, tag = 'boostkit'): void {
+  if (!isDev) return
+
+  const problems: string[] = []
+  const seen = new WeakSet()
+
+  function walk(value: unknown, path: string): void {
+    if (value === null || value === undefined) return
+    const t = typeof value
+    if (t === 'string' || t === 'number' || t === 'boolean') return
+    if (t === 'function') { problems.push(`${path} — function`); return }
+    if (t === 'symbol')   { problems.push(`${path} — Symbol`); return }
+    if (t === 'bigint')   { problems.push(`${path} — BigInt`); return }
+
+    if (typeof value === 'object') {
+      if (seen.has(value as object)) { problems.push(`${path} — circular reference`); return }
+      seen.add(value as object)
+
+      if (value instanceof Date)   { problems.push(`${path} — Date (use .toISOString())`); return }
+      if (value instanceof RegExp) { problems.push(`${path} — RegExp`); return }
+      if (value instanceof Map)    { problems.push(`${path} — Map`); return }
+      if (value instanceof Set)    { problems.push(`${path} — Set`); return }
+
+      if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) walk(value[i], `${path}[${i}]`)
+        return
+      }
+
+      const proto = Object.getPrototypeOf(value) as object | null
+      if (proto !== null && proto !== Object.prototype) {
+        const name = (proto.constructor as { name?: string })?.name ?? 'unknown'
+        problems.push(`${path} — class instance (${name}), expected plain object`)
+        return
+      }
+
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        walk(v, `${path}.${k}`)
+      }
+    }
+  }
+
+  walk(data, label)
+
+  if (problems.length > 0) {
+    console.error(
+      `\n[${tag}] Non-serializable values detected in ${label}:\n` +
+      problems.map(p => `  • ${p}`).join('\n') +
+      '\n\nThese will cause hydration errors on the client.\n' +
+      'Fix the code that produces these values.\n',
+    )
+  }
+}
+
 // ─── defineEnv ─────────────────────────────────────────────
 
 import { z } from 'zod'

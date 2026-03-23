@@ -33,13 +33,14 @@
   "dependencies": {
     "@boostkit/core": "workspace:*",
     "@boostkit/router": "workspace:*",
+    "@boostkit/support": "workspace:*",
     "quill-delta": "^5.1.0"
   },
   "peerDependencies": {
     "@boostkit/broadcast": "workspace:*",
+    "@boostkit/image": "workspace:*",
     "@boostkit/live": "workspace:*",
     "@boostkit/storage": "workspace:*",
-    "@boostkit/image": "workspace:*",
     "recharts": ">=2.0.0"
   },
   "peerDependenciesMeta": {

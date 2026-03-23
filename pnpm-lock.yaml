@@ -475,6 +475,9 @@ importers:
       '@boostkit/router':
         specifier: workspace:*
         version: link:../router
+      '@boostkit/support':
+        specifier: workspace:*
+        version: link:../support
       quill-delta:
         specifier: ^5.1.0
         version: 5.1.0
