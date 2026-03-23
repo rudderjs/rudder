@@ -170,6 +170,18 @@ export const tap = <T>(val: T, fn: (v: T) => void): T => {
   return val
 }
 
+/**
+ * Simple i18n template interpolation.
+ * Replaces `:key` placeholders with values from the vars object.
+ *
+ * @example
+ * t('Hello :name, you have :n items', { name: 'Alice', n: 5 })
+ * // → 'Hello Alice, you have 5 items'
+ */
+export function t(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/:([a-z]+)/g, (_, k: string) => String(vars[k] ?? `:${k}`))
+}
+
 // ─── ConfigRepository ──────────────────────────────────────
 
 export class ConfigRepository {
