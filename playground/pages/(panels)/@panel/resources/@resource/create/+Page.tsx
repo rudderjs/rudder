@@ -6,11 +6,8 @@ import { toast } from 'sonner'
 import { Breadcrumbs } from '../../../../_components/Breadcrumbs.js'
 import { SchemaForm }  from '../../../../_components/SchemaForm.js'
 import type { SchemaFormMeta } from '@boostkit/panels'
+import { t } from '../../../../_lib/formHelpers.js'
 import type { Data } from './+data.js'
-
-function t(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/:([a-z]+)/g, (_, k: string) => String(vars[k] ?? `:${k}`))
-}
 
 export default function CreatePage() {
   const config = useConfig()

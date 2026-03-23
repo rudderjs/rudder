@@ -1,18 +1,9 @@
-import { PanelRegistry, resolveForm } from '@boostkit/panels'
+import { PanelRegistry, resolveForm, flattenFields } from '@boostkit/panels'
 import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow, PanelSchemaElementMeta } from '@boostkit/panels'
 import { buildPanelContext } from '../../../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
-
-function flattenFields(items: (Field | { getFields(): Field[] })[]): Field[] {
-  const result: Field[] = []
-  for (const item of items) {
-    if ('getFields' in item) result.push(...flattenFields(item.getFields()))
-    else result.push(item as Field)
-  }
-  return result
-}
 
 export async function data(pageContext: PageContextServer) {
   const { panel: pathSegment, resource: slug, id } = pageContext.routeParams as { panel: string; resource: string; id: string }

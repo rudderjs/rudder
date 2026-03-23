@@ -3,10 +3,7 @@ import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from
 import { SortableBlockList } from '../SortableBlockList.js'
 import type { FieldInputProps } from './types.js'
 import { FieldInput } from '../FieldInput.js'
-
-function t(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
-}
+import { t } from '../../_lib/formHelpers.js'
 
 export function RepeaterInput({ field, value, onChange, uploadBase, disabled = false, i18n }: FieldInputProps) {
   const isDisabled = disabled || field.readonly

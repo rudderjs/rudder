@@ -17,27 +17,9 @@ import {
 } from '@/components/ui/table.js'
 import { Badge } from '@/components/ui/badge.js'
 import { SchemaElementRenderer } from '../../../../_components/SchemaElementRenderer.js'
+import { t, flattenSchemaFields } from '../../../../_lib/formHelpers.js'
+import type { SchemaItem } from '../../../../_lib/formHelpers.js'
 import type { Data }   from './+data.js'
-
-function t(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/:([a-z]+)/g, (_, k: string) => String(vars[k] ?? `:${k}`))
-}
-
-type SchemaItem = FieldMeta | SectionMeta | TabsMeta
-
-function flattenFields(schema: SchemaItem[]): FieldMeta[] {
-  const result: FieldMeta[] = []
-  for (const item of schema) {
-    if (item.type === 'section') {
-      result.push(...(item as SectionMeta).fields)
-    } else if (item.type === 'tabs') {
-      for (const tab of (item as TabsMeta).tabs) result.push(...tab.fields)
-    } else {
-      result.push(item as FieldMeta)
-    }
-  }
-  return result
-}
 
 export default function ShowPage() {
   const config = useConfig()
@@ -52,7 +34,7 @@ export default function ShowPage() {
 
   config({ title: `${recordTitle} — ${panelName}` })
 
-  const allFields  = flattenFields(resourceMeta.fields as SchemaItem[])
+  const allFields  = flattenSchemaFields(resourceMeta.fields as SchemaItem[])
   const viewFields = allFields.filter(f => !f.hidden.includes('view') && f.type !== 'password' && f.type !== 'hasMany')
   const hasManyFields = allFields.filter(f => f.type === 'hasMany')
 
@@ -162,7 +144,7 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
     fetch(`/${pathSegment}/api/${resourceSlug}/_schema`)
       .then(r => r.json())
       .then((d: { resourceMeta: { fields: SchemaItem[] } }) => {
-        setSchema(flattenFields(d.resourceMeta.fields).filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
+        setSchema(flattenSchemaFields(d.resourceMeta.fields).filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
       })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is SSR-only, intentionally excluded to prevent re-fetch loop

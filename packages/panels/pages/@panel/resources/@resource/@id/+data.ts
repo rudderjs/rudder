@@ -1,4 +1,4 @@
-import { PanelRegistry } from '@boostkit/panels'
+import { PanelRegistry, flattenFields } from '@boostkit/panels'
 import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@boostkit/panels'
 import { getSessionUser } from '../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
@@ -8,15 +8,6 @@ export type Data = Awaited<ReturnType<typeof data>>
 /** A Field with an optional `.apply(record)` method (ComputedField). */
 interface ComputedFieldLike extends Field {
   apply(record: RecordRow): unknown
-}
-
-function flattenFields(items: (Field | { getFields(): Field[] })[]): Field[] {
-  const result: Field[] = []
-  for (const item of items) {
-    if ('getFields' in item) result.push(...flattenFields(item.getFields()))
-    else result.push(item as Field)
-  }
-  return result
 }
 
 export async function data(pageContext: PageContextServer) {

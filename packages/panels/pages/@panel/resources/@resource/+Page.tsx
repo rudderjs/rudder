@@ -9,11 +9,8 @@ import { SchemaTable } from '../../../_components/SchemaTable.js'
 import type { SchemaTableResourceProps } from '../../../_components/SchemaTable.js'
 import { SchemaTabs } from '../../../_components/SchemaTabs.js'
 import type { PanelSchemaElementMeta } from '@boostkit/panels'
+import { t } from '../../../_lib/formHelpers.js'
 import type { Data } from './+data.js'
-
-function t(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/:([a-z]+)/g, (_, k: string) => String(vars[k] ?? `:${k}`))
-}
 
 export default function ResourceListPage() {
   const config = useConfig()

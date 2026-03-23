@@ -2,6 +2,22 @@ import type { FieldMeta, SectionMeta, TabsMeta } from '@boostkit/panels'
 
 export type SchemaItem = FieldMeta | SectionMeta | TabsMeta
 
+/** Flatten Section/Tabs groupings to a plain FieldMeta array (all fields, no mode filter). */
+export function flattenSchemaFields(schema: SchemaItem[]): FieldMeta[] {
+  const result: FieldMeta[] = []
+  for (const item of schema) {
+    if (item.type === 'section') {
+      result.push(...(item as SectionMeta).fields)
+    } else if (item.type === 'tabs') {
+      for (const tab of (item as TabsMeta).tabs) result.push(...tab.fields)
+    } else {
+      result.push(item as FieldMeta)
+    }
+  }
+  return result
+}
+
+/** Flatten Section/Tabs groupings, filtering out fields hidden from the given mode. */
 export function flattenFormFields(schema: SchemaItem[], mode: 'create' | 'edit'): FieldMeta[] {
   const result: FieldMeta[] = []
   function collect(fields: FieldMeta[]) {

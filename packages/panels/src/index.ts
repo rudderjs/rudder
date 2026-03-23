@@ -135,6 +135,7 @@ export { resolveTable } from './resolvers/resolveTable.js'
 export { resolveTabs }  from './resolvers/resolveTabs.js'
 export { resolveActiveTabIndex } from './resolvers/helpers.js'
 export { resolveForm }  from './resolvers/resolveForm.js'
+export { flattenFields } from './handlers/utils.js'
 
 // ─── Registries ─────────────────────────────────────────────
 

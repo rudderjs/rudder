@@ -5,16 +5,13 @@ import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 import { CheckIcon } from './Icons.js'
 import { FieldInput } from '../FieldInput.js'
+import { t } from '../../_lib/formHelpers.js'
 
 function generateSlug(str: string): string {
   return str.toLowerCase().trim()
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-}
-
-function t(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/:([a-z]+)/g, (_, k) => String(vars[k] ?? `:${k}`))
 }
 
 interface Opt { value: string; label: string }

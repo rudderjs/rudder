@@ -2,18 +2,7 @@ import { PanelRegistry } from './registries/PanelRegistry.js'
 import type { PanelMeta } from './Panel.js'
 import type { ResourceMeta, FieldOrGrouping } from './Resource.js'
 import type { Field } from './schema/Field.js'
-
-function flattenFields(items: (Field | { getFields(): Field[] })[]): Field[] {
-  const result: Field[] = []
-  for (const item of items) {
-    if ('getFields' in item) {
-      result.push(...flattenFields(item.getFields()))
-    } else {
-      result.push(item as Field)
-    }
-  }
-  return result
-}
+import { flattenFields } from './handlers/utils.js'
 
 export interface ResourceDataContext {
   /** Panel path segment (e.g. 'admin' for a panel at /admin). */
