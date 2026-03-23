@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { WidgetCard } from './WidgetCard.js'
-import type { WidgetWithData } from './WidgetCard.js'
+import type { WidgetWithSchema } from './WidgetCard.js'
 import type { PanelI18n } from '@boostkit/panels'
 
 interface Props {
-  widget:      WidgetWithData
+  widget:      WidgetWithSchema
   panelPath:   string
   pathSegment: string
   i18n:        PanelI18n & Record<string, string>
@@ -17,23 +17,23 @@ interface Props {
  * Supports lazy loading and polling.
  */
 export function StandaloneWidget({ widget, panelPath, pathSegment, i18n }: Props) {
-  const [data, setData] = useState<unknown>(widget.data)
-  const [loading, setLoading] = useState(widget.lazy === true && !widget.data)
+  const [schema, setSchema] = useState(widget.schema)
+  const [loading, setLoading] = useState(widget.lazy === true && !widget.schema)
 
   // Lazy fetch
   useEffect(() => {
-    if (!widget.lazy || widget.data) return
-    async function fetchData() {
+    if (!widget.lazy || widget.schema) return
+    async function fetchSchema() {
       try {
         const res = await fetch(`/${pathSegment}/api/_widgets/${widget.id}`)
         if (res.ok) {
-          const body = await res.json() as { widget: WidgetWithData }
-          if (body.widget?.data) setData(body.widget.data)
+          const body = await res.json() as { widget: WidgetWithSchema }
+          if (body.widget?.schema) setSchema(body.widget.schema)
         }
       } catch { /* failed */ }
       setLoading(false)
     }
-    void fetchData()
+    void fetchSchema()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Polling
@@ -43,8 +43,8 @@ export function StandaloneWidget({ widget, panelPath, pathSegment, i18n }: Props
       try {
         const res = await fetch(`/${pathSegment}/api/_widgets/${widget.id}`)
         if (res.ok) {
-          const body = await res.json() as { widget: WidgetWithData }
-          if (body.widget?.data) setData(body.widget.data)
+          const body = await res.json() as { widget: WidgetWithSchema }
+          if (body.widget?.schema) setSchema(body.widget.schema)
         }
       } catch { /* failed */ }
     }, widget.pollInterval)
@@ -60,8 +60,6 @@ export function StandaloneWidget({ widget, panelPath, pathSegment, i18n }: Props
     )
   }
 
-  // Pass widget with current data to the shared WidgetCard
-  const widgetWithData: WidgetWithData = { ...widget, data }
-
-  return <WidgetCard widget={widgetWithData} panelPath={panelPath} i18n={i18n} />
+  const widgetWithSchema: WidgetWithSchema = { ...widget, schema }
+  return <WidgetCard widget={widgetWithSchema} panelPath={panelPath} i18n={i18n} />
 }

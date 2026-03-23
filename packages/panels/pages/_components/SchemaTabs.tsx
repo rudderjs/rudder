@@ -6,7 +6,7 @@ import { StandaloneWidget } from './StandaloneWidget.js'
 import { SchemaForm } from './SchemaForm.js'
 import { SchemaDialog } from './SchemaDialog.js'
 import type { PanelSchemaElementMeta, FormElementMeta, DialogElementMeta } from '@boostkit/panels'
-import type { WidgetWithData } from './WidgetCard.js'
+import type { WidgetWithSchema } from './WidgetCard.js'
 import { slugify } from '../_lib/persist.js'
 import type { SchemaElement, TabItem, DashboardEl, I18nExtended } from './schema-types.js'
 
@@ -179,7 +179,7 @@ export function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, 
                 return (
                   <StandaloneWidget
                     key={`${tabIdx}-tw-${i}`}
-                    widget={el as unknown as WidgetWithData}
+                    widget={el as unknown as WidgetWithSchema}
                     panelPath={panelPath}
                     pathSegment={pathSegment}
                     i18n={i18n}

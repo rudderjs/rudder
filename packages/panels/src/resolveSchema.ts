@@ -93,7 +93,7 @@ export async function resolveSchema(
     }
 
     if (type === 'dashboard') {
-      result.push(await resolveDashboard(el, panel, ctx))
+      result.push(await resolveDashboard(el, panel, ctx, resolveSchema))
       continue
     }
 
@@ -108,7 +108,7 @@ export async function resolveSchema(
     }
 
     if (type === 'widget') {
-      result.push(await resolveWidget(el, ctx))
+      result.push(await resolveWidget(el, panel, ctx, resolveSchema))
       continue
     }
 

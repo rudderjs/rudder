@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/sortable'
 import { WidgetSettingsDrawer } from './WidgetSettingsDrawer.js'
 import { WidgetCard } from './WidgetCard.js'
-import type { WidgetWithData } from './WidgetCard.js'
+import type { WidgetWithSchema } from './WidgetCard.js'
 import type { PanelI18n } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/panels'
 
@@ -52,7 +52,7 @@ export interface DashboardGridProps {
   label?:         string | undefined
   editable?:      boolean | undefined
   defaultWidgets: WidgetMeta[]
-  ssrWidgets?:    WidgetWithData[] | undefined
+  ssrWidgets?:    WidgetWithSchema[] | undefined
   ssrLayout?:     DashboardLayoutItem[] | undefined
   pathSegment:    string
   panelPath:      string
@@ -141,7 +141,7 @@ export function DashboardGrid({
 }: DashboardGridProps) {
   const hasSSR = ssrWidgets && ssrWidgets.length > 0
   const hasSSRLayout = ssrLayout && ssrLayout.length > 0
-  const [widgets, setWidgets] = useState<WidgetWithData[]>(hasSSR ? ssrWidgets : [])
+  const [widgets, setWidgets] = useState<WidgetWithSchema[]>(hasSSR ? ssrWidgets : [])
   const [layout, setLayout] = useState<DashboardLayoutItem[]>(
     hasSSRLayout ? ssrLayout : (hasSSR ? computeDefaultLayout(defaultWidgets) : [])
   )
@@ -165,14 +165,14 @@ export function DashboardGrid({
         setWidgets(ssrWidgets)
 
         // Fetch lazy widgets via API
-        const lazyIds = ssrWidgets.filter(w => w.lazy && !w.data).map(w => w.id)
+        const lazyIds = ssrWidgets.filter(w => w.lazy && !w.schema).map(w => w.id)
         if (lazyIds.length > 0) {
           try {
             const base = `/${pathSegment}/api/_dashboard/${dashboardId}`
             const qs = tabQuery(tabId)
             const res = await fetch(`${base}/widgets${qs}`)
             if (res.ok) {
-              const body = await res.json() as { widgets: WidgetWithData[] }
+              const body = await res.json() as { widgets: WidgetWithSchema[] }
               setWidgets(prev => prev.map(w => {
                 if (!lazyIds.includes(w.id)) return w
                 const fresh = body.widgets.find(fw => fw.id === w.id)
@@ -188,7 +188,7 @@ export function DashboardGrid({
           const qs = tabQuery(tabId)
           const res = await fetch(`${base}/widgets${qs}`)
           if (res.ok) {
-            const body = await res.json() as { widgets: WidgetWithData[] }
+            const body = await res.json() as { widgets: WidgetWithSchema[] }
             setWidgets(body.widgets)
           }
         } catch { /* fetch failed */ }
@@ -245,7 +245,7 @@ export function DashboardGrid({
           const tabParam = tabId ? `&tab=${tabId}` : ''
           const res = await fetch(`${base}/widgets?widget=${pw.id}${tabParam}`)
           if (res.ok) {
-            const body = await res.json() as { widgets: WidgetWithData[] }
+            const body = await res.json() as { widgets: WidgetWithSchema[] }
             const fresh = body.widgets.find(w => w.id === pw.id)
             if (fresh) {
               setWidgets(prev => prev.map(w => w.id === pw.id ? fresh : w))
@@ -297,7 +297,7 @@ export function DashboardGrid({
   }
 
   // ── Add widget ──────────────────────────────────────────────────────────
-  function addWidget(widget: WidgetWithData) {
+  function addWidget(widget: WidgetWithSchema) {
     setLayout(prev => [...prev, { widgetId: widget.id, w: widget.defaultSize.w }])
     setShowPalette(false)
   }
@@ -319,7 +319,7 @@ export function DashboardGrid({
         : ''
       const res = await fetch(`${base}/widgets?widget=${widgetId}${tabParam}${settingsParam}`)
       if (res.ok) {
-        const body = await res.json() as { widgets: WidgetWithData[] }
+        const body = await res.json() as { widgets: WidgetWithSchema[] }
         const updated = body.widgets.find(w => w.id === widgetId)
         if (updated) {
           setWidgets(prev => prev.map(w => w.id === widgetId ? updated : w))
@@ -425,13 +425,11 @@ export function DashboardGrid({
             <div className="grid grid-cols-12 gap-4">
               {activeWidgets.map(({ widgetId, w, widget }) => {
                 const span = clampSpan(w)
-                const needsHeight = widget?.component === 'chart' || widget?.component === 'table'
                 return (
                   <SortableWidget
                     key={widgetId}
                     id={widgetId}
                     span={span}
-                    minHeight={needsHeight ? 280 : undefined}
                     editing={editing}
                   >
                     {/* Edit controls */}

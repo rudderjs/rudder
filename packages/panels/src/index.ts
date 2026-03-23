@@ -191,7 +191,7 @@ export type { ResourceDataContext, ResourceDataResult } from './resourceData.js'
 
 // ─── Widget ─────────────────────────────────────────────
 export { Widget } from './schema/Widget.js'
-export type { WidgetSize, WidgetMeta, WidgetSettingsField } from './schema/Widget.js'
+export type { WidgetSize, WidgetMeta, WidgetSettingsField, WidgetSchemaFn } from './schema/Widget.js'
 
 // ─── Dashboard ──────────────────────────────────────────
 export { Dashboard, DashboardTab } from './schema/Dashboard.js'

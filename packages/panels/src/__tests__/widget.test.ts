@@ -27,14 +27,6 @@ describe('Widget', () => {
     assert.deepEqual(Widget.make('x').defaultSize({ w: 4, h: 3 }).getDefaultSize(), { w: 4, h: 3 })
   })
 
-  it('component defaults to stat', () => {
-    assert.equal(Widget.make('x').getComponent(), 'stat')
-  })
-
-  it('component is configurable', () => {
-    assert.equal(Widget.make('x').component('chart').getComponent(), 'chart')
-  })
-
   it('description is optional', () => {
     const meta = Widget.make('x').toMeta()
     assert.equal(meta.description, undefined)
@@ -49,7 +41,6 @@ describe('Widget', () => {
     const meta = Widget.make('revenue')
       .label('Revenue')
       .large()
-      .component('chart')
       .description('Monthly revenue chart')
       .icon('chart-line')
       .toMeta()
@@ -57,46 +48,55 @@ describe('Widget', () => {
     assert.equal(meta.id, 'revenue')
     assert.equal(meta.label, 'Revenue')
     assert.deepEqual(meta.defaultSize, { w: 12, h: 3 })
-    assert.equal(meta.component, 'chart')
     assert.equal(meta.description, 'Monthly revenue chart')
     assert.equal(meta.icon, 'chart-line')
   })
 
-  it('data function is stored', () => {
-    const fn = async () => ({ value: 42 })
-    const w = Widget.make('x').data(fn)
-    assert.equal(w.getDataFn(), fn)
+  it('schema function (static array) is stored', () => {
+    const elements = [{ getType: () => 'text', toMeta: () => ({ type: 'text', text: 'hello' }) }]
+    const w = Widget.make('x').schema(elements)
+    assert.equal(typeof w.getSchemaFn(), 'function')
   })
 
-  it('data function is optional', () => {
-    assert.equal(Widget.make('x').getDataFn(), undefined)
+  it('schema function (async) is stored', () => {
+    const fn = async () => [{ getType: () => 'text', toMeta: () => ({ type: 'text', text: 'hello' }) }]
+    const w = Widget.make('x').schema(fn)
+    assert.equal(typeof w.getSchemaFn(), 'function')
+  })
+
+  it('schema function is optional', () => {
+    assert.equal(Widget.make('x').getSchemaFn(), undefined)
+  })
+
+  it('static schema returns same elements', async () => {
+    const elements = [{ getType: () => 'text', toMeta: () => ({ type: 'text', text: 'hello' }) }]
+    const w = Widget.make('x').schema(elements)
+    const result = await w.getSchemaFn()!({} as never)
+    assert.equal(result, elements)
   })
 
   it('fluent API is chainable', () => {
     const w = Widget.make('x')
       .label('Test')
       .small()
-      .component('list')
       .description('Desc')
       .icon('star')
     assert.equal(w.getId(), 'x')
     assert.equal(w.getLabel(), 'Test')
     assert.deepEqual(w.getDefaultSize(), { w: 3, h: 2 })
-    assert.equal(w.getComponent(), 'list')
   })
 })
 
 // ─── Widget — custom component ───────────────────────────
 
 describe('Widget — custom component', () => {
-  it('render() sets component to custom', () => {
+  it('render() sets componentPath', () => {
     const w = Widget.make('x').render('/app/widgets/Map')
-    assert.equal(w.getComponent(), 'custom')
+    assert.equal(w.getComponentPath(), '/app/widgets/Map')
   })
 
   it('componentPath in toMeta()', () => {
     const meta = Widget.make('x').render('/app/widgets/Map').toMeta()
-    assert.equal(meta.component, 'custom')
     assert.equal(meta.componentPath, '/app/widgets/Map')
   })
 
@@ -118,12 +118,11 @@ describe('Widget — custom component', () => {
       .label('Office Map')
       .render('/app/widgets/OfficeMapWidget')
       .large()
-      .data(async () => ({ floors: 3 }))
-    assert.equal(w.getComponent(), 'custom')
+      .schema(async () => [])
     assert.equal(w.getComponentPath(), '/app/widgets/OfficeMapWidget')
     assert.equal(w.getLabel(), 'Office Map')
     assert.deepEqual(w.getDefaultSize(), { w: 12, h: 3 })
-    assert.equal(typeof w.getDataFn(), 'function')
+    assert.equal(typeof w.getSchemaFn(), 'function')
   })
 })
 
@@ -181,10 +180,14 @@ describe('Widget — settings', () => {
     assert.equal(meta.settings![1]!.name, 'showTrend')
   })
 
-  it('data fn can receive settings', () => {
-    const fn = async (_ctx: unknown, _settings: unknown) => ({ value: 42 })
-    const w = Widget.make('x').data(fn)
-    assert.equal(typeof w.getDataFn(), 'function')
+  it('schema fn receives settings', async () => {
+    let receivedSettings: unknown
+    const w = Widget.make('x').schema(async (_ctx, settings) => {
+      receivedSettings = settings
+      return []
+    })
+    await w.getSchemaFn()!({} as never, { period: '7d' })
+    assert.deepEqual(receivedSettings, { period: '7d' })
   })
 })
 

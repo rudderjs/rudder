@@ -7,7 +7,7 @@ import { SchemaForm } from './SchemaForm.js'
 import { SchemaDialog } from './SchemaDialog.js'
 import { SchemaTabs } from './SchemaTabs.js'
 import type { PanelSchemaElementMeta, FormElementMeta, DialogElementMeta } from '@boostkit/panels'
-import type { WidgetWithData } from './WidgetCard.js'
+import type { WidgetWithSchema } from './WidgetCard.js'
 import type { SchemaElement, TabItem, DashboardEl, I18nExtended } from './schema-types.js'
 
 export interface SchemaSectionProps {
@@ -55,7 +55,7 @@ export function SchemaSection({ section, panelPath, pathSegment, i18n, urlSearch
                 return (
                   <StandaloneWidget
                     key={`sw-${i}`}
-                    widget={el as unknown as WidgetWithData}
+                    widget={el as unknown as WidgetWithSchema}
                     panelPath={panelPath}
                     pathSegment={pathSegment}
                     i18n={i18n}

@@ -1,10 +1,12 @@
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { Panel } from '../Panel.js'
-import type { Widget, WidgetSize } from '../schema/Widget.js'
+import type { Widget, WidgetSize, WidgetMeta } from '../schema/Widget.js'
 import type { Dashboard, DashboardTab } from '../schema/Dashboard.js'
-import type { PanelUser } from '../types.js'
+import type { PanelUser, PanelContext, SchemaElementLike } from '../types.js'
+import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { RouterLike } from './types.js'
 import { DashboardRegistry } from '../registries/DashboardRegistry.js'
+import { debugWarn } from '../debug.js'
 
 // ── Minimal structural type for dynamically-resolved app/auth ──
 
@@ -29,6 +31,34 @@ interface PrismaLayoutClient {
       update: Record<string, unknown>
     }): Promise<void>
   }
+}
+
+type WidgetMetaResolved = WidgetMeta & { type: 'widget'; schema?: PanelSchemaElementMeta[] }
+
+/** Resolve a widget's schema elements via its schemaFn. */
+async function resolveWidgetSchema(
+  widget: Widget,
+  panel: Panel,
+  ctx: PanelContext,
+  settings?: Record<string, unknown>,
+): Promise<WidgetMetaResolved> {
+  const meta: WidgetMetaResolved = widget.toMeta()
+  const schemaFn = widget.getSchemaFn?.()
+  if (schemaFn) {
+    try {
+      const elements = await schemaFn(ctx, settings)
+      // Lazily import resolveSchema to avoid circular deps
+      const { resolveSchema } = await import('../resolveSchema.js')
+      const innerPanel = Object.create(panel, {
+        getSchema: { value: () => elements },
+      }) as Panel
+      meta.schema = await resolveSchema(innerPanel, ctx)
+    } catch (e) {
+      debugWarn('widget.schema', e)
+      meta.schema = []
+    }
+  }
+  return meta
 }
 
 export function mountDashboardRoutes(
@@ -66,20 +96,26 @@ export function mountDashboardRoutes(
     return undefined
   }
 
-  // GET /_dashboard/:dashId/widgets — list widgets with resolved data
+  /** Build PanelContext from request. */
+  function buildCtx(req: AppRequest): PanelContext {
+    const reqUser = (req as AppRequest & { user?: PanelUser }).user
+    return { user: reqUser, headers: req.headers as Record<string, string>, path: req.url, params: {} }
+  }
+
+  // GET /_dashboard/:dashId/widgets — list widgets with resolved schemas
   router.get(`${base}/:dashId/widgets`, async (req: AppRequest, res: AppResponse) => {
     const params  = req.params as Record<string, string>
     const query   = req.query as Record<string, string | undefined>
-    const reqUser = (req as AppRequest & { user?: PanelUser }).user
+    const ctx     = buildCtx(req)
 
     let dashboard: Dashboard | undefined = DashboardRegistry.get(panelName, params['dashId'] ?? '')
 
     if (!dashboard) {
       // Resolve async schema to discover dashboards
       const schema = typeof schemaDef === 'function'
-        ? await schemaDef({ user: reqUser, headers: req.headers as Record<string, string>, path: req.url, params: {} })
+        ? await schemaDef(ctx)
         : schemaDef ?? []
-      for (const el of schema) {
+      for (const el of schema as SchemaElementLike[]) {
         if (typeof el?.getType === 'function' && el.getType() === 'dashboard') {
           const dash = el as Dashboard
           DashboardRegistry.register(panelName, dash)
@@ -98,22 +134,14 @@ export function mountDashboardRoutes(
       if (tab) widgets = tab.getWidgets()
     }
 
-    const results = []
-    for (const widget of widgets) {
-      const meta = widget.toMeta()
-      let data: unknown = null
-      const dataFn = widget.getDataFn()
-      if (dataFn) {
-        try {
-          const settingsStr = query['settings']
-          const settings = settingsStr ? JSON.parse(settingsStr) as Record<string, unknown> : undefined
-          const uid = await resolveUserId(req)
-          const ctx: PanelUser | undefined = uid ? { id: uid, ...reqUser } : reqUser
-          data = await dataFn(ctx, settings)
-        } catch { /* data resolution failed */ }
-      }
-      results.push({ ...meta, data })
-    }
+    // Parse per-widget settings from query
+    const settingsStr = query['settings']
+    const settings = settingsStr ? JSON.parse(settingsStr) as Record<string, unknown> : undefined
+
+    const results = await Promise.all(
+      widgets.map(widget => resolveWidgetSchema(widget, panel, ctx, settings))
+    )
+
     return res.json({ widgets: results })
   }, mw)
 
@@ -180,18 +208,18 @@ export function mountDashboardRoutes(
     return res.json({ ok: true })
   }, mw)
 
-  // GET /_widgets/:widgetId — resolve a standalone widget's data
+  // GET /_widgets/:widgetId — resolve a standalone widget's schema
   router.get(`${panel.getApiBase()}/_widgets/:widgetId`, async (req: AppRequest, res: AppResponse) => {
     const params  = req.params as Record<string, string>
     const widgetId = params['widgetId'] ?? ''
-    const reqUser  = (req as AppRequest & { user?: PanelUser }).user
+    const ctx     = buildCtx(req)
 
     const schema = typeof schemaDef === 'function'
-      ? await schemaDef({ user: reqUser, headers: req.headers as Record<string, string>, path: req.url, params: {} })
+      ? await schemaDef(ctx)
       : schemaDef ?? []
 
     let widget: Widget | null = null
-    for (const el of schema) {
+    for (const el of schema as SchemaElementLike[]) {
       if (typeof el?.getType === 'function' && el.getType() === 'widget' && (el as Widget).getId() === widgetId) {
         widget = el as Widget
         break
@@ -200,17 +228,8 @@ export function mountDashboardRoutes(
 
     if (!widget) return res.status(404).json({ error: 'Widget not found' })
 
-    const meta = widget.toMeta() as ReturnType<Widget['toMeta']> & { data?: unknown }
-    const dataFn = widget.getDataFn?.()
-    if (dataFn) {
-      try {
-        meta.data = await dataFn(reqUser)
-      } catch {
-        meta.data = null
-      }
-    }
-
-    return res.json({ widget: meta })
+    const resolved = await resolveWidgetSchema(widget, panel, ctx)
+    return res.json({ widget: resolved })
   }, mw)
 }
 

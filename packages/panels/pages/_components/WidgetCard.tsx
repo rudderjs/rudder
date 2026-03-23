@@ -2,14 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { SchemaElementRenderer } from './SchemaElementRenderer.js'
-import type { SchemaElementRendererProps } from './SchemaElementRenderer.js'
-import type { PanelSchemaElementMeta, PanelI18n, ChartDataset, PanelColumnMeta, ListItem } from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelI18n } from '@boostkit/panels'
 import type { WidgetMeta } from '@boostkit/panels'
 
-type SchemaElementRendererElement = SchemaElementRendererProps['element']
-
-export interface WidgetWithData extends WidgetMeta {
-  data: unknown
+export interface WidgetWithSchema extends WidgetMeta {
+  schema?: PanelSchemaElementMeta[]
 }
 
 // ── Icon — supports emoji and lucide icon names ─────────────────────────────
@@ -46,91 +43,42 @@ export function WidgetIcon({ icon, className }: { icon: string; className?: stri
   return <span className={className}>{icon}</span>
 }
 
-// ── Widget card — maps widget component type to rendered output ──────────────
+// ── Widget card — renders resolved schema elements ──────────────────────────
 
 export function WidgetCard({ widget, panelPath, i18n }: {
-  widget:    WidgetWithData
+  widget:    WidgetWithSchema
   panelPath: string
   i18n:      PanelI18n & Record<string, string>
 }) {
-  const data = widget.data as Record<string, unknown> | null
-
-  // Custom component
-  if (widget.component === 'custom' && widget.componentPath) {
+  // Custom component via .render()
+  if (widget.componentPath) {
     return <CustomWidgetLoader widget={widget} />
   }
 
-  // Stat with icon
-  if (widget.component === 'stat') {
-    return (
-      <div className="rounded-xl border bg-card p-5 flex flex-col gap-1 h-full">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{widget.label}</p>
-          {widget.icon && <WidgetIcon icon={widget.icon} className="w-5 h-5 text-muted-foreground" />}
-        </div>
-        <p className="text-3xl font-bold tabular-nums">{((data?.value as number | string) ?? 0).toLocaleString()}</p>
-        {data?.description !== undefined && (
-          <p className="text-xs text-muted-foreground mt-0.5">{String(data.description)}</p>
-        )}
-        {data?.trend !== undefined && (
-          <p className={`text-xs font-medium mt-0.5 ${(data.trend as number) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-            {(data.trend as number) >= 0 ? '\u2191' : '\u2193'} {Math.abs(data.trend as number)}%
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  // Map other types to SchemaElementRenderer
-  let element: SchemaElementRendererElement | null = null
-
-  if (widget.component === 'chart') {
-    element = {
-      type: 'chart',
-      title: widget.label,
-      chartType: (data?.['type'] as string) ?? 'line',
-      labels: (data?.['labels'] as string[]) ?? [],
-      datasets: (data?.['datasets'] as ChartDataset[]) ?? [],
-      height: (data?.['height'] as number) ?? Math.max((widget.defaultSize.h * 80) - 60, 180),
-    } as PanelSchemaElementMeta
-  } else if (widget.component === 'table') {
-    element = {
-      type: 'table',
-      title: widget.label,
-      resource: '',
-      columns: (data?.['columns'] as PanelColumnMeta[]) ?? [],
-      records: (data?.['records'] as unknown[]) ?? [],
-      href: (data?.['href'] as string) ?? '#',
-    } as PanelSchemaElementMeta
-  } else if (widget.component === 'list') {
-    element = {
-      type: 'list',
-      title: widget.label,
-      items: (data?.['items'] as ListItem[]) ?? [],
-      limit: (data?.['limit'] as number) ?? 5,
-    } as PanelSchemaElementMeta
-  } else if (widget.component === 'stat-progress') {
-    element = { type: 'stat-progress', data: data ?? {} }
-  } else if (widget.component === 'user-card') {
-    element = { type: 'user-card', data: data ?? {} }
-  }
-
-  if (!element) {
+  // Render resolved schema elements
+  const schema = widget.schema
+  if (!schema || schema.length === 0) {
     return (
       <div className="rounded-xl border bg-card p-5 h-full">
         <p className="text-sm font-semibold">{widget.label}</p>
-        {data && <pre className="text-xs text-muted-foreground mt-2 overflow-auto">{JSON.stringify(data, null, 2)}</pre>}
+        <p className="text-xs text-muted-foreground mt-1">No content</p>
       </div>
     )
   }
 
-  return <SchemaElementRenderer element={element} panelPath={panelPath} i18n={i18n} />
+  return (
+    <div className="h-full">
+      {schema.map((element, i) => (
+        <SchemaElementRenderer key={i} element={element} panelPath={panelPath} i18n={i18n} />
+      ))}
+    </div>
+  )
 }
 
 // ── Custom component loader ─────────────────────────────────────────────────
 
-function CustomWidgetLoader({ widget }: { widget: WidgetWithData }) {
-  const [Comp, setComp] = useState<React.ComponentType<{ data: unknown; widget: WidgetWithData }> | null>(null)
+function CustomWidgetLoader({ widget }: { widget: WidgetWithSchema }) {
+  const [Comp, setComp] = useState<React.ComponentType<{ widget: WidgetWithSchema }> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -158,5 +106,5 @@ function CustomWidgetLoader({ widget }: { widget: WidgetWithData }) {
     )
   }
 
-  return <Comp data={widget.data} widget={widget} />
+  return <Comp widget={widget} />
 }

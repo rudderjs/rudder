@@ -11,7 +11,7 @@ import { SchemaDialog } from '../_components/SchemaDialog.js'
 import { SchemaTabs } from '../_components/SchemaTabs.js'
 import { SchemaSection } from '../_components/SchemaSection.js'
 import type { PanelSchemaElementMeta, PanelI18n, FormElementMeta, DialogElementMeta, WidgetMeta } from '@boostkit/panels'
-import type { WidgetWithData } from '../_components/WidgetCard.js'
+import type { WidgetWithSchema } from '../_components/WidgetCard.js'
 import type { DashboardGridProps } from '../_components/DashboardGrid.js'
 import type { Data } from './+data.js'
 import { slugify } from '../_lib/persist.js'
@@ -67,7 +67,7 @@ export default function PanelRootPage() {
                 return (
                   <div key={`widget-${widgetEl.id ?? wi}`} style={{ gridColumn: `span ${Math.min(w, 12)}` }}>
                     <StandaloneWidget
-                      widget={el as unknown as WidgetWithData}
+                      widget={el as unknown as WidgetWithSchema}
                       panelPath={panelMeta.path}
                       pathSegment={pathSegment}
                       i18n={i18n}
@@ -182,7 +182,7 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
   const [activeTab, setActiveTab] = useState(tabs?.[0]?.id ?? null)
 
   const widgets      = dashboard.widgets as WidgetMeta[]
-  const ssrWidgets   = dashboard.widgets as WidgetWithData[]
+  const ssrWidgets   = dashboard.widgets as WidgetWithSchema[]
   const ssrLayout    = dashboard.savedLayout as DashboardLayoutItem[] | undefined
 
   return (
@@ -226,7 +226,7 @@ function DashboardSection({ dashboard, pathSegment, panelPath, i18n }: Dashboard
           {/* Active tab's grid */}
           {tabs.map(tab => {
             const tabWidgets    = tab.widgets as WidgetMeta[]
-            const tabSsrWidgets = tab.widgets as WidgetWithData[]
+            const tabSsrWidgets = tab.widgets as WidgetWithSchema[]
             const tabSsrLayout  = dashboard.savedTabLayouts?.[tab.id] as DashboardLayoutItem[] | undefined
             return activeTab === tab.id && (
               <DashboardGrid

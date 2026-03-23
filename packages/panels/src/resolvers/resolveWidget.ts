@@ -1,24 +1,33 @@
+import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike } from '../types.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
-import type { WidgetElement } from './types.js'
+import type { WidgetElement, ResolveSchemaFn } from './types.js'
 import { debugWarn } from '../debug.js'
 
 export async function resolveWidget(
   el: SchemaElementLike,
+  panel: Panel,
   ctx: PanelContext,
+  resolveSchemaFn: ResolveSchemaFn,
 ): Promise<PanelSchemaElementMeta> {
   const widget = el as WidgetElement
-  // Extend WidgetMeta with the runtime-populated `data` field (SSR-only, not in static type)
-  const meta = widget.toMeta() as import('../schema/Widget.js').WidgetMeta & { type: 'widget'; data?: unknown }
+  const meta = widget.toMeta() as import('../schema/Widget.js').WidgetMeta & {
+    type: 'widget'
+    schema?: PanelSchemaElementMeta[]
+  }
 
   if (!meta.lazy) {
-    const dataFn = widget.getDataFn?.()
-    if (dataFn) {
+    const schemaFn = widget.getSchemaFn?.()
+    if (schemaFn) {
       try {
-        meta.data = await dataFn({ user: ctx.user })
+        const elements = await schemaFn(ctx)
+        const innerPanel = Object.create(panel, {
+          getSchema: { value: () => elements },
+        }) as Panel
+        meta.schema = await resolveSchemaFn(innerPanel, ctx)
       } catch (e) {
-        debugWarn('widget.data', e)
-        meta.data = null
+        debugWarn('widget.schema', e)
+        meta.schema = []
       }
     }
   }
