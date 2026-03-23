@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { useData } from 'vike-react/useData'
-import { navigate } from 'vike/client/router'
 import type { Data } from './+data.js'
+import type { MediaRecord } from '../../_lib/types.js'
+import { useMediaActions } from '../../_lib/useMediaActions.js'
 import { MediaGrid } from '../../_components/MediaGrid.js'
 import { MediaList } from '../../_components/MediaList.js'
 import { MediaPreview } from '../../_components/MediaPreview.js'
@@ -11,158 +12,82 @@ import { MediaUploadZone } from '../../_components/MediaUploadZone.js'
 import { NewFolderDialog } from '../../_components/NewFolderDialog.js'
 
 export default function MediaPage() {
-  const { panelMeta, items, breadcrumbs, scope, search, pathSegment, currentFolder, sessionUser } = useData<Data>()
+  const { items, breadcrumbs, scope, search, pathSegment, currentFolder, sessionUser } = useData<Data>()
   const [view, setView] = useState<'grid' | 'list'>('grid')
-  const [previewItem, setPreviewItem] = useState<Record<string, unknown> | null>(null)
+  const [previewItem, setPreviewItem] = useState<MediaRecord | null>(null)
   const [showNewFolder, setShowNewFolder] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const searchRef = useRef<HTMLInputElement>(null)
 
   const apiBase = `/${pathSegment}/api/media`
   const pageBase = `/${pathSegment}/media`
-  const currentFolderId = (currentFolder?.['id'] as string) ?? null
+  const currentFolderId = currentFolder?.id ?? null
 
-  // ── Navigation (Vike SSR) ──────────────────────────────────
+  const {
+    uploading,
+    searchRef,
+    navigateToFolder,
+    handleSearch,
+    toggleScope,
+    deleteItem,
+    renameItem,
+    updateItem,
+    moveToFolder,
+    createFolder,
+    uploadFiles,
+  } = useMediaActions({ apiBase, pageBase, currentFolderId, scope, sessionUser })
 
-  const navigateToFolder = useCallback((folderId: string | null) => {
-    const params = new URLSearchParams()
-    if (folderId) params.set('folder', folderId)
-    if (scope === 'private') params.set('scope', 'private')
-    const qs = params.toString()
-    navigate(`${pageBase}${qs ? `?${qs}` : ''}`)
-  }, [pageBase, scope])
+  // ── Item interactions ────────────────────────────────────────
 
-  const handleSearch = useCallback(() => {
-    const q = searchRef.current?.value ?? ''
-    const params = new URLSearchParams()
-    if (currentFolderId) params.set('folder', currentFolderId)
-    if (scope === 'private') params.set('scope', 'private')
-    if (q) params.set('search', q)
-    const qs = params.toString()
-    navigate(`${pageBase}${qs ? `?${qs}` : ''}`)
-  }, [pageBase, currentFolderId, scope])
-
-  const toggleScope = useCallback(() => {
-    const next = scope === 'shared' ? 'private' : 'shared'
-    const params = new URLSearchParams()
-    if (next === 'private') params.set('scope', 'private')
-    const qs = params.toString()
-    navigate(`${pageBase}${qs ? `?${qs}` : ''}`)
-  }, [pageBase, scope])
-
-  // ── Item actions ───────────────────────────────────────────
-
-  const handleDoubleClick = useCallback((item: Record<string, unknown>) => {
-    if (item['type'] === 'folder') {
-      navigateToFolder(item['id'] as string)
+  const handleDoubleClick = useCallback((item: MediaRecord) => {
+    if (item.type === 'folder') {
+      navigateToFolder(item.id)
     } else {
       setPreviewItem(item)
     }
   }, [navigateToFolder])
 
-  const handleDelete = useCallback(async (id: string) => {
-    await fetch(`${apiBase}/${id}`, { method: 'DELETE' })
-    navigate(window.location.href) // refresh current page
-  }, [apiBase])
-
-  const handleRename = useCallback(async (id: string, newName: string) => {
-    await fetch(`${apiBase}/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName }),
-    })
-    navigate(window.location.href)
-  }, [apiBase])
-
-  // ── Create folder ──────────────────────────────────────────
-
   const handleCreateFolder = useCallback(async (name: string) => {
-    await fetch(`${apiBase}/folder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        parentId: currentFolderId,
-        scope,
-        userId: scope === 'private' ? sessionUser?.id : null,
-      }),
-    })
+    await createFolder(name)
     setShowNewFolder(false)
-    navigate(window.location.href)
-  }, [apiBase, currentFolderId, scope, sessionUser])
+  }, [createFolder])
 
-  // ── Upload ─────────────────────────────────────────────────
-
-  const handleUpload = useCallback(async (files: File[]) => {
-    if (files.length === 0) return
-    setUploading(true)
-    try {
-      const formData = new FormData()
-      for (const file of files) {
-        formData.append('files', file)
-      }
-      if (currentFolderId) formData.append('parentId', currentFolderId)
-      formData.append('scope', scope)
-      if (scope === 'private' && sessionUser) formData.append('userId', sessionUser.id)
-
-      await fetch(`${apiBase}/upload`, { method: 'POST', body: formData })
-      navigate(window.location.href)
-    } finally {
-      setUploading(false)
-    }
-  }, [apiBase, currentFolderId, scope, sessionUser])
-
-  // ── Drag and drop from OS / browser ────────────────────────
+  // ── Drag and drop from OS / browser ──────────────────────────
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
-    // Check for dragged URL (image from another browser tab)
+    // Dragged URL (image from another browser tab)
     const uri = e.dataTransfer.getData('text/uri-list')
     if (uri && !e.dataTransfer.files.length) {
-      // Fetch the image from the URL server-side
       try {
         const response = await fetch(uri)
         const blob = await response.blob()
         const filename = uri.split('/').pop()?.split('?')[0] || 'downloaded-image'
         const file = new File([blob], filename, { type: blob.type })
-        await handleUpload([file])
+        await uploadFiles([file])
       } catch { /* ignore failed URL fetches */ }
       return
     }
 
-    // Handle directory drops via webkitGetAsEntry
+    // Directory drops via webkitGetAsEntry
     const entries = Array.from(e.dataTransfer.items)
       .map(item => item.webkitGetAsEntry?.())
       .filter(Boolean) as FileSystemEntry[]
 
     if (entries.some(entry => entry.isDirectory)) {
       const allFiles = await readEntries(entries)
-      await handleUpload(allFiles)
+      await uploadFiles(allFiles)
       return
     }
 
     // Regular file drops
     const files = Array.from(e.dataTransfer.files)
-    if (files.length) await handleUpload(files)
-  }, [handleUpload])
-
-  // ── Move item (drag to folder) ─────────────────────────────
-
-  const handleMoveToFolder = useCallback(async (itemId: string, targetFolderId: string) => {
-    await fetch(`${apiBase}/${itemId}/move`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentId: targetFolderId }),
-    })
-    navigate(window.location.href)
-  }, [apiBase])
+    if (files.length) await uploadFiles(files)
+  }, [uploadFiles])
 
   // ── Render ─────────────────────────────────────────────────
 
-  const folders = items.filter(i => i['type'] === 'folder')
-  const files = items.filter(i => i['type'] !== 'folder')
+  const files = items.filter((i): i is MediaRecord => i.type !== 'folder')
 
   return (
     <div className="flex h-full flex-col"
@@ -247,7 +172,7 @@ export default function MediaPage() {
             type="file"
             multiple
             className="hidden"
-            onChange={(e) => handleUpload(Array.from(e.target.files ?? []))}
+            onChange={(e) => uploadFiles(Array.from(e.target.files ?? []))}
           />
         </label>
       </header>
@@ -271,17 +196,17 @@ export default function MediaPage() {
           <MediaGrid
             items={items}
             onDoubleClick={handleDoubleClick}
-            onDelete={handleDelete}
-            onRename={handleRename}
-            onMove={handleMoveToFolder}
+            onDelete={deleteItem}
+            onRename={renameItem}
+            onMove={moveToFolder}
             panelPath={pathSegment}
           />
         ) : (
           <MediaList
             items={items}
             onDoubleClick={handleDoubleClick}
-            onDelete={handleDelete}
-            onRename={handleRename}
+            onDelete={deleteItem}
+            onRename={renameItem}
             panelPath={pathSegment}
           />
         )}
@@ -295,15 +220,8 @@ export default function MediaPage() {
           onClose={() => setPreviewItem(null)}
           onNavigate={setPreviewItem}
           panelPath={pathSegment}
-          onDelete={handleDelete}
-          onUpdate={async (id, data) => {
-            await fetch(`${apiBase}/${id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data),
-            })
-            navigate(window.location.href)
-          }}
+          onDelete={deleteItem}
+          onUpdate={updateItem}
         />
       )}
 

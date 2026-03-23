@@ -1,3 +1,5 @@
+import { categorize } from '../_lib/format.js'
+
 interface Props {
   type: string
   mime: string | null
@@ -19,19 +21,6 @@ export function FileIcon({ type, mime, className = 'size-5' }: Props) {
     case 'archive':     return <ArchiveSvg className={className} />
     default:            return <FileSvg className={className} />
   }
-}
-
-function categorize(mime: string | null): string {
-  if (!mime) return 'other'
-  if (mime.startsWith('image/'))  return 'image'
-  if (mime.startsWith('video/'))  return 'video'
-  if (mime.startsWith('audio/'))  return 'audio'
-  if (mime === 'application/pdf') return 'pdf'
-  if (mime.includes('wordprocessingml') || mime.includes('msword')) return 'document'
-  if (mime.includes('spreadsheetml') || mime.includes('csv') || mime.includes('ms-excel')) return 'spreadsheet'
-  if (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml') return 'text'
-  if (mime.includes('zip') || mime.includes('tar') || mime.includes('gzip')) return 'archive'
-  return 'other'
 }
 
 // ── SVG icons (inline, no lucide dependency) ─────────────────

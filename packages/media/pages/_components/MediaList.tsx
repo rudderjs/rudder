@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
+import type { MediaRecord } from '../_lib/types.js'
+import { formatSize, formatDate } from '../_lib/format.js'
 import { FileIcon } from './FileIcon.js'
 
 interface Props {
-  items: Array<Record<string, unknown>>
-  onDoubleClick: (item: Record<string, unknown>) => void
+  items: MediaRecord[]
+  onDoubleClick: (item: MediaRecord) => void
   onDelete: (id: string) => void
   onRename: (id: string, name: string) => void
   panelPath: string
@@ -26,39 +28,33 @@ export function MediaList({ items, onDoubleClick, onDelete, onRename, panelPath 
       </div>
 
       {items.map((item) => {
-        const id = item['id'] as string
-        const name = item['name'] as string
-        const type = item['type'] as string
-        const mime = item['mime'] as string | null
-        const size = item['size'] as number | null
-        const updatedAt = item['updatedAt'] as string
-        const isSelected = selected === id
+        const isSelected = selected === item.id
 
         return (
           <div
-            key={id}
+            key={item.id}
             className={`group flex items-center gap-4 rounded-lg px-4 py-2.5 cursor-pointer transition-colors ${
               isSelected ? 'bg-primary/10 ring-1 ring-primary' : 'hover:bg-muted/50'
             }`}
-            onClick={() => setSelected(id)}
+            onClick={() => setSelected(item.id)}
             onDoubleClick={() => onDoubleClick(item)}
           >
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <FileIcon type={type} mime={mime} className="size-5 shrink-0" />
-              <span className="truncate text-sm font-medium">{name}</span>
+              <FileIcon type={item.type} mime={item.mime} className="size-5 shrink-0" />
+              <span className="truncate text-sm font-medium">{item.name}</span>
             </div>
             <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground sm:block">
-              {size ? formatSize(size) : '—'}
+              {item.size ? formatSize(item.size) : '—'}
             </span>
             <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground md:block">
-              {mime ?? (type === 'folder' ? 'Folder' : '—')}
+              {item.mime ?? (item.type === 'folder' ? 'Folder' : '—')}
             </span>
             <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground lg:block">
-              {formatDate(updatedAt)}
+              {formatDate(item.updatedAt)}
             </span>
             <button
               className="w-8 shrink-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive/80 text-xs transition-opacity"
-              onClick={(e) => { e.stopPropagation(); onDelete(id) }}
+              onClick={(e) => { e.stopPropagation(); onDelete(item.id) }}
               title="Delete"
             >
               ✕
@@ -68,15 +64,4 @@ export function MediaList({ items, onDoubleClick, onDelete, onRename, panelPath 
       })}
     </div>
   )
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(d: string): string {
-  try { return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(d)) }
-  catch { return d }
 }

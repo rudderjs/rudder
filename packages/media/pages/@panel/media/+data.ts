@@ -1,4 +1,5 @@
 import type { PageContextServer } from 'vike/types'
+import type { MediaRecord } from '../../_lib/types.js'
 
 export type Data = Awaited<ReturnType<typeof data>>
 
@@ -52,18 +53,18 @@ export async function data(pageContext: PageContextServer) {
       { type: 'asc' },  // folders first
       { name: 'asc' },
     ],
-  })
+  }) as MediaRecord[]
 
   // Get current folder info
-  let currentFolder: unknown = null
+  let currentFolder: MediaRecord | null = null
   if (parentId) {
-    currentFolder = await prisma.media.findUnique({ where: { id: parentId } })
+    currentFolder = await prisma.media.findUnique({ where: { id: parentId } }) as MediaRecord | null
   }
 
   // Build breadcrumbs
   const breadcrumbs: Array<{ id: string; name: string }> = []
-  if (parentId) {
-    let current = currentFolder as { id: string; name: string; parentId: string | null } | null
+  if (parentId && currentFolder) {
+    let current: { id: string; name: string; parentId: string | null } | null = currentFolder
     while (current) {
       breadcrumbs.unshift({ id: current.id, name: current.name })
       current = current.parentId
@@ -74,8 +75,8 @@ export async function data(pageContext: PageContextServer) {
 
   return {
     panelMeta,
-    items: items as Array<Record<string, unknown>>,
-    currentFolder: currentFolder as Record<string, unknown> | null,
+    items,
+    currentFolder,
     breadcrumbs,
     scope,
     search,
