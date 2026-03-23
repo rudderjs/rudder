@@ -117,7 +117,7 @@ export function coerceGlobalPayload(
 ): Record<string, unknown> {
   const result = { ...body }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const field of flattenFields((global as any).fields())) {
+  for (const field of flattenFields((global as any)._resolveForm().getFields() as FieldOrGrouping[])) {
     const name = field.getName()
     if (!(name in result)) continue
     const val  = result[name]

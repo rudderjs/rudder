@@ -1,12 +1,12 @@
-import { Global, TextField, TextareaField, ToggleField, FileField, ColorField, Section } from '@boostkit/panels'
+import { Global, Form, TextField, TextareaField, ToggleField, FileField, ColorField, Section } from '@boostkit/panels'
 
 export class SiteSettingsGlobal extends Global {
   static slug  = 'site-settings'
   static label = 'Site Settings'
   static icon  = 'settings'
 
-  fields() {
-    return [
+  form(form: Form) {
+    return form.fields([
       Section.make('General').schema(
         TextField.make('siteName').required().label('Site Name'),
         TextField.make('tagline'),
@@ -29,6 +29,6 @@ export class SiteSettingsGlobal extends Global {
         TextareaField.make('maintenanceMessage').label('Maintenance Message')
           .showWhen('maintenanceMode', 'truthy'),
       ),
-    ]
+    ])
   }
 }
