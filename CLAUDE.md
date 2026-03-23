@@ -110,9 +110,10 @@ boostkit/
 │   ├── live/           # Real-time collaborative document sync via Yjs CRDT — /ws-live endpoint
 │   │                   #   Built-in: MemoryPersistence. Optional: livePrisma(), liveRedis()
 │   ├── panels/         # Admin panel builder — Resource CRUD, schema elements (Stats, Chart, Table, List, Tabs,
-│   │                   #   Section, Form, Dialog, Column, Heading, Text, Code), WidgetRenderer, Resource.widgets(), draftRecovery,
+│   │                   #   Section, Form, Dialog, Column, Heading, Text, Code), draftRecovery,
 │   │                   #   rememberTable, autosave, Yjs field persist, inline editing (Column.editable())
-│   │                   #   + Dashboard builder: Widget, Dashboard, drag-and-drop, per-user layout, settings, lazy/polling
+│   │                   #   + Dashboard builder: Widget.schema(), Dashboard, drag-and-drop, per-user layout, lazy/polling
+│   │                   #   + Panel.use() plugin system — PanelPlugin with schemas/pages/register/boot hooks
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
 │   ├── media/          # Media library panels extension — file browser, uploads, folders, preview, image conversions
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
@@ -151,7 +152,7 @@ boostkit/
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard), persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable |
+| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable |
 | `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@boostkit/media` | 0.0.1 | Media library panels extension — file browser, uploads, folders, preview, image conversions |
 
@@ -208,8 +209,11 @@ Providers can be registered at runtime via `app().register(ProviderClass)`:
 app().register(PanelServiceProvider)
 app().register(TodoServiceProvider)
 
-// Panels extensions use this under the hood
-panels([AdminPanel], [media({ conversions: [...] })])
+// Panels extensions use Panel.use()
+Panel.make('admin')
+  .use(media({ conversions: [...] }))
+  .use(panelsLexical())
+  .resources([...])
 ```
 
 ### Package Merge Policy (Tight-Coupling Only)
