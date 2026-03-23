@@ -1,4 +1,4 @@
-import { editorRegistry } from '@boostkit/panels'
+import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -32,7 +32,7 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
 
   // Collaborative text input for text/email fields
   if ((field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
-    const CollabText = editorRegistry.collaborativePlainText
+    const CollabText = getField('collaborativePlainText')
     if (CollabText) {
       return (
         <CollabText

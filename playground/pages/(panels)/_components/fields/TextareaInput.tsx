@@ -1,4 +1,4 @@
-import { editorRegistry } from '@boostkit/panels'
+import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -6,7 +6,7 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
   const isDisabled = disabled || field.readonly
 
   if (field.yjs && wsPath && docName) {
-    const CollabText = editorRegistry.collaborativePlainText
+    const CollabText = getField('collaborativePlainText')
     if (CollabText) {
       return (
         <CollabText

@@ -1,26 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { editorRegistry } from '@boostkit/panels'
+import { useState, useEffect, type ComponentType } from 'react'
+import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
-import { INPUT_CLS } from './types.js'
 
 export function RichContentInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
 
-  // Wait for editorRegistry to be populated by registerLexical() (async dynamic import).
+  // Wait for registerField('richcontent', ...) to be called (async dynamic import).
   // SSR: always null. Client: poll until available, then render the real editor.
-  const [RichEditor, setRichEditor] = useState<typeof editorRegistry.richcontent>(null)
+  const [RichEditor, setRichEditor] = useState<ComponentType<Record<string, unknown>> | null>(() => getField('richcontent') ?? null)
   useEffect(() => {
-    // Already available (e.g. client-side navigation after import completed)
-    if (editorRegistry.richcontent) {
-      setRichEditor(() => editorRegistry.richcontent)
+    if (getField('richcontent')) {
+      setRichEditor(() => getField('richcontent')!)
       return
     }
-    // Poll until registerLexical() completes
     const interval = setInterval(() => {
-      if (editorRegistry.richcontent) {
-        setRichEditor(() => editorRegistry.richcontent)
+      const comp = getField('richcontent')
+      if (comp) {
+        setRichEditor(() => comp)
         clearInterval(interval)
       }
     }, 50)
@@ -44,7 +42,7 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
     )
   }
 
-  // Fallback: shown during SSR and while waiting for registerLexical()
+  // Fallback: shown during SSR and while waiting for the editor to register
   return (
     <div className="min-h-[200px] rounded-lg border border-input bg-background p-3 flex items-center justify-center text-sm text-muted-foreground animate-pulse">
       Loading editor…

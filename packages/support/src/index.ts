@@ -289,8 +289,8 @@ export function validateSerializable(data: unknown, label: string, tag = 'boostk
       if (seen.has(value as object)) { problems.push(`${path} — circular reference`); return }
       seen.add(value as object)
 
-      if (value instanceof Date)   { problems.push(`${path} — Date (use .toISOString())`); return }
-      if (value instanceof RegExp) { problems.push(`${path} — RegExp`); return }
+      if (value instanceof Date)   return // Date is serializable by devalue
+      if (value instanceof RegExp) return // RegExp is serializable by devalue
       if (value instanceof Map)    { problems.push(`${path} — Map`); return }
       if (value instanceof Set)    { problems.push(`${path} — Set`); return }
 

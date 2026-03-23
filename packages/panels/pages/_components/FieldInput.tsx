@@ -1,4 +1,4 @@
-import { customFieldRenderers } from './CustomFieldRenderers.js'
+import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './fields/types.js'
 import { BooleanInput } from './fields/BooleanInput.js'
 import { SelectInput } from './fields/SelectInput.js'
@@ -23,6 +23,13 @@ export type { FieldInputProps } from './fields/types.js'
 export function FieldInput(props: FieldInputProps) {
   const { field } = props
 
+  // Check registry first — custom fields and plugin-registered fields take priority
+  const customKey = field.component ?? field.type
+  const Custom = getField(customKey)
+  if (Custom) {
+    return <Custom {...props} />
+  }
+
   switch (field.type) {
     case 'boolean':       return <BooleanInput {...props} />
     case 'select':        return <SelectInput {...props} />
@@ -41,15 +48,6 @@ export function FieldInput(props: FieldInputProps) {
     case 'belongsTo':     return <BelongsToInput {...props} />
     case 'belongsToMany': return <BelongsToManyInput {...props} />
     case 'richcontent':   return <RichContentInput {...props} />
-    default: {
-      // Custom renderer lookup
-      const customKey = field.component ?? field.type
-      const CustomRenderer = customFieldRenderers[customKey]
-      if (CustomRenderer) {
-        return <CustomRenderer field={field} value={props.value} onChange={props.onChange} />
-      }
-      // Fallback: text, email, number, date, datetime
-      return <TextInput {...props} />
-    }
+    default:              return <TextInput {...props} />
   }
 }

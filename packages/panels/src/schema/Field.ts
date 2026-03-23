@@ -193,7 +193,7 @@ export abstract class Field {
   }
 
   /**
-   * Key for a custom React renderer registered in CustomFieldRenderers.tsx.
+   * Key for a custom React renderer registered via `registerField()`.
    * Use when built-in field types don't cover your UI needs.
    *
    * @example

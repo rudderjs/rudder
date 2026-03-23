@@ -1,4 +1,4 @@
-import { editorRegistry } from '@boostkit/panels'
+import { registerField } from '@boostkit/panels'
 import { LexicalEditor } from './LexicalEditor.js'
 import { CollaborativePlainText } from './CollaborativePlainText.js'
 
@@ -13,6 +13,6 @@ import { CollaborativePlainText } from './CollaborativePlainText.js'
  * ```
  */
 export function registerLexical(): void {
-  editorRegistry.richcontent = LexicalEditor as typeof editorRegistry.richcontent
-  editorRegistry.collaborativePlainText = CollaborativePlainText as typeof editorRegistry.collaborativePlainText
+  registerField('richcontent', LexicalEditor)
+  registerField('collaborativePlainText', CollaborativePlainText)
 }

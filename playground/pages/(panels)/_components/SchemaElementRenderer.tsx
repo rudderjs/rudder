@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@boostkit/panels'
+import { getElement } from '@boostkit/panels'
 import { SchemaTable } from './SchemaTable.js'
 import { SchemaForm } from './SchemaForm.js'
 import type { SchemaFormMeta } from '@boostkit/panels'
@@ -20,6 +21,12 @@ export interface SchemaElementRendererProps {
 }
 
 export function SchemaElementRenderer({ element, panelPath, i18n }: SchemaElementRendererProps) {
+  // Check registry first — custom elements and plugin-registered elements take priority
+  const CustomElement = getElement(element.type)
+  if (CustomElement) {
+    return <CustomElement element={element} panelPath={panelPath} i18n={i18n} />
+  }
+
   if (element.type === 'text') {
     return <p className="text-sm text-muted-foreground">{element.content}</p>
   }

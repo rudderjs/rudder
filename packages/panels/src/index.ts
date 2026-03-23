@@ -76,7 +76,11 @@ export type { NodeData, NodeMap } from './NodeMap.js'
 // ─── Rich Content Field (Lexical) ───────────────────────────
 export { RichContentField } from './schema/fields/RichContentField.js'
 
-// ─── Editor Registry ────────────────────────────────────────
+// ─── Component Registry ─────────────────────────────────────
+
+export { registerField, getField, registerElement, getElement } from './registries/ComponentRegistry.js'
+
+// ─── Editor Registry (deprecated — use registerField instead) ──
 
 export { editorRegistry } from './registries/EditorRegistry.js'
 export type { RichContentEditorProps, CollaborativePlainTextProps } from './registries/EditorRegistry.js'

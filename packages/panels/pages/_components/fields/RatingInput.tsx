@@ -1,4 +1,4 @@
-import type { FieldInputProps } from '../CustomFieldRenderers.js'
+import type { FieldInputProps } from './types.js'
 
 export function RatingInput({ value, onChange }: FieldInputProps) {
   const rating = Number(value) || 0
