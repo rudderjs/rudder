@@ -69,9 +69,9 @@ export async function resolveTable(
         else q = q.where(filterName, filterValue)
       }
 
-      const sortCol = urlSort ?? config.sortBy ?? ResourceClass.defaultSort
+      const sortCol = urlSort ?? config.sortBy
       if (sortCol) {
-        const dir = urlSortDir ?? (config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir ?? 'DESC'))
+        const dir = urlSortDir ?? config.sortDir
         q = q.orderBy(sortCol, dir)
       }
       // loadMore: fetch all records up to the current page (page * perPage)
@@ -90,8 +90,8 @@ export async function resolveTable(
     const slug = ResourceClass.getSlug?.() as string | undefined
 
     // Active sort: persisted sort → table default sort → undefined
-    const effectiveSortCol = urlSort ?? config.sortBy ?? (ResourceClass.defaultSort as string | undefined)
-    const effectiveSortDir = urlSortDir ?? (config.sortBy ? config.sortDir : (ResourceClass.defaultSortDir as string | undefined) ?? 'DESC')
+    const effectiveSortCol = urlSort ?? config.sortBy
+    const effectiveSortDir = urlSortDir ?? config.sortDir
 
     return buildTableMeta(config, columns, records, tableId, {
       resource: slug ?? '',

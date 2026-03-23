@@ -5,6 +5,7 @@ import type { FieldOrGrouping } from '../Resource.js'
 import type { Field } from '../schema/Field.js'
 import type { PersistMode } from '../persist.js'
 import { readPersistedState, slugify as slugifyPersist } from '../persist.js'
+import { flattenFields } from '../handlers/utils.js'
 import type { ResourceLike, ModelLike } from './types.js'
 
 // ─── Field helpers ──────────────────────────────────────────
@@ -14,17 +15,6 @@ export function isField(item: FieldOrGrouping): item is Field {
   return typeof (item as unknown as Record<string, unknown>)['getName'] === 'function'
 }
 
-export function flattenFields(items: FieldOrGrouping[]): FieldOrGrouping[] {
-  const result: FieldOrGrouping[] = []
-  for (const item of items) {
-    if (typeof (item as unknown as Record<string, unknown>)['getFields'] === 'function') {
-      result.push(...flattenFields((item as unknown as { getFields(): FieldOrGrouping[] }).getFields()))
-    } else {
-      result.push(item)
-    }
-  }
-  return result
-}
 
 function titleCase(str: string): string {
   return str.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim()
@@ -54,12 +44,13 @@ export function resolveColumns(
 
   if (resourceClass) {
     const resource = new resourceClass()
-    const flatFields2 = flattenFields(resource.fields())
+    const formFields = resource._resolveForm().getFields() as FieldOrGrouping[]
+    const flatFields2 = flattenFields(formFields)
     const names: string[] = columns.length > 0
       ? columns as string[]
-      : flatFields2.filter((f): f is Field => isField(f) && !f.isHiddenFrom('table') && f.getType() !== 'hasMany').map(f => (f as Field).getName()).slice(0, 5)
+      : flatFields2.filter((f) => !f.isHiddenFrom('table') && f.getType() !== 'hasMany').map(f => f.getName()).slice(0, 5)
     return names.map(name => {
-      const field = flatFields2.find((f): f is Field => isField(f) && (f as Field).getName() === name)
+      const field = flatFields2.find((f) => f.getName() === name)
       return { name, label: field ? field.getLabel() : titleCase(name) }
     })
   }

@@ -444,6 +444,9 @@ export abstract class Field {
       .trim()
   }
 
+  /** Get the extra metadata bag (relation name, options, etc.) */
+  getExtra(): Record<string, unknown> { return this._extra }
+
   isHiddenFrom(view: FieldVisibility): boolean {
     return this._hidden.has(view)
   }

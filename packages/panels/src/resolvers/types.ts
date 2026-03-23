@@ -28,10 +28,10 @@ export interface WidgetElement extends SchemaElementLike {
 
 /** Minimal interface for a Resource class (static shape). */
 export interface ResourceLike {
-  new(): { fields(): FieldOrGrouping[] }
+  new(): {
+    _resolveForm(): { getFields(): FieldOrGrouping[] }
+  }
   model?: ModelLike
-  defaultSort?: string
-  defaultSortDir?: 'ASC' | 'DESC'
   getSlug?(): string
 }
 

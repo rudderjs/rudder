@@ -79,14 +79,18 @@ export async function resolveForm(
   }
 
   // 4. Register compute functions and compute initial values
+  interface ComputeFieldLike {
+    getName(): string
+    getFrom?(): string[] | undefined
+    getDeriveFn?(): ((values: Record<string, unknown>) => unknown) | undefined
+  }
   for (const field of formFields) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const f = field as any
+    const f = field as unknown as ComputeFieldLike
     if (typeof f.getFrom === 'function' && typeof f.getDeriveFn === 'function') {
-      const fromFields = f.getFrom() as string[] | undefined
-      const computeFn = f.getDeriveFn() as ((values: Record<string, unknown>) => unknown) | undefined
+      const fromFields = f.getFrom!()
+      const computeFn = f.getDeriveFn!()
       if (fromFields && fromFields.length > 0 && computeFn) {
-        const fieldName = f.getName() as string
+        const fieldName = f.getName()
         // Register for API recomputation
         ComputeRegistry.register(panel.getName(), `${formId}:${fieldName}`, { from: fromFields, compute: computeFn })
         // Compute initial value from current initialValues
@@ -104,12 +108,18 @@ export async function resolveForm(
   }
 
   // 5. Detect collaborative fields and set up Yjs config
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const yjsFields = formFields.filter((f: any) => typeof f.isYjs === 'function' && f.isYjs())
+  interface YjsFieldLike {
+    isYjs?(): boolean
+    getYjsProviders?(): string[]
+  }
+  const yjsFields = formFields.filter((f) => {
+    const yf = f as unknown as YjsFieldLike
+    return typeof yf.isYjs === 'function' && yf.isYjs()
+  })
   if (yjsFields.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const needsWebsocket = yjsFields.some((f: any) => {
-      const providers: string[] = typeof f.getYjsProviders === 'function' ? f.getYjsProviders() : []
+    const needsWebsocket = yjsFields.some((f) => {
+      const yf = f as unknown as YjsFieldLike
+      const providers = typeof yf.getYjsProviders === 'function' ? yf.getYjsProviders() : []
       return providers.includes('websocket')
     })
 
@@ -120,10 +130,9 @@ export async function resolveForm(
 
     // Collect all providers
     const providers = new Set<string>()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const f of yjsFields) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fp: string[] = typeof (f as any).getYjsProviders === 'function' ? (f as any).getYjsProviders() : []
+      const yf = f as unknown as YjsFieldLike
+      const fp = typeof yf.getYjsProviders === 'function' ? yf.getYjsProviders() : []
       for (const p of fp) providers.add(p)
     }
     formMeta.liveProviders = [...providers]

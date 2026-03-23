@@ -7,8 +7,7 @@ import { ComputedField } from '../schema/fields/ComputedField.js'
 
 /** Derive the Prisma relation name from a RelationField. */
 export function relationName(field: Field): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const explicit = (field as any)._extra?.['relationName'] as string | undefined
+  const explicit = field.getExtra()['relationName'] as string | undefined
   if (explicit) return explicit
   const name = field.getName()
   return name.endsWith('Id') ? name.slice(0, -2) : name
@@ -116,8 +115,8 @@ export function coerceGlobalPayload(
   body: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...body }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const field of flattenFields((global as any)._resolveForm().getFields() as FieldOrGrouping[])) {
+  const globalForm = (global as unknown as { _resolveForm(): { getFields(): FieldOrGrouping[] } })._resolveForm()
+  for (const field of flattenFields(globalForm.getFields())) {
     const name = field.getName()
     if (!(name in result)) continue
     const val  = result[name]
