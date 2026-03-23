@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta } from '@boostkit/panels'
 import { SchemaTable } from './SchemaTable.js'
+import { SchemaForm } from './SchemaForm.js'
+import type { SchemaFormMeta } from '@boostkit/panels'
+import { CodeBlock, CopyButton } from './CodeBlock.js'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
 type SchemaElementRendererElement = PanelSchemaElementMeta
@@ -31,7 +34,19 @@ export function SchemaElementRenderer({ element, panelPath, i18n }: SchemaElemen
   }
 
   if (element.type === 'code') {
-    return <CodeBlock code={element.content} language={element.language} title={element.title} lineNumbers={element.lineNumbers} />
+    return <CodeBlock code={(element as { content: string }).content} language={(element as { language?: string }).language} title={(element as { title?: string }).title} lineNumbers={(element as { lineNumbers?: boolean }).lineNumbers} />
+  }
+
+  if (element.type === 'snippet') {
+    return <SnippetBlock element={element as unknown as SnippetElementMeta} />
+  }
+
+  if (element.type === 'example') {
+    return <ExampleBlock element={element as unknown as ExampleElementMeta} panelPath={panelPath} i18n={i18n} />
+  }
+
+  if (element.type === 'form') {
+    return <SchemaForm form={element as unknown as SchemaFormMeta} panelPath={panelPath} i18n={i18n} />
   }
 
   if (element.type === 'stats') {
@@ -251,76 +266,91 @@ function StatProgressWidget({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function CodeBlock({ code, language, title, lineNumbers }: { code: string; language?: string; title?: string; lineNumbers?: boolean }) {
-  const [html, setHtml] = useState<string | null>(null)
+/* ── Snippet — tabbed code with copy ──────────────────────── */
 
-  useEffect(() => {
-    let cancelled = false
-    import('shiki').then(async ({ codeToHtml }) => {
-      if (cancelled) return
-      const result = await codeToHtml(code, {
-        lang: language ?? 'text',
-        themes: {
-          light: 'github-light',
-          dark: 'github-dark-high-contrast',
-        },
-        defaultColor: false,
-      })
-      if (!cancelled) setHtml(result)
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [code, language])
-
-  const lines = code.split('\n')
+function SnippetBlock({ element }: { element: SnippetElementMeta }) {
+  const [active, setActive] = useState(0)
+  const tab = element.tabs[active]
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
-      {title && (
-        <div className="px-4 py-2 border-b bg-muted/40 flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">{title}</span>
-          <button
-            type="button"
-            onClick={() => { void navigator.clipboard.writeText(code) }}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title="Copy"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-          </button>
+      {element.title && (
+        <div className="px-4 py-2 border-b bg-muted/40">
+          <span className="text-xs font-medium text-muted-foreground">{element.title}</span>
         </div>
       )}
-      <div className="relative">
-        {!title && (
+      <div className="flex items-center gap-1 px-3 py-2 bg-muted/30 border-b">
+        {element.tabs.map((t, i) => (
           <button
+            key={t.label}
             type="button"
-            onClick={() => { void navigator.clipboard.writeText(code) }}
-            className="absolute top-2 right-2 text-xs text-muted-foreground hover:text-foreground transition-colors z-10"
-            title="Copy"
+            onClick={() => setActive(i)}
+            className={[
+              'px-3 py-1 text-xs font-medium rounded-md transition-colors',
+              i === active
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            ].join(' ')}
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
+            {t.label}
           </button>
-        )}
-        {html ? (
-          <div
-            className="text-sm [&_pre]:!rounded-none [&_pre]:!m-0 [&_pre]:p-4 [&_pre]:overflow-x-auto [&_span]:!text-[var(--shiki-light)] dark:[&_span]:!text-[var(--shiki-dark)] [&_pre]:!bg-[var(--shiki-light-bg,#fff)] dark:[&_pre]:!bg-[var(--shiki-dark-bg,#24292e)]"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        ) : (
-          <div className="flex text-sm font-mono">
-            {lineNumbers && (
-              <div className="select-none text-right pr-4 pl-4 py-4 text-muted-foreground/40 border-r border-border/50 bg-muted/20">
-                {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
-              </div>
-            )}
-            <pre className="p-4 overflow-x-auto flex-1"><code>{code}</code></pre>
-          </div>
+        ))}
+        <div className="flex-1" />
+        {tab && <CopyButton code={tab.code} />}
+      </div>
+      {tab && <CodeBlock code={tab.code} language={tab.language} bare />}
+    </div>
+  )
+}
+
+/* ── Example — live preview + collapsible code ───────────── */
+
+function ExampleBlock({ element, panelPath, i18n }: { element: ExampleElementMeta; panelPath: string; i18n: PanelI18n }) {
+  const [showCode, setShowCode] = useState(false)
+
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-3 border-b bg-muted/40">
+        <p className="text-sm font-semibold">{element.title}</p>
+        {element.description && (
+          <p className="text-xs text-muted-foreground mt-0.5">{element.description}</p>
         )}
       </div>
+
+      {/* Live preview */}
+      <div className="p-5 flex flex-col gap-4">
+        {(element.elements ?? []).map((el: unknown, i: number) => (
+          <SchemaElementRenderer
+            key={i}
+            element={el as PanelSchemaElementMeta}
+            panelPath={panelPath}
+            i18n={i18n}
+          />
+        ))}
+      </div>
+
+      {/* Code panel */}
+      {element.code && (
+        <>
+          <div className="border-t px-4 py-2 flex items-center justify-between bg-muted/20">
+            <button
+              type="button"
+              onClick={() => setShowCode(!showCode)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showCode ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {showCode ? 'Hide Code' : 'View Code'}
+            </button>
+            {showCode && <CopyButton code={element.code} />}
+          </div>
+          {showCode && (
+            <CodeBlock code={element.code} language={element.language} bare />
+          )}
+        </>
+      )}
     </div>
   )
 }

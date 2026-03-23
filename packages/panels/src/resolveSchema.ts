@@ -11,6 +11,9 @@ import type {
 } from './schema/index.js'
 import type { FormElementMeta } from './schema/Form.js'
 import type { DialogElementMeta } from './schema/Dialog.js'
+import type { SnippetElementMeta } from './schema/Snippet.js'
+import type { ExampleElementMeta } from './schema/Example.js'
+import type { Example } from './schema/Example.js'
 
 import { resolveSection }   from './resolvers/resolveSection.js'
 import { resolveTabs }      from './resolvers/resolveTabs.js'
@@ -34,6 +37,8 @@ export type PanelSchemaElementMeta =
   | ListElementMeta
   | FormElementMeta
   | DialogElementMeta
+  | SnippetElementMeta
+  | ExampleElementMeta
 
 // ─── Schema resolver ───────────────────────────────────────
 
@@ -103,6 +108,21 @@ export async function resolveSchema(
 
     if (type === 'list') {
       result.push(await resolveList(el, ctx))
+      continue
+    }
+
+    if (type === 'example') {
+      const example = el as unknown as Example
+      const meta = example.toMeta()
+      // Resolve inner schema elements for the live preview
+      const innerElements = example.getSchema()
+      if (innerElements.length > 0) {
+        const examplePanel = Object.create(panel, {
+          getSchema: { value: () => innerElements },
+        })
+        meta.elements = await resolveSchema(examplePanel, ctx)
+      }
+      result.push(meta as unknown as PanelSchemaElementMeta)
       continue
     }
 

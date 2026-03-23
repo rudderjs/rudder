@@ -1,5 +1,5 @@
 import {
-  Page, Heading, Text, Code, Form, Section,
+  Page, Heading, Text, Code, Form, Section, Example, Snippet,
   TextField, EmailField, PasswordField, NumberField,
   TextareaField, SelectField, BooleanField, ToggleField,
   DateField, ColorField, TagsField, SlugField,
@@ -17,6 +17,70 @@ export class FieldsDemo extends Page {
     return [
       Heading.make('Field Types'),
       Text.make('All available field types with configuration examples.'),
+
+      // ── New Elements Demo ──────────────────────────────────
+      Heading.make('Example & Snippet Elements').level(2),
+
+      Example.make('Text Field')
+        .description('A simple text input with validation.')
+        .code(`TextField.make('name')
+  .label('Full Name')
+  .required()
+  .placeholder('Enter your name...')`)
+        .schema([
+          TextField.make('demoName').label('Full Name').required().placeholder('Enter your name...'),
+        ]),
+
+      Example.make('Toggle Field')
+        .description('A boolean toggle switch.')
+        .code(`ToggleField.make('notifications')
+  .label('Email Notifications')
+  .onLabel('Enabled')
+  .offLabel('Disabled')`)
+        .schema([
+          ToggleField.make('demoToggle').label('Email Notifications').onLabel('Enabled').offLabel('Disabled'),
+        ]),
+
+      Example.make('Select Field')
+        .description('Dropdown select with options.')
+        .code(`SelectField.make('role')
+  .label('Role')
+  .options([
+    { value: 'admin', label: 'Admin' },
+    { value: 'user', label: 'User' },
+    { value: 'editor', label: 'Editor' },
+  ])`)
+        .schema([
+          SelectField.make('demoRole').label('Role').options([
+            { value: 'admin', label: 'Admin' },
+            { value: 'user', label: 'User' },
+            { value: 'editor', label: 'Editor' },
+          ]),
+        ]),
+
+      Snippet.make('Install BoostKit')
+        .tab('npm', 'npx create-boostkit-app my-app', 'bash')
+        .tab('pnpm', 'pnpm create boostkit-app my-app', 'bash')
+        .tab('yarn', 'yarn create boostkit-app my-app', 'bash')
+        .tab('bun', 'bunx create-boostkit-app my-app', 'bash'),
+
+      Snippet.make('Resource Definition')
+        .tab('table()', `table(table: Table) {
+  return table
+    .columns([
+      Column.make('title').sortable().searchable(),
+      Column.make('status').badge(),
+    ])
+    .paginated('pages', 10)
+    .remember('session')
+}`, 'ts')
+        .tab('form()', `form(form: Form) {
+  return form.fields([
+    TextField.make('title').required(),
+    TextareaField.make('body'),
+    SelectField.make('status').options(['draft', 'published']),
+  ])
+}`, 'ts'),
 
       // ── Text Fields ────────────────────────────────────────
       Heading.make('Text Fields').level(2),
