@@ -17,7 +17,7 @@ export class FieldsDemo extends Page {
     return [
       Heading.make('Field Types'),
       Text.make('All available field types with configuration examples.'),
-
+      
       // ── New Elements Demo ──────────────────────────────────
       Heading.make('Example & Snippet Elements').level(2),
 
