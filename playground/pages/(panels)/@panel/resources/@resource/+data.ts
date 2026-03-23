@@ -1,5 +1,5 @@
-import { PanelRegistry, resolveTable, resolveActiveTabIndex } from '@boostkit/panels'
-import type { PanelSchemaElementMeta, PersistMode } from '@boostkit/panels'
+import { PanelRegistry, resolveTable } from '@boostkit/panels'
+import type { PanelSchemaElementMeta } from '@boostkit/panels'
 import { buildPanelContext } from '../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 
@@ -19,69 +19,35 @@ export async function data(pageContext: PageContextServer) {
   const panelMeta    = panel.toMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
-  let tableElement: PanelSchemaElementMeta | null = null
-  let tabsElement: PanelSchemaElementMeta | null = null
-
+  // resolveTable handles both plain tables and tables with .tabs() (returns tabs meta)
+  let element: PanelSchemaElementMeta | null = null
   if (ResourceClass.model) {
     const table = resource._resolveTable()
-    const tableConfig = table.getConfig()
+    element = await resolveTable(table as any, panel, ctx)
 
-    if (tableConfig.tabs.length > 0) {
-      const tabsId = `${slug}-tabs`
-      const resolvedTabs: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] }[] = []
-
-      for (const tab of tableConfig.tabs) {
-        const tabName = tab.getLabel().toLowerCase().replace(/\s+/g, '-')
-        const tabTableId = `${slug}-${tabName}`
-        const tabTable = table._cloneWithScope(tabTableId, tab.getScope())
-        const resolvedTable = await resolveTable(tabTable as any, panel, ctx)
-
-        if (resolvedTable && 'href' in resolvedTable) {
-          (resolvedTable as any).href = `/${pathSegment}/resources/${slug}`
+    // Apply resource-specific overrides
+    if (element) {
+      const el = element as PanelSchemaElementMeta & Record<string, unknown>
+      if (el.type === 'table') {
+        el['href'] = `/${pathSegment}/resources/${slug}`
+        el['resource'] = slug
+        if (el['live']) el['liveChannel'] = `panel:${slug}`
+      } else if (el.type === 'tabs') {
+        // Tabs wrapping per-tab tables — apply overrides to each inner table
+        const tabs = (el as any).tabs as { elements?: PanelSchemaElementMeta[] }[]
+        for (const tab of tabs) {
+          for (const inner of tab.elements ?? []) {
+            const t = inner as PanelSchemaElementMeta & Record<string, unknown>
+            if (t.type === 'table') {
+              t['href'] = `/${pathSegment}/resources/${slug}`
+              t['resource'] = ''
+              if (t['live']) t['liveChannel'] = `panel:${slug}`
+            }
+          }
         }
-        if (resolvedTable && 'resource' in resolvedTable) {
-          (resolvedTable as any).resource = ''
-        }
-        if (resolvedTable && (resolvedTable as any).live) {
-          (resolvedTable as any).liveChannel = `panel:${slug}`
-        }
-
-        const tabMeta: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] } = {
-          label: tab.getLabel(),
-          fields: [],
-          elements: resolvedTable ? [resolvedTable] : [],
-        }
-        const icon = tab.getIcon()
-        if (icon) tabMeta.icon = icon
-        resolvedTabs.push(tabMeta)
-      }
-
-      const persistMode = (tableConfig.remember || 'session') as PersistMode
-      const tabLabels = tableConfig.tabs.map(t => t.getLabel())
-      const activeTabIndex = await resolveActiveTabIndex(persistMode, tabsId, tabLabels, ctx)
-
-      tabsElement = {
-        type: 'tabs',
-        id: tabsId,
-        tabs: resolvedTabs,
-        persist: persistMode,
-        ...(activeTabIndex > 0 ? { activeTab: activeTabIndex } : {}),
-      } as unknown as PanelSchemaElementMeta
-
-    } else {
-      tableElement = await resolveTable(table as any, panel, ctx)
-
-      if (tableElement && 'href' in tableElement) {
-        (tableElement as any).href = `/${pathSegment}/resources/${slug}`
-      }
-      if (tableElement && 'resource' in tableElement) {
-        (tableElement as any).resource = slug
-      }
-      if (tableElement && (tableElement as any).live) {
-        (tableElement as any).liveChannel = `panel:${slug}`
       }
     }
   }
 
-  return { panelMeta, resourceMeta, tableElement, tabsElement, pathSegment, slug, sessionUser }
+  return { panelMeta, resourceMeta, element, pathSegment, slug, sessionUser }
 }

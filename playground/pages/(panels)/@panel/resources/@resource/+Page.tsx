@@ -14,14 +14,14 @@ import type { Data } from './+data.js'
 
 export default function ResourceListPage() {
   const config = useConfig()
-  const { panelMeta, resourceMeta, tableElement, tabsElement, pathSegment, slug } = useData<Data>()
+  const { panelMeta, resourceMeta, element, pathSegment, slug } = useData<Data>()
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   const i18n = panelMeta.i18n
   config({ title: `${resourceMeta.label} — ${panelName}` })
 
   const [isTrashed, setIsTrashed] = useState(false)
 
-  // Resource props for SchemaTable (used when no tabs)
+  // Resource props for SchemaTable
   const resourceProps: SchemaTableResourceProps = {
     resourceSlug: slug,
     softDeletes: resourceMeta.softDeletes || undefined,
@@ -37,8 +37,7 @@ export default function ResourceListPage() {
       : undefined,
   }
 
-  const element = tableElement as Extract<PanelSchemaElementMeta, { type: 'table' }> | null
-  const tabsMeta = tabsElement as { type: 'tabs'; id?: string; tabs: any[]; persist?: string; activeTab?: number } | null
+  const el = element as (PanelSchemaElementMeta & Record<string, unknown>) | null
 
   return (
     <>
@@ -89,19 +88,19 @@ export default function ResourceListPage() {
         </div>
       )}
 
-      {/* Tabs mode: SchemaTabs wrapping per-tab SchemaTable */}
-      {tabsMeta ? (
+      {/* Content: tabs (wrapping per-tab tables) or single table */}
+      {el?.type === 'tabs' ? (
         <SchemaTabs
-          id={tabsMeta.id}
-          tabs={tabsMeta.tabs}
+          id={(el as any).id}
+          tabs={(el as any).tabs}
           panelPath={`/${pathSegment}`}
           pathSegment={pathSegment}
           i18n={i18n}
-          persist={tabsMeta.persist as any}
-          activeTab={tabsMeta.activeTab}
+          persist={(el as any).persist}
+          activeTab={(el as any).activeTab}
         />
-      ) : element ? (
-        <SchemaTable element={element} panelPath={`/${pathSegment}`} i18n={i18n} resource={resourceProps} />
+      ) : el?.type === 'table' ? (
+        <SchemaTable element={el as Extract<PanelSchemaElementMeta, { type: 'table' }>} panelPath={`/${pathSegment}`} i18n={i18n} resource={resourceProps} />
       ) : (
         <p className="text-sm text-muted-foreground">{i18n.noRecordsFound}</p>
       )}

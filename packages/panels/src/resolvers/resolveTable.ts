@@ -2,11 +2,12 @@ import type { Panel } from '../Panel.js'
 import type { PanelContext, SchemaElementLike, QueryBuilderLike, RecordRow } from '../types.js'
 import type { TableElementMeta } from '../schema/index.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
+import type { PersistMode } from '../persist.js'
 import type { ConfigurableElement, ResourceLike, ModelLike } from './types.js'
 import { TableRegistry } from '../registries/TableRegistry.js'
 import { readPersistedState } from '../persist.js'
 import { resolveDataSource } from '../datasource.js'
-import { resolveColumns, resolvePagination, resolveSearchColumns, buildTableMeta } from './helpers.js'
+import { resolveColumns, resolvePagination, resolveSearchColumns, buildTableMeta, resolveActiveTabIndex } from './helpers.js'
 
 export async function resolveTable(
   el: SchemaElementLike,
@@ -14,6 +15,12 @@ export async function resolveTable(
   ctx: PanelContext,
 ): Promise<PanelSchemaElementMeta | null> {
   const config = (el as ConfigurableElement).getConfig()
+  const table = el as unknown as import('../schema/Table.js').Table
+
+  // ── Table with .tabs() — resolve each tab's scoped table and return a tabs meta ──
+  if (config.tabs.length > 0) {
+    return resolveTableTabs(table, config, panel, ctx)
+  }
 
   // Register table for lazy/poll/paginated API endpoint
   const tableId = (el as unknown as { getId(): string }).getId()
@@ -183,4 +190,46 @@ export async function resolveTable(
   }
 
   return null
+}
+
+// ── Table tabs → Tabs meta ──────────────────────────────────
+
+async function resolveTableTabs(
+  table: import('../schema/Table.js').Table,
+  config: ReturnType<ConfigurableElement['getConfig']>,
+  panel: Panel,
+  ctx: PanelContext,
+): Promise<PanelSchemaElementMeta> {
+  const tableId = table.getId()
+  const tabsId = `${tableId}-tabs`
+  const persistMode = (config.remember || 'session') as PersistMode
+
+  const resolvedTabs: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] }[] = []
+
+  for (const tab of config.tabs) {
+    const tabName = tab.getLabel().toLowerCase().replace(/\s+/g, '-')
+    const tabTableId = `${tableId}-${tabName}`
+    const tabTable = table._cloneWithScope(tabTableId, tab.getScope())
+    const resolved = await resolveTable(tabTable as unknown as SchemaElementLike, panel, ctx)
+
+    const tabMeta: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] } = {
+      label: tab.getLabel(),
+      fields: [],
+      elements: resolved ? [resolved] : [],
+    }
+    const icon = tab.getIcon()
+    if (icon) tabMeta.icon = icon
+    resolvedTabs.push(tabMeta)
+  }
+
+  const tabLabels = config.tabs.map(t => t.getLabel())
+  const activeTabIndex = await resolveActiveTabIndex(persistMode, tabsId, tabLabels, ctx)
+
+  return {
+    type: 'tabs',
+    id: tabsId,
+    tabs: resolvedTabs,
+    persist: persistMode,
+    ...(activeTabIndex > 0 ? { activeTab: activeTabIndex } : {}),
+  } as unknown as PanelSchemaElementMeta
 }
