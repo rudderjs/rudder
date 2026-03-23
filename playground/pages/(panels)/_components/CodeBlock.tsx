@@ -75,7 +75,7 @@ export function CodeBlock({ code, language, title, lineNumbers, bare }: {
         </div>
       )}
       <div className="relative">
-        {!title && (
+        {!title && !bare && (
           <CopyButton code={code} className="absolute top-2 right-2 z-10" />
         )}
         {html ? (
