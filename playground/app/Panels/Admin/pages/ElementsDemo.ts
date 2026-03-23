@@ -1,6 +1,6 @@
 import {
-  Page, Heading, Text, Card, Alert, Divider, Each, View, Example, Snippet, Code,
-  Stats, Stat, TextField, ToggleField, SelectField,
+  Page, Heading, Text, Card, Alert, Divider, Each, View, Example, Snippet, Code, Playground,
+  Stats, Stat, TextField, ToggleField, SelectField, NumberField, ColorField,
 } from '@boostkit/panels'
 import type { PanelContext } from '@boostkit/panels'
 import { Article } from '../../../Models/Article.js'
@@ -262,6 +262,50 @@ Divider.make('Advanced Options')`)
             { value: 'system', label: 'System' },
           ]),
         ]),
+
+      // ── Playground ───────────────────────────────────────────
+      Heading.make('Playground').level(2),
+      Text.make('Interactive demo with controls that update a live preview. Change the controls below and see the preview update in real-time.'),
+
+      Playground.make('Alert Builder')
+        .description('Build an alert by changing its properties.')
+        .controls([
+          TextField.make('message').label('Message').default('This is an alert message.'),
+          SelectField.make('alertType').label('Type').options([
+            { value: 'info', label: 'Info' },
+            { value: 'warning', label: 'Warning' },
+            { value: 'success', label: 'Success' },
+            { value: 'danger', label: 'Danger' },
+          ]).default('info'),
+          TextField.make('title').label('Title').default('Notice'),
+        ])
+        .preview((props) => [
+          Alert.make(String(props.message || 'Alert message'))
+            .alertType((props.alertType as 'info' | 'warning' | 'success' | 'danger') || 'info')
+            .title(String(props.title || '')),
+        ])
+        .code(`Alert.make(:message)
+  .alertType(:alertType)
+  .title(:title)`),
+
+      Playground.make('Stats Builder')
+        .description('Configure a stats display.')
+        .controls([
+          TextField.make('label1').label('Stat 1 Label').default('Users'),
+          NumberField.make('value1').label('Stat 1 Value').default(150),
+          TextField.make('label2').label('Stat 2 Label').default('Articles'),
+          NumberField.make('value2').label('Stat 2 Value').default(42),
+        ])
+        .preview((props) => [
+          Stats.make([
+            Stat.make(String(props.label1 || 'Stat 1')).value(Number(props.value1 || 0)),
+            Stat.make(String(props.label2 || 'Stat 2')).value(Number(props.value2 || 0)),
+          ]),
+        ])
+        .code(`Stats.make([
+  Stat.make(:label1).value(:value1),
+  Stat.make(:label2).value(:value2),
+])`),
     ]
   }
 }

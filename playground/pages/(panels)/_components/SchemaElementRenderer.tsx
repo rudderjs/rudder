@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta } from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@boostkit/panels'
 import { SchemaTable } from './SchemaTable.js'
 import { SchemaForm } from './SchemaForm.js'
 import type { SchemaFormMeta } from '@boostkit/panels'
 import { CodeBlock, CopyButton } from './CodeBlock.js'
+import { FieldInput } from './FieldInput.js'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
 type SchemaElementRendererElement = PanelSchemaElementMeta
@@ -67,6 +68,10 @@ export function SchemaElementRenderer({ element, panelPath, i18n }: SchemaElemen
 
   if (element.type === 'view') {
     return <ViewBlock element={element as unknown as ViewElementMeta} panelPath={panelPath} i18n={i18n} />
+  }
+
+  if (element.type === 'playground') {
+    return <PlaygroundBlock element={element as unknown as PlaygroundElementMeta} panelPath={panelPath} i18n={i18n} />
   }
 
   if (element.type === 'stats') {
@@ -371,6 +376,124 @@ function ViewBlock({ element, panelPath, i18n }: { element: ViewElementMeta; pan
       {(element.elements ?? []).map((el: unknown, i: number) => (
         <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
       ))}
+    </div>
+  )
+}
+
+/* ── Playground — controls + live preview ─────────────────── */
+
+function PlaygroundBlock({ element, panelPath, i18n }: { element: PlaygroundElementMeta; panelPath: string; i18n: PanelI18n }) {
+  const [values, setValues] = useState<Record<string, unknown>>({ ...element.defaults })
+  const [showCode, setShowCode] = useState(false)
+
+  function handleChange(name: string, value: unknown) {
+    setValues(prev => ({ ...prev, [name]: value }))
+  }
+
+  // Patch SSR-resolved preview elements with current control values.
+  // Deep-clone each element and override any property that matches a control name.
+  function patchElements(elements: unknown[]): unknown[] {
+    return elements.map((el) => {
+      const patched = { ...(el as Record<string, unknown>) }
+      const elType = patched['type'] as string | undefined
+
+      // Map control names to element properties based on element type
+      for (const [key, val] of Object.entries(values)) {
+        // Direct property match (always apply)
+        if (key in patched) patched[key] = val
+        // Alert: message → content, title → title, alertType → alertType
+        if (elType === 'alert') {
+          if (key === 'message') patched['content'] = val
+          if (key === 'title') patched['title'] = val
+          if (key === 'alertType') patched['alertType'] = val
+        }
+      }
+      // Patch stats: rebuild stats array from control values
+      if (patched['type'] === 'stats' && Array.isArray(patched['stats'])) {
+        patched['stats'] = (patched['stats'] as Record<string, unknown>[]).map((stat, i) => {
+          const labelKey = `label${i + 1}`
+          const valueKey = `value${i + 1}`
+          return {
+            ...stat,
+            ...(labelKey in values ? { label: String(values[labelKey]) } : {}),
+            ...(valueKey in values ? { value: values[valueKey] } : {}),
+          }
+        })
+      }
+      return patched
+    })
+  }
+
+  const previewElements = patchElements(element.elements ?? [])
+
+  // Build code string with current values substituted
+  const codeWithValues = element.code
+    ? element.code.replace(/:([a-zA-Z0-9]+)/g, (_, key: string) => {
+        const v = values[key]
+        if (typeof v === 'boolean') return String(v)
+        if (typeof v === 'number') return String(v)
+        return `'${String(v ?? '')}'`
+      })
+    : undefined
+
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-3 border-b bg-muted/40">
+        <p className="text-sm font-semibold">{element.title}</p>
+        {element.description && (
+          <p className="text-xs text-muted-foreground mt-0.5">{element.description}</p>
+        )}
+      </div>
+
+      {/* Preview + Controls side by side */}
+      <div className="flex">
+        {/* Preview */}
+        <div className="flex-1 p-5 flex flex-col gap-4 items-center justify-center min-h-[120px]">
+          <div className="w-full">
+            {previewElements.map((el: unknown, i: number) => (
+              <SchemaElementRenderer key={i} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+            ))}
+          </div>
+        </div>
+
+        {/* Controls sidebar */}
+        <div className="w-72 shrink-0 border-l bg-muted/10 px-4 py-4 flex flex-col gap-3">
+          <p className="text-xs font-medium text-muted-foreground">Controls</p>
+          {(element.controls as FieldMeta[]).map((field) => (
+            <div key={field.name} className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">{field.label || field.name}</label>
+              <FieldInput
+                field={field}
+                value={values[field.name] ?? ''}
+                onChange={(v: unknown) => handleChange(field.name, v)}
+                uploadBase={panelPath.replace(/\/$/, '') + '/api'}
+                i18n={i18n}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Code panel */}
+      {codeWithValues && (
+        <>
+          <div className="border-t px-4 py-2 flex items-center justify-between bg-muted/10">
+            <button
+              type="button"
+              onClick={() => setShowCode(!showCode)}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showCode ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {showCode ? 'Hide Code' : 'View Code'}
+            </button>
+            {showCode && <CopyButton code={codeWithValues} />}
+          </div>
+          {showCode && <CodeBlock code={codeWithValues} language="ts" bare />}
+        </>
+      )}
     </div>
   )
 }

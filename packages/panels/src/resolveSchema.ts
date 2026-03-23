@@ -22,6 +22,8 @@ import type { EachElementMeta } from './schema/Each.js'
 import type { Each } from './schema/Each.js'
 import type { ViewElementMeta } from './schema/View.js'
 import type { View } from './schema/View.js'
+import type { PlaygroundElementMeta } from './schema/Playground.js'
+import type { Playground } from './schema/Playground.js'
 
 import { resolveSection }   from './resolvers/resolveSection.js'
 import { resolveTabs }      from './resolvers/resolveTabs.js'
@@ -52,6 +54,7 @@ export type PanelSchemaElementMeta =
   | DividerElementMeta
   | EachElementMeta
   | ViewElementMeta
+  | PlaygroundElementMeta
 
 // ─── Schema resolver ───────────────────────────────────────
 
@@ -219,6 +222,22 @@ export async function resolveSchema(
           getSchema: { value: () => viewElements },
         })
         meta.elements = await resolveSchema(viewPanel, ctx)
+      }
+      result.push(meta as unknown as PanelSchemaElementMeta)
+      continue
+    }
+
+    if (type === 'playground') {
+      const playground = el as unknown as Playground
+      const meta = playground.toMeta()
+      const previewFn = playground.getPreviewFn()
+      if (previewFn) {
+        const defaults = playground.getDefaults()
+        const previewElements = previewFn(defaults)
+        const previewPanel = Object.create(panel, {
+          getSchema: { value: () => previewElements },
+        })
+        meta.elements = await resolveSchema(previewPanel, ctx)
       }
       result.push(meta as unknown as PanelSchemaElementMeta)
       continue
