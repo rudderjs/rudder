@@ -495,6 +495,8 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
             void navigate(navigateTo)
             return
           }
+          // onSuccess handled it (e.g. toast) — don't show inline success message
+          return
         }
         setSubmitted(true)
       } else {

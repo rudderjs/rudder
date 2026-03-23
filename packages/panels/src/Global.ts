@@ -1,5 +1,6 @@
 import type { PanelContext } from './types.js'
 import type { FieldOrGrouping, SchemaItemMeta } from './Resource.js'
+import { Form } from './schema/Form.js'
 
 // ─── Global meta (for UI / meta endpoint) ───────────────
 
@@ -51,27 +52,35 @@ export class Global {
   /** Icon for the sidebar (optional). */
   static icon?: string
 
+  // ── form() ────────────────────────────────────────────
+
   /**
-   * Enable Yjs-backed collaborative editing for this global.
-   * Uses the same @boostkit/live infrastructure as versioned resources.
+   * Configure the global's form.
+   * Receives a pre-configured Form with the global slug as ID.
+   *
+   * @example
+   * form(form: Form) {
+   *   return form.fields([
+   *     TextField.make('siteName').required(),
+   *     ToggleField.make('maintenanceMode'),
+   *   ])
+   * }
    */
-  static versioned = false
-
-  // ── Abstract / overridable ──────────────────────────────
-
-  /** Define the fields (and optional Section / Tabs groupings) for this global. Required. */
-  fields(): FieldOrGrouping[] {
-    throw new Error(`[BoostKit Panels] Global "${this.constructor.name}" must implement fields().`)
+  form(form: Form): Form {
+    return form
   }
 
-  /**
-   * Authorization policy.
-   * Return false to deny the action — the API responds with 403.
-   * Defaults to allowing everything.
-   */
-   
+  /** Authorization policy. Return false to deny — API responds 403. */
   async policy(_action: 'view' | 'update', _ctx: PanelContext): Promise<boolean> {
     return true
+  }
+
+  // ── Internal resolvers ────────────────────────────────
+
+  /** @internal — Constructs Form, calls this.form(). */
+  _resolveForm(): Form {
+    const Cls = this.constructor as typeof Global
+    return this.form(Form.make(Cls.getSlug()))
   }
 
   // ── Static helpers ──────────────────────────────────────
@@ -95,12 +104,14 @@ export class Global {
   /** @internal */
   toMeta(): GlobalMeta {
     const Cls = this.constructor as typeof Global
+    const form = this._resolveForm()
+    const formMeta = form.toMeta()
     return {
       label:     Cls.getLabel(),
       slug:      Cls.getSlug(),
       icon:      Cls.icon,
-      fields:    this.fields().map((f) => f.toMeta()) as SchemaItemMeta[],
-      versioned: Cls.versioned,
+      fields:    formMeta.fields as SchemaItemMeta[],
+      versioned: !!formMeta.versioned,
     }
   }
 }

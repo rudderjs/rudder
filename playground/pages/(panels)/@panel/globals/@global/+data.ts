@@ -1,5 +1,6 @@
-import { PanelRegistry } from '@boostkit/panels'
-import { getSessionUser } from '../../../_lib/getSessionUser.js'
+import { PanelRegistry, resolveForm } from '@boostkit/panels'
+import type { PanelSchemaElementMeta } from '@boostkit/panels'
+import { buildPanelContext } from '../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>
@@ -16,8 +17,9 @@ export async function data(pageContext: PageContextServer) {
   const global     = new GlobalClass()
   const globalMeta = global.toMeta()
   const panelMeta  = panel.toMeta()
+  const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
-  // Load current data from API
+  // Load current data from DB
   let record: Record<string, unknown> = {}
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,18 +28,15 @@ export async function data(pageContext: PageContextServer) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row     = await (prisma as any).panelGlobal.findUnique({ where: { slug } })
     if (row?.data) record = typeof row.data === 'string' ? JSON.parse(row.data) : row.data
-  } catch {
-    // table not created yet or prisma not available
-  }
+  } catch { /* table not created yet */ }
 
-  const sessionUser = await getSessionUser(pageContext)
+  // Resolve form with record as initial data
+  const form = global._resolveForm()
+  form.action(`/${pathSegment}/api/_globals/${slug}`)
+  form.method('PUT')
+  form.data(async () => record)
 
-  return {
-    panelMeta,
-    globalMeta,
-    record,
-    pathSegment,
-    slug,
-    sessionUser,
-  }
+  const formElement = await resolveForm(form as any, panel, ctx)
+
+  return { panelMeta, globalMeta, formElement, pathSegment, slug, sessionUser }
 }
