@@ -4,15 +4,11 @@ import { Component, type ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import type { PanelMeta } from '@boostkit/panels'
-// Optionally register Lexical editor if @boostkit/panels-lexical is installed.
-// Dynamic import avoids a hard dependency and breaks the panels ↔ panels-lexical cycle.
+// Auto-discover plugin registrations (fields, lazy elements, etc.)
+// Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
+import.meta.glob('../_register-*.ts', { eager: true })
+// Lexical uses registerField (async is fine for fields — they render inside forms post-hydration)
 import('@boostkit/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
-
-// Register lazy-loaded plugin elements (synchronous — just stores factory, no actual import)
-import { registerLazyElement } from '@boostkit/panels'
-try {
-  registerLazyElement('media', () => import('@boostkit/media').then(m => ({ default: (m as Record<string, unknown>).MediaElement as React.ComponentType })))
-} catch {}
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
 
