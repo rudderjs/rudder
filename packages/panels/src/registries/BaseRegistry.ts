@@ -29,20 +29,10 @@ export function createRegistry<T>() {
 export function createMapRegistry<T>(namespace: string) {
   const g = globalThis as Record<string, unknown>
   const key = `__boostkit_${namespace}`
-  const listenersKey = `__boostkit_${namespace}_listeners`
   if (!g[key]) g[key] = new Map<string, T>()
-  if (!g[listenersKey]) g[listenersKey] = new Set<() => void>()
   const map = g[key] as Map<string, T>
-  const listeners = g[listenersKey] as Set<() => void>
   return {
-    register(key: string, value: T): void {
-      map.set(key, value)
-      for (const fn of listeners) fn()
-    },
+    register(key: string, value: T): void { map.set(key, value) },
     get(key: string): T | undefined { return map.get(key) },
-    subscribe(fn: () => void): () => void {
-      listeners.add(fn)
-      return () => { listeners.delete(fn) }
-    },
   }
 }

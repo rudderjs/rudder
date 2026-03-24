@@ -78,7 +78,7 @@ export { RichContentField } from './schema/fields/RichContentField.js'
 
 // ─── Component Registry ─────────────────────────────────────
 
-export { registerField, getField, registerElement, getElement, onElementChange, registerLazyElement, getLazyElement } from './registries/ComponentRegistry.js'
+export { registerField, getField, registerElement, getElement, registerLazyElement, getLazyElement } from './registries/ComponentRegistry.js'
 
 // ─── Resolver Registry ──────────────────────────────────────
 

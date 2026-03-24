@@ -20,7 +20,6 @@ export const registerElement = elements.register
 /** Look up a registered element component by type. @internal */
 export const getElement      = elements.get
 /** Subscribe to element registration changes. @internal */
-export const onElementChange = elements.subscribe
 
 /**
  * Register a lazy-loaded schema element.
