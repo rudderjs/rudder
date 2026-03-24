@@ -1,13 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@boostkit/panels'
-import { getElement } from '@boostkit/panels'
+import { getElement, getLazyElement } from '@boostkit/panels'
 import { SchemaTable } from './SchemaTable.js'
 import { SchemaForm } from './SchemaForm.js'
 import type { SchemaFormMeta } from '@boostkit/panels'
 import { CodeBlock, CopyButton } from './CodeBlock.js'
 import { FieldInput } from './FieldInput.js'
+
+// Cache for React.lazy wrappers around lazy element factories
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lazyCache = new Map<string, React.LazyExoticComponent<any>>()
+function getOrCreateLazy(type: string) {
+  const factory = getLazyElement(type)
+  if (!factory) return undefined
+  if (!lazyCache.has(type)) lazyCache.set(type, lazy(factory))
+  return lazyCache.get(type)
+}
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
 type SchemaElementRendererElement = PanelSchemaElementMeta
@@ -21,10 +31,20 @@ export interface SchemaElementRendererProps {
 }
 
 export function SchemaElementRenderer({ element, panelPath, i18n }: SchemaElementRendererProps) {
-  // Check registry first — custom elements and plugin-registered elements take priority
+  // Sync registry — for elements registered via registerElement()
   const CustomElement = getElement(element.type)
   if (CustomElement) {
     return <CustomElement element={element} panelPath={panelPath} i18n={i18n} />
+  }
+
+  // Lazy registry — for plugin elements registered via registerLazyElement()
+  const LazyElement = getOrCreateLazy(element.type)
+  if (LazyElement) {
+    return (
+      <Suspense fallback={<div className="rounded-xl border bg-card animate-pulse h-64" />}>
+        <LazyElement element={element} panelPath={panelPath} i18n={i18n} />
+      </Suspense>
+    )
   }
 
   if (element.type === 'text') {

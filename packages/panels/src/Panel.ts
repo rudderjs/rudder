@@ -37,6 +37,8 @@ export interface PanelPlugin {
   schemas?: PanelPluginSchema[]
   /** Pages directory to publish (relative to the plugin's package). */
   pages?: string
+  /** SSR resolvers for custom schema element types. Keyed by element type. */
+  resolvers?: Record<string, (el: unknown, ctx: unknown) => Promise<unknown>>
   /** Called during PanelServiceProvider.register() — bind DI, etc. */
   register?(panel: Panel, app: AppLike): void
   /** Called during PanelServiceProvider.boot() — mount routes, etc. */

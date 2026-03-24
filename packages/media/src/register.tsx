@@ -1,11 +1,10 @@
-import { registerElement } from '@boostkit/panels'
-import { MediaElement } from './components/MediaElement.js'
+import { registerLazyElement } from '@boostkit/panels'
 
 /**
  * Register the Media schema element renderer with @boostkit/panels.
  *
- * Call once in your app's client-side entry point, or it's auto-registered
- * by the panels +Layout.tsx dynamic import.
+ * Uses React.lazy for SSR-compatible code-splitting.
+ * Call once at module load time (e.g. top-level in +Layout or +config).
  *
  * ```ts
  * import { registerMedia } from '@boostkit/media'
@@ -13,5 +12,7 @@ import { MediaElement } from './components/MediaElement.js'
  * ```
  */
 export function registerMedia(): void {
-  registerElement('media', MediaElement)
+  registerLazyElement('media', () =>
+    import('./components/MediaElement.js').then(m => ({ default: m.MediaElement }))
+  )
 }

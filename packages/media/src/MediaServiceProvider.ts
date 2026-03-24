@@ -2,6 +2,7 @@ import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import type { MediaConfig } from './types.js'
 import { mountMediaRoutes } from './handlers/mediaRoutes.js'
+import { resolveMedia } from './resolveMedia.js'
 
 /**
  * @deprecated Use `media()` as a PanelPlugin with `Panel.use(media())` instead.
@@ -67,6 +68,7 @@ export function media(config?: MediaConfig): PanelPlugin {
       { from: `${schemaDir}/media.prisma`, to: 'prisma/schema', tag: 'media-schema', orm: 'prisma' as const },
     ],
     pages: pagesDir,
+    resolvers: { media: resolveMedia },
 
     async boot(panel) {
       type RouteHandler = (req: AppRequest, res: AppResponse) => unknown
@@ -83,11 +85,6 @@ export function media(config?: MediaConfig): PanelPlugin {
       if (guard) mw.push(guard as unknown as MiddlewareHandler)
 
       mountMediaRoutes(router, panel.getApiBase(), config ?? {}, mw)
-
-      // Register SSR resolver for Media.make() schema element
-      const { registerResolver } = await import(/* @vite-ignore */ '@boostkit/panels')
-      const { resolveMedia } = await import('./resolveMedia.js')
-      registerResolver('media', resolveMedia)
     },
   }
 }

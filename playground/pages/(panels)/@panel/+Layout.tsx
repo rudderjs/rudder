@@ -7,7 +7,12 @@ import type { PanelMeta } from '@boostkit/panels'
 // Optionally register Lexical editor if @boostkit/panels-lexical is installed.
 // Dynamic import avoids a hard dependency and breaks the panels ↔ panels-lexical cycle.
 import('@boostkit/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
-import('@boostkit/media').then(({ registerMedia }) => registerMedia()).catch(() => {})
+
+// Register lazy-loaded plugin elements (synchronous — just stores factory, no actual import)
+import { registerLazyElement } from '@boostkit/panels'
+try {
+  registerLazyElement('media', () => import('@boostkit/media').then(m => ({ default: (m as Record<string, unknown>).MediaElement as React.ComponentType })))
+} catch {}
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
 

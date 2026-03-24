@@ -2,6 +2,7 @@ import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import { debugWarn } from './debug.js'
 import { PanelRegistry } from './registries/PanelRegistry.js'
+import { registerResolver } from './registries/ResolverRegistry.js'
 import { DashboardRegistry } from './registries/DashboardRegistry.js'
 import {
   buildPanelMiddleware,
@@ -71,6 +72,11 @@ export class PanelServiceProvider extends ServiceProvider {
 
       // Boot panel plugins
       for (const plugin of panel.getPlugins()) {
+        if (plugin.resolvers) {
+          for (const [type, resolver] of Object.entries(plugin.resolvers)) {
+            registerResolver(type, resolver)
+          }
+        }
         if (plugin.boot) await plugin.boot(panel, this.app)
       }
     }
