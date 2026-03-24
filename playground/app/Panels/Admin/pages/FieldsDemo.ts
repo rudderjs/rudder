@@ -4,8 +4,9 @@ import {
   TextareaField, SelectField, BooleanField, ToggleField,
   DateField, ColorField, TagsField, SlugField,
   JsonField, HiddenField, FileField,
-  RepeaterField, BuilderField, RichContentField, Block,
+  RepeaterField, BuilderField, Block,
 } from '@boostkit/panels'
+import { RichContentField } from '@boostkit/panels-lexical'
 import type { PanelContext } from '@boostkit/panels'
 
 export class FieldsDemo extends Page {

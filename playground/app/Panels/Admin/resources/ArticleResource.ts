@@ -12,7 +12,6 @@ import {
   ColorField,
   FileField,
   JsonField,
-  RichContentField,
   Block,
   RelationField,
   ComputedField,
@@ -24,6 +23,7 @@ import {
   Stats,
   Stat,
 } from '@boostkit/panels'
+import { RichContentField } from '@boostkit/panels-lexical'
 import { Article } from '../../../Models/Article.js'
 
 export class ArticleResource extends Resource {

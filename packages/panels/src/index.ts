@@ -73,9 +73,6 @@ export {
 } from './NodeMap.js'
 export type { NodeData, NodeMap } from './NodeMap.js'
 
-// ─── Rich Content Field (Lexical) ───────────────────────────
-export { RichContentField } from './schema/fields/RichContentField.js'
-
 // ─── Component Registry ─────────────────────────────────────
 
 export { registerField, getField, registerElement, getElement, registerLazyElement, getLazyElement } from './registries/ComponentRegistry.js'

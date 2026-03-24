@@ -1,5 +1,5 @@
-import { Field } from '../Field.js'
-import type { BlockMeta } from '../Block.js'
+import { Field } from '@boostkit/panels'
+import type { BlockMeta } from '@boostkit/panels'
 
 export class RichContentField extends Field {
   protected _blocks: BlockMeta[] = []
