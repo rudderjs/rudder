@@ -90,7 +90,7 @@ export default function MediaPage() {
   const files = items.filter((i): i is MediaRecord => i.type !== 'folder')
 
   return (
-    <div className="-m-6 flex h-[calc(100%+3rem)] flex-col"
+    <div className="flex h-full flex-col"
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
       onDrop={handleDrop}
     >

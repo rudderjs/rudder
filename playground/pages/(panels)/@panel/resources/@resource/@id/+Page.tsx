@@ -39,7 +39,7 @@ export default function ShowPage() {
   const hasManyFields = allFields.filter(f => f.type === 'hasMany')
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl p-6">
         <Breadcrumbs crumbs={[
           { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
           { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },

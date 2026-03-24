@@ -40,7 +40,7 @@ export default function ResourceListPage() {
   const el = element as (PanelSchemaElementMeta & Record<string, unknown>) | null
 
   return (
-    <>
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-4">
         <div>
@@ -104,7 +104,7 @@ export default function ResourceListPage() {
       ) : (
         <p className="text-sm text-muted-foreground">{i18n.noRecordsFound}</p>
       )}
-    </>
+    </div>
   )
 }
 

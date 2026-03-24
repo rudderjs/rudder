@@ -56,7 +56,7 @@ export default function PanelRootPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 p-6">
       {groups.map((group, gi) => {
         if (group.type === 'widget-group') {
           return (

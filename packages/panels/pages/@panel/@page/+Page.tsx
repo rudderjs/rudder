@@ -26,13 +26,13 @@ export default function SchemaPage() {
 
   if (!schemaData || schemaData.length === 0) {
     return (
-      <>
+      <div className="p-6">
         <Breadcrumbs crumbs={[
           { label: panelName, href: `/${pathSegment}` },
           { label: pageMeta.label },
         ]} />
         <p className="text-muted-foreground">No content defined for this page.</p>
-      </>
+      </div>
     )
   }
 
@@ -64,7 +64,7 @@ export default function SchemaPage() {
   }
 
   return (
-    <>
+    <div className="p-6">
       <Breadcrumbs crumbs={[
         { label: panelName, href: `/${pathSegment}` },
         { label: pageMeta.label },
@@ -132,7 +132,7 @@ export default function SchemaPage() {
           return <SchemaElementRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelMeta.path} i18n={i18n} />
         })}
       </div>
-    </>
+    </div>
   )
 }
 

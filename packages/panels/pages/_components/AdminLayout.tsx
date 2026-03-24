@@ -459,7 +459,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
             <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
             <ThemeToggle />
           </header>
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 overflow-y-auto">
             {children}
           </main>
         </div>
@@ -513,7 +513,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
         <ThemeToggle />
         <UserDropdown user={user} i18n={i18n} />
       </header>
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 overflow-y-auto">
         {children}
       </main>
       <Toaster richColors position="bottom-right" />
