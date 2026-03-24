@@ -83,6 +83,11 @@ export function media(config?: MediaConfig): PanelPlugin {
       if (guard) mw.push(guard as unknown as MiddlewareHandler)
 
       mountMediaRoutes(router, panel.getApiBase(), config ?? {}, mw)
+
+      // Register SSR resolver for Media.make() schema element
+      const { registerResolver } = await import(/* @vite-ignore */ '@boostkit/panels')
+      const { resolveMedia } = await import('./resolveMedia.js')
+      registerResolver('media', resolveMedia)
     },
   }
 }

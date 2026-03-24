@@ -80,6 +80,10 @@ export { RichContentField } from './schema/fields/RichContentField.js'
 
 export { registerField, getField, registerElement, getElement } from './registries/ComponentRegistry.js'
 
+// ─── Resolver Registry ──────────────────────────────────────
+
+export { registerResolver, getResolver } from './registries/ResolverRegistry.js'
+
 // ─── Editor Registry (deprecated — use registerField instead) ──
 
 export { editorRegistry } from './registries/EditorRegistry.js'

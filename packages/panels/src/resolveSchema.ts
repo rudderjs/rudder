@@ -36,6 +36,7 @@ import { resolveStats }     from './resolvers/resolveStats.js'
 import { resolveChart }     from './resolvers/resolveChart.js'
 import { resolveList }      from './resolvers/resolveList.js'
 import { resolveField }     from './resolvers/resolveField.js'
+import { getResolver }      from './registries/ResolverRegistry.js'
 import { validateSerializable } from '@boostkit/support'
 
 export type PanelSchemaElementMeta =
@@ -253,6 +254,15 @@ export async function resolveSchema(
     const fieldMeta = await resolveField(el, panel, ctx)
     if (fieldMeta) {
       result.push(fieldMeta)
+      continue
+    }
+
+    // Check resolver registry — plugins register async resolvers for custom types
+    const customResolver = getResolver(type)
+    if (customResolver) {
+      try {
+        result.push(await customResolver(el, ctx) as unknown as PanelSchemaElementMeta)
+      } catch { /* resolver failed */ }
       continue
     }
 

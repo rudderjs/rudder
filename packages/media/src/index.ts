@@ -11,5 +11,12 @@ export type {
 
 export { categorize } from './types.js'
 
+// Schema element
+export { Media } from './schema/Media.js'
+export type { MediaElementMeta } from './schema/Media.js'
+
+// Client registration
+export { registerMedia } from './register.js'
+
 // Server exports available via '@boostkit/media/server'
 export { media, MediaServiceProvider } from './MediaServiceProvider.js'
