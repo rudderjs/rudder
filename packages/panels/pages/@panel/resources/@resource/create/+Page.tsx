@@ -17,7 +17,7 @@ export default function CreatePage() {
   config({ title: `${t(i18n.create, { singular: resourceMeta.labelSingular })} — ${panelName}` })
 
   return (
-    <>
+    <div className="p-6">
       <Breadcrumbs crumbs={[
         { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
         { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
@@ -40,6 +40,6 @@ export default function CreatePage() {
           }}
         />
       </div>
-    </>
+    </div>
   )
 }

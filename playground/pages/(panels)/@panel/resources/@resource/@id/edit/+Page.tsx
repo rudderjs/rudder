@@ -28,7 +28,7 @@ export default function EditPage() {
   }
 
   return (
-    <>
+    <div className="p-6">
       <Breadcrumbs crumbs={[
         { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
         { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
@@ -46,6 +46,6 @@ export default function EditPage() {
           backUrl={backHref}
         />
       </div>
-    </>
+    </div>
   )
 }

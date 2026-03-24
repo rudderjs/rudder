@@ -16,7 +16,7 @@ export default function GlobalEditPage() {
   config({ title: `${globalMeta.label} — ${panelName}` })
 
   return (
-    <>
+    <div className="p-6">
       <Breadcrumbs crumbs={[
         { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}` },
         { label: globalMeta.label },
@@ -34,6 +34,6 @@ export default function GlobalEditPage() {
           }}
         />
       </div>
-    </>
+    </div>
   )
 }
