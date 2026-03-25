@@ -1,0 +1,195 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e7]:
+      - link "BoostKit" [ref=e9] [cursor=pointer]:
+        - /url: /admin
+        - generic [ref=e11]: BoostKit
+      - generic [ref=e12]:
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "Todos" [ref=e17] [cursor=pointer]:
+              - /url: /admin/resources/todos
+              - img [ref=e18]
+              - generic [ref=e21]: Todos
+        - generic [ref=e22]:
+          - generic [ref=e23]: Content
+          - list [ref=e25]:
+            - listitem [ref=e26]:
+              - link "Articles 42" [ref=e27] [cursor=pointer]:
+                - /url: /admin/resources/articles
+                - img [ref=e28]
+                - generic [ref=e31]: Articles
+                - generic [ref=e32]: "42"
+            - listitem [ref=e33]:
+              - link "Categories" [ref=e34] [cursor=pointer]:
+                - /url: /admin/resources/categories
+                - img [ref=e35]
+                - generic [ref=e40]: Categories
+        - generic [ref=e41]:
+          - generic [ref=e42]: System
+          - list [ref=e44]:
+            - listitem [ref=e45]:
+              - link "Users 4" [ref=e46] [cursor=pointer]:
+                - /url: /admin/resources/users
+                - img [ref=e47]
+                - generic [ref=e52]: Users
+                - generic [ref=e53]: "4"
+        - generic [ref=e54]:
+          - generic [ref=e55]: Settings
+          - list [ref=e57]:
+            - listitem [ref=e58]:
+              - link "Site Settings" [ref=e59] [cursor=pointer]:
+                - /url: /admin/globals/site-settings
+                - img [ref=e60]
+                - generic [ref=e63]: Site Settings
+        - generic [ref=e64]:
+          - generic [ref=e65]: Pages
+          - list [ref=e67]:
+            - listitem [ref=e69]:
+              - generic [ref=e70]:
+                - link "Tables Demo" [ref=e71] [cursor=pointer]:
+                  - /url: /admin/tables-demo
+                  - img [ref=e73]
+                  - generic [ref=e75]: Tables Demo
+                - button [ref=e76] [cursor=pointer]:
+                  - img [ref=e77]
+            - listitem [ref=e79]:
+              - link "Tabs Demo" [ref=e80] [cursor=pointer]:
+                - /url: /admin/tabs-demo
+                - img [ref=e81]
+                - generic [ref=e84]: Tabs Demo
+            - listitem [ref=e85]:
+              - link "Forms Demo" [ref=e86] [cursor=pointer]:
+                - /url: /admin/forms-demo
+                - img [ref=e88]
+                - generic [ref=e92]: Forms Demo
+            - listitem [ref=e93]:
+              - link "Fields Demo" [ref=e94] [cursor=pointer]:
+                - /url: /admin/fields-demo
+                - img [ref=e95]
+                - generic [ref=e100]: Fields Demo
+            - listitem [ref=e101]:
+              - link "Sections Demo" [ref=e102] [cursor=pointer]:
+                - /url: /admin/sections-demo
+                - img [ref=e103]
+                - generic [ref=e107]: Sections Demo
+            - listitem [ref=e108]:
+              - link "Dialogs Demo" [ref=e109] [cursor=pointer]:
+                - /url: /admin/dialogs-demo
+                - img [ref=e110]
+                - generic [ref=e114]: Dialogs Demo
+            - listitem [ref=e115]:
+              - link "Elements Demo" [ref=e116] [cursor=pointer]:
+                - /url: /admin/elements-demo
+                - img [ref=e117]
+                - generic [ref=e122]: Elements Demo
+            - listitem [ref=e123]:
+              - link "Reports" [ref=e124] [cursor=pointer]:
+                - /url: /admin/reports/:id?
+                - img [ref=e125]
+                - generic [ref=e128]: Reports
+            - listitem [ref=e129]:
+              - link "Media" [ref=e130] [cursor=pointer]:
+                - /url: /admin/media-demo
+                - img [ref=e131]
+                - generic [ref=e135]: Media
+            - listitem [ref=e136]:
+              - link "Custom Page" [ref=e137] [cursor=pointer]:
+                - /url: /admin/custom
+                - img [ref=e138]
+                - generic [ref=e141]: Custom Page
+    - generic [ref=e143]:
+      - banner [ref=e144]:
+        - button "Toggle Sidebar" [ref=e145]:
+          - img
+          - generic [ref=e146]: Toggle Sidebar
+        - generic [ref=e147]: Articles
+        - button "Search everything… ⌘K" [ref=e148]:
+          - img [ref=e149]
+          - generic [ref=e152]: Search everything…
+          - generic [ref=e153]: ⌘K
+        - button [ref=e154]:
+          - img [ref=e155]
+      - main [ref=e157]:
+        - generic [ref=e158]:
+          - navigation "breadcrumb" [ref=e159]:
+            - list [ref=e160]:
+              - listitem [ref=e161]:
+                - link "BoostKit" [ref=e162] [cursor=pointer]:
+                  - /url: /admin/resources/articles
+              - listitem [ref=e163]:
+                - img [ref=e164]
+              - listitem [ref=e166]:
+                - link "Articles" [ref=e167] [cursor=pointer]:
+                  - /url: /admin/resources/articles
+              - listitem [ref=e168]:
+                - img [ref=e169]
+              - listitem [ref=e171]:
+                - link "Edit Article" [disabled] [ref=e172]
+          - generic [ref=e174]:
+            - generic [ref=e175]:
+              - generic [ref=e176]: Connected
+              - generic [ref=e178]: Draft
+              - button "Version History" [ref=e179]
+            - generic [ref=e182]:
+              - generic [ref=e183]:
+                - generic [ref=e184]: Title*
+                - textbox [ref=e186]:
+                  - paragraph [ref=e187]: Final-150293
+              - generic [ref=e188]:
+                - generic [ref=e189]: Slug*
+                - generic [ref=e190]:
+                  - generic [ref=e191]: /
+                  - textbox "my-slug" [ref=e192]: kjkjh
+              - generic [ref=e193]:
+                - generic [ref=e194]: Excerpt
+                - textbox [ref=e196]
+              - generic [ref=e197]:
+                - generic [ref=e198]: Cover Image
+                - button "Choose File" [ref=e200] [cursor=pointer]
+              - generic [ref=e201]:
+                - generic [ref=e202]: Content (Lexical)
+                - textbox [ref=e205]:
+                  - paragraph [ref=e206]: ddsdsd
+                  - paragraph [ref=e207]: dd
+              - generic [ref=e208]:
+                - generic [ref=e209]: Body (Lexical)
+                - textbox [ref=e212]:
+                  - paragraph [ref=e213]: ddsdsd
+                  - paragraph [ref=e214]: dd
+              - generic [ref=e215]:
+                - generic [ref=e216]: Tags
+                - textbox "Add a tag…" [ref=e218]
+              - generic [ref=e219]:
+                - generic [ref=e220]: Categories
+                - textbox "Search Categories…" [ref=e223]
+              - generic [ref=e224]:
+                - paragraph [ref=e227]: Publishing
+                - generic [ref=e228]:
+                  - generic [ref=e230]:
+                    - switch [ref=e231] [cursor=pointer]
+                    - checkbox [ref=e232]
+                    - generic [ref=e233]: Not featured
+                  - generic [ref=e234]:
+                    - generic [ref=e235]: Publish Date
+                    - textbox [ref=e236]
+                  - generic [ref=e237]:
+                    - generic [ref=e238]: Accent Color
+                    - generic [ref=e239]:
+                      - textbox [ref=e240] [cursor=pointer]: "#000000"
+                      - generic [ref=e241]: "#000000"
+              - generic [ref=e243] [cursor=pointer]:
+                - generic [ref=e244]:
+                  - paragraph [ref=e245]: SEO & Metadata
+                  - paragraph [ref=e246]: Optional fields to improve search engine visibility.
+                - generic [ref=e247]: ▼
+              - generic [ref=e248]:
+                - button "Save Draft" [ref=e249]
+                - button "Publish" [ref=e250]
+                - link "Cancel" [ref=e251] [cursor=pointer]:
+                  - /url: /admin/resources/articles
+  - region "Notifications alt+T"
+```

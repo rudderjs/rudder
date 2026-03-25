@@ -59,10 +59,13 @@ export async function data(pageContext: PageContextServer) {
       try {
         const { Live } = await import('@boostkit/live')
         const fieldData: Record<string, unknown> = {}
+        const collabFields = formFields.filter((f: Field) => f.isYjs())
+
         for (const f of formFields) {
           const name = f.getName()
           if (name in record) fieldData[name] = record[name]
         }
+
         await Live.seed(resourceDocName, fieldData)
       } catch { /* @boostkit/live not available */ }
     }

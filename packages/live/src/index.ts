@@ -533,15 +533,28 @@ export const Live = {
   },
 
   /**
-   * Orphan a Y.Doc room and clear its persistence.
-   * The room is removed from the map but connections stay open on the orphaned
-   * room object (no auto-reconnect race). New connections via getOrCreateRoom()
-   * get a fresh empty room. Old connections die when clients navigate/unmount.
+   * Clear a Y.Doc room: close all WebSocket clients, remove from memory, clear persistence.
+   * Clients will reconnect and get a fresh empty room.
    */
   async clearDocument(docName: string): Promise<void> {
     const persistence = this.persistence()
     await persistence.clearDocument(docName)
     const rooms = g[KEY] as Map<string, Room> | undefined
+    const room = rooms?.get(docName)
+    if (room) {
+      // Close all connected WebSocket clients — prevents stale Y.Doc re-sync
+      for (const client of room.clients) {
+        try { client.close(4000, 'room-cleared') } catch { /* ignore */ }
+      }
+      room.clients.clear()
+      room.awarenessMap.clear()
+    }
     rooms?.delete(docName)
+  },
+
+  /** Get the number of active WebSocket clients for a document room. Returns 0 if the room doesn't exist. */
+  getClientCount(docName: string): number {
+    const rooms = g[KEY] as Map<string, Room> | undefined
+    return rooms?.get(docName)?.clients.size ?? 0
   },
 }

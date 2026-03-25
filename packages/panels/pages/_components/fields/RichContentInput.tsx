@@ -7,9 +7,8 @@ import type { FieldInputProps } from './types.js'
 export function RichContentInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
 
-  // Wait for registerField('richcontent', ...) to be called (async dynamic import).
-  // SSR: always null. Client: poll until available, then render the real editor.
-  const [RichEditor, setRichEditor] = useState<ComponentType<Record<string, unknown>> | null>(() => getField('richcontent') ?? null)
+  // Always start null to avoid SSR/client hydration mismatch — editor registers async on client
+  const [RichEditor, setRichEditor] = useState<ComponentType<Record<string, unknown>> | null>(null)
   useEffect(() => {
     if (getField('richcontent')) {
       setRichEditor(() => getField('richcontent')!)

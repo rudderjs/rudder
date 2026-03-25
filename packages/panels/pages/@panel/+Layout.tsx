@@ -7,8 +7,10 @@ import type { PanelMeta } from '@boostkit/panels'
 // Auto-discover plugin registrations (fields, lazy elements, etc.)
 // Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
 import.meta.glob('../_register-*.ts', { eager: true })
-// Lexical uses registerField (async is fine for fields — they render inside forms post-hydration)
-import('@boostkit/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
+// Lexical uses registerField — only register on client to avoid SSR/client hydration mismatch
+if (typeof window !== 'undefined') {
+  import('@boostkit/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
+}
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
 
