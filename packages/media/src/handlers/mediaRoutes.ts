@@ -1,5 +1,5 @@
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
-import type { MediaConfig, MediaRecord, ConversionInfo, MediaConversion } from '../types.js'
+import type { MediaRecord, ConversionInfo, MediaConversion } from '../types.js'
 
 interface RouterLike {
   get(path: string, handler: (req: AppRequest, res: AppResponse) => unknown, mw?: MiddlewareHandler[]): void
@@ -41,14 +41,9 @@ function query(req: AppRequest): Record<string, string> {
 export function mountMediaRoutes(
   router: RouterLike,
   panelApiBase: string,
-  config: MediaConfig,
   mw: MiddlewareHandler[],
 ): void {
   const base = `${panelApiBase}/media`
-  const disk = config.disk ?? 'public'
-  const baseDir = config.directory ?? 'media'
-  const maxSize = config.maxUploadSize ?? 10 * 1024 * 1024
-  const defaultConversions = config.conversions ?? []
 
   // ── GET /panel/api/media — list items in a folder ─────────
   router.get(base, async (req, res) => {
@@ -142,6 +137,16 @@ export function mountMediaRoutes(
     const scope = (formData['scope'] as string) || 'shared'
     const userId = (formData['userId'] as string) || null
 
+    // Element-level config (sent from Media.make() via frontend)
+    const disk = (formData['disk'] as string) || 'public'
+    const baseDir = (formData['directory'] as string) || 'media'
+    const maxSize = Number(formData['maxUploadSize']) || 10 * 1024 * 1024
+    let uploadConversions: MediaConversion[] = []
+    try {
+      const raw = formData['conversions'] as string | undefined
+      if (raw) uploadConversions = JSON.parse(raw) as MediaConversion[]
+    } catch { /* ignore */ }
+
     // Collect files (single or multiple)
     const rawFiles = formData['file'] ?? formData['files']
     const files: Array<{ name: string; type: string; size: number; arrayBuffer(): Promise<ArrayBuffer> }> = []
@@ -200,8 +205,8 @@ export function mountMediaRoutes(
           height = meta.height ?? null
 
           // Generate conversions
-          if (defaultConversions.length > 0) {
-            const specs = defaultConversions.map((c: MediaConversion) => {
+          if (uploadConversions.length > 0) {
+            const specs = uploadConversions.map((c: MediaConversion) => {
               const spec: Record<string, unknown> = { name: c.name, width: c.width }
               if (c.height !== undefined)  spec['height']  = c.height
               if (c.crop !== undefined)    spec['crop']    = c.crop

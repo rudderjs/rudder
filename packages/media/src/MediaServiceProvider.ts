@@ -1,6 +1,5 @@
 import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
-import type { MediaConfig } from './types.js'
 import { mountMediaRoutes } from './handlers/mediaRoutes.js'
 import { resolveMedia } from './resolveMedia.js'
 
@@ -8,9 +7,10 @@ import { resolveMedia } from './resolveMedia.js'
  * @deprecated Use `media()` as a PanelPlugin with `Panel.use(media())` instead.
  * Kept for backward compatibility with the `panels([...], [extensions])` pattern.
  */
+/**
+ * @deprecated Use `media()` as a PanelPlugin with `Panel.use(media())` instead.
+ */
 export class MediaServiceProvider extends ServiceProvider {
-  protected config: MediaConfig = {}
-
   register(): void {
     const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
     this.publishes([
@@ -38,7 +38,7 @@ export class MediaServiceProvider extends ServiceProvider {
       const mw: MiddlewareHandler[] = []
       const guard = panel.getGuard()
       if (guard) mw.push(guard as unknown as MiddlewareHandler)
-      mountMediaRoutes(router, panel.getApiBase(), this.config, mw)
+      mountMediaRoutes(router, panel.getApiBase(), mw)
     }
   }
 }
@@ -59,10 +59,10 @@ const pagesDir  = new URL(/* @vite-ignore */ '../pages', import.meta.url).pathna
  * import { media } from '@boostkit/media/server'
  *
  * Panel.make('admin')
- *   .use(media({ conversions: [{ name: 'thumb', width: 200, format: 'webp' }] }))
+ *   .use(media())
  * ```
  */
-export function media(config?: MediaConfig): PanelPlugin {
+export function media(): PanelPlugin {
   return {
     schemas: [
       { from: `${schemaDir}/media.prisma`, to: 'prisma/schema', tag: 'media-schema', orm: 'prisma' as const },
@@ -84,20 +84,14 @@ export function media(config?: MediaConfig): PanelPlugin {
       const guard = panel.getGuard()
       if (guard) mw.push(guard as unknown as MiddlewareHandler)
 
-      mountMediaRoutes(router, panel.getApiBase(), config ?? {}, mw)
+      mountMediaRoutes(router, panel.getApiBase(), mw)
     },
   }
 }
 
 /**
  * @deprecated Use `media()` directly with `Panel.use(media())`.
- * Legacy factory for the `panels([...], [extensions])` pattern.
  */
-export function mediaExtension(config?: MediaConfig): ProviderClass {
-  return class MediaProvider extends MediaServiceProvider {
-    constructor(app: Application) {
-      super(app)
-      this.config = config ?? {}
-    }
-  }
+export function mediaExtension(): ProviderClass {
+  return MediaServiceProvider
 }

@@ -14,7 +14,10 @@ export class MediaPage extends Page {
       Media.make('Files')
         .disk('public')
         .directory('media')
-        .scope('shared'),
+        .conversions([
+          { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
+          { name: 'preview', width: 800, format: 'webp' },
+        ]),
     ]
   }
 }

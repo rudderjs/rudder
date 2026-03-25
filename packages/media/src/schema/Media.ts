@@ -1,4 +1,4 @@
-import type { MediaConfig, MediaRecord } from '../types.js'
+import type { MediaRecord } from '../types.js'
 
 export interface MediaElementMeta {
   type:           'media'
@@ -8,6 +8,7 @@ export interface MediaElementMeta {
   directory:      string
   accept:         string[]
   maxUploadSize:  number
+  conversions:    MediaConversion[]
   scope:          'shared' | 'private'
   height?:        number
   items:          MediaRecord[]
@@ -15,6 +16,15 @@ export interface MediaElementMeta {
   currentFolder:  MediaRecord | null
   lazy?:          boolean
   pollInterval?:  number
+}
+
+interface MediaConversion {
+  name:    string
+  width:   number
+  height?: number
+  crop?:   boolean
+  format?: 'webp' | 'jpeg' | 'png' | 'avif'
+  quality?: number
 }
 
 interface PanelContext {
@@ -42,7 +52,7 @@ export class Media {
   private _pollInterval?:  number
   private _parentId:       string | null = null
   private _dataFn?:        DataFn
-  private _conversions:    MediaConfig['conversions'] = []
+  private _conversions:    MediaConversion[] = []
 
   protected constructor(title: string) {
     this._title = title
@@ -92,7 +102,7 @@ export class Media {
     return this
   }
 
-  conversions(conversions: NonNullable<MediaConfig['conversions']>): this {
+  conversions(conversions: MediaConversion[]): this {
     this._conversions = conversions
     return this
   }
@@ -124,7 +134,7 @@ export class Media {
   getMaxUploadSize(): number { return this._maxUploadSize }
   getScope(): 'shared' | 'private' { return this._scope }
   getParentId(): string | null { return this._parentId }
-  getConversions(): MediaConfig['conversions'] { return this._conversions }
+  getConversions(): MediaConversion[] { return this._conversions }
   getDataFn(): DataFn | undefined { return this._dataFn }
   isLazy(): boolean { return this._lazy }
   getPollInterval(): number | undefined { return this._pollInterval }
@@ -139,6 +149,7 @@ export class Media {
       directory:     this._directory,
       accept:        this._accept,
       maxUploadSize: this._maxUploadSize,
+      conversions:   this._conversions,
       scope:         this._scope,
       items:         [],
       breadcrumbs:   [],
