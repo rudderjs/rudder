@@ -375,7 +375,8 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       else if (draftableEnabled && publishAction === 'unpublish') toast.success((i18n as Record<string, string>).unpublishedToast ?? 'Unpublished.')
       else toast.success((i18n as Record<string, string>).savedToast ?? 'Saved.')
 
-      // Clear server Y.Doc rooms so next page load re-seeds from fresh DB values
+      // Destroy local Yjs providers before clearing server rooms — prevents y-websocket
+      // from auto-reconnecting and re-pushing stale data to freshly cleared rooms.
       if (formYjs.yjs && resourceSlug && recordId) {
         if (isRestorePreview && collabRef.current?.fieldsMap) {
           const doc = collabRef.current
@@ -383,6 +384,9 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
             for (const [k, v] of Object.entries(values)) doc.fieldsMap.set(k, v)
           })
         }
+        // Destroy the form-level Yjs provider
+        collabRef.current?.provider?.destroy()
+        // Clear server Y.Doc rooms
         await fetch(`/${pathSegment}/api/${resourceSlug}/${recordId}/_sync-live`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       }
 

@@ -151,12 +151,16 @@ export function mountVersionRoutes(
       await Live.clearDocument(docName)
       for (const name of fieldDocNames) await Live.clearDocument(name)
 
-      // y-websocket auto-reconnects and re-pushes stale data — clear again after a delay
-      setTimeout(async () => {
-        try {
-          for (const name of fieldDocNames) await Live.clearDocument(name)
-        } catch { /* ignore */ }
-      }, 500)
+      // y-websocket auto-reconnects and re-pushes stale data — clear again after delays
+      // to catch reconnection at different exponential backoff intervals (100ms, 200ms, 400ms...)
+      for (const delay of [300, 1000, 3000]) {
+        setTimeout(async () => {
+          try {
+            for (const name of fieldDocNames) await Live.clearDocument(name)
+            await Live.clearDocument(docName)
+          } catch { /* ignore */ }
+        }, delay)
+      }
 
       // Re-seed the main Y.Doc with saved DB values
       const SyncModel = ResourceClass.model as ModelClass<RecordRow> | undefined

@@ -51,7 +51,7 @@ export function CollaborativePlainText({
   // ── Per-field collaborative state ─────────────────────────
   const [collabReady, setCollabReady] = useState(false)
   const [providerSynced, setProviderSynced] = useState(false)
-  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider } | null>(null)
+  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider; Y: typeof import('yjs') } | null>(null)
 
   const fragmentName = `text:${fieldName}`
 
@@ -67,7 +67,7 @@ export function CollaborativePlainText({
       const roomName = `${docName}:${fragmentName}`
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
-      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc) as YjsProvider
+      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
       provider.awareness.setLocalStateField('user', {
         name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
@@ -77,7 +77,7 @@ export function CollaborativePlainText({
         if (!destroyed) setProviderSynced(true)
       })
 
-      collabRef.current = { doc, provider }
+      collabRef.current = { doc, provider, Y }
       setCollabReady(true)
     })
 
@@ -156,7 +156,7 @@ export function CollaborativePlainText({
         />
         <OnChangePlugin onChange={onChange} />
         {!multiline && <BlockEnterPlugin />}
-        {providerSynced && <SeedPlugin value={value} />}
+        {providerSynced && <SeedPlugin value={value} yjsRef={collabRef} />}
       </div>
     </LexicalComposer>
   )
@@ -170,15 +170,19 @@ export function CollaborativePlainText({
 
 // ── OnChangePlugin ──────────────────────────────────────────
 // Extracts plain text from Lexical state and calls onChange.
-// Skips remote collaborative changes to avoid re-render cascades.
+// Compares with previous value to avoid unnecessary re-renders.
 
 function OnChangePlugin({ onChange }: { onChange: (value: string) => void }) {
   const [editor] = useLexicalComposerContext()
+  const prevRef = useRef('')
   useEffect(() => {
-    return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
-      if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return
+    return editor.registerUpdateListener(({ editorState }) => {
       const text = editorState.read(() => $getRoot().getTextContent())
-      onChange(text)
+      if (text !== prevRef.current) {
+        prevRef.current = text
+        console.log(`[OnChange:plaintext] "${text.slice(0, 50)}"`)
+        onChange(text)
+      }
     })
   }, [editor, onChange])
   return null
@@ -200,38 +204,34 @@ function BlockEnterPlugin() {
 }
 
 // ── SeedPlugin ──────────────────────────────────────────────
-// Seeds the editor from DB value ONLY when the Y.Doc root is empty.
+// Seeds the editor from DB value ONLY when the Y.Doc is empty after sync.
+// Checks Y.Doc state vector directly (synchronous, no race with CollaborationPlugin).
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function SeedPlugin({ value }: { value: string }) {
+function SeedPlugin({ value, yjsRef }: { value: string; yjsRef: React.RefObject<{ doc: any; Y: any } | null> }) {
   const [editor] = useLexicalComposerContext()
   const seeded = useRef(false)
 
   useEffect(() => {
     if (seeded.current || !value) return
+    seeded.current = true
 
-    const timer = setTimeout(() => {
-      if (seeded.current) return
-      const text = editor.getEditorState().read(() => $getRoot().getTextContent())
-      const isEmpty = !text.trim()
-      console.log(`[SeedPlugin:plaintext] isEmpty=${isEmpty} text="${text.slice(0,50)}" value="${String(value).slice(0,50)}"`)
-      if (!isEmpty) {
-        seeded.current = true
-        return
-      }
-      seeded.current = true
-      console.log(`[SeedPlugin:plaintext] Seeding with: "${String(value).slice(0,50)}"`)
+    // Check Y.Doc state vector — if > 1, the doc has content from server sync
+    const yjs = yjsRef.current
+    if (yjs) {
+      const sv = yjs.Y.encodeStateVector(yjs.doc)
+      if (sv.length > 1) return // Y.Doc has content — CollaborationPlugin will render it
+    }
 
-      editor.update(() => {
-        const lexicalRoot = $getRoot()
-        lexicalRoot.clear()
-        const p = $createParagraphNode()
-        p.append($createTextNode(value))
-        lexicalRoot.append(p)
-      })
-    }, 200)
-    return () => clearTimeout(timer)
-  }, [editor, value])
+    // Y.Doc is empty (fresh room, no prior content) — seed from DB value
+    editor.update(() => {
+      const root = $getRoot()
+      root.clear()
+      const p = $createParagraphNode()
+      p.append($createTextNode(value))
+      root.append(p)
+    })
+  }, [editor, value, yjsRef])
 
   return null
 }
