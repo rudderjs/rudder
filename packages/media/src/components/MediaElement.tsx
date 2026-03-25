@@ -14,6 +14,7 @@ interface MediaElementMeta {
   directory:      string
   accept:         string[]
   maxUploadSize:  number
+  conversions:    Array<{ name: string; width: number; height?: number; crop?: boolean; format?: string; quality?: number }>
   scope:          'shared' | 'private'
   height?:        number
   items:          MediaRecord[]
@@ -113,12 +114,16 @@ export function MediaElement({ element, panelPath }: Props) {
       for (const file of fileList) fd.append('files', file)
       if (currentFolderId) fd.append('parentId', currentFolderId)
       fd.append('scope', element.scope)
+      fd.append('disk', element.disk)
+      fd.append('directory', element.directory)
+      fd.append('maxUploadSize', String(element.maxUploadSize))
+      if (element.conversions.length) fd.append('conversions', JSON.stringify(element.conversions))
       await fetch(`${apiBase}/upload`, { method: 'POST', body: fd })
       refresh()
     } finally {
       setUploading(false)
     }
-  }, [apiBase, currentFolderId, element.scope, refresh])
+  }, [apiBase, currentFolderId, element, refresh])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()

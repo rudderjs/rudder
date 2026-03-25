@@ -25,14 +25,7 @@ import { User }       from 'App/Models/User.js'
 export const adminPanel = Panel.make('admin')
   .path('/admin')
   .use(panelsLexical())
-  .use(media({
-    disk: 'public',
-    directory: 'media',
-    conversions: [
-      { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
-      { name: 'preview', width: 800, format: 'webp' },
-    ],
-  }))
+  .use(media())
   .branding({
     title: 'BoostKit',
     logo: '/logo.svg',
