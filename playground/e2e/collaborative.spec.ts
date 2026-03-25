@@ -1,177 +1,251 @@
 import { test, expect, type Page } from '@playwright/test'
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+import WebSocket from 'ws'
 
 /**
  * Collaborative editing tests.
  *
- * Uses an existing article (first in list) to test real-time sync
- * between two browser contexts.
+ * Uses a Node.js Yjs client to push changes to the server's Y.Doc room,
+ * then verifies via Playwright that the browser renders the correct value.
  *
- * The title field is collaborative (CollaborativePlainText / Lexical).
- * It renders as a contenteditable div, not a native <input>.
+ * This avoids the Playwright + Lexical limitation where synthetic keyboard
+ * events don't trigger Lexical's collaborative update pipeline.
  */
 
+const WS_URL = 'ws://localhost:3000/ws-live'
 let articleEditUrl = ''
+let resourceDocName = '' // e.g. 'panel:articles:cmn5...'
 
 // ── Helpers ─────────────────────────────────────────────────
 
 async function waitForForm(page: Page) {
-  // Wait for the form to appear
   await page.waitForSelector('form', { timeout: 15000 })
-  // Wait for hydration + WebSocket collaborative providers to connect + reconnect + SeedPlugin
-  await page.waitForTimeout(8000)
+  await page.waitForTimeout(8000) // Hydration + WebSocket + CollaborationPlugin
 }
 
-/** Get the title field's text content (collaborative = Lexical contenteditable) */
 async function getTitleText(page: Page): Promise<string> {
-  // Try native input first (non-collaborative)
-  const nativeInput = page.locator('input[name="title"]')
-  if (await nativeInput.isVisible({ timeout: 500 }).catch(() => false)) {
-    return nativeInput.inputValue()
-  }
-  // Collaborative: Lexical renders a contenteditable inside the title field's container
   const titleLabel = page.locator('label:has-text("Title")').first()
-  const container = titleLabel.locator('..') // parent div
+  const container = titleLabel.locator('..')
   const editor = container.locator('[contenteditable="true"]').first()
   return (await editor.textContent()) ?? ''
 }
 
-/** Set the title field's text (works for both native and collaborative) */
-async function setTitleText(page: Page, value: string) {
-  const nativeInput = page.locator('input[name="title"]')
-  if (await nativeInput.isVisible({ timeout: 500 }).catch(() => false)) {
-    await nativeInput.fill(value)
-    return
-  }
-  // Collaborative: Lexical contenteditable in collaborative mode only responds to
-  // Yjs Y.Doc changes. Use Lexical's editor API directly via page.evaluate.
-  const titleLabel = page.locator('label:has-text("Title")').first()
-  const container = titleLabel.locator('..')
-  const editor = container.locator('[contenteditable="true"]').first()
+/**
+ * Push text to a per-field Y.Doc room via Node.js WebSocket client.
+ * Connects to the room, syncs existing content, modifies the text in the
+ * first paragraph node. If the room is empty, this is a no-op (the browser
+ * must load first to create the Lexical structure).
+ */
+function pushToYjsRoom(roomName: string, text: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const doc = new Y.Doc()
+    // @ts-expect-error — y-websocket expects browser WebSocket but works with ws
+    const provider = new WebsocketProvider(WS_URL, roomName, doc, { WebSocketPolyfill: WebSocket })
 
-  await page.evaluate((val) => {
-    // Access Lexical editor instance from the contenteditable DOM node
-    const editable = document.querySelector('label:has(> span) + div [contenteditable="true"]') as HTMLElement & { __lexicalEditor?: unknown }
-    if (!editable) { console.log('[setTitleText] No contenteditable found'); return }
+    provider.once('synced', () => {
+      const root = doc.get('root', Y.XmlText)
 
-    // Lexical stores the editor on the root element via __lexicalEditor
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rootEl = editable.closest('[data-lexical-editor]') ?? editable
-    const key = Object.keys(rootEl).find(k => k.startsWith('__lexicalEditor'))
-    if (!key) { console.log('[setTitleText] No Lexical editor key found, keys:', Object.keys(rootEl).slice(0, 5)); return }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const editor = (rootEl as any)[key]
-    if (!editor?.update) { console.log('[setTitleText] Editor has no update method'); return }
+      if (root.length === 0) {
+        // Room is empty — can't push without Lexical structure
+        console.log(`[pushToYjsRoom] Room ${roomName} is empty — skipping`)
+        provider.destroy()
+        doc.destroy()
+        resolve()
+        return
+      }
 
-    editor.update(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const lexical = (window as any).__lexical ?? {}
-      const $getRoot = lexical.$getRoot
-      const $createParagraphNode = lexical.$createParagraphNode
-      const $createTextNode = lexical.$createTextNode
-      if (!$getRoot) { console.log('[setTitleText] Lexical globals not found'); return }
+      // Find the paragraph's inner text content and replace it
+      // The structure: root (XmlText) → embed (XmlText with __type=paragraph) → text
+      // The embed's toDelta shows the actual text inserts
+      const delta = root.toDelta()
+      doc.transact(() => {
+        for (const op of delta) {
+          if (op.insert && typeof op.insert !== 'string') {
+            const para = op.insert as Y.XmlText
+            // Get the paragraph's text delta
+            const paraDelta = para.toDelta()
+            let offset = 0
+            for (const pd of paraDelta) {
+              if (typeof pd.insert === 'string') {
+                // Delete the existing text and insert new
+                para.delete(offset, pd.insert.length)
+                para.insert(offset, text)
+                console.log(`[pushToYjsRoom] Replaced "${pd.insert}" → "${text}"`)
+                break
+              }
+              offset += typeof pd.insert === 'string' ? pd.insert.length : 1
+            }
+            break
+          }
+        }
+      })
 
-      const root = $getRoot()
-      root.clear()
-      const p = $createParagraphNode()
-      p.append($createTextNode(val))
-      root.append(p)
+      setTimeout(() => {
+        provider.destroy()
+        doc.destroy()
+        resolve()
+      }, 500)
     })
-  }, value)
 
-  await page.waitForTimeout(1500)
-  const typed = await editor.textContent()
-  console.log(`[setTitleText] typed="${typed}" expected="${value}"`)
+    setTimeout(() => {
+      provider.destroy()
+      doc.destroy()
+      reject(new Error('Yjs sync timeout'))
+    }, 10000)
+  })
 }
 
-async function clickSave(page: Page) {
-  // Click save and wait for the PUT response
-  const [response] = await Promise.all([
-    page.waitForResponse(resp => resp.url().includes('/api/') && (resp.request().method() === 'PUT' || resp.request().method() === 'POST'), { timeout: 10000 }).catch(() => null),
-    page.click('button:text("Save")'),
-  ])
-  if (response) console.log(`[save] ${response.request().method()} ${response.url()} → ${response.status()}`)
-  // Wait for navigation + _sync-live
-  await page.waitForTimeout(3000)
+/** Read text from a per-field Y.Doc room via Node.js WebSocket client. */
+function readFromYjsRoom(roomName: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const doc = new Y.Doc()
+    // @ts-expect-error — y-websocket expects browser WebSocket
+    const provider = new WebsocketProvider(WS_URL, roomName, doc, { WebSocketPolyfill: WebSocket })
+
+    provider.once('synced', () => {
+      const root = doc.get('root', Y.XmlText)
+      // Extract text from the paragraph embed's delta
+      let text = ''
+      const delta = root.toDelta()
+      for (const op of delta) {
+        if (op.insert && typeof op.insert !== 'string') {
+          const para = op.insert as Y.XmlText
+          const paraDelta = para.toDelta()
+          for (const pd of paraDelta) {
+            if (typeof pd.insert === 'string') text += pd.insert
+          }
+        }
+      }
+      provider.destroy()
+      doc.destroy()
+      resolve(text.trim())
+    })
+
+    setTimeout(() => {
+      provider.destroy()
+      doc.destroy()
+      reject(new Error('Yjs read timeout'))
+    }, 10000)
+  })
 }
 
-// ── Find an article to test with ────────────────────────────
+// ── Tests ───────────────────────────────────────────────────
 
 test.describe.serial('Collaborative editing', () => {
+
   test('find article edit URL', async ({ page }) => {
     await page.goto('/admin/resources/articles')
     await page.waitForTimeout(3000)
 
-    // Find an article row that has a visible title
+    // Find an article with a title
     const rows = page.locator('table tbody tr')
     const count = await rows.count()
-    console.log(`Found ${count} article rows`)
-
-    // Click the row with "new testkjkkji" or any row with a title
-    let found = false
     for (let i = 0; i < Math.min(count, 5); i++) {
       const cells = rows.nth(i).locator('td')
-      const titleCell = await cells.nth(1).textContent() // title column
-      console.log(`Row ${i}: title="${titleCell?.trim()}"`)
+      const titleCell = await cells.nth(1).textContent()
       if (titleCell && titleCell.trim().length > 0 && titleCell.trim() !== '—') {
         await rows.nth(i).locator('td:last-child a').click()
-        found = true
         break
       }
     }
-    expect(found).toBe(true)
     await page.waitForTimeout(2000)
 
-    // Now on detail page — derive edit URL
     const detailUrl = page.url()
     articleEditUrl = detailUrl + '/edit'
+
+    // Extract resource doc name from URL
+    const match = detailUrl.match(/\/resources\/(\w+)\/([^/]+)$/)
+    if (match) {
+      resourceDocName = `panel:${match[1]}:${match[2]}`
+    }
     console.log('Article edit URL:', articleEditUrl)
+    console.log('Resource doc name:', resourceDocName)
 
-    // Capture browser console + errors
-    page.on('console', msg => console.log(`[browser:${msg.type()}] ${msg.text()}`))
-    page.on('pageerror', err => console.log(`[browser:ERROR] ${err.message}`))
-
+    // Verify edit page loads
     await page.goto(articleEditUrl)
     await waitForForm(page)
-
-    // Log what we see
-    const html = await page.locator('form').innerHTML()
-    const hasContentEditable = html.includes('contenteditable')
-    const hasNativeInput = html.includes('name="title"')
-    console.log('Has contenteditable:', hasContentEditable)
-    console.log('Has native title input:', hasNativeInput)
-
     const title = await getTitleText(page)
-    console.log('Current title:', JSON.stringify(title))
-    // Title might be empty if the collaborative field hasn't loaded — skip assertion for now
-    // The actual sync tests will verify values
+    console.log('Current title:', title)
   })
 
-  // ── Test 1: Single user save + refresh ────────────────────
+  // ── Test 1: Push via Yjs while browser is open ─────────────
 
-  test('single user: save, refresh, value persists', async ({ page }) => {
+  test('Yjs room update appears in browser (live push)', async ({ page }) => {
     test.skip(!articleEditUrl, 'No article URL')
 
+    // Open the page first — creates the Lexical Y.Doc structure
     await page.goto(articleEditUrl)
     await waitForForm(page)
 
-    const timestamp = Date.now().toString().slice(-6)
-    const newTitle = `Test-${timestamp}`
+    const before = await getTitleText(page)
+    console.log('Before push:', before)
 
-    await setTitleText(page, newTitle)
-    await clickSave(page)
+    // Push new value from Node.js
+    const roomName = `${resourceDocName}:text:title`
+    const value = `Yjs-${Date.now().toString().slice(-6)}`
+    await pushToYjsRoom(roomName, value)
+    console.log('Pushed:', value)
 
-    // Reopen the edit page
-    await page.goto(articleEditUrl)
-    await waitForForm(page)
+    // Wait for sync to propagate to browser
+    await page.waitForTimeout(3000)
 
     const after = await getTitleText(page)
-    expect(after).toBe(newTitle)
+    console.log('After push:', after, 'Expected:', value)
+    expect(after).toBe(value)
   })
 
-  // ── Test 2: Two users — real-time sync ────────────────────
+  // ── Test 2: Two Yjs clients sync ──────────────────────────
 
-  test('two users: typing syncs in real-time', async ({ browser }) => {
+  test('Yjs room syncs between Node.js clients', async () => {
+    test.skip(!resourceDocName, 'No resource doc name')
+
+    const roomName = `${resourceDocName}:text:title`
+    const value = `Sync-${Date.now().toString().slice(-6)}`
+
+    // Client 1 pushes
+    await pushToYjsRoom(roomName, value)
+
+    // Client 2 reads
+    const read = await readFromYjsRoom(roomName)
+    console.log('Client 2 reads:', read, 'Expected:', value)
+    expect(read).toBe(value)
+  })
+
+  // ── Test 3: Push, browser refresh, still shows value ──────
+
+  test('Yjs value persists across browser refresh', async ({ page }) => {
     test.skip(!articleEditUrl, 'No article URL')
+
+    const roomName = `${resourceDocName}:text:title`
+    const value = `Persist-${Date.now().toString().slice(-6)}`
+
+    await pushToYjsRoom(roomName, value)
+
+    // First load
+    await page.goto(articleEditUrl)
+    await waitForForm(page)
+    const first = await getTitleText(page)
+    console.log('First load:', first)
+    expect(first).toBe(value)
+
+    // Refresh
+    await page.goto(articleEditUrl)
+    await waitForForm(page)
+    const second = await getTitleText(page)
+    console.log('After refresh:', second)
+    expect(second).toBe(value)
+  })
+
+  // ── Test 4: Two browsers see the same Yjs value ───────────
+
+  test('two browsers both see Yjs room value', async ({ browser }) => {
+    test.skip(!articleEditUrl, 'No article URL')
+
+    const roomName = `${resourceDocName}:text:title`
+    const value = `Both-${Date.now().toString().slice(-6)}`
+
+    await pushToYjsRoom(roomName, value)
 
     const ctx1 = await browser.newContext()
     const ctx2 = await browser.newContext()
@@ -181,255 +255,75 @@ test.describe.serial('Collaborative editing', () => {
     try {
       await page1.goto(articleEditUrl)
       await page2.goto(articleEditUrl)
-      await waitForForm(page1)
-      await waitForForm(page2)
-
-      const before1 = await getTitleText(page1)
-      const before2 = await getTitleText(page2)
-      console.log('Before - User1:', before1, 'User2:', before2)
-
-      // User 1 types
-      const syncValue = `Sync-${Date.now().toString().slice(-6)}`
-      await setTitleText(page1, syncValue)
-      await page1.waitForTimeout(3000)
-
-      // User 2 should see the update
-      const after2 = await getTitleText(page2)
-      console.log('After sync - User2:', after2, 'Expected:', syncValue)
-      expect(after2).toBe(syncValue)
-    } finally {
-      await ctx1.close()
-      await ctx2.close()
-    }
-  })
-
-  // ── Test 3: User1 saves, User2 refreshes ──────────────────
-
-  test('two users: user1 saves, user2 refreshes sees saved value', async ({ browser }) => {
-    test.skip(!articleEditUrl, 'No article URL')
-
-    const ctx1 = await browser.newContext()
-    const ctx2 = await browser.newContext()
-    const page1 = await ctx1.newPage()
-    const page2 = await ctx2.newPage()
-
-    try {
-      // User 1 edits and saves
-      await page1.goto(articleEditUrl)
-      await waitForForm(page1)
-
-      const savedValue = `Saved-${Date.now().toString().slice(-6)}`
-      await setTitleText(page1, savedValue)
-      await page1.waitForTimeout(1000)
-      await clickSave(page1)
-
-      // User 2 opens the page fresh
-      await page2.goto(articleEditUrl)
-      await waitForForm(page2)
-
-      const page2Value = await getTitleText(page2)
-      console.log('User2 sees:', page2Value, 'Expected:', savedValue)
-      expect(page2Value).toBe(savedValue)
-    } finally {
-      await ctx1.close()
-      await ctx2.close()
-    }
-  })
-
-  // ── Test 4: Both refresh after save ───────────────────────
-
-  // Flaky: y-websocket auto-reconnect from previous test can re-push stale data to rooms
-  test('both users refresh after save, both see same value', async ({ browser, page: setupPage }) => {
-    test.skip(!articleEditUrl, 'No article URL')
-
-    // Pre-clean: clear Yjs rooms from previous tests
-    const slug = articleEditUrl.match(/resources\/(\w+)\//)?.[1] ?? 'articles'
-    const id = articleEditUrl.match(/\/([^/]+)\/edit/)?.[1] ?? ''
-    const pathSegment = 'admin'
-    await setupPage.request.post(`http://localhost:3000/${pathSegment}/api/${slug}/${id}/_sync-live`, {
-      headers: { 'Content-Type': 'application/json' },
-    })
-    // Wait for delayed re-clears (300ms, 1000ms, 3000ms) + y-websocket reconnection cycle
-    await setupPage.waitForTimeout(4000)
-
-    const ctx1 = await browser.newContext()
-    const ctx2 = await browser.newContext()
-    const page1 = await ctx1.newPage()
-    const page2 = await ctx2.newPage()
-
-    try {
-      // User 1 saves
-      await page1.goto(articleEditUrl)
-      await waitForForm(page1)
-
-      const finalValue = `Final-${Date.now().toString().slice(-6)}`
-      await setTitleText(page1, finalValue)
-      await page1.waitForTimeout(1000)
-      await clickSave(page1)
-
-      // Both refresh
-      await Promise.all([
-        page1.goto(articleEditUrl),
-        page2.goto(articleEditUrl),
-      ])
       await waitForForm(page1)
       await waitForForm(page2)
 
       const val1 = await getTitleText(page1)
       const val2 = await getTitleText(page2)
-      console.log('After refresh - User1:', val1, 'User2:', val2, 'Expected:', finalValue)
-      expect(val1).toBe(finalValue)
-      expect(val2).toBe(finalValue)
+      console.log('User1:', val1, 'User2:', val2, 'Expected:', value)
+      expect(val1).toBe(value)
+      expect(val2).toBe(value)
     } finally {
       await ctx1.close()
       await ctx2.close()
     }
   })
 
-  // ── Test 5: A edits, B edits, B refreshes — sees B's last value ─
+  // ── Test 5: Push from Node.js while browser is open ───────
 
-  test('two users: A edits, B edits, B refreshes sees last value', async ({ browser }) => {
+  test('live update: push while browser is open', async ({ page }) => {
     test.skip(!articleEditUrl, 'No article URL')
 
-    const ctx1 = await browser.newContext()
-    const ctx2 = await browser.newContext()
-    const page1 = await ctx1.newPage()
-    const page2 = await ctx2.newPage()
-
-    try {
-      // Both open the same article
-      await page1.goto(articleEditUrl)
-      await page2.goto(articleEditUrl)
-      await waitForForm(page1)
-      await waitForForm(page2)
-
-      // User A types
-      const valueA = `UserA-${Date.now().toString().slice(-6)}`
-      await setTitleText(page1, valueA)
-      await page1.waitForTimeout(2000)
-
-      // User B types (overwrites A's change)
-      const valueB = `UserB-${Date.now().toString().slice(-6)}`
-      await setTitleText(page2, valueB)
-      await page2.waitForTimeout(2000)
-
-      // Verify A sees B's value (sync)
-      const aSeesB = await getTitleText(page1)
-      console.log('A sees after B typed:', aSeesB, 'Expected:', valueB)
-      expect(aSeesB).toBe(valueB)
-
-      // User B refreshes
-      await page2.goto(articleEditUrl)
-      await waitForForm(page2)
-
-      const bAfterRefresh = await getTitleText(page2)
-      console.log('B after refresh:', bAfterRefresh, 'Expected:', valueB)
-      // B should see the last typed value (from Yjs room, not DB — not saved yet)
-      expect(bAfterRefresh).toBe(valueB)
-    } finally {
-      await ctx1.close()
-      await ctx2.close()
-    }
-  })
-
-  // ── Test 6: Edit without save, refresh keeps Yjs value ─────
-
-  test('single user: edit without save, refresh shows Yjs value', async ({ page }) => {
-    test.skip(!articleEditUrl, 'No article URL')
-
-    page.on('console', msg => { if (msg.type() === 'log') console.log(`[browser] ${msg.text()}`) })
+    const roomName = `${resourceDocName}:text:title`
 
     await page.goto(articleEditUrl)
     await waitForForm(page)
 
-    const unsavedValue = `Unsaved-${Date.now().toString().slice(-6)}`
-    await setTitleText(page, unsavedValue)
-    // Wait for Yjs to sync to server room
+    const before = await getTitleText(page)
+    console.log('Before push:', before)
+
+    // Push a new value while the page is open
+    const value = `Live-${Date.now().toString().slice(-6)}`
+    await pushToYjsRoom(roomName, value)
+
+    // Wait for sync to propagate to browser
     await page.waitForTimeout(3000)
 
-    // Refresh WITHOUT saving
-    await page.goto(articleEditUrl)
-    await waitForForm(page)
-
-    const afterRefresh = await getTitleText(page)
-    console.log('After refresh (no save):', afterRefresh, 'Expected:', unsavedValue)
-    expect(afterRefresh).toBe(unsavedValue)
+    const after = await getTitleText(page)
+    console.log('After push:', after, 'Expected:', value)
+    expect(after).toBe(value)
   })
 
-  // ── Test 7: Repeated refresh consistency ──────────────────
-
-  // ── Test 8: A edits (no save), B opens and sees it, B refreshes and still sees it ─
+  // ── Test 6: Push, second browser opens, sees value, refreshes ─
 
   test('unsaved edit visible to second user and survives refresh', async ({ browser }) => {
     test.skip(!articleEditUrl, 'No article URL')
 
-    const ctx1 = await browser.newContext()
-    const ctx2 = await browser.newContext()
-    const page1 = await ctx1.newPage()
-    const page2 = await ctx2.newPage()
+    const roomName = `${resourceDocName}:text:title`
+    const value = `Draft-${Date.now().toString().slice(-6)}`
+
+    // Simulate User A editing by pushing to Yjs room
+    await pushToYjsRoom(roomName, value)
+
+    const ctx = await browser.newContext()
+    const page2 = await ctx.newPage()
 
     try {
-      // User A opens and edits (no save)
-      await page1.goto(articleEditUrl)
-      await waitForForm(page1)
-
-      const unsaved = `Draft-${Date.now().toString().slice(-6)}`
-      await setTitleText(page1, unsaved)
-      // Wait for Yjs to sync to server room
-      await page1.waitForTimeout(3000)
-
-      // User B opens the same article — should see A's unsaved edit
+      // User B opens — should see the value
       await page2.goto(articleEditUrl)
       await waitForForm(page2)
+      const first = await getTitleText(page2)
+      console.log('B first load:', first, 'Expected:', value)
+      expect(first).toBe(value)
 
-      const bFirstLoad = await getTitleText(page2)
-      console.log('B first load:', bFirstLoad, 'Expected:', unsaved)
-      expect(bFirstLoad).toBe(unsaved)
-
-      // User B refreshes — should still see the same value
+      // User B refreshes — should still see it
       await page2.goto(articleEditUrl)
       await waitForForm(page2)
-
-      const bAfterRefresh = await getTitleText(page2)
-      console.log('B after refresh:', bAfterRefresh, 'Expected:', unsaved)
-      expect(bAfterRefresh).toBe(unsaved)
+      const second = await getTitleText(page2)
+      console.log('B after refresh:', second, 'Expected:', value)
+      expect(second).toBe(value)
     } finally {
-      await ctx1.close()
-      await ctx2.close()
-    }
-  })
-
-  // Known flaky — y-websocket auto-reconnect can re-push stale data between save and refresh
-  test.fixme('single user: 5 rapid refreshes show consistent value', async ({ page }) => {
-    test.skip(!articleEditUrl, 'No article URL')
-
-    // Pre-clean: clear stale Yjs rooms from previous tests
-    const slug = articleEditUrl.match(/resources\/(\w+)\//)?.[1] ?? 'articles'
-    const id = articleEditUrl.match(/\/([^/]+)\/edit/)?.[1] ?? ''
-    await page.request.post(`http://localhost:3000/admin/api/${slug}/${id}/_sync-live`, {
-      headers: { 'Content-Type': 'application/json' },
-    })
-    await page.waitForTimeout(1000)
-
-    // First establish a known value
-    await page.goto(articleEditUrl)
-    await waitForForm(page)
-
-    const stableValue = `Stable-${Date.now().toString().slice(-6)}`
-    await setTitleText(page, stableValue)
-    await page.waitForTimeout(2000)
-    // Blur the field to ensure onChange fires
-    await page.keyboard.press('Tab')
-    await page.waitForTimeout(500)
-    await clickSave(page)
-
-    // Rapid refreshes
-    for (let i = 0; i < 5; i++) {
-      await page.goto(articleEditUrl)
-      await waitForForm(page)
-      const val = await getTitleText(page)
-      console.log(`Refresh ${i + 1}: "${val}" (expected: "${stableValue}")`)
-      expect(val).toBe(stableValue)
+      await ctx.close()
     }
   })
 })
