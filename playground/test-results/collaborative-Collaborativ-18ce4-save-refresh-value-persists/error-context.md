@@ -138,7 +138,7 @@
               - generic [ref=e183]:
                 - generic [ref=e184]: Title*
                 - textbox [ref=e186]:
-                  - paragraph [ref=e187]: Final-150293
+                  - paragraph [ref=e187]: Test-247907
               - generic [ref=e188]:
                 - generic [ref=e189]: Slug*
                 - generic [ref=e190]:
@@ -152,44 +152,44 @@
                 - button "Choose File" [ref=e200] [cursor=pointer]
               - generic [ref=e201]:
                 - generic [ref=e202]: Content (Lexical)
-                - textbox [ref=e205]:
-                  - paragraph [ref=e206]: ddsdsd
-                  - paragraph [ref=e207]: dd
-              - generic [ref=e208]:
-                - generic [ref=e209]: Body (Lexical)
-                - textbox [ref=e212]:
-                  - paragraph [ref=e213]: ddsdsd
-                  - paragraph [ref=e214]: dd
+                - generic [ref=e204]:
+                  - textbox [ref=e205]
+                  - generic: Type "/" for commands…
+              - generic [ref=e206]:
+                - generic [ref=e207]: Body (Lexical)
+                - generic [ref=e209]:
+                  - textbox [ref=e210]
+                  - generic: Type "/" for commands…
+              - generic [ref=e211]:
+                - generic [ref=e212]: Tags
+                - textbox "Add a tag…" [ref=e214]
               - generic [ref=e215]:
-                - generic [ref=e216]: Tags
-                - textbox "Add a tag…" [ref=e218]
-              - generic [ref=e219]:
-                - generic [ref=e220]: Categories
-                - textbox "Search Categories…" [ref=e223]
-              - generic [ref=e224]:
-                - paragraph [ref=e227]: Publishing
-                - generic [ref=e228]:
+                - generic [ref=e216]: Categories
+                - textbox "Search Categories…" [ref=e219]
+              - generic [ref=e220]:
+                - paragraph [ref=e223]: Publishing
+                - generic [ref=e224]:
+                  - generic [ref=e226]:
+                    - switch [ref=e227] [cursor=pointer]
+                    - checkbox [ref=e228]
+                    - generic [ref=e229]: Not featured
                   - generic [ref=e230]:
-                    - switch [ref=e231] [cursor=pointer]
-                    - checkbox [ref=e232]
-                    - generic [ref=e233]: Not featured
-                  - generic [ref=e234]:
-                    - generic [ref=e235]: Publish Date
-                    - textbox [ref=e236]
-                  - generic [ref=e237]:
-                    - generic [ref=e238]: Accent Color
-                    - generic [ref=e239]:
-                      - textbox [ref=e240] [cursor=pointer]: "#000000"
-                      - generic [ref=e241]: "#000000"
-              - generic [ref=e243] [cursor=pointer]:
-                - generic [ref=e244]:
-                  - paragraph [ref=e245]: SEO & Metadata
-                  - paragraph [ref=e246]: Optional fields to improve search engine visibility.
-                - generic [ref=e247]: ▼
-              - generic [ref=e248]:
-                - button "Save Draft" [ref=e249]
-                - button "Publish" [ref=e250]
-                - link "Cancel" [ref=e251] [cursor=pointer]:
+                    - generic [ref=e231]: Publish Date
+                    - textbox [ref=e232]
+                  - generic [ref=e233]:
+                    - generic [ref=e234]: Accent Color
+                    - generic [ref=e235]:
+                      - textbox [ref=e236] [cursor=pointer]: "#000000"
+                      - generic [ref=e237]: "#000000"
+              - generic [ref=e239] [cursor=pointer]:
+                - generic [ref=e240]:
+                  - paragraph [ref=e241]: SEO & Metadata
+                  - paragraph [ref=e242]: Optional fields to improve search engine visibility.
+                - generic [ref=e243]: ▼
+              - generic [ref=e244]:
+                - button "Save Draft" [ref=e245]
+                - button "Publish" [ref=e246]
+                - link "Cancel" [ref=e247] [cursor=pointer]:
                   - /url: /admin/resources/articles
   - region "Notifications alt+T"
 ```

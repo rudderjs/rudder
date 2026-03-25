@@ -95,7 +95,7 @@ export function LexicalEditor({
   // multiple editors sharing one Y.Doc would bind to the same fragment.
   const [collabReady, setCollabReady] = useState(false)
   const [providerSynced, setProviderSynced] = useState(false)
-  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider } | null>(null)
+  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider; Y: typeof import('yjs') } | null>(null)
 
   useEffect(() => {
     if (!isCollab) return
@@ -110,7 +110,7 @@ export function LexicalEditor({
       const roomName = `${docName}:${fragmentName}`
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
-      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc) as YjsProvider
+      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
       provider.awareness.setLocalStateField('user', {
         name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
@@ -121,7 +121,7 @@ export function LexicalEditor({
         if (!destroyed) setProviderSynced(true)
       })
 
-      collabRef.current = { doc, provider }
+      collabRef.current = { doc, provider, Y }
       setCollabReady(true)
     })
 
@@ -235,7 +235,7 @@ export function LexicalEditor({
         )}
 
         <OnChangePlugin onChange={onChange} />
-        {collabActive && providerSynced && <SeedPlugin value={value} />}
+        {collabActive && providerSynced && <SeedPlugin value={value} yjsRef={collabRef} />}
 
         <DragHandleLoader anchorRef={anchorRef} />
         </div>
@@ -290,64 +290,63 @@ function DragHandleLoader({ anchorRef }: { anchorRef: React.RefObject<HTMLDivEle
 }
 
 // ── OnChangePlugin ──────────────────────────────────────────
-// Only fires onChange when content actually changed (dirtyElements/dirtyLeaves),
-// NOT for selection changes or awareness updates. This prevents the parent form
-// from re-rendering on every cursor move, which would reset caret position in
-// other controlled inputs.
+// Fires onChange when editor content changes. Compares serialized state to
+// avoid re-renders on selection changes and awareness updates.
 
 function OnChangePlugin({ onChange }: { onChange: (json: unknown) => void }) {
   const [editor] = useLexicalComposerContext()
+  const prevRef = useRef('')
   useEffect(() => {
-    return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
-      if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return
-      onChange(editorState.toJSON())
+    return editor.registerUpdateListener(({ editorState }) => {
+      const json = editorState.toJSON()
+      const serialized = JSON.stringify(json)
+      if (serialized !== prevRef.current) {
+        prevRef.current = serialized
+        onChange(json)
+      }
     })
   }, [editor, onChange])
   return null
 }
 
 // ── SeedPlugin ──────────────────────────────────────────────
-// Seeds the editor from DB value ONLY when the Y.Doc root is empty.
-// Checks the Y.Doc directly (not editor state) to avoid race with CollaborationPlugin.
+// Seeds the editor from DB value ONLY when the Y.Doc is empty after sync.
+// Checks Y.Doc state vector directly (synchronous, no race with CollaborationPlugin).
 
-function SeedPlugin({ value }: { value: unknown }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function SeedPlugin({ value, yjsRef }: { value: unknown; yjsRef: React.RefObject<{ doc: any; Y: any } | null> }) {
   const [editor] = useLexicalComposerContext()
   const seeded = useRef(false)
 
   useEffect(() => {
     if (seeded.current || !value) return
+    seeded.current = true
 
-    // Delay to let CollaborationPlugin apply any Y.Doc content to the editor.
-    // After the delay, check if the editor is still empty. If so, seed from DB.
-    const timer = setTimeout(() => {
-      if (seeded.current) return
-      const isEmpty = editor.getEditorState().read(() => !$getRoot().getTextContent().trim())
-      if (!isEmpty) {
-        // Editor has content from Yjs sync — don't overwrite
-        seeded.current = true
-        return
+    // Check Y.Doc state vector — if > 1, the doc has content from server sync
+    const yjs = yjsRef.current
+    if (yjs) {
+      const sv = yjs.Y.encodeStateVector(yjs.doc)
+      if (sv.length > 1) return // Y.Doc has content — CollaborationPlugin will render it
+    }
+
+    // Y.Doc is empty (fresh room) — seed from DB value
+    try {
+      const serialized = typeof value === 'string' ? JSON.parse(value) : value
+      const children = (serialized as { root?: { children?: unknown[] } })?.root?.children
+      if (Array.isArray(children) && children.length > 0) {
+        editor.update(() => {
+          const root = $getRoot()
+          root.clear()
+          for (const child of children) {
+            const node = $parseSerializedNode(child as SerializedLexicalNode)
+            root.append(node)
+          }
+        })
       }
-      // Editor is empty — seed from DB value
-      seeded.current = true
-      try {
-        const serialized = typeof value === 'string' ? JSON.parse(value) : value
-        const children = (serialized as { root?: { children?: unknown[] } })?.root?.children
-        if (Array.isArray(children) && children.length > 0) {
-          editor.update(() => {
-            const root = $getRoot()
-            root.clear()
-            for (const child of children) {
-              const node = $parseSerializedNode(child as SerializedLexicalNode)
-              root.append(node)
-            }
-          })
-        }
-      } catch (e) {
-        console.error('[LexicalEditor] SeedPlugin failed:', e)
-      }
-    }, 200)
-    return () => clearTimeout(timer)
-  }, [editor, value])
+    } catch (e) {
+      console.error('[LexicalEditor] SeedPlugin failed:', e)
+    }
+  }, [editor, value, yjsRef])
 
   return null
 }

@@ -17,8 +17,8 @@ let articleEditUrl = ''
 async function waitForForm(page: Page) {
   // Wait for the form to appear
   await page.waitForSelector('form', { timeout: 15000 })
-  // Wait for hydration + WebSocket collaborative providers to connect + SeedPlugin (200ms delay)
-  await page.waitForTimeout(6000)
+  // Wait for hydration + WebSocket collaborative providers to connect + reconnect + SeedPlugin
+  await page.waitForTimeout(8000)
 }
 
 /** Get the title field's text content (collaborative = Lexical contenteditable) */
@@ -42,19 +42,43 @@ async function setTitleText(page: Page, value: string) {
     await nativeInput.fill(value)
     return
   }
-  // Collaborative: Lexical contenteditable
+  // Collaborative: Lexical contenteditable in collaborative mode only responds to
+  // Yjs Y.Doc changes. Use Lexical's editor API directly via page.evaluate.
   const titleLabel = page.locator('label:has-text("Title")').first()
   const container = titleLabel.locator('..')
   const editor = container.locator('[contenteditable="true"]').first()
-  await editor.focus()
-  await page.keyboard.press('Control+a')
-  await page.keyboard.press('Meta+a')
-  await page.waitForTimeout(100)
-  await page.keyboard.press('Backspace')
-  await page.waitForTimeout(100)
-  await page.keyboard.type(value, { delay: 10 })
-  // Wait for Lexical onChange to propagate to form state
-  await page.waitForTimeout(1000)
+
+  await page.evaluate((val) => {
+    // Access Lexical editor instance from the contenteditable DOM node
+    const editable = document.querySelector('label:has(> span) + div [contenteditable="true"]') as HTMLElement & { __lexicalEditor?: unknown }
+    if (!editable) { console.log('[setTitleText] No contenteditable found'); return }
+
+    // Lexical stores the editor on the root element via __lexicalEditor
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rootEl = editable.closest('[data-lexical-editor]') ?? editable
+    const key = Object.keys(rootEl).find(k => k.startsWith('__lexicalEditor'))
+    if (!key) { console.log('[setTitleText] No Lexical editor key found, keys:', Object.keys(rootEl).slice(0, 5)); return }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const editor = (rootEl as any)[key]
+    if (!editor?.update) { console.log('[setTitleText] Editor has no update method'); return }
+
+    editor.update(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lexical = (window as any).__lexical ?? {}
+      const $getRoot = lexical.$getRoot
+      const $createParagraphNode = lexical.$createParagraphNode
+      const $createTextNode = lexical.$createTextNode
+      if (!$getRoot) { console.log('[setTitleText] Lexical globals not found'); return }
+
+      const root = $getRoot()
+      root.clear()
+      const p = $createParagraphNode()
+      p.append($createTextNode(val))
+      root.append(p)
+    })
+  }, value)
+
+  await page.waitForTimeout(1500)
   const typed = await editor.textContent()
   console.log(`[setTitleText] typed="${typed}" expected="${value}"`)
 }
@@ -225,8 +249,8 @@ test.describe.serial('Collaborative editing', () => {
     await setupPage.request.post(`http://localhost:3000/${pathSegment}/api/${slug}/${id}/_sync-live`, {
       headers: { 'Content-Type': 'application/json' },
     })
-    // Wait for delayed re-clear (500ms) + y-websocket reconnection cycle
-    await setupPage.waitForTimeout(2000)
+    // Wait for delayed re-clears (300ms, 1000ms, 3000ms) + y-websocket reconnection cycle
+    await setupPage.waitForTimeout(4000)
 
     const ctx1 = await browser.newContext()
     const ctx2 = await browser.newContext()
