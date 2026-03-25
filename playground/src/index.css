@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @source "../../packages/panels-lexical/src";
+@source "../../packages/media/src";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
