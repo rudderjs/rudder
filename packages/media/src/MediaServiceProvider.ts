@@ -2,11 +2,8 @@ import { ServiceProvider } from '@boostkit/core'
 import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
 import { mountMediaRoutes } from './handlers/mediaRoutes.js'
 import { resolveMedia } from './resolveMedia.js'
+import { registerLibrary, type MediaLibrary } from './registry.js'
 
-/**
- * @deprecated Use `media()` as a PanelPlugin with `Panel.use(media())` instead.
- * Kept for backward compatibility with the `panels([...], [extensions])` pattern.
- */
 /**
  * @deprecated Use `media()` as a PanelPlugin with `Panel.use(media())` instead.
  */
@@ -52,23 +49,72 @@ const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathn
 const pagesDir  = new URL(/* @vite-ignore */ '../pages', import.meta.url).pathname
 
 /**
- * Register the media library as a panel plugin.
+ * Media plugin config.
  *
- * @example
+ * **Simple** (single default library):
  * ```ts
- * import { media } from '@boostkit/media/server'
+ * media({ disk: 'public', directory: 'media', conversions: [...] })
+ * ```
  *
- * Panel.make('admin')
- *   .use(media())
+ * **Named libraries**:
+ * ```ts
+ * media({
+ *   libraries: {
+ *     photos:    { disk: 'public', directory: 'photos', accept: ['image/*'], conversions: [...] },
+ *     documents: { disk: 'public', directory: 'docs',   accept: ['application/pdf'] },
+ *   },
+ * })
+ * ```
+ *
+ * **No config** (default library: disk='public', directory='media'):
+ * ```ts
+ * media()
  * ```
  */
-export function media(): PanelPlugin {
+export interface MediaPluginConfig {
+  /** Named media libraries. */
+  libraries?: Record<string, MediaLibrary>
+  /** Shorthand: single default library config. */
+  disk?: string
+  directory?: string
+  accept?: string[]
+  maxUploadSize?: number
+  conversions?: MediaLibrary['conversions']
+}
+
+export function media(config?: MediaPluginConfig): PanelPlugin {
   return {
     schemas: [
       { from: `${schemaDir}/media.prisma`, to: 'prisma/schema', tag: 'media-schema', orm: 'prisma' as const },
     ],
     pages: pagesDir,
     resolvers: { media: resolveMedia },
+
+    register() {
+      // Register libraries in globalThis-backed registry (available at SSR time)
+      if (config?.libraries) {
+        for (const [name, lib] of Object.entries(config.libraries)) {
+          registerLibrary(name, lib)
+        }
+      }
+
+      // Shorthand config → register as 'default' library
+      if (config?.disk || config?.directory || config?.conversions) {
+        const lib: MediaLibrary = {
+          disk:      config.disk ?? 'public',
+          directory: config.directory ?? 'media',
+        }
+        if (config.accept) lib.accept = config.accept
+        if (config.maxUploadSize !== undefined) lib.maxUploadSize = config.maxUploadSize
+        if (config.conversions) lib.conversions = config.conversions
+        registerLibrary('default', lib)
+      }
+
+      // Always ensure a 'default' library exists
+      if (!config?.libraries?.['default'] && !config?.disk) {
+        registerLibrary('default', { disk: 'public', directory: 'media' })
+      }
+    },
 
     async boot(panel) {
       type RouteHandler = (req: AppRequest, res: AppResponse) => unknown

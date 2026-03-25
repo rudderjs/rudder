@@ -6,15 +6,21 @@ import { categorize } from '../types.js'
 
 // ─── Types ───────────────────────────────────────────────────
 
+interface MediaLibraryMeta {
+  name:           string
+  disk:           string
+  directory:      string
+  accept?:        string[]
+  maxUploadSize?: number
+  conversions?:   Array<{ name: string; width: number; height?: number; crop?: boolean; format?: string; quality?: number }>
+}
+
 interface MediaElementMeta {
   type:           'media'
   id:             string
   title:          string
-  disk:           string
-  directory:      string
-  accept:         string[]
-  maxUploadSize:  number
-  conversions:    Array<{ name: string; width: number; height?: number; crop?: boolean; format?: string; quality?: number }>
+  libraries:      MediaLibraryMeta[]
+  activeLibrary:  string
   scope:          'shared' | 'private'
   height?:        number
   items:          MediaRecord[]
@@ -43,8 +49,10 @@ export function MediaElement({ element, panelPath }: Props) {
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [activeLib, setActiveLib] = useState(element.activeLibrary)
 
   const pathSegment = panelPath.replace(/^\//, '')
+  const lib = element.libraries.find(l => l.name === activeLib) ?? element.libraries[0]!
   const apiBase = `/${pathSegment}/api/media`
   const currentFolderId = currentFolder?.id ?? null
 
@@ -114,16 +122,16 @@ export function MediaElement({ element, panelPath }: Props) {
       for (const file of fileList) fd.append('files', file)
       if (currentFolderId) fd.append('parentId', currentFolderId)
       fd.append('scope', element.scope)
-      fd.append('disk', element.disk)
-      fd.append('directory', element.directory)
-      fd.append('maxUploadSize', String(element.maxUploadSize))
-      if (element.conversions.length) fd.append('conversions', JSON.stringify(element.conversions))
+      fd.append('disk', lib.disk)
+      fd.append('directory', lib.directory)
+      if (lib.maxUploadSize) fd.append('maxUploadSize', String(lib.maxUploadSize))
+      if (lib.conversions?.length) fd.append('conversions', JSON.stringify(lib.conversions))
       await fetch(`${apiBase}/upload`, { method: 'POST', body: fd })
       refresh()
     } finally {
       setUploading(false)
     }
-  }, [apiBase, currentFolderId, element, refresh])
+  }, [apiBase, currentFolderId, element.scope, lib, refresh])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
@@ -165,6 +173,19 @@ export function MediaElement({ element, panelPath }: Props) {
           ))}
         </nav>
 
+        {/* Library selector — only shown when multiple libraries */}
+        {element.libraries.length > 1 && (
+          <select
+            value={activeLib}
+            onChange={(e) => { setActiveLib(e.target.value); navigateToFolder(null) }}
+            className="text-xs rounded-md border bg-background px-2 py-1 shrink-0"
+          >
+            {element.libraries.map(l => (
+              <option key={l.name} value={l.name}>{l.name.charAt(0).toUpperCase() + l.name.slice(1)}</option>
+            ))}
+          </select>
+        )}
+
         <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={() => setView('grid')}
@@ -191,7 +212,7 @@ export function MediaElement({ element, panelPath }: Props) {
           <input
             type="file"
             multiple
-            accept={element.accept.length ? element.accept.join(',') : undefined}
+            accept={lib.accept?.length ? lib.accept.join(',') : undefined}
             className="hidden"
             onChange={(e) => uploadFiles(Array.from(e.target.files ?? []))}
           />

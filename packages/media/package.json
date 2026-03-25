@@ -32,13 +32,12 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "dependencies": {},
   "peerDependencies": {
     "@boostkit/core": "*",
+    "@boostkit/image": "*",
     "@boostkit/panels": "*",
     "@boostkit/router": "*",
     "@boostkit/storage": "*",
-    "@boostkit/image": "*",
     "react": ">=18"
   },
   "peerDependenciesMeta": {
@@ -48,12 +47,13 @@
   },
   "devDependencies": {
     "@boostkit/core": "workspace:*",
-    "@boostkit/panels": "workspace:*",
-    "@boostkit/storage": "workspace:*",
     "@boostkit/image": "workspace:*",
+    "@boostkit/panels": "workspace:*",
     "@boostkit/router": "workspace:*",
-    "@types/react": "^19.0.0",
+    "@boostkit/storage": "workspace:*",
     "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"

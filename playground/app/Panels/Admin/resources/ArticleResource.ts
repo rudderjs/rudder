@@ -24,6 +24,7 @@ import {
   Stat,
 } from '@boostkit/panels'
 import { RichContentField } from '@boostkit/panels-lexical'
+import { MediaPickerField } from '@boostkit/media'
 import { Article } from '../../../Models/Article.js'
 
 export class ArticleResource extends Resource {
@@ -147,6 +148,10 @@ export class ArticleResource extends Resource {
         .maxSize(5)
         .disk('public')
         .directory('articles'),
+
+      MediaPickerField.make('mediaId')
+        .label('Featured Media')
+        .library('photos'),
 
       RichContentField.make('content')
         .label('Content (Lexical)')
