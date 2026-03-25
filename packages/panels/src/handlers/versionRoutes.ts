@@ -134,7 +134,6 @@ export function mountVersionRoutes(
 
     try {
       const { Live } = await import(/* @vite-ignore */ '@boostkit/live')
-      console.log(`[_sync-live] Clearing rooms for ${docName}`)
 
       const resource = new ResourceClass()
       const vFormFields = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])

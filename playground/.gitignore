@@ -20,3 +20,5 @@ dev.db
 # Storage uploads
 storage/app/
 public/storage
+# Playwright
+test-results/

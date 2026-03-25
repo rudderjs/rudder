@@ -180,7 +180,6 @@ function OnChangePlugin({ onChange }: { onChange: (value: string) => void }) {
       const text = editorState.read(() => $getRoot().getTextContent())
       if (text !== prevRef.current) {
         prevRef.current = text
-        console.log(`[OnChange:plaintext] "${text.slice(0, 50)}"`)
         onChange(text)
       }
     })

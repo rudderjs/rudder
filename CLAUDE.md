@@ -114,8 +114,9 @@ boostkit/
 │   │                   #   rememberTable, autosave, Yjs field persist, inline editing (Column.editable())
 │   │                   #   + Dashboard builder: Widget.schema(), Dashboard, drag-and-drop, per-user layout, lazy/polling
 │   │                   #   + Panel.use() plugin system — PanelPlugin with schemas/pages/register/boot hooks
+│   ├── panels-lexical/ # Lexical rich-text editor adapter — RichContentField, CollaborativePlainText, block editor
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
-│   ├── media/          # Media library panels extension — file browser, uploads, folders, preview, image conversions
+│   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
 ├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm/npm/yarn/bun create boostkit-app)
 │                          #   Prompts: name · DB · Todo · frameworks · primary · Tailwind · shadcn
@@ -152,9 +153,10 @@ boostkit/
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable |
+| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, `registerLazyElement`/`registerResolver` for plugins |
+| `@boostkit/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
 | `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
-| `@boostkit/media` | 0.0.1 | Media library panels extension — file browser, uploads, folders, preview, image conversions |
+| `@boostkit/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
 
 **Merged/removed packages** (code absorbed, originals deleted):
 - `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
@@ -376,7 +378,9 @@ There is **no `boostkit.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **RateLimit not working**: Requires a cache provider registered before middleware runs
 - **S3 disk errors**: Install `@aws-sdk/client-s3` — it's an optional dep of `@boostkit/storage`
 - **Panels pages not updated after source edit**: `packages/panels/pages/` are published copies. After editing source, re-run `pnpm artisan vendor:publish --tag=panels-pages --force` from `playground/`
-- **`panels-lexical` cycle**: `@boostkit/panels` must NOT depend on `@boostkit/panels-lexical`. The `+Layout.tsx` loads it via `import('@boostkit/panels-lexical').then(...)` (dynamic, no devDependency)
+- **`panels-lexical` cycle**: `@boostkit/panels` must NOT depend on `@boostkit/panels-lexical`. The `+Layout.tsx` registers it client-side via `if (typeof window !== 'undefined') import('@boostkit/panels-lexical').then(...)`. `RichContentField` lives in `@boostkit/panels-lexical`, not `@boostkit/panels`.
+- **Plugin element registration**: Plugin schema elements use `registerLazyElement` (SSR-safe via `React.lazy`). Plugin SSR resolvers use `registerResolver` (via `PanelPlugin.resolvers`). Plugins publish `_register-{name}.ts` files auto-discovered by `+Layout.tsx` via `import.meta.glob('../_register-*.ts', { eager: true })`.
+- **Media plugin pattern**: `@boostkit/media` uses `PanelPlugin.resolvers` for SSR data + `_register-media.ts` for client component. Zero media-specific code in panels.
 
 ## create-boostkit-app
 
