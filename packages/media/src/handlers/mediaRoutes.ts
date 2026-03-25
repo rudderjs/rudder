@@ -70,16 +70,30 @@ export function mountMediaRoutes(
 
     // Search by name
     if (search) {
-      where['name'] = { contains: search, mode: 'insensitive' }
+      where['name'] = { contains: search }
     }
 
-    const items = await prisma.media.findMany({
+    // Pagination
+    const perPage = q['perPage'] ? Number(q['perPage']) : undefined
+    const page = Math.max(1, Number(q['page'] || 1))
+    const findArgs: Record<string, unknown> = {
       where,
-      orderBy: [
-        { type: 'asc' },  // folders first
-        { name: 'asc' },
-      ],
-    }) as MediaRecord[]
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    }
+    if (perPage) {
+      findArgs['take'] = perPage
+      findArgs['skip'] = (page - 1) * perPage
+    }
+
+    const items = await prisma.media.findMany(findArgs) as MediaRecord[]
+
+    // Total count for pagination
+    let totalItems: number | undefined
+    let totalPages: number | undefined
+    if (perPage) {
+      totalItems = await prisma.media.count({ where } as Record<string, unknown>)
+      totalPages = Math.ceil(totalItems / perPage)
+    }
 
     // Build breadcrumbs by walking up the tree
     const breadcrumbs: Array<{ id: string; name: string }> = []
@@ -93,7 +107,7 @@ export function mountMediaRoutes(
       }
     }
 
-    res.json({ items, breadcrumbs })
+    res.json({ items, breadcrumbs, ...(perPage ? { page, perPage, totalPages, totalItems } : {}) })
   }, mw)
 
   // ── GET /panel/api/media/:id — single item ───────────────
@@ -118,6 +132,8 @@ export function mountMediaRoutes(
         parentId: (body?.['parentId'] as string) || null,
         scope: (body?.['scope'] as string) || 'shared',
         userId: (body?.['userId'] as string) || null,
+        disk: (body?.['disk'] as string) || 'public',
+        directory: (body?.['directory'] as string) || '',
       },
     })
 

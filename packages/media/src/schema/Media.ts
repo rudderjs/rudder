@@ -17,11 +17,17 @@ export interface MediaElementMeta {
   libraries:      Array<{ name: string } & MediaLibrary>
   activeLibrary:  string
   scope:          'shared' | 'private'
+  searchable?:    boolean
+  perPage?:       number
+  totalPages?:    number
+  currentPage?:   number
+  totalItems?:    number
   height?:        number
   items:          MediaRecord[]
   breadcrumbs:    Array<{ id: string; name: string }>
   currentFolder:  MediaRecord | null
   lazy?:          boolean
+  ssr?:           boolean
   pollInterval?:  number
 }
 
@@ -44,6 +50,9 @@ export class Media {
   private _scope:          'shared' | 'private' = 'shared'
   private _height?:        number
   private _lazy            = false
+  private _ssr             = false
+  private _searchable      = false
+  private _perPage?:       number
   private _pollInterval?:  number
   private _parentId:       string | null = null
   private _dataFn?:        DataFn
@@ -86,6 +95,12 @@ export class Media {
   height(h: number): this { this._height = h; return this }
   parentId(id: string): this { this._parentId = id; return this }
   lazy(): this { this._lazy = true; return this }
+  /** Enable SSR data loading (items pre-loaded on server). Default: lazy (client-side fetch). */
+  ssr(): this { this._ssr = true; return this }
+  /** Show search input in the media browser header. */
+  searchable(): this { this._searchable = true; return this }
+  /** Enable pagination with N items per page. */
+  paginated(perPage = 24): this { this._perPage = perPage; return this }
   poll(ms: number): this { this._pollInterval = ms; return this }
   data(fn: DataFn): this { this._dataFn = fn; return this }
 
@@ -99,6 +114,9 @@ export class Media {
   getParentId(): string | null { return this._parentId }
   getDataFn(): DataFn | undefined { return this._dataFn }
   isLazy(): boolean { return this._lazy }
+  isSsr(): boolean { return this._ssr }
+  isSearchable(): boolean { return this._searchable }
+  getPerPage(): number | undefined { return this._perPage }
   getPollInterval(): number | undefined { return this._pollInterval }
   getType(): 'media' { return 'media' }
 
@@ -148,7 +166,10 @@ export class Media {
       currentFolder: null,
     }
     if (this._height !== undefined) meta.height = this._height
+    if (this._searchable) meta.searchable = true
+    if (this._perPage !== undefined) meta.perPage = this._perPage
     if (this._lazy) meta.lazy = true
+    if (this._ssr) meta.ssr = true
     if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
     return meta
   }

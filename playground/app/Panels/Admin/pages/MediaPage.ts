@@ -12,7 +12,9 @@ export class MediaPage extends Page {
       Text.make('Browse, upload, and manage files across multiple libraries.'),
 
       Media.make('Files')
-        .library(['documents', 'photos']),
+        .library(['photos', 'documents'])
+        .searchable()
+        .ssr(),
     ]
   }
 }

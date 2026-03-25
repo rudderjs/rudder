@@ -22,6 +22,8 @@ interface MediaElementMeta {
   libraries:      MediaLibraryMeta[]
   activeLibrary:  string
   scope:          'shared' | 'private'
+  searchable?:    boolean
+  perPage?:       number
   height?:        number
   items:          MediaRecord[]
   breadcrumbs:    Array<{ id: string; name: string }>
@@ -50,6 +52,7 @@ export function MediaElement({ element, panelPath }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [activeLib, setActiveLib] = useState(element.activeLibrary)
+  const [search, setSearch] = useState('')
 
   const pathSegment = panelPath.replace(/^\//, '')
   const lib = element.libraries.find(l => l.name === activeLib) ?? element.libraries[0]!
@@ -58,20 +61,25 @@ export function MediaElement({ element, panelPath }: Props) {
 
   // ── API helpers ────────────────────────────────────────────
 
-  const fetchItems = useCallback(async (parentId: string | null, directory?: string) => {
+  const fetchItems = useCallback(async (parentId: string | null, directory?: string, searchQuery?: string) => {
     const params = new URLSearchParams()
     if (parentId) params.set('parentId', parentId)
     params.set('scope', element.scope)
     const dir = directory ?? lib.directory
     if (dir) params.set('directory', dir)
+    const q = searchQuery ?? search
+    if (q) params.set('search', q)
     const res = await fetch(`${apiBase}?${params}`)
     const data = await res.json() as { items: MediaRecord[]; breadcrumbs: Array<{ id: string; name: string }> }
     setItems(data.items)
     setBreadcrumbs(data.breadcrumbs)
-  }, [apiBase, element.scope, lib.directory])
+  }, [apiBase, element.scope, lib.directory, search])
 
   // Fetch on mount
-  useEffect(() => { fetchItems(null) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Fetch on mount — skip if SSR already loaded items
+  useEffect(() => {
+    if (element.items.length === 0) fetchItems(null)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigateToFolder = useCallback(async (folderId: string | null) => {
     if (folderId) {
@@ -112,7 +120,7 @@ export function MediaElement({ element, panelPath }: Props) {
     await fetch(`${apiBase}/folder`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: trimmed, parentId: currentFolderId, scope: element.scope }),
+      body: JSON.stringify({ name: trimmed, parentId: currentFolderId, scope: element.scope, disk: lib.disk, directory: lib.directory }),
     })
     setShowNewFolder(false)
     setFolderName('')
@@ -177,6 +185,22 @@ export function MediaElement({ element, panelPath }: Props) {
             </span>
           ))}
         </nav>
+
+        {/* Search */}
+        {element.searchable && (
+          <div className="relative w-44 shrink-0">
+            <input
+              type="search"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                fetchItems(currentFolderId, undefined, e.target.value)
+              }}
+              className="w-full h-7 rounded-md border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+        )}
 
         {/* Library selector — only shown when multiple libraries */}
         {element.libraries.length > 1 && (
