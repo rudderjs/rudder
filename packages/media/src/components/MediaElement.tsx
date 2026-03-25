@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { MediaRecord, ConversionInfo } from '../types.js'
 import { categorize } from '../types.js'
 
@@ -58,15 +58,20 @@ export function MediaElement({ element, panelPath }: Props) {
 
   // ── API helpers ────────────────────────────────────────────
 
-  const fetchItems = useCallback(async (parentId: string | null) => {
+  const fetchItems = useCallback(async (parentId: string | null, directory?: string) => {
     const params = new URLSearchParams()
     if (parentId) params.set('parentId', parentId)
     params.set('scope', element.scope)
-    const res = await fetch(`${apiBase}${params.toString() ? `?${params}` : ''}`)
+    const dir = directory ?? lib.directory
+    if (dir) params.set('directory', dir)
+    const res = await fetch(`${apiBase}?${params}`)
     const data = await res.json() as { items: MediaRecord[]; breadcrumbs: Array<{ id: string; name: string }> }
     setItems(data.items)
     setBreadcrumbs(data.breadcrumbs)
-  }, [apiBase, element.scope])
+  }, [apiBase, element.scope, lib.directory])
+
+  // Fetch on mount
+  useEffect(() => { fetchItems(null) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigateToFolder = useCallback(async (folderId: string | null) => {
     if (folderId) {
@@ -177,7 +182,14 @@ export function MediaElement({ element, panelPath }: Props) {
         {element.libraries.length > 1 && (
           <select
             value={activeLib}
-            onChange={(e) => { setActiveLib(e.target.value); navigateToFolder(null) }}
+            onChange={(e) => {
+              const name = e.target.value
+              setActiveLib(name)
+              setCurrentFolder(null)
+              setSelected(null)
+              const newLib = element.libraries.find(l => l.name === name)
+              fetchItems(null, newLib?.directory)
+            }}
             className="text-xs rounded-md border bg-background px-2 py-1 shrink-0"
           >
             {element.libraries.map(l => (

@@ -1,6 +1,7 @@
 import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@boostkit/panels'
 import { panelsLexical } from '@boostkit/panels-lexical/server'
 import { media } from '@boostkit/media/server'
+import configs from '../../../config/index.js'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
 import { ArticleResource }      from './resources/ArticleResource.js'
@@ -25,24 +26,7 @@ import { User }       from 'App/Models/User.js'
 export const adminPanel = Panel.make('admin')
   .path('/admin')
   .use(panelsLexical())
-  .use(media({
-    libraries: {
-      photos: {
-        disk: 'public',
-        directory: 'photos',
-        accept: ['image/*'],
-        conversions: [
-          { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
-          { name: 'preview', width: 800, format: 'webp' },
-        ],
-      },
-      documents: {
-        disk: 'public',
-        directory: 'docs',
-        accept: ['application/pdf', 'text/*'],
-      },
-    },
-  }))
+  .use(media(configs.media))
   .branding({
     title: 'BoostKit',
     logo: '/logo.svg',

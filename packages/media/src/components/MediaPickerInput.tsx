@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { MediaRecord } from '../types.js'
 import { categorize } from '../types.js'
+import { getLibrary, getDefaultLibrary, type MediaLibrary } from '../registry.js'
 
 interface FieldMeta {
   name:     string
@@ -24,14 +25,9 @@ interface Props {
 
 export function MediaPickerInput({ field, value, onChange, disabled, panelPath }: Props) {
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<MediaRecord[]>([])
-  const [breadcrumbs, setBreadcrumbs] = useState<Array<{ id: string; name: string }>>([])
-  const [uploading, setUploading] = useState(false)
-  const [activeLib, setActiveLib] = useState('')
 
   const isMultiple = field.extra['multiple'] === true
   const libraries = (field.extra['library'] as string[] | undefined) ?? ['default']
-  const acceptFilter = field.extra['accept'] as string[] | undefined
   const showPreview = field.extra['preview'] !== false
 
   const pathSegment = (panelPath ?? '/admin').replace(/^\//, '')
@@ -39,51 +35,15 @@ export function MediaPickerInput({ field, value, onChange, disabled, panelPath }
 
   const selectedIds: string[] = Array.isArray(value) ? value as string[] : (value ? [String(value)] : [])
 
-  // ── Fetch items ────────────────────────────────────────────
-
-  const fetchItems = useCallback(async (parentId: string | null = null) => {
-    const params = new URLSearchParams()
-    if (parentId) params.set('parentId', parentId)
-    params.set('scope', 'shared')
-    const res = await fetch(`${apiBase}?${params}`)
-    const data = await res.json() as { items: MediaRecord[]; breadcrumbs: Array<{ id: string; name: string }> }
-    setItems(data.items)
-    setBreadcrumbs(data.breadcrumbs)
-  }, [apiBase])
-
-  const openPicker = useCallback(async () => {
-    if (disabled || field.readonly) return
-    setActiveLib(libraries[0] ?? 'default')
-    await fetchItems()
-    setOpen(true)
-  }, [disabled, field.readonly, libraries, fetchItems])
-
-  const handleSelect = useCallback((item: MediaRecord) => {
-    if (item.type === 'folder') { fetchItems(item.id); return }
-    if (isMultiple) {
-      const cur = [...selectedIds]
-      onChange(cur.includes(item.id) ? cur.filter(id => id !== item.id) : [...cur, item.id])
-    } else {
-      onChange(item.id)
-      setOpen(false)
-    }
-  }, [isMultiple, selectedIds, onChange, fetchItems])
-
-  const handleUpload = useCallback(async (files: FileList | File[]) => {
-    if (Array.from(files).length === 0) return
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      for (const file of Array.from(files)) fd.append('files', file)
-      fd.append('scope', 'shared')
-      await fetch(`${apiBase}/upload`, { method: 'POST', body: fd })
-      await fetchItems()
-    } finally { setUploading(false) }
-  }, [apiBase, fetchItems])
-
   const handleRemove = useCallback((id: string) => {
     onChange(isMultiple ? selectedIds.filter(i => i !== id) : null)
   }, [isMultiple, selectedIds, onChange])
+
+  // Build library meta for the embedded MediaElement
+  const libraryMetas = libraries.map(name => {
+    const lib = getLibrary(name) ?? getDefaultLibrary()
+    return { name, ...lib }
+  })
 
   // ── Render ─────────────────────────────────────────────────
 
@@ -100,7 +60,7 @@ export function MediaPickerInput({ field, value, onChange, disabled, panelPath }
         )}
         <button
           type="button"
-          onClick={openPicker}
+          onClick={() => { if (!disabled && !field.readonly) setOpen(true) }}
           disabled={disabled || field.readonly}
           className="text-sm px-3 py-2 rounded-md border bg-background hover:bg-muted transition-colors disabled:opacity-50"
         >
@@ -108,21 +68,22 @@ export function MediaPickerInput({ field, value, onChange, disabled, panelPath }
         </button>
       </div>
 
-      {/* Picker dialog — rendered via portal to escape form stacking context */}
+      {/* Picker dialog — portal to escape form stacking context */}
       {open && typeof document !== 'undefined' && createPortal(
         <PickerDialog
-          items={items}
-          breadcrumbs={breadcrumbs}
-          selectedIds={selectedIds}
+          libraries={libraryMetas}
           isMultiple={isMultiple}
-          libraries={libraries}
-          activeLib={activeLib}
-          acceptFilter={acceptFilter ?? []}
-          uploading={uploading}
-          onSelect={handleSelect}
-          onUpload={handleUpload}
-          onNavigate={fetchItems}
-          onLibChange={(lib) => { setActiveLib(lib); fetchItems() }}
+          selectedIds={selectedIds}
+          panelPath={`/${pathSegment}`}
+          onSelect={(item: MediaRecord) => {
+            if (isMultiple) {
+              const cur = [...selectedIds]
+              onChange(cur.includes(item.id) ? cur.filter(i => i !== item.id) : [...cur, item.id])
+            } else {
+              onChange(item.id)
+              setOpen(false)
+            }
+          }}
           onClose={() => setOpen(false)}
         />,
         document.body,
@@ -131,116 +92,86 @@ export function MediaPickerInput({ field, value, onChange, disabled, panelPath }
   )
 }
 
-// ── Picker dialog ────────────────────────────────────────────
+// ── Picker dialog — embeds the full MediaElement ─────────────
 
-function PickerDialog({ items, breadcrumbs, selectedIds, isMultiple, libraries, activeLib, acceptFilter, uploading, onSelect, onUpload, onNavigate, onLibChange, onClose }: {
-  items: MediaRecord[]
-  breadcrumbs: Array<{ id: string; name: string }>
-  selectedIds: string[]
+interface LibraryMeta { name: string; disk: string; directory: string; accept?: string[]; maxUploadSize?: number; conversions?: unknown[] }
+
+function PickerDialog({ libraries, isMultiple, selectedIds, panelPath, onSelect, onClose }: {
+  libraries: LibraryMeta[]
   isMultiple: boolean
-  libraries: string[]
-  activeLib: string
-  acceptFilter: string[]
-  uploading: boolean
+  selectedIds: string[]
+  panelPath: string
   onSelect: (item: MediaRecord) => void
-  onUpload: (files: FileList) => void
-  onNavigate: (parentId: string | null) => void
-  onLibChange: (lib: string) => void
   onClose: () => void
 }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [MediaEl, setMediaEl] = useState<React.ComponentType<any> | null>(null)
+
+  // Lazy-load MediaElement to avoid circular imports
+  useEffect(() => {
+    import('./MediaElement.js').then(m => setMediaEl(() => m.MediaElement)).catch(() => {})
+  }, [])
+
+  // Build the element meta that MediaElement expects
+  const elementMeta = {
+    type: 'media' as const,
+    id: 'picker',
+    title: 'Select Media',
+    libraries: libraries.map(l => ({
+      name: l.name,
+      disk: l.disk,
+      directory: l.directory,
+      ...(l.accept ? { accept: l.accept } : {}),
+      ...(l.maxUploadSize !== undefined ? { maxUploadSize: l.maxUploadSize } : {}),
+      ...(l.conversions ? { conversions: l.conversions } : {}),
+    })),
+    activeLibrary: libraries[0]?.name ?? 'default',
+    scope: 'shared' as const,
+    items: [],
+    breadcrumbs: [],
+    currentFolder: null,
+    // Pass picker mode info
+    _picker: true,
+    _selectedIds: selectedIds,
+    _onSelect: onSelect,
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Overlay */}
-      <div className="fixed inset-0 bg-black/10 backdrop-blur-xs animate-in fade-in-0" onClick={onClose} />
-      {/* Content — shadcn dialog style */}
+      <div className="fixed inset-0 bg-black/10 backdrop-blur-xs" onClick={onClose} />
+      {/* Content */}
       <div className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[80vh] rounded-xl bg-background text-sm ring-1 ring-foreground/10 shadow-lg flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex flex-col gap-2 p-4 pb-0 shrink-0">
-          <div className="flex items-center gap-3">
-            <h3 className="text-base font-medium leading-none flex-1">Select Media</h3>
-
-            {libraries.length > 1 && (
-              <select value={activeLib} onChange={(e) => onLibChange(e.target.value)} className="text-xs rounded-md border bg-background px-2 py-1">
-                {libraries.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
-              </select>
-            )}
-
-            <label className="text-xs px-2.5 py-1 rounded-md bg-primary text-primary-foreground cursor-pointer hover:bg-primary/90 transition-colors shrink-0">
-              Upload
-              <input type="file" multiple accept={acceptFilter.length ? acceptFilter.join(',') : undefined} className="hidden" onChange={(e) => e.target.files && onUpload(e.target.files)} />
-            </label>
-
-            <button type="button" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              <span className="sr-only">Close</span>
+        <div className="flex items-center gap-3 p-4 pb-0 shrink-0">
+          <h3 className="text-base font-medium leading-none flex-1">Select Media</h3>
+          {isMultiple && (
+            <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+          )}
+          {isMultiple && (
+            <button type="button" onClick={onClose} className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
+              Done
             </button>
-          </div>
-
-          {/* Breadcrumbs */}
-          <nav className="flex items-center gap-1 text-xs text-muted-foreground">
-            <button type="button" onClick={() => onNavigate(null)} className="hover:text-foreground transition-colors">Root</button>
-            {breadcrumbs.map(c => (
-              <span key={c.id} className="flex items-center gap-1">
-                <span>/</span>
-                <button type="button" onClick={() => onNavigate(c.id)} className="hover:text-foreground transition-colors">{c.name}</button>
-              </span>
-            ))}
-          </nav>
+          )}
+          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
         </div>
 
-        {uploading && (
-          <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b text-xs shrink-0">
-            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            Uploading...
-          </div>
-        )}
-
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-sm">
-              No files yet
-            </div>
+        {/* Embedded media browser */}
+        <div className="flex-1 overflow-hidden p-4 pt-2">
+          {MediaEl ? (
+            <MediaEl
+              element={elementMeta}
+              panelPath={panelPath}
+              i18n={{}}
+            />
           ) : (
-            <div className="grid grid-cols-4 gap-3 sm:grid-cols-5 md:grid-cols-6">
-              {items.map(item => {
-                const isFolder = item.type === 'folder'
-                const isImage = item.mime?.startsWith('image/') ?? false
-                const isSelected = selectedIds.includes(item.id)
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSelect(item)}
-                    className={`flex flex-col items-center gap-2 rounded-lg p-2 transition-all ${
-                      isSelected ? 'bg-primary/10 ring-2 ring-primary' : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-muted/50 overflow-hidden shrink-0">
-                      {isImage && item.directory && item.filename ? (
-                        <img src={`/storage/${item.directory}/${item.filename}`} alt={item.name} className="w-14 h-14 object-cover" loading="lazy" />
-                      ) : (
-                        <FileTypeIcon type={item.type} mime={item.mime} />
-                      )}
-                    </div>
-                    <span className="w-full text-center text-[11px] truncate leading-tight">{item.name}</span>
-                  </button>
-                )
-              })}
+            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+              Loading...
             </div>
           )}
         </div>
-
-        {/* Footer — shadcn DialogFooter style */}
-        {isMultiple && (
-          <div className="flex items-center justify-between rounded-b-xl border-t bg-muted/50 px-4 py-3 shrink-0">
-            <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-            <button type="button" onClick={onClose} className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
-              Done
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )
