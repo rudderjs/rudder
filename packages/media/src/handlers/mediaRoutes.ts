@@ -63,6 +63,11 @@ export function mountMediaRoutes(
       where['userId'] = q['userId']
     }
 
+    // Filter by library directory prefix
+    if (q['directory']) {
+      where['directory'] = { startsWith: q['directory'] }
+    }
+
     // Search by name
     if (search) {
       where['name'] = { contains: search, mode: 'insensitive' }
