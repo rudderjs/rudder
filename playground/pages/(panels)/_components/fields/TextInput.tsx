@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
@@ -30,8 +31,11 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
     ? formatDateValue(value, field.type)
     : (value as string) ?? ''
 
-  // Collaborative text input for text/email fields
-  if ((field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
+  // Collaborative text — only render after client mount to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  if (mounted && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
     const CollabText = getField('collaborativePlainText')
     if (CollabText) {
       return (

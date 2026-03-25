@@ -67,7 +67,7 @@ export function CollaborativePlainText({
       const roomName = `${docName}:${fragmentName}`
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
-      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
+      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc) as YjsProvider
       provider.awareness.setLocalStateField('user', {
         name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
@@ -200,26 +200,39 @@ function BlockEnterPlugin() {
 }
 
 // ── SeedPlugin ──────────────────────────────────────────────
-// Seeds the editor from the database value if the Y.Doc is empty after sync.
+// Seeds the editor from DB value ONLY when the Y.Doc root is empty.
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function SeedPlugin({ value }: { value: string }) {
   const [editor] = useLexicalComposerContext()
   const seeded = useRef(false)
 
   useEffect(() => {
     if (seeded.current || !value) return
-    const isEmpty = editor.getEditorState().read(() => !$getRoot().getTextContent().trim())
-    if (isEmpty) {
+
+    const timer = setTimeout(() => {
+      if (seeded.current) return
+      const text = editor.getEditorState().read(() => $getRoot().getTextContent())
+      const isEmpty = !text.trim()
+      console.log(`[SeedPlugin:plaintext] isEmpty=${isEmpty} text="${text.slice(0,50)}" value="${String(value).slice(0,50)}"`)
+      if (!isEmpty) {
+        seeded.current = true
+        return
+      }
       seeded.current = true
+      console.log(`[SeedPlugin:plaintext] Seeding with: "${String(value).slice(0,50)}"`)
+
       editor.update(() => {
-        const root = $getRoot()
-        root.clear()
+        const lexicalRoot = $getRoot()
+        lexicalRoot.clear()
         const p = $createParagraphNode()
         p.append($createTextNode(value))
-        root.append(p)
+        lexicalRoot.append(p)
       })
-    }
+    }, 200)
+    return () => clearTimeout(timer)
   }, [editor, value])
 
   return null
 }
+

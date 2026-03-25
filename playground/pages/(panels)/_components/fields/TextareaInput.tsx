@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
@@ -5,13 +6,17 @@ import { INPUT_CLS } from './types.js'
 export function TextareaInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
 
-  if (field.yjs && wsPath && docName) {
+  // Collaborative textarea — only render after client mount to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  if (mounted && field.yjs && wsPath && docName) {
     const CollabText = getField('collaborativePlainText')
     if (CollabText) {
       return (
         <CollabText
           value={(value as string) ?? ''}
-          onChange={(v) => onChange(v)}
+          onChange={(v: string) => onChange(v)}
           wsPath={wsPath}
           docName={docName}
           fieldName={field.name}
@@ -36,6 +41,7 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
       readOnly={field.readonly}
       disabled={isDisabled}
       className={INPUT_CLS}
+      placeholder={(field.extra?.placeholder as string) ?? ''}
     />
   )
 }

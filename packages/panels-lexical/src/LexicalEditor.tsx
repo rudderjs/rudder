@@ -17,7 +17,7 @@ import { useEffect } from 'react'
 import { SlashCommandPlugin } from './lexical/SlashCommandPlugin.js'
 import { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 import { DraggableBlockPlugin_EXPERIMENTAL } from '@lexical/react/LexicalDraggableBlockPlugin'
-import { $getRoot, $getSelection, $isRangeSelection, $parseSerializedNode, type LexicalEditor as LexicalEditorType } from 'lexical'
+import { $getRoot, $getSelection, $isRangeSelection, $parseSerializedNode, type LexicalEditor as LexicalEditorType, type SerializedLexicalNode } from 'lexical'
 import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
 import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
@@ -110,7 +110,7 @@ export function LexicalEditor({
       const roomName = `${docName}:${fragmentName}`
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
-      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
+      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc) as YjsProvider
       provider.awareness.setLocalStateField('user', {
         name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
         color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
@@ -307,15 +307,8 @@ function OnChangePlugin({ onChange }: { onChange: (json: unknown) => void }) {
 }
 
 // ── SeedPlugin ──────────────────────────────────────────────
-// In collaborative mode, the editor starts empty (editorState: null) and
-// CollaborationPlugin binds to the Y.XmlFragment. If the Y.Doc is fresh
-// (server restart, new session), the fragment is empty. This plugin seeds
-// the editor from the database value after CollaborationPlugin initializes.
-//
-// Uses editor.update() + $parseSerializedNode so mutations go through
-// the normal path and trigger syncLexicalUpdateToYjs (the Y.js binding).
-// editor.setEditorState() does NOT mark elements dirty, so the binding's
-// syncLexicalUpdateToYjs skips the sync (it checks dirtyElements.has('root')).
+// Seeds the editor from DB value ONLY when the Y.Doc root is empty.
+// Checks the Y.Doc directly (not editor state) to avoid race with CollaborationPlugin.
 
 function SeedPlugin({ value }: { value: unknown }) {
   const [editor] = useLexicalComposerContext()
@@ -323,12 +316,18 @@ function SeedPlugin({ value }: { value: unknown }) {
 
   useEffect(() => {
     if (seeded.current || !value) return
-    // Provider sync is already complete (parent only renders SeedPlugin after 'synced').
-    // If the editor is still empty, seed from the DB value.
-    const isEmpty = editor.getEditorState().read(() => {
-      return !$getRoot().getTextContent().trim()
-    })
-    if (isEmpty) {
+
+    // Delay to let CollaborationPlugin apply any Y.Doc content to the editor.
+    // After the delay, check if the editor is still empty. If so, seed from DB.
+    const timer = setTimeout(() => {
+      if (seeded.current) return
+      const isEmpty = editor.getEditorState().read(() => !$getRoot().getTextContent().trim())
+      if (!isEmpty) {
+        // Editor has content from Yjs sync — don't overwrite
+        seeded.current = true
+        return
+      }
+      // Editor is empty — seed from DB value
       seeded.current = true
       try {
         const serialized = typeof value === 'string' ? JSON.parse(value) : value
@@ -338,7 +337,7 @@ function SeedPlugin({ value }: { value: unknown }) {
             const root = $getRoot()
             root.clear()
             for (const child of children) {
-              const node = $parseSerializedNode(child as import('lexical').SerializedLexicalNode)
+              const node = $parseSerializedNode(child as SerializedLexicalNode)
               root.append(node)
             }
           })
@@ -346,7 +345,8 @@ function SeedPlugin({ value }: { value: unknown }) {
       } catch (e) {
         console.error('[LexicalEditor] SeedPlugin failed:', e)
       }
-    }
+    }, 200)
+    return () => clearTimeout(timer)
   }, [editor, value])
 
   return null

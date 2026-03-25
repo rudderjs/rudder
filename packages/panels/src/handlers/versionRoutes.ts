@@ -134,20 +134,29 @@ export function mountVersionRoutes(
 
     try {
       const { Live } = await import(/* @vite-ignore */ '@boostkit/live')
-
-      // Clear the main shared Y.Doc + all per-field Y.Docs
-      await Live.clearDocument(docName)
+      console.log(`[_sync-live] Clearing rooms for ${docName}`)
 
       const resource = new ResourceClass()
       const vFormFields = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
       const collabFields = vFormFields.filter(f => f.isYjs())
 
-      for (const f of collabFields) {
+      const fieldDocNames = collabFields.map(f => {
         const type = f.getType()
         const name = f.getName()
         const prefix = (type === 'richcontent' || type === 'content') ? type : 'text'
-        await Live.clearDocument(`${docName}:${prefix}:${name}`)
-      }
+        return `${docName}:${prefix}:${name}`
+      })
+
+      // Clear all Y.Doc rooms (main + per-field)
+      await Live.clearDocument(docName)
+      for (const name of fieldDocNames) await Live.clearDocument(name)
+
+      // y-websocket auto-reconnects and re-pushes stale data — clear again after a delay
+      setTimeout(async () => {
+        try {
+          for (const name of fieldDocNames) await Live.clearDocument(name)
+        } catch { /* ignore */ }
+      }, 500)
 
       // Re-seed the main Y.Doc with saved DB values
       const SyncModel = ResourceClass.model as ModelClass<RecordRow> | undefined

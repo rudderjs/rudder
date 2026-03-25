@@ -375,12 +375,14 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       else if (draftableEnabled && publishAction === 'unpublish') toast.success((i18n as Record<string, string>).unpublishedToast ?? 'Unpublished.')
       else toast.success((i18n as Record<string, string>).savedToast ?? 'Saved.')
 
-      // Sync live if restoring
-      if (formYjs.yjs && isRestorePreview && collabRef.current?.fieldsMap) {
-        const doc = collabRef.current
-        doc.doc.transact(() => {
-          for (const [k, v] of Object.entries(values)) doc.fieldsMap.set(k, v)
-        })
+      // Clear server Y.Doc rooms so next page load re-seeds from fresh DB values
+      if (formYjs.yjs && resourceSlug && recordId) {
+        if (isRestorePreview && collabRef.current?.fieldsMap) {
+          const doc = collabRef.current
+          doc.doc.transact(() => {
+            for (const [k, v] of Object.entries(values)) doc.fieldsMap.set(k, v)
+          })
+        }
         await fetch(`/${pathSegment}/api/${resourceSlug}/${recordId}/_sync-live`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       }
 
