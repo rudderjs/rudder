@@ -153,7 +153,7 @@ function PickerDialog({ items, breadcrumbs, selectedIds, isMultiple, libraries, 
       {/* Overlay */}
       <div className="fixed inset-0 bg-black/10 backdrop-blur-xs animate-in fade-in-0" onClick={onClose} />
       {/* Content — shadcn dialog style */}
-      <div className="fixed z-50 grid w-full max-w-3xl max-h-[80vh] rounded-xl bg-background text-sm ring-1 ring-foreground/10 shadow-lg animate-in fade-in-0 zoom-in-95 flex flex-col overflow-hidden">
+      <div className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[80vh] rounded-xl bg-background text-sm ring-1 ring-foreground/10 shadow-lg flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex flex-col gap-2 p-4 pb-0 shrink-0">
           <div className="flex items-center gap-3">
