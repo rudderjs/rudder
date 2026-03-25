@@ -9,15 +9,10 @@ export class MediaPage extends Page {
   static schema() {
     return [
       Heading.make('Media Browser'),
-      Text.make('Inline media browser element — browse, upload, and manage files.'),
+      Text.make('Browse, upload, and manage files across multiple libraries.'),
 
       Media.make('Files')
-        .disk('public')
-        .directory('media')
-        .conversions([
-          { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
-          { name: 'preview', width: 800, format: 'webp' },
-        ]),
+        .library(['photos', 'documents']),
     ]
   }
 }

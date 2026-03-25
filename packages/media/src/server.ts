@@ -4,7 +4,10 @@
  * No React imports here.
  */
 export { MediaServiceProvider, media, mediaExtension } from './MediaServiceProvider.js'
+export type { MediaPluginConfig } from './MediaServiceProvider.js'
 export type { MediaConfig, MediaConversion } from './types.js'
+export { registerLibrary, getLibrary, getDefaultLibrary, getLibraryNames } from './registry.js'
+export type { MediaLibrary } from './registry.js'
 export { Media } from './schema/Media.js'
 export type { MediaElementMeta } from './schema/Media.js'
 export { resolveMedia } from './resolveMedia.js'

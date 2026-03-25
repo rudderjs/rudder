@@ -15,8 +15,16 @@ export { categorize } from './types.js'
 export { Media } from './schema/Media.js'
 export type { MediaElementMeta } from './schema/Media.js'
 
-// Client component (used by registerLazyElement in +Layout.tsx)
+// Field type
+export { MediaPickerField } from './schema/MediaPickerField.js'
+
+// Library registry (used by Media.make().library() and MediaPickerField)
+export { getLibrary, getDefaultLibrary, getLibraryNames } from './registry.js'
+export type { MediaLibrary } from './registry.js'
+
+// Client components
 export { MediaElement } from './components/MediaElement.js'
+export { MediaPickerInput } from './components/MediaPickerInput.js'
 
 // Server exports available via '@boostkit/media/server'
 export { media, MediaServiceProvider } from './MediaServiceProvider.js'
