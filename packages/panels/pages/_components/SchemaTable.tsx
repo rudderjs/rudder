@@ -131,7 +131,8 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
       const params = new URLSearchParams()
       const p = opts.page ?? currentPage
       params.set('page', String(p))
-      if (opts.search !== undefined ? opts.search : search) params.set('search', opts.search !== undefined ? opts.search : search)
+      const searchVal = opts.search !== undefined ? opts.search : search
+      if (searchVal) params.set('search', searchVal)
       if (opts.sort) { params.set('sort', opts.sort); params.set('dir', opts.dir ?? 'asc') }
       else if (sort) { params.set('sort', sort.col); params.set('dir', sort.dir) }
       // Add filter params
@@ -177,13 +178,15 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
     else delete newFilters[filterName]
     setActiveFilters(newFilters)
 
+    const filterState = Object.fromEntries(Object.entries(newFilters).map(([k, v]) => [`filter_${k}`, v]))
     if (hasPagination) {
-      // Fetch with filters applied
       void fetchTable({ page: 1, filters: newFilters })
       setCurrentPage(1)
-      saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: 1, ...Object.fromEntries(Object.entries(newFilters).map(([k, v]) => [`filter_${k}`, v])) })
+      saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: 1, ...filterState })
     } else {
-      saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: currentPage, ...Object.fromEntries(Object.entries(newFilters).map(([k, v]) => [`filter_${k}`, v])) })
+      // Non-paginated: re-fetch when filter changes (records may be from a previous filtered fetch)
+      void fetchTable({ page: 1, search, filters: newFilters })
+      saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: currentPage, ...filterState })
     }
   }
 
@@ -459,6 +462,12 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
         saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: 1, ...filterState })
       }, 300)
     } else {
+      // Non-paginated: if records were fetched from API (restore/search), re-fetch to get full dataset when clearing
+      if (!value && search) {
+        searchTimerRef.current = setTimeout(() => {
+          void fetchTable({ page: 1, search: '' })
+        }, 300)
+      }
       saveRememberState({ sort: sort?.col, dir: sort?.dir, search: value, page: currentPage, ...filterState })
     }
   }
@@ -582,7 +591,7 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
           })}
           {Object.keys(activeFilters).length > 0 && (
             <button
-              onClick={() => { setActiveFilters({}); setCurrentPage(1); if (hasPagination) void fetchTable({ page: 1, filters: {} }); saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: 1 }) }}
+              onClick={() => { setActiveFilters({}); setCurrentPage(1); void fetchTable({ page: 1, search, filters: {} }); saveRememberState({ sort: sort?.col, dir: sort?.dir, search, page: 1 }) }}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
               {i18n.clearFilters ?? 'Clear filters'}
