@@ -15,7 +15,9 @@ export async function data(pageContext: PageContextServer) {
   if (!ResourceClass) throw new Error(`Resource "${slug}" not found.`)
 
   const resource     = new ResourceClass()
-  const resourceMeta = resource.toMeta()
+  const fullMeta     = resource.toMeta()
+  // Edit page only needs identity labels — form config is in formElement
+  const resourceMeta = { label: fullMeta.label, labelSingular: fullMeta.labelSingular }
   const panelMeta    = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
@@ -71,5 +73,5 @@ export async function data(pageContext: PageContextServer) {
     }
   }
 
-  return { panelMeta, resourceMeta, record, formElement, pathSegment, slug, id, sessionUser }
+  return { panelMeta, resourceMeta, formElement, pathSegment, slug, id, sessionUser }
 }

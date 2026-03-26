@@ -11,7 +11,7 @@ import type { Data } from './+data.js'
 
 export default function EditPage() {
   const config = useConfig()
-  const { panelMeta, resourceMeta, formElement, pathSegment, slug, id, record } = useData<Data>()
+  const { panelMeta, resourceMeta, formElement, pathSegment, slug, id } = useData<Data>()
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   const i18n = useI18n() as PanelI18n & Record<string, string>
   config({ title: `${i18n.edit} ${resourceMeta.labelSingular} — ${panelName}` })
@@ -24,7 +24,7 @@ export default function EditPage() {
     if (fromQs) setBackHref(fromQs)
   }, [])
 
-  if (!record) {
+  if (!(formElement as Record<string, unknown>)?.initialValues) {
     return <p className="text-muted-foreground">{i18n.recordNotFound}</p>
   }
 

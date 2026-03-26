@@ -63,7 +63,7 @@ export async function resourceData(ctx: ResourceDataContext): Promise<ResourceDa
     for (const f of formFields.filter(f => f.getType() === 'belongsTo')) {
       const extra = f.toMeta().extra
       const name  = f.getName()
-      const rel   = (extra['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
+      const rel   = (extra?.['relationName'] as string) ?? (name.endsWith('Id') ? name.slice(0, -2) : name)
       q = q.with(rel)
     }
 

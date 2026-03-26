@@ -36,7 +36,7 @@ export default function ShowPage() {
   config({ title: `${recordTitle} — ${panelName}` })
 
   const allFields  = flattenSchemaFields(resourceMeta.fields as SchemaItem[])
-  const viewFields = allFields.filter(f => !f.hidden.includes('view') && f.type !== 'password' && f.type !== 'hasMany')
+  const viewFields = allFields.filter(f => !f.hidden?.includes('view') && f.type !== 'password' && f.type !== 'hasMany')
   const hasManyFields = allFields.filter(f => f.type === 'hasMany')
 
   return (
@@ -145,7 +145,7 @@ function HasManyTable({ field, parentId, parentSlug, pathSegment, initialData, i
     fetch(`/${pathSegment}/api/${resourceSlug}/_schema`)
       .then(r => r.json())
       .then((d: { resourceMeta: { fields: SchemaItem[] } }) => {
-        setSchema(flattenSchemaFields(d.resourceMeta.fields).filter(f => !f.hidden.includes('table') && f.type !== 'hasMany'))
+        setSchema(flattenSchemaFields(d.resourceMeta.fields).filter(f => !f.hidden?.includes('table') && f.type !== 'hasMany'))
       })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is SSR-only, intentionally excluded to prevent re-fetch loop
