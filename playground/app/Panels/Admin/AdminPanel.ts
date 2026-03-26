@@ -22,6 +22,7 @@ import { Article }    from 'App/Models/Article.js'
 import { Category }   from 'App/Models/Category.js'
 import { Todo }       from 'App/Models/Todo.js'
 import { User }       from 'App/Models/User.js'
+import { SimplePage } from './pages/SimplePage.js'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -158,4 +159,5 @@ export const adminPanel = Panel.make('admin')
     ReportsPage,
     MediaPage,
     CustomPage,
+    SimplePage,
   ])

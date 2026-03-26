@@ -11,7 +11,7 @@ export type Data = {
   schemaData:  PanelSchemaElementMeta[]
   sessionUser: SessionUser | undefined
   pathSegment: string
-  urlSearch:   Record<string, string>
+  urlSearch?:  Record<string, string>
 }
 
 export async function data(pageContext: PageContextServer): Promise<Data> {
@@ -22,7 +22,6 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
       schemaData: [],
       sessionUser: undefined,
       pathSegment: '',
-      urlSearch: {},
     }
   }
 
@@ -47,7 +46,8 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
   })
   const schemaData = await resolveSchema(pagePanel, ctx)
 
-  const urlSearch = pageContext.urlParsed?.search ?? {}
+  const raw = pageContext.urlParsed?.search ?? {}
+  const urlSearch = Object.keys(raw).length > 0 ? raw : undefined
 
   return {
     panelMeta,
@@ -55,6 +55,6 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
     schemaData,
     sessionUser,
     pathSegment,
-    urlSearch,
+    ...(urlSearch ? { urlSearch } : {}),
   }
 }
