@@ -144,12 +144,24 @@ export function buildTableMeta(
   },
 ): TableElementMeta {
   const transformedRecords = applyColumnTransforms(config, records)
+
+  // Strip records to only displayed columns + id — removes heavy unused fields (content, body, metadata)
+  const displayedKeys = new Set(columns.map(c => c.name))
+  displayedKeys.add('id') // always needed for links/actions
+  const strippedRecords = transformedRecords.map(record => {
+    const slim: RecordRow = {}
+    for (const key of displayedKeys) {
+      if (key in record) slim[key] = record[key]
+    }
+    return slim
+  })
+
   const meta: TableElementMeta = {
     type:     'table',
     title:    config.title,
     resource: opts.resource ?? '',
     columns,
-    records:  transformedRecords,
+    records:  strippedRecords,
     href:     config.href ?? opts.href ?? '',
     id:       tableId,
   }

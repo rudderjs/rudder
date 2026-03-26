@@ -15,7 +15,9 @@ export async function data(pageContext: PageContextServer) {
   if (!ResourceClass) throw new Error(`Resource "${slug}" not found.`)
 
   const resource     = new ResourceClass()
-  const resourceMeta = resource.toMeta()
+  const fullMeta     = resource.toMeta()
+  // Strip fields from resourceMeta on list page — fields are for forms (create/edit), not table view
+  const { fields: _fields, ...resourceMeta } = fullMeta
   const panelMeta    = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
