@@ -14,7 +14,7 @@ interface MetaItem {}
 
 export interface TabMeta {
   label:    string
-  fields:   FieldMeta[]
+  fields?:  FieldMeta[]
   /** Schema elements (used in Panel.schema() tabs). Undefined when used with fields. */
   elements?: unknown[]
   /** Record ID (model-backed tabs only). */
@@ -122,7 +122,6 @@ export class Tab {
   toMeta(): TabMeta {
     const meta: TabMeta = {
       label: this._label,
-      fields: [],
     }
     if (this._icon) meta.icon = this._icon
     if (this._lazy) meta.lazy = true

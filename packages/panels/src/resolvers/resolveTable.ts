@@ -204,7 +204,7 @@ async function resolveTableTabs(
   const tabsId = `${tableId}-tabs`
   const persistMode = (config.remember || 'session') as PersistMode
 
-  const resolvedTabs: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] }[] = []
+  const resolvedTabs: { label: string; icon?: string; elements: PanelSchemaElementMeta[] }[] = []
 
   for (const tab of config.tabs) {
     const tabName = tab.getLabel().toLowerCase().replace(/\s+/g, '-')
@@ -212,9 +212,8 @@ async function resolveTableTabs(
     const tabTable = table._cloneWithScope(tabTableId, tab.getScope())
     const resolved = await resolveTable(tabTable as unknown as SchemaElementLike, panel, ctx)
 
-    const tabMeta: { label: string; icon?: string; fields: never[]; elements: PanelSchemaElementMeta[] } = {
+    const tabMeta: { label: string; icon?: string; elements: PanelSchemaElementMeta[] } = {
       label: tab.getLabel(),
-      fields: [],
       elements: resolved ? [resolved] : [],
     }
     const icon = tab.getIcon()
