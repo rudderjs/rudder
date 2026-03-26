@@ -31,13 +31,13 @@ export default function CreatePage() {
           panelPath={`/${pathSegment}`}
           i18n={i18n}
           mode="create"
-          prefill={Object.keys(prefill).length > 0 ? prefill : undefined}
-          cancelUrl={backHref}
+          prefill={prefill && Object.keys(prefill).length > 0 ? prefill : undefined}
+          cancelUrl={backHref ?? `/${pathSegment}/resources/${slug}`}
           submitUrl={`/${pathSegment}/api/${slug}`}
           submitMethod="POST"
           onSuccess={() => {
             toast.success(t(i18n.createdToast, { singular: resourceMeta.labelSingular }))
-            return backHref
+            return backHref ?? `/${pathSegment}/resources/${slug}`
           }}
         />
       </div>
