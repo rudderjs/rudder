@@ -26,6 +26,9 @@ export interface MediaElementMeta {
   items:          MediaRecord[]
   breadcrumbs:    Array<{ id: string; name: string }>
   currentFolder:  MediaRecord | null
+  persist?:       false | 'localStorage' | 'url' | 'session'
+  sortBy?:        string
+  sortDir?:       'asc' | 'desc'
   lazy?:          boolean
   ssr?:           boolean
   pollInterval?:  number
@@ -53,6 +56,9 @@ export class Media {
   private _ssr             = false
   private _searchable      = false
   private _perPage?:       number
+  private _persist:        false | 'localStorage' | 'url' | 'session' = false
+  private _sortBy:         string = 'name'
+  private _sortDir:        'asc' | 'desc' = 'asc'
   private _pollInterval?:  number
   private _parentId:       string | null = null
   private _dataFn?:        DataFn
@@ -101,6 +107,10 @@ export class Media {
   searchable(): this { this._searchable = true; return this }
   /** Enable pagination with N items per page. */
   paginated(perPage = 24): this { this._perPage = perPage; return this }
+  /** Persist view state (search, active library, view mode, current folder). */
+  persist(mode: 'localStorage' | 'url' | 'session'): this { this._persist = mode; return this }
+  /** Default sort field and direction. */
+  sortBy(field: string, dir: 'asc' | 'desc' = 'asc'): this { this._sortBy = field; this._sortDir = dir; return this }
   poll(ms: number): this { this._pollInterval = ms; return this }
   data(fn: DataFn): this { this._dataFn = fn; return this }
 
@@ -117,6 +127,9 @@ export class Media {
   isSsr(): boolean { return this._ssr }
   isSearchable(): boolean { return this._searchable }
   getPerPage(): number | undefined { return this._perPage }
+  getPersist(): false | 'localStorage' | 'url' | 'session' { return this._persist }
+  getSortBy(): string { return this._sortBy }
+  getSortDir(): 'asc' | 'desc' { return this._sortDir }
   getPollInterval(): number | undefined { return this._pollInterval }
   getType(): 'media' { return 'media' }
 
@@ -168,6 +181,11 @@ export class Media {
     if (this._height !== undefined) meta.height = this._height
     if (this._searchable) meta.searchable = true
     if (this._perPage !== undefined) meta.perPage = this._perPage
+    if (this._persist) meta.persist = this._persist
+    if (this._sortBy !== 'name' || this._sortDir !== 'asc') {
+      meta.sortBy = this._sortBy
+      meta.sortDir = this._sortDir
+    }
     if (this._lazy) meta.lazy = true
     if (this._ssr) meta.ssr = true
     if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval

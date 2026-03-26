@@ -14,6 +14,8 @@ export class MediaPage extends Page {
       Media.make('Files')
         .library(['photos', 'documents'])
         .searchable()
+        .paginated(6)
+        .persist('url')
         .ssr(),
     ]
   }

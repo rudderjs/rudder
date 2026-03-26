@@ -73,12 +73,14 @@ export function mountMediaRoutes(
       where['name'] = { contains: search }
     }
 
-    // Pagination
+    // Sort + Pagination
+    const sortBy = q['sort'] || 'name'
+    const sortDir = q['dir'] === 'desc' ? 'desc' : 'asc'
     const perPage = q['perPage'] ? Number(q['perPage']) : undefined
     const page = Math.max(1, Number(q['page'] || 1))
     const findArgs: Record<string, unknown> = {
       where,
-      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+      orderBy: [{ type: 'asc' }, { [sortBy]: sortDir }],
     }
     if (perPage) {
       findArgs['take'] = perPage

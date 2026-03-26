@@ -1,8 +1,46 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { MediaRecord, ConversionInfo } from '../types.js'
 import { categorize } from '../types.js'
+
+// ─── Persist helpers (inline — same logic as panels _lib/persist.ts) ──
+
+type PersistMode = false | 'localStorage' | 'url' | 'session'
+
+function readPersisted(mode: PersistMode, key: string): Record<string, string> {
+  if (typeof window === 'undefined' || !mode) return {}
+  if (mode === 'localStorage') {
+    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : {} } catch { return {} }
+  }
+  if (mode === 'url') {
+    const url = new URL(window.location.href)
+    const state: Record<string, string> = {}
+    for (const [k, v] of url.searchParams.entries()) {
+      if (k.startsWith(`${key}_`)) state[k.slice(key.length + 1)] = v
+    }
+    return state
+  }
+  return {}
+}
+
+function savePersisted(mode: PersistMode, key: string, state: Record<string, string>): void {
+  if (!mode || typeof window === 'undefined') return
+  if (mode === 'localStorage') {
+    localStorage.setItem(key, JSON.stringify(state))
+    return
+  }
+  if (mode === 'url') {
+    const url = new URL(window.location.href)
+    for (const k of [...url.searchParams.keys()]) {
+      if (k.startsWith(`${key}_`)) url.searchParams.delete(k)
+    }
+    for (const [k, v] of Object.entries(state)) {
+      if (v) url.searchParams.set(`${key}_${k}`, v)
+    }
+    window.history.replaceState(null, '', url.pathname + url.search)
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -24,6 +62,12 @@ interface MediaElementMeta {
   scope:          'shared' | 'private'
   searchable?:    boolean
   perPage?:       number
+  persist?:       false | 'localStorage' | 'url' | 'session'
+  sortBy?:        string
+  sortDir?:       'asc' | 'desc'
+  totalPages?:    number
+  currentPage?:   number
+  totalItems?:    number
   height?:        number
   items:          MediaRecord[]
   breadcrumbs:    Array<{ id: string; name: string }>
@@ -41,7 +85,11 @@ interface Props {
 // ─── Main component ──────────────────────────────────────────
 
 export function MediaElement({ element, panelPath }: Props) {
-  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const persistMode = element.persist ?? false
+  const persistKey = `media:${element.id}`
+  const initial = useRef(readPersisted(persistMode, persistKey)).current
+
+  const [view, setView] = useState<'grid' | 'list'>((initial['view'] as 'grid' | 'list') || 'grid')
   const [items, setItems] = useState<MediaRecord[]>(element.items)
   const [breadcrumbs, setBreadcrumbs] = useState(element.breadcrumbs)
   const [currentFolder, setCurrentFolder] = useState(element.currentFolder)
@@ -51,8 +99,13 @@ export function MediaElement({ element, panelPath }: Props) {
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
-  const [activeLib, setActiveLib] = useState(element.activeLibrary)
-  const [search, setSearch] = useState('')
+  const [activeLib, setActiveLib] = useState(initial['library'] || element.activeLibrary)
+  const [search, setSearch] = useState(initial['search'] || '')
+  const [sortBy, setSortBy] = useState(initial['sort'] || element.sortBy || 'name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>((initial['dir'] as 'asc' | 'desc') || element.sortDir || 'asc')
+  const [page, setPage] = useState(element.currentPage ?? 1)
+  const [totalPages, setTotalPages] = useState(element.totalPages ?? 0)
+  const [totalItems, setTotalItems] = useState(element.totalItems ?? 0)
 
   const pathSegment = panelPath.replace(/^\//, '')
   const lib = element.libraries.find(l => l.name === activeLib) ?? element.libraries[0]!
@@ -61,25 +114,45 @@ export function MediaElement({ element, panelPath }: Props) {
 
   // ── API helpers ────────────────────────────────────────────
 
-  const fetchItems = useCallback(async (parentId: string | null, directory?: string, searchQuery?: string) => {
+  const fetchItems = useCallback(async (parentId: string | null, opts?: { directory?: string | undefined; search?: string | undefined; page?: number | undefined; sort?: string | undefined; dir?: string | undefined }) => {
     const params = new URLSearchParams()
     if (parentId) params.set('parentId', parentId)
     params.set('scope', element.scope)
-    const dir = directory ?? lib.directory
+    const dir = opts?.directory ?? lib.directory
     if (dir) params.set('directory', dir)
-    const q = searchQuery ?? search
+    const q = opts?.search ?? search
     if (q) params.set('search', q)
+    params.set('sort', opts?.sort ?? sortBy)
+    params.set('dir', opts?.dir ?? sortDir)
+    if (element.perPage) {
+      params.set('perPage', String(element.perPage))
+      params.set('page', String(opts?.page ?? page))
+    }
     const res = await fetch(`${apiBase}?${params}`)
-    const data = await res.json() as { items: MediaRecord[]; breadcrumbs: Array<{ id: string; name: string }> }
+    const data = await res.json() as { items: MediaRecord[]; breadcrumbs: Array<{ id: string; name: string }>; totalPages?: number; totalItems?: number; page?: number }
     setItems(data.items)
     setBreadcrumbs(data.breadcrumbs)
-  }, [apiBase, element.scope, lib.directory, search])
+    if (data.totalPages !== undefined) setTotalPages(data.totalPages)
+    if (data.totalItems !== undefined) setTotalItems(data.totalItems)
+    if (data.page !== undefined) setPage(data.page)
+  }, [apiBase, element.scope, element.perPage, lib.directory, search, page, sortBy, sortDir])
 
-  // Fetch on mount
   // Fetch on mount — skip if SSR already loaded items
   useEffect(() => {
     if (element.items.length === 0) fetchItems(null)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist state on change
+  useEffect(() => {
+    savePersisted(persistMode, persistKey, {
+      view,
+      library: activeLib,
+      search,
+      sort: sortBy,
+      dir: sortDir,
+      page: String(page),
+    })
+  }, [view, activeLib, search, sortBy, sortDir, page, persistMode, persistKey])
 
   const navigateToFolder = useCallback(async (folderId: string | null) => {
     if (folderId) {
@@ -89,7 +162,8 @@ export function MediaElement({ element, panelPath }: Props) {
       setCurrentFolder(null)
     }
     setSelected(null)
-    await fetchItems(folderId)
+    setPage(1)
+    await fetchItems(folderId, { page: 1 })
   }, [fetchItems, items])
 
   const refresh = useCallback(() => fetchItems(currentFolderId), [fetchItems, currentFolderId])
@@ -195,7 +269,8 @@ export function MediaElement({ element, panelPath }: Props) {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value)
-                fetchItems(currentFolderId, undefined, e.target.value)
+                setPage(1)
+                fetchItems(currentFolderId, { search: e.target.value, page: 1 })
               }}
               className="w-full h-7 rounded-md border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
             />
@@ -211,8 +286,9 @@ export function MediaElement({ element, panelPath }: Props) {
               setActiveLib(name)
               setCurrentFolder(null)
               setSelected(null)
+              setPage(1)
               const newLib = element.libraries.find(l => l.name === name)
-              fetchItems(null, newLib?.directory)
+              fetchItems(null, { directory: newLib?.directory, page: 1 })
             }}
             className="text-xs rounded-md border bg-background px-2 py-1 shrink-0"
           >
@@ -236,6 +312,26 @@ export function MediaElement({ element, panelPath }: Props) {
             <ListIcon />
           </button>
         </div>
+
+        {/* Sort */}
+        <select
+          value={`${sortBy}:${sortDir}`}
+          onChange={(e) => {
+            const [s, d] = e.target.value.split(':') as [string, 'asc' | 'desc']
+            setSortBy(s)
+            setSortDir(d)
+            setPage(1)
+            fetchItems(currentFolderId, { sort: s, dir: d, page: 1 })
+          }}
+          className="text-xs rounded-md border bg-background px-2 py-1 shrink-0"
+        >
+          <option value="name:asc">Name A-Z</option>
+          <option value="name:desc">Name Z-A</option>
+          <option value="createdAt:desc">Newest</option>
+          <option value="createdAt:asc">Oldest</option>
+          <option value="size:desc">Largest</option>
+          <option value="size:asc">Smallest</option>
+        </select>
 
         <button
           onClick={() => setShowNewFolder(true)}
@@ -308,6 +404,34 @@ export function MediaElement({ element, panelPath }: Props) {
           onClose={() => setPreviewItem(null)}
           onDelete={() => { deleteItem(previewItem.id); setPreviewItem(null) }}
         />
+      )}
+
+      {/* Pagination */}
+      {element.perPage && totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-2 text-xs shrink-0">
+          <span className="text-muted-foreground">{totalItems} items</span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => { setPage(page - 1); fetchItems(currentFolderId, { page: page - 1 }) }}
+              className="px-2 py-1 rounded border hover:bg-muted disabled:opacity-30 transition-colors"
+            >
+              ←
+            </button>
+            <span className="px-2 text-muted-foreground">
+              {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => { setPage(page + 1); fetchItems(currentFolderId, { page: page + 1 }) }}
+              className="px-2 py-1 rounded border hover:bg-muted disabled:opacity-30 transition-colors"
+            >
+              →
+            </button>
+          </div>
+        </div>
       )}
 
       {/* New folder dialog */}
