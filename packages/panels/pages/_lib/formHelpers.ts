@@ -22,17 +22,17 @@ export function flattenFormFields(schema: SchemaItem[], mode: 'create' | 'edit')
   const result: FieldMeta[] = []
   function collect(fields: FieldMeta[]) {
     for (const f of fields) {
-      if (!f.hidden.includes(mode)) result.push(f)
+      if (!f.hidden?.includes(mode)) result.push(f)
     }
   }
   for (const item of schema) {
     if (item.type === 'section') {
       collect((item as SectionMeta).fields)
     } else if (item.type === 'tabs') {
-      for (const tab of (item as TabsMeta).tabs) collect(tab.fields)
+      for (const tab of (item as TabsMeta).tabs) if (tab.fields) collect(tab.fields)
     } else {
       const f = item as FieldMeta
-      if (!f.hidden.includes(mode)) result.push(f)
+      if (!f.hidden?.includes(mode)) result.push(f)
     }
   }
   return result

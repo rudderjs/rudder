@@ -22,12 +22,12 @@ export interface FieldMeta {
   name:                string
   type:                string
   label:               string
-  required:            boolean
-  readonly:            boolean
-  sortable:            boolean
-  searchable:          boolean
-  hidden:              FieldVisibility[]
-  extra:               Record<string, unknown>
+  required?:           boolean
+  readonly?:           boolean
+  sortable?:           boolean
+  searchable?:         boolean
+  hidden?:             FieldVisibility[]
+  extra?:              Record<string, unknown>
   component?:          string
   conditions?:         Condition[]
   displayTransformed?: boolean
@@ -459,13 +459,13 @@ export abstract class Field {
       name:       this._name,
       type:       this.getType(),
       label:      this.getLabel(),
-      required:   this._required,
-      readonly:   this._readonly,
-      sortable:   this._sortable,
-      searchable: this._searchable,
-      hidden:     [...this._hidden],
-      extra:      this._extra,
     }
+    if (this._required)            meta.required   = true
+    if (this._readonly)            meta.readonly   = true
+    if (this._sortable)            meta.sortable   = true
+    if (this._searchable)          meta.searchable = true
+    if (this._hidden.size > 0)     meta.hidden     = [...this._hidden]
+    if (Object.keys(this._extra).length > 0) meta.extra = this._extra
     if (this._component !== undefined) meta.component = this._component
     if (this._conditions.length > 0)   meta.conditions = this._conditions
     if (this._displayFn !== undefined) meta.displayTransformed = true

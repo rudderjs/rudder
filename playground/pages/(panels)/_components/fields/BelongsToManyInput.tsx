@@ -138,7 +138,7 @@ export function BelongsToManyInput({ field, value, onChange, uploadBase = '', i1
     try {
       const res  = await fetch(`${uploadBase}/${resourceSlug}/_schema`)
       const data = await res.json() as { resourceMeta: { fields: FieldMeta[] } }
-      const fields = data.resourceMeta.fields.filter(f => !f.hidden.includes('create'))
+      const fields = data.resourceMeta.fields.filter(f => !f.hidden?.includes('create'))
       setCreateSchema(fields)
       const init: Record<string, unknown> = {}
       for (const f of fields) {
