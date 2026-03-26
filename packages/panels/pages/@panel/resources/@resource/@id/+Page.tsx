@@ -24,7 +24,7 @@ import type { Data }   from './+data.js'
 
 export default function ShowPage() {
   const config = useConfig()
-  const { panelMeta, resourceMeta, record, pathSegment, slug, id, hasManyData, widgetData } = useData<Data>()
+  const { panelMeta, resourceMeta, record, pathSegment, slug, id, hasManyData = {}, widgetData } = useData<Data>()
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   const i18n = useI18n()
   const rec = record as Record<string, unknown> | null

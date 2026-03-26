@@ -24,7 +24,14 @@ export async function data(pageContext: PageContextServer) {
   if (!ResourceClass) throw new Error(`Resource "${slug}" not found.`)
 
   const resource     = new ResourceClass()
-  const resourceMeta = resource.toMeta()
+  const fullMeta     = resource.toMeta()
+  // View page needs fields (for detail view), identity labels, and titleField
+  const resourceMeta = {
+    label:         fullMeta.label,
+    labelSingular: fullMeta.labelSingular,
+    fields:        fullMeta.fields,
+    ...(fullMeta.titleField ? { titleField: fullMeta.titleField } : {}),
+  }
   const panelMeta    = panel.toNavigationMeta()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,5 +141,9 @@ export async function data(pageContext: PageContextServer) {
   } catch { /* detail()/widgets() threw — skip */ }
 
   const sessionUser = await getSessionUser(pageContext)
-  return { panelMeta, resourceMeta, record, pathSegment, slug, id, hasManyData, widgetData, sessionUser }
+  return {
+    panelMeta, resourceMeta, record, pathSegment, slug, id, sessionUser,
+    ...(Object.keys(hasManyData).length > 0 ? { hasManyData } : {}),
+    ...(widgetData.length > 0 ? { widgetData } : {}),
+  }
 }
