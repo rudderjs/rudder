@@ -56,9 +56,9 @@ export async function resolveTabs(
             getSchema: { value: () => items },
           }) as Panel
           const resolved = await resolveSchema(tabPanel, ctx)
-          resolvedTabs.push({ label, fields: [], elements: resolved, id: tabId } as TabMeta)
+          resolvedTabs.push({ label, elements: resolved, id: tabId } as TabMeta)
         } else {
-          resolvedTabs.push({ label, fields: [], id: tabId } as TabMeta)
+          resolvedTabs.push({ label, id: tabId } as TabMeta)
         }
       }
     }
@@ -109,9 +109,9 @@ export async function resolveTabs(
             getSchema: { value: () => items },
           }) as Panel
           const resolved = await resolveSchema(tabPanel, ctx)
-          resolvedTabs.push({ label, fields: [], elements: resolved, id: tabId } as TabMeta)
+          resolvedTabs.push({ label, elements: resolved, id: tabId } as TabMeta)
         } else {
-          resolvedTabs.push({ label, fields: [], id: tabId } as TabMeta)
+          resolvedTabs.push({ label, id: tabId } as TabMeta)
         }
       }
     }
