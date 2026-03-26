@@ -8,14 +8,13 @@ import type { SessionUser } from '../_lib/getSessionUser.js'
 export type Data = {
   panelMeta:   PanelNavigationMeta
   schemaData:  PanelSchemaElementMeta[]
-  slug:        undefined
   sessionUser: SessionUser | undefined
-  urlSearch:   Record<string, string>
+  urlSearch?:  Record<string, string>
 }
 
 export async function data(pageContext: PageContextServer): Promise<Data> {
   if (!import.meta.env.SSR) {
-    return { panelMeta: null as never, schemaData: [], slug: undefined, sessionUser: undefined, urlSearch: {} }
+    return { panelMeta: null as never, schemaData: [], sessionUser: undefined }
   }
 
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }
@@ -30,7 +29,8 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
     schemaData = await resolveSchema(panel, ctx)
   }
 
-  const urlSearch = pageContext.urlParsed?.search ?? {}
+  const raw = pageContext.urlParsed?.search ?? {}
+  const urlSearch = Object.keys(raw).length > 0 ? raw : undefined
 
-  return { panelMeta, schemaData, slug: undefined, sessionUser, urlSearch }
+  return { panelMeta, schemaData, sessionUser, ...(urlSearch ? { urlSearch } : {}) }
 }
