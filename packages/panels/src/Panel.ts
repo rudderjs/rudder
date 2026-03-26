@@ -53,6 +53,38 @@ type PanelSchemaDefinition =
 
 // ─── Panel meta (for UI / meta endpoint) ───────────────────
 
+/** Slim resource info for sidebar navigation — no fields/columns/actions. */
+export interface ResourceNavigationMeta {
+  label:       string
+  labelSingular: string
+  slug:        string
+  icon?:       string | undefined
+  navigationGroup?: string | undefined
+  navigationBadgeColor?: 'gray' | 'primary' | 'success' | 'warning' | 'danger' | undefined
+}
+
+/** Slim global info for sidebar navigation. */
+export interface GlobalNavigationMeta {
+  label:  string
+  slug:   string
+  icon?:  string | undefined
+}
+
+/** Slim panel meta for layout/sidebar — no full resource definitions. */
+export interface PanelNavigationMeta {
+  name:      string
+  path:      string
+  branding:  BrandingOptions
+  resources: ResourceNavigationMeta[]
+  globals:   GlobalNavigationMeta[]
+  pages:     PageMeta[]
+  layout:    PanelLayout
+  locale:    string
+  dir:       'ltr' | 'rtl'
+  i18n:      PanelI18n
+}
+
+/** Full panel meta — includes complete resource/global definitions. */
 export interface PanelMeta {
   name:      string
   path:      string
@@ -245,6 +277,35 @@ export class Panel {
   getApiBase(): string { return `${this._path}/api` }
 
   /** @internal */
+  /** Slim meta for layout/sidebar — no full resource definitions. */
+  toNavigationMeta(): PanelNavigationMeta {
+    const locale = this._locale ?? getActiveLocale()
+    return {
+      name:      this._name,
+      path:      this._path,
+      branding:  this._branding,
+      resources: this._resources.map((R) => ({
+        label:          R.label ?? R.name.replace(/Resource$/, ''),
+        labelSingular:  R.labelSingular ?? R.label ?? R.name.replace(/Resource$/, ''),
+        slug:           R.getSlug(),
+        icon:           R.icon,
+        navigationGroup: R.navigationGroup,
+        navigationBadgeColor: R.navigationBadgeColor,
+      })),
+      globals:   this._globals.map((G) => ({
+        label:  G.label ?? G.name.replace(/Global$/, ''),
+        slug:   G.getSlug(),
+        icon:   G.icon,
+      })),
+      pages:     this._pages.map((P) => P.toMeta()),
+      layout:    this._layout,
+      locale,
+      dir:       getPanelDir(locale),
+      i18n:      getPanelI18n(locale),
+    }
+  }
+
+  /** Full meta — includes complete resource/global definitions. */
   toMeta(): PanelMeta {
     const locale = this._locale ?? getActiveLocale()
     return {

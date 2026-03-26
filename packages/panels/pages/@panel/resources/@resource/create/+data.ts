@@ -16,7 +16,7 @@ export async function data(pageContext: PageContextServer) {
 
   const resource     = new ResourceClass()
   const resourceMeta = resource.toMeta()
-  const panelMeta    = panel.toMeta()
+  const panelMeta    = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
   const form = resource._resolveForm()

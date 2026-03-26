@@ -16,7 +16,7 @@ export async function data(pageContext: PageContextServer) {
 
   const global     = new GlobalClass()
   const globalMeta = global.toMeta()
-  const panelMeta  = panel.toMeta()
+  const panelMeta  = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
   // Load current data from DB

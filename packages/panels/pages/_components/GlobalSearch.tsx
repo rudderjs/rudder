@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { navigate } from 'vike/client/router'
-import type { PanelMeta } from '@boostkit/panels'
+import type { PanelNavigationMeta } from '@boostkit/panels'
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,7 @@ interface SearchResult {
 }
 
 interface Props {
-  panelMeta:    PanelMeta
+  panelMeta:    PanelNavigationMeta
   pathSegment:  string
 }
 

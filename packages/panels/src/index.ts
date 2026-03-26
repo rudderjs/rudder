@@ -1,7 +1,7 @@
 // ─── Panel ─────────────────────────────────────────────────
 
 export { Panel } from './Panel.js'
-export type { PanelMeta, PanelPlugin, PanelPluginSchema } from './Panel.js'
+export type { PanelMeta, PanelNavigationMeta, ResourceNavigationMeta, GlobalNavigationMeta, PanelPlugin, PanelPluginSchema } from './Panel.js'
 export type { PanelI18n } from './i18n/index.js'
 export { getPanelI18n, getPanelDir } from './i18n/index.js'
 

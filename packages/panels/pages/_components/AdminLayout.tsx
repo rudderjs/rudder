@@ -2,7 +2,7 @@ import '@/index.css'
 import { useState, useEffect } from 'react'
 import { navigate } from 'vike/client/router'
 import { Toaster } from 'sonner'
-import type { PanelMeta } from '@boostkit/panels'
+import type { PanelNavigationMeta } from '@boostkit/panels'
 import { GlobalSearch } from './GlobalSearch.js'
 import { ResourceIcon } from './ResourceIcon.js'
 import { ThemeProvider } from './ThemeProvider.js'
@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/tooltip.js'
 
 interface Props {
-  panelMeta:    PanelMeta
+  panelMeta:    PanelNavigationMeta
   currentSlug?: string | undefined
   initialUser?: SessionUser | undefined
   children:     React.ReactNode
@@ -68,7 +68,7 @@ interface SessionUser {
   image?: string
 }
 
-function buildNavItems(panelMeta: PanelMeta): NavItem[] {
+function buildNavItems(panelMeta: PanelNavigationMeta): NavItem[] {
   const path = panelMeta.path
   return [
     ...panelMeta.resources.map((r) => ({
@@ -103,7 +103,7 @@ function buildNavItems(panelMeta: PanelMeta): NavItem[] {
   ]
 }
 
-function useNavItemsWithPersistedState(panelMeta: PanelMeta): NavItem[] {
+function useNavItemsWithPersistedState(panelMeta: PanelNavigationMeta): NavItem[] {
   const base = buildNavItems(panelMeta)
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
@@ -130,7 +130,7 @@ function useSessionUser(initial?: SessionUser): SessionUser | null {
   return user
 }
 
-function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelMeta['i18n'] }) {
+function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigationMeta['i18n'] }) {
   if (!user) return null
   const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
 
@@ -167,7 +167,7 @@ function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelMet
 }
 
 /** Sidebar user menu — collapses to just the avatar when sidebar is in icon mode. */
-function SidebarUserMenu({ user, i18n }: { user: SessionUser | null; i18n: PanelMeta['i18n'] }) {
+function SidebarUserMenu({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigationMeta['i18n'] }) {
   if (!user) return null
   const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
 
@@ -240,7 +240,7 @@ function SvgMask({ src, className }: { src: string; className?: string }) {
 }
 
 /** Logo that shows full branding when expanded, just the icon when collapsed. */
-function SidebarLogo({ branding, name, path }: { branding: PanelMeta['branding']; name: string; path: string }) {
+function SidebarLogo({ branding, name, path }: { branding: PanelNavigationMeta['branding']; name: string; path: string }) {
   const title = branding?.title ?? name
   const isSvg = branding?.logo?.endsWith('.svg')
   return (
@@ -260,7 +260,7 @@ function SidebarLogo({ branding, name, path }: { branding: PanelMeta['branding']
   )
 }
 
-function useNavigationBadges(panelMeta: PanelMeta): Record<string, string | number | null> {
+function useNavigationBadges(panelMeta: PanelNavigationMeta): Record<string, string | number | null> {
   const [badges, setBadges] = useState<Record<string, string | number | null>>({})
 
   useEffect(() => {
@@ -277,7 +277,7 @@ function SidebarNavigation({ items, currentSlug, badges, panelMeta }: {
   items: NavItem[]
   currentSlug: string
   badges: Record<string, string | number | null>
-  panelMeta: PanelMeta
+  panelMeta: PanelNavigationMeta
 }) {
   const resourceItems = items.filter(i => i.kind === 'resource')
   const globalItems   = items.filter(i => i.kind === 'global')

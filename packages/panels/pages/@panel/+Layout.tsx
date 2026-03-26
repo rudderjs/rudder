@@ -3,7 +3,7 @@
 import { Component, type ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
-import type { PanelMeta } from '@boostkit/panels'
+import type { PanelNavigationMeta } from '@boostkit/panels'
 // Auto-discover plugin registrations (fields, lazy elements, etc.)
 // Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
 import.meta.glob('../_register-*.ts', { eager: true })
@@ -70,7 +70,7 @@ class PanelErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundar
 // ── Layout ──────────────────────────────────────────────────────────────────
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
-  let data: { panelMeta: PanelMeta; slug?: string; sessionUser?: { name?: string; email?: string; image?: string } }
+  let data: { panelMeta: PanelNavigationMeta; slug?: string; sessionUser?: { name?: string; email?: string; image?: string } }
 
   try {
     const ctx = usePageContext() as { data: typeof data }

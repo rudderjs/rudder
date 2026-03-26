@@ -7,5 +7,5 @@ export async function data(pageContext: PageContextServer) {
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
   if (!panel) throw new Error(`Panel "/${pathSegment}" not found.`)
-  return { panelMeta: panel.toMeta(), slug: 'custom' }
+  return { panelMeta: panel.toNavigationMeta(), slug: 'custom' }
 }

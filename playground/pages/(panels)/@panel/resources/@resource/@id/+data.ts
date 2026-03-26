@@ -25,7 +25,7 @@ export async function data(pageContext: PageContextServer) {
 
   const resource     = new ResourceClass()
   const resourceMeta = resource.toMeta()
-  const panelMeta    = panel.toMeta()
+  const panelMeta    = panel.toNavigationMeta()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Model  = ResourceClass.model as any

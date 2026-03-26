@@ -1,12 +1,12 @@
 import { render } from 'vike/abort'
 import type { PageContextServer } from 'vike/types'
 import { PanelRegistry, resolveSchema } from '@boostkit/panels'
-import type { PanelMeta, PanelSchemaElementMeta } from '@boostkit/panels'
+import type { PanelNavigationMeta, PanelSchemaElementMeta } from '@boostkit/panels'
 import { buildPanelContext } from '../../_lib/buildPanelContext.js'
 import type { SessionUser } from '../../_lib/getSessionUser.js'
 
 export type Data = {
-  panelMeta:   PanelMeta
+  panelMeta:   PanelNavigationMeta
   pageMeta:    { slug: string; label: string; icon: string | undefined }
   schemaData:  PanelSchemaElementMeta[]
   sessionUser: SessionUser | undefined
@@ -38,7 +38,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
 
   if (!PageClass.hasSchema()) throw render(404)
 
-  const panelMeta = panel.toMeta()
+  const panelMeta = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext, pageParams)
 
   const elements = await PageClass.schema(ctx)
