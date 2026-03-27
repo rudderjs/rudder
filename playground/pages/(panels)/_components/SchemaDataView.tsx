@@ -784,16 +784,30 @@ function StaticTreeView({ records, folderField, titleField, iconField }: {
   )
 }
 
+// ─── Static grip placeholder (SSR-safe) ─────────────────────
+
+function GripPlaceholder() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+      <circle cx="5" cy="3" r="1.5" /><circle cx="11" cy="3" r="1.5" />
+      <circle cx="5" cy="8" r="1.5" /><circle cx="11" cy="8" r="1.5" />
+      <circle cx="5" cy="13" r="1.5" /><circle cx="11" cy="13" r="1.5" />
+    </svg>
+  )
+}
+
 // ─── SSR-safe sortable wrappers ─────────────────────────────
 // dnd-kit references `document` at module level — cannot import during SSR.
-// These wrappers render plain elements during SSR, and load SortableList.tsx on client.
+// These wrappers render plain elements + grip placeholder during SSR,
+// then upgrade to interactive dnd-kit components on the client.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _dnd: typeof import('./SortableList.js') | null = null
 const _dndPromise = typeof window !== 'undefined' ? import('./SortableList.js').then(m => { _dnd = m }) : null
 
 function SortableItem({ id, children, reorderable, showHandle }: { id: string; children: React.ReactNode; reorderable?: boolean; showHandle?: boolean }) {
-  if (!reorderable || !_dnd) return <>{children}</>
+  if (!reorderable) return <>{children}</>
+  if (!_dnd) return <div style={{ position: 'relative' }}>{showHandle && <span className="absolute left-1 top-1/2 -translate-y-1/2 z-10 p-1 text-muted-foreground/40"><GripPlaceholder /></span>}{children}</div>
   return <_dnd.SortableItem id={id} showHandle={showHandle}>{children}</_dnd.SortableItem>
 }
 
@@ -803,7 +817,7 @@ function SortableTableRow({ id, children, reorderable }: { id: string; children:
 }
 
 function TableDragHandle({ id }: { id: string }) {
-  if (!_dnd) return null
+  if (!_dnd) return <td className="px-1 py-2.5 w-6"><span className="text-muted-foreground/40 p-1 inline-flex"><GripPlaceholder /></span></td>
   return <_dnd.TableDragHandle id={id} />
 }
 
