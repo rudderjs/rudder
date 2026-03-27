@@ -2,8 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { PanelI18n, PanelColumnMeta } from '@boostkit/panels'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ResourceIcon } from './ResourceIcon.js'
 import { TableEditCell } from './TableEditCell.js'
+import { TreeView } from './TreeView.js'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -69,6 +74,13 @@ interface DataViewElement {
   exportable?:       string[]
   defaultView?:      Record<string, string>
   folderField?:      string
+  iconField?:        string
+  activeFolder?:     string | null
+  breadcrumbs?:      { id: string; label: string }[]
+  reorderable?:      boolean
+  reorderEndpoint?:  string
+  reorderField?:     string
+  reorderModel?:     string
   sortableOptions?:  { field: string; label: string }[]
   scopes?:           { label: string; icon?: string }[]
   activeScope?:      number
@@ -86,7 +98,7 @@ interface Props {
 export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const {
     title, id: elementId, records: initialRecords, views,
-    titleField, descriptionField, imageField,
+    titleField, descriptionField, imageField, iconField,
     searchable, pagination: initialPagination,
     activeSearch: ssrSearch, defaultView,
     emptyState, description, href, creatableUrl, groupBy, recordClick,
@@ -104,7 +116,10 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>((element.activeSort?.dir?.toLowerCase() as 'asc' | 'desc') ?? 'asc')
   const [activeScope, setActiveScope] = useState(element.activeScope ?? 0)
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>(element.activeFilters ?? {})
+  const [currentFolder, setCurrentFolder] = useState<string | null>(element.activeFolder ?? null)
+  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string; label: string }[]>(element.breadcrumbs ?? [])
   const filters = element.filters ?? []
+  const folderField = element.folderField
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Active view ──
@@ -118,6 +133,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   function buildState(overrides: Record<string, unknown> = {}, filterOverride?: Record<string, string>): Record<string, unknown> {
     const state: Record<string, unknown> = { view: activeView, search, page: currentPage }
     if (sortField) { state.sort = sortField; state.dir = sortDir }
+    if (currentFolder) state.folder = currentFolder
     if (activeScope > 0) state.scope = activeScope
     const filtersToSave = filterOverride ?? activeFilters
     for (const [k, v] of Object.entries(filtersToSave)) {
@@ -140,6 +156,13 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   function handleViewChange(viewName: string) {
     setActiveView(viewName)
     saveRememberState(buildState({ view: viewName }))
+    // When switching to/from tree view, re-fetch (tree needs all records)
+    const targetView = viewOptions.find(v => v.name === viewName)
+    const isTree = targetView?.type === 'tree'
+    const wasTree = viewOptions.find(v => v.name === activeView)?.type === 'tree'
+    if (isTree !== wasTree) {
+      void fetchData({ page: 1, ...(isTree ? { folder: null } : {}) })
+    }
   }
 
   // ── Container-based responsive default view (first visit only) ──
@@ -159,7 +182,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   }, [])
 
   // ── Fetch ──
-  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string>; scope?: number } = {}) {
+  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string>; scope?: number; folder?: string | null } = {}) {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -176,11 +199,18 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       // Include active scope
       const scopeIdx = opts.scope ?? activeScope
       if (scopeIdx > 0) params.set('scope', String(scopeIdx))
+      // Include folder param
+      const folder = opts.folder !== undefined ? opts.folder : currentFolder
+      if (folder) params.set('folder', folder)
+      // Tree view needs all records
+      const currentViewMeta = viewOptions.find(v => v.name === activeView)
+      if (currentViewMeta?.type === 'tree') params.set('view', 'tree')
       const res = await fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
       if (!res.ok) return
-      const body = await res.json() as { records: Record<string, unknown>[]; pagination?: PaginationMeta }
+      const body = await res.json() as { records: Record<string, unknown>[]; pagination?: PaginationMeta; breadcrumbs?: { id: string; label: string }[] }
       setRecords(body.records)
       if (body.pagination) setPagination(body.pagination)
+      if (body.breadcrumbs !== undefined) setBreadcrumbs(body.breadcrumbs ?? [])
     } finally {
       setLoading(false)
     }
@@ -236,6 +266,14 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     saveRememberState(buildState({ page: 1 }, {}))
   }
 
+  function handleFolderNavigate(folderId: string | null) {
+    setCurrentFolder(folderId)
+    setCurrentPage(1)
+    if (!folderId) setBreadcrumbs([])
+    void fetchData({ page: 1, folder: folderId })
+    saveRememberState(buildState({ page: 1, folder: folderId ?? undefined }))
+  }
+
   function getRecordHref(record: Record<string, unknown>): string | undefined {
     if (recordClick === 'edit') return href ? `${href}/${record.id}/edit` : undefined
     if (recordClick === 'custom' && record._href) return String(record._href)
@@ -254,12 +292,14 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   useEffect(() => { sortDirRef.current = sortDir }, [sortDir])
   const activeScopeRef = useRef(activeScope)
   useEffect(() => { activeScopeRef.current = activeScope }, [activeScope])
+  const currentFolderRef = useRef(currentFolder)
+  useEffect(() => { currentFolderRef.current = currentFolder }, [currentFolder])
 
   // ── Polling ──
   useEffect(() => {
     if (!element.pollInterval) return
     const interval = setInterval(() => {
-      void fetchData({ page: currentPageRef.current, search: searchRef.current, sort: sortFieldRef.current || undefined, dir: sortDirRef.current, scope: activeScopeRef.current })
+      void fetchData({ page: currentPageRef.current, search: searchRef.current, sort: sortFieldRef.current || undefined, dir: sortDirRef.current, scope: activeScopeRef.current, folder: currentFolderRef.current })
     }, element.pollInterval)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,6 +336,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
                 sort: sortFieldRef.current || undefined,
                 dir: sortDirRef.current,
                 scope: activeScopeRef.current,
+                folder: currentFolderRef.current,
               })
             }
           } catch { /* ignore */ }
@@ -314,6 +355,29 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [element.live, element.liveChannel])
+
+  // ── Reorder handler (dnd-kit) ──
+  const reorderEndpoint = element.reorderEndpoint ? `${panelPath}/api${element.reorderEndpoint.replace(/^.*\/api/, '')}` : undefined
+  const handleReorder = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id || !reorderEndpoint) return
+    setRecords(prev => {
+      const oldIndex = prev.findIndex(r => String(r.id) === String(active.id))
+      const newIndex = prev.findIndex(r => String(r.id) === String(over.id))
+      if (oldIndex === -1 || newIndex === -1) return prev
+      const next = arrayMove(prev, oldIndex, newIndex)
+      // Persist
+      const ids = next.map(r => String(r.id))
+      fetch(reorderEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, field: element.reorderField ?? 'position', model: element.reorderModel }),
+      }).catch(() => {})
+      return next
+    })
+  }, [reorderEndpoint, element.reorderField, element.reorderModel])
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   // ── Editable save handler ──
   const saveEndpoint = `${panelPath}/api/_tables/${elementId}/save`
@@ -516,6 +580,37 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
         )}
       </div>
 
+      {/* Folder breadcrumbs */}
+      {folderField && (currentFolder || breadcrumbs.length > 0) && (
+        <div className="flex items-center gap-1 py-2 text-sm">
+          <button
+            type="button"
+            onClick={() => handleFolderNavigate(null)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          </button>
+          {breadcrumbs.map((crumb, i) => (
+            <span key={crumb.id} className="flex items-center gap-1">
+              <span className="text-muted-foreground/50">/</span>
+              {i < breadcrumbs.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => handleFolderNavigate(crumb.id)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {crumb.label}
+                </button>
+              ) : (
+                <span className="font-medium">{crumb.label}</span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Empty state */}
       {isEmpty && (
         <div className="rounded-xl border bg-card p-12 text-center">
@@ -533,43 +628,74 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
 
         // For list/grid: use view fields or fall back to titleField/descriptionField/imageField
         const viewType = activeViewMeta?.type ?? activeView
+        const isReorderable = !!element.reorderable && !groupBy
 
         if (viewType === 'table' && viewFields) {
-          return <TableView records={records} fields={viewFields} getHref={getRecordHref} sortField={sortField} sortDir={sortDir} onSort={handleSortChange} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={handleEditSaved} />
+          return <TableView records={records} fields={viewFields} getHref={getRecordHref} sortField={sortField} sortDir={sortDir} onSort={handleSortChange} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={handleEditSaved} reorderable={isReorderable} sensors={sensors} onReorder={handleReorder} />
         }
-        if (viewType === 'grid') {
+        if (viewType === 'tree' && element.folderField) {
           return (
-            <GridView
-              groups={grouped}
-              fields={viewFields}
+            <TreeView
+              records={records}
+              folderField={element.folderField}
               titleField={titleField ?? 'id'}
-              descriptionField={descriptionField}
-              imageField={imageField}
-              getHref={getRecordHref}
-              groupBy={groupBy}
-              saveEndpoint={saveEndpoint}
-              panelPath={panelPath}
-              i18n={i18n}
-              onSaved={handleEditSaved}
+              iconField={iconField}
+              fields={viewFields}
+              reorderable={element.reorderable}
+              reorderEndpoint={reorderEndpoint}
+              reorderField={element.reorderField}
+              reorderModel={element.reorderModel}
+              onRecordsChange={(flat) => setRecords(flat)}
             />
           )
         }
-        // Default: list view
-        return (
-          <ListView
+
+        const viewContent = viewType === 'grid' ? (
+          <GridView
             groups={grouped}
             fields={viewFields}
             titleField={titleField ?? 'id'}
             descriptionField={descriptionField}
             imageField={imageField}
+            iconField={iconField}
             getHref={getRecordHref}
             groupBy={groupBy}
             saveEndpoint={saveEndpoint}
             panelPath={panelPath}
             i18n={i18n}
             onSaved={handleEditSaved}
+            onFolderNavigate={folderField ? handleFolderNavigate : undefined}
+            reorderable={isReorderable}
+          />
+        ) : (
+          <ListView
+            groups={grouped}
+            fields={viewFields}
+            titleField={titleField ?? 'id'}
+            descriptionField={descriptionField}
+            imageField={imageField}
+            iconField={iconField}
+            getHref={getRecordHref}
+            groupBy={groupBy}
+            saveEndpoint={saveEndpoint}
+            panelPath={panelPath}
+            i18n={i18n}
+            onSaved={handleEditSaved}
+            onFolderNavigate={folderField ? handleFolderNavigate : undefined}
+            reorderable={isReorderable}
           />
         )
+
+        if (isReorderable) {
+          return (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleReorder}>
+              <SortableContext items={records.map(r => String(r.id))} strategy={viewType === 'grid' ? rectSortingStrategy : verticalListSortingStrategy}>
+                {viewContent}
+              </SortableContext>
+            </DndContext>
+          )
+        }
+        return viewContent
       })()}
 
       {/* Pagination */}
@@ -596,6 +722,41 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+// ─── SortableItem — wraps a record row/card for dnd-kit ─────
+
+function SortableItem({ id, children, reorderable }: { id: string; children: React.ReactNode; reorderable?: boolean }) {
+  if (!reorderable) return <>{children}</>
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </div>
+  )
+}
+
+// ─── SortableTableRow — wraps a <tr> for dnd-kit ────────────
+
+function SortableTableRow({ id, children, reorderable }: { id: string; children: React.ReactNode; reorderable?: boolean }) {
+  if (!reorderable) return <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">{children}</tr>
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </tr>
   )
 }
 
@@ -647,18 +808,21 @@ function FieldValue({ field, record, saveEndpoint, panelPath, i18n, onSaved }: {
 
 // ─── ListView ───────────────────────────────────────────────
 
-function ListView({ groups, fields, titleField, descriptionField, imageField, getHref, groupBy, saveEndpoint, panelPath, i18n, onSaved }: {
+function ListView({ groups, fields, titleField, descriptionField, imageField, iconField, getHref, groupBy, saveEndpoint, panelPath, i18n, onSaved, onFolderNavigate, reorderable }: {
   groups:           { label: string; records: Record<string, unknown>[] }[]
   fields?:          DataFieldMeta[]
   titleField:       string
   descriptionField?: string
   imageField?:      string
+  iconField?:       string
   getHref:          (r: Record<string, unknown>) => string | undefined
   groupBy?:         string
   saveEndpoint?:    string
   panelPath?:       string
   i18n?:            PanelI18n
   onSaved?:         (record: Record<string, unknown>, field: string, value: unknown) => void
+  onFolderNavigate?: (folderId: string | null) => void
+  reorderable?:     boolean
 }) {
   return (
     <div className="rounded-xl border overflow-hidden divide-y">
@@ -670,42 +834,54 @@ function ListView({ groups, fields, titleField, descriptionField, imageField, ge
             </div>
           )}
           {group.records.map((record) => {
-            const href = getHref(record)
+            const href = onFolderNavigate ? undefined : getHref(record)
+            const isFolder = !!onFolderNavigate
             const Tag = href ? 'a' : 'div'
+            const folderClick = isFolder ? () => onFolderNavigate(String(record.id)) : undefined
+            const icon = iconField ? record[iconField] as string | undefined : undefined
+            const rid = String(record.id)
 
             // With DataField definitions
             if (fields && fields.length > 0) {
               const imgField = fields.find(f => f.type === 'image')
               const textFields = fields.filter(f => f.type !== 'image')
               return (
-                <Tag key={String(record.id)} {...(href ? { href } : {})} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
-                  {imgField && record[imgField.name] && <FieldValue field={imgField} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />}
-                  <div className="flex-1 min-w-0">
-                    {textFields.map((f, i) => (
-                      <p key={f.name} className={i === 0 ? 'text-sm font-medium truncate' : 'text-xs text-muted-foreground truncate'}>
-                        <FieldValue field={f} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />
-                      </p>
-                    ))}
-                  </div>
-                  {href && <span className="text-xs text-muted-foreground">→</span>}
-                </Tag>
+                <SortableItem key={rid} id={rid} reorderable={reorderable}>
+                  <Tag {...(href ? { href } : {})} onClick={folderClick} className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors${isFolder ? ' cursor-pointer' : ''}${reorderable ? ' cursor-grab active:cursor-grabbing' : ''}`}>
+                    {reorderable && <span className="text-muted-foreground/40 shrink-0">⠿</span>}
+                    {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
+                    {imgField && record[imgField.name] && <FieldValue field={imgField} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />}
+                    <div className="flex-1 min-w-0">
+                      {textFields.map((f, i) => (
+                        <p key={f.name} className={i === 0 ? 'text-sm font-medium truncate' : 'text-xs text-muted-foreground truncate'}>
+                          <FieldValue field={f} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />
+                        </p>
+                      ))}
+                    </div>
+                    {(href || isFolder) && <span className="text-xs text-muted-foreground">→</span>}
+                  </Tag>
+                </SortableItem>
               )
             }
 
             // Fallback: titleField / descriptionField / imageField
             return (
-              <Tag key={String(record.id)} {...(href ? { href } : {})} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
-                {imageField && record[imageField] && (
-                  <img src={String(record[imageField])} alt="" className="h-10 w-10 rounded-md object-cover shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{String(record[titleField] ?? '')}</p>
-                  {descriptionField && record[descriptionField] !== undefined && (
-                    <p className="text-xs text-muted-foreground truncate">{String(record[descriptionField] ?? '')}</p>
+              <SortableItem key={rid} id={rid} reorderable={reorderable}>
+                <Tag {...(href ? { href } : {})} onClick={folderClick} className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors${isFolder ? ' cursor-pointer' : ''}${reorderable ? ' cursor-grab active:cursor-grabbing' : ''}`}>
+                  {reorderable && <span className="text-muted-foreground/40 shrink-0">⠿</span>}
+                  {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
+                  {imageField && record[imageField] && (
+                    <img src={String(record[imageField])} alt="" className="h-10 w-10 rounded-md object-cover shrink-0" />
                   )}
-                </div>
-                {href && <span className="text-xs text-muted-foreground">→</span>}
-              </Tag>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{String(record[titleField] ?? '')}</p>
+                    {descriptionField && record[descriptionField] !== undefined && (
+                      <p className="text-xs text-muted-foreground truncate">{String(record[descriptionField] ?? '')}</p>
+                    )}
+                  </div>
+                  {(href || isFolder) && <span className="text-xs text-muted-foreground">→</span>}
+                </Tag>
+              </SortableItem>
             )
           })}
         </div>
@@ -716,18 +892,21 @@ function ListView({ groups, fields, titleField, descriptionField, imageField, ge
 
 // ─── GridView ───────────────────────────────────────────────
 
-function GridView({ groups, fields, titleField, descriptionField, imageField, getHref, groupBy, saveEndpoint, panelPath, i18n, onSaved }: {
+function GridView({ groups, fields, titleField, descriptionField, imageField, iconField, getHref, groupBy, saveEndpoint, panelPath, i18n, onSaved, onFolderNavigate, reorderable }: {
   groups:           { label: string; records: Record<string, unknown>[] }[]
   fields?:          DataFieldMeta[]
   titleField:       string
   descriptionField?: string
   imageField?:      string
+  iconField?:       string
   getHref:          (r: Record<string, unknown>) => string | undefined
   groupBy?:         string
   saveEndpoint?:    string
   panelPath?:       string
   i18n?:            PanelI18n
   onSaved?:         (record: Record<string, unknown>, field: string, value: unknown) => void
+  onFolderNavigate?: (folderId: string | null) => void
+  reorderable?:     boolean
 }) {
   return (
     <div>
@@ -740,38 +919,52 @@ function GridView({ groups, fields, titleField, descriptionField, imageField, ge
           )}
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {group.records.map((record) => {
-              const href = getHref(record)
+              const href = onFolderNavigate ? undefined : getHref(record)
+              const isFolder = !!onFolderNavigate
               const Tag = href ? 'a' : 'div'
+              const folderClick = isFolder ? () => onFolderNavigate(String(record.id)) : undefined
+              const icon = iconField ? record[iconField] as string | undefined : undefined
+              const rid = String(record.id)
 
               // With DataField definitions
               if (fields && fields.length > 0) {
                 const imgField = fields.find(f => f.type === 'image')
                 const textFields = fields.filter(f => f.type !== 'image')
                 return (
-                  <Tag key={String(record.id)} {...(href ? { href } : {})} className="rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2">
-                    {imgField && record[imgField.name] && (
-                      <img src={String(record[imgField.name])} alt="" className="h-32 w-full rounded-lg object-cover" />
-                    )}
-                    {textFields.map((f, i) => (
-                      <p key={f.name} className={i === 0 ? 'text-sm font-medium truncate' : 'text-xs text-muted-foreground truncate'}>
-                        <FieldValue field={f} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />
-                      </p>
-                    ))}
-                  </Tag>
+                  <SortableItem key={rid} id={rid} reorderable={reorderable}>
+                    <Tag {...(href ? { href } : {})} onClick={folderClick} className={`rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2${isFolder ? ' cursor-pointer' : ''}${reorderable ? ' cursor-grab active:cursor-grabbing' : ''}`}>
+                      {imgField && record[imgField.name] && (
+                        <img src={String(record[imgField.name])} alt="" className="h-32 w-full rounded-lg object-cover" />
+                      )}
+                      {icon && !imgField && (
+                        <div className="text-muted-foreground"><ResourceIcon icon={icon} /></div>
+                      )}
+                      {textFields.map((f, i) => (
+                        <p key={f.name} className={i === 0 ? 'text-sm font-medium truncate' : 'text-xs text-muted-foreground truncate'}>
+                          <FieldValue field={f} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />
+                        </p>
+                      ))}
+                    </Tag>
+                  </SortableItem>
                 )
               }
 
               // Fallback
               return (
-                <Tag key={String(record.id)} {...(href ? { href } : {})} className="rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2">
-                  {imageField && record[imageField] && (
-                    <img src={String(record[imageField])} alt="" className="h-32 w-full rounded-lg object-cover" />
-                  )}
-                  <p className="text-sm font-medium truncate">{String(record[titleField] ?? '')}</p>
-                  {descriptionField && record[descriptionField] !== undefined && (
-                    <p className="text-xs text-muted-foreground truncate">{String(record[descriptionField] ?? '')}</p>
-                  )}
-                </Tag>
+                <SortableItem key={rid} id={rid} reorderable={reorderable}>
+                  <Tag {...(href ? { href } : {})} onClick={folderClick} className={`rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2${isFolder ? ' cursor-pointer' : ''}${reorderable ? ' cursor-grab active:cursor-grabbing' : ''}`}>
+                    {imageField && record[imageField] && (
+                      <img src={String(record[imageField])} alt="" className="h-32 w-full rounded-lg object-cover" />
+                    )}
+                    {icon && !imageField && (
+                      <div className="text-muted-foreground"><ResourceIcon icon={icon} /></div>
+                    )}
+                    <p className="text-sm font-medium truncate">{String(record[titleField] ?? '')}</p>
+                    {descriptionField && record[descriptionField] !== undefined && (
+                      <p className="text-xs text-muted-foreground truncate">{String(record[descriptionField] ?? '')}</p>
+                    )}
+                  </Tag>
+                </SortableItem>
               )
             })}
           </div>
@@ -783,7 +976,7 @@ function GridView({ groups, fields, titleField, descriptionField, imageField, ge
 
 // ─── TableView ──────────────────────────────────────────────
 
-function TableView({ records, fields, getHref, sortField, sortDir, onSort, saveEndpoint, panelPath, i18n, onSaved }: {
+function TableView({ records, fields, getHref, sortField, sortDir, onSort, saveEndpoint, panelPath, i18n, onSaved, reorderable, sensors, onReorder }: {
   records:       Record<string, unknown>[]
   fields:        DataFieldMeta[]
   getHref:       (r: Record<string, unknown>) => string | undefined
@@ -794,13 +987,18 @@ function TableView({ records, fields, getHref, sortField, sortDir, onSort, saveE
   panelPath?:    string
   i18n?:         PanelI18n
   onSaved?:      (record: Record<string, unknown>, field: string, value: unknown) => void
+  reorderable?:  boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sensors?:      any
+  onReorder?:    (event: DragEndEvent) => void
 }) {
-  return (
+  const table = (
     <div className="rounded-xl border overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/40">
+              {reorderable && <th className="w-6" />}
               {fields.map((f) => {
                 const isSortable = f.sortable
                 const isActive = sortField === f.name
@@ -827,34 +1025,49 @@ function TableView({ records, fields, getHref, sortField, sortDir, onSort, saveE
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => (
-              <tr key={String(record.id)} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                {fields.map((f) => (
-                  <td key={f.name} className="px-4 py-2.5 text-muted-foreground">
-                    {f.editable && saveEndpoint && panelPath && i18n ? (
-                      <TableEditCell
-                        record={record}
-                        column={f as unknown as PanelColumnMeta}
-                        saveEndpoint={saveEndpoint}
-                        panelPath={panelPath}
-                        i18n={i18n}
-                        onSaved={onSaved}
-                      />
-                    ) : (
-                      <FieldValue field={f} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />
+            {records.map((record) => {
+              const rid = String(record.id)
+              return (
+                <SortableTableRow key={rid} id={rid} reorderable={reorderable}>
+                  {reorderable && <td className="px-1 py-2.5 text-muted-foreground/40 cursor-grab active:cursor-grabbing">⠿</td>}
+                  {fields.map((f) => (
+                    <td key={f.name} className="px-4 py-2.5 text-muted-foreground">
+                      {f.editable && saveEndpoint && panelPath && i18n ? (
+                        <TableEditCell
+                          record={record}
+                          column={f as unknown as PanelColumnMeta}
+                          saveEndpoint={saveEndpoint}
+                          panelPath={panelPath}
+                          i18n={i18n}
+                          onSaved={onSaved}
+                        />
+                      ) : (
+                        <FieldValue field={f} record={record} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={onSaved} />
+                      )}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2.5 text-right">
+                    {getHref(record) && (
+                      <a href={getHref(record)!} className="text-xs text-muted-foreground hover:text-foreground transition-colors">→</a>
                     )}
                   </td>
-                ))}
-                <td className="px-4 py-2.5 text-right">
-                  {getHref(record) && (
-                    <a href={getHref(record)!} className="text-xs text-muted-foreground hover:text-foreground transition-colors">→</a>
-                  )}
-                </td>
-              </tr>
-            ))}
+                </SortableTableRow>
+              )
+            })}
           </tbody>
         </table>
       </div>
     </div>
   )
+
+  if (reorderable && sensors && onReorder) {
+    return (
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onReorder}>
+        <SortableContext items={records.map(r => String(r.id))} strategy={verticalListSortingStrategy}>
+          {table}
+        </SortableContext>
+      </DndContext>
+    )
+  }
+  return table
 }

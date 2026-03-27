@@ -51,6 +51,8 @@ export interface DataViewElementMeta {
   editable?:         boolean
   reorderable?:      boolean
   reorderEndpoint?:  string
+  reorderField?:     string
+  reorderModel?:     string
   emptyState?:       { icon?: string; heading?: string; description?: string }
   creatableUrl?:     string | boolean
   groupBy?:          string
@@ -58,6 +60,9 @@ export interface DataViewElementMeta {
   exportable?:       ('csv' | 'json')[]
   defaultView?:      Record<string, string>
   folderField?:      string
+  iconField?:        string
+  activeFolder?:     string | null
+  breadcrumbs?:      { id: string; label: string }[]
   sortableOptions?:  { field: string; label: string }[]
   scopes?:           { label: string; icon?: string }[]
   activeScope?:      number
@@ -110,13 +115,20 @@ export async function resolveListElement(
   const model = config.resourceClass
     ? (config.resourceClass as ResourceLike).model
     : config.model
-  const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes })
+  // Determine if active view is tree (needs all records, no folder filter)
+  const activeViewName = persistedView ?? (config.views.length > 0 ? config.views[0]!.getName() : undefined)
+  const isTreeView = config.views.some(v => v.getType() === 'tree' && v.getName() === activeViewName)
+
+  const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes, treeView: isTreeView })
 
   // ── Strip records to only needed fields (like buildTableMeta does for tables) ──
   const displayedKeys = new Set<string>(['id'])
   if (config.titleField)       displayedKeys.add(config.titleField)
   if (config.descriptionField) displayedKeys.add(config.descriptionField)
   if (config.imageField)       displayedKeys.add(config.imageField)
+  if (config.iconField)        displayedKeys.add(config.iconField)
+  if (config.folderField)      displayedKeys.add(config.folderField)
+  if (config.reorderable)      displayedKeys.add(config.reorderField)
   if (config.groupBy)          displayedKeys.add(config.groupBy)
   // Add fields from all views (DataField/Column)
   if (config.views.length > 0) {
@@ -208,7 +220,20 @@ export async function resolveListElement(
   if (config.softDeletes)      meta.softDeletes      = true
   if (config.groupBy)          meta.groupBy          = config.groupBy
   if (recordClick)             meta.recordClick      = recordClick
-  if (config.folderField)      meta.folderField      = config.folderField
+  if (config.folderField) {
+    meta.folderField = config.folderField
+    meta.activeFolder = result.activeFolder ?? null
+    if (result.breadcrumbs && result.breadcrumbs.length > 0) meta.breadcrumbs = result.breadcrumbs
+  }
+  if (config.iconField)        meta.iconField        = config.iconField
+  if (config.reorderable) {
+    meta.reorderable = true
+    meta.reorderEndpoint = `${panel.getApiBase()}/_tables/reorder`
+    meta.reorderField = config.reorderField
+    // Include model name so the reorder endpoint can find the right model
+    const reorderModel = model?.name as string | undefined
+    if (reorderModel) meta.reorderModel = reorderModel
+  }
   if (config.sortableOptions)  meta.sortableOptions  = config.sortableOptions
   if (config.scopes && config.scopes.length > 0) {
     meta.scopes = config.scopes.map(s => {

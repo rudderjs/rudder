@@ -34,6 +34,7 @@
     "@boostkit/core": "workspace:*",
     "@boostkit/router": "workspace:*",
     "@boostkit/support": "workspace:*",
+    "dnd-kit-sortable-tree": "^0.1.73",
     "quill-delta": "^5.1.0"
   },
   "peerDependencies": {

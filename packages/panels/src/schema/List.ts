@@ -75,6 +75,7 @@ export interface ListConfig {
   exportable?:       ('csv' | 'json')[] | boolean | undefined
   defaultView?:      Record<string, string> | undefined
   folderField?:      string | undefined
+  iconField?:        string | undefined
   sortableOptions?:  { field: string; label: string }[] | undefined
   scopes?:           ScopePreset[] | undefined
   reorderable:       boolean
@@ -138,6 +139,7 @@ export class List {
   protected _exportable?:      ('csv' | 'json')[] | boolean
   protected _defaultView?:     Record<string, string>
   protected _folderField?:     string
+  protected _iconField?:       string
   protected _reorderable       = false
   protected _reorderField      = 'position'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -356,6 +358,15 @@ export class List {
     return this
   }
 
+  /**
+   * Field on each record containing a Lucide icon name.
+   * Rendered as an icon in list/grid/table/tree views.
+   */
+  iconField(name: string): this {
+    this._iconField = name
+    return this
+  }
+
   // ── Export ────────────────────────────────────────
 
   /** Add export button to toolbar. Downloads filtered/searched dataset. */
@@ -529,6 +540,7 @@ export class List {
       exportable:      this._exportable,
       defaultView:     this._defaultView,
       folderField:     this._folderField,
+      iconField:       this._iconField,
       sortableOptions: this._sortableOptions,
       scopes:          this._scopes,
       reorderable:     this._reorderable,
@@ -568,6 +580,7 @@ export class List {
     if (this._creatableUrl)    target._creatableUrl    = this._creatableUrl
     if (this._groupBy)         target._groupBy         = this._groupBy
     if (this._folderField)     target._folderField     = this._folderField
+    if (this._iconField)       target._iconField       = this._iconField
     if (this._sortableOptions) target._sortableOptions = [...this._sortableOptions]
     if (this._scopes)          target._scopes          = [...this._scopes]
     target._reorderable  = this._reorderable

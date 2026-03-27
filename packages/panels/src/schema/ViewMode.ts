@@ -67,6 +67,16 @@ export class ViewMode {
     return v
   }
 
+  /** Tree view preset — hierarchical drag-and-drop. Requires .folder() on the parent List. */
+  static tree(fields?: DataField[]): ViewMode {
+    const v = new ViewMode('tree')
+    v._type  = 'tree'
+    v._label = 'Tree'
+    v._icon  = 'git-branch'
+    if (fields) v._fields = fields
+    return v
+  }
+
   /** Display label for the view toggle button. Auto-derives name from label if not explicitly set. */
   label(label: string): this {
     this._label = label

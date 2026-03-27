@@ -14,17 +14,20 @@ export class ListDemoPage extends Page {
       Heading.make('List Demo'),
       Text.make('Showcases the List element with views, search, sort, scopes, groupBy, pagination, and export.'),
 
-      // ─── 1. Categories — views + search + pagination + export ──
-      Heading.make('Categories — Views + Search + Export').level(2),
+      // ─── 1. Categories — folder + tree + icon + views ──
+      Heading.make('Categories — Folder + Tree + Icon').level(2),
       List.make('Categories')
         .id('list-demo-categories')
         .fromModel(Category)
         .titleField('name')
         .descriptionField('slug')
-        .sortBy('name', 'ASC')
+        .iconField('icon')
+        .folder('parentId')
+        .sortBy('position', 'ASC')
         .searchable(['name'])
-        .sortable(['name', 'slug'])
-        .paginated('pages', 5)
+        .sortable(['name', 'position'])
+        .reorderable('position')
+        .paginated('pages', 10)
         .live()
         .views([
           ViewMode.list([
@@ -35,12 +38,17 @@ export class ListDemoPage extends Page {
             DataField.make('name').editable(),
             DataField.make('slug').badge(),
           ]),
+          ViewMode.tree([
+            DataField.make('name'),
+            DataField.make('slug').badge(),
+          ]),
           ViewMode.table([
             Column.make('name').sortable().editable(),
             Column.make('slug').editable('popover'),
+            Column.make('position').numeric().sortable(),
           ]),
         ])
-        .defaultView({ sm: 'list', lg: 'grid' })
+        .defaultView({ sm: 'list', lg: 'list' })
         .remember('session')
         .exportable(['csv', 'json']),
 

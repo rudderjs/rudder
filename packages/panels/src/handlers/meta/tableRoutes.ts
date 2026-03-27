@@ -18,7 +18,10 @@ export function mountTableRoutes(
   // We cannot reference the model class directly here, so the client sends
   // ordered IDs and the field name; we update each record's position field.
   router.post(`${apiBase}/_tables/reorder`, async (req, res) => {
-    const { ids, field, model: modelName } = (req.body as { ids?: string[]; field?: string; model?: string }) ?? {}
+    const { ids, field, model: modelName, parentField, parents } = (req.body as {
+      ids?: string[]; field?: string; model?: string
+      parentField?: string; parents?: Record<string, string | null>
+    }) ?? {}
     if (!Array.isArray(ids) || !field) {
       return res.status(400).json({ message: 'ids[] and field are required.' })
     }
@@ -29,15 +32,33 @@ export function mountTableRoutes(
     )
     const Model = ResourceClass?.model as ModelClass<RecordRow> | undefined
 
+    // Also check table registry for standalone List elements
+    let ListModel: ModelClass<RecordRow> | undefined
     if (!Model) {
-      return res.status(404).json({ message: `Model "${modelName}" not found on this panel.` })
+      for (const [, tables] of (TableRegistry as unknown as { entries(): Iterable<[string, Map<string, unknown>]> }).entries?.() ?? []) {
+        for (const [, table] of (tables as Map<string, { getConfig(): { model?: unknown } }>).entries()) {
+          const cfg = table.getConfig()
+          if (cfg.model) { ListModel = cfg.model as ModelClass<RecordRow>; break }
+        }
+        if (ListModel) break
+      }
+    }
+
+    const EffectiveModel = Model ?? ListModel
+    if (!EffectiveModel) {
+      return res.status(404).json({ message: `Model "${modelName ?? 'unknown'}" not found on this panel.` })
     }
 
     try {
       await Promise.all(
-        ids.map((id, index) =>
-          Model.query().update(id, { [field]: index }),
-        ),
+        ids.map((id, index) => {
+          const update: Record<string, unknown> = { [field]: index }
+          // Update parent if tree reorder provided parent mapping
+          if (parentField && parents && id in parents) {
+            update[parentField] = parents[id] ?? null
+          }
+          return EffectiveModel.query().update(id, update)
+        }),
       )
       return res.json({ success: true })
     } catch (err) {
@@ -130,6 +151,19 @@ export function mountTableRoutes(
     let q: QueryBuilderLike<RecordRow> = Model.query()
     if (config.scope) q = config.scope(q)
 
+    // Apply folder filter (?folder=id or empty=root) — skip in tree view
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const folderField = (config as any).folderField as string | undefined
+    const isTreeView = url.searchParams.get('view') === 'tree'
+    if (folderField && !isTreeView) {
+      const folderParam = url.searchParams.get('folder')
+      if (folderParam) {
+        q = q.where(folderField, folderParam)
+      } else {
+        q = q.where(folderField, null)
+      }
+    }
+
     // Apply scope preset if ?scope=N is set (from List.scopes())
     const scopeIndex = parseInt(url.searchParams.get('scope') ?? '') || 0
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,17 +208,28 @@ export function mountTableRoutes(
     if (sortCol) q = q.orderBy(sortCol, dirParam ?? config.sortDir)
 
     const perPage = config.paginationType ? config.perPage : config.limit
-    const offset = (page - 1) * perPage
-    q = q.limit(perPage).offset(offset)
+    // Tree view fetches all records (no pagination)
+    if (!isTreeView) {
+      const offset = (page - 1) * perPage
+      q = q.limit(perPage).offset(offset)
+    } else {
+      q = q.limit(1000) // safety cap for tree
+    }
 
     let records: RecordRow[] = []
     try { records = await q.get() } catch { /* empty */ }
 
     let pagination
-    if (config.paginationType) {
+    if (config.paginationType && !isTreeView) {
       let total = records.length
       try {
         let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(Model.query()) : Model.query()
+        // Apply folder filter to count query
+        if (folderField) {
+          const folderParam = url.searchParams.get('folder')
+          if (folderParam) countQ = countQ.where(folderField, folderParam)
+          else countQ = countQ.where(folderField, null)
+        }
         // Apply scope preset to count query
         if (scopes && scopeIndex > 0 && scopeIndex < scopes.length) {
           const countScopeFn = scopes[scopeIndex]?.scope
@@ -239,7 +284,30 @@ export function mountTableRoutes(
       }
     }
 
-    return res.json({ records, pagination })
+    // Resolve breadcrumbs for folder navigation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let breadcrumbs: { id: string; label: string }[] | undefined
+    if (folderField) {
+      const folderParam = url.searchParams.get('folder')
+      if (folderParam) {
+        breadcrumbs = []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const titleKey = (config as any).titleField ?? 'name'
+        let currentId: string | null = folderParam
+        let depth = 0
+        while (currentId && depth < 20) {
+          depth++
+          try {
+            const row = await Model.query().find(currentId) as RecordRow | null
+            if (!row) break
+            breadcrumbs.unshift({ id: String(row.id), label: String(row[titleKey] ?? row.id) })
+            currentId = row[folderField] ? String(row[folderField]) : null
+          } catch { break }
+        }
+      }
+    }
+
+    return res.json({ records, pagination, breadcrumbs })
   }, mw)
 
   // Table inline-edit save endpoint

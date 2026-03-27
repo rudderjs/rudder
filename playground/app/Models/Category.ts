@@ -6,6 +6,8 @@ export class Category extends Model {
   id!:        string
   name!:      string
   slug!:      string
+  icon!:      string | null
+  position!:  number
   parentId!:  string | null
   createdAt!: Date
   updatedAt!: Date
