@@ -1,4 +1,4 @@
-import { Page, Heading, Text, List, ViewMode, Column, DataField } from '@boostkit/panels'
+import { Page, Heading, Text, List, ViewMode, Column, DataField, SelectField } from '@boostkit/panels'
 import { Category } from '../../../Models/Category.js'
 import { Article } from '../../../Models/Article.js'
 import { Todo } from '../../../Models/Todo.js'
@@ -70,7 +70,13 @@ export class ListDemoPage extends Page {
           ]),
           ViewMode.table([
             Column.make('title').sortable().editable(),
-            Column.make('status').badge().editable('popover'),
+            Column.make('status').badge().editable(
+              SelectField.make('status').options([
+                { value: 'draft', label: 'Draft' },
+                { value: 'published', label: 'Published' },
+              ]),
+              'popover'
+            ),
             Column.make('featured').boolean().editable(),
             Column.make('createdAt').date().sortable(),
           ]),

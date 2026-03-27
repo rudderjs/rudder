@@ -153,7 +153,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   }, [])
 
   // ── Fetch ──
-  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string> } = {}) {
+  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string>; scope?: number } = {}) {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -167,6 +167,9 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       for (const [k, v] of Object.entries(filtersToApply)) {
         if (v) params.set(`filter[${k}]`, v)
       }
+      // Include active scope
+      const scopeIdx = opts.scope ?? activeScope
+      if (scopeIdx > 0) params.set('scope', String(scopeIdx))
       const res = await fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
       if (!res.ok) return
       const body = await res.json() as { records: Record<string, unknown>[]; pagination?: PaginationMeta }
@@ -204,23 +207,8 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
 
   function handleScopeChange(index: number) {
     setActiveScope(index)
-    // Scopes are applied server-side via the scope index query param
-    const params = new URLSearchParams()
-    params.set('page', '1')
-    if (search) params.set('search', search)
-    if (sortField) { params.set('sort', sortField); params.set('dir', sortDir) }
-    params.set('scope', String(index))
-    setLoading(true)
-    fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((body: { records: Record<string, unknown>[]; pagination?: PaginationMeta } | null) => {
-        if (body) {
-          setRecords(body.records)
-          if (body.pagination) setPagination(body.pagination)
-        }
-      })
-      .finally(() => setLoading(false))
     setCurrentPage(1)
+    void fetchData({ page: 1, scope: index })
     saveRememberState(buildState({ scope: index, page: 1 }))
   }
 
@@ -241,12 +229,14 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { sortFieldRef.current = sortField }, [sortField])
   useEffect(() => { sortDirRef.current = sortDir }, [sortDir])
+  const activeScopeRef = useRef(activeScope)
+  useEffect(() => { activeScopeRef.current = activeScope }, [activeScope])
 
   // ── Polling ──
   useEffect(() => {
     if (!element.pollInterval) return
     const interval = setInterval(() => {
-      void fetchData({ page: currentPageRef.current, search: searchRef.current, sort: sortFieldRef.current || undefined, dir: sortDirRef.current })
+      void fetchData({ page: currentPageRef.current, search: searchRef.current, sort: sortFieldRef.current || undefined, dir: sortDirRef.current, scope: activeScopeRef.current })
     }, element.pollInterval)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,6 +272,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
                 search: searchRef.current || undefined,
                 sort: sortFieldRef.current || undefined,
                 dir: sortDirRef.current,
+                scope: activeScopeRef.current,
               })
             }
           } catch { /* ignore */ }
