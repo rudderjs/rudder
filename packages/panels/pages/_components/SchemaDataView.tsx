@@ -67,6 +67,8 @@ interface DataViewElement {
   exportable?:       string[]
   defaultView?:      Record<string, string>
   folderField?:      string
+  sortableOptions?:  { field: string; label: string }[]
+  scopes?:           { label: string; icon?: string }[]
   renderedRecords?:  unknown[][]
 }
 
@@ -86,6 +88,8 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     activeSearch: ssrSearch, defaultView,
     emptyState, description, href, creatableUrl, groupBy, recordClick,
   } = element
+  const sortableOptions = element.sortableOptions
+  const scopePresets = element.scopes
 
   // ── State ──
   const [records, setRecords] = useState(initialRecords)
@@ -93,6 +97,9 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const [pagination, setPagination] = useState(initialPagination)
   const [currentPage, setCurrentPage] = useState(initialPagination?.currentPage ?? 1)
   const [loading, setLoading] = useState(false)
+  const [sortField, setSortField] = useState(element.activeSort?.col ?? '')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>((element.activeSort?.dir?.toLowerCase() as 'asc' | 'desc') ?? 'asc')
+  const [activeScope, setActiveScope] = useState(0)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Active view ──
@@ -103,6 +110,13 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const pathSegment = panelPath.replace(/^\//, '')
 
   // Save state to session (same as SchemaTable remember)
+  function buildState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    const state: Record<string, unknown> = { view: activeView, search, page: currentPage }
+    if (sortField) { state.sort = sortField; state.dir = sortDir }
+    if (activeScope > 0) state.scope = activeScope
+    return { ...state, ...overrides }
+  }
+
   function saveRememberState(state: Record<string, unknown>) {
     if (!rememberMode || rememberMode === 'localStorage') return
     if (rememberMode === 'session') {
@@ -116,7 +130,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
 
   function handleViewChange(viewName: string) {
     setActiveView(viewName)
-    saveRememberState({ view: viewName, search, page: currentPage })
+    saveRememberState(buildState({ view: viewName }))
   }
 
   // ── Container-based responsive default view (first visit only) ──
@@ -130,7 +144,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     const target = defaultView[bp] ?? defaultView['lg'] ?? defaultView['md'] ?? defaultView['sm']
     if (target && target !== activeView) {
       setActiveView(target)
-      saveRememberState({ view: target, search, page: currentPage })
+      saveRememberState(buildState({ view: target }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -143,7 +157,9 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       params.set('page', String(opts.page ?? currentPage))
       const searchVal = opts.search !== undefined ? opts.search : search
       if (searchVal) params.set('search', searchVal)
-      if (opts.sort) { params.set('sort', opts.sort); params.set('dir', opts.dir ?? 'asc') }
+      const s = opts.sort ?? sortField
+      const d = opts.dir ?? sortDir
+      if (s) { params.set('sort', s); params.set('dir', d) }
       const filtersToApply = opts.filters ?? {}
       for (const [k, v] of Object.entries(filtersToApply)) {
         if (v) params.set(`filter[${k}]`, v)
@@ -164,14 +180,45 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     searchTimerRef.current = setTimeout(() => {
       void fetchData({ page: 1, search: value })
       setCurrentPage(1)
-      saveRememberState({ view: activeView, search: value, page: 1 })
+      saveRememberState(buildState({ search: value, page: 1 }))
     }, 300)
   }
 
   function handlePageChange(page: number) {
     setCurrentPage(page)
     void fetchData({ page, search })
-    saveRememberState({ view: activeView, search, page })
+    saveRememberState(buildState({ page }))
+  }
+
+  function handleSortChange(field: string) {
+    const newDir = field === sortField ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc'
+    setSortField(field)
+    setSortDir(newDir)
+    void fetchData({ page: 1, sort: field, dir: newDir })
+    setCurrentPage(1)
+    saveRememberState(buildState({ sort: field, dir: newDir, page: 1 }))
+  }
+
+  function handleScopeChange(index: number) {
+    setActiveScope(index)
+    // Scopes are applied server-side via the scope index query param
+    const params = new URLSearchParams()
+    params.set('page', '1')
+    if (search) params.set('search', search)
+    if (sortField) { params.set('sort', sortField); params.set('dir', sortDir) }
+    params.set('scope', String(index))
+    setLoading(true)
+    fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { records: Record<string, unknown>[]; pagination?: PaginationMeta } | null) => {
+        if (body) {
+          setRecords(body.records)
+          if (body.pagination) setPagination(body.pagination)
+        }
+      })
+      .finally(() => setLoading(false))
+    setCurrentPage(1)
+    saveRememberState(buildState({ scope: index, page: 1 }))
   }
 
   // ── Record click URL ──
@@ -213,7 +260,29 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
         </div>
       )}
 
-      {/* Toolbar: search + view toggle + export */}
+      {/* Scope pills */}
+      {scopePresets && scopePresets.length > 0 && (
+        <div className="flex items-center gap-1 mb-2">
+          {scopePresets.map((scope, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handleScopeChange(i)}
+              className={[
+                'inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors',
+                activeScope === i
+                  ? 'bg-primary text-primary-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              ].join(' ')}
+            >
+              {scope.icon && <span className="mr-1.5"><ResourceIcon icon={scope.icon} /></span>}
+              {scope.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Toolbar: search + sort + view toggle + export */}
       <div className="py-2.5 flex items-center gap-3 flex-wrap">
         {searchable && (
           <div className="relative">
@@ -236,6 +305,38 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Sort dropdown */}
+        {sortableOptions && sortableOptions.length > 0 && (
+          <div className="flex items-center gap-1">
+            <select
+              value={sortField}
+              onChange={(e) => handleSortChange(e.target.value)}
+              className="h-8 rounded-md border bg-background px-2 text-sm text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">Sort by…</option>
+              {sortableOptions.map((opt) => (
+                <option key={opt.field} value={opt.field}>{opt.label}</option>
+              ))}
+            </select>
+            {sortField && (
+              <button
+                type="button"
+                onClick={() => {
+                  const newDir = sortDir === 'asc' ? 'desc' : 'asc'
+                  setSortDir(newDir)
+                  void fetchData({ page: 1, sort: sortField, dir: newDir })
+                  setCurrentPage(1)
+                  saveRememberState(buildState({ sort: sortField, dir: newDir, page: 1 }))
+                }}
+                className="h-8 w-8 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground transition-colors"
+                title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+              >
+                {sortDir === 'asc' ? '↑' : '↓'}
               </button>
             )}
           </div>
@@ -311,7 +412,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
         const viewType = activeViewMeta?.type ?? activeView
 
         if (viewType === 'table' && viewFields) {
-          return <TableView records={records} fields={viewFields} getHref={getRecordHref} />
+          return <TableView records={records} fields={viewFields} getHref={getRecordHref} sortField={sortField} sortDir={sortDir} onSort={handleSortChange} />
         }
         if (viewType === 'grid') {
           return (
@@ -522,10 +623,13 @@ function GridView({ groups, fields, titleField, descriptionField, imageField, ge
 
 // ─── TableView ──────────────────────────────────────────────
 
-function TableView({ records, fields, getHref }: {
-  records:  Record<string, unknown>[]
-  fields:   DataFieldMeta[]
-  getHref:  (r: Record<string, unknown>) => string | undefined
+function TableView({ records, fields, getHref, sortField, sortDir, onSort }: {
+  records:    Record<string, unknown>[]
+  fields:     DataFieldMeta[]
+  getHref:    (r: Record<string, unknown>) => string | undefined
+  sortField?: string
+  sortDir?:   string
+  onSort?:    (field: string) => void
 }) {
   return (
     <div className="rounded-xl border overflow-hidden">
@@ -533,11 +637,28 @@ function TableView({ records, fields, getHref }: {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/40">
-              {fields.map((f) => (
-                <th key={f.name} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {f.label}
-                </th>
-              ))}
+              {fields.map((f) => {
+                const isSortable = f.sortable
+                const isActive = sortField === f.name
+                return (
+                  <th
+                    key={f.name}
+                    className={[
+                      'text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider',
+                      isSortable ? 'cursor-pointer select-none hover:text-foreground' : '',
+                    ].join(' ')}
+                    onClick={isSortable && onSort ? () => onSort(f.name) : undefined}
+                  >
+                    {f.label}
+                    {isSortable && (
+                      <svg width="10" height="12" viewBox="0 0 10 12" fill="none" className="inline ml-1" style={{ opacity: isActive ? 1 : 0.3 }}>
+                        <path d="M5 1L2 4h6L5 1Z" fill="currentColor" opacity={isActive && sortDir === 'asc' ? 1 : 0.3} />
+                        <path d="M5 11L2 8h6L5 11Z" fill="currentColor" opacity={isActive && sortDir === 'desc' ? 1 : 0.3} />
+                      </svg>
+                    )}
+                  </th>
+                )
+              })}
               <th className="w-8" />
             </tr>
           </thead>

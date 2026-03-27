@@ -58,6 +58,9 @@ export interface DataViewElementMeta {
   exportable?:       ('csv' | 'json')[]
   defaultView?:      Record<string, string>
   folderField?:      string
+  sortableOptions?:  { field: string; label: string }[]
+  scopes?:           { label: string; icon?: string }[]
+  activeScope?:      number
   // Custom render results (per record, SSR-resolved)
   renderedRecords?:  unknown[][]
 }
@@ -206,6 +209,14 @@ export async function resolveListElement(
   if (config.groupBy)          meta.groupBy          = config.groupBy
   if (recordClick)             meta.recordClick      = recordClick
   if (config.folderField)      meta.folderField      = config.folderField
+  if (config.sortableOptions)  meta.sortableOptions  = config.sortableOptions
+  if (config.scopes && config.scopes.length > 0) {
+    meta.scopes = config.scopes.map(s => {
+      const m: { label: string; icon?: string } = { label: s.label }
+      if (s.icon) m.icon = s.icon
+      return m
+    })
+  }
   if (config.defaultView)      meta.defaultView      = config.defaultView
 
   // Export
