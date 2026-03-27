@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import type { PanelI18n } from '@boostkit/panels'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import type { PanelI18n, PanelColumnMeta } from '@boostkit/panels'
 import { ResourceIcon } from './ResourceIcon.js'
+import { TableEditCell } from './TableEditCell.js'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ interface DataViewElement {
   lazy?:             boolean
   pollInterval?:     number
   live?:             boolean
+  liveChannel?:      string
   remember?:         string
   emptyMessage?:     string
   emptyState?:       { icon?: string; heading?: string; description?: string }
@@ -229,6 +231,81 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     if (href) return `${href}/${record.id}`
     return undefined
   }
+
+  // ── Refs for live/poll (avoid stale closures) ──
+  const currentPageRef = useRef(currentPage)
+  const searchRef = useRef(search)
+  const sortFieldRef = useRef(sortField)
+  const sortDirRef = useRef(sortDir)
+  useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
+  useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => { sortFieldRef.current = sortField }, [sortField])
+  useEffect(() => { sortDirRef.current = sortDir }, [sortDir])
+
+  // ── Polling ──
+  useEffect(() => {
+    if (!element.pollInterval) return
+    const interval = setInterval(() => {
+      void fetchData({ page: currentPageRef.current, search: searchRef.current, sort: sortFieldRef.current || undefined, dir: sortDirRef.current })
+    }, element.pollInterval)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [element.pollInterval, elementId])
+
+  // ── Live updates via WebSocket ──
+  useEffect(() => {
+    if (!element.live || !element.liveChannel) return
+    const liveChannel = element.liveChannel
+    let destroyed = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let socket: any = null
+
+    ;(async () => {
+      try {
+        const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+        const wsUrl = `${wsProto}://${window.location.host}/ws`
+        const ws = new WebSocket(wsUrl)
+        socket = ws
+
+        ws.onopen = () => {
+          if (destroyed) { ws.close(); return }
+          ws.send(JSON.stringify({ type: 'subscribe', channel: liveChannel }))
+        }
+
+        ws.onmessage = (event: MessageEvent) => {
+          if (destroyed) return
+          try {
+            const msg = JSON.parse(String(event.data)) as { type: string; channel?: string }
+            if (msg.type === 'event' && msg.channel === liveChannel) {
+              void fetchData({
+                page: currentPageRef.current,
+                search: searchRef.current || undefined,
+                sort: sortFieldRef.current || undefined,
+                dir: sortDirRef.current,
+              })
+            }
+          } catch { /* ignore */ }
+        }
+
+        ws.onclose = () => { socket = null }
+      } catch { /* WebSocket not available */ }
+    })()
+
+    return () => {
+      destroyed = true
+      if (socket) {
+        try { socket.send(JSON.stringify({ type: 'unsubscribe', channel: liveChannel })) } catch { /* ignore */ }
+        socket.close()
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [element.live, element.liveChannel])
+
+  // ── Editable save handler ──
+  const saveEndpoint = `${panelPath}/api/_tables/${elementId}/save`
+  const handleEditSaved = useCallback((record: Record<string, unknown>, field: string, value: unknown) => {
+    setRecords(prev => prev.map(r => r.id === record.id ? { ...r, [field]: value } : r))
+  }, [])
 
   // ── Group records ──
   function groupRecords(recs: Record<string, unknown>[]): { label: string; records: Record<string, unknown>[] }[] {
@@ -413,7 +490,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
         const viewType = activeViewMeta?.type ?? activeView
 
         if (viewType === 'table' && viewFields) {
-          return <TableView records={records} fields={viewFields} getHref={getRecordHref} sortField={sortField} sortDir={sortDir} onSort={handleSortChange} />
+          return <TableView records={records} fields={viewFields} getHref={getRecordHref} sortField={sortField} sortDir={sortDir} onSort={handleSortChange} saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n} onSaved={handleEditSaved} />
         }
         if (viewType === 'grid') {
           return (
@@ -624,13 +701,17 @@ function GridView({ groups, fields, titleField, descriptionField, imageField, ge
 
 // ─── TableView ──────────────────────────────────────────────
 
-function TableView({ records, fields, getHref, sortField, sortDir, onSort }: {
-  records:    Record<string, unknown>[]
-  fields:     DataFieldMeta[]
-  getHref:    (r: Record<string, unknown>) => string | undefined
-  sortField?: string
-  sortDir?:   string
-  onSort?:    (field: string) => void
+function TableView({ records, fields, getHref, sortField, sortDir, onSort, saveEndpoint, panelPath, i18n, onSaved }: {
+  records:       Record<string, unknown>[]
+  fields:        DataFieldMeta[]
+  getHref:       (r: Record<string, unknown>) => string | undefined
+  sortField?:    string
+  sortDir?:      string
+  onSort?:       (field: string) => void
+  saveEndpoint?: string
+  panelPath?:    string
+  i18n?:         PanelI18n
+  onSaved?:      (record: Record<string, unknown>, field: string, value: unknown) => void
 }) {
   return (
     <div className="rounded-xl border overflow-hidden">
@@ -668,7 +749,18 @@ function TableView({ records, fields, getHref, sortField, sortDir, onSort }: {
               <tr key={String(record.id)} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                 {fields.map((f) => (
                   <td key={f.name} className="px-4 py-2.5 text-muted-foreground">
-                    <FieldValue field={f} record={record} />
+                    {f.editable && saveEndpoint && panelPath && i18n ? (
+                      <TableEditCell
+                        record={record}
+                        column={f as unknown as PanelColumnMeta}
+                        saveEndpoint={saveEndpoint}
+                        panelPath={panelPath}
+                        i18n={i18n}
+                        onSaved={onSaved}
+                      />
+                    ) : (
+                      <FieldValue field={f} record={record} />
+                    )}
                   </td>
                 ))}
                 <td className="px-4 py-2.5 text-right">

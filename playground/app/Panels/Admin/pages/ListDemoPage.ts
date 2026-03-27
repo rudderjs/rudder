@@ -25,6 +25,7 @@ export class ListDemoPage extends Page {
         .searchable(['name'])
         .sortable(['name', 'slug'])
         .paginated('pages', 5)
+        .live()
         .views([
           ViewMode.list([
             DataField.make('name'),
@@ -35,8 +36,8 @@ export class ListDemoPage extends Page {
             DataField.make('slug').badge(),
           ]),
           ViewMode.table([
-            Column.make('name').sortable(),
-            Column.make('slug'),
+            Column.make('name').sortable().editable(),
+            Column.make('slug').editable('popover'),
           ]),
         ])
         .defaultView({ sm: 'list', lg: 'grid' })
@@ -67,9 +68,9 @@ export class ListDemoPage extends Page {
             DataField.make('createdAt').date(),
           ]),
           ViewMode.table([
-            Column.make('title').sortable(),
-            Column.make('status').badge(),
-            Column.make('featured').boolean(),
+            Column.make('title').sortable().editable(),
+            Column.make('status').badge().editable('popover'),
+            Column.make('featured').boolean().editable(),
             Column.make('createdAt').date().sortable(),
           ]),
         ])
