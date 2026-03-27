@@ -1,4 +1,4 @@
-import { Page, Heading, Text, List, ViewMode, Column, DataField, SelectField } from '@boostkit/panels'
+import { Page, Heading, Text, List, ViewMode, Column, DataField, SelectField, SelectFilter } from '@boostkit/panels'
 import { Category } from '../../../Models/Category.js'
 import { Article } from '../../../Models/Article.js'
 import { Todo } from '../../../Models/Todo.js'
@@ -53,6 +53,12 @@ export class ListDemoPage extends Page {
         .descriptionField('excerpt')
         .sortBy('createdAt', 'DESC')
         .searchable(['title'])
+        .filters([
+          SelectFilter.make('featured').label('Featured').options([
+            { label: 'Featured', value: true },
+            { label: 'Not featured', value: false },
+          ]),
+        ])
         .groupBy('status')
         .scopes([
           { label: 'All' },
@@ -81,6 +87,7 @@ export class ListDemoPage extends Page {
             Column.make('createdAt').date().sortable(),
           ]),
         ])
+        .remember('session')
         .onRecordClick('edit'),
 
       // ─── 3. Todos — computed field + display transform ─────────
@@ -118,6 +125,12 @@ export class ListDemoPage extends Page {
         .descriptionField('email')
         .sortBy('name', 'ASC')
         .searchable(['name', 'email'])
+        .filters([
+          SelectFilter.make('role').label('Role').options([
+            { label: 'Admin', value: 'admin' },
+            { label: 'User', value: 'user' },
+          ]),
+        ])
         .sortable([
           { field: 'name', label: 'Name' },
           { field: 'email', label: 'Email' },

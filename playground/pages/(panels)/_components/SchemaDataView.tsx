@@ -50,7 +50,7 @@ interface DataViewElement {
   searchable?:       boolean
   searchColumns?:    string[]
   pagination?:       PaginationMeta
-  filters?:          unknown[]
+  filters?:          { name: string; type: string; label: string; extra?: Record<string, unknown> }[]
   actions?:          unknown[]
   activeSearch?:     string
   activeSort?:       { col: string; dir: string }
@@ -103,6 +103,8 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const [sortField, setSortField] = useState(element.activeSort?.col ?? '')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>((element.activeSort?.dir?.toLowerCase() as 'asc' | 'desc') ?? 'asc')
   const [activeScope, setActiveScope] = useState(element.activeScope ?? 0)
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(element.activeFilters ?? {})
+  const filters = element.filters ?? []
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Active view ──
@@ -117,6 +119,9 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     const state: Record<string, unknown> = { view: activeView, search, page: currentPage }
     if (sortField) { state.sort = sortField; state.dir = sortDir }
     if (activeScope > 0) state.scope = activeScope
+    for (const [k, v] of Object.entries(activeFilters)) {
+      if (v) state[`filter_${k}`] = v
+    }
     return { ...state, ...overrides }
   }
 
@@ -163,7 +168,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       const s = opts.sort ?? sortField
       const d = opts.dir ?? sortDir
       if (s) { params.set('sort', s); params.set('dir', d) }
-      const filtersToApply = opts.filters ?? {}
+      const filtersToApply = opts.filters ?? activeFilters
       for (const [k, v] of Object.entries(filtersToApply)) {
         if (v) params.set(`filter[${k}]`, v)
       }
@@ -213,6 +218,26 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   }
 
   // ── Record click URL ──
+  function handleFilterChange(filterName: string, value: string) {
+    const newFilters = { ...activeFilters }
+    if (value) newFilters[filterName] = value
+    else delete newFilters[filterName]
+    setActiveFilters(newFilters)
+    setCurrentPage(1)
+    void fetchData({ page: 1, filters: newFilters })
+    // Build state with new filters
+    const filterState: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(newFilters)) filterState[`filter_${k}`] = v
+    saveRememberState(buildState({ page: 1, ...filterState }))
+  }
+
+  function clearFilters() {
+    setActiveFilters({})
+    setCurrentPage(1)
+    void fetchData({ page: 1, filters: {} })
+    saveRememberState(buildState({ page: 1 }))
+  }
+
   function getRecordHref(record: Record<string, unknown>): string | undefined {
     if (recordClick === 'edit') return href ? `${href}/${record.id}/edit` : undefined
     if (recordClick === 'custom' && record._href) return String(record._href)
@@ -377,6 +402,37 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
               </button>
             )}
           </div>
+        )}
+
+        {/* Filters */}
+        {filters.map(filter => {
+          if (filter.type === 'select') {
+            const options = (filter.extra?.options ?? []) as Array<{ label: string; value: string | number | boolean }>
+            return (
+              <select
+                key={filter.name}
+                value={activeFilters[filter.name] ?? ''}
+                onChange={(e) => handleFilterChange(filter.name, e.target.value)}
+                className="h-8 rounded-md border bg-background px-3 pr-8 text-sm appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+              >
+                <option value="">{filter.label}</option>
+                {options.map(opt => (
+                  <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
+                ))}
+              </select>
+            )
+          }
+          return null
+        })}
+        {Object.keys(activeFilters).length > 0 && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            {i18n.clearFilters ?? 'Clear filters'}
+          </button>
         )}
 
         {/* Sort dropdown */}
