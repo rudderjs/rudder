@@ -6,12 +6,25 @@ import { ResourceIcon } from './ResourceIcon.js'
 
 // ─── Types ──────────────────────────────────────────────────
 
+interface DataFieldMeta {
+  name:       string
+  label:      string
+  type:       string
+  format?:    string
+  href?:      string
+  editable?:  boolean
+  editMode?:  string
+  editField?: unknown
+  sortable?:  boolean
+  searchable?: boolean
+}
+
 interface ViewModeMeta {
   type:        string
   name:        string
   label:       string
   icon?:       string
-  hasColumns?: boolean
+  fields?:     DataFieldMeta[]
 }
 
 interface PaginationMeta {
@@ -32,7 +45,6 @@ interface DataViewElement {
   imageField?:       string
   views?:            ViewModeMeta[]
   activeView?:       string
-  columns?:          { name: string; label: string; sortable?: boolean }[]
   description?:      string
   searchable?:       boolean
   searchColumns?:    string[]
@@ -70,7 +82,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const {
     title, id: elementId, records: initialRecords, views,
     titleField, descriptionField, imageField,
-    columns, searchable, pagination: initialPagination,
+    searchable, pagination: initialPagination,
     activeSearch: ssrSearch, defaultView,
     emptyState, description, href, creatableUrl, groupBy, recordClick,
   } = element
@@ -290,39 +302,43 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       )}
 
       {/* Content — active view */}
-      {!isEmpty && (
-        <>
-          {activeView === 'list' && (
-            <ListView
-              groups={grouped}
-              titleField={titleField ?? 'id'}
-              descriptionField={descriptionField}
-              imageField={imageField}
-              getHref={getRecordHref}
-              groupBy={groupBy}
-            />
-          )}
+      {!isEmpty && (() => {
+        // Find the active view's field definitions
+        const activeViewMeta = viewOptions.find(v => v.name === activeView)
+        const viewFields = activeViewMeta?.fields
 
-          {activeView === 'grid' && (
+        // For list/grid: use view fields or fall back to titleField/descriptionField/imageField
+        const viewType = activeViewMeta?.type ?? activeView
+
+        if (viewType === 'table' && viewFields) {
+          return <TableView records={records} fields={viewFields} getHref={getRecordHref} />
+        }
+        if (viewType === 'grid') {
+          return (
             <GridView
               groups={grouped}
+              fields={viewFields}
               titleField={titleField ?? 'id'}
               descriptionField={descriptionField}
               imageField={imageField}
               getHref={getRecordHref}
               groupBy={groupBy}
             />
-          )}
-
-          {activeView === 'table' && columns && (
-            <TableView
-              records={records}
-              columns={columns}
-              getHref={getRecordHref}
-            />
-          )}
-        </>
-      )}
+          )
+        }
+        // Default: list view
+        return (
+          <ListView
+            groups={grouped}
+            fields={viewFields}
+            titleField={titleField ?? 'id'}
+            descriptionField={descriptionField}
+            imageField={imageField}
+            getHref={getRecordHref}
+            groupBy={groupBy}
+          />
+        )
+      })()}
 
       {/* Pagination */}
       {pagination && pagination.lastPage > 1 && (
@@ -351,10 +367,36 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   )
 }
 
+// ─── FieldValue — renders a single DataField value ──────────
+
+function FieldValue({ field, record }: { field: DataFieldMeta; record: Record<string, unknown> }) {
+  const value = record[field.name]
+  if (value === null || value === undefined) return <span className="text-muted-foreground/40">—</span>
+
+  if (field.type === 'image') {
+    return <img src={String(value)} alt="" className="h-10 w-10 rounded-md object-cover shrink-0" />
+  }
+  if (field.type === 'badge') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">{String(value)}</span>
+  }
+  if (field.type === 'boolean') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">{value ? 'Yes' : 'No'}</span>
+  }
+  if (field.type === 'date') {
+    try {
+      const d = value instanceof Date ? value : new Date(String(value))
+      return <span>{d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+    } catch { return <span>{String(value)}</span> }
+  }
+
+  return <span>{String(value)}</span>
+}
+
 // ─── ListView ───────────────────────────────────────────────
 
-function ListView({ groups, titleField, descriptionField, imageField, getHref, groupBy }: {
+function ListView({ groups, fields, titleField, descriptionField, imageField, getHref, groupBy }: {
   groups:           { label: string; records: Record<string, unknown>[] }[]
+  fields?:          DataFieldMeta[]
   titleField:       string
   descriptionField?: string
   imageField?:      string
@@ -373,12 +415,29 @@ function ListView({ groups, titleField, descriptionField, imageField, getHref, g
           {group.records.map((record) => {
             const href = getHref(record)
             const Tag = href ? 'a' : 'div'
+
+            // With DataField definitions
+            if (fields && fields.length > 0) {
+              const imgField = fields.find(f => f.type === 'image')
+              const textFields = fields.filter(f => f.type !== 'image')
+              return (
+                <Tag key={String(record.id)} {...(href ? { href } : {})} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
+                  {imgField && record[imgField.name] && <FieldValue field={imgField} record={record} />}
+                  <div className="flex-1 min-w-0">
+                    {textFields.map((f, i) => (
+                      <p key={f.name} className={i === 0 ? 'text-sm font-medium truncate' : 'text-xs text-muted-foreground truncate'}>
+                        <FieldValue field={f} record={record} />
+                      </p>
+                    ))}
+                  </div>
+                  {href && <span className="text-xs text-muted-foreground">→</span>}
+                </Tag>
+              )
+            }
+
+            // Fallback: titleField / descriptionField / imageField
             return (
-              <Tag
-                key={String(record.id)}
-                {...(href ? { href } : {})}
-                className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors"
-              >
+              <Tag key={String(record.id)} {...(href ? { href } : {})} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
                 {imageField && record[imageField] && (
                   <img src={String(record[imageField])} alt="" className="h-10 w-10 rounded-md object-cover shrink-0" />
                 )}
@@ -388,9 +447,7 @@ function ListView({ groups, titleField, descriptionField, imageField, getHref, g
                     <p className="text-xs text-muted-foreground truncate">{String(record[descriptionField] ?? '')}</p>
                   )}
                 </div>
-                {href && (
-                  <span className="text-xs text-muted-foreground">→</span>
-                )}
+                {href && <span className="text-xs text-muted-foreground">→</span>}
               </Tag>
             )
           })}
@@ -402,8 +459,9 @@ function ListView({ groups, titleField, descriptionField, imageField, getHref, g
 
 // ─── GridView ───────────────────────────────────────────────
 
-function GridView({ groups, titleField, descriptionField, imageField, getHref, groupBy }: {
+function GridView({ groups, fields, titleField, descriptionField, imageField, getHref, groupBy }: {
   groups:           { label: string; records: Record<string, unknown>[] }[]
+  fields?:          DataFieldMeta[]
   titleField:       string
   descriptionField?: string
   imageField?:      string
@@ -423,12 +481,28 @@ function GridView({ groups, titleField, descriptionField, imageField, getHref, g
             {group.records.map((record) => {
               const href = getHref(record)
               const Tag = href ? 'a' : 'div'
+
+              // With DataField definitions
+              if (fields && fields.length > 0) {
+                const imgField = fields.find(f => f.type === 'image')
+                const textFields = fields.filter(f => f.type !== 'image')
+                return (
+                  <Tag key={String(record.id)} {...(href ? { href } : {})} className="rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2">
+                    {imgField && record[imgField.name] && (
+                      <img src={String(record[imgField.name])} alt="" className="h-32 w-full rounded-lg object-cover" />
+                    )}
+                    {textFields.map((f, i) => (
+                      <p key={f.name} className={i === 0 ? 'text-sm font-medium truncate' : 'text-xs text-muted-foreground truncate'}>
+                        <FieldValue field={f} record={record} />
+                      </p>
+                    ))}
+                  </Tag>
+                )
+              }
+
+              // Fallback
               return (
-                <Tag
-                  key={String(record.id)}
-                  {...(href ? { href } : {})}
-                  className="rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2"
-                >
+                <Tag key={String(record.id)} {...(href ? { href } : {})} className="rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors flex flex-col gap-2">
                   {imageField && record[imageField] && (
                     <img src={String(record[imageField])} alt="" className="h-32 w-full rounded-lg object-cover" />
                   )}
@@ -448,9 +522,9 @@ function GridView({ groups, titleField, descriptionField, imageField, getHref, g
 
 // ─── TableView ──────────────────────────────────────────────
 
-function TableView({ records, columns, getHref }: {
+function TableView({ records, fields, getHref }: {
   records:  Record<string, unknown>[]
-  columns:  { name: string; label: string; sortable?: boolean }[]
+  fields:   DataFieldMeta[]
   getHref:  (r: Record<string, unknown>) => string | undefined
 }) {
   return (
@@ -459,9 +533,9 @@ function TableView({ records, columns, getHref }: {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/40">
-              {columns.map((col) => (
-                <th key={col.name} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {col.label}
+              {fields.map((f) => (
+                <th key={f.name} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {f.label}
                 </th>
               ))}
               <th className="w-8" />
@@ -470,9 +544,9 @@ function TableView({ records, columns, getHref }: {
           <tbody>
             {records.map((record) => (
               <tr key={String(record.id)} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                {columns.map((col) => (
-                  <td key={col.name} className="px-4 py-2.5 text-muted-foreground">
-                    {String(record[col.name] ?? '')}
+                {fields.map((f) => (
+                  <td key={f.name} className="px-4 py-2.5 text-muted-foreground">
+                    <FieldValue field={f} record={record} />
                   </td>
                 ))}
                 <td className="px-4 py-2.5 text-right">

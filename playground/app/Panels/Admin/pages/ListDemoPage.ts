@@ -1,4 +1,4 @@
-import { Page, Heading, List, ViewMode, Column } from '@boostkit/panels'
+import { Page, Heading, List, ViewMode, Column, DataField } from '@boostkit/panels'
 import { Category } from '../../../Models/Category.js'
 
 export class ListDemoPage extends Page {
@@ -10,7 +10,6 @@ export class ListDemoPage extends Page {
     return [
       Heading.make('List Demo'),
 
-      // Basic list with title/description fields
       List.make('Categories')
         .id('list-demo-categories')
         .fromModel(Category)
@@ -20,8 +19,17 @@ export class ListDemoPage extends Page {
         .searchable(['name'])
         .paginated('pages', 5)
         .views([
-          'list',
-          'grid',
+          // List view with DataField definitions
+          ViewMode.list([
+            DataField.make('name'),
+            DataField.make('slug'),
+          ]),
+          // Grid view with DataField
+          ViewMode.grid([
+            DataField.make('name'),
+            DataField.make('slug').badge(),
+          ]),
+          // Table view with Column (extends DataField + sortable/searchable)
           ViewMode.table([
             Column.make('name').sortable(),
             Column.make('slug'),

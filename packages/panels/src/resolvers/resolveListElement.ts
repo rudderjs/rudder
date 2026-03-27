@@ -23,8 +23,6 @@ export interface DataViewElementMeta {
   // View configuration
   views?:            ViewModeMeta[]
   activeView?:       string
-  // Table view columns (when View.table() is used)
-  columns?:          unknown[]
   // Shared data-view features
   description?:      string
   emptyMessage?:     string
@@ -117,11 +115,11 @@ export async function resolveListElement(
   if (config.descriptionField) displayedKeys.add(config.descriptionField)
   if (config.imageField)       displayedKeys.add(config.imageField)
   if (config.groupBy)          displayedKeys.add(config.groupBy)
-  // Add column fields from View.table()
+  // Add fields from all views (DataField/Column)
   if (config.views.length > 0) {
     for (const v of config.views) {
-      const cols = v.getColumns()
-      if (cols) for (const c of cols) displayedKeys.add(c.getName())
+      const fields = v.getFields()
+      if (fields) for (const f of fields) displayedKeys.add(f.getName())
     }
   }
   let records = result.records.map(record => {
@@ -142,18 +140,12 @@ export async function resolveListElement(
   }
 
   // ── Resolve views meta ──
+  // ViewMode.toMeta() serializes per-view fields (DataField/Column) into the meta.
+  // Each view carries its own field definitions — the renderer reads the active view's fields.
   let viewsMeta: ViewModeMeta[] | undefined
-  let tableColumns: unknown[] | undefined
 
   if (config.views.length > 0) {
-    viewsMeta = config.views.map(v => {
-      const meta = v.toMeta()
-      // If this view has columns (View.table()), resolve them
-      if (v.getColumns()) {
-        tableColumns = resolveColumns(v.getColumns()!).map(c => c)
-      }
-      return meta
-    })
+    viewsMeta = config.views.map(v => v.toMeta())
   }
 
   // ── Resolve recordClick for function handlers ──
@@ -185,7 +177,6 @@ export async function resolveListElement(
   // Views
   if (viewsMeta && viewsMeta.length > 0) meta.views = viewsMeta
   if (persistedView)             meta.activeView = persistedView
-  if (tableColumns)            meta.columns    = tableColumns
 
   // Description / empty
   if (config.description)      meta.description  = config.description
