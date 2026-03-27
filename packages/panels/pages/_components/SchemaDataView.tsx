@@ -166,12 +166,12 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   function handleViewChange(viewName: string) {
     setActiveView(viewName)
     saveRememberState(buildState({ view: viewName }))
-    // When switching to/from tree view, re-fetch (tree needs all records)
+    // When switching to/from tree view, re-fetch (tree needs all records, others need folder-filtered)
     const targetView = viewOptions.find(v => v.name === viewName)
     const isTree = targetView?.type === 'tree'
     const wasTree = viewOptions.find(v => v.name === activeView)?.type === 'tree'
-    if (isTree !== wasTree) {
-      void fetchData({ page: 1, ...(isTree ? { folder: null } : {}) })
+    if (isTree || wasTree) {
+      void fetchData({ page: 1, viewType: targetView?.type, folder: isTree ? null : currentFolder })
     }
   }
 
@@ -192,7 +192,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   }, [])
 
   // ── Fetch ──
-  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string>; scope?: number; folder?: string | null } = {}) {
+  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string>; scope?: number; folder?: string | null; viewType?: string } = {}) {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -212,9 +212,9 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       // Include folder param
       const folder = opts.folder !== undefined ? opts.folder : currentFolder
       if (folder) params.set('folder', folder)
-      // Tree view needs all records
-      const currentViewMeta = viewOptions.find(v => v.name === activeView)
-      if (currentViewMeta?.type === 'tree') params.set('view', 'tree')
+      // Tree view needs all records (use explicit viewType if passed, else read current)
+      const effectiveViewType = opts.viewType ?? viewOptions.find(v => v.name === activeView)?.type
+      if (effectiveViewType === 'tree') params.set('view', 'tree')
       const res = await fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
       if (!res.ok) return
       const body = await res.json() as { records: Record<string, unknown>[]; pagination?: PaginationMeta; breadcrumbs?: { id: string; label: string }[] }
