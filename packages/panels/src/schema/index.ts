@@ -28,8 +28,11 @@ export type { Table2Config }  from './Table2.js'
 export { Form }               from './Form.js'
 export type { FormElementMeta, FormSubmitFn, FormItem } from './Form.js'
 
+export { DataField }          from './DataField.js'
+export type { DataFieldMeta, DataFieldType, EditMode } from './DataField.js'
+
 export { Column }             from './Column.js'
-export type { ColumnMeta, EditMode } from './Column.js'
+export type { ColumnMeta } from './Column.js'
 
 export { Dialog }             from './Dialog.js'
 export type { DialogElementMeta } from './Dialog.js'

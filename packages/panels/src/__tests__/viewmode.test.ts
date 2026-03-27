@@ -2,8 +2,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ViewMode } from '../schema/ViewMode.js'
-import { Column }   from '../schema/Column.js'
+import { ViewMode }  from '../schema/ViewMode.js'
+import { Column }    from '../schema/Column.js'
+import { DataField } from '../schema/DataField.js'
 
 describe('ViewMode', () => {
   it('make() creates custom view', () => {
@@ -101,13 +102,27 @@ describe('ViewMode toMeta', () => {
     assert.equal(meta.name, 'list')
     assert.equal(meta.label, 'List')
     assert.equal(meta.icon, 'list')
-    assert.equal(meta.hasColumns, undefined)
+    assert.equal(meta.fields, undefined)
   })
 
-  it('table preset meta includes hasColumns', () => {
+  it('table preset meta includes fields', () => {
     const meta = ViewMode.table([Column.make('x')]).toMeta()
     assert.equal(meta.type, 'table')
-    assert.equal(meta.hasColumns, true)
+    assert.equal(meta.fields?.length, 1)
+    assert.equal(meta.fields?.[0]?.name, 'x')
+  })
+
+  it('list preset with fields includes them in meta', () => {
+    const meta = ViewMode.list([DataField.make('name'), DataField.make('slug')]).toMeta()
+    assert.equal(meta.fields?.length, 2)
+    assert.equal(meta.fields?.[0]?.name, 'name')
+    assert.equal(meta.fields?.[1]?.name, 'slug')
+  })
+
+  it('grid preset with editable field includes edit meta', () => {
+    const meta = ViewMode.grid([DataField.make('name').editable()]).toMeta()
+    assert.equal(meta.fields?.[0]?.editable, true)
+    assert.equal(meta.fields?.[0]?.editMode, 'inline')
   })
 
   it('custom view meta omits icon when not set', () => {
