@@ -115,11 +115,12 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const pathSegment = panelPath.replace(/^\//, '')
 
   // Save state to session (same as SchemaTable remember)
-  function buildState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  function buildState(overrides: Record<string, unknown> = {}, filterOverride?: Record<string, string>): Record<string, unknown> {
     const state: Record<string, unknown> = { view: activeView, search, page: currentPage }
     if (sortField) { state.sort = sortField; state.dir = sortDir }
     if (activeScope > 0) state.scope = activeScope
-    for (const [k, v] of Object.entries(activeFilters)) {
+    const filtersToSave = filterOverride ?? activeFilters
+    for (const [k, v] of Object.entries(filtersToSave)) {
       if (v) state[`filter_${k}`] = v
     }
     return { ...state, ...overrides }
@@ -225,17 +226,14 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
     setActiveFilters(newFilters)
     setCurrentPage(1)
     void fetchData({ page: 1, filters: newFilters })
-    // Build state with new filters
-    const filterState: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(newFilters)) filterState[`filter_${k}`] = v
-    saveRememberState(buildState({ page: 1, ...filterState }))
+    saveRememberState(buildState({ page: 1 }, newFilters))
   }
 
   function clearFilters() {
     setActiveFilters({})
     setCurrentPage(1)
     void fetchData({ page: 1, filters: {} })
-    saveRememberState(buildState({ page: 1 }))
+    saveRememberState(buildState({ page: 1 }, {}))
   }
 
   function getRecordHref(record: Record<string, unknown>): string | undefined {
