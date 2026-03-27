@@ -125,8 +125,10 @@ export { Playground } from './schema/Playground.js'
 export type { PlaygroundElementMeta } from './schema/Playground.js'
 export { Stats, Stat } from './schema/Stats.js'
 export { Table }   from './schema/Table.js'
+export { Table2 }  from './schema/Table2.js'
 export { Chart }   from './schema/Chart.js'
 export { List }    from './schema/List.js'
+export { ViewMode } from './schema/ViewMode.js'
 export { Form }    from './schema/Form.js'
 export type { FormElementMeta, FormElementMeta as SchemaFormMeta, FormSubmitFn, FormItem } from './schema/Form.js'
 export { Column }  from './schema/Column.js'
@@ -146,6 +148,9 @@ export type {
   ChartType,
   ListElementMeta,
   ListItem,
+  ListConfig,
+  ViewModeMeta,
+  Table2Config,
 } from './schema/index.js'
 
 // ─── Schema resolver ────────────────────────────────────────
@@ -153,6 +158,10 @@ export type {
 export { resolveSchema } from './resolveSchema.js'
 export type { PanelSchemaElementMeta } from './resolveSchema.js'
 export { resolveTable } from './resolvers/resolveTable.js'
+export { resolveTable2 } from './resolvers/resolveTable2.js'
+export { resolveListElement } from './resolvers/resolveListElement.js'
+export type { DataViewElementMeta } from './resolvers/resolveListElement.js'
+export { resolveListQuery } from './resolvers/resolveListQuery.js'
 export { resolveTabs }  from './resolvers/resolveTabs.js'
 export { resolveActiveTabIndex } from './resolvers/helpers.js'
 export { resolveForm }  from './resolvers/resolveForm.js'

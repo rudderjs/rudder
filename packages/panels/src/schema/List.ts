@@ -398,7 +398,14 @@ export class List {
   getPollInterval(): number | undefined { return this._pollInterval }
   getFilters(): Filter[] { return this._filters }
   getActions(): Action[] { return this._actions }
-  getType(): string { return 'list' }
+  getType(): string {
+    // If this List has data-view features (model/views/search/pagination), resolve as 'dataview'
+    // Otherwise fall back to legacy 'list' (simple static items)
+    if (this._model || this._resourceClass || this._rows || this._views.length > 0 || this._renderFn || this._searchable || this._paginationType) {
+      return 'dataview'
+    }
+    return 'list'
+  }
 
   // ── Config ────────────────────────────────────────
 

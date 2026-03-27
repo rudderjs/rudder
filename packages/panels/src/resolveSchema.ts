@@ -99,6 +99,13 @@ export async function resolveSchema(
       continue
     }
 
+    if (type === 'dataview') {
+      const { resolveListElement } = await import('./resolvers/resolveListElement.js')
+      const meta = await resolveListElement(el, panel, ctx)
+      if (meta) result.push(meta)
+      continue
+    }
+
     if (type === 'dashboard') {
       result.push(await resolveDashboard(el, panel, ctx, resolveSchema))
       continue

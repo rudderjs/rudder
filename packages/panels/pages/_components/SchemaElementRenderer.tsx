@@ -4,6 +4,7 @@ import { lazy, Suspense, useState, useEffect } from 'react'
 import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@boostkit/panels'
 import { getElement, getLazyElement } from '@boostkit/panels'
 import { SchemaTable } from './SchemaTable.js'
+import { SchemaDataView } from './SchemaDataView.js'
 import { SchemaForm } from './SchemaForm.js'
 import type { SchemaFormMeta } from '@boostkit/panels'
 import { CodeBlock, CopyButton } from './CodeBlock.js'
@@ -111,6 +112,10 @@ export function SchemaElementRenderer({ element, panelPath, i18n }: SchemaElemen
 
   if (element.type === 'table') {
     return <SchemaTable element={element} panelPath={panelPath} i18n={i18n} />
+  }
+
+  if (element.type === 'dataview') {
+    return <SchemaDataView element={element} panelPath={panelPath} i18n={i18n} />
   }
 
   if (element.type === 'list') {
