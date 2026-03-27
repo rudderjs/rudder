@@ -131,6 +131,7 @@ export function mountTableRoutes(
     if (config.scope) q = config.scope(q)
 
     // Server-side search
+    console.log('[table-api] search:', JSON.stringify(search), 'searchable:', config.searchable, 'searchColumns:', config.searchColumns, 'paginationType:', config.paginationType)
     if (search && config.searchable) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -250,7 +251,7 @@ export function mountTableRoutes(
     const ctx = buildContext(req)
 
     // Find the Column instance by name
-    const isColumnInstances = config.columns.length > 0 && typeof (config.columns[0] as { isEditable?: unknown })?.isEditable === 'function'
+    const isColumnInstances = config.columns?.length > 0 && typeof (config.columns[0] as { isEditable?: unknown })?.isEditable === 'function'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     type ColumnLike = { getName(): string; isEditable(): boolean; getOnSaveFn?(): ((record: Record<string, unknown>, value: unknown, ctx: any) => Promise<void> | void) | undefined }
     const column = isColumnInstances

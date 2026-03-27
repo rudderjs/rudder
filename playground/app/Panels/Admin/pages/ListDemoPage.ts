@@ -12,6 +12,7 @@ export class ListDemoPage extends Page {
 
       // Basic list with title/description fields
       List.make('Categories')
+        .id('list-demo-categories')
         .fromModel(Category)
         .titleField('name')
         .descriptionField('slug')
