@@ -263,13 +263,30 @@ export function mountTableRoutes(
     const config = table.getConfig()
     const ctx = buildContext(req)
 
-    // Find the Column instance by name
-    const isColumnInstances = config.columns?.length > 0 && typeof (config.columns[0] as { isEditable?: unknown })?.isEditable === 'function'
+    // Find the editable Column/DataField instance by name
+    // Check config.columns (Table) and config.views[].getFields() (List with ViewMode.table())
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     type ColumnLike = { getName(): string; isEditable(): boolean; getOnSaveFn?(): ((record: Record<string, unknown>, value: unknown, ctx: any) => Promise<void> | void) | undefined }
-    const column = isColumnInstances
-      ? (config.columns as unknown as ColumnLike[]).find(c => c.getName() === field)
-      : undefined
+    let column: ColumnLike | undefined
+
+    const isColumnInstances = config.columns?.length > 0 && typeof (config.columns[0] as { isEditable?: unknown })?.isEditable === 'function'
+    if (isColumnInstances) {
+      column = (config.columns as unknown as ColumnLike[]).find(c => c.getName() === field)
+    }
+
+    // Fallback: check view fields (List with ViewMode.table/list/grid)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!column && (config as any).views) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const views = (config as any).views as Array<{ getFields?(): any[] }>
+      for (const v of views) {
+        const fields = v.getFields?.()
+        if (fields) {
+          const found = fields.find((f: ColumnLike) => f.getName() === field && typeof f.isEditable === 'function' && f.isEditable())
+          if (found) { column = found; break }
+        }
+      }
+    }
 
     if (column && !column.isEditable()) {
       return res.status(403).json({ message: `Column "${field}" is not editable.` })

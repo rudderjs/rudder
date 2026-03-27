@@ -60,6 +60,7 @@ export class ListDemoPage extends Page {
           { label: 'Drafts', icon: 'pencil-line', scope: (q) => q.where('status', 'draft') },
         ])
         .remember('session')
+        .live()
         .paginated('pages', 5)
         .views([
           ViewMode.list([

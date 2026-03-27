@@ -201,7 +201,7 @@ export async function resolveListElement(
   // Real-time
   if (config.lazy)             meta.lazy         = true
   if (config.pollInterval)     meta.pollInterval = config.pollInterval
-  if (config.live)             { meta.live = true; meta.liveChannel = `live:list:${listId}` }
+  if (config.live)             { meta.live = true; meta.liveChannel = `live:table:${listId}` }
   if (config.remember)         meta.remember     = config.remember as string
 
   // Features
