@@ -23,6 +23,14 @@ export interface ListItem {
 // ─── Sortable option ──────────────────────────────────
 export type SortableOption = string | { field: string; label: string }
 
+// ─── Scope preset ─────────────────────────────────────
+export interface ScopePreset {
+  label:  string
+  icon?:  string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope?: (query: any) => any
+}
+
 // ─── View type for config ─────────────────────────────
 export type ViewPreset = 'list' | 'grid'
 
@@ -68,6 +76,7 @@ export interface ListConfig {
   defaultView?:      Record<string, string> | undefined
   folderField?:      string | undefined
   sortableOptions?:  { field: string; label: string }[] | undefined
+  scopes?:           ScopePreset[] | undefined
 }
 
 // ─── Legacy ListElementMeta (kept for backward compat) ──
@@ -126,6 +135,7 @@ export class List {
   protected _defaultView?:     Record<string, string>
   protected _folderField?:     string
   protected _sortableOptions?: { field: string; label: string }[]
+  protected _scopes?:          ScopePreset[]
 
   // ── Legacy fields (backward compat with old List API) ──
   protected _items:            ListItem[] = []
@@ -262,6 +272,22 @@ export class List {
         ? { field: o, label: o.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim() }
         : o
     )
+    return this
+  }
+
+  /**
+   * User-visible scope toggles rendered as pills/tabs in the toolbar.
+   * One active at a time. Runs on top of `.scope()`.
+   *
+   * @example
+   * .scopes([
+   *   { label: 'All' },
+   *   { label: 'Published', icon: 'circle-check', scope: q => q.where('status', 'published') },
+   *   { label: 'Drafts', icon: 'pencil-line', scope: q => q.where('status', 'draft') },
+   * ])
+   */
+  scopes(presets: ScopePreset[]): this {
+    this._scopes = presets
     return this
   }
 
@@ -469,6 +495,7 @@ export class List {
       defaultView:     this._defaultView,
       folderField:     this._folderField,
       sortableOptions: this._sortableOptions,
+      scopes:          this._scopes,
     }
   }
 
@@ -504,6 +531,7 @@ export class List {
     if (this._groupBy)         target._groupBy         = this._groupBy
     if (this._folderField)     target._folderField     = this._folderField
     if (this._sortableOptions) target._sortableOptions = [...this._sortableOptions]
+    if (this._scopes)          target._scopes          = [...this._scopes]
     if (this._onRecordClick)   target._onRecordClick   = this._onRecordClick
     if (this._exportable)      target._exportable      = this._exportable
     if (this._defaultView)     target._defaultView     = this._defaultView

@@ -6,8 +6,6 @@ import { Table2 }       from '../schema/Table2.js'
 import { Column }       from '../schema/Column.js'
 import { SelectFilter } from '../schema/Filter.js'
 import { Action }       from '../schema/Action.js'
-import { Tab }          from '../schema/Tabs.js'
-import { ListTab }      from '../schema/Tab.js'
 import { ViewMode }     from '../schema/ViewMode.js'
 
 // ─── Mock classes ──────────────────────────────────────────
@@ -282,30 +280,16 @@ describe('Table2 onSave', () => {
   })
 })
 
-// ─── Table2 tabs ────────────────────────────────────────────
+// ─── Table2 scopes (replaces tabs) ──────────────────────────
 
-describe('Table2 tabs', () => {
-  it('tabs() stores Tab array', () => {
-    const tabs = [Tab.make('All'), Tab.make('Published').scope((q: any) => q)]
-    const t = Table2.make('T').tabs(tabs)
-    assert.equal(t.getTabs().length, 2)
-    assert.equal(t.getTabs()[0]?.getLabel(), 'All')
-  })
-
-  it('getTabs() defaults to empty', () => {
-    assert.deepEqual(Table2.make('T').getTabs(), [])
-  })
-
-  it('getConfig includes tabs', () => {
-    const tabs = [Tab.make('All')]
-    const c = Table2.make('T').tabs(tabs).getConfig()
-    assert.equal(c.tabs.length, 1)
-  })
-
-  it('listTabs() stores ListTab array', () => {
-    const tabs = [ListTab.make('all'), ListTab.make('active')]
-    const t = Table2.make('T').listTabs(tabs)
-    assert.equal(t.getListTabs().length, 2)
+describe('Table2 scopes', () => {
+  it('scopes() stores preset array', () => {
+    const c = Table2.make('T').scopes([
+      { label: 'All' },
+      { label: 'Published', scope: (q: any) => q.where('status', 'published') },
+    ]).getConfig()
+    assert.equal(c.scopes?.length, 2)
+    assert.equal(c.scopes?.[0]?.label, 'All')
   })
 })
 
@@ -459,6 +443,36 @@ describe('Table2 List features', () => {
     assert.equal(c.sortableOptions?.[0]?.label, 'Title')
     assert.equal(c.sortableOptions?.[1]?.label, 'Date Created')
   })
+
+  it('scopes stores preset array', () => {
+    const scopeFn = (q: any) => q.where('status', 'published')
+    const c = Table2.make('T').scopes([
+      { label: 'All' },
+      { label: 'Published', icon: 'circle-check', scope: scopeFn },
+      { label: 'Drafts', icon: 'pencil-line', scope: (q: any) => q.where('status', 'draft') },
+    ]).getConfig()
+    assert.equal(c.scopes?.length, 3)
+    assert.equal(c.scopes?.[0]?.label, 'All')
+    assert.equal(c.scopes?.[0]?.scope, undefined)
+    assert.equal(c.scopes?.[1]?.label, 'Published')
+    assert.equal(c.scopes?.[1]?.icon, 'circle-check')
+    assert.equal(c.scopes?.[1]?.scope, scopeFn)
+  })
+
+  it('scope() and scopes() work together', () => {
+    const baseFn = (q: any) => q.where('tenant', '1')
+    const presetFn = (q: any) => q.where('featured', true)
+    const c = Table2.make('T')
+      .scope(baseFn)
+      .scopes([
+        { label: 'All' },
+        { label: 'Featured', scope: presetFn },
+      ])
+      .getConfig()
+    assert.equal(c.scope, baseFn)
+    assert.equal(c.scopes?.length, 2)
+    assert.equal(c.scopes?.[1]?.scope, presetFn)
+  })
 })
 
 // ─── Table2 _cloneWithScope ─────────────────────────────────
@@ -496,7 +510,7 @@ describe('Table2 _cloneWithScope', () => {
     assert.deepEqual(c.exportable, ['csv'])
     assert.equal(c.columns.length, 1)
     assert.equal(c.scope, scopeFn)
-    // Tabs not copied
-    assert.equal(c.tabs.length, 0)
+    // Clone preserves config
+    assert.equal(c.reorderable, false)
   })
 })

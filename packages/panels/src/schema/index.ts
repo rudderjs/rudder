@@ -17,7 +17,7 @@ export { Chart }               from './Chart.js'
 export type { ChartElementMeta, ChartDataset, ChartType } from './Chart.js'
 
 export { List }               from './List.js'
-export type { ListElementMeta, ListItem, ListConfig, ViewPreset, SortableOption } from './List.js'
+export type { ListElementMeta, ListItem, ListConfig, ViewPreset, SortableOption, ScopePreset } from './List.js'
 
 export { ViewMode }           from './ViewMode.js'
 export type { ViewModeMeta }  from './ViewMode.js'

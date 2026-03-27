@@ -1,13 +1,11 @@
 import { List } from './List.js'
 import type { ListConfig } from './List.js'
 import type { Column } from './Column.js'
-import type { Tab } from './Tabs.js'
-import type { ListTab } from './Tab.js'
 import type { PanelContext } from '../types.js'
 
 // ─── Table2 schema element ──────────────────────────────────
-// Extends List with column layout, inline editing, reorder, and tabs.
-// Drop-in replacement for Table — same API, inherits all List features.
+// Extends List with column layout, inline editing, and reorder.
+// Uses .scopes() (from List) instead of .tabs() for filtered views.
 
 type TableSaveHandler = (record: Record<string, unknown>, field: string, value: unknown, ctx: PanelContext) => Promise<void> | void
 
@@ -16,8 +14,6 @@ export interface Table2Config extends ListConfig {
   reorderable:   boolean
   reorderField:  string
   onSave?:       TableSaveHandler | undefined
-  tabs:          Tab[]
-  listTabs:      ListTab[]
 }
 
 export class Table2 extends List {
@@ -25,8 +21,6 @@ export class Table2 extends List {
   private _reorderable    = false
   private _reorderField   = 'position'
   private _onSaveFn?:     TableSaveHandler
-  private _tabs:          Tab[] = []
-  private _listTabs:      ListTab[] = []
 
   protected constructor(title: string) {
     super(title)
@@ -62,21 +56,6 @@ export class Table2 extends List {
 
   getOnSave(): TableSaveHandler | undefined { return this._onSaveFn }
 
-  /** Add Tab-based filter tabs to the table (schema tabs with scope). */
-  tabs(tabs: Tab[]): this {
-    this._tabs = tabs
-    return this
-  }
-
-  /** Add ListTab-based filter tabs to the table (legacy resource tabs). */
-  listTabs(tabs: ListTab[]): this {
-    this._listTabs = tabs
-    return this
-  }
-
-  getTabs(): Tab[] { return this._tabs }
-  getListTabs(): ListTab[] { return this._listTabs }
-
   // ── Overrides ─────────────────────────────────────
 
   getType(): 'table' { return 'table' }
@@ -88,29 +67,23 @@ export class Table2 extends List {
       reorderable:  this._reorderable,
       reorderField: this._reorderField,
       onSave:       this._onSaveFn,
-      tabs:         this._tabs,
-      listTabs:     this._listTabs,
     }
   }
 
   /**
    * @internal — Create a copy of this table with a different scope and ID.
-   * Used by Resource to create per-tab Table instances from a shared base config.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _cloneWithScope(id: string, scopeFn?: (query: any) => any): Table2 {
     const clone = Table2.make(this._title)
-    this._cloneBase(clone)  // copy all List fields
-    // Copy Table-specific fields
+    this._cloneBase(clone)
     clone._columns      = this._columns
     clone._reorderable  = this._reorderable
     clone._reorderField = this._reorderField
     if (this._onSaveFn)  clone._onSaveFn  = this._onSaveFn
-    // Apply overrides
     clone._id = id
     if (scopeFn) clone._scope = scopeFn
     else if (this._scope) clone._scope = this._scope
-    // Don't copy tabs — this clone IS one tab's table
     return clone
   }
 }
