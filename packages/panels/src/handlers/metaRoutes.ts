@@ -8,6 +8,7 @@ import { mountStatsRoutes } from './meta/statsRoutes.js'
 import { mountTabsRoutes } from './meta/tabsRoutes.js'
 import { mountFormRoutes } from './meta/formRoutes.js'
 import { mountUploadRoutes } from './meta/uploadRoutes.js'
+import { mountExportRoutes } from './meta/exportRoutes.js'
 
 export function mountMetaRoutes(
   router: RouterLike,
@@ -93,4 +94,5 @@ export function mountMetaRoutes(
   mountTabsRoutes(router, panel, mw)
   mountFormRoutes(router, panel, mw)
   mountUploadRoutes(router, panel, mw)
+  mountExportRoutes(router, panel, mw)
 }
