@@ -130,8 +130,16 @@ export function mountTableRoutes(
     let q: QueryBuilderLike<RecordRow> = Model.query()
     if (config.scope) q = config.scope(q)
 
+    // Apply scope preset if ?scope=N is set (from List.scopes())
+    const scopeIndex = parseInt(url.searchParams.get('scope') ?? '') || 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scopes = (config as any).scopes as Array<{ scope?: (q: any) => any }> | undefined
+    if (scopes && scopeIndex > 0 && scopeIndex < scopes.length) {
+      const scopeFn = scopes[scopeIndex]?.scope
+      if (scopeFn) q = scopeFn(q)
+    }
+
     // Server-side search
-    console.log('[table-api] search:', JSON.stringify(search), 'searchable:', config.searchable, 'searchColumns:', config.searchColumns, 'paginationType:', config.paginationType)
     if (search && config.searchable) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,6 +185,11 @@ export function mountTableRoutes(
       let total = records.length
       try {
         let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(Model.query()) : Model.query()
+        // Apply scope preset to count query
+        if (scopes && scopeIndex > 0 && scopeIndex < scopes.length) {
+          const countScopeFn = scopes[scopeIndex]?.scope
+          if (countScopeFn) countQ = countScopeFn(countQ)
+        }
         // Apply search filter to count query
         if (search && config.searchable) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

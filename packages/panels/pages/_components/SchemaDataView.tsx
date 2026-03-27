@@ -69,6 +69,7 @@ interface DataViewElement {
   folderField?:      string
   sortableOptions?:  { field: string; label: string }[]
   scopes?:           { label: string; icon?: string }[]
+  activeScope?:      number
   renderedRecords?:  unknown[][]
 }
 
@@ -99,7 +100,7 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const [loading, setLoading] = useState(false)
   const [sortField, setSortField] = useState(element.activeSort?.col ?? '')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>((element.activeSort?.dir?.toLowerCase() as 'asc' | 'desc') ?? 'asc')
-  const [activeScope, setActiveScope] = useState(0)
+  const [activeScope, setActiveScope] = useState(element.activeScope ?? 0)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Active view ──

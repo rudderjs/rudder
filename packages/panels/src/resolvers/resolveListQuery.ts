@@ -30,6 +30,9 @@ export interface ListQueryOpts {
   /** Model class (from resource or direct). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   model?:        any
+  /** Scope presets from .scopes() — applied based on persisted scope index. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scopes?:       Array<{ scope?: (q: any) => any }> | undefined
 }
 
 /**
@@ -62,6 +65,9 @@ export async function resolveListQuery(
       if (k.startsWith('filter_')) persistedFilters[k.slice(7)] = String(v)
     }
   }
+
+  // Read persisted scope index
+  const persistedScope = persisted?.scope ? Number(persisted.scope) || 0 : 0
 
   const searchFilter = urlSearch && searchColumns.length > 0
     ? { search: urlSearch, columns: searchColumns }
@@ -103,6 +109,12 @@ export async function resolveListQuery(
     let q: QueryBuilderLike<RecordRow> = model.query()
     if (config.scope) q = config.scope(q)
 
+    // Apply scope preset
+    if (opts.scopes && persistedScope > 0 && persistedScope < opts.scopes.length) {
+      const scopeFn = opts.scopes[persistedScope]?.scope
+      if (scopeFn) q = scopeFn(q)
+    }
+
     // Apply search
     if (searchFilter) {
       q = q.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
@@ -141,6 +153,11 @@ export async function resolveListQuery(
   if (config.paginationType && !config.lazy) {
     try {
       let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(model.query()) : model.query()
+      // Apply scope preset to count query too
+      if (opts.scopes && persistedScope > 0 && persistedScope < opts.scopes.length) {
+        const scopeFn = opts.scopes[persistedScope]?.scope
+        if (scopeFn) countQ = scopeFn(countQ)
+      }
       if (searchFilter) {
         countQ = countQ.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
         for (let i = 1; i < searchFilter.columns.length; i++) {

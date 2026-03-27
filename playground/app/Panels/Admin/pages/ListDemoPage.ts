@@ -58,6 +58,7 @@ export class ListDemoPage extends Page {
           { label: 'Published', icon: 'circle-check', scope: (q) => q.where('status', 'published') },
           { label: 'Drafts', icon: 'pencil-line', scope: (q) => q.where('status', 'draft') },
         ])
+        .remember('session')
         .paginated('pages', 5)
         .views([
           ViewMode.list([

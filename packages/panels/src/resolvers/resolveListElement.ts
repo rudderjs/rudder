@@ -110,7 +110,7 @@ export async function resolveListElement(
   const model = config.resourceClass
     ? (config.resourceClass as ResourceLike).model
     : config.model
-  const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model })
+  const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes })
 
   // ── Strip records to only needed fields (like buildTableMeta does for tables) ──
   const displayedKeys = new Set<string>(['id'])
@@ -216,6 +216,9 @@ export async function resolveListElement(
       if (s.icon) m.icon = s.icon
       return m
     })
+    // Read persisted scope for SSR
+    const persistedScopeIdx = persisted?.scope ? Number(persisted.scope) || 0 : 0
+    if (persistedScopeIdx > 0) meta.activeScope = persistedScopeIdx
   }
   if (config.defaultView)      meta.defaultView      = config.defaultView
 
