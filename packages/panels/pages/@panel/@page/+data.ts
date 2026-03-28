@@ -55,6 +55,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
     schemaData,
     sessionUser,
     pathSegment,
+    slug: pageSlug,
     ...(urlSearch ? { urlSearch } : {}),
   }
 }
