@@ -149,6 +149,20 @@ export function mountTableRoutes(
         records = records.filter(row => String(row[colName] ?? '') === value)
       }
 
+      // Client-side sort for array data
+      const sortParam = url.searchParams.get('sort')
+      const dirParam = url.searchParams.get('dir')?.toUpperCase() as 'ASC' | 'DESC' | undefined
+      const arraySortCol = sortParam ?? config.sortBy
+      if (arraySortCol) {
+        const dir = dirParam ?? config.sortDir
+        records = [...records].sort((a, b) => {
+          const av = String(a[arraySortCol] ?? '')
+          const bv = String(b[arraySortCol] ?? '')
+          const cmp = av.localeCompare(bv, undefined, { numeric: true })
+          return dir === 'DESC' ? -cmp : cmp
+        })
+      }
+
       const perPage = config.paginationType ? config.perPage : config.limit
       const offset = (page - 1) * perPage
       const paged = records.slice(offset, offset + perPage)

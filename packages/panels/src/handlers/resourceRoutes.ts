@@ -144,6 +144,7 @@ export function mountResourceRoutes(
         currentPage: result.currentPage,
         perPage:     result.perPage,
         lastPage:    result.lastPage,
+        type:        tableConfig.paginationType ?? 'pages',
         ...(hasSoftDeletes ? { trashed } : {}),
       },
     })
