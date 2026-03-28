@@ -502,10 +502,25 @@ function HeaderBreadcrumb({ panelMeta, items, currentSlug, i18n }: {
     crumbs.push({ label: 'Settings' })
     crumbs.push({ label: navItem?.label ?? globalSlug })
   } else if (segments[0] && segments[0] !== '') {
-    // Custom page
-    const navItem = items.find(i => i.slug === segments[0])
-    const pageLabel = (data.pageMeta as Record<string, string> | undefined)?.label ?? navItem?.label ?? segments[0]
-    crumbs.push({ label: pageLabel })
+    // Custom page — may be nested (e.g. tables-demo/pagination)
+    // The first segment is always the parent page slug
+    const parentSlug = segments[0]
+    const parentItem = items.find(i => i.slug === parentSlug)
+
+    if (segments.length > 1) {
+      // Sub-page: show parent as link, then child as current
+      const fullSlug = segments.join('/')
+      crumbs.push({ label: parentItem?.label ?? parentSlug, href: `${path}/${parentSlug}` })
+
+      // Find child label from parent's children or from pageMeta
+      const childItem = parentItem?.children?.find(c => c.slug === fullSlug)
+      const childLabel = (data.pageMeta as Record<string, string> | undefined)?.label ?? childItem?.label ?? segments[segments.length - 1]!
+      crumbs.push({ label: childLabel })
+    } else {
+      // Top-level page
+      const pageLabel = (data.pageMeta as Record<string, string> | undefined)?.label ?? parentItem?.label ?? parentSlug
+      crumbs.push({ label: pageLabel })
+    }
   }
 
   // If only root crumb, show just the panel name as current page
