@@ -82,7 +82,14 @@ const TreeItem = forwardRef<HTMLDivElement, TreeItemComponentProps<TreeRecord> &
     const title = String(item[titleField] ?? item.id)
 
     return (
-      <SimpleTreeItemWrapper {...props} ref={ref} showDragHandle={false} manualDrag>
+      <SimpleTreeItemWrapper
+        {...props}
+        ref={ref}
+        showDragHandle={false}
+        manualDrag
+        className={`!list-none !mb-0 ${props.ghost ? 'opacity-30' : ''} ${props.clone ? 'inline-block' : ''}`}
+        contentClassName={`!flex !items-center !py-1.5 !px-2 !rounded-md !text-foreground !transition-colors ${props.clone ? '!bg-card !border !border-border !shadow-lg !rounded-lg' : '!border !border-transparent hover:!bg-muted hover:!border-border'}`}
+      >
         <div className="flex items-center gap-2 py-0.5 min-w-0">
           <span className="shrink-0 cursor-grab active:cursor-grabbing touch-none text-muted-foreground/40 hover:text-muted-foreground" {...props.handleProps}>
             <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
