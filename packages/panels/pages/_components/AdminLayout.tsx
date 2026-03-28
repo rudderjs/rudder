@@ -550,9 +550,11 @@ function HeaderBreadcrumb({ panelMeta, items, currentSlug, i18n }: {
             <span key={i} className="contents">
               {i > 0 && <BreadcrumbSeparator className="hidden md:block" />}
               <BreadcrumbItem className={i === 0 ? 'hidden md:block' : ''}>
-                {isLast || !crumb.href
+                {isLast
                   ? <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                  : <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+                  : crumb.href
+                    ? <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+                    : <span className="text-muted-foreground">{crumb.label}</span>
                 }
               </BreadcrumbItem>
             </span>
