@@ -30,6 +30,7 @@ export class ListDemoPage extends Page {
         .paginated('pages', 10)
         .live()
         .views([
+          ViewMode.folder(['list', 'grid', 'table']),
           ViewMode.list([
             DataField.make('name').editable(),
             DataField.make('slug').editable('popover'),

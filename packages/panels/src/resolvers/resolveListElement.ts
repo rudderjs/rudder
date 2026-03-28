@@ -115,11 +115,13 @@ export async function resolveListElement(
   const model = config.resourceClass
     ? (config.resourceClass as ResourceLike).model
     : config.model
-  // Determine if active view is tree (needs all records, no folder filter)
+  // Determine active view type for query behavior
   const activeViewName = persistedView ?? (config.views.length > 0 ? config.views[0]!.getName() : undefined)
-  const isTreeView = config.views.some(v => v.getType() === 'tree' && v.getName() === activeViewName)
+  const activeViewType = config.views.find(v => v.getName() === activeViewName)?.getType()
+  const isTreeView = activeViewType === 'tree'
+  const isFolderView = activeViewType === 'folder'
 
-  const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes, treeView: isTreeView })
+  const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes, treeView: isTreeView, folderView: isFolderView })
 
   // ── Strip records to only needed fields (like buildTableMeta does for tables) ──
   const displayedKeys = new Set<string>(['id'])

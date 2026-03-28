@@ -33,6 +33,7 @@ interface ViewModeMeta {
   label:       string
   icon?:       string
   fields?:     DataFieldMeta[]
+  subViews?:   string[]
 }
 
 interface PaginationMeta {
@@ -136,6 +137,10 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   const viewOptions = views ?? []
   const defaultViewName = viewOptions.length > 0 ? viewOptions[0]!.name : 'list'
   const [activeView, setActiveView] = useState(element.activeView ?? defaultViewName)
+  // Sub-view within folder view (list/grid/table)
+  const folderViewMeta = viewOptions.find(v => v.type === 'folder')
+  const folderSubViews = folderViewMeta?.subViews ?? ['list']
+  const [folderSubView, setFolderSubView] = useState(folderSubViews[0] ?? 'list')
   const rememberMode = element.remember
   const pathSegment = panelPath.replace(/^\//, '')
 
@@ -165,14 +170,33 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
 
   function handleViewChange(viewName: string) {
     setActiveView(viewName)
-    saveRememberState(buildState({ view: viewName }))
-    // When switching to/from tree view, re-fetch (tree needs all records, others need folder-filtered)
     const targetView = viewOptions.find(v => v.name === viewName)
-    const isTree = targetView?.type === 'tree'
-    const wasTree = viewOptions.find(v => v.name === activeView)?.type === 'tree'
-    if (isTree || wasTree) {
-      void fetchData({ page: 1, viewType: targetView?.type, folder: isTree ? null : currentFolder })
+    const prevView = viewOptions.find(v => v.name === activeView)
+    const targetType = targetView?.type
+    const prevType = prevView?.type
+
+    // Re-fetch when switching between view types that need different data
+    const needsAllRecords = targetType === 'tree'
+    const needsFolderFilter = targetType === 'folder'
+    const hadAllRecords = prevType === 'tree'
+    const hadFolderFilter = prevType === 'folder'
+
+    if (needsAllRecords !== hadAllRecords || needsFolderFilter !== hadFolderFilter) {
+      if (needsAllRecords) {
+        // Tree: fetch all records
+        void fetchData({ page: 1, viewType: 'tree', folder: null })
+      } else if (needsFolderFilter) {
+        // Folder: fetch current folder level
+        void fetchData({ page: 1, viewType: 'folder', folder: currentFolder })
+      } else {
+        // Flat views (list/grid/table): fetch all, no folder filter, reset folder state
+        setCurrentFolder(null)
+        setBreadcrumbs([])
+        void fetchData({ page: 1, folder: null })
+      }
     }
+
+    saveRememberState(buildState({ view: viewName }))
   }
 
   // ── Container-based responsive default view (first visit only) ──
@@ -212,9 +236,10 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       // Include folder param
       const folder = opts.folder !== undefined ? opts.folder : currentFolder
       if (folder) params.set('folder', folder)
-      // Tree view needs all records (use explicit viewType if passed, else read current)
+      // Pass view type to backend (tree = all records, folder = folder-filtered)
       const effectiveViewType = opts.viewType ?? viewOptions.find(v => v.name === activeView)?.type
       if (effectiveViewType === 'tree') params.set('view', 'tree')
+      if (effectiveViewType === 'folder') params.set('view', 'folder')
       const res = await fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
       if (!res.ok) return
       const body = await res.json() as { records: Record<string, unknown>[]; pagination?: PaginationMeta; breadcrumbs?: { id: string; label: string }[] }
@@ -589,8 +614,8 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
         )}
       </div>
 
-      {/* Folder breadcrumbs */}
-      {folderField && (currentFolder || breadcrumbs.length > 0) && (
+      {/* Folder breadcrumbs — only in folder view */}
+      {folderField && (currentFolder || breadcrumbs.length > 0) && viewOptions.find(v => v.name === activeView)?.type === 'folder' && (
         <div className="flex items-center gap-1 py-2 text-sm">
           <button
             type="button"
@@ -659,6 +684,80 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
           )
         }
 
+        // Folder view — drill-down navigation with sub-view pills
+        if (viewType === 'folder' && folderField) {
+          // Resolve fields from matching sibling view (e.g. list fields for list sub-view)
+          const subViewFields = viewOptions.find(v => v.type === folderSubView)?.fields ?? viewFields
+
+          const subViewIcons: Record<string, string> = { list: 'list', grid: 'layout-grid', table: 'table' }
+          const subViewLabels: Record<string, string> = { list: 'List', grid: 'Grid', table: 'Table' }
+
+          let folderContent: React.ReactNode
+          if (folderSubView === 'grid') {
+            folderContent = (
+              <GridView
+                groups={grouped} fields={subViewFields} titleField={titleField ?? 'id'}
+                descriptionField={descriptionField} imageField={imageField} iconField={iconField}
+                getHref={getRecordHref} groupBy={groupBy} saveEndpoint={saveEndpoint}
+                panelPath={panelPath} i18n={i18n} onSaved={handleEditSaved}
+                onFolderNavigate={handleFolderNavigate} reorderable={isReorderable}
+              />
+            )
+          } else if (folderSubView === 'table' && subViewFields) {
+            folderContent = (
+              <TableView
+                records={records} fields={subViewFields} getHref={getRecordHref}
+                sortField={sortField} sortDir={sortDir} onSort={handleSortChange}
+                saveEndpoint={saveEndpoint} panelPath={panelPath} i18n={i18n}
+                onSaved={handleEditSaved} reorderable={isReorderable} onReorder={handleReorder}
+              />
+            )
+          } else {
+            folderContent = (
+              <ListView
+                groups={grouped} fields={subViewFields} titleField={titleField ?? 'id'}
+                descriptionField={descriptionField} imageField={imageField} iconField={iconField}
+                getHref={getRecordHref} groupBy={groupBy} saveEndpoint={saveEndpoint}
+                panelPath={panelPath} i18n={i18n} onSaved={handleEditSaved}
+                onFolderNavigate={handleFolderNavigate} reorderable={isReorderable}
+              />
+            )
+          }
+
+          const wrapped = isReorderable ? (
+            <DndWrapper items={records.map(r => String(r.id))} onDragEnd={handleReorder} strategy={folderSubView === 'grid' ? 'grid' : 'vertical'}>
+              {folderContent}
+            </DndWrapper>
+          ) : folderContent
+
+          return (
+            <div>
+              {/* Sub-view pills */}
+              {folderSubViews.length > 1 && (
+                <div className="flex items-center gap-1 mb-2">
+                  {folderSubViews.map(sv => (
+                    <button
+                      key={sv}
+                      type="button"
+                      onClick={() => setFolderSubView(sv)}
+                      className={[
+                        'inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md transition-colors',
+                        folderSubView === sv
+                          ? 'bg-secondary text-secondary-foreground font-medium'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                      ].join(' ')}
+                    >
+                      {subViewIcons[sv] && <ResourceIcon icon={subViewIcons[sv]} />}
+                      {subViewLabels[sv] ?? sv}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {wrapped}
+            </div>
+          )
+        }
+
         const viewContent = viewType === 'grid' ? (
           <GridView
             groups={grouped}
@@ -673,7 +772,6 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
             panelPath={panelPath}
             i18n={i18n}
             onSaved={handleEditSaved}
-            onFolderNavigate={folderField ? handleFolderNavigate : undefined}
             reorderable={isReorderable}
           />
         ) : (
@@ -690,7 +788,6 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
             panelPath={panelPath}
             i18n={i18n}
             onSaved={handleEditSaved}
-            onFolderNavigate={folderField ? handleFolderNavigate : undefined}
             reorderable={isReorderable}
           />
         )

@@ -123,8 +123,8 @@ export async function resolveListQuery(
     let q: QueryBuilderLike<RecordRow> = model.query()
     if (config.scope) q = config.scope(q)
 
-    // Apply folder filter (WHERE folderField = :folder or IS NULL for root) — skip for tree view
-    if (config.folderField && !opts.treeView) {
+    // Apply folder filter — only for folder view (drill-down). Flat views + tree skip it.
+    if (config.folderField && opts.folderView) {
       if (persistedFolder) {
         q = q.where(config.folderField, persistedFolder)
       } else {
@@ -180,8 +180,8 @@ export async function resolveListQuery(
   if (config.paginationType && !config.lazy && !opts.treeView) {
     try {
       let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(model.query()) : model.query()
-      // Apply folder filter to count query
-      if (config.folderField) {
+      // Apply folder filter to count query (only in folder view)
+      if (config.folderField && opts.folderView) {
         if (persistedFolder) countQ = countQ.where(config.folderField, persistedFolder)
         else countQ = countQ.where(config.folderField, null)
       }
@@ -227,7 +227,7 @@ export async function resolveListQuery(
   // ── Resolve breadcrumb chain for folder navigation ──
   let activeFolder: string | null | undefined
   let breadcrumbs: FolderBreadcrumb[] | undefined
-  if (config.folderField && model) {
+  if (config.folderField && model && opts.folderView) {
     activeFolder = persistedFolder
     if (persistedFolder) {
       // Walk up parent chain to build breadcrumbs

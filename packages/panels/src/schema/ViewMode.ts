@@ -18,6 +18,8 @@ export interface ViewModeMeta {
   label:       string
   icon?:       string
   fields?:     DataFieldMeta[]
+  /** Sub-views for folder view (e.g. ['list', 'grid', 'table']) */
+  subViews?:   string[]
 }
 
 export class ViewMode {
@@ -27,6 +29,7 @@ export class ViewMode {
   private _icon?:     string
   private _renderFn?: (record: Record<string, unknown>) => SchemaElement[]
   private _fields?:   DataField[]
+  private _subViews?: string[]
 
   private constructor(name: string) {
     this._type  = 'custom'
@@ -67,13 +70,22 @@ export class ViewMode {
     return v
   }
 
-  /** Folder view preset — drill-down navigation with breadcrumbs. Requires .folder() on the parent List. */
-  static folder(fields?: DataField[]): ViewMode {
+  /**
+   * Folder view preset — drill-down navigation with breadcrumbs.
+   * Accepts sub-view types rendered as pills inside the folder view.
+   * Requires .folder() on the parent List.
+   *
+   * @example
+   * ViewMode.folder(['list', 'grid'])         // list + grid sub-views
+   * ViewMode.folder(['list', 'grid', 'table']) // all three
+   * ViewMode.folder()                         // defaults to ['list']
+   */
+  static folder(subViews?: ('list' | 'grid' | 'table')[]): ViewMode {
     const v = new ViewMode('folder')
-    v._type  = 'folder'
-    v._label = 'Folder'
-    v._icon  = 'folder'
-    if (fields) v._fields = fields
+    v._type      = 'folder'
+    v._label     = 'Folder'
+    v._icon      = 'folder'
+    v._subViews  = subViews && subViews.length > 0 ? subViews : ['list']
     return v
   }
 
@@ -123,6 +135,7 @@ export class ViewMode {
   getIcon(): string | undefined { return this._icon }
   getRenderFn(): ((record: Record<string, unknown>) => SchemaElement[]) | undefined { return this._renderFn }
   getFields(): DataField[] | undefined { return this._fields }
+  getSubViews(): string[] | undefined { return this._subViews }
 
   /** @deprecated Use getFields() instead. */
   getColumns(): Column[] | undefined { return this._fields as Column[] | undefined }
@@ -137,6 +150,9 @@ export class ViewMode {
     if (this._icon) meta.icon = this._icon
     if (this._fields && this._fields.length > 0) {
       meta.fields = this._fields.map(f => f.toMeta())
+    }
+    if (this._subViews && this._subViews.length > 0) {
+      meta.subViews = this._subViews
     }
     return meta
   }
