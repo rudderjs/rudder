@@ -74,6 +74,7 @@ export default function ResourceListPage() {
       {/* Content */}
       {el ? (
         <SchemaDataView
+          key={slug}
           element={el as any}
           panelPath={`/${pathSegment}`}
           i18n={i18n}

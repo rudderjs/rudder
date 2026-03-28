@@ -113,7 +113,14 @@ export function mountResourceRoutes(
     const urlFilters = parseUrlFilters(url)
     q = applyFilters(q, tableConfig.filters, urlFilters)
 
-    const result = await q.paginate(page, perPage)
+    // Use paginate() when table has .paginated(), otherwise limit()
+    let result: { data: unknown[]; total: number; currentPage: number; perPage: number; lastPage: number }
+    if (tableConfig.paginationType) {
+      result = await q.paginate(page, perPage)
+    } else {
+      const records = await q.limit(tableConfig.limit).get()
+      result = { data: records, total: records.length, currentPage: 1, perPage: records.length, lastPage: 1 }
+    }
 
     // Strip unreadable fields from each record
     const readableNames = new Set(

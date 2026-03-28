@@ -459,8 +459,8 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
 
   return (
     <div ref={containerRef} style={{ containerType: 'inline-size' }}>
-      {/* Title */}
-      {title && (
+      {/* Title — hidden in resource mode (resource page has its own heading) */}
+      {title && !resourceSlug && (
         <div className="mb-1 flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold">{title}</p>
@@ -492,6 +492,7 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
       )}
 
       {/* Toolbar: search + sort + view toggle + export */}
+      {(searchable || filters.length > 0 || (sortableOptions && sortableOptions.length > 0) || viewOptions.length > 1 || (element.exportable && element.exportable.length > 0)) && (
       <div className="py-2.5 flex items-center gap-3 flex-wrap">
         {searchable && (
           <div className="relative">
@@ -632,6 +633,7 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
           </a>
         )}
       </div>
+      )}
 
       {/* Folder breadcrumbs — only in folder view */}
       {folderField && (currentFolder || breadcrumbs.length > 0) && viewOptions.find(v => v.name === activeView)?.type === 'folder' && (
