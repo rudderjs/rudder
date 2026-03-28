@@ -27,6 +27,7 @@ import type { Playground } from './schema/Playground.js'
 
 import { resolveSection }   from './resolvers/resolveSection.js'
 import { resolveTabs }      from './resolvers/resolveTabs.js'
+import { resolveDataView }  from './resolvers/resolveListElement.js'
 import { resolveDashboard } from './resolvers/resolveDashboard.js'
 import { resolveDialog }    from './resolvers/resolveDialog.js'
 import { resolveForm }      from './resolvers/resolveForm.js'
@@ -93,7 +94,6 @@ export async function resolveSchema(
     }
 
     if (type === 'table' || type === 'dataview') {
-      const { resolveDataView } = await import('./resolvers/resolveListElement.js')
       const meta = await resolveDataView(el, panel, ctx)
       if (meta) result.push(meta)
       continue

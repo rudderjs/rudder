@@ -88,7 +88,7 @@ export function getRegisteredList(panelName: string, listId: string): List | und
 // ─── Resolver ───────────────────────────────────────────────
 
 export async function resolveDataView(
-  el: SchemaElementLike,
+  el: SchemaElementLike | { getType(): string; getConfig(): unknown; getId(): string },
   panel: Panel,
   ctx: PanelContext,
 ): Promise<PanelSchemaElementMeta | null> {

@@ -33,7 +33,7 @@ export async function data(pageContext: PageContextServer) {
   let element: PanelSchemaElementMeta | null = null
   if (ResourceClass.model) {
     const table = resource._resolveTable()
-    element = await resolveDataView(table as any, panel, ctx)
+    element = await resolveDataView(table, panel, ctx)
 
     // Apply resource-specific overrides
     if (element) {

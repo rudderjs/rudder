@@ -119,7 +119,7 @@ export class Resource {
   /** @internal — Constructs Table with resource wired, calls this.table(). */
   _resolveTable(): Table {
     const Cls = this.constructor as typeof Resource
-    const table = Table.make(Cls.getLabel()).fromResource(Cls as any)
+    const table = Table.make(Cls.getLabel()).fromResource(Cls as { new(): any; getSlug(): string; model?: any })
     return this.table(table)
   }
 

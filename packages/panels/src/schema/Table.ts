@@ -83,7 +83,14 @@ export class Table extends List {
   /** Column names (resolved via Resource fields) or Column instances. */
   columns(cols: string[] | Column[]): this {
     this._columns = cols
+    this._resolvedViews = undefined
     return this
+  }
+
+  /** @override Clear auto-view cache when explicit views are set. */
+  views(defs: (import('./List.js').ViewPreset | ViewMode)[]): this {
+    this._resolvedViews = undefined
+    return super.views(defs)
   }
 
   // ── Overrides ─────────────────────────────────────
