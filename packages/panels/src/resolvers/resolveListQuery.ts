@@ -1,12 +1,14 @@
 import type { PanelContext, QueryBuilderLike, RecordRow } from '../types.js'
 import type { ListConfig } from '../schema/List.js'
-import type { PersistMode } from '../persist.js'
 import { readPersistedState } from '../persist.js'
 import { resolveDataSource } from '../datasource.js'
+import {
+  applySearch, applyFilters, applyScope, applyFolderFilter,
+  buildBreadcrumbs, countFiltered,
+} from '../utils/queryHelpers.js'
 
 // ─── Shared query pipeline for all data-view elements ──────
-// Used by resolveTable and resolveListElement.
-// Handles: persisted state, search, filters, sort, pagination, data sources.
+// Used by resolveListElement (a.k.a. resolveDataView) for SSR resolution of Table and List elements.
 
 export interface FolderBreadcrumb {
   id:    string
@@ -30,24 +32,18 @@ export interface ListQueryResult {
 }
 
 export interface ListQueryOpts {
-  /** Element ID for persist key. */
   elementId:     string
-  /** Search column names (extracted from Column.searchable or config.searchColumns). */
   searchColumns: string[]
-  /** Model class (from resource or direct). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   model?:        any
-  /** Scope presets from .scopes() — applied based on persisted scope index. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scopes?:       Array<{ scope?: (q: any) => any }> | undefined
-  /** When true, skip folder filter and pagination (tree view). */
   treeView?:     boolean
-  /** When true, apply folder filter (folder view). Flat views skip it. */
   folderView?:   boolean
 }
 
 /**
- * Resolve data for a List/Table element.
+ * Resolve data for a List/Table element (SSR).
  * Reads persisted state, builds query (or slices array), returns records + pagination.
  */
 export async function resolveListQuery(
@@ -68,6 +64,8 @@ export async function resolveListQuery(
   const urlSort    = persisted?.sort ? String(persisted.sort) : undefined
   const urlSortDir = persisted?.dir ? String(persisted.dir).toUpperCase() as 'ASC' | 'DESC' : undefined
   const urlSearch  = persisted?.search ? String(persisted.search) : undefined
+  const persistedScope  = persisted?.scope ? Number(persisted.scope) || 0 : 0
+  const persistedFolder = persisted?.folder ? String(persisted.folder) : null
 
   // Extract persisted filters (stored as filter_<name> keys)
   const persistedFilters: Record<string, string> = {}
@@ -76,16 +74,6 @@ export async function resolveListQuery(
       if (k.startsWith('filter_')) persistedFilters[k.slice(7)] = String(v)
     }
   }
-
-  // Read persisted scope index
-  const persistedScope = persisted?.scope ? Number(persisted.scope) || 0 : 0
-
-  // Read persisted folder
-  const persistedFolder = persisted?.folder ? String(persisted.folder) : null
-
-  const searchFilter = urlSearch && searchColumns.length > 0
-    ? { search: urlSearch, columns: searchColumns }
-    : undefined
 
   // ── fromArray / rows — static array or async function ──
   if (config.rows) {
@@ -123,45 +111,18 @@ export async function resolveListQuery(
     let q: QueryBuilderLike<RecordRow> = model.query()
     if (config.scope) q = config.scope(q)
 
-    // Apply folder filter — only for folder view (drill-down). Flat views + tree skip it.
-    if (config.folderField && opts.folderView) {
-      if (persistedFolder) {
-        q = q.where(config.folderField, persistedFolder)
-      } else {
-        q = q.where(config.folderField, null)
-      }
-    }
-
-    // Apply scope preset
-    if (opts.scopes && persistedScope > 0 && persistedScope < opts.scopes.length) {
-      const scopeFn = opts.scopes[persistedScope]?.scope
-      if (scopeFn) q = scopeFn(q)
-    }
-
-    // Apply search
-    if (searchFilter) {
-      q = q.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
-      for (let i = 1; i < searchFilter.columns.length; i++) {
-        q = q.orWhere(searchFilter.columns[i]!, 'LIKE', `%${searchFilter.search}%`)
-      }
-    }
-
-    // Apply persisted filters
-    for (const [filterName, filterValue] of Object.entries(persistedFilters)) {
-      const filter = config.filters.find(f => f.getName() === filterName)
-      if (filter) q = filter.applyToQuery(q, filterValue)
-      else q = q.where(filterName, filterValue)
-    }
+    q = applyFolderFilter(q, config.folderField, persistedFolder, { isFolderView: opts.folderView })
+    q = applyScope(q, opts.scopes, persistedScope)
+    if (urlSearch && searchColumns.length > 0) q = applySearch(q, searchColumns, urlSearch)
+    q = applyFilters(q, config.filters, persistedFilters)
 
     // Sort
     const sortCol = urlSort ?? config.sortBy
-    if (sortCol) {
-      q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
-    }
+    if (sortCol) q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
 
     // Limit/offset — tree view fetches all records
     if (opts.treeView) {
-      q = q.limit(1000) // safety cap
+      q = q.limit(1000)
     } else {
       const isLoadMore = config.paginationType === 'loadMore'
       const queryLimit = config.paginationType
@@ -175,33 +136,22 @@ export async function resolveListQuery(
     try { records = await q.get() } catch { /* empty model */ }
   }
 
-  // Pagination count (skip for tree view)
+  // ── Pagination count (skip for tree view) ──
   let pagination: ListQueryResult['pagination']
   if (config.paginationType && !config.lazy && !opts.treeView) {
     try {
-      let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(model.query()) : model.query()
-      // Apply folder filter to count query (only in folder view)
-      if (config.folderField && opts.folderView) {
-        if (persistedFolder) countQ = countQ.where(config.folderField, persistedFolder)
-        else countQ = countQ.where(config.folderField, null)
-      }
-      // Apply scope preset to count query too
-      if (opts.scopes && persistedScope > 0 && persistedScope < opts.scopes.length) {
-        const scopeFn = opts.scopes[persistedScope]?.scope
-        if (scopeFn) countQ = scopeFn(countQ)
-      }
-      if (searchFilter) {
-        countQ = countQ.where(searchFilter.columns[0]!, 'LIKE', `%${searchFilter.search}%`)
-        for (let i = 1; i < searchFilter.columns.length; i++) {
-          countQ = countQ.orWhere(searchFilter.columns[i]!, 'LIKE', `%${searchFilter.search}%`)
-        }
-      }
-      for (const [filterName, filterValue] of Object.entries(persistedFilters)) {
-        const filter = config.filters.find(f => f.getName() === filterName)
-        if (filter) countQ = filter.applyToQuery(countQ, filterValue)
-        else countQ = countQ.where(filterName, filterValue)
-      }
-      const total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
+      const total = await countFiltered(model, {
+        scope:         config.scope,
+        folderField:   config.folderField,
+        folderId:      persistedFolder,
+        isFolderView:  opts.folderView,
+        scopes:        opts.scopes,
+        scopeIndex:    persistedScope,
+        searchColumns: urlSearch ? searchColumns : undefined,
+        searchTerm:    urlSearch,
+        filterDefs:    config.filters,
+        filterValues:  Object.keys(persistedFilters).length > 0 ? persistedFilters : undefined,
+      })
       pagination = {
         total,
         currentPage: urlPage,
@@ -220,31 +170,17 @@ export async function resolveListQuery(
     }
   }
 
-  // Active state
+  // ── Active state ──
   const effectiveSortCol = urlSort ?? config.sortBy
   const effectiveSortDir = urlSortDir ?? config.sortDir
 
-  // ── Resolve breadcrumb chain for folder navigation ──
+  // ── Breadcrumbs for folder navigation ──
   let activeFolder: string | null | undefined
   let breadcrumbs: FolderBreadcrumb[] | undefined
   if (config.folderField && model && opts.folderView) {
     activeFolder = persistedFolder
     if (persistedFolder) {
-      // Walk up parent chain to build breadcrumbs
-      breadcrumbs = []
-      let currentId: string | null = persistedFolder
-      const titleKey = config.titleField ?? 'name'
-      const maxDepth = 20  // safety limit
-      let depth = 0
-      while (currentId && depth < maxDepth) {
-        depth++
-        try {
-          const row = await model.query().find(currentId) as RecordRow | null
-          if (!row) break
-          breadcrumbs.unshift({ id: String(row.id), label: String(row[titleKey] ?? row.id) })
-          currentId = row[config.folderField!] ? String(row[config.folderField!]) : null
-        } catch { break }
-      }
+      breadcrumbs = await buildBreadcrumbs(model, persistedFolder, config.folderField, config.titleField ?? 'name')
     }
   }
 

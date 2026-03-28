@@ -207,7 +207,7 @@ describe('Resource', () => {
     assert.equal(X.getLabelSingular(), 'Entry')
   })
 
-  it('toMeta() includes fields, filters, actions', () => {
+  it('toMeta() includes fields and identity', () => {
     class PostResource extends Resource {
       static model = MockModel as any
       static label = 'Posts'
@@ -222,10 +222,6 @@ describe('Resource', () => {
     assert.equal(meta.label, 'Posts')
     assert.equal(meta.fields.length, 1)
     assert.equal((meta.fields[0] as any).name, 'title')
-    assert.equal(meta.filters.length, 1)
-    assert.equal(meta.filters[0]!.name, 'status')
-    assert.equal(meta.actions.length, 1)
-    assert.equal(meta.actions[0]!.name, 'publish')
   })
 
   it('policy() defaults to true for all actions', async () => {
@@ -236,26 +232,7 @@ describe('Resource', () => {
   })
 })
 
-// ─── Resource defaultSort ────────────────────────────────────
-
-describe('Resource.defaultSort', () => {
-  it('defaultSort defaults to undefined', () => {
-    class R extends Resource {
-      static model = MockModel as any
-    }
-    assert.equal(new R().toMeta().defaultSort, undefined)
-  })
-
-  it('defaultSort and defaultSortDir appear in meta via table()', () => {
-    class R extends Resource {
-      static model = MockModel as any
-      table(table: Table) { return table.sortBy('createdAt', 'DESC') }
-    }
-    const meta = new R().toMeta()
-    assert.equal(meta.defaultSort, 'createdAt')
-    assert.equal(meta.defaultSortDir, 'DESC')
-  })
-})
+// ─── Resource defaultSort (tested via table config, not ResourceMeta) ──
 
 // ─── Resource with Section/Tabs ───────────────────────────────
 
@@ -333,35 +310,33 @@ describe('resourceData', () => {
   })
 })
 
-// ─── Resource — navigation group ────────────────────────────
+// ─── Resource — navigation group (read by Panel.toNavigationMeta, not ResourceMeta) ──
 
-describe('Resource — navigation group', () => {
+describe('Resource — navigation group (static)', () => {
   it('navigationGroup defaults to undefined', () => {
     class R extends Resource {}
-    assert.strictEqual(new R().toMeta().navigationGroup, undefined)
+    assert.strictEqual(R.navigationGroup, undefined)
   })
 
-  it('navigationGroup is included in meta when set', () => {
+  it('navigationGroup is set via static property', () => {
     class R extends Resource {
       static navigationGroup = 'Content'
-
     }
-    assert.strictEqual(new R().toMeta().navigationGroup, 'Content')
+    assert.strictEqual(R.navigationGroup, 'Content')
   })
 })
 
-describe('Resource — navigation badge color', () => {
+describe('Resource — navigation badge color (static)', () => {
   it('navigationBadgeColor defaults to undefined', () => {
     class R extends Resource {}
-    assert.strictEqual(new R().toMeta().navigationBadgeColor, undefined)
+    assert.strictEqual(R.navigationBadgeColor, undefined)
   })
 
-  it('navigationBadgeColor is included in meta when set', () => {
+  it('navigationBadgeColor is set via static property', () => {
     class R extends Resource {
       static navigationBadgeColor = 'danger' as const
-
     }
-    assert.strictEqual(new R().toMeta().navigationBadgeColor, 'danger')
+    assert.strictEqual(R.navigationBadgeColor, 'danger')
   })
 })
 
@@ -394,66 +369,7 @@ describe('Resource — autosave', () => {
   })
 })
 
-// ─── Resource — yjs derived from fields ──────────────────────
-
-describe('Resource — yjs flag', () => {
-  it('yjs=false when no fields use yjs', () => {
-    class R extends Resource {
-      form(form: Form) { return form.fields([TextField.make('title')]) }
-    }
-    assert.equal(new R().toMeta().yjs, false)
-  })
-
-  it('yjs=true when a field has .collaborative()', () => {
-    class R extends Resource {
-      form(form: Form) { return form.fields([TextField.make('title').collaborative()]) }
-    }
-    assert.equal(new R().toMeta().yjs, true)
-  })
-
-  it('yjs=true when a field has .persist("websocket")', () => {
-    class R extends Resource {
-      form(form: Form) { return form.fields([TextField.make('title').persist('websocket')]) }
-    }
-    assert.equal(new R().toMeta().yjs, true)
-  })
-
-  it('yjs=true when a field has .persist("indexeddb")', () => {
-    class R extends Resource {
-      form(form: Form) { return form.fields([TextField.make('title').persist('indexeddb')]) }
-    }
-    assert.equal(new R().toMeta().yjs, true)
-  })
-
-  it('yjs=false when field only has .persist() (localStorage)', () => {
-    class R extends Resource {
-      form(form: Form) { return form.fields([TextField.make('title').persist()]) }
-    }
-    assert.equal(new R().toMeta().yjs, false)
-  })
-
-  it('yjs derived through Section grouping', () => {
-    class R extends Resource {
-      form(form: Form) {
-        return form.fields([Section.make('Content').schema(
-          TextField.make('title').persist('websocket'),
-        )])
-      }
-    }
-    assert.equal(new R().toMeta().yjs, true)
-  })
-
-  it('yjs derived through Tabs grouping', () => {
-    class R extends Resource {
-      form(form: Form) {
-        return form.fields([Tabs.make().tab('Main',
-          TextField.make('title').collaborative(),
-        )])
-      }
-    }
-    assert.equal(new R().toMeta().yjs, true)
-  })
-})
+// ─── Resource — yjs (derived in resolveForm, not ResourceMeta) ──
 
 // ─── Resource — empty state ─────────────────────────────────
 

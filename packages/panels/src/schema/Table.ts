@@ -4,15 +4,12 @@ import { Column } from './Column.js'
 import type { ColumnMeta } from './Column.js'
 import type { FilterMeta } from './Filter.js'
 import type { ActionMeta } from './Action.js'
-import type { PersistMode } from '../persist.js'
 import { ViewMode } from './ViewMode.js'
 
 // ─── Table schema element ──────────────────────────────────
 // Extends List with column layout.
 // All shared features (data sources, search, pagination, filters, scopes,
 // sortable, reorderable, onSave, views, actions, live, etc.) are on List.
-
-export type TableRememberMode = PersistMode
 
 export interface PanelColumnMeta {
   name:        string
@@ -27,6 +24,7 @@ export interface PanelColumnMeta {
   editField?:  import('./Field.js').FieldMeta
 }
 
+/** @deprecated Tables now resolve as DataViewElementMeta via resolveListElement. */
 export interface TableElementMeta {
   type:              'table'
   title:             string
@@ -72,6 +70,7 @@ export interface TableConfig extends ListConfig {
 
 export class Table extends List {
   private _columns: string[] | Column[] = []
+  private _resolvedViews: ViewMode[] | undefined = undefined
 
   protected constructor(title: string) {
     super(title)
@@ -91,20 +90,24 @@ export class Table extends List {
 
   getType(): 'table' { return 'table' }
 
+  /**
+   * Lazily resolves views: when no explicit views are defined and columns exist,
+   * auto-creates a table ViewMode from the columns. The result is cached to
+   * avoid creating new objects on every call.
+   */
+  private _getViews(): ViewMode[] {
+    if (this._resolvedViews) return this._resolvedViews
+    const baseViews = super.getConfig().views
+    if (baseViews.length > 0 || this._columns.length === 0) return baseViews
+    const cols = typeof this._columns[0] === 'string'
+      ? (this._columns as string[]).map(name => Column.make(name))
+      : this._columns as Column[]
+    this._resolvedViews = [ViewMode.table(cols)]
+    return this._resolvedViews
+  }
+
   getConfig(): TableConfig {
-    const base = super.getConfig()
-    const config: TableConfig = { ...base, columns: this._columns }
-
-    // Auto-create a table ViewMode from columns when no explicit views defined.
-    // This ensures resolveListElement includes column fields in record stripping.
-    if (base.views.length === 0 && this._columns.length > 0) {
-      const cols = typeof this._columns[0] === 'string'
-        ? (this._columns as string[]).map(name => Column.make(name))
-        : this._columns as Column[]
-      config.views = [ViewMode.table(cols)]
-    }
-
-    return config
+    return { ...super.getConfig(), columns: this._columns, views: this._getViews() }
   }
 
   /**
@@ -115,6 +118,7 @@ export class Table extends List {
     const clone = Table.make(this._title)
     this._cloneBase(clone)
     clone._columns = this._columns
+    clone._resolvedViews = undefined
     clone._id = id
     if (scopeFn) clone._scope = scopeFn
     else if (this._scope) clone._scope = this._scope

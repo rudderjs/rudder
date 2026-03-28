@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@boostkit/panels'
 import { TableEditPopover } from './TableEditPopover.js'
 import { TableEditModal } from './TableEditModal.js'
-import { formatCellValue } from './SchemaTable.js'
+import { formatCellValue } from './formatCellValue.js'
 
 interface TableEditCellProps {
   record: Record<string, unknown>

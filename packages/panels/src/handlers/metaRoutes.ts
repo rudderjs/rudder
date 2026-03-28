@@ -3,6 +3,7 @@ import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { ModelClass, QueryBuilderLike, RecordRow } from '../types.js'
 import { flattenFields, buildContext } from './utils.js'
+import { applySearch } from '../utils/queryHelpers.js'
 import { mountTableRoutes } from './meta/tableRoutes.js'
 import { mountStatsRoutes } from './meta/statsRoutes.js'
 import { mountTabsRoutes } from './meta/tabsRoutes.js'
@@ -66,10 +67,7 @@ export function mountMetaRoutes(
       if (searchableCols.length === 0) continue
 
       let qb: QueryBuilderLike<RecordRow> = Model.query()
-      qb = qb.where(searchableCols[0] ?? '', 'LIKE', `%${q}%`)
-      for (let i = 1; i < searchableCols.length; i++) {
-        qb = qb.orWhere(searchableCols[i] ?? '', 'LIKE', `%${q}%`)
-      }
+      qb = applySearch(qb, searchableCols, q)
 
       const rows: RecordRow[] = await qb.limit(limit).all()
       if (rows.length === 0) continue

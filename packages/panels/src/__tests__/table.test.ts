@@ -392,7 +392,7 @@ describe('Table List features', () => {
     ]).getConfig()
     assert.equal(c.views.length, 3)
     assert.equal(c.views[2]?.getType(), 'table')
-    assert.equal(c.views[2]?.getColumns()?.length, 1)
+    assert.equal(c.views[2]?.getFields()?.length, 1)
   })
 
   it('views mixes presets and ViewMode instances', () => {

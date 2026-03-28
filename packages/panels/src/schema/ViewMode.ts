@@ -146,9 +146,6 @@ export class ViewMode {
   getFields(): DataField[] | undefined { return this._fields }
   getLayout(): string | undefined { return this._layout }
 
-  /** @deprecated Use getFields() instead. */
-  getColumns(): Column[] | undefined { return this._fields as Column[] | undefined }
-
   /** Serialize for SSR payload. */
   toMeta(): ViewModeMeta {
     const meta: ViewModeMeta = {

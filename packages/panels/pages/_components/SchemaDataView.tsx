@@ -152,7 +152,7 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
   const rememberMode = element.remember
   const pathSegment = panelPath.replace(/^\//, '')
 
-  // Save state to session (same as SchemaTable remember)
+  // Save state to session (persist/remember feature)
   function buildState(overrides: Record<string, unknown> = {}, filterOverride?: Record<string, string>): Record<string, unknown> {
     const state: Record<string, unknown> = { view: activeView, search, page: currentPage }
     if (sortField) { state.sort = sortField; state.dir = sortDir }

@@ -11,7 +11,7 @@ export { Stats, Stat }              from './Stats.js'
 export type { StatsElementMeta, PanelStatMeta } from './Stats.js'
 
 export { Table }                from './Table.js'
-export type { TableElementMeta, PanelColumnMeta, TableConfig, TableRememberMode } from './Table.js'
+export type { TableElementMeta, PanelColumnMeta, TableConfig } from './Table.js'
 
 export { Chart }               from './Chart.js'
 export type { ChartElementMeta, ChartDataset, ChartType } from './Chart.js'

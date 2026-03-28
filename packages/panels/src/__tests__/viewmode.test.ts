@@ -37,7 +37,7 @@ describe('ViewMode', () => {
     assert.equal(v.getName(), 'table')
     assert.equal(v.getLabel(), 'Table')
     assert.equal(v.getIcon(), 'table')
-    assert.deepEqual(v.getColumns(), cols)
+    assert.deepEqual(v.getFields(), cols)
   })
 
   it('label() overrides default label', () => {
@@ -88,10 +88,10 @@ describe('ViewMode', () => {
     assert.equal(ViewMode.list().getRenderFn(), undefined)
   })
 
-  it('getColumns() returns undefined for non-table views', () => {
-    assert.equal(ViewMode.list().getColumns(), undefined)
-    assert.equal(ViewMode.grid().getColumns(), undefined)
-    assert.equal(ViewMode.make('custom').getColumns(), undefined)
+  it('getFields() returns undefined for non-table views', () => {
+    assert.equal(ViewMode.list().getFields(), undefined)
+    assert.equal(ViewMode.grid().getFields(), undefined)
+    assert.equal(ViewMode.make('custom').getFields(), undefined)
   })
 })
 

@@ -5,6 +5,11 @@ import type { ModelClass, QueryBuilderLike, RecordRow } from '../../types.js'
 import { flattenFields, buildContext } from '../utils.js'
 import { TableRegistry } from '../../registries/TableRegistry.js'
 import { warmUpRegistries, debugWarn } from './shared.js'
+import {
+  applySearch, applyFilters, applyScope, applyFolderFilter,
+  extractSearchColumns, parseUrlFilters, buildBreadcrumbs,
+  applyColumnTransforms, countFiltered,
+} from '../../utils/queryHelpers.js'
 
 export function mountTableRoutes(
   router: RouterLike,
@@ -13,10 +18,7 @@ export function mountTableRoutes(
 ): void {
   const apiBase = panel.getApiBase()
 
-  // Table reorder endpoint — used by Table.make().reorderable()
-  // POST body: { model: string, ids: string[], field: string }
-  // We cannot reference the model class directly here, so the client sends
-  // ordered IDs and the field name; we update each record's position field.
+  // ── Reorder endpoint ──
   router.post(`${apiBase}/_tables/reorder`, async (req, res) => {
     const { ids, field, model: modelName, parentField, parents } = (req.body as {
       ids?: string[]; field?: string; model?: string
@@ -26,13 +28,11 @@ export function mountTableRoutes(
       return res.status(400).json({ message: 'ids[] and field are required.' })
     }
 
-    // Find the model by name across all resources registered on this panel
     const ResourceClass = panel.getResources().find(
       (R) => (R.model as ModelClass<RecordRow> | undefined)?.name === modelName || R.getSlug() === modelName,
     )
     const Model = ResourceClass?.model as ModelClass<RecordRow> | undefined
 
-    // Also check table registry for standalone List elements
     let ListModel: ModelClass<RecordRow> | undefined
     if (!Model) {
       for (const [, tables] of (TableRegistry as unknown as { entries(): Iterable<[string, Map<string, unknown>]> }).entries?.() ?? []) {
@@ -53,7 +53,6 @@ export function mountTableRoutes(
       await Promise.all(
         ids.map((id, index) => {
           const update: Record<string, unknown> = { [field]: index }
-          // Update parent if tree reorder provided parent mapping
           if (parentField && parents && id in parents) {
             update[parentField] = parents[id] ?? null
           }
@@ -66,7 +65,7 @@ export function mountTableRoutes(
     }
   }, mw)
 
-  // Save table navigation state to session (remember='session' mode)
+  // ── Remember state endpoint ──
   router.post(`${apiBase}/_tables/:tableId/remember`, async (req, res) => {
     const tableId = (req.params as Record<string, string> | undefined)?.['tableId']
     if (!tableId) return res.status(400).json({ message: 'Missing tableId.' })
@@ -74,27 +73,21 @@ export function mountTableRoutes(
     const state = (req.body as Record<string, unknown> | undefined) ?? {}
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const session = (req as any).session as { put(key: string, value: unknown): void } | undefined
-    if (session) {
-      session.put(`table:${tableId}`, state)
-    }
+    if (session) session.put(`table:${tableId}`, state)
 
     return res.json({ success: true })
   }, mw)
 
-  // Table data endpoint — used by lazy, poll, paginated tables
+  // ── Table data endpoint (lazy, poll, paginated) ──
   router.get(`${apiBase}/_tables/:tableId`, async (req, res) => {
     const tableId = (req.params as Record<string, string> | undefined)?.['tableId']
     if (!tableId) return res.status(400).json({ message: 'Missing tableId.' })
 
     let table = TableRegistry.get(panel.getName(), tableId)
     if (!table) {
-      // Table not yet registered — warm up by evaluating schema
-      try {
-        await warmUpRegistries(panel, req)
-      } catch (e) { debugWarn('registry.warmup', e) }
+      try { await warmUpRegistries(panel, req) } catch (e) { debugWarn('registry.warmup', e) }
       table = TableRegistry.get(panel.getName(), tableId)
     }
-
     if (!table) return res.status(404).json({ message: `Table "${tableId}" not found.` })
 
     const config = table.getConfig()
@@ -102,217 +95,112 @@ export function mountTableRoutes(
     const page = parseInt(url.searchParams.get('page') as string) || 1
     const search = url.searchParams.get('search')?.trim() ?? ''
 
-    // --- fromArray() / rows() — static array or async function ---
+    // ── fromArray / rows ──
     if (config.rows) {
-      // Resolve data source
       const { resolveDataSource: resolveDS } = await import('../../datasource.js')
       const ctx = buildContext(req)
-      const allRows = await resolveDS(config.rows, ctx)
+      let records = await resolveDS(config.rows, ctx) as RecordRow[]
 
-      let filtered = allRows
-      // Search for array rows
+      // Client-side search for array data
       if (search && config.searchable) {
-        const cols = config.searchColumns ?? (config.columns ?? []).map((c: { getName?: () => string } | string) => typeof c === 'string' ? c : (c as { getName?: () => string }).getName?.() ?? '')
-        filtered = allRows.filter(row =>
-          cols.some(col => String(row[col as string] ?? '').toLowerCase().includes(search.toLowerCase()))
+        const cols = extractSearchColumns(config)
+        records = records.filter(row =>
+          cols.some(col => String(row[col] ?? '').toLowerCase().includes(search.toLowerCase()))
         )
       }
 
-      // Apply filters
-      for (const [key, value] of url.searchParams.entries()) {
-        const match = key.match(/^filter\[(.+)\]$/)
-        if (match) {
-          const colName = match[1]
-          filtered = filtered.filter(row => String(row[colName as string] ?? '') === value)
-        }
+      // Client-side filter for array data
+      const urlFilters = parseUrlFilters(url)
+      for (const [colName, value] of Object.entries(urlFilters)) {
+        records = records.filter(row => String(row[colName] ?? '') === value)
       }
 
       const perPage = config.paginationType ? config.perPage : config.limit
       const offset = (page - 1) * perPage
-      const records = filtered.slice(offset, offset + perPage)
-      const total = filtered.length
+      const paged = records.slice(offset, offset + perPage)
 
       return res.json({
-        records,
+        records: paged,
         pagination: config.paginationType ? {
-          total,
-          currentPage: page,
-          perPage,
-          lastPage: Math.ceil(total / perPage),
-          type: config.paginationType,
+          total: records.length, currentPage: page, perPage,
+          lastPage: Math.ceil(records.length / perPage), type: config.paginationType,
         } : undefined,
       })
     }
 
-    // --- Model-backed ---
+    // ── Model-backed ──
     const Model = config.model as ModelClass<RecordRow> | undefined
     if (!Model) return res.status(404).json({ message: 'No data source configured.' })
 
-    let q: QueryBuilderLike<RecordRow> = Model.query()
-    if (config.scope) q = config.scope(q)
-
-    // Apply folder filter — only for folder view (?view=folder) or when ?folder= is explicit
-    // Tree view (?view=tree) fetches all. Flat views (list/grid/table) fetch all.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const folderField = (config as any).folderField as string | undefined
     const viewParam = url.searchParams.get('view')
     const isTreeView = viewParam === 'tree'
     const isFolderView = viewParam === 'folder'
     const folderParam = url.searchParams.get('folder')
-    if (folderField && !isTreeView && (isFolderView || folderParam)) {
-      if (folderParam) {
-        q = q.where(folderField, folderParam)
-      } else {
-        q = q.where(folderField, null)
-      }
-    }
-
-    // Apply scope preset if ?scope=N is set (from List.scopes())
     const scopeIndex = parseInt(url.searchParams.get('scope') ?? '') || 0
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scopes = (config as any).scopes as Array<{ scope?: (q: any) => any }> | undefined
-    if (scopes && scopeIndex > 0 && scopeIndex < scopes.length) {
-      const scopeFn = scopes[scopeIndex]?.scope
-      if (scopeFn) q = scopeFn(q)
-    }
-
-    // Server-side search
-    if (search && config.searchable) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const searchCols = config.searchColumns ?? ((config.columns ?? []) as any[])
-        .filter((c: { toMeta?: () => { searchable?: boolean } }) => typeof c !== 'string' && c.toMeta?.()?.searchable)
-        .map((c: { toMeta: () => { name: string } }) => c.toMeta().name)
-      if (searchCols.length > 0) {
-        q = q.where(searchCols[0] ?? '', 'LIKE', `%${search}%`)
-        for (let i = 1; i < searchCols.length; i++) {
-          q = q.orWhere(searchCols[i] ?? '', 'LIKE', `%${search}%`)
-        }
-      }
-    }
-
-    // Apply filters from query params: ?filter[name]=value
-    const filterParams = url.searchParams
-    for (const [key, value] of filterParams.entries()) {
-      const match = key.match(/^filter\[(.+)\]$/)
-      if (match) {
-        const filterName = match[1]
-        const filter = config.filters.find(f => f.getName() === filterName)
-        if (filter) {
-          q = filter.applyToQuery(q, value)
-        }
-      }
-    }
-
-    // Sort — use query params if provided, fall back to config default
+    const searchCols = extractSearchColumns(config)
+    const urlFilters = parseUrlFilters(url)
     const sortParam = url.searchParams.get('sort')
     const dirParam = url.searchParams.get('dir')?.toUpperCase() as 'ASC' | 'DESC' | undefined
+
+    let q: QueryBuilderLike<RecordRow> = Model.query()
+    if (config.scope) q = config.scope(q)
+    q = applyFolderFilter(q, folderField, folderParam ?? null, { isTreeView, isFolderView: isFolderView || !!folderParam })
+    q = applyScope(q, scopes, scopeIndex)
+    if (search) q = applySearch(q, searchCols, search)
+    q = applyFilters(q, config.filters, urlFilters)
+
     const sortCol = sortParam ?? config.sortBy
     if (sortCol) q = q.orderBy(sortCol, dirParam ?? config.sortDir)
 
+    // Limit/offset
     const perPage = config.paginationType ? config.perPage : config.limit
-    // Tree view fetches all records (no pagination)
     if (!isTreeView) {
-      const offset = (page - 1) * perPage
-      q = q.limit(perPage).offset(offset)
+      q = q.limit(perPage).offset((page - 1) * perPage)
     } else {
-      q = q.limit(1000) // safety cap for tree
+      q = q.limit(1000)
     }
 
     let records: RecordRow[] = []
     try { records = await q.get() } catch { /* empty */ }
 
+    // Pagination count
     let pagination
     if (config.paginationType && !isTreeView) {
-      let total = records.length
       try {
-        let countQ: QueryBuilderLike<RecordRow> = config.scope ? config.scope(Model.query()) : Model.query()
-        // Apply folder filter to count query (only in folder view)
-        if (folderField && (isFolderView || folderParam)) {
-          if (folderParam) countQ = countQ.where(folderField, folderParam)
-          else countQ = countQ.where(folderField, null)
-        }
-        // Apply scope preset to count query
-        if (scopes && scopeIndex > 0 && scopeIndex < scopes.length) {
-          const countScopeFn = scopes[scopeIndex]?.scope
-          if (countScopeFn) countQ = countScopeFn(countQ)
-        }
-        // Apply search filter to count query
-        if (search && config.searchable) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const countSearchCols = config.searchColumns ?? ((config.columns ?? []) as any[])
-            .filter((c: { toMeta?: () => { searchable?: boolean } }) => typeof c !== 'string' && c.toMeta?.()?.searchable)
-            .map((c: { toMeta: () => { name: string } }) => c.toMeta().name)
-          if (countSearchCols.length > 0) {
-            countQ = countQ.where(countSearchCols[0] ?? '', 'LIKE', `%${search}%`)
-            for (let i = 1; i < countSearchCols.length; i++) {
-              countQ = countQ.orWhere(countSearchCols[i] ?? '', 'LIKE', `%${search}%`)
-            }
-          }
-        }
-        // Apply filters to count query
-        for (const [key, value] of url.searchParams.entries()) {
-          const match = key.match(/^filter\[(.+)\]$/)
-          if (match) {
-            const filterName = match[1]
-            const filter = config.filters.find(f => f.getName() === filterName)
-            if (filter) countQ = filter.applyToQuery(countQ, value)
-          }
-        }
-        total = await (countQ as QueryBuilderLike<RecordRow> & { count(): Promise<number> }).count()
-      } catch { /* fallback */ }
-      pagination = {
-        total,
-        currentPage: page,
-        perPage,
-        lastPage: Math.ceil(total / perPage),
-        type: config.paginationType,
+        const total = await countFiltered(Model, {
+          scope: config.scope,
+          folderField, folderId: folderParam, isFolderView: isFolderView || !!folderParam,
+          scopes, scopeIndex,
+          searchColumns: search ? searchCols : undefined,
+          searchTerm: search || undefined,
+          filterDefs: config.filters,
+          filterValues: Object.keys(urlFilters).length > 0 ? urlFilters : undefined,
+        })
+        pagination = { total, currentPage: page, perPage, lastPage: Math.ceil(total / perPage), type: config.paginationType }
+      } catch {
+        pagination = { total: records.length, currentPage: page, perPage, lastPage: Math.ceil(records.length / perPage), type: config.paginationType }
       }
     }
 
-    // Apply Column.compute() + .display() transforms
-    const isColumnInstances = config.columns?.length > 0 && typeof (config.columns[0] as { getComputeFn?: unknown })?.getComputeFn === 'function'
-    if (isColumnInstances) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cols = config.columns as Array<{ getName(): string; getComputeFn?(): ((r: any) => unknown) | undefined; getDisplayFn?(): ((v: unknown, r?: any) => unknown) | undefined }>
-      for (const record of records) {
-        for (const col of cols) {
-          const computeFn = col.getComputeFn?.()
-          if (computeFn) (record as Record<string, unknown>)[col.getName()] = computeFn(record)
-          const displayFn = col.getDisplayFn?.()
-          if (displayFn) (record as Record<string, unknown>)[col.getName()] = displayFn((record as Record<string, unknown>)[col.getName()], record)
-        }
-      }
-    }
+    // Column transforms
+    applyColumnTransforms(records, config.columns ?? [])
 
-    // Resolve breadcrumbs for folder navigation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Breadcrumbs
     let breadcrumbs: { id: string; label: string }[] | undefined
-    if (folderField) {
-      const folderParam = url.searchParams.get('folder')
-      if (folderParam) {
-        breadcrumbs = []
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const titleKey = (config as any).titleField ?? 'name'
-        let currentId: string | null = folderParam
-        let depth = 0
-        while (currentId && depth < 20) {
-          depth++
-          try {
-            const row = await Model.query().find(currentId) as RecordRow | null
-            if (!row) break
-            breadcrumbs.unshift({ id: String(row.id), label: String(row[titleKey] ?? row.id) })
-            currentId = row[folderField] ? String(row[folderField]) : null
-          } catch { break }
-        }
-      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (folderField && folderParam) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      breadcrumbs = await buildBreadcrumbs(Model, folderParam, folderField, (config as any).titleField ?? 'name')
     }
 
     return res.json({ records, pagination, breadcrumbs })
   }, mw)
 
-  // Table inline-edit save endpoint
+  // ── Inline-edit save endpoint ──
   router.post(`${apiBase}/_tables/:tableId/save`, async (req, res) => {
     const tableId = (req.params as Record<string, string> | undefined)?.['tableId']
     if (!tableId) return res.status(400).json({ message: 'Missing tableId.' })
@@ -322,29 +210,25 @@ export function mountTableRoutes(
 
     let table = TableRegistry.get(panel.getName(), tableId)
     if (!table) {
-      try {
-        await warmUpRegistries(panel, req)
-      } catch (e) { debugWarn('registry.warmup', e) }
+      try { await warmUpRegistries(panel, req) } catch (e) { debugWarn('registry.warmup', e) }
       table = TableRegistry.get(panel.getName(), tableId)
     }
-
     if (!table) return res.status(404).json({ message: `Table "${tableId}" not found.` })
 
     const config = table.getConfig()
     const ctx = buildContext(req)
 
-    // Find the editable Column/DataField instance by name
-    // Check config.columns (Table) and config.views[].getFields() (List with ViewMode.table())
+    // Find editable Column/DataField by name
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    type ColumnLike = { getName(): string; isEditable(): boolean; getOnSaveFn?(): ((record: Record<string, unknown>, value: unknown, ctx: any) => Promise<void> | void) | undefined }
-    let column: ColumnLike | undefined
+    type EditableField = { getName(): string; isEditable(): boolean; getOnSaveFn?(): ((record: Record<string, unknown>, value: unknown, ctx: any) => Promise<void> | void) | undefined }
+    let column: EditableField | undefined
 
     const isColumnInstances = config.columns?.length > 0 && typeof (config.columns[0] as { isEditable?: unknown })?.isEditable === 'function'
     if (isColumnInstances) {
-      column = (config.columns as unknown as ColumnLike[]).find(c => c.getName() === field)
+      column = (config.columns as unknown as EditableField[]).find(c => c.getName() === field)
     }
 
-    // Fallback: check view fields (List with ViewMode.table/list/grid)
+    // Fallback: check view fields (List with ViewMode)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!column && (config as any).views) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,7 +236,7 @@ export function mountTableRoutes(
       for (const v of views) {
         const fields = v.getFields?.()
         if (fields) {
-          const found = fields.find((f: ColumnLike) => f.getName() === field && typeof f.isEditable === 'function' && f.isEditable())
+          const found = fields.find((f: EditableField) => f.getName() === field && typeof f.isEditable === 'function' && f.isEditable())
           if (found) { column = found; break }
         }
       }
@@ -362,7 +246,6 @@ export function mountTableRoutes(
       return res.status(403).json({ message: `Column "${field}" is not editable.` })
     }
 
-    // Determine save handler: column-level → table-level → auto (model update)
     const columnSaveFn = column?.getOnSaveFn?.()
     const tableSaveFn = config.onSave ?? table.getOnSave?.()
 
@@ -372,25 +255,22 @@ export function mountTableRoutes(
       } else if (tableSaveFn) {
         await tableSaveFn({ id: recordId } as Record<string, unknown>, field, value, ctx)
       } else if (config.model) {
-        // Auto: update model by ID
         const Model = config.model as ModelClass<RecordRow>
         await Model.query().update(recordId, { [field]: value })
       } else {
         return res.status(400).json({ message: 'No save handler configured.' })
       }
-      // Broadcast live update if table has .live()
+
       if (table.isLive()) {
         try {
           const broadcastPkg = '@boostkit/broadcast'
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
           broadcast(`live:table:${tableId}`, 'refresh', { field, recordId })
-          // Also broadcast on resource channel (resource tables listen on panel:{slug})
           const resourceSlug = config.resourceClass?.getSlug?.() as string | undefined
           if (resourceSlug) {
             broadcast(`panel:${resourceSlug}`, 'record.updated', { id: recordId })
           } else {
-            // Per-tab tables: derive slug from tableId (e.g. 'articles-all' → 'articles')
             const slugFromId = tableId.replace(/-[^-]+$/, '')
             const matchingResource = panel.getResources().find(R => R.getSlug() === slugFromId)
             if (matchingResource) broadcast(`panel:${slugFromId}`, 'record.updated', { id: recordId })
@@ -404,7 +284,7 @@ export function mountTableRoutes(
     }
   }, mw)
 
-  // Table action endpoint — execute bulk/row actions on table records
+  // ── Action endpoint ──
   router.post(`${apiBase}/_tables/:tableId/action/:actionName`, async (req, res) => {
     const tableId = (req.params as Record<string, string> | undefined)?.['tableId']
     const actionName = (req.params as Record<string, string> | undefined)?.['actionName']
@@ -412,12 +292,8 @@ export function mountTableRoutes(
 
     let table = TableRegistry.get(panel.getName(), tableId)
     if (!table) {
-      // Warm up
-      try {
-        await warmUpRegistries(panel, req)
-      } catch (e) { debugWarn('registry.warmup', e) }
+      try { await warmUpRegistries(panel, req) } catch (e) { debugWarn('registry.warmup', e) }
     }
-
     table = TableRegistry.get(panel.getName(), tableId)
     if (!table) return res.status(404).json({ message: `Table "${tableId}" not found.` })
 
@@ -427,7 +303,6 @@ export function mountTableRoutes(
     const { ids } = (req.body as { ids?: string[] }) ?? {}
     if (!Array.isArray(ids)) return res.status(400).json({ message: 'ids[] is required.' })
 
-    // Fetch records by IDs if model is available
     const actionConfig = table.getConfig()
     const Model = actionConfig.model as ModelClass<RecordRow> | undefined
     let records: unknown[] = ids
@@ -441,8 +316,6 @@ export function mountTableRoutes(
 
     try {
       await action.execute(records)
-
-      // Broadcast live update if table has .live()
       if (table.isLive()) {
         try {
           const broadcastPkg = '@boostkit/broadcast'
@@ -451,7 +324,6 @@ export function mountTableRoutes(
           broadcast(`live:table:${tableId}`, 'refresh', { action: actionName })
         } catch { /* @boostkit/broadcast not available */ }
       }
-
       return res.json({ success: true })
     } catch (err) {
       return res.status(422).json({ message: String(err) })

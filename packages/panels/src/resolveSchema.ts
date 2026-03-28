@@ -93,8 +93,8 @@ export async function resolveSchema(
     }
 
     if (type === 'table' || type === 'dataview') {
-      const { resolveListElement } = await import('./resolvers/resolveListElement.js')
-      const meta = await resolveListElement(el, panel, ctx)
+      const { resolveDataView } = await import('./resolvers/resolveListElement.js')
+      const meta = await resolveDataView(el, panel, ctx)
       if (meta) result.push(meta)
       continue
     }

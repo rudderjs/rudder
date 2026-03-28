@@ -8,6 +8,7 @@ import {
   flattenFields, relationName, buildContext,
   coercePayload, validatePayload, applyTransforms, liveBroadcast,
 } from './utils.js'
+import { applySearch, applyFilters, parseUrlFilters } from '../utils/queryHelpers.js'
 import { mountVersionRoutes } from './versionRoutes.js'
 
 /** Extract a named route parameter — always returns a string (empty if somehow absent). */
@@ -105,21 +106,12 @@ export function mountResourceRoutes(
     if (search) {
       const searchableCols = tableConfig.searchColumns
         ?? formFields.filter(f => f.isSearchable()).map(f => f.getName())
-      if (searchableCols.length > 0) {
-        q = q.where(searchableCols[0] ?? '', 'LIKE', `%${search}%`)
-        for (let i = 1; i < searchableCols.length; i++) {
-          q = q.orWhere(searchableCols[i] ?? '', `%${search}%`)
-        }
-      }
+      q = applySearch(q, searchableCols, search)
     }
 
     // Filters — ?filter[field]=value
-    for (const filter of tableConfig.filters) {
-      const value = url.searchParams.get(`filter[${filter.getName()}]`)
-      if (value !== null && value !== '') {
-        q = filter.applyToQuery(q, value)
-      }
-    }
+    const urlFilters = parseUrlFilters(url)
+    q = applyFilters(q, tableConfig.filters, urlFilters)
 
     const result = await q.paginate(page, perPage)
 

@@ -1,4 +1,4 @@
-import { PanelRegistry, resolveListElement } from '@boostkit/panels'
+import { PanelRegistry, resolveDataView } from '@boostkit/panels'
 import type { PanelSchemaElementMeta } from '@boostkit/panels'
 import { buildPanelContext } from '../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
@@ -33,7 +33,7 @@ export async function data(pageContext: PageContextServer) {
   let element: PanelSchemaElementMeta | null = null
   if (ResourceClass.model) {
     const table = resource._resolveTable()
-    element = await resolveListElement(table as any, panel, ctx)
+    element = await resolveDataView(table as any, panel, ctx)
 
     // Apply resource-specific overrides
     if (element) {

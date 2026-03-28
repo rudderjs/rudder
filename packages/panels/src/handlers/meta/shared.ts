@@ -29,13 +29,13 @@ export async function warmUpRegistries(panel: Panel, req: AppRequest): Promise<v
   }
 
   // Register resource tables for lazy/poll/paginated API endpoints
-  const { resolveListElement } = await import('../../resolvers/resolveListElement.js')
+  const { resolveDataView } = await import('../../resolvers/resolveListElement.js')
   for (const ResourceClass of panel.getResources()) {
     if (!ResourceClass.model) continue
     try {
       const resource = new ResourceClass()
       const table = resource._resolveTable()
-      await resolveListElement(table as any, panel, ctx)
+      await resolveDataView(table as any, panel, ctx)
     } catch { /* resource schema failed */ }
   }
 }

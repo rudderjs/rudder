@@ -83,6 +83,7 @@ export { registerResolver, getResolver } from './registries/ResolverRegistry.js'
 
 // ─── Editor Registry (deprecated — use registerField instead) ──
 
+/** @deprecated Use `registerField` instead. */
 export { editorRegistry } from './registries/EditorRegistry.js'
 export type { RichContentEditorProps, CollaborativePlainTextProps } from './registries/EditorRegistry.js'
 
@@ -141,9 +142,10 @@ export type {
   HeadingElementMeta,
   StatsElementMeta,
   PanelStatMeta,
+  /** @deprecated Tables now resolve as DataViewElementMeta. */
   TableElementMeta,
-  TableRememberMode,
   TableConfig,
+  /** @deprecated Use `TableConfig` instead. */
   TableConfig as Table2Config,
   PanelColumnMeta,
   ChartElementMeta,
@@ -159,8 +161,11 @@ export type {
 
 export { resolveSchema } from './resolveSchema.js'
 export type { PanelSchemaElementMeta } from './resolveSchema.js'
-export { resolveListElement } from './resolvers/resolveListElement.js'
-export { resolveListElement as resolveTable } from './resolvers/resolveListElement.js'
+export { resolveDataView } from './resolvers/resolveListElement.js'
+/** @deprecated Use `resolveDataView` instead. */
+export { resolveDataView as resolveTable } from './resolvers/resolveListElement.js'
+/** @deprecated Use `resolveDataView` instead. */
+export { resolveDataView as resolveListElement } from './resolvers/resolveListElement.js'
 export type { DataViewElementMeta } from './resolvers/resolveListElement.js'
 export { resolveListQuery } from './resolvers/resolveListQuery.js'
 export { resolveTabs }  from './resolvers/resolveTabs.js'

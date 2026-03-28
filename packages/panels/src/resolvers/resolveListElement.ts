@@ -86,7 +86,7 @@ export function getRegisteredList(panelName: string, listId: string): List | und
 
 // ─── Resolver ───────────────────────────────────────────────
 
-export async function resolveListElement(
+export async function resolveDataView(
   el: SchemaElementLike,
   panel: Panel,
   ctx: PanelContext,

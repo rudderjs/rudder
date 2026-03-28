@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@boostkit/panels'
 import { FieldInput } from './FieldInput.js'
-import { formatCellValue } from './SchemaTable.js'
+import { formatCellValue } from './formatCellValue.js'
 
 interface TableEditModalProps {
   value: unknown
