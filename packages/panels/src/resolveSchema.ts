@@ -5,10 +5,10 @@ import type {
   HeadingElementMeta,
   CodeElementMeta,
   StatsElementMeta,
-  TableElementMeta,
   ChartElementMeta,
   ListElementMeta,
 } from './schema/index.js'
+import type { DataViewElementMeta } from './resolvers/resolveListElement.js'
 import type { FormElementMeta } from './schema/Form.js'
 import type { DialogElementMeta } from './schema/Dialog.js'
 import type { SnippetElementMeta } from './schema/Snippet.js'
@@ -27,7 +27,6 @@ import type { Playground } from './schema/Playground.js'
 
 import { resolveSection }   from './resolvers/resolveSection.js'
 import { resolveTabs }      from './resolvers/resolveTabs.js'
-import { resolveTable }     from './resolvers/resolveTable.js'
 import { resolveDashboard } from './resolvers/resolveDashboard.js'
 import { resolveDialog }    from './resolvers/resolveDialog.js'
 import { resolveForm }      from './resolvers/resolveForm.js'
@@ -44,7 +43,7 @@ export type PanelSchemaElementMeta =
   | HeadingElementMeta
   | CodeElementMeta
   | StatsElementMeta
-  | TableElementMeta
+  | DataViewElementMeta
   | ChartElementMeta
   | ListElementMeta
   | FormElementMeta
@@ -93,13 +92,7 @@ export async function resolveSchema(
       continue
     }
 
-    if (type === 'table') {
-      const meta = await resolveTable(el, panel, ctx)
-      if (meta) result.push(meta)
-      continue
-    }
-
-    if (type === 'dataview') {
+    if (type === 'table' || type === 'dataview') {
       const { resolveListElement } = await import('./resolvers/resolveListElement.js')
       const meta = await resolveListElement(el, panel, ctx)
       if (meta) result.push(meta)
