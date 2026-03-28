@@ -82,7 +82,14 @@ const TreeItem = forwardRef<HTMLDivElement, TreeItemComponentProps<TreeRecord> &
     const title = String(item[titleField] ?? item.id)
 
     return (
-      <SimpleTreeItemWrapper {...props} ref={ref} showDragHandle={false} manualDrag>
+      <SimpleTreeItemWrapper
+        {...props}
+        ref={ref}
+        showDragHandle={false}
+        manualDrag
+        className={`!list-none !mb-0 ${props.ghost ? 'opacity-30' : ''} ${props.clone ? 'inline-block' : ''}`}
+        contentClassName={`!flex !items-center !py-1.5 !px-2 !rounded-md !text-foreground !transition-colors ${props.clone ? '!bg-card !border !border-border !shadow-lg !rounded-lg' : '!border !border-transparent hover:!bg-muted hover:!border-border'}`}
+      >
         <div className="flex items-center gap-2 py-0.5 min-w-0">
           <span className="shrink-0 cursor-grab active:cursor-grabbing touch-none text-muted-foreground/40 hover:text-muted-foreground" {...props.handleProps}>
             <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
@@ -162,47 +169,15 @@ export function TreeView({ records, folderField, titleField, iconField, fields, 
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-2 bk-tree-view">
-      <style>{`
-        .bk-tree-view li { list-style: none; }
-        .bk-tree-view .dnd-sortable-tree_simple_wrapper {
-          list-style: none; margin-bottom: 0; padding: 0;
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_tree-item {
-          display: flex; align-items: center; padding: 6px 8px; border-radius: 6px;
-          border: 1px solid transparent; color: hsl(var(--foreground));
-          transition: background-color 0.15s, border-color 0.15s;
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_tree-item:hover {
-          background: hsl(var(--muted)); border-color: hsl(var(--border));
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_clone .dnd-sortable-tree_simple_tree-item {
-          background: hsl(var(--card)); border-color: hsl(var(--border));
-          box-shadow: 0 8px 24px hsl(var(--foreground) / 0.1); border-radius: 8px;
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_ghost {
-          opacity: 0.3;
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_ghost > .dnd-sortable-tree_simple_tree-item {
-          background: hsl(var(--muted)); border-color: hsl(var(--border));
-          border-style: dashed;
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_handle { display: none; }
-        .bk-tree-view .dnd-sortable-tree_simple_collapse-button {
-          border: none; background: none; cursor: pointer; padding: 2px 6px;
-          color: hsl(var(--muted-foreground)); transition: transform 0.15s, color 0.15s;
-          border-radius: 4px;
-        }
-        .bk-tree-view .dnd-sortable-tree_simple_collapse-button:hover {
-          color: hsl(var(--foreground)); background: hsl(var(--muted));
-        }
-      `}</style>
+    <div className="rounded-xl border border-border bg-card p-2 [&_li]:!list-none [&_.dnd-sortable-tree_simple_wrapper]:!list-none [&_.dnd-sortable-tree_simple_wrapper]:!m-0 [&_.dnd-sortable-tree_simple_wrapper]:!p-0 [&_.dnd-sortable-tree_simple_handle]:!hidden [&_.dnd-sortable-tree_simple_tree-item]:!bg-transparent [&_.dnd-sortable-tree_simple_tree-item]:!text-inherit [&_.dnd-sortable-tree_simple_tree-item]:!m-0 [&_.dnd-sortable-tree_simple_collapse-button]:!border-none [&_.dnd-sortable-tree_simple_collapse-button]:!bg-transparent [&_.dnd-sortable-tree_simple_collapse-button]:!cursor-pointer [&_.dnd-sortable-tree_simple_collapse-button]:!p-1 [&_.dnd-sortable-tree_simple_collapse-button]:!text-muted-foreground [&_.dnd-sortable-tree_simple_collapse-button]:!rounded [&_.dnd-sortable-tree_simple_collapse-button:hover]:!text-foreground [&_.dnd-sortable-tree_simple_collapse-button:hover]:!bg-muted">
       <SortableTree
         items={items}
         onItemsChanged={handleItemsChanged}
         TreeItemComponent={ItemComponent}
         indentationWidth={24}
         disableSorting={!reorderable}
+        dropAnimation={null}
+        sortableProps={{ animateLayoutChanges: () => false }}
       />
     </div>
   )
