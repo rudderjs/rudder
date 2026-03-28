@@ -38,7 +38,6 @@ export async function data(pageContext: PageContextServer) {
     // Apply resource-specific overrides
     if (element) {
       const el = element as PanelSchemaElementMeta & Record<string, unknown>
-      el['href'] = `/${pathSegment}/resources/${slug}`
       el['resource'] = slug
       if (el['live']) el['liveChannel'] = `panel:${slug}`
     }
