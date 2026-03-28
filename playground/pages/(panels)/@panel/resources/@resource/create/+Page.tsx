@@ -3,7 +3,6 @@
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { toast } from 'sonner'
-import { Breadcrumbs } from '../../../../_components/Breadcrumbs.js'
 import { SchemaForm }  from '../../../../_components/SchemaForm.js'
 import type { SchemaFormMeta } from '@boostkit/panels'
 import { useI18n } from '../../../../_hooks/useI18n.js'
@@ -19,12 +18,6 @@ export default function CreatePage() {
 
   return (
     <div className="p-6">
-      <Breadcrumbs crumbs={[
-        { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
-        { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
-        { label: t(i18n.create, { singular: resourceMeta.labelSingular }) },
-      ]} />
-
       <div className="max-w-2xl">
         <SchemaForm
           form={formElement as SchemaFormMeta}

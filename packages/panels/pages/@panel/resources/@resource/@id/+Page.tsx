@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useData }     from 'vike-react/useData'
 import { useConfig }   from 'vike-react/useConfig'
 import { navigate }    from 'vike/client/router'
-import { Breadcrumbs } from '../../../../_components/Breadcrumbs.js'
 import { CellValue, resolveCellValue } from '../../../../_components/CellValue.js'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, RecordRow } from '@boostkit/panels'
 import { useI18n } from '../../../../_hooks/useI18n.js'
@@ -41,12 +40,6 @@ export default function ShowPage() {
 
   return (
     <div className="max-w-4xl p-6">
-        <Breadcrumbs crumbs={[
-          { label: panelMeta.branding?.title ?? panelMeta.name, href: `/${pathSegment}/resources/${slug}` },
-          { label: resourceMeta.label, href: `/${pathSegment}/resources/${slug}` },
-          { label: recordTitle },
-        ]} />
-
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">{recordTitle}</h1>
           <button

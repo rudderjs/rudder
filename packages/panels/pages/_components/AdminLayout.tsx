@@ -54,6 +54,7 @@ import {
 } from '@/components/ui/breadcrumb.js'
 import { TooltipProvider } from '@/components/ui/tooltip.js'
 import { ChevronRightIcon, ChevronsUpDownIcon, LogOutIcon, BadgeCheckIcon, BellIcon } from 'lucide-react'
+import { usePageContext } from 'vike-react/usePageContext'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -444,6 +445,104 @@ function SidebarNavigation({ items, currentSlug, badges }: {
   )
 }
 
+// ─── HeaderBreadcrumb ───────────────────────────────────────
+
+interface Crumb { label: string; href?: string }
+
+function HeaderBreadcrumb({ panelMeta, items, currentSlug, i18n }: {
+  panelMeta: PanelNavigationMeta
+  items: NavItem[]
+  currentSlug: string
+  i18n: ReturnType<typeof useI18n>
+}) {
+  const pageContext = usePageContext() as { urlPathname: string; data?: Record<string, unknown> }
+  const path = panelMeta.path
+  const pathname = pageContext.urlPathname
+  const data = pageContext.data ?? {}
+  const panelTitle = panelMeta.branding?.title ?? panelMeta.name
+
+  // Build crumbs from URL structure
+  const crumbs: Crumb[] = [{ label: panelTitle, href: path }]
+
+  // Parse the URL after the panel path
+  const rest = pathname.slice(path.length).replace(/^\//, '')
+  const segments = rest ? rest.split('/') : []
+
+  if (segments[0] === 'resources' && segments[1]) {
+    const resourceSlug = segments[1]
+    const navItem = items.find(i => i.slug === resourceSlug)
+    const resourceLabel = (data.resourceMeta as Record<string, string> | undefined)?.label ?? navItem?.label ?? resourceSlug
+
+    // Group label if available
+    if (navItem?.navigationGroup) {
+      crumbs.push({ label: navItem.navigationGroup })
+    }
+
+    // Resource list
+    crumbs.push({ label: resourceLabel, href: `${path}/resources/${resourceSlug}` })
+
+    if (segments[2] === 'create') {
+      const singular = (data.resourceMeta as Record<string, string> | undefined)?.labelSingular ?? 'New'
+      crumbs.push({ label: `New ${singular}` })
+    } else if (segments[2]) {
+      // Detail or edit — segments[2] is record ID
+      const recordId = segments[2]
+      // Try to get a display title from record data
+      const record = data.record as Record<string, unknown> | undefined
+      const recordTitle = record?.title ?? record?.name ?? record?.label ?? `#${recordId}`
+      crumbs.push({ label: String(recordTitle), href: `${path}/resources/${resourceSlug}/${recordId}` })
+
+      if (segments[3] === 'edit') {
+        crumbs.push({ label: i18n.edit ?? 'Edit' })
+      }
+    }
+  } else if (segments[0] === 'globals' && segments[1]) {
+    const globalSlug = segments[1]
+    const navItem = items.find(i => i.slug === globalSlug)
+    crumbs.push({ label: 'Settings' })
+    crumbs.push({ label: navItem?.label ?? globalSlug })
+  } else if (segments[0] && segments[0] !== '') {
+    // Custom page
+    const navItem = items.find(i => i.slug === segments[0])
+    const pageLabel = (data.pageMeta as Record<string, string> | undefined)?.label ?? navItem?.label ?? segments[0]
+    crumbs.push({ label: pageLabel })
+  }
+
+  // If only root crumb, show just the panel name as current page
+  if (crumbs.length === 1) {
+    return (
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbPage>{panelTitle}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+    )
+  }
+
+  return (
+    <Breadcrumb>
+      <BreadcrumbList>
+        {crumbs.map((crumb, i) => {
+          const isLast = i === crumbs.length - 1
+          return (
+            <span key={i} className="contents">
+              {i > 0 && <BreadcrumbSeparator className="hidden md:block" />}
+              <BreadcrumbItem className={i === 0 ? 'hidden md:block' : ''}>
+                {isLast || !crumb.href
+                  ? <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                  : <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+                }
+              </BreadcrumbItem>
+            </span>
+          )
+        })}
+      </BreadcrumbList>
+    </Breadcrumb>
+  )
+}
+
 // ─── SidebarLayout ──────────────────────────────────────────
 
 function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props & { currentSlug: string }) {
@@ -453,9 +552,6 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
   const i18n   = useI18n()
   const dir    = panelMeta.dir ?? 'ltr'
   const branding = panelMeta.branding
-
-  const currentItem = items.find(i => i.slug === currentSlug)
-  const groupLabel  = currentItem?.navigationGroup
 
   return (
     <SidebarProvider>
@@ -477,23 +573,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
           <div className="flex items-center gap-2 px-4">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                {groupLabel && (
-                  <>
-                    <BreadcrumbItem className="hidden md:block">
-                      <BreadcrumbLink href={panelMeta.path}>
-                        {groupLabel}
-                      </BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator className="hidden md:block" />
-                  </>
-                )}
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{currentItem?.label ?? ''}</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
+            <HeaderBreadcrumb panelMeta={panelMeta} items={items} currentSlug={currentSlug} i18n={i18n} />
           </div>
           <div className="ms-auto flex items-center gap-2 px-4">
             <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />

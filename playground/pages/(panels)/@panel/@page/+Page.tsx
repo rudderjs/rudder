@@ -2,7 +2,6 @@
 
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
-import { Breadcrumbs }       from '../../_components/Breadcrumbs.js'
 import { useI18n } from '../../_hooks/useI18n.js'
 import { SchemaPageContent } from '../../_components/SchemaPageContent.js'
 import type { SchemaElement, I18nExtended } from '../../_components/schema-types.js'
@@ -18,10 +17,6 @@ export default function SchemaPage() {
   if (!schemaData || schemaData.length === 0) {
     return (
       <div className="p-6">
-        <Breadcrumbs crumbs={[
-          { label: panelName, href: `/${pathSegment}` },
-          { label: pageMeta.label },
-        ]} />
         <p className="text-muted-foreground">No content defined for this page.</p>
       </div>
     )
@@ -29,11 +24,6 @@ export default function SchemaPage() {
 
   return (
     <div className="p-6">
-      <Breadcrumbs crumbs={[
-        { label: panelName, href: `/${pathSegment}` },
-        { label: pageMeta.label },
-      ]} />
-
       <div className="flex flex-col gap-6">
         <SchemaPageContent
           key={pageMeta.slug}
