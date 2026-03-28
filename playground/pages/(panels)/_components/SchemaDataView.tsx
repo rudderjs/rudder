@@ -207,6 +207,14 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
     saveRememberState(buildState({ view: viewName }))
   }
 
+  // ── Lazy: fetch data on client mount (SSR sends empty records) ──
+  useEffect(() => {
+    if (element.lazy && records.length === 0) {
+      void fetchData({ page: 1 })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Container-based responsive default view (first visit only) ──
   const containerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {

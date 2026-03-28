@@ -116,7 +116,7 @@ export async function resolveListQuery(
     const sliceEnd = isLoadMore ? urlPage * config.perPage : offset + config.perPage
     const records  = config.paginationType
       ? allRecords.slice(offset, sliceEnd)
-      : allRecords
+      : allRecords.slice(0, config.limit)
 
     const pagination = config.paginationType && !config.lazy
       ? {
