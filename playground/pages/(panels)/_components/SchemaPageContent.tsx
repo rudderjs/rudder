@@ -48,11 +48,9 @@ export interface SchemaPageContentProps {
   pathSegment: string
   i18n: I18nExtended
   urlSearch?: Record<string, string>
-  /** Unique key for the page — forces full remount when navigating between pages. */
-  pageKey?: string
 }
 
-export function SchemaPageContent({ elements, panelPath, pathSegment, i18n, urlSearch, pageKey }: SchemaPageContentProps) {
+export function SchemaPageContent({ elements, panelPath, pathSegment, i18n, urlSearch }: SchemaPageContentProps) {
   if (!elements || elements.length === 0) return null
 
   // Group consecutive standalone widgets into grid rows
@@ -83,7 +81,7 @@ export function SchemaPageContent({ elements, panelPath, pathSegment, i18n, urlS
   }
 
   return (
-    <div key={pageKey}>
+    <>
       {groups.map((group, gi) => {
         if (group.type === 'widget-group') {
           return (
@@ -182,6 +180,6 @@ export function SchemaPageContent({ elements, panelPath, pathSegment, i18n, urlS
           <SchemaElementRenderer key={gi} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
         )
       })}
-    </div>
+    </>
   )
 }

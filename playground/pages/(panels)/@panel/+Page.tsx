@@ -21,7 +21,7 @@ export default function PanelRootPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <SchemaPageContent
-        pageKey="root"
+        key="root"
         elements={schemaData as SchemaElement[]}
         panelPath={panelMeta.path}
         pathSegment={pathSegment}

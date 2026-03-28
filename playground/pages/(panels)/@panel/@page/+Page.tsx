@@ -36,7 +36,7 @@ export default function SchemaPage() {
 
       <div className="flex flex-col gap-6">
         <SchemaPageContent
-          pageKey={pageMeta.slug}
+          key={pageMeta.slug}
           elements={schemaData as SchemaElement[]}
           panelPath={panelMeta.path}
           pathSegment={pathSegment}
