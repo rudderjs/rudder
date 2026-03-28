@@ -5,7 +5,7 @@ import type { Section, SectionMeta } from './schema/Section.js'
 import type { Tabs, TabsMeta } from './schema/Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
 import type { PanelColumnMeta } from './schema/Table.js'
-import { Table2 as Table } from './schema/Table2.js'
+import { Table } from './schema/Table.js'
 import { Form } from './schema/Form.js'
 import { Column } from './schema/Column.js'
 

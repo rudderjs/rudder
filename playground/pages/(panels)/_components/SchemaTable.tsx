@@ -75,7 +75,7 @@ export function SchemaTable({ element, panelPath, i18n, resource }: { element: E
   )
   const [search, setSearch]   = useState(ssrSearch ?? (cachedState?.search ? String(cachedState.search) : ''))
   const [dragging, setDragging] = useState<string | null>(null)
-  // Scope tabs (from Table2 .scopes())
+  // Scope tabs (from Table .scopes())
   const scopeTabs = (element as unknown as { tabs?: { label: string; icon?: string; scope?: boolean }[] }).tabs ?? []
   const [activeTab, setActiveTab] = useState('')
   const [pagination, setPagination] = useState<typeof element.pagination>(element.pagination)

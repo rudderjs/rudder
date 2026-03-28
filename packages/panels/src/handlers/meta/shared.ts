@@ -28,15 +28,13 @@ export async function warmUpRegistries(panel: Panel, req: AppRequest): Promise<v
     } catch { /* page schema failed */ }
   }
 
-  // Register resource tables (including per-tab table clones)
+  // Register resource tables for lazy/poll/paginated API endpoints
   const { resolveTable } = await import('../../resolvers/resolveTable.js')
   for (const ResourceClass of panel.getResources()) {
     if (!ResourceClass.model) continue
     try {
       const resource = new ResourceClass()
       const table = resource._resolveTable()
-      const tableConfig = table.getConfig()
-
       await resolveTable(table as any, panel, ctx)
     } catch { /* resource schema failed */ }
   }

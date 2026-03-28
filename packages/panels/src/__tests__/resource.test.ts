@@ -15,12 +15,10 @@ import { SelectFilter, SearchFilter } from '../schema/Filter.js'
 import { Action }       from '../schema/Action.js'
 import { Section }      from '../schema/Section.js'
 import { Tabs }         from '../schema/Tabs.js'
-import { Tab }          from '../schema/Tabs.js'
 import { Stats, Stat }  from '../schema/Stats.js'
 import { Table }        from '../schema/Table.js'
 import { Form }         from '../schema/Form.js'
 import { Column }       from '../schema/Column.js'
-import { ListTab }      from '../schema/Tab.js'
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -862,21 +860,21 @@ describe('Resource — table() override', () => {
     new PostResource()._resolveTable()
   })
 
-  it('table() with tabs', () => {
+  it('table() with scopes', () => {
     class PostResource extends Resource {
       static model = MockModel as any
       table(table: Table) {
-        return table.tabs([
-          Tab.make('All'),
-          Tab.make('Published').scope((q: any) => q.where('status', 'published')),
+        return table.scopes([
+          { label: 'All' },
+          { label: 'Published', scope: (q: any) => q.where('status', 'published') },
         ])
       }
 
     }
     const config = new PostResource()._resolveTable().getConfig()
-    assert.equal(config.tabs.length, 2)
-    assert.equal(config.tabs[0]?.getLabel(), 'All')
-    assert.ok(config.tabs[1]?.getScope())
+    assert.equal(config.scopes?.length, 2)
+    assert.equal(config.scopes?.[0]?.label, 'All')
+    assert.ok(config.scopes?.[1]?.scope)
   })
 })
 

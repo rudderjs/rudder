@@ -6,8 +6,7 @@ import { Table }        from '../schema/Table.js'
 import { Column }       from '../schema/Column.js'
 import { SelectFilter } from '../schema/Filter.js'
 import { Action }       from '../schema/Action.js'
-import { Tab }          from '../schema/Tabs.js'
-import { ListTab }      from '../schema/Tab.js'
+import { ViewMode }     from '../schema/ViewMode.js'
 
 // ─── Mock classes ──────────────────────────────────────────
 
@@ -15,7 +14,7 @@ class MockModel {
   static query() { return { get: async () => [], count: async () => 0 } }
 }
 
-// ─── Table ────────────────────────────────────────────────────
+// ─── Table (extends List) ─────────────────────────────────
 
 describe('Table', () => {
   it('type is table', () => {
@@ -69,7 +68,7 @@ describe('Table', () => {
   })
 })
 
-// ─── Table enhancements ──────────────────────────────────────
+// ─── Table enhancements (inherited from List) ──────────────
 
 describe('Table enhancements', () => {
   it('fromArray() stores static data in config', () => {
@@ -200,6 +199,8 @@ describe('Table enhancements', () => {
     assert.equal(c.lazy, true)
     assert.equal(c.pollInterval, 3000)
     assert.equal(c.id, 'full-tbl')
+    // Table-specific
+    assert.equal(c.columns.length, 2)
   })
 })
 
@@ -242,7 +243,7 @@ describe('Table remember', () => {
   })
 })
 
-// ─── Table live ────────────────────────────────────────────────────
+// ─── Table live ────────────────────────────────────────────
 
 describe('Table live', () => {
   it('live() sets flag', () => {
@@ -259,7 +260,262 @@ describe('Table live', () => {
   })
 })
 
-// ─── Column editable ────────────────────────────────────────────────
+// ─── Table onSave ──────────────────────────────────────────
+
+describe('Table onSave', () => {
+  it('onSave(fn) stores handler', () => {
+    const fn = async () => {}
+    const t = Table.make('T').onSave(fn)
+    assert.equal(t.getOnSave(), fn)
+  })
+
+  it('getConfig includes onSave', () => {
+    const fn = async () => {}
+    const c = Table.make('T').onSave(fn).getConfig()
+    assert.equal(c.onSave, fn)
+  })
+
+  it('getOnSave returns undefined by default', () => {
+    assert.equal(Table.make('T').getOnSave(), undefined)
+  })
+})
+
+// ─── Table scopes (replaces tabs) ──────────────────────────
+
+describe('Table scopes', () => {
+  it('scopes() stores preset array', () => {
+    const c = Table.make('T').scopes([
+      { label: 'All' },
+      { label: 'Published', scope: (q: any) => q.where('status', 'published') },
+    ]).getConfig()
+    assert.equal(c.scopes?.length, 2)
+    assert.equal(c.scopes?.[0]?.label, 'All')
+  })
+})
+
+// ─── Table resource methods ────────────────────────────────
+
+describe('Table resource methods', () => {
+  it('softDeletes() sets flag', () => {
+    const c = Table.make('T').softDeletes().getConfig()
+    assert.equal(c.softDeletes, true)
+  })
+
+  it('softDeletes(false) unsets flag', () => {
+    const c = Table.make('T').softDeletes(false).getConfig()
+    assert.equal(c.softDeletes, false)
+  })
+
+  it('titleField() stores field name', () => {
+    const c = Table.make('T').titleField('name').getConfig()
+    assert.equal(c.titleField, 'name')
+  })
+
+  it('emptyState() stores config', () => {
+    const es = { icon: 'inbox', heading: 'No items', description: 'Create one' }
+    const c = Table.make('T').emptyState(es).getConfig()
+    assert.deepEqual(c.emptyState, es)
+  })
+
+  it('creatable() defaults to true', () => {
+    const c = Table.make('T').creatable().getConfig()
+    assert.equal(c.creatableUrl, true)
+  })
+
+  it('creatable(url) stores custom URL', () => {
+    const c = Table.make('T').creatable('/admin/posts/create').getConfig()
+    assert.equal(c.creatableUrl, '/admin/posts/create')
+  })
+
+  it('defaults: no softDeletes, no titleField, no emptyState, no creatable', () => {
+    const c = Table.make('T').getConfig()
+    assert.equal(c.softDeletes, false)
+    assert.equal(c.titleField, undefined)
+    assert.equal(c.emptyState, undefined)
+    assert.equal(c.creatableUrl, undefined)
+  })
+})
+
+// ─── Table List features ───────────────────────────────────
+
+describe('Table List features', () => {
+  it('titleField/descriptionField/imageField', () => {
+    const c = Table.make('T').titleField('name').descriptionField('bio').imageField('avatar').getConfig()
+    assert.equal(c.titleField, 'name')
+    assert.equal(c.descriptionField, 'bio')
+    assert.equal(c.imageField, 'avatar')
+  })
+
+  it('groupBy stores field', () => {
+    const c = Table.make('T').groupBy('status').getConfig()
+    assert.equal(c.groupBy, 'status')
+  })
+
+  it('folder stores parent field', () => {
+    const c = Table.make('T').folder('parentId').getConfig()
+    assert.equal(c.folderField, 'parentId')
+  })
+
+  it('onRecordClick stores handler', () => {
+    const c = Table.make('T').onRecordClick('edit').getConfig()
+    assert.equal(c.onRecordClick, 'edit')
+  })
+
+  it('onRecordClick with function', () => {
+    const fn = (r: Record<string, unknown>) => `/custom/${r.id}`
+    const c = Table.make('T').onRecordClick(fn).getConfig()
+    assert.equal(c.onRecordClick, fn)
+  })
+
+  it('exportable() defaults to true', () => {
+    const c = Table.make('T').exportable().getConfig()
+    assert.equal(c.exportable, true)
+  })
+
+  it('exportable(formats) stores explicit formats', () => {
+    const c = Table.make('T').exportable(['csv', 'json']).getConfig()
+    assert.deepEqual(c.exportable, ['csv', 'json'])
+  })
+
+  it('views stores view definitions from presets', () => {
+    const c = Table.make('T').views(['list', 'grid']).getConfig()
+    assert.equal(c.views.length, 2)
+    assert.equal(c.views[0]?.getName(), 'list')
+    assert.equal(c.views[1]?.getName(), 'grid')
+  })
+
+  it('views stores ViewMode instances', () => {
+    const c = Table.make('T').views([
+      ViewMode.list(),
+      ViewMode.grid(),
+      ViewMode.table([Column.make('name')]),
+    ]).getConfig()
+    assert.equal(c.views.length, 3)
+    assert.equal(c.views[2]?.getType(), 'table')
+    assert.equal(c.views[2]?.getColumns()?.length, 1)
+  })
+
+  it('views mixes presets and ViewMode instances', () => {
+    const c = Table.make('T').views([
+      'list',
+      ViewMode.make('cards').icon('credit-card').render(() => []),
+    ]).getConfig()
+    assert.equal(c.views.length, 2)
+    assert.equal(c.views[0]?.getType(), 'list')
+    assert.equal(c.views[1]?.getType(), 'custom')
+    assert.equal(c.views[1]?.getIcon(), 'credit-card')
+  })
+
+  it('defaultView stores breakpoint map', () => {
+    const c = Table.make('T').defaultView({ sm: 'list', lg: 'grid' }).getConfig()
+    assert.deepEqual(c.defaultView, { sm: 'list', lg: 'grid' })
+  })
+
+  it('render stores function', () => {
+    const fn = (r: Record<string, unknown>) => []
+    const c = Table.make('T').render(fn).getConfig()
+    assert.equal(c.renderFn, fn)
+  })
+
+  it('sortable with string array', () => {
+    const c = Table.make('T').sortable(['title', 'createdAt']).getConfig()
+    assert.equal(c.sortableOptions?.length, 2)
+    assert.equal(c.sortableOptions?.[0]?.field, 'title')
+    assert.equal(c.sortableOptions?.[0]?.label, 'Title')
+    assert.equal(c.sortableOptions?.[1]?.field, 'createdAt')
+    assert.equal(c.sortableOptions?.[1]?.label, 'Created At')
+  })
+
+  it('sortable with custom labels', () => {
+    const c = Table.make('T').sortable([
+      { field: 'title', label: 'العنوان' },
+      { field: 'date', label: 'التاريخ' },
+    ]).getConfig()
+    assert.equal(c.sortableOptions?.[0]?.label, 'العنوان')
+    assert.equal(c.sortableOptions?.[1]?.label, 'التاريخ')
+  })
+
+  it('sortable with mix of strings and objects', () => {
+    const c = Table.make('T').sortable([
+      'title',
+      { field: 'createdAt', label: 'Date Created' },
+    ]).getConfig()
+    assert.equal(c.sortableOptions?.[0]?.label, 'Title')
+    assert.equal(c.sortableOptions?.[1]?.label, 'Date Created')
+  })
+
+  it('scopes stores preset array', () => {
+    const scopeFn = (q: any) => q.where('status', 'published')
+    const c = Table.make('T').scopes([
+      { label: 'All' },
+      { label: 'Published', icon: 'circle-check', scope: scopeFn },
+      { label: 'Drafts', icon: 'pencil-line', scope: (q: any) => q.where('status', 'draft') },
+    ]).getConfig()
+    assert.equal(c.scopes?.length, 3)
+    assert.equal(c.scopes?.[0]?.label, 'All')
+    assert.equal(c.scopes?.[0]?.scope, undefined)
+    assert.equal(c.scopes?.[1]?.label, 'Published')
+    assert.equal(c.scopes?.[1]?.icon, 'circle-check')
+    assert.equal(c.scopes?.[1]?.scope, scopeFn)
+  })
+
+  it('scope() and scopes() work together', () => {
+    const baseFn = (q: any) => q.where('tenant', '1')
+    const presetFn = (q: any) => q.where('featured', true)
+    const c = Table.make('T')
+      .scope(baseFn)
+      .scopes([
+        { label: 'All' },
+        { label: 'Featured', scope: presetFn },
+      ])
+      .getConfig()
+    assert.equal(c.scope, baseFn)
+    assert.equal(c.scopes?.length, 2)
+    assert.equal(c.scopes?.[1]?.scope, presetFn)
+  })
+})
+
+// ─── Table _cloneWithScope ─────────────────────────────────
+
+describe('Table _cloneWithScope', () => {
+  it('clones all List + Table fields', () => {
+    const scopeFn = (q: any) => q.where('active', true)
+    const original = Table.make('T')
+      .fromModel(MockModel as any)
+      .columns([Column.make('name')])
+      .limit(10)
+      .sortBy('name', 'ASC')
+      .searchable(['name'])
+      .paginated('pages', 20)
+      .remember('session')
+      .softDeletes()
+      .titleField('name')
+      .groupBy('status')
+      .exportable(['csv'])
+
+    const clone = original._cloneWithScope('clone-id', scopeFn)
+    const c = clone.getConfig()
+
+    assert.equal(c.id, 'clone-id')
+    assert.equal(c.model, MockModel)
+    assert.equal(c.limit, 10)
+    assert.equal(c.sortBy, 'name')
+    assert.equal(c.searchable, true)
+    assert.equal(c.paginationType, 'pages')
+    assert.equal(c.perPage, 20)
+    assert.equal(c.remember, 'session')
+    assert.equal(c.softDeletes, true)
+    assert.equal(c.titleField, 'name')
+    assert.equal(c.groupBy, 'status')
+    assert.deepEqual(c.exportable, ['csv'])
+    assert.equal(c.columns.length, 1)
+    assert.equal(c.scope, scopeFn)
+    // Clone preserves config
+    assert.equal(c.reorderable, false)
+  })
+})
+
+// ─── Column editable ────────────────────────────────────────
 
 describe('Column editable', () => {
   it('editable() sets editable with default inline mode', () => {
@@ -346,27 +602,7 @@ describe('Column editable', () => {
   })
 })
 
-// ─── Table onSave ────────────────────────────────────────────────
-
-describe('Table onSave', () => {
-  it('onSave(fn) stores handler', () => {
-    const fn = async () => {}
-    const t = Table.make('T').onSave(fn)
-    assert.equal(t.getOnSave(), fn)
-  })
-
-  it('getConfig includes onSave', () => {
-    const fn = async () => {}
-    const c = Table.make('T').onSave(fn).getConfig()
-    assert.equal(c.onSave, fn)
-  })
-
-  it('getOnSave returns undefined by default', () => {
-    assert.equal(Table.make('T').getOnSave(), undefined)
-  })
-})
-
-// ─── Column compute/display ────────────────────────────────────────
+// ─── Column compute/display ────────────────────────────────
 
 describe('Column compute/display', () => {
   it('compute stores function', () => {
@@ -387,75 +623,5 @@ describe('Column compute/display', () => {
 
   it('display not set by default', () => {
     assert.equal(Column.make('x').getDisplayFn(), undefined)
-  })
-})
-
-// ─── Table tabs ─────────────────────────────────────────────
-
-describe('Table tabs', () => {
-  it('tabs() stores Tab array', () => {
-    const tabs = [Tab.make('All'), Tab.make('Published').scope((q: any) => q)]
-    const t = Table.make('T').tabs(tabs)
-    assert.equal(t.getTabs().length, 2)
-    assert.equal(t.getTabs()[0]?.getLabel(), 'All')
-  })
-
-  it('getTabs() defaults to empty', () => {
-    assert.deepEqual(Table.make('T').getTabs(), [])
-  })
-
-  it('getConfig includes tabs', () => {
-    const tabs = [Tab.make('All')]
-    const c = Table.make('T').tabs(tabs).getConfig()
-    assert.equal(c.tabs.length, 1)
-  })
-
-  it('listTabs() stores ListTab array', () => {
-    const tabs = [ListTab.make('all'), ListTab.make('active')]
-    const t = Table.make('T').listTabs(tabs)
-    assert.equal(t.getListTabs().length, 2)
-  })
-})
-
-// ─── Table resource methods ─────────────────────────────────
-
-describe('Table resource methods', () => {
-  it('softDeletes() sets flag', () => {
-    const c = Table.make('T').softDeletes().getConfig()
-    assert.equal(c.softDeletes, true)
-  })
-
-  it('softDeletes(false) unsets flag', () => {
-    const c = Table.make('T').softDeletes(false).getConfig()
-    assert.equal(c.softDeletes, false)
-  })
-
-  it('titleField() stores field name', () => {
-    const c = Table.make('T').titleField('name').getConfig()
-    assert.equal(c.titleField, 'name')
-  })
-
-  it('emptyState() stores config', () => {
-    const es = { icon: 'inbox', heading: 'No items', description: 'Create one' }
-    const c = Table.make('T').emptyState(es).getConfig()
-    assert.deepEqual(c.emptyState, es)
-  })
-
-  it('creatable() defaults to true', () => {
-    const c = Table.make('T').creatable().getConfig()
-    assert.equal(c.creatableUrl, true)
-  })
-
-  it('creatable(url) stores custom URL', () => {
-    const c = Table.make('T').creatable('/admin/posts/create').getConfig()
-    assert.equal(c.creatableUrl, '/admin/posts/create')
-  })
-
-  it('defaults: no softDeletes, no titleField, no emptyState, no creatable', () => {
-    const c = Table.make('T').getConfig()
-    assert.equal(c.softDeletes, false)
-    assert.equal(c.titleField, undefined)
-    assert.equal(c.emptyState, undefined)
-    assert.equal(c.creatableUrl, undefined)
   })
 })

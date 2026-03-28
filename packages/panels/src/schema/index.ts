@@ -22,8 +22,6 @@ export type { ListElementMeta, ListItem, ListConfig, ViewPreset, SortableOption,
 export { ViewMode }           from './ViewMode.js'
 export type { ViewModeMeta }  from './ViewMode.js'
 
-export { Table2 }             from './Table2.js'
-export type { Table2Config }  from './Table2.js'
 
 export { Form }               from './Form.js'
 export type { FormElementMeta, FormSubmitFn, FormItem } from './Form.js'

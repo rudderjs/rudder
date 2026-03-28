@@ -124,9 +124,7 @@ export type { ViewElementMeta } from './schema/View.js'
 export { Playground } from './schema/Playground.js'
 export type { PlaygroundElementMeta } from './schema/Playground.js'
 export { Stats, Stat } from './schema/Stats.js'
-export { Table as LegacyTable } from './schema/Table.js'
-export { Table2 as Table }     from './schema/Table2.js'
-export { Table2 }              from './schema/Table2.js'
+export { Table }               from './schema/Table.js'
 export { Chart }   from './schema/Chart.js'
 export { List }    from './schema/List.js'
 export { ViewMode } from './schema/ViewMode.js'
@@ -145,6 +143,8 @@ export type {
   PanelStatMeta,
   TableElementMeta,
   TableRememberMode,
+  TableConfig,
+  TableConfig as Table2Config,
   PanelColumnMeta,
   ChartElementMeta,
   ChartDataset,
@@ -153,7 +153,6 @@ export type {
   ListItem,
   ListConfig,
   ViewModeMeta,
-  Table2Config,
 } from './schema/index.js'
 
 // ─── Schema resolver ────────────────────────────────────────
@@ -161,7 +160,6 @@ export type {
 export { resolveSchema } from './resolveSchema.js'
 export type { PanelSchemaElementMeta } from './resolveSchema.js'
 export { resolveTable } from './resolvers/resolveTable.js'
-export { resolveTable2 } from './resolvers/resolveTable2.js'
 export { resolveListElement } from './resolvers/resolveListElement.js'
 export type { DataViewElementMeta } from './resolvers/resolveListElement.js'
 export { resolveListQuery } from './resolvers/resolveListQuery.js'

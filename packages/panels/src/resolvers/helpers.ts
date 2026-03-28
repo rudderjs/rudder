@@ -188,7 +188,7 @@ export function buildTableMeta(
   if (opts.activeSort)            meta.activeSort   = opts.activeSort
   if (opts.activeFilters)         meta.activeFilters = opts.activeFilters
   if (config.live)                { meta.live = true; meta.liveChannel = `live:table:${tableId}` }
-  // Scopes (from Table2/List .scopes()) — rendered as tab pills in SchemaTable
+  // Scopes (from Table/List .scopes()) — rendered as tab pills in SchemaTable
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scopes = (config as any).scopes as Array<{ label: string; icon?: string }> | undefined
   if (scopes && scopes.length > 0) {
