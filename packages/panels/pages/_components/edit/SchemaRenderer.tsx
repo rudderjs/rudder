@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js'
+import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'
 import type { SchemaItem } from '../../_lib/formHelpers.js'
@@ -100,19 +100,21 @@ export function SchemaRenderer({
         <Tabs key={key} defaultValue={tabsMeta.tabs[0]?.label} className="rounded-xl border border-border bg-card">
           <TabsList className="w-full justify-start rounded-none border-b bg-muted/40 px-2">
             {tabsMeta.tabs.map((tab) => (
-              <TabsTrigger key={tab.label} value={tab.label} className="text-sm">
+              <TabsTab key={tab.label} value={tab.label} className="text-sm">
                 {tab.label}
-              </TabsTrigger>
+              </TabsTab>
             ))}
           </TabsList>
-          {tabsMeta.tabs.map((tab) => (
-            <TabsContent key={tab.label} value={tab.label} className="p-5 flex flex-col gap-4 mt-0">
-              {tab.fields
-                .filter((f) => !f.hidden?.includes(mode) && isFieldVisible(f, values))
-                .map((f) => renderField(f))
-              }
-            </TabsContent>
-          ))}
+          <TabsPanels>
+            {tabsMeta.tabs.map((tab) => (
+              <TabsPanel key={tab.label} value={tab.label} className="p-5 flex flex-col gap-4">
+                {tab.fields
+                  .filter((f) => !f.hidden?.includes(mode) && isFieldVisible(f, values))
+                  .map((f) => renderField(f))
+                }
+              </TabsPanel>
+            ))}
+          </TabsPanels>
         </Tabs>
       )
     }

@@ -9,6 +9,7 @@ import type { PanelSchemaElementMeta, FormElementMeta, DialogElementMeta } from 
 import type { WidgetWithSchema } from './WidgetCard.js'
 import { slugify } from '../_lib/persist.js'
 import type { SchemaElement, TabItem, DashboardEl, I18nExtended } from './schema-types.js'
+import { Tabs, TabsList, TabsTab, TabsPanels, TabsPanel } from '@/components/animate-ui/components/base/tabs.js'
 
 // Lazy import to avoid circular dependency — DashboardSection is only used inside tab content
 let DashboardSectionComp: React.ComponentType<{ dashboard: DashboardEl; pathSegment: string; panelPath: string; i18n: I18nExtended }> | null = null
@@ -135,77 +136,74 @@ export function SchemaTabs({ id, tabs, urlSearch, panelPath, pathSegment, i18n, 
     ? tabs[activeIdx]!.elements!
     : fetchedElements[activeIdx] ?? []
 
+  function renderTabElements(tabElements: SchemaElement[], tabIdx: number) {
+    return tabElements.map((el: SchemaElement, i: number) => {
+      if (el.type === 'widget') {
+        return (
+          <StandaloneWidget
+            key={`${tabIdx}-tw-${i}`}
+            widget={el as unknown as WidgetWithSchema}
+            panelPath={panelPath}
+            pathSegment={pathSegment}
+            i18n={i18n}
+          />
+        )
+      }
+      if (el.type === 'form') {
+        return (
+          <SchemaForm key={`${tabIdx}-tf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
+        )
+      }
+      if (el.type === 'dialog') {
+        return (
+          <SchemaDialog key={`${tabIdx}-td-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
+        )
+      }
+      if (el.type === 'dashboard' && renderDashboard) {
+        return renderDashboard(el as DashboardEl, i)
+      }
+      return (
+        <SchemaElementRenderer key={`${tabIdx}-${i}`} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
+      )
+    })
+  }
+
   return (
-    <div>
-      <div className="flex items-center gap-1 mb-4">
-        {tabs.map((tab, idx) => {
-          const isActive = idx === activeIdx
-          return (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => void switchTab(tab.label)}
-              className={[
-                'inline-flex items-center px-3 py-1.5 text-sm rounded-md transition-colors',
-                isActive
-                  ? 'bg-primary text-primary-foreground font-medium'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              ].join(' ')}
-            >
-              {tab.label}
-              {tab.badge != null && (
-                <span className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-medium ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{tab.badge}</span>
-              )}
-            </button>
-          )
-        })}
-      </div>
+    <Tabs
+      value={activeSlug}
+      onValueChange={(v) => {
+        const tab = tabs.find(t => slugify(t.label) === v)
+        if (tab) void switchTab(tab.label)
+      }}
+    >
+      <TabsList>
+        {tabs.map((tab) => (
+          <TabsTab key={slugify(tab.label)} value={slugify(tab.label)}>
+            {tab.label}
+            {tab.badge != null && (
+              <span className="ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground">{tab.badge}</span>
+            )}
+          </TabsTab>
+        ))}
+      </TabsList>
       {loading && activeElements.length === 0 && (
         <div className="space-y-4">
           <div className="h-32 rounded-xl bg-muted/30 animate-pulse" />
           <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
         </div>
       )}
-      {/* Render all tabs but hide inactive — prevents unmount/remount flash */}
-      {tabs.map((tab, tabIdx) => {
-        const tabElements = tab.elements?.length
-          ? tab.elements
-          : fetchedElements[tabIdx] ?? []
-        const isActive = tabIdx === activeIdx
-        return (
-          <div key={tabIdx} className={isActive ? 'flex flex-col gap-6' : 'hidden'}>
-            {tabElements.map((el: SchemaElement, i: number) => {
-              if (el.type === 'widget') {
-                return (
-                  <StandaloneWidget
-                    key={`${tabIdx}-tw-${i}`}
-                    widget={el as unknown as WidgetWithSchema}
-                    panelPath={panelPath}
-                    pathSegment={pathSegment}
-                    i18n={i18n}
-                  />
-                )
-              }
-              if (el.type === 'form') {
-                return (
-                  <SchemaForm key={`${tabIdx}-tf-${(el as { id?: string }).id ?? i}`} form={el as FormElementMeta} panelPath={panelPath} i18n={i18n} />
-                )
-              }
-              if (el.type === 'dialog') {
-                return (
-                  <SchemaDialog key={`${tabIdx}-td-${(el as { id?: string }).id ?? i}`} dialog={el as DialogElementMeta} panelPath={panelPath} pathSegment={pathSegment} i18n={i18n} />
-                )
-              }
-              if (el.type === 'dashboard' && renderDashboard) {
-                return renderDashboard(el as DashboardEl, i)
-              }
-              return (
-                <SchemaElementRenderer key={`${tabIdx}-${i}`} element={el as PanelSchemaElementMeta} panelPath={panelPath} i18n={i18n} />
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
+      <TabsPanels>
+        {tabs.map((tab, tabIdx) => {
+          const tabElements = tab.elements?.length
+            ? tab.elements
+            : fetchedElements[tabIdx] ?? []
+          return (
+            <TabsPanel key={slugify(tab.label)} value={slugify(tab.label)} className="flex flex-col gap-6">
+              {renderTabElements(tabElements, tabIdx)}
+            </TabsPanel>
+          )
+        })}
+      </TabsPanels>
+    </Tabs>
   )
 }
