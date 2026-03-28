@@ -644,11 +644,11 @@ Resource is a thin wrapper that auto-generates schema elements:
 
 | Component | Generates | Renders via |
 |---|---|---|
-| Resource list | Table + Tabs | `resolveTable()` → `SchemaTable` + `SchemaTabs` |
+| Resource list | DataView (Table extends List) | `resolveDataView()` → `SchemaDataView` |
 | Resource create | Form | `resolveForm()` → `SchemaForm` |
 | Resource edit | Form | `resolveForm()` → `SchemaForm` (+ autosave/versioning) |
 | Resource show | detail() elements | `SchemaElementRenderer` |
 | Global | Form | `resolveForm()` → `SchemaForm` |
 | Page | schema elements | `resolveSchema()` → `SchemaElementRenderer` |
 
-One rendering path for everything. Features added to Table/Form/Tabs work everywhere automatically.
+One rendering path for everything. Table, List, and DataView all resolve through `resolveDataView()` → `SchemaDataView`. Features added to List (scopes, views, search, filters, reorder, export, live) work in both standalone pages and resource tables.

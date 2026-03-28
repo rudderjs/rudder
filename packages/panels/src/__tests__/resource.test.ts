@@ -20,6 +20,12 @@ import { Table }        from '../schema/Table.js'
 import { Form }         from '../schema/Form.js'
 import { Column }       from '../schema/Column.js'
 
+// ─── Mock model ─────────────────────────────────────────────
+
+class MockModel {
+  static query() { return { get: async () => [], count: async () => 0 } }
+}
+
 // ─── Helpers ────────────────────────────────────────────────
 
 function makeResource(name = 'Post', fields: Field[] = []) {
@@ -735,12 +741,6 @@ describe('search — searchable field detection', () => {
     assert.deepEqual(cols, ['title', 'body'])
   })
 })
-
-// ─── Mock model for _resolveTable tests ─────────────────────
-
-class MockModel {
-  static query() { return { get: async () => [], count: async () => 0 } }
-}
 
 // ─── Resource — new table()/form()/detail() API ─────────────
 

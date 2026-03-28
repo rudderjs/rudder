@@ -11,6 +11,40 @@ import {
   applyColumnTransforms, countFiltered,
 } from '../../utils/queryHelpers.js'
 
+/** Extended config shape — covers both Table and List properties used by handlers. */
+interface DataViewConfig {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  model?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rows?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scope?: (q: any) => any
+  columns: unknown[]
+  limit: number
+  sortBy?: string | undefined
+  sortDir: 'ASC' | 'DESC'
+  searchable?: boolean | undefined
+  searchColumns?: string[] | undefined
+  paginationType?: 'pages' | 'loadMore' | undefined
+  perPage: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filters: Array<{ getName(): string; applyToQuery(q: any, value: string): any }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actions: Array<{ getName(): string; execute(records: unknown[]): Promise<void> }>
+  lazy?: boolean | undefined
+  softDeletes: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onSave?: ((...args: any[]) => any) | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  resourceClass?: { getSlug?(): string }
+  folderField?: string | undefined
+  titleField?: string | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scopes?: Array<{ scope?: (q: any) => any }> | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  views?: Array<{ getFields?(): any[] }> | undefined
+}
+
 export function mountTableRoutes(
   router: RouterLike,
   panel: Panel,
@@ -90,7 +124,7 @@ export function mountTableRoutes(
     }
     if (!table) return res.status(404).json({ message: `Table "${tableId}" not found.` })
 
-    const config = table.getConfig()
+    const config = table.getConfig() as unknown as DataViewConfig
     const url = new URL(req.url, 'http://localhost')
     const page = parseInt(url.searchParams.get('page') as string) || 1
     const search = url.searchParams.get('search')?.trim() ?? ''
@@ -132,15 +166,13 @@ export function mountTableRoutes(
     const Model = config.model as ModelClass<RecordRow> | undefined
     if (!Model) return res.status(404).json({ message: 'No data source configured.' })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const folderField = (config as any).folderField as string | undefined
+    const folderField = config.folderField
     const viewParam = url.searchParams.get('view')
     const isTreeView = viewParam === 'tree'
     const isFolderView = viewParam === 'folder'
     const folderParam = url.searchParams.get('folder')
     const scopeIndex = parseInt(url.searchParams.get('scope') ?? '') || 0
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const scopes = (config as any).scopes as Array<{ scope?: (q: any) => any }> | undefined
+    const scopes = config.scopes
     const searchCols = extractSearchColumns(config)
     const urlFilters = parseUrlFilters(url)
     const sortParam = url.searchParams.get('sort')
@@ -197,7 +229,7 @@ export function mountTableRoutes(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (folderField && folderParam) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      breadcrumbs = await buildBreadcrumbs(Model, folderParam, folderField, (config as any).titleField ?? 'name')
+      breadcrumbs = await buildBreadcrumbs(Model, folderParam, folderField, config.titleField ?? 'name')
     }
 
     return res.json({ records, pagination, breadcrumbs })
@@ -218,7 +250,7 @@ export function mountTableRoutes(
     }
     if (!table) return res.status(404).json({ message: `Table "${tableId}" not found.` })
 
-    const config = table.getConfig()
+    const config = table.getConfig() as unknown as DataViewConfig
     const ctx = buildContext(req)
 
     // Find editable Column/DataField by name
@@ -233,9 +265,8 @@ export function mountTableRoutes(
 
     // Fallback: check view fields (List with ViewMode)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!column && (config as any).views) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const views = (config as any).views as Array<{ getFields?(): any[] }>
+    if (!column && config.views) {
+      const views = config.views
       for (const v of views) {
         const fields = v.getFields?.()
         if (fields) {

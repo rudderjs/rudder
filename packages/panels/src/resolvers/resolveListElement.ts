@@ -96,8 +96,9 @@ export async function resolveDataView(
   const config = list.getConfig()
   const listId = list.getId()
 
-  // Register in both ListRegistry (for future List-specific endpoints) and
-  // TableRegistry (so existing /_tables/:id fetch/remember endpoints work)
+  // Register in both registries:
+  // - ListRegistry for future List-specific endpoints
+  // - TableRegistry for /_tables/:id data/remember/save/action/reorder/export endpoints
   registerList(panel.getName(), listId, list)
   TableRegistry.register(panel.getName(), listId, list as unknown as import('../schema/Table.js').Table)
 
