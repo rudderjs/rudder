@@ -5,6 +5,7 @@ import type { PanelI18n, PanelColumnMeta } from '@boostkit/panels'
 import { ResourceIcon } from './ResourceIcon.js'
 import { TableEditCell } from './TableEditCell.js'
 import { ConfirmDialog } from './ConfirmDialog.js'
+import { Checkbox } from '@/components/ui/checkbox.js'
 
 // ─── Action types ────────────────────────────────────────────
 interface ActionMeta {
@@ -1365,12 +1366,10 @@ function TableView({ records, fields, getHref, getEditHref, sortField, sortDir, 
             <tr className="border-b bg-muted/40">
               {selectable && (
                 <th className="w-10 px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    checked={!!allSelected}
-                    ref={(el) => { if (el) el.indeterminate = !!someSelected }}
-                    onChange={onToggleAll}
-                    className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                  <Checkbox
+                    checked={someSelected ? 'indeterminate' : !!allSelected}
+                    onCheckedChange={onToggleAll}
+                    aria-label="Select all"
                   />
                 </th>
               )}
@@ -1408,11 +1407,10 @@ function TableView({ records, fields, getHref, getEditHref, sortField, sortDir, 
                 <SortableTableRow key={rid} id={rid} reorderable={reorderable}>
                   {selectable && (
                     <td className="w-10 px-3 py-2.5">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={!!isSelected}
-                        onChange={() => onToggleRecord?.(rid)}
-                        className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                        onCheckedChange={() => onToggleRecord?.(rid)}
+                        aria-label={`Select row ${rid}`}
                       />
                     </td>
                   )}
