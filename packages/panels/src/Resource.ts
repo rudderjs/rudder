@@ -116,10 +116,10 @@ export class Resource {
 
   // ── Internal resolvers ────────────────────────────────
 
-  /** @internal — Constructs Table with model wired, calls this.table(). */
+  /** @internal — Constructs Table with resource wired, calls this.table(). */
   _resolveTable(): Table {
     const Cls = this.constructor as typeof Resource
-    const table = Table.make(Cls.getLabel()).fromModel(Cls.model!)
+    const table = Table.make(Cls.getLabel()).fromResource(Cls as any)
     return this.table(table)
   }
 

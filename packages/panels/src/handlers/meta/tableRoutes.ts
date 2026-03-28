@@ -148,6 +148,7 @@ export function mountTableRoutes(
 
     let q: QueryBuilderLike<RecordRow> = Model.query()
     if (config.scope) q = config.scope(q)
+    if (config.softDeletes) q = q.where('deletedAt', null)
     q = applyFolderFilter(q, folderField, folderParam ?? null, { isTreeView, isFolderView: isFolderView || !!folderParam })
     q = applyScope(q, scopes, scopeIndex)
     if (search) q = applySearch(q, searchCols, search)
@@ -174,7 +175,7 @@ export function mountTableRoutes(
     if (config.paginationType && !isTreeView) {
       try {
         const total = await countFiltered(Model, {
-          scope: config.scope,
+          scope: config.scope, softDeletes: config.softDeletes,
           folderField, folderId: folderParam, isFolderView: isFolderView || !!folderParam,
           scopes, scopeIndex,
           searchColumns: search ? searchCols : undefined,

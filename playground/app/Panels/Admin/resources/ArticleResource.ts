@@ -14,7 +14,6 @@ import {
   JsonField,
   Block,
   RelationField,
-  ComputedField,
   Action,
   Tab,
   Table,
@@ -48,8 +47,10 @@ export class ArticleResource extends Resource {
         Column.make('createdAt').date().sortable(),
         Column.make('wordCount')
           .compute((r) => {
-            const text = ((r as Record<string, unknown>).excerpt as string | undefined) ?? ''
-            return text.trim() ? text.trim().split(/\s+/).length : 0
+            const title   = ((r as Record<string, unknown>).title as string | undefined) ?? ''
+            const excerpt = ((r as Record<string, unknown>).excerpt as string | undefined) ?? ''
+            const text = `${title} ${excerpt}`.trim()
+            return text ? text.split(/\s+/).length : 0
           })
           .display((v) => `${v} words`),
       ])
@@ -268,14 +269,6 @@ export class ArticleResource extends Resource {
             .rows(4).hideFromTable(),
         ),
 
-      // Computed virtual field — word count derived from excerpt
-      ComputedField.make('wordCount')
-        .label('Words')
-        .compute((r) => {
-          const text = ((r as any).excerpt as string | undefined) ?? ''
-          return text.trim() ? text.trim().split(/\s+/).length : 0
-        })
-        .display((v) => `${v} words`),
     ])
   }
 

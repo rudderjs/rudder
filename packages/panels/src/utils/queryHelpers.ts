@@ -154,6 +154,7 @@ export async function countFiltered(
   opts: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     scope?: ((q: any) => any) | undefined
+    softDeletes?: boolean | undefined
     folderField?: string | undefined
     folderId?: string | null | undefined
     isFolderView?: boolean | undefined
@@ -166,6 +167,7 @@ export async function countFiltered(
   },
 ): Promise<number> {
   let q: QueryBuilderLike<RecordRow> = opts.scope ? opts.scope(model.query()) : model.query()
+  if (opts.softDeletes) q = q.where('deletedAt', null)
   q = applyFolderFilter(q, opts.folderField, opts.folderId ?? null, { isFolderView: opts.isFolderView })
   q = applyScope(q, opts.scopes, opts.scopeIndex ?? 0)
   if (opts.searchTerm && opts.searchColumns?.length) {

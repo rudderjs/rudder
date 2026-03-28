@@ -8,7 +8,7 @@ import {
   flattenFields, relationName, buildContext,
   coercePayload, validatePayload, applyTransforms, liveBroadcast,
 } from './utils.js'
-import { applySearch, applyFilters, parseUrlFilters } from '../utils/queryHelpers.js'
+import { applySearch, applyFilters, parseUrlFilters, applyColumnTransforms } from '../utils/queryHelpers.js'
 import { mountVersionRoutes } from './versionRoutes.js'
 
 /** Extract a named route parameter — always returns a string (empty if somehow absent). */
@@ -125,6 +125,10 @@ export function mountResourceRoutes(
     )
 
     result.data = applyTransforms(resource, result.data as unknown[]) as typeof result.data
+
+    // Apply Column.compute() + Column.display() transforms (e.g. virtual computed columns)
+    const tableColumns = tableConfig.columns ?? []
+    applyColumnTransforms(result.data as RecordRow[], tableColumns)
 
     return res.json({
       data: result.data,

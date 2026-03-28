@@ -140,6 +140,9 @@ export async function resolveListQuery(
     let q: QueryBuilderLike<RecordRow> = model.query()
     if (config.scope) q = config.scope(q)
 
+    // Soft deletes — exclude trashed records (WHERE deletedAt IS NULL)
+    if (config.softDeletes) q = q.where('deletedAt', null)
+
     q = applyFolderFilter(q, config.folderField, persistedFolder, { isFolderView: opts.folderView })
     q = applyScope(q, opts.scopes, persistedScope)
     if (urlSearch && searchColumns.length > 0) q = applySearch(q, searchColumns, urlSearch)
@@ -174,6 +177,7 @@ export async function resolveListQuery(
     try {
       const total = await countFiltered(model, {
         scope:         config.scope,
+        softDeletes:   config.softDeletes,
         folderField:   config.folderField,
         folderId:      persistedFolder,
         isFolderView:  opts.folderView,

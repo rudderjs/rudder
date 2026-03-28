@@ -125,14 +125,24 @@ export async function resolveDataView(
 
   const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes, treeView: isTreeView, folderView: isFolderView })
 
-  // ── Apply Column/DataField compute() + display() transforms (SSR) ──
+  // ── Apply transforms (SSR) ──
+  // 1. Column/DataField compute() + display() from table columns and view fields
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const columns = (config as any).columns as unknown[] | undefined
   if (columns) applyColumnTransforms(result.records, columns)
-  // Also apply transforms from view fields (DataField.compute/display)
   for (const v of config.views) {
     const fields = v.getFields()
     if (fields) applyColumnTransforms(result.records, fields)
+  }
+  // 2. Form-level ComputedField + display transforms (for resource tables)
+  if (config.resourceClass) {
+    try {
+      const { applyTransforms } = await import('../handlers/utils.js')
+      const resource = new (config.resourceClass as { new(): { _resolveForm(): unknown } })()
+      // applyTransforms returns new array (doesn't mutate) — must capture return value
+      const transformed = applyTransforms(resource as any, result.records)
+      if (transformed) result.records = transformed as RecordRow[]
+    } catch { /* resource transforms failed */ }
   }
 
   // ── Strip records to only needed fields ──
