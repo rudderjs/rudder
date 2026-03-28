@@ -46,7 +46,12 @@ export class ArticleResource extends Resource {
         Column.make('featured').boolean().editable(ToggleField.make('featured')),
         Column.make('publishedAt').date(),
         Column.make('createdAt').date().sortable(),
-        Column.make('wordCount'),
+        Column.make('wordCount')
+          .compute((r) => {
+            const text = ((r as Record<string, unknown>).excerpt as string | undefined) ?? ''
+            return text.trim() ? text.trim().split(/\s+/).length : 0
+          })
+          .display((v) => `${v} words`),
       ])
       .sortBy('createdAt', 'DESC')
       .titleField('title')

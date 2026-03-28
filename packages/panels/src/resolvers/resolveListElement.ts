@@ -6,6 +6,7 @@ import type { ViewModeMeta } from '../schema/ViewMode.js'
 import type { ResourceLike } from './types.js'
 import { resolveListQuery } from './resolveListQuery.js'
 import { readPersistedState } from '../persist.js'
+import { applyColumnTransforms } from '../utils/queryHelpers.js'
 import { TableRegistry } from '../registries/TableRegistry.js'
 
 // ─── List element meta (SSR payload) ────────────────────────
@@ -123,6 +124,16 @@ export async function resolveDataView(
   const isFolderView = activeViewType === 'folder'
 
   const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes, treeView: isTreeView, folderView: isFolderView })
+
+  // ── Apply Column/DataField compute() + display() transforms (SSR) ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const columns = (config as any).columns as unknown[] | undefined
+  if (columns) applyColumnTransforms(result.records, columns)
+  // Also apply transforms from view fields (DataField.compute/display)
+  for (const v of config.views) {
+    const fields = v.getFields()
+    if (fields) applyColumnTransforms(result.records, fields)
+  }
 
   // ── Strip records to only needed fields ──
   const displayedKeys = new Set<string>(['id'])

@@ -8,7 +8,36 @@ import {
 } from '../utils/queryHelpers.js'
 
 // ─── Shared query pipeline for all data-view elements ──────
-// Used by resolveListElement (a.k.a. resolveDataView) for SSR resolution of Table and List elements.
+// Used by resolveDataView for SSR resolution of Table and List elements.
+
+/** Check if a sort column name exists in the table columns or view fields. */
+function isValidSortColumn(col: string, config: ListConfig): boolean {
+  // Check config.sortBy (always valid — defined by the developer)
+  if (col === config.sortBy) return true
+  // Check columns (Table)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const columns = (config as any).columns as unknown[] | undefined
+  if (columns?.length) {
+    for (const c of columns) {
+      if (typeof c === 'string' && c === col) return true
+      if (typeof c === 'object' && c && 'getName' in c && (c as { getName(): string }).getName() === col) return true
+    }
+  }
+  // Check view fields
+  if (config.views?.length) {
+    for (const v of config.views) {
+      const fields = v.getFields?.()
+      if (fields) {
+        for (const f of fields) if (f.getName() === col) return true
+      }
+    }
+  }
+  // Check sortableOptions
+  if (config.sortableOptions) {
+    for (const opt of config.sortableOptions) if (opt.field === col) return true
+  }
+  return false
+}
 
 export interface FolderBreadcrumb {
   id:    string
@@ -116,9 +145,12 @@ export async function resolveListQuery(
     if (urlSearch && searchColumns.length > 0) q = applySearch(q, searchColumns, urlSearch)
     q = applyFilters(q, config.filters, persistedFilters)
 
-    // Sort
+    // Sort — validate persisted sort column against known columns/fields
     const sortCol = urlSort ?? config.sortBy
-    if (sortCol) q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
+    if (sortCol) {
+      const validSort = !urlSort || isValidSortColumn(sortCol, config)
+      if (validSort) q = q.orderBy(sortCol, urlSortDir ?? config.sortDir)
+    }
 
     // Limit/offset — tree view fetches all records
     if (opts.treeView) {
@@ -133,7 +165,7 @@ export async function resolveListQuery(
       if (offset > 0) q = q.offset(offset)
     }
 
-    try { records = await q.get() } catch { /* empty model */ }
+    try { records = await q.get() } catch { /* query failed — likely invalid persisted state */ }
   }
 
   // ── Pagination count (skip for tree view) ──

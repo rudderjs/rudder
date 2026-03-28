@@ -154,7 +154,9 @@ export function mountTableRoutes(
     q = applyFilters(q, config.filters, urlFilters)
 
     const sortCol = sortParam ?? config.sortBy
-    if (sortCol) q = q.orderBy(sortCol, dirParam ?? config.sortDir)
+    if (sortCol) {
+      try { q = q.orderBy(sortCol, dirParam ?? config.sortDir) } catch { /* invalid sort column */ }
+    }
 
     // Limit/offset
     const perPage = config.paginationType ? config.perPage : config.limit
