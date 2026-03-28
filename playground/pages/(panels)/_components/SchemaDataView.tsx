@@ -811,11 +811,10 @@ function ClientTreeView(props: any) {
   return <Comp {...props} />
 }
 
-/** SSR-safe static tree — renders records as indented list using folderField */
-function StaticTreeView({ records, folderField, titleField, iconField }: {
-  records: Record<string, unknown>[]; folderField: string; titleField: string; iconField?: string
+/** SSR-safe static tree — renders records as indented list matching TreeView layout */
+function StaticTreeView({ records, folderField, titleField, iconField, fields }: {
+  records: Record<string, unknown>[]; folderField: string; titleField: string; iconField?: string; fields?: DataFieldMeta[]
 }) {
-  // Build parent→children map
   const childMap = new Map<string | null, Record<string, unknown>[]>()
   for (const r of records) {
     const pid = r[folderField] ? String(r[folderField]) : null
@@ -828,11 +827,24 @@ function StaticTreeView({ records, folderField, titleField, iconField }: {
     return children.map(r => {
       const id = String(r.id)
       const icon = iconField ? r[iconField] as string | undefined : undefined
+      const title = String(r[titleField] ?? id)
       return (
         <div key={id}>
-          <div className="flex items-center gap-2 py-1.5 px-2 rounded-md" style={{ paddingLeft: `${depth * 24 + 8}px` }}>
-            {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
-            <span className="text-sm font-medium truncate">{String(r[titleField] ?? id)}</span>
+          <div style={{ paddingLeft: `${depth * 24}px` }}>
+            <div className="flex items-center gap-2 py-1.5 px-2 rounded-md border border-transparent">
+              <span className="text-muted-foreground/40 shrink-0 cursor-grab p-1 touch-none"><GripPlaceholder /></span>
+              {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
+              <span className="text-sm font-medium truncate">{title}</span>
+              {fields && fields.map(f => {
+                if (f.name === titleField) return null
+                const val = r[f.name]
+                if (val === null || val === undefined) return null
+                if (f.type === 'badge') {
+                  return <span key={f.name} className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-secondary text-secondary-foreground">{String(val)}</span>
+                }
+                return <span key={f.name} className="text-xs text-muted-foreground">{String(val)}</span>
+              })}
+            </div>
           </div>
           {renderLevel(id, depth + 1)}
         </div>
@@ -840,7 +852,7 @@ function StaticTreeView({ records, folderField, titleField, iconField }: {
     })
   }
   return (
-    <div className="rounded-xl border bg-card p-2">
+    <div className="rounded-xl border border-border bg-card p-2">
       {renderLevel(null, 0)}
     </div>
   )
