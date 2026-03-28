@@ -16,6 +16,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -23,7 +24,9 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
   SidebarProvider,
+  SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from '@/components/ui/sidebar.js'
 import {
   Collapsible,
@@ -42,8 +45,17 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.js'
 import { Separator } from '@/components/ui/separator.js'
 import {
-  TooltipProvider,
-} from '@/components/ui/tooltip.js'
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb.js'
+import { TooltipProvider } from '@/components/ui/tooltip.js'
+import { ChevronRightIcon, ChevronsUpDownIcon, LogOutIcon, BadgeCheckIcon, BellIcon } from 'lucide-react'
+
+// ─── Types ──────────────────────────────────────────────────
 
 interface Props {
   panelMeta:    PanelNavigationMeta
@@ -61,6 +73,7 @@ interface NavItem {
   navigationGroup?:  string | undefined
   navigationParent?: string | undefined
   children?:         NavItem[]
+  badgeColor?:       string
 }
 
 interface SessionUser {
@@ -68,6 +81,8 @@ interface SessionUser {
   email?: string
   image?: string
 }
+
+// ─── Hooks ──────────────────────────────────────────────────
 
 function buildNavItems(panelMeta: PanelNavigationMeta): NavItem[] {
   const path = panelMeta.path
@@ -77,6 +92,7 @@ function buildNavItems(panelMeta: PanelNavigationMeta): NavItem[] {
       href: `${path}/resources/${r.slug}`,
       kind: 'resource' as const,
       navigationGroup: r.navigationGroup,
+      badgeColor: r.navigationBadgeColor,
     })),
     ...(panelMeta.globals ?? []).map((g) => ({
       slug: g.slug, label: g.label, icon: g.icon,
@@ -90,7 +106,6 @@ function buildNavItems(panelMeta: PanelNavigationMeta): NavItem[] {
         kind: 'page' as const,
         navigationParent: (p as { navigationParent?: string }).navigationParent,
       }
-      // Add structural children from Page.pages
       const children = (p as { children?: typeof panelMeta.pages }).children
       if (children && children.length > 0) {
         item.children = children.map(c => ({
@@ -126,101 +141,32 @@ function useSessionUser(initial?: SessionUser): SessionUser | null {
       .then(r => r.ok ? r.json() : null)
       .then((data: { user?: SessionUser } | null) => { if (data?.user) setUser(data.user) })
       .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: run once on mount, skip fetch when SSR user is provided
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return user
 }
 
-function UserDropdown({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigationMeta['i18n'] }) {
-  if (!user) return null
-  const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
-
-  async function handleSignOut() {
-    await fetch('/api/auth/sign-out', { method: 'POST' })
-    await navigate('/login')
-  }
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors outline-none">
-        <Avatar className="h-6 w-6 text-[10px]">
-          {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
-          <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
-        </Avatar>
-        <span className="hidden sm:inline text-sm">{user.name ?? user.email}</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex flex-col gap-1">
-              {user.name && <p className="text-sm font-medium">{user.name}</p>}
-              {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
-            </div>
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
-          {i18n.signOut}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
+function useNavigationBadges(panelMeta: PanelNavigationMeta): Record<string, string | number | null> {
+  const [badges, setBadges] = useState<Record<string, string | number | null>>({})
+  useEffect(() => {
+    fetch(`${panelMeta.path}/api/_badges`)
+      .then(r => r.ok ? r.json() : {})
+      .then(setBadges)
+      .catch(() => {})
+  }, [panelMeta.path])
+  return badges
 }
 
-/** Sidebar user menu — collapses to just the avatar when sidebar is in icon mode. */
-function SidebarUserMenu({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigationMeta['i18n'] }) {
-  if (!user) return null
-  const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
+// ─── Small components ───────────────────────────────────────
 
-  async function handleSignOut() {
-    await fetch('/api/auth/sign-out', { method: 'POST' })
-    await navigate('/login')
-  }
-
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <SidebarMenuButton
-            size="lg"
-            render={<DropdownMenuTrigger />}
-            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            tooltip={user.name ?? user.email ?? ''}
-          >
-            <Avatar className="h-7 w-7 rounded-md text-[10px]">
-              {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
-              <AvatarFallback className="rounded-md text-[10px]">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              {user.name && <span className="truncate font-medium">{user.name}</span>}
-              {user.email && <span className="truncate text-xs text-muted-foreground">{user.email}</span>}
-            </div>
-          </SidebarMenuButton>
-          <DropdownMenuContent
-            side="top"
-            align="start"
-            className="w-[--radix-dropdown-menu-trigger-width] min-w-52 rounded-lg"
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col gap-1">
-                  {user.name && <p className="text-sm font-medium">{user.name}</p>}
-                  {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
-                </div>
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
-              {i18n.signOut}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
-  )
+const badgeColors: Record<string, string> = {
+  gray:    'bg-muted text-muted-foreground',
+  primary: 'bg-primary/10 text-primary',
+  success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  danger:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 }
 
-/** SVG rendered via CSS mask so currentColor applies without fetching. */
 function SvgMask({ src, className }: { src: string; className?: string }) {
   return (
     <span
@@ -240,45 +186,192 @@ function SvgMask({ src, className }: { src: string; className?: string }) {
   )
 }
 
-/** Logo that shows full branding when expanded, just the icon when collapsed. */
+// ─── SidebarLogo ────────────────────────────────────────────
+
 function SidebarLogo({ branding, name, path }: { branding: PanelNavigationMeta['branding']; name: string; path: string }) {
   const title = branding?.title ?? name
   const isSvg = branding?.logo?.endsWith('.svg')
   return (
-    <a href={path} className="flex items-center gap-2 px-2 hover:opacity-80 transition-opacity">
-      {branding?.logo ? (
-        <>
-          {isSvg
-            ? <SvgMask src={branding.logo} className="inline-block h-6 w-6 shrink-0" />
-            : <img src={branding.logo} alt={title} className="h-6 w-6 shrink-0" />
-          }
-          <span className="text-sm font-semibold truncate group-data-[collapsible=icon]:hidden">{title}</span>
-        </>
-      ) : (
-        <span className="text-sm font-semibold truncate">{title}</span>
-      )}
-    </a>
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          size="lg"
+          render={<a href={path} />}
+          tooltip={title}
+        >
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+            {branding?.logo ? (
+              isSvg
+                ? <SvgMask src={branding.logo} className="inline-block size-4" />
+                : <img src={branding.logo} alt={title} className="size-4" />
+            ) : (
+              <span className="text-xs font-bold">{title.charAt(0).toUpperCase()}</span>
+            )}
+          </div>
+          <div className="grid flex-1 text-start text-sm leading-tight">
+            <span className="truncate font-semibold">{title}</span>
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   )
 }
 
-function useNavigationBadges(panelMeta: PanelNavigationMeta): Record<string, string | number | null> {
-  const [badges, setBadges] = useState<Record<string, string | number | null>>({})
+// ─── NavUser ────────────────────────────────────────────────
 
-  useEffect(() => {
-    fetch(`${panelMeta.path}/api/_badges`)
-      .then(r => r.ok ? r.json() : {})
-      .then(setBadges)
-      .catch(() => {})
-  }, [panelMeta.path])
+function NavUser({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigationMeta['i18n'] }) {
+  const { isMobile } = useSidebar()
+  if (!user) return null
+  const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
 
-  return badges
+  async function handleSignOut() {
+    await fetch('/api/auth/sign-out', { method: 'POST' })
+    await navigate('/login')
+  }
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuButton size="lg" className="aria-expanded:bg-muted" />
+            }
+          >
+            <Avatar className="h-8 w-8 rounded-lg">
+              {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+              <AvatarFallback className="rounded-lg text-[10px]">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="grid flex-1 text-start text-sm leading-tight">
+              {user.name && <span className="truncate font-medium">{user.name}</span>}
+              {user.email && <span className="truncate text-xs">{user.email}</span>}
+            </div>
+            <ChevronsUpDownIcon className="ms-auto size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            className="min-w-56 rounded-lg"
+            side={isMobile ? 'bottom' : 'right'}
+            align="end"
+            sideOffset={4}
+          >
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="p-0 font-normal">
+                <div className="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
+                  <Avatar className="h-8 w-8 rounded-lg">
+                    {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+                    <AvatarFallback className="rounded-lg text-[10px]">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-start text-sm leading-tight">
+                    {user.name && <span className="truncate font-medium">{user.name}</span>}
+                    {user.email && <span className="truncate text-xs">{user.email}</span>}
+                  </div>
+                </div>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem>
+                <BadgeCheckIcon />
+                Account
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <BellIcon />
+                Notifications
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
+              <LogOutIcon />
+              {i18n.signOut}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
 }
 
-function SidebarNavigation({ items, currentSlug, badges, panelMeta }: {
+// ─── NavMain — collapsible groups with sub-items ────────────
+
+function NavMain({ items, currentSlug, badges }: {
   items: NavItem[]
   currentSlug: string
   badges: Record<string, string | number | null>
-  panelMeta: PanelNavigationMeta
+}) {
+  return (
+    <SidebarMenu>
+      {items.map((item) => {
+        const allChildren = item.children ?? []
+        const badge = badges[item.slug]
+        const colorCls = badgeColors[item.badgeColor ?? 'gray'] ?? badgeColors['gray']
+        const isActive = item.slug === currentSlug
+        const isChildActive = allChildren.some(c => c.slug === currentSlug)
+
+        // Item with children → collapsible
+        if (allChildren.length > 0) {
+          return (
+            <Collapsible
+              key={item.slug}
+              defaultOpen={isActive || isChildActive}
+              className="group/collapsible"
+              render={<SidebarMenuItem />}
+            >
+              <CollapsibleTrigger
+                render={<SidebarMenuButton tooltip={item.label} isActive={isActive} />}
+              >
+                <ResourceIcon icon={item.icon} />
+                <span>{item.label}</span>
+                {badge != null && (
+                  <span className={`ms-auto inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${colorCls}`}>
+                    {badge}
+                  </span>
+                )}
+                <ChevronRightIcon className="ms-auto transition-transform duration-200 group-data-open/collapsible:rotate-90" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  {allChildren.map(child => (
+                    <SidebarMenuSubItem key={child.slug}>
+                      <SidebarMenuSubButton render={<a href={child.href} />} isActive={child.slug === currentSlug}>
+                        <span>{child.label}</span>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </Collapsible>
+          )
+        }
+
+        // Simple item
+        return (
+          <SidebarMenuItem key={item.slug}>
+            <SidebarMenuButton
+              render={<a href={item.href} />}
+              isActive={isActive}
+              tooltip={item.label}
+            >
+              <ResourceIcon icon={item.icon} />
+              <span>{item.label}</span>
+              {badge != null && (
+                <span className={`ms-auto inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${colorCls}`}>
+                  {badge}
+                </span>
+              )}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )
+      })}
+    </SidebarMenu>
+  )
+}
+
+// ─── SidebarNavigation ──────────────────────────────────────
+
+function SidebarNavigation({ items, currentSlug, badges }: {
+  items: NavItem[]
+  currentSlug: string
+  badges: Record<string, string | number | null>
 }) {
   const resourceItems = items.filter(i => i.kind === 'resource')
   const globalItems   = items.filter(i => i.kind === 'global')
@@ -297,131 +390,61 @@ function SidebarNavigation({ items, currentSlug, badges, panelMeta }: {
     }
   }
 
-  const badgeColors: Record<string, string> = {
-    gray:    'bg-muted text-muted-foreground',
-    primary: 'bg-primary/10 text-primary',
-    success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    danger:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  // Merge visual children (navigationParent) into parent pages
+  const topPages = pageItems.filter(p => !p.navigationParent)
+  const visualChildren = pageItems.filter(p => !!p.navigationParent)
+  const visualChildMap = new Map<string, NavItem[]>()
+  for (const child of visualChildren) {
+    const list = visualChildMap.get(child.navigationParent!) ?? []
+    list.push(child)
+    visualChildMap.set(child.navigationParent!, list)
   }
-
-  function renderItem(item: NavItem) {
-    const badge = badges[item.slug]
-    const resourceMeta = panelMeta.resources.find(r => r.slug === item.slug)
-    const colorCls = badgeColors[resourceMeta?.navigationBadgeColor ?? 'gray'] ?? badgeColors['gray']
-
-    return (
-      <SidebarMenuItem key={item.slug}>
-        <SidebarMenuButton
-          render={<a href={item.href} />}
-          isActive={item.slug === currentSlug}
-          tooltip={item.label}
-        >
-          <ResourceIcon icon={item.icon} />
-          <span>{item.label}</span>
-          {badge != null && (
-            <span className={`ml-auto inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${colorCls}`}>
-              {badge}
-            </span>
-          )}
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    )
-  }
-
-  function renderGroup(label: string | null, groupItems: NavItem[]) {
-    if (groupItems.length === 0) return null
-    return (
-      <SidebarGroup key={label ?? '__ungrouped'}>
-        {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {groupItems.map(renderItem)}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    )
-  }
+  const topPagesWithChildren = topPages.map(item => {
+    const merged = [...(item.children ?? []), ...(visualChildMap.get(item.label) ?? [])]
+    return merged.length > 0 ? { ...item, children: merged } : item
+  })
 
   return (
     <>
-      {renderGroup(null, ungrouped)}
-      {[...grouped.entries()].map(([label, groupItems]) =>
-        renderGroup(label, groupItems)
+      {ungrouped.length > 0 && (
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <NavMain items={ungrouped} currentSlug={currentSlug} badges={badges} />
+          </SidebarGroupContent>
+        </SidebarGroup>
       )}
-      {globalItems.length > 0 && renderGroup('Settings', globalItems)}
-      {pageItems.length > 0 && (() => {
-        // Separate top-level pages from visually-nested pages (navigationParent)
-        const topPages = pageItems.filter(p => !p.navigationParent)
-        const visualChildren = pageItems.filter(p => !!p.navigationParent)
 
-        // Build parent label → visual children map
-        const visualChildMap = new Map<string, NavItem[]>()
-        for (const child of visualChildren) {
-          const list = visualChildMap.get(child.navigationParent!) ?? []
-          list.push(child)
-          visualChildMap.set(child.navigationParent!, list)
-        }
+      {[...grouped.entries()].map(([label, groupItems]) => (
+        <SidebarGroup key={label}>
+          <SidebarGroupLabel>{label}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMain items={groupItems} currentSlug={currentSlug} badges={badges} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ))}
 
-        function renderPageWithChildren(item: NavItem) {
-          // Merge structural children (item.children) + visual children (navigationParent)
-          const allChildren = [
-            ...(item.children ?? []),
-            ...(visualChildMap.get(item.label) ?? []),
-          ]
+      {globalItems.length > 0 && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Settings</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMain items={globalItems} currentSlug={currentSlug} badges={badges} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
 
-          if (allChildren.length > 0) {
-            const isParentActive = item.slug === currentSlug
-            const isChildActive = allChildren.some(c => c.slug === currentSlug)
-            return (
-              <Collapsible key={item.slug} defaultOpen={isParentActive || isChildActive} className="group/collapsible">
-                <SidebarMenuItem>
-                  <div className="flex items-center w-full">
-                    <SidebarMenuButton
-                      render={<a href={item.href} />}
-                      isActive={isParentActive}
-                      tooltip={item.label}
-                      className="flex-1"
-                    >
-                      <ResourceIcon icon={item.icon} />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                    <CollapsibleTrigger className="p-1.5 rounded hover:bg-accent shrink-0 cursor-pointer">
-                      <svg className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                    </CollapsibleTrigger>
-                  </div>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {allChildren.map(child => (
-                        <SidebarMenuSubItem key={child.slug}>
-                          <SidebarMenuSubButton render={<a href={child.href} />} isActive={child.slug === currentSlug}>
-                            <span>{child.label}</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-            )
-          }
-          return renderItem(item)
-        }
-
-        return (
-          <SidebarGroup>
-            <SidebarGroupLabel>Pages</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {topPages.map(renderPageWithChildren)}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )
-      })()}
+      {topPagesWithChildren.length > 0 && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Pages</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <NavMain items={topPagesWithChildren} currentSlug={currentSlug} badges={badges} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
     </>
   )
 }
+
+// ─── SidebarLayout ──────────────────────────────────────────
 
 function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props & { currentSlug: string }) {
   const items  = useNavItemsWithPersistedState(panelMeta)
@@ -431,44 +454,63 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
   const dir    = panelMeta.dir ?? 'ltr'
   const branding = panelMeta.branding
 
+  const currentItem = items.find(i => i.slug === currentSlug)
+  const groupLabel  = currentItem?.navigationGroup
+
   return (
     <SidebarProvider>
-      <div dir={dir} className="flex h-screen w-full">
-        <Sidebar side={dir === 'rtl' ? 'right' : 'left'} collapsible="icon">
-          <SidebarHeader className="h-14 border-b justify-center">
-            <SidebarLogo branding={branding} name={panelMeta.name} path={panelMeta.path} />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarNavigation
-              items={items}
-              currentSlug={currentSlug}
-              badges={badges}
-              panelMeta={panelMeta}
-            />
-          </SidebarContent>
-          <SidebarFooter className="border-t">
-            <SidebarUserMenu user={user} i18n={i18n} />
-          </SidebarFooter>
-        </Sidebar>
+      <Sidebar side={dir === 'rtl' ? 'right' : 'left'} collapsible="icon">
+        <SidebarHeader>
+          <SidebarLogo branding={branding} name={panelMeta.name} path={panelMeta.path} />
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarNavigation items={items} currentSlug={currentSlug} badges={badges} />
+        </SidebarContent>
+        <SidebarFooter>
+          <NavUser user={user} i18n={i18n} />
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
 
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <header className="h-14 shrink-0 border-b flex items-center gap-2 px-4">
-            <SidebarTrigger />
-            <span className="text-sm text-muted-foreground flex-1">
-              {items.find(i => i.slug === currentSlug)?.label ?? ''}
-            </span>
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                {groupLabel && (
+                  <>
+                    <BreadcrumbItem className="hidden md:block">
+                      <BreadcrumbLink href={panelMeta.path}>
+                        {groupLabel}
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                  </>
+                )}
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{currentItem?.label ?? ''}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+          <div className="ms-auto flex items-center gap-2 px-4">
             <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
             <ThemeToggle />
-          </header>
-          <main className="flex-1 overflow-y-auto">
-            {children}
-          </main>
+          </div>
+        </header>
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {children}
         </div>
-      </div>
+      </SidebarInset>
+
       <Toaster richColors position="bottom-right" />
     </SidebarProvider>
   )
 }
+
+// ─── TopbarLayout ───────────────────────────────────────────
 
 function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props & { currentSlug: string }) {
   const items = useNavItemsWithPersistedState(panelMeta)
@@ -476,6 +518,43 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
   const i18n  = useI18n()
   const dir   = panelMeta.dir ?? 'ltr'
   const branding = panelMeta.branding
+
+  function UserDropdown() {
+    if (!user) return null
+    const initials = (user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()
+
+    async function handleSignOut() {
+      await fetch('/api/auth/sign-out', { method: 'POST' })
+      await navigate('/login')
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors outline-none">
+          <Avatar className="h-6 w-6 text-[10px]">
+            {user.image && <AvatarImage src={user.image} alt={user.name ?? ''} />}
+            <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
+          </Avatar>
+          <span className="hidden sm:inline text-sm">{user.name ?? user.email}</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-1">
+                {user.name && <p className="text-sm font-medium">{user.name}</p>}
+                {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
+              </div>
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
+            <LogOutIcon />
+            {i18n.signOut}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   return (
     <div dir={dir} className="flex flex-col h-screen bg-background overflow-hidden">
@@ -512,7 +591,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
         </nav>
         <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
         <ThemeToggle />
-        <UserDropdown user={user} i18n={i18n} />
+        <UserDropdown />
       </header>
       <main className="flex-1 overflow-y-auto">
         {children}
@@ -521,6 +600,8 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
     </div>
   )
 }
+
+// ─── AdminLayout (entry) ────────────────────────────────────
 
 export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: Props) {
   const slug = currentSlug ?? ''
