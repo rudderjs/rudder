@@ -1,4 +1,4 @@
-import { PanelRegistry, resolveTable } from '@boostkit/panels'
+import { PanelRegistry, resolveListElement } from '@boostkit/panels'
 import type { PanelSchemaElementMeta } from '@boostkit/panels'
 import { buildPanelContext } from '../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
@@ -16,7 +16,7 @@ export async function data(pageContext: PageContextServer) {
 
   const resource     = new ResourceClass()
   const fullMeta     = resource.toMeta()
-  // List page only needs identity + a few flags — everything else is in the table element
+  // List page only needs identity + a few flags — everything else is in the dataview element
   const resourceMeta: Record<string, unknown> = {
     label:          fullMeta.label,
     labelSingular:  fullMeta.labelSingular,
@@ -29,33 +29,18 @@ export async function data(pageContext: PageContextServer) {
   const panelMeta    = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 
-  // resolveTable handles both plain tables and tables with .tabs() (returns tabs meta)
+  // Resolve resource table as a DataView element
   let element: PanelSchemaElementMeta | null = null
   if (ResourceClass.model) {
     const table = resource._resolveTable()
-    element = await resolveTable(table as any, panel, ctx)
+    element = await resolveListElement(table as any, panel, ctx)
 
     // Apply resource-specific overrides
     if (element) {
       const el = element as PanelSchemaElementMeta & Record<string, unknown>
-      if (el.type === 'table') {
-        el['href'] = `/${pathSegment}/resources/${slug}`
-        el['resource'] = slug
-        if (el['live']) el['liveChannel'] = `panel:${slug}`
-      } else if (el.type === 'tabs') {
-        // Tabs wrapping per-tab tables — apply overrides to each inner table
-        const tabs = (el as any).tabs as { elements?: PanelSchemaElementMeta[] }[]
-        for (const tab of tabs) {
-          for (const inner of tab.elements ?? []) {
-            const t = inner as PanelSchemaElementMeta & Record<string, unknown>
-            if (t.type === 'table') {
-              t['href'] = `/${pathSegment}/resources/${slug}`
-              t['resource'] = ''
-              if (t['live']) t['liveChannel'] = `panel:${slug}`
-            }
-          }
-        }
-      }
+      el['href'] = `/${pathSegment}/resources/${slug}`
+      el['resource'] = slug
+      if (el['live']) el['liveChannel'] = `panel:${slug}`
     }
   }
 

@@ -66,6 +66,8 @@ export interface DataViewElementMeta {
   sortableOptions?:  { field: string; label: string }[]
   scopes?:           { label: string; icon?: string }[]
   activeScope?:      number
+  // Resource slug — set when this data view is a resource list
+  resource?:         string
   // Custom render results (per record, SSR-resolved)
   renderedRecords?:  unknown[][]
 }
@@ -185,6 +187,10 @@ export async function resolveListElement(
     id:      listId,
     records,
   }
+
+  // Resource slug
+  const slug = config.resourceClass?.getSlug?.() as string | undefined
+  if (slug) meta.resource = slug
 
   // Display fields
   if (config.titleField)       meta.titleField       = config.titleField

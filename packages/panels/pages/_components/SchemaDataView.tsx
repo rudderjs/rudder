@@ -87,18 +87,27 @@ interface DataViewElement {
   sortableOptions?:  { field: string; label: string }[]
   scopes?:           { label: string; icon?: string }[]
   activeScope?:      number
+  resource?:         string
   renderedRecords?:  unknown[][]
+  softDeletes?:      boolean
+}
+
+/** Resource-context props — enables resource API mode. */
+export interface SchemaDataViewResourceProps {
+  resourceSlug: string
+  isTrashed?: boolean
 }
 
 interface Props {
   element:   DataViewElement
   panelPath: string
   i18n:      PanelI18n
+  resource?: SchemaDataViewResourceProps
 }
 
 // ─── Component ──────────────────────────────────────────────
 
-export function SchemaDataView({ element, panelPath, i18n }: Props) {
+export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
   const {
     title, id: elementId, records: initialRecords, views,
     titleField, descriptionField, imageField, iconField,
@@ -108,6 +117,9 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
   } = element
   const sortableOptions = element.sortableOptions
   const scopePresets = element.scopes
+
+  // Auto-detect resource mode from element.resource or explicit prop
+  const resourceSlug = resource?.resourceSlug ?? (element.resource || undefined)
 
   // Force re-render after dnd-kit loads (client-only)
   const [dndReady, setDndReady] = useState(!!_dnd)
@@ -236,11 +248,22 @@ export function SchemaDataView({ element, panelPath, i18n }: Props) {
       const effectiveViewType = opts.viewType ?? viewOptions.find(v => v.name === activeView)?.type
       if (effectiveViewType === 'tree') params.set('view', 'tree')
       if (effectiveViewType === 'folder') params.set('view', 'folder')
-      const res = await fetch(`${panelPath}/api/_tables/${elementId}?${params}`)
+      // Resource mode: include trashed param and use resource API endpoint
+      if (resourceSlug && resource?.isTrashed) params.set('trashed', 'true')
+      // Resource mode: include active scope as tab param (resource API uses ?tab=slug)
+      if (resourceSlug && scopePresets && scopeIdx > 0 && scopeIdx < scopePresets.length) {
+        const scopeLabel = scopePresets[scopeIdx]?.label
+        if (scopeLabel) params.set('tab', scopeLabel.toLowerCase().replace(/\s+/g, '-'))
+      }
+      const fetchBase = resourceSlug
+        ? `${panelPath}/api/${resourceSlug}`
+        : `${panelPath}/api/_tables/${elementId}`
+      const res = await fetch(`${fetchBase}?${params}`)
       if (!res.ok) return
-      const body = await res.json() as { records: Record<string, unknown>[]; pagination?: PaginationMeta; breadcrumbs?: { id: string; label: string }[] }
-      setRecords(body.records)
-      setPagination(body.pagination)
+      // Resource API returns { data, meta }, table API returns { records, pagination }
+      const body = await res.json() as { records?: Record<string, unknown>[]; data?: Record<string, unknown>[]; pagination?: PaginationMeta; meta?: PaginationMeta; breadcrumbs?: { id: string; label: string }[] }
+      setRecords(body.records ?? body.data ?? [])
+      setPagination(body.pagination ?? body.meta)
       if (body.breadcrumbs !== undefined) setBreadcrumbs(body.breadcrumbs ?? [])
     } finally {
       setLoading(false)

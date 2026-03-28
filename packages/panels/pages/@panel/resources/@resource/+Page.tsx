@@ -5,9 +5,7 @@ import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
-import { SchemaTable } from '../../../_components/SchemaTable.js'
-import type { SchemaTableResourceProps } from '../../../_components/SchemaTable.js'
-import { SchemaTabs } from '../../../_components/SchemaTabs.js'
+import { SchemaDataView } from '../../../_components/SchemaDataView.js'
 import type { PanelSchemaElementMeta } from '@boostkit/panels'
 import { useI18n } from '../../../_hooks/useI18n.js'
 import { t } from '../../../_lib/formHelpers.js'
@@ -21,22 +19,6 @@ export default function ResourceListPage() {
   config({ title: `${resourceMeta.label} — ${panelName}` })
 
   const [isTrashed, setIsTrashed] = useState(false)
-
-  // Resource props for SchemaTable
-  const resourceProps: SchemaTableResourceProps = {
-    resourceSlug: slug,
-    softDeletes: resourceMeta.softDeletes || undefined,
-    isTrashed,
-    onTrashedChange: (trashed) => setIsTrashed(trashed),
-    createUrl: resourceMeta.draftable ? undefined : `/${pathSegment}/resources/${slug}/create`,
-    emptyState: resourceMeta.emptyStateIcon || resourceMeta.emptyStateHeading || resourceMeta.emptyStateDescription
-      ? {
-          icon:        resourceMeta.emptyStateIcon,
-          heading:     resourceMeta.emptyStateHeading,
-          description: resourceMeta.emptyStateDescription,
-        }
-      : undefined,
-  }
 
   const el = element as (PanelSchemaElementMeta & Record<string, unknown>) | null
 
@@ -89,19 +71,14 @@ export default function ResourceListPage() {
         </div>
       )}
 
-      {/* Content: tabs (wrapping per-tab tables) or single table */}
-      {el?.type === 'tabs' ? (
-        <SchemaTabs
-          id={(el as any).id}
-          tabs={(el as any).tabs}
+      {/* Content */}
+      {el ? (
+        <SchemaDataView
+          element={el as any}
           panelPath={`/${pathSegment}`}
-          pathSegment={pathSegment}
           i18n={i18n}
-          persist={(el as any).persist}
-          activeTab={(el as any).activeTab}
+          resource={{ resourceSlug: slug, isTrashed }}
         />
-      ) : el?.type === 'table' ? (
-        <SchemaTable element={el as Extract<PanelSchemaElementMeta, { type: 'table' }>} panelPath={`/${pathSegment}`} i18n={i18n} resource={resourceProps} />
       ) : (
         <p className="text-sm text-muted-foreground">{i18n.noRecordsFound}</p>
       )}

@@ -1,9 +1,11 @@
 import { List } from './List.js'
 import type { ListConfig } from './List.js'
-import type { Column, ColumnMeta } from './Column.js'
+import { Column } from './Column.js'
+import type { ColumnMeta } from './Column.js'
 import type { FilterMeta } from './Filter.js'
 import type { ActionMeta } from './Action.js'
 import type { PersistMode } from '../persist.js'
+import { ViewMode } from './ViewMode.js'
 
 // ─── Table schema element ──────────────────────────────────
 // Extends List with column layout.
@@ -90,10 +92,19 @@ export class Table extends List {
   getType(): 'table' { return 'table' }
 
   getConfig(): TableConfig {
-    return {
-      ...super.getConfig(),
-      columns: this._columns,
+    const base = super.getConfig()
+    const config: TableConfig = { ...base, columns: this._columns }
+
+    // Auto-create a table ViewMode from columns when no explicit views defined.
+    // This ensures resolveListElement includes column fields in record stripping.
+    if (base.views.length === 0 && this._columns.length > 0) {
+      const cols = typeof this._columns[0] === 'string'
+        ? (this._columns as string[]).map(name => Column.make(name))
+        : this._columns as Column[]
+      config.views = [ViewMode.table(cols)]
     }
+
+    return config
   }
 
   /**
