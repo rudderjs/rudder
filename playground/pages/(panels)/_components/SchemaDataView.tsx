@@ -7,6 +7,7 @@ import { TableEditCell } from './TableEditCell.js'
 import { ConfirmDialog } from './ConfirmDialog.js'
 import { Checkbox } from '@/components/ui/checkbox.js'
 import { Tabs as ScopeTabs, TabsList as ScopeTabsList, TabsTab as ScopeTabsTab } from '@/components/animate-ui/components/base/tabs.js'
+import { motion, AnimatePresence } from 'motion/react'
 
 // ─── Action types ────────────────────────────────────────────
 interface ActionMeta {
@@ -833,6 +834,16 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
         </div>
       )}
 
+      {/* Content wrapper — animates on scope/filter changes */}
+      <AnimatePresence initial={false} mode="wait">
+      <motion.div
+        key={`scope-${activeScope}`}
+        initial={{ opacity: 0, filter: 'blur(4px)' }}
+        animate={{ opacity: 1, filter: 'blur(0px)' }}
+        exit={{ opacity: 0, filter: 'blur(4px)' }}
+        transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+      >
+
       {/* Empty state */}
       {isEmpty && (
         <div className="rounded-xl border bg-card p-12 text-center">
@@ -998,6 +1009,9 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
           </div>
         </div>
       )}
+
+      </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
