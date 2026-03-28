@@ -815,45 +815,60 @@ function ClientTreeView(props: any) {
 function StaticTreeView({ records, folderField, titleField, iconField, fields }: {
   records: Record<string, unknown>[]; folderField: string; titleField: string; iconField?: string; fields?: DataFieldMeta[]
 }) {
+  // Build flat list with depth — same as dnd-kit-sortable-tree's flattened output
   const childMap = new Map<string | null, Record<string, unknown>[]>()
   for (const r of records) {
     const pid = r[folderField] ? String(r[folderField]) : null
     if (!childMap.has(pid)) childMap.set(pid, [])
     childMap.get(pid)!.push(r)
   }
-  function renderLevel(parentId: string | null, depth: number): React.ReactNode {
+  const flatItems: { record: Record<string, unknown>; depth: number; hasChildren: boolean }[] = []
+  function flatten(parentId: string | null, depth: number) {
     const children = childMap.get(parentId)
-    if (!children) return null
-    return children.map(r => {
+    if (!children) return
+    for (const r of children) {
       const id = String(r.id)
-      const icon = iconField ? r[iconField] as string | undefined : undefined
-      const title = String(r[titleField] ?? id)
-      return (
-        <div key={id}>
-          <div style={{ paddingLeft: `${depth * 24}px` }}>
-            <div className="flex items-center gap-2 py-1.5 px-2 rounded-md border border-transparent">
-              <span className="text-muted-foreground/40 shrink-0 cursor-grab p-1 touch-none"><GripPlaceholder /></span>
-              {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
-              <span className="text-sm font-medium truncate">{title}</span>
-              {fields && fields.map(f => {
-                if (f.name === titleField) return null
-                const val = r[f.name]
-                if (val === null || val === undefined) return null
-                if (f.type === 'badge') {
-                  return <span key={f.name} className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-secondary text-secondary-foreground">{String(val)}</span>
-                }
-                return <span key={f.name} className="text-xs text-muted-foreground">{String(val)}</span>
-              })}
-            </div>
-          </div>
-          {renderLevel(id, depth + 1)}
-        </div>
-      )
-    })
+      const hasChildren = childMap.has(id)
+      flatItems.push({ record: r, depth, hasChildren })
+      if (hasChildren) flatten(id, depth + 1)
+    }
   }
+  flatten(null, 0)
+
   return (
     <div className="rounded-xl border border-border bg-card p-2">
-      {renderLevel(null, 0)}
+      {flatItems.map(({ record: r, depth, hasChildren }) => {
+        const id = String(r.id)
+        const icon = iconField ? r[iconField] as string | undefined : undefined
+        const title = String(r[titleField] ?? id)
+        return (
+          <li key={id} className="list-none m-0" style={{ paddingLeft: `${depth * 24}px`, transition: 'transform linear' }}>
+            <div className="flex items-center py-1.5 px-2 rounded-md border border-transparent transition-colors hover:bg-muted hover:border-border">
+              <div className="flex items-center gap-2 py-0.5 min-w-0">
+                <span className="shrink-0 cursor-grab p-1 text-muted-foreground/40 touch-none"><GripPlaceholder /></span>
+                {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
+                <span className="text-sm font-medium truncate">{title}</span>
+                {fields && fields.map(f => {
+                  if (f.name === titleField) return null
+                  const val = r[f.name]
+                  if (val === null || val === undefined) return null
+                  if (f.type === 'badge') {
+                    return <span key={f.name} className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-secondary text-secondary-foreground">{String(val)}</span>
+                  }
+                  return <span key={f.name} className="text-xs text-muted-foreground">{String(val)}</span>
+                })}
+              </div>
+              {hasChildren && (
+                <button type="button" className="ml-auto border-none bg-transparent cursor-pointer p-1 text-muted-foreground/40 rounded hover:text-foreground hover:bg-muted transition-colors shrink-0">
+                  <svg className="h-3 w-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </li>
+        )
+      })}
     </div>
   )
 }

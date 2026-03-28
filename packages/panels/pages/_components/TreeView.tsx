@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, forwardRef } from 'react'
-import { SortableTree, SimpleTreeItemWrapper } from 'dnd-kit-sortable-tree'
+import { SortableTree } from 'dnd-kit-sortable-tree'
 import type { TreeItems, TreeItemComponentProps, ItemChangedReason } from 'dnd-kit-sortable-tree'
 import { ResourceIcon } from './ResourceIcon.js'
 
@@ -39,13 +39,11 @@ function buildTree(records: Record<string, unknown>[], folderField: string): Tre
   const map = new Map<string, TreeItems<TreeRecord>[number]>()
   const roots: TreeItems<TreeRecord> = []
 
-  // First pass: create all nodes
   for (const r of records) {
     const id = String(r.id)
     map.set(id, { id, ...r, children: [] } as TreeItems<TreeRecord>[number])
   }
 
-  // Second pass: build parent-child relationships
   for (const r of records) {
     const id = String(r.id)
     const parentId = r[folderField] ? String(r[folderField]) : null
@@ -60,7 +58,6 @@ function buildTree(records: Record<string, unknown>[], folderField: string): Tre
   return roots
 }
 
-// Flatten tree back to ordered flat array with parentId
 function flattenTree(items: TreeItems<TreeRecord>, folderField: string, parentId: string | null = null): Record<string, unknown>[] {
   const result: Record<string, unknown>[] = []
   for (const item of items) {
@@ -73,7 +70,77 @@ function flattenTree(items: TreeItems<TreeRecord>, folderField: string, parentId
   return result
 }
 
-// ─── Tree Item Component ────────────────────────────────────
+// ─── Grip Icon ──────────────────────────────────────────────
+
+function GripIcon() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+      <circle cx="5" cy="3" r="1.5" /><circle cx="11" cy="3" r="1.5" />
+      <circle cx="5" cy="8" r="1.5" /><circle cx="11" cy="8" r="1.5" />
+      <circle cx="5" cy="13" r="1.5" /><circle cx="11" cy="13" r="1.5" />
+    </svg>
+  )
+}
+
+// ─── TreeItemWrapper — our own, no library CSS ──────────────
+// Same structure as SimpleTreeItemWrapper but pure Tailwind.
+// Renders identical DOM to StaticTreeView for zero hydration shift.
+
+const TreeItemWrapper = forwardRef<
+  HTMLDivElement,
+  React.PropsWithChildren<TreeItemComponentProps<TreeRecord>>
+>((props, ref) => {
+  const {
+    clone, depth, ghost, handleProps, indentationWidth,
+    collapsed, onCollapse, wrapperRef, style, childCount,
+    disableSorting, children,
+    // Consumed but not used in DOM:
+    disableSelection: _, disableInteraction: _2, indicator: _3,
+    onRemove: _4, item: _5, manualDrag: _6, showDragHandle: _7,
+    hideCollapseButton: _8, disableCollapseOnItemClick: _9,
+    isLast: _10, parent: _11, className: _12, contentClassName: _13,
+    isOver: _14, isOverParent: _15,
+    ...rest
+  } = props
+
+  return (
+    <li
+      ref={wrapperRef}
+      {...rest}
+      className={`list-none ${ghost ? 'opacity-30' : ''} ${clone ? 'inline-block' : ''}`}
+      style={{
+        ...style,
+        paddingLeft: clone ? indentationWidth : (indentationWidth ?? 24) * depth,
+      }}
+    >
+      <div
+        ref={ref}
+        className={[
+          'flex items-center py-1.5 px-2 rounded-md border border-transparent transition-colors',
+          clone ? 'bg-card border-border shadow-lg rounded-lg' : 'hover:bg-muted hover:border-border',
+        ].join(' ')}
+      >
+        {children}
+        {/* Collapse button — end of row */}
+        {!!onCollapse && !!childCount && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onCollapse?.() }}
+            className="ml-auto border-none bg-transparent cursor-pointer p-1 text-muted-foreground/40 rounded hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          >
+            <svg className={`h-3 w-3 transition-transform ${collapsed ? '-rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </li>
+  )
+}) as <T>(
+  p: React.PropsWithChildren<TreeItemComponentProps<T> & React.RefAttributes<HTMLDivElement>>
+) => React.ReactElement
+
+// ─── Tree Item Content ──────────────────────────────────────
 
 const TreeItem = forwardRef<HTMLDivElement, TreeItemComponentProps<TreeRecord> & { titleField: string; iconField?: string; fields?: DataFieldMeta[] }>(
   function TreeItemInner(props, ref) {
@@ -82,22 +149,13 @@ const TreeItem = forwardRef<HTMLDivElement, TreeItemComponentProps<TreeRecord> &
     const title = String(item[titleField] ?? item.id)
 
     return (
-      <SimpleTreeItemWrapper
-        {...props}
-        ref={ref}
-        showDragHandle={false}
-        manualDrag
-        className={`!list-none !mb-0 ${props.ghost ? 'opacity-30' : ''} ${props.clone ? 'inline-block' : ''}`}
-        contentClassName={`!flex !items-center !py-1.5 !px-2 !rounded-md !text-foreground !transition-colors ${props.clone ? '!bg-card !border !border-border !shadow-lg !rounded-lg' : '!border !border-transparent hover:!bg-muted hover:!border-border'}`}
-      >
+      <TreeItemWrapper {...props} ref={ref}>
         <div className="flex items-center gap-2 py-0.5 min-w-0">
-          <span className="shrink-0 cursor-grab active:cursor-grabbing touch-none text-muted-foreground/40 hover:text-muted-foreground" {...props.handleProps}>
-            <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="5" cy="3" r="1.5" /><circle cx="11" cy="3" r="1.5" />
-              <circle cx="5" cy="8" r="1.5" /><circle cx="11" cy="8" r="1.5" />
-              <circle cx="5" cy="13" r="1.5" /><circle cx="11" cy="13" r="1.5" />
-            </svg>
-          </span>
+          {!props.disableSorting && (
+            <span className="shrink-0 cursor-grab active:cursor-grabbing touch-none text-muted-foreground/40 hover:text-muted-foreground p-1" {...props.handleProps}>
+              <GripIcon />
+            </span>
+          )}
           {icon && <span className="text-muted-foreground shrink-0"><ResourceIcon icon={icon} /></span>}
           <span className="text-sm font-medium truncate">{title}</span>
           {fields && fields.length > 0 && fields.map(f => {
@@ -110,7 +168,7 @@ const TreeItem = forwardRef<HTMLDivElement, TreeItemComponentProps<TreeRecord> &
             return <span key={f.name} className="text-xs text-muted-foreground">{String(val)}</span>
           })}
         </div>
-      </SimpleTreeItemWrapper>
+      </TreeItemWrapper>
     )
   }
 )
@@ -122,7 +180,6 @@ export function TreeView({ records, folderField, titleField, iconField, fields, 
     buildTree(records, folderField)
   )
 
-  // Sync with external record changes (live updates, search, etc.)
   const recordIds = records.map(r => String(r.id)).join(',')
   useEffect(() => {
     setItems(buildTree(records, folderField))
@@ -133,7 +190,6 @@ export function TreeView({ records, folderField, titleField, iconField, fields, 
     setItems(newItems)
 
     if (reason.type === 'dropped' && reorderable && reorderEndpoint) {
-      // Flatten and send reorder request with parent mapping
       const flat = flattenTree(newItems, folderField)
       const ids = flat.map(r => String(r.id))
       const parents: Record<string, string | null> = {}
@@ -150,10 +206,9 @@ export function TreeView({ records, folderField, titleField, iconField, fields, 
     }
   }, [reorderable, reorderEndpoint, reorderField, reorderModel, folderField, onRecordsChange])
 
-  // Wrap TreeItem to inject our extra props
   const ItemComponent = useCallback(
     forwardRef<HTMLDivElement, TreeItemComponentProps<TreeRecord>>(
-      function TreeItemWrapper(props, ref) {
+      function TreeItemWrap(props, ref) {
         return <TreeItem {...props} ref={ref} titleField={titleField} iconField={iconField} fields={fields} />
       }
     ),
@@ -169,7 +224,7 @@ export function TreeView({ records, folderField, titleField, iconField, fields, 
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-2 [&_li]:!list-none [&_.dnd-sortable-tree_simple_wrapper]:!list-none [&_.dnd-sortable-tree_simple_wrapper]:!m-0 [&_.dnd-sortable-tree_simple_wrapper]:!p-0 [&_.dnd-sortable-tree_simple_handle]:!hidden [&_.dnd-sortable-tree_simple_tree-item]:!bg-transparent [&_.dnd-sortable-tree_simple_tree-item]:!text-inherit [&_.dnd-sortable-tree_simple_tree-item]:!m-0 [&_.dnd-sortable-tree_simple_collapse-button]:!border-none [&_.dnd-sortable-tree_simple_collapse-button]:!bg-transparent [&_.dnd-sortable-tree_simple_collapse-button]:!cursor-pointer [&_.dnd-sortable-tree_simple_collapse-button]:!p-1 [&_.dnd-sortable-tree_simple_collapse-button]:!text-muted-foreground [&_.dnd-sortable-tree_simple_collapse-button]:!rounded [&_.dnd-sortable-tree_simple_collapse-button:hover]:!text-foreground [&_.dnd-sortable-tree_simple_collapse-button:hover]:!bg-muted">
+    <div className="rounded-xl border border-border bg-card p-2 [&_ul]:list-none [&_ul]:m-0 [&_ul]:p-0 [&_li]:m-0">
       <SortableTree
         items={items}
         onItemsChanged={handleItemsChanged}
