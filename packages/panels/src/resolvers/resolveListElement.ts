@@ -6,7 +6,6 @@ import type { ViewModeMeta } from '../schema/ViewMode.js'
 import type { ResourceLike } from './types.js'
 import { resolveListQuery } from './resolveListQuery.js'
 import { readPersistedState } from '../persist.js'
-import { resolveColumns, resolveSearchColumns, applyColumnTransforms } from './helpers.js'
 import { TableRegistry } from '../registries/TableRegistry.js'
 
 // ─── List element meta (SSR payload) ────────────────────────
@@ -125,7 +124,7 @@ export async function resolveListElement(
 
   const result = await resolveListQuery(config, ctx, { elementId: listId, searchColumns, model, scopes: config.scopes, treeView: isTreeView, folderView: isFolderView })
 
-  // ── Strip records to only needed fields (like buildTableMeta does for tables) ──
+  // ── Strip records to only needed fields ──
   const displayedKeys = new Set<string>(['id'])
   if (config.titleField)       displayedKeys.add(config.titleField)
   if (config.descriptionField) displayedKeys.add(config.descriptionField)

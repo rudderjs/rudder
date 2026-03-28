@@ -3,11 +3,6 @@ import type { PanelContext, SchemaElementLike, QueryBuilderLike, RecordRow } fro
 import type { FieldOrGrouping } from '../Resource.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 
-/** Minimal interface for elements that expose getConfig(). */
-export interface ConfigurableElement extends SchemaElementLike {
-  getConfig(): import('../schema/Table.js').TableConfig
-}
-
 /** Minimal interface for a Form schema element. */
 export interface FormElement extends SchemaElementLike {
   getId(): string

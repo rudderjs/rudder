@@ -159,8 +159,8 @@ export type {
 
 export { resolveSchema } from './resolveSchema.js'
 export type { PanelSchemaElementMeta } from './resolveSchema.js'
-export { resolveTable } from './resolvers/resolveTable.js'
 export { resolveListElement } from './resolvers/resolveListElement.js'
+export { resolveListElement as resolveTable } from './resolvers/resolveListElement.js'
 export type { DataViewElementMeta } from './resolvers/resolveListElement.js'
 export { resolveListQuery } from './resolvers/resolveListQuery.js'
 export { resolveTabs }  from './resolvers/resolveTabs.js'
