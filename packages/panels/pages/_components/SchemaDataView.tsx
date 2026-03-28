@@ -6,8 +6,8 @@ import { ResourceIcon } from './ResourceIcon.js'
 import { TableEditCell } from './TableEditCell.js'
 import { ConfirmDialog } from './ConfirmDialog.js'
 import { Checkbox } from '@/components/ui/checkbox.js'
-import { Tabs as ScopeTabs, TabsList as ScopeTabsList, TabsTab as ScopeTabsTab } from '@/components/animate-ui/components/base/tabs.js'
-import { motion, AnimatePresence } from 'motion/react'
+import { Tabs as ScopeTabs, TabsList as ScopeTabsList, TabsTab as ScopeTabsTab, TabsPanels as ScopeTabsPanels, TabsPanel as ScopeTabsPanel } from '@/components/animate-ui/components/base/tabs.js'
+
 
 // ─── Action types ────────────────────────────────────────────
 interface ActionMeta {
@@ -593,14 +593,13 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
         </div>
       )}
 
-      {/* Scope pills */}
+      {/* Scope pills — TabsList only, content panels added below */}
       {scopePresets && scopePresets.length > 0 && (
         <ScopeTabs
           value={String(activeScope)}
           onValueChange={(v) => handleScopeChange(Number(v))}
-          className="mb-2"
         >
-          <ScopeTabsList>
+          <ScopeTabsList className="mb-2">
             {scopePresets.map((scope, i) => (
               <ScopeTabsTab key={i} value={String(i)}>
                 {scope.icon && <span className="mr-1.5"><ResourceIcon icon={scope.icon} /></span>}
@@ -608,9 +607,22 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
               </ScopeTabsTab>
             ))}
           </ScopeTabsList>
+          <ScopeTabsPanels>
+            {scopePresets.map((_, i) => (
+              <ScopeTabsPanel key={i} value={String(i)}>
+                {renderContent()}
+              </ScopeTabsPanel>
+            ))}
+          </ScopeTabsPanels>
         </ScopeTabs>
       )}
 
+      {/* No scopes — render content directly */}
+      {(!scopePresets || scopePresets.length === 0) && renderContent()}
+    </div>
+  )
+
+  function renderContent() { return (<>
       {/* Toolbar: search + sort + view toggle + export */}
       {(searchable || filters.length > 0 || (sortableOptions && sortableOptions.length > 0) || viewOptions.length > 1 || (element.exportable && element.exportable.length > 0)) && (
       <div className="py-2.5 flex items-center gap-3 flex-wrap">
@@ -834,16 +846,6 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
         </div>
       )}
 
-      {/* Content wrapper — animates on scope/filter changes */}
-      <AnimatePresence initial={false} mode="wait">
-      <motion.div
-        key={`scope-${activeScope}`}
-        initial={{ opacity: 0, filter: 'blur(4px)' }}
-        animate={{ opacity: 1, filter: 'blur(0px)' }}
-        exit={{ opacity: 0, filter: 'blur(4px)' }}
-        transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-      >
-
       {/* Empty state */}
       {isEmpty && (
         <div className="rounded-xl border bg-card p-12 text-center">
@@ -1009,11 +1011,8 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
           </div>
         </div>
       )}
-
-      </motion.div>
-      </AnimatePresence>
-    </div>
-  )
+  </>)
+  }
 }
 
 // ─── ClientTreeView — lazy-loads TreeView on client only ─────
