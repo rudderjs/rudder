@@ -286,6 +286,34 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
     saveRememberState(buildState({ page }))
   }
 
+  function handleLoadMore() {
+    const nextPage = currentPage + 1
+    setCurrentPage(nextPage)
+    setLoading(true)
+    const params = new URLSearchParams()
+    params.set('page', String(nextPage))
+    if (search) params.set('search', search)
+    if (sortField) { params.set('sort', sortField); params.set('dir', sortDir) }
+    for (const [k, v] of Object.entries(activeFilters)) { if (v) params.set(`filter[${k}]`, v) }
+    if (activeScope > 0) params.set('scope', String(activeScope))
+    if (resourceSlug && resource?.isTrashed) params.set('trashed', 'true')
+    if (resourceSlug && scopePresets && activeScope > 0 && activeScope < scopePresets.length) {
+      const scopeLabel = scopePresets[activeScope]?.label
+      if (scopeLabel) params.set('tab', scopeLabel.toLowerCase().replace(/\s+/g, '-'))
+    }
+    const fetchBase = resourceSlug
+      ? `${panelPath}/api/${resourceSlug}`
+      : `${panelPath}/api/_tables/${elementId}`
+    void fetch(`${fetchBase}?${params}`).then(async (res) => {
+      if (!res.ok) return
+      const body = await res.json() as { records?: Record<string, unknown>[]; data?: Record<string, unknown>[]; pagination?: PaginationMeta; meta?: PaginationMeta }
+      const newRecords = body.records ?? body.data ?? []
+      setRecords(prev => [...prev, ...newRecords])
+      setPagination(body.pagination ?? body.meta)
+    }).finally(() => setLoading(false))
+    saveRememberState(buildState({ page: nextPage }))
+  }
+
   function handleSortChange(field: string) {
     const newDir = field === sortField ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc'
     setSortField(field)
@@ -793,7 +821,23 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
       })()}
 
       {/* Pagination */}
-      {pagination && pagination.lastPage > 1 && (
+      {pagination && pagination.type === 'loadMore' ? (
+        pagination.currentPage < pagination.lastPage && (
+          <div className="flex flex-col items-center gap-2 pt-4">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loading}
+              className="px-4 py-2 text-sm rounded-md border hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              {loading ? (i18n.loading ?? 'Loading…') : (i18n.loadMore ?? 'Load more')}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              {i18n.showing?.replace(':n', String(records.length)).replace(':total', String(pagination.total)) ?? `Showing ${records.length} of ${pagination.total}`}
+            </span>
+          </div>
+        )
+      ) : pagination && pagination.lastPage > 1 && (
         <div className="flex items-center justify-between pt-4 text-xs text-muted-foreground">
           <span>{i18n.showing?.replace(':n', String(records.length)).replace(':total', String(pagination.total)) ?? `Showing ${records.length} of ${pagination.total}`}</span>
           <div className="flex items-center gap-1">
