@@ -1,4 +1,5 @@
 import type { PanelContext, SchemaElementLike } from '../types.js'
+import { applyLazyPollMeta } from './utils.js'
 
 export interface WidgetSize {
   w: number   // columns (1-12)
@@ -113,7 +114,7 @@ export class Widget {
   getPollInterval(): number | undefined { return this._pollInterval }
 
   toMeta(): WidgetMeta & { type: 'widget' } {
-    return {
+    const meta: WidgetMeta & { type: 'widget' } = {
       type:        'widget',
       id:          this._id,
       label:       this._label,
@@ -124,8 +125,8 @@ export class Widget {
       ...(this._maxSize !== undefined && { maxSize: this._maxSize }),
       ...(this._settings.length > 0 && { settings: this._settings }),
       ...(this._componentPath !== undefined && { componentPath: this._componentPath }),
-      ...(this._lazy && { lazy: true }),
-      ...(this._pollInterval !== undefined && { pollInterval: this._pollInterval }),
     }
+    applyLazyPollMeta(meta as unknown as Record<string, unknown>, this)
+    return meta
   }
 }

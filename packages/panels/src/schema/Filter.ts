@@ -1,3 +1,5 @@
+import { toTitleCase } from './utils.js'
+
 // ─── Filter meta (for UI) ──────────────────────────────────
 
 export interface FilterMeta {
@@ -29,10 +31,7 @@ export abstract class Filter {
 
   getLabel(): string {
     if (this._label) return this._label
-    return this._name
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, (s) => s.toUpperCase())
-      .trim()
+    return toTitleCase(this._name)
   }
 
   abstract getType(): string

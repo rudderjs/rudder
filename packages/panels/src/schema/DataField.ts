@@ -10,6 +10,7 @@
 
 import type { FieldMeta } from './Field.js'
 import type { PanelContext } from '../types.js'
+import { toTitleCase } from './utils.js'
 
 export type EditMode = 'inline' | 'popover' | 'modal'
 export type DataFieldType = 'string' | 'number' | 'boolean' | 'date' | 'badge' | 'image'
@@ -52,8 +53,7 @@ export class DataField {
 
   protected constructor(name: string) {
     this._name  = name
-    this._label = name.replace(/([A-Z])/g, ' $1').trim()
-      .replace(/^./, s => s.toUpperCase())
+    this._label = toTitleCase(name)
   }
 
   static make(name: string): DataField {

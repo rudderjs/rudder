@@ -1,3 +1,5 @@
+import { toTitleCase } from './utils.js'
+
 // ─── Field visibility ──────────────────────────────────────
 
 export type FieldVisibility = 'table' | 'create' | 'edit' | 'view'
@@ -437,11 +439,7 @@ export abstract class Field {
 
   getLabel(): string {
     if (this._label) return this._label
-    // title-case the field name: camelCase → 'Camel Case'
-    return this._name
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, (s) => s.toUpperCase())
-      .trim()
+    return toTitleCase(this._name)
   }
 
   /** Get the extra metadata bag (relation name, options, etc.) */

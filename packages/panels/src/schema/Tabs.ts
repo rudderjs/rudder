@@ -2,6 +2,7 @@ import type { Field } from './Field.js'
 import type { FieldMeta } from './Field.js'
 import type { PersistMode } from '../persist.js'
 import type { DataSource } from '../datasource.js'
+import { applyLazyPollMeta } from './utils.js'
 
 // ─── Persist mode for Tabs ─────────────────────────────────────
 export type TabsPersistMode = PersistMode
@@ -395,8 +396,7 @@ export class Tabs {
     }
     if (this._creatable) meta.creatable = true
     if (this._editable)  meta.editable  = true
-    if (this._lazy)      meta.lazy      = true
-    if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
+    applyLazyPollMeta(meta as unknown as Record<string, unknown>, this)
     if (this.isModelBacked()) meta.modelBacked = true
     if (this._persist !== false) meta.persist = this._persist
     if (this._animate !== false) meta.animate = this._animate

@@ -1,6 +1,7 @@
 // ─── Stats schema element ───────────────────────────────────
 
 import type { PanelContext } from '../types.js'
+import { slugify, applyLazyPollLiveMeta, resolveElementId } from './utils.js'
 
 export interface PanelStatMeta {
   label:        string
@@ -127,7 +128,7 @@ export class Stats {
   }
 
   getId(): string {
-    return this._id ?? 'stats-' + this._stats.map(s => s.toMeta().label).join('-').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    return this._id ?? 'stats-' + slugify(this._stats.map(s => s.toMeta().label).join('-'))
   }
 
   getDataFn(): ((ctx: PanelContext) => Promise<PanelStatMeta[]>) | undefined { return this._dataFn }
@@ -142,11 +143,9 @@ export class Stats {
       type: 'stats',
       stats: this._stats.map(s => s.toMeta()),
     }
-    const id = this._id ?? (this._dataFn || this._lazy || this._pollInterval ? this.getId() : undefined)
+    const id = resolveElementId(this._id, this.getId(), !!this._dataFn, this)
     if (id) meta.id = id
-    if (this._lazy) meta.lazy = true
-    if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
-    if (this._live) meta.live = true
+    applyLazyPollLiveMeta(meta as unknown as Record<string, unknown>, this)
     return meta
   }
 }

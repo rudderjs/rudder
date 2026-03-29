@@ -1,3 +1,5 @@
+import { toTitleCase } from './utils.js'
+
 // ─── Action meta (for UI) ──────────────────────────────────
 
 export interface ActionMeta {
@@ -92,10 +94,7 @@ export class Action {
 
   getLabel(): string {
     if (this._label) return this._label
-    return this._name
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, (s) => s.toUpperCase())
-      .trim()
+    return toTitleCase(this._name)
   }
 
   async execute(records: unknown[]): Promise<void> {

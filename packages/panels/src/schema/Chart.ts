@@ -1,4 +1,5 @@
 import type { PanelContext } from '../types.js'
+import { slugify, applyLazyPollLiveMeta, resolveElementId } from './utils.js'
 
 export type ChartType = 'line' | 'bar' | 'pie' | 'doughnut' | 'area'
 
@@ -105,7 +106,7 @@ export class Chart {
   }
 
   getId(): string {
-    return this._id ?? this._title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    return this._id ?? slugify(this._title)
   }
 
   getDataFn(): ((ctx: PanelContext) => Promise<ChartDataResult>) | undefined { return this._dataFn }
@@ -123,12 +124,10 @@ export class Chart {
       datasets:  this._datasets,
       height:    this._height,
     }
-    const id = this._id ?? (this._dataFn || this._lazy || this._pollInterval ? this.getId() : undefined)
+    const id = resolveElementId(this._id, this.getId(), !!this._dataFn, this)
     if (id) meta.id = id
     if (this._description !== undefined) meta.description = this._description
-    if (this._lazy) meta.lazy = true
-    if (this._pollInterval !== undefined) meta.pollInterval = this._pollInterval
-    if (this._live) meta.live = true
+    applyLazyPollLiveMeta(meta as unknown as Record<string, unknown>, this)
     return meta
   }
 }

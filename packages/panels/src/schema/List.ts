@@ -3,6 +3,7 @@ import type { Action } from './Action.js'
 import type { DataSource } from '../datasource.js'
 import type { PersistMode } from '../persist.js'
 import type { PanelContext } from '../types.js'
+import { slugify, toTitleCase } from './utils.js'
 import { ViewMode } from './ViewMode.js'
 import type { ViewModeMeta } from './ViewMode.js'
 
@@ -283,7 +284,7 @@ export class List {
   sortable(options: SortableOption[]): this {
     this._sortableOptions = options.map(o =>
       typeof o === 'string'
-        ? { field: o, label: o.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim() }
+        ? { field: o, label: toTitleCase(o) }
         : o
     )
     return this
@@ -499,7 +500,7 @@ export class List {
   // ── Getters ───────────────────────────────────────
 
   getId(): string {
-    return this._id ?? this._title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    return this._id ?? slugify(this._title)
   }
 
   getDataFn(): ((ctx: PanelContext) => Promise<ListItem[]>) | undefined { return this._dataFn }
