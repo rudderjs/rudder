@@ -5,6 +5,7 @@ import type { Widget, WidgetMeta } from '../schema/Widget.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import type { AppLike, ResolveSchemaFn } from './types.js'
 import { debugWarn } from '../debug.js'
+import { resolveChildSchema } from './utils.js'
 
 type WidgetMetaResolved = WidgetMeta & { type: 'widget'; schema?: PanelSchemaElementMeta[] }
 
@@ -23,10 +24,7 @@ async function resolveWidgetSchemas(
       if (schemaFn) {
         try {
           const elements = await schemaFn(ctx)
-          const innerPanel = Object.create(panel, {
-            getSchema: { value: () => elements },
-          }) as Panel
-          meta.schema = await resolveSchemaFn(innerPanel, ctx)
+          meta.schema = await resolveChildSchema(panel, ctx, elements, resolveSchemaFn)
         } catch (e) {
           debugWarn('widget.schema', e)
           meta.schema = []

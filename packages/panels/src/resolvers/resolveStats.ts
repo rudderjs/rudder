@@ -3,7 +3,7 @@ import type { PanelContext, SchemaElementLike } from '../types.js'
 import type { StatsElementMeta, PanelStatMeta } from '../schema/index.js'
 import type { PanelSchemaElementMeta } from '../resolveSchema.js'
 import { StatsRegistry } from '../registries/StatsRegistry.js'
-import { debugWarn } from '../debug.js'
+import { resolveDataFn } from './utils.js'
 
 export async function resolveStats(
   el: SchemaElementLike,
@@ -19,11 +19,14 @@ export async function resolveStats(
     StatsRegistry.register(panel.getName(), stats.getId(), stats)
   }
 
-  // Resolve async data (skip for lazy — client fetches after mount)
-  if (dataFn && !stats.isLazy?.()) {
-    try {
-      meta.stats = await dataFn(ctx)
-    } catch (e) { debugWarn('stats.data', e) }
+  const resolved = await resolveDataFn<PanelStatMeta[]>(ctx, {
+    dataFn,
+    isLazy: stats.isLazy?.() ?? false,
+    debugLabel: 'stats.data',
+  })
+
+  if (resolved) {
+    meta.stats = resolved
   } else if (stats.isLazy?.()) {
     meta.stats = []
   }

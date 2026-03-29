@@ -21,6 +21,15 @@ export interface WidgetElement extends SchemaElementLike {
   toMeta(): import('../schema/Widget.js').WidgetMeta & { type: 'widget' }
 }
 
+/** Minimal interface for a schema element with lazy data support (Chart, List, Stats). */
+export interface LazyDataElement<TMeta = unknown> {
+  getDataFn?(): ((ctx: PanelContext) => Promise<unknown>) | undefined
+  isLazy?(): boolean
+  getPollInterval?(): number | undefined
+  getId?(): string
+  toMeta(): TMeta
+}
+
 /** Minimal interface for a Resource class (static shape). */
 export interface ResourceLike {
   new(): {
