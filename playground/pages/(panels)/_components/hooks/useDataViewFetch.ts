@@ -109,20 +109,22 @@ export function useDataViewFetch(
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Refs for stale-closure avoidance ──
-  const currentPageRef   = useRef(currentPage)
-  const searchRef        = useRef(search)
-  const sortFieldRef     = useRef(sortField)
-  const sortDirRef       = useRef(sortDir)
-  const activeScopeRef   = useRef(activeScope)
-  const currentFolderRef = useRef(currentFolder)
+  const currentPageRef    = useRef(currentPage)
+  const searchRef         = useRef(search)
+  const sortFieldRef      = useRef(sortField)
+  const sortDirRef        = useRef(sortDir)
+  const activeScopeRef    = useRef(activeScope)
+  const currentFolderRef  = useRef(currentFolder)
+  const activeFiltersRef  = useRef(activeFilters)
 
   // Keep refs in sync
-  currentPageRef.current   = currentPage
-  searchRef.current        = search
-  sortFieldRef.current     = sortField
-  sortDirRef.current       = sortDir
-  activeScopeRef.current   = activeScope
-  currentFolderRef.current = currentFolder
+  currentPageRef.current    = currentPage
+  searchRef.current         = search
+  sortFieldRef.current      = sortField
+  sortDirRef.current        = sortDir
+  activeScopeRef.current    = activeScope
+  currentFolderRef.current  = currentFolder
+  activeFiltersRef.current  = activeFilters
 
   const clearSelection = callbacks?.clearSelection ?? (() => {})
   const notifyStateChange = callbacks?.onStateChange
@@ -138,7 +140,7 @@ export function useDataViewFetch(
       const s = opts.sort ?? sortFieldRef.current
       const d = opts.dir ?? sortDirRef.current
       if (s) { params.set('sort', s); params.set('dir', d) }
-      const filtersToApply = opts.filters ?? activeFilters
+      const filtersToApply = opts.filters ?? activeFiltersRef.current
       for (const [k, v] of Object.entries(filtersToApply)) {
         if (v) params.set(`filter[${k}]`, v)
       }
@@ -183,7 +185,7 @@ export function useDataViewFetch(
     if (sortFieldRef.current) { state.sort = sortFieldRef.current; state.dir = sortDirRef.current }
     if (currentFolderRef.current) state.folder = currentFolderRef.current
     if (activeScopeRef.current > 0) state.scope = activeScopeRef.current
-    const filtersToSave = filterOverride ?? activeFilters
+    const filtersToSave = filterOverride ?? activeFiltersRef.current
     for (const [k, v] of Object.entries(filtersToSave)) {
       if (v) state[`filter_${k}`] = v
     }
@@ -215,7 +217,7 @@ export function useDataViewFetch(
     params.set('page', String(nextPage))
     if (searchRef.current) params.set('search', searchRef.current)
     if (sortFieldRef.current) { params.set('sort', sortFieldRef.current); params.set('dir', sortDirRef.current) }
-    for (const [k, v] of Object.entries(activeFilters)) { if (v) params.set(`filter[${k}]`, v) }
+    for (const [k, v] of Object.entries(activeFiltersRef.current)) { if (v) params.set(`filter[${k}]`, v) }
     if (activeScopeRef.current > 0) params.set('scope', String(activeScopeRef.current))
     if (resourceSlug && isTrashed) params.set('trashed', 'true')
     if (resourceSlug && scopePresets && activeScopeRef.current > 0 && activeScopeRef.current < scopePresets.length) {
