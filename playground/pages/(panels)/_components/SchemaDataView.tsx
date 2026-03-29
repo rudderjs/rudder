@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, type RefCallback } from 'react'
+import { useDataViewFetch } from './hooks/useDataViewFetch.js'
+import { useLiveUpdates } from './hooks/useLiveUpdates.js'
+import { usePersistence } from './hooks/usePersistence.js'
 import type { PanelI18n, PanelColumnMeta } from '@boostkit/panels'
 import { ResourceIcon } from './ResourceIcon.js'
 import { TableEditCell } from './TableEditCell.js'
@@ -169,30 +172,38 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
     }
   }, [dndReady])
 
-  // ── State ──
-  const [records, setRecords] = useState(initialRecords)
-  const [search, setSearch]   = useState(ssrSearch ?? '')
-  const [pagination, setPagination] = useState(initialPagination)
-  const [currentPage, setCurrentPage] = useState(initialPagination?.currentPage ?? 1)
-  const [loading, setLoading] = useState(false)
-  const [sortField, setSortField] = useState(element.activeSort?.col ?? '')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>((element.activeSort?.dir?.toLowerCase() as 'asc' | 'desc') ?? 'asc')
-  const [activeScope, setActiveScope] = useState(element.activeScope ?? 0)
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(element.activeFilters ?? {})
-  const [currentFolder, setCurrentFolder] = useState<string | null>(element.activeFolder ?? null)
-  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string; label: string }[]>(element.breadcrumbs ?? [])
-  const filters = element.filters ?? []
-  const folderField = element.folderField
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   // ── Selection (for bulk actions) ──
   const bulkActions = (element.actions ?? []).filter(a => a.bulk)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<ActionMeta | null>(null)
-
-  // Clear selection when search, filters, or scope changes (not page changes)
   function clearSelection() { setSelectedIds(new Set()) }
+
+  // ── Fetch hook ──
+  const {
+    records, pagination, currentPage, search, sortField, sortDir,
+    activeScope, activeFilters, currentFolder, breadcrumbs, loading,
+    fetchData, handleSearchChange, handlePageChange, handleLoadMore,
+    handleSortChange, handleScopeChange, handleFilterChange, clearFilters,
+    handleFolderNavigate, setRecords, stateRefs,
+  } = useDataViewFetch(
+    { elementId, panelPath, resourceSlug, isTrashed: resource?.isTrashed, scopePresets: element.scopes },
+    {
+      records: initialRecords,
+      pagination: initialPagination,
+      search: ssrSearch,
+      sortField: element.activeSort?.col,
+      sortDir: element.activeSort?.dir?.toLowerCase() as 'asc' | 'desc' | undefined,
+      activeScope: element.activeScope,
+      activeFilters: element.activeFilters,
+      activeFolder: element.activeFolder,
+      breadcrumbs: element.breadcrumbs,
+    },
+    { onStateChange: (state) => saveRememberState(state), clearSelection },
+  )
+
+  const filters = element.filters ?? []
+  const folderField = element.folderField
 
   // Toggle all on the *current page* only
   function toggleSelectAll() {
@@ -244,66 +255,20 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
     }
   }
 
-  // ── Active view ──
+  // ── Persistence hook ──
   const viewOptions = views ?? []
   const defaultViewName = viewOptions.length > 0 ? viewOptions[0]!.name : 'list'
-  const [activeView, setActiveView] = useState(element.activeView ?? defaultViewName)
-  const rememberMode = element.remember
+  const containerRef = useRef<HTMLDivElement>(null)
   const pathSegment = panelPath.replace(/^\//, '')
 
-  // Save state to session (persist/remember feature)
-  function buildState(overrides: Record<string, unknown> = {}, filterOverride?: Record<string, string>): Record<string, unknown> {
-    const state: Record<string, unknown> = { view: activeView, search, page: currentPage }
-    if (sortField) { state.sort = sortField; state.dir = sortDir }
-    if (currentFolder) state.folder = currentFolder
-    if (activeScope > 0) state.scope = activeScope
-    const filtersToSave = filterOverride ?? activeFilters
-    for (const [k, v] of Object.entries(filtersToSave)) {
-      if (v) state[`filter_${k}`] = v
-    }
-    return { ...state, ...overrides }
-  }
-
-  function saveRememberState(state: Record<string, unknown>) {
-    if (!rememberMode || rememberMode === 'localStorage') return
-    if (rememberMode === 'session') {
-      void fetch(`${panelPath}/api/_tables/${elementId}/remember`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state),
-      })
-    }
-  }
+  const { activeView, saveRememberState, handleViewChange: _handleViewChange } = usePersistence(
+    { rememberMode: element.remember, elementId, panelPath },
+    { viewOptions, defaultView: defaultViewName, ssrActiveView: element.activeView, defaultViewBreakpoints: defaultView },
+    containerRef,
+  )
 
   function handleViewChange(viewName: string) {
-    setActiveView(viewName)
-    const targetView = viewOptions.find(v => v.name === viewName)
-    const prevView = viewOptions.find(v => v.name === activeView)
-    const targetType = targetView?.type
-    const prevType = prevView?.type
-
-    // Re-fetch when switching between view types that need different data
-    const needsAllRecords = targetType === 'tree'
-    const needsFolderFilter = targetType === 'folder'
-    const hadAllRecords = prevType === 'tree'
-    const hadFolderFilter = prevType === 'folder'
-
-    if (needsAllRecords !== hadAllRecords || needsFolderFilter !== hadFolderFilter) {
-      if (needsAllRecords) {
-        // Tree: fetch all records
-        void fetchData({ page: 1, viewType: 'tree', folder: null })
-      } else if (needsFolderFilter) {
-        // Folder: fetch current folder level
-        void fetchData({ page: 1, viewType: 'folder', folder: currentFolder })
-      } else {
-        // Flat views (list/grid/table): fetch all, no folder filter, reset folder state
-        setCurrentFolder(null)
-        setBreadcrumbs([])
-        void fetchData({ page: 1, folder: null, viewType: targetType })
-      }
-    }
-
-    saveRememberState(buildState({ view: viewName }))
+    _handleViewChange(viewName, fetchData, currentFolder, (overrides) => ({ view: activeView, ...overrides }))
   }
 
   // ── Lazy: fetch data on client mount (SSR sends empty records) ──
@@ -314,158 +279,12 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Container-based responsive default view (first visit only) ──
-  const containerRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    // Skip if user already has a persisted view (SSR sent it via activeView)
-    if (element.activeView) return
-    if (!defaultView || !containerRef.current) return
-    const width = containerRef.current.clientWidth
-    const bp = width < 480 ? 'sm' : width < 768 ? 'md' : 'lg'
-    const target = defaultView[bp] ?? defaultView['lg'] ?? defaultView['md'] ?? defaultView['sm']
-    if (target && target !== activeView) {
-      setActiveView(target)
-      saveRememberState(buildState({ view: target }))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ── Fetch ──
-  async function fetchData(opts: { page?: number; search?: string; sort?: string; dir?: string; filters?: Record<string, string>; scope?: number; folder?: string | null; viewType?: string } = {}) {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      params.set('page', String(opts.page ?? currentPage))
-      const searchVal = opts.search !== undefined ? opts.search : search
-      if (searchVal) params.set('search', searchVal)
-      const s = opts.sort ?? sortField
-      const d = opts.dir ?? sortDir
-      if (s) { params.set('sort', s); params.set('dir', d) }
-      const filtersToApply = opts.filters ?? activeFilters
-      for (const [k, v] of Object.entries(filtersToApply)) {
-        if (v) params.set(`filter[${k}]`, v)
-      }
-      // Include active scope
-      const scopeIdx = opts.scope ?? activeScope
-      if (scopeIdx > 0) params.set('scope', String(scopeIdx))
-      // Include folder param
-      const folder = opts.folder !== undefined ? opts.folder : currentFolder
-      if (folder) params.set('folder', folder)
-      // Pass view type to backend (tree = all records, folder = folder-filtered)
-      const effectiveViewType = opts.viewType ?? viewOptions.find(v => v.name === activeView)?.type
-      if (effectiveViewType === 'tree') params.set('view', 'tree')
-      if (effectiveViewType === 'folder') params.set('view', 'folder')
-      // Resource mode: include trashed param and use resource API endpoint
-      if (resourceSlug && resource?.isTrashed) params.set('trashed', 'true')
-      // Resource mode: include active scope as tab param (resource API uses ?tab=slug)
-      if (resourceSlug && scopePresets && scopeIdx > 0 && scopeIdx < scopePresets.length) {
-        const scopeLabel = scopePresets[scopeIdx]?.label
-        if (scopeLabel) params.set('tab', scopeLabel.toLowerCase().replace(/\s+/g, '-'))
-      }
-      const fetchBase = resourceSlug
-        ? `${panelPath}/api/${resourceSlug}`
-        : `${panelPath}/api/_tables/${elementId}`
-      const res = await fetch(`${fetchBase}?${params}`)
-      if (!res.ok) return
-      // Resource API returns { data, meta }, table API returns { records, pagination }
-      const body = await res.json() as { records?: Record<string, unknown>[]; data?: Record<string, unknown>[]; pagination?: PaginationMeta; meta?: PaginationMeta; breadcrumbs?: { id: string; label: string }[] }
-      setRecords(body.records ?? body.data ?? [])
-      setPagination(body.pagination ?? body.meta)
-      if (body.breadcrumbs !== undefined) setBreadcrumbs(body.breadcrumbs ?? [])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function handleSearchChange(value: string) {
-    setSearch(value)
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = setTimeout(() => {
-      clearSelection()
-      void fetchData({ page: 1, search: value })
-      setCurrentPage(1)
-      saveRememberState(buildState({ search: value, page: 1 }))
-    }, 300)
-  }
-
-  function handlePageChange(page: number) {
-    setCurrentPage(page)
-    void fetchData({ page, search })
-    saveRememberState(buildState({ page }))
-  }
-
-  function handleLoadMore() {
-    const nextPage = currentPage + 1
-    setCurrentPage(nextPage)
-    setLoading(true)
-    const params = new URLSearchParams()
-    params.set('page', String(nextPage))
-    if (search) params.set('search', search)
-    if (sortField) { params.set('sort', sortField); params.set('dir', sortDir) }
-    for (const [k, v] of Object.entries(activeFilters)) { if (v) params.set(`filter[${k}]`, v) }
-    if (activeScope > 0) params.set('scope', String(activeScope))
-    if (resourceSlug && resource?.isTrashed) params.set('trashed', 'true')
-    if (resourceSlug && scopePresets && activeScope > 0 && activeScope < scopePresets.length) {
-      const scopeLabel = scopePresets[activeScope]?.label
-      if (scopeLabel) params.set('tab', scopeLabel.toLowerCase().replace(/\s+/g, '-'))
-    }
-    const fetchBase = resourceSlug
-      ? `${panelPath}/api/${resourceSlug}`
-      : `${panelPath}/api/_tables/${elementId}`
-    void fetch(`${fetchBase}?${params}`).then(async (res) => {
-      if (!res.ok) return
-      const body = await res.json() as { records?: Record<string, unknown>[]; data?: Record<string, unknown>[]; pagination?: PaginationMeta; meta?: PaginationMeta }
-      const newRecords = body.records ?? body.data ?? []
-      setRecords(prev => [...prev, ...newRecords])
-      setPagination(body.pagination ?? body.meta)
-    }).finally(() => setLoading(false))
-    saveRememberState(buildState({ page: nextPage }))
-  }
-
-  function handleSortChange(field: string) {
-    const newDir = field === sortField ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc'
-    setSortField(field)
-    setSortDir(newDir)
-    void fetchData({ page: 1, sort: field, dir: newDir })
-    setCurrentPage(1)
-    saveRememberState(buildState({ sort: field, dir: newDir, page: 1 }))
-  }
-
-  function handleScopeChange(index: number) {
-    clearSelection()
-    setActiveScope(index)
-    setCurrentPage(1)
-    void fetchData({ page: 1, scope: index })
-    saveRememberState(buildState({ scope: index, page: 1 }))
-  }
-
-  // ── Record click URL ──
-  function handleFilterChange(filterName: string, value: string) {
-    clearSelection()
-    const newFilters = { ...activeFilters }
-    if (value) newFilters[filterName] = value
-    else delete newFilters[filterName]
-    setActiveFilters(newFilters)
-    setCurrentPage(1)
-    void fetchData({ page: 1, filters: newFilters })
-    saveRememberState(buildState({ page: 1 }, newFilters))
-  }
-
-  function clearFilters() {
-    clearSelection()
-    setActiveFilters({})
-    setCurrentPage(1)
-    void fetchData({ page: 1, filters: {} })
-    saveRememberState(buildState({ page: 1 }, {}))
-  }
-
-  function handleFolderNavigate(folderId: string | null) {
-    setCurrentFolder(folderId)
-    setCurrentPage(1)
-    if (!folderId) setBreadcrumbs([])
-    void fetchData({ page: 1, folder: folderId })
-    saveRememberState(buildState({ page: 1, folder: folderId ?? undefined }))
-  }
+  // ── Live updates + polling ──
+  useLiveUpdates(
+    { pollInterval: element.pollInterval, live: element.live, liveChannel: element.liveChannel, elementId },
+    stateRefs,
+    fetchData,
+  )
 
   // Build base href for record links (resource mode auto-generates it)
   const resolvedHref = href ?? (resourceSlug ? `${panelPath}/resources/${resourceSlug}` : undefined)
@@ -481,81 +300,6 @@ export function SchemaDataView({ element, panelPath, i18n, resource }: Props) {
     if (!resourceSlug) return undefined
     return `${panelPath}/resources/${resourceSlug}/${record.id}/edit`
   }
-
-  // ── Refs for live/poll (avoid stale closures) ──
-  const currentPageRef = useRef(currentPage)
-  const searchRef = useRef(search)
-  const sortFieldRef = useRef(sortField)
-  const sortDirRef = useRef(sortDir)
-  useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
-  useEffect(() => { searchRef.current = search }, [search])
-  useEffect(() => { sortFieldRef.current = sortField }, [sortField])
-  useEffect(() => { sortDirRef.current = sortDir }, [sortDir])
-  const activeScopeRef = useRef(activeScope)
-  useEffect(() => { activeScopeRef.current = activeScope }, [activeScope])
-  const currentFolderRef = useRef(currentFolder)
-  useEffect(() => { currentFolderRef.current = currentFolder }, [currentFolder])
-
-  // ── Polling ──
-  useEffect(() => {
-    if (!element.pollInterval) return
-    const interval = setInterval(() => {
-      void fetchData({ page: currentPageRef.current, search: searchRef.current, sort: sortFieldRef.current || undefined, dir: sortDirRef.current, scope: activeScopeRef.current, folder: currentFolderRef.current })
-    }, element.pollInterval)
-    return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [element.pollInterval, elementId])
-
-  // ── Live updates via WebSocket ──
-  useEffect(() => {
-    if (!element.live || !element.liveChannel) return
-    const liveChannel = element.liveChannel
-    let destroyed = false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let socket: any = null
-
-    ;(async () => {
-      try {
-        const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-        const wsUrl = `${wsProto}://${window.location.host}/ws`
-        const ws = new WebSocket(wsUrl)
-        socket = ws
-
-        ws.onopen = () => {
-          if (destroyed) { ws.close(); return }
-          ws.send(JSON.stringify({ type: 'subscribe', channel: liveChannel }))
-        }
-
-        ws.onmessage = (event: MessageEvent) => {
-          if (destroyed) return
-          try {
-            const msg = JSON.parse(String(event.data)) as { type: string; channel?: string }
-            if (msg.type === 'event' && msg.channel === liveChannel) {
-              void fetchData({
-                page: currentPageRef.current,
-                search: searchRef.current || undefined,
-                sort: sortFieldRef.current || undefined,
-                dir: sortDirRef.current,
-                scope: activeScopeRef.current,
-                folder: currentFolderRef.current,
-              })
-            }
-          } catch { /* ignore */ }
-        }
-
-        ws.onclose = () => { socket = null }
-      } catch { /* WebSocket not available */ }
-    })()
-
-    return () => {
-      destroyed = true
-      if (socket) {
-        try { socket.send(JSON.stringify({ type: 'unsubscribe', channel: liveChannel })) } catch { /* ignore */ }
-        socket.close()
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [element.live, element.liveChannel])
 
   // ── Reorder handler (dnd-kit — client only) ──
   const reorderEndpoint = element.reorderEndpoint ? `${panelPath}/api${element.reorderEndpoint.replace(/^.*\/api/, '')}` : undefined
