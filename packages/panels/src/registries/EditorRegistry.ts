@@ -31,9 +31,11 @@ export interface CollaborativePlainTextProps {
 }
 
 /**
- * Editor registry — populated by `@boostkit/panels-lexical` (or any future editor adapter).
+ * @deprecated — Not a registry. Replaced by `registerField()` for editor components.
+ * Kept for backward compatibility only.
  *
- * `FieldInput.tsx` checks these before falling back to native `<textarea>` / `<input>`.
+ * Previously populated by `@boostkit/panels-lexical`, now unused.
+ * `FieldInput.tsx` uses `ComponentRegistry` instead.
  */
 export const editorRegistry: {
   richcontent:            ComponentType<RichContentEditorProps> | null
