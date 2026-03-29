@@ -997,16 +997,18 @@ function ListView({ groups, fields, titleField, descriptionField, imageField, ic
   enableAutoAnimate?: boolean
 }) {
   const [animateRef] = useAutoAnimate()
+  const singleGroup = groups.length === 1 && !groupBy
   return (
-    <div ref={enableAutoAnimate ? animateRef : undefined} className="rounded-xl border overflow-hidden divide-y">
-      {groups.map((group, gi) => (
-        <div key={gi}>
-          {groupBy && group.label && (
-            <div className="px-4 py-2 bg-muted/40 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {group.label}
-            </div>
-          )}
-          {group.records.map((record) => {
+    <div ref={enableAutoAnimate && singleGroup ? animateRef : undefined} className="rounded-xl border overflow-hidden divide-y">
+      {groups.map((group, gi) => {
+        const records = group.records
+        const wrapRecords = (children: React.ReactNode) =>
+          singleGroup ? <>{children}</> : (
+            <GroupContainer key={gi} enableAutoAnimate={!!enableAutoAnimate} groupBy={groupBy} label={group.label}>
+              {children}
+            </GroupContainer>
+          )
+        return wrapRecords(records.map((record) => {
             const href = onFolderNavigate ? undefined : getHref(record)
             const isFolder = !!onFolderNavigate
             const Tag = href ? 'a' : 'div'
@@ -1054,9 +1056,28 @@ function ListView({ groups, fields, titleField, descriptionField, imageField, ic
                 </Tag>
               </SortableItem>
             )
-          })}
+          }))
+      })}
+    </div>
+  )
+}
+
+/** Wrapper for grouped list/grid records — applies auto-animate ref to the record container. */
+function GroupContainer({ children, enableAutoAnimate, groupBy, label }: {
+  children:          React.ReactNode
+  enableAutoAnimate?: boolean
+  groupBy?:          string
+  label?:            string
+}) {
+  const [animateRef] = useAutoAnimate()
+  return (
+    <div ref={enableAutoAnimate ? animateRef : undefined}>
+      {groupBy && label && (
+        <div className="px-4 py-2 bg-muted/40 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {label}
         </div>
-      ))}
+      )}
+      {children}
     </div>
   )
 }

@@ -19,6 +19,8 @@ import {
   Table,
   Form,
   Column,
+  DataField,
+  ViewMode,
   Stats,
   Stat,
 } from '@boostkit/panels'
@@ -39,20 +41,24 @@ export class ArticleResource extends Resource {
 
   table(table: Table) {
     return table
-      .columns([
-        Column.make('title').sortable().searchable(),
-        Column.make('slug'),
-        Column.make('featured').boolean().editable(ToggleField.make('featured')),
-        Column.make('publishedAt').date(),
-        Column.make('createdAt').date().sortable(),
-        Column.make('wordCount')
-          .compute((r) => {
-            const title   = ((r as Record<string, unknown>).title as string | undefined) ?? ''
-            const excerpt = ((r as Record<string, unknown>).excerpt as string | undefined) ?? ''
-            const text = `${title} ${excerpt}`.trim()
-            return text ? text.split(/\s+/).length : 0
-          })
-          .display((v) => `${v} words`),
+      .views([
+        ViewMode.table([
+          Column.make('title').sortable().searchable(),
+          Column.make('slug'),
+          Column.make('featured').boolean().editable(ToggleField.make('featured')),
+          Column.make('publishedAt').date(),
+          Column.make('createdAt').date().sortable(),
+        ]),
+        ViewMode.list([
+          DataField.make('title'),
+          DataField.make('publishedAt').date(),
+          DataField.make('featured').badge(),
+        ]),
+        ViewMode.grid([
+          DataField.make('title'),
+          DataField.make('publishedAt').date(),
+          DataField.make('featured').badge(),
+        ]),
       ])
       .sortBy('createdAt', 'DESC')
       .titleField('title')
@@ -60,6 +66,8 @@ export class ArticleResource extends Resource {
       .searchable(['title'])
       .paginated('pages', 5)
       .remember('session')
+      .autoAnimate()
+      .animateScopes({ highlight: true, content: false })
       .live()
       .emptyState({
         icon: 'file-text',
