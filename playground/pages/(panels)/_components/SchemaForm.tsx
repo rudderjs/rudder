@@ -163,10 +163,14 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       const fieldsMap = doc.getMap('fields')
       const suppress = new Set<string>()
 
+      const mapFieldSet = new Set(mapFields)
       fieldsMap.observe((event: unknown) => {
         const mapEvent = event as { keysChanged: Set<string> }
         mapEvent.keysChanged.forEach((key: string) => {
-          if (!suppress.has(key)) setValues(prev => ({ ...prev, [key]: fieldsMap.get(key) }))
+          // Only apply changes for fields that are actually collaborative
+          if (!suppress.has(key) && mapFieldSet.has(key)) {
+            setValues(prev => ({ ...prev, [key]: fieldsMap.get(key) }))
+          }
         })
       })
 
@@ -375,8 +379,8 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       else if (draftableEnabled && publishAction === 'unpublish') toast.success((i18n as Record<string, string>).unpublishedToast ?? 'Unpublished.')
       else toast.success((i18n as Record<string, string>).savedToast ?? 'Saved.')
 
-      // Destroy local Yjs providers before clearing server rooms — prevents y-websocket
-      // from auto-reconnecting and re-pushing stale data to freshly cleared rooms.
+      // After save: clear all Yjs persistence (WebSocket rooms + IndexedDB) to prevent
+      // stale data from overwriting fresh DB values on next page load.
       if (formYjs.yjs && resourceSlug && recordId) {
         if (isRestorePreview && collabRef.current?.fieldsMap) {
           const doc = collabRef.current
@@ -384,10 +388,55 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
             for (const [k, v] of Object.entries(values)) doc.fieldsMap.set(k, v)
           })
         }
-        // Destroy the form-level Yjs provider
+        // Destroy the form-level Yjs providers (WebSocket + IndexedDB)
         collabRef.current?.provider?.destroy()
-        // Clear server Y.Doc rooms
-        await fetch(`/${pathSegment}/api/${resourceSlug}/${recordId}/_sync-live`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        collabRef.current?.idb?.destroy()
+        // Clear IndexedDB persistence for the main fields map and plain text fields only.
+        // Richcontent (Lexical) fields use XmlText in their own Y.Doc rooms — these can't
+        // be re-seeded from the server, so we keep them intact. They already have the correct
+        // content from the editing session that was just saved.
+        if (formYjs.docName) {
+          const docName = formYjs.docName
+          const docNames = [docName]
+          function collectTextDocs(items: unknown[]) {
+            for (const item of items) {
+              const f = item as FieldMeta & { fields?: unknown[]; tabs?: { fields?: unknown[] }[] }
+              if ((f.type === 'section' || f.type === 'tabs') && f.fields) collectTextDocs(f.fields)
+              if (f.type === 'tabs' && f.tabs) for (const tab of f.tabs) { if (tab.fields) collectTextDocs(tab.fields) }
+              // Only clear plain text collab fields, NOT richcontent
+              if (f.yjs && f.name && f.type !== 'richcontent' && f.type !== 'content') {
+                docNames.push(`${docName}:text:${f.name}`)
+              }
+            }
+          }
+          collectTextDocs(form.fields)
+          for (const name of [...new Set(docNames)]) {
+            try { indexedDB.deleteDatabase(name) } catch { /* ignore */ }
+          }
+        }
+        // Clear server Y.Doc rooms for non-richcontent fields only.
+        // Richcontent rooms retain their content — they can't be re-seeded from the server.
+        // The full _sync-live endpoint (which clears everything) is only used for version restore.
+        try {
+          const { Live } = await import(/* @vite-ignore */ '@boostkit/live')
+          await Live.clearDocument(formYjs.docName!)
+          // Clear text field rooms
+          function collectTextRooms(items: unknown[]): string[] {
+            const rooms: string[] = []
+            for (const item of items) {
+              const f = item as FieldMeta & { fields?: unknown[]; tabs?: { fields?: unknown[] }[] }
+              if ((f.type === 'section' || f.type === 'tabs') && f.fields) rooms.push(...collectTextRooms(f.fields))
+              if (f.type === 'tabs' && f.tabs) for (const tab of f.tabs) { if (tab.fields) rooms.push(...collectTextRooms(tab.fields)) }
+              if (f.yjs && f.name && f.type !== 'richcontent' && f.type !== 'content') {
+                rooms.push(`${formYjs.docName}:text:${f.name}`)
+              }
+            }
+            return rooms
+          }
+          for (const room of collectTextRooms(form.fields)) {
+            await Live.clearDocument(room)
+          }
+        } catch { /* @boostkit/live not available */ }
       }
 
       autosaveResetBaseline?.()

@@ -288,14 +288,14 @@ function SeedPlugin({ value, yjsRef }: { value: unknown; yjsRef: React.RefObject
     if (seeded.current || !value) return
     seeded.current = true
 
-    // Check Y.Doc state vector — if > 1, the doc has content from server sync
+    // Check if Y.Doc already has meaningful content from server sync.
     const yjs = yjsRef.current
     if (yjs) {
-      const sv = yjs.Y.encodeStateVector(yjs.doc)
-      if (sv.length > 1) return // Y.Doc has content — CollaborationPlugin will render it
+      const root = yjs.doc.get('root', yjs.Y.XmlText)
+      if (root && root.length > 0) return // Y.Doc has content — CollaborationPlugin will render it
     }
 
-    // Y.Doc is empty (fresh room) — seed from DB value
+    // Y.Doc is empty (fresh room, no prior content) — seed from DB value
     try {
       const serialized = typeof value === 'string' ? JSON.parse(value) : value
       const children = (serialized as { root?: { children?: unknown[] } })?.root?.children
