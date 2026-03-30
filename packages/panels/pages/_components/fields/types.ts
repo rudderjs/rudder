@@ -8,6 +8,8 @@ export interface FieldInputProps {
   uploadBase?: string
   i18n:        PanelI18n
   disabled?:   boolean
+  /** All current form values — used by slug fields and derived fields. */
+  formValues?: Record<string, unknown>
   /** Stable user identity for collaborative cursors (shared across all field types) */
   userName?: string
   userColor?: string

@@ -142,7 +142,8 @@ export class ArticleResource extends Resource {
           const q = Article.query().where('slug', value as string)
           if (data['id']) (q as any).where('id', '!=', data['id'])
           return await (q as any).first() ? 'Slug already in use' : true
-        }),
+        })
+        .persist(['websocket', 'indexeddb']),
 
       TextareaField.make('excerpt')
         .label('Excerpt')

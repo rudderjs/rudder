@@ -46,6 +46,7 @@ export function SchemaRenderer({
           uploadBase={uploadBase}
           i18n={i18n}
           disabled={fieldDisabled}
+          formValues={values}
           {...(userName !== undefined ? { userName } : {})}
           {...(userColor !== undefined ? { userColor } : {})}
           {...(wsPath !== undefined ? { wsPath } : {})}
