@@ -136,10 +136,32 @@ export function LexicalEditor({
     editable: !disabled,
     ...(collabReady
       ? { editorState: null }
-      : (value && typeof value === 'object' && 'root' in (value as Record<string, unknown>))
-        ? { editorState: JSON.stringify(value) }
-        : {}),
-    onError: (error: Error) => console.error('[LexicalEditor]', error),
+      : (() => {
+          try {
+            if (!value) return {}
+            // Handle both string and object values
+            let parsed: Record<string, unknown>
+            if (typeof value === 'string') {
+              parsed = JSON.parse(value)
+            } else if (typeof value === 'object') {
+              parsed = value as Record<string, unknown>
+            } else {
+              return {}
+            }
+            if (!('root' in parsed)) return {}
+            const root = parsed.root as { children?: unknown[] } | undefined
+            if (!root?.children?.length) return {} // empty root — let Lexical create default
+            return { editorState: JSON.stringify(parsed) }
+          } catch {
+            return {} // invalid value — let Lexical create default empty state
+          }
+        })()),
+    onError: (error: Error) => {
+      // Suppress "editor state is empty" errors during initialization —
+      // can happen when restoring versions with empty richcontent fields
+      if (String(error.message).includes('editor state is empty')) return
+      console.error('[LexicalEditor]', error)
+    },
   }), [fragmentName, disabled, collabReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show loading state while waiting for Y.Doc + WS setup (same pattern as CollaborativePlainText)
