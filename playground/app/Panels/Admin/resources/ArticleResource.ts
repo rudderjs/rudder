@@ -262,9 +262,7 @@ export class ArticleResource extends Resource {
           ToggleField.make('featured')
             .label('Featured')
             .onLabel('Featured')
-            .offLabel('Not featured')
-            .inlineEditable()
-            .collaborative(),
+            .offLabel('Not featured'),
 
           DateField.make('publishedAt')
             .label('Publish Date'),
