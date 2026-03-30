@@ -22,15 +22,7 @@ import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
 import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
 import type { BlockMeta } from '@boostkit/panels'
-
-// Minimal structural interface for a Yjs WebSocket provider.
-// y-websocket's own TypeScript types are incomplete (missing .once, .destroy),
-// so we define what we actually use rather than importing the class type directly.
-interface YjsProvider {
-  awareness: { setLocalStateField(field: string, state: Record<string, unknown>): void }
-  once(event: string, callback: () => void): void
-  destroy(): void
-}
+import { useYjsCollab } from './hooks/useYjsCollab.js'
 
 export interface Props {
   value:         unknown       // Lexical JSON state or null
@@ -85,68 +77,13 @@ export function LexicalEditor({
   wsPath, docName, fragmentName = 'richcontent',
   blocks, userName, userColor,
 }: Props) {
-  const isCollab = !!(wsPath && docName)
   const anchorRef = useRef<HTMLDivElement>(null)
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
 
-  // ── Per-editor collaborative state ─────────────────────────
-  // Each LexicalEditor instance creates its own Y.Doc + WebSocket connection
-  // because Lexical's createBinding hardcodes doc.get('root', XmlText) —
-  // multiple editors sharing one Y.Doc would bind to the same fragment.
-  const [collabReady, setCollabReady] = useState(false)
-  const [providerSynced, setProviderSynced] = useState(false)
-  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider; Y: typeof import('yjs') } | null>(null)
-
-  useEffect(() => {
-    if (!isCollab) return
-    let destroyed = false
-
-    Promise.all([import('yjs'), import('y-websocket')]).then(([Y, ws]) => {
-      if (destroyed) return
-
-      const doc = new Y.Doc()
-      const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const wsUrl    = `${wsProto}://${window.location.host}${wsPath}`
-      const roomName = `${docName}:${fragmentName}`
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
-      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
-      provider.awareness.setLocalStateField('user', {
-        name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
-        color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
-      })
-
-      // Mark synced after initial server handshake completes
-      provider.once('synced', () => {
-        if (!destroyed) setProviderSynced(true)
-      })
-
-      collabRef.current = { doc, provider, Y }
-      setCollabReady(true)
-    })
-
-    return () => {
-      destroyed = true
-      collabRef.current?.provider?.destroy()
-      collabRef.current?.doc?.destroy()
-      collabRef.current = null
-      setCollabReady(false)
-      setProviderSynced(false)
-    }
-  }, [wsPath, docName, fragmentName]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Memoize provider factory — must be stable across renders so
-  // CollaborationPlugin doesn't disconnect/reconnect on every re-render.
-  const providerFactory = useMemo(() => {
-    if (!collabReady || !collabRef.current) return undefined
-    const { doc, provider } = collabRef.current
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical's ProviderFactory signature uses Map<string, any> internally
-    return (_id: string, yjsDocMap: Map<string, any>) => {
-      yjsDocMap.set(_id, doc)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast to satisfy Lexical's Provider type which requires awareness/connect/disconnect/on/off
-      return provider as unknown as any
-    }
-  }, [collabReady])
+  // ── Collaborative state (shared hook) ──
+  const { collabReady, providerSynced, collabRef, isCollab, providerFactory } = useYjsCollab({
+    wsPath, docName, fragmentName, userName, userColor,
+  })
 
   const blockRegistry = useMemo(() => {
     const map = new Map<string, BlockMeta>()

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
@@ -12,6 +12,7 @@ import type { LexicalEditor } from 'lexical'
 import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from '@lexical/list'
 import { $createCodeNode } from '@lexical/code'
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode'
+import { computePosition, flip, shift, offset, size, autoUpdate } from '@floating-ui/dom'
 
 // ── Menu option class ───────────────────────────────────────
 
@@ -19,70 +20,72 @@ class SlashMenuOption extends MenuOption {
   title: string
   icon: string
   description: string
+  group?: string | undefined
   onSelect: (editor: LexicalEditor) => void
 
   constructor(
     title: string,
-    opts: { icon: string; description: string; onSelect: (editor: LexicalEditor) => void },
+    opts: { icon: string; description: string; group?: string; onSelect: (editor: LexicalEditor) => void },
   ) {
     super(title)
     this.title = title
     this.icon = opts.icon
     this.description = opts.description
+    this.group = opts.group
     this.onSelect = opts.onSelect
   }
 }
 
 // ── Default items ───────────────────────────────────────────
 
-function getDefaultOptions(editor: LexicalEditor): SlashMenuOption[] {
+function getDefaultOptions(): SlashMenuOption[] {
   return [
     new SlashMenuOption('Heading 1', {
-      icon: 'H1', description: 'Large heading',
-      onSelect: () => editor.update(() => {
+      icon: 'H1', description: 'Large heading', group: 'Basic',
+      onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createHeadingNode('h1')])
       }),
     }),
     new SlashMenuOption('Heading 2', {
-      icon: 'H2', description: 'Medium heading',
-      onSelect: () => editor.update(() => {
+      icon: 'H2', description: 'Medium heading', group: 'Basic',
+      onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createHeadingNode('h2')])
       }),
     }),
     new SlashMenuOption('Heading 3', {
-      icon: 'H3', description: 'Small heading',
-      onSelect: () => editor.update(() => {
+      icon: 'H3', description: 'Small heading', group: 'Basic',
+      onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createHeadingNode('h3')])
       }),
     }),
     new SlashMenuOption('Bullet List', {
-      icon: '•', description: 'Unordered list',
-      onSelect: () => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined),
+      icon: '•', description: 'Unordered list', group: 'Lists',
+      onSelect: (editor) => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined),
     }),
     new SlashMenuOption('Numbered List', {
-      icon: '1.', description: 'Ordered list',
-      onSelect: () => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined),
+      icon: '1.', description: 'Ordered list', group: 'Lists',
+      onSelect: (editor) => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined),
     }),
     new SlashMenuOption('Quote', {
-      icon: '"', description: 'Block quote',
-      onSelect: () => editor.update(() => {
+      icon: '"', description: 'Block quote', group: 'Basic',
+      onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createQuoteNode()])
       }),
     }),
     new SlashMenuOption('Code Block', {
-      icon: '</>', description: 'Code snippet',
-      onSelect: () => editor.update(() => {
+      icon: '</>', description: 'Code snippet', group: 'Basic',
+      onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createCodeNode()])
       }),
     }),
     new SlashMenuOption('Divider', {
-      icon: '—', description: 'Horizontal rule',
-      onSelect: () => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined),
+      icon: '—', description: 'Horizontal rule', group: 'Basic',
+      onSelect: (editor) => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined),
     }),
   ]
 }
@@ -97,18 +100,22 @@ interface Props {
 export function SlashCommandPlugin({ extraItems }: Props) {
   const [editor] = useLexicalComposerContext()
   const [queryString, setQueryString] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const checkForTriggerMatch = useBasicTypeaheadTriggerMatch('/', {
     minLength: 0,
   })
 
   const options = useMemo(() => {
-    const all = [...getDefaultOptions(editor), ...(extraItems ?? [])]
+    const all = [...getDefaultOptions(), ...(extraItems ?? [])]
     if (!queryString) return all
+    const q = queryString.toLowerCase()
     return all.filter(opt =>
-      opt.title.toLowerCase().includes(queryString.toLowerCase()),
+      opt.title.toLowerCase().includes(q) ||
+      opt.description.toLowerCase().includes(q) ||
+      (opt.group?.toLowerCase().includes(q))
     )
-  }, [editor, queryString, extraItems])
+  }, [queryString, extraItems])
 
   const onSelectOption = useCallback(
     (option: SlashMenuOption, textNodeContainingQuery: { remove(): void } | null, closeMenu: () => void) => {
@@ -121,6 +128,45 @@ export function SlashCommandPlugin({ extraItems }: Props) {
     [editor],
   )
 
+  // Auto-position the menu with scroll/resize tracking
+  const cleanupRef = useRef<(() => void) | null>(null)
+
+  const startAutoPosition = useCallback((anchorEl: HTMLElement) => {
+    // Clean up previous auto-update
+    cleanupRef.current?.()
+
+    const menu = menuRef.current
+    if (!menu) return
+
+    const updatePosition = () => {
+      computePosition(anchorEl, menu, {
+        placement: 'bottom-start',
+        strategy: 'fixed',
+        middleware: [
+          offset(0),
+          shift({ padding: 8 }),
+          size({
+            padding: 8,
+            apply({ availableHeight }) {
+              if (menu) {
+                menu.style.maxHeight = `${Math.min(300, Math.max(120, availableHeight))}px`
+              }
+            },
+          }),
+        ],
+      }).then(({ x, y }) => {
+        menu.style.left = `${x}px`
+        menu.style.top = `${y}px`
+      })
+    }
+
+    // autoUpdate tracks scroll, resize, and ancestor layout changes
+    cleanupRef.current = autoUpdate(anchorEl, menu, updatePosition)
+  }, [])
+
+  // Clean up auto-update on unmount
+  useEffect(() => () => { cleanupRef.current?.() }, [])
+
   return (
     <LexicalTypeaheadMenuPlugin<SlashMenuOption>
       onQueryChange={setQueryString}
@@ -128,9 +174,22 @@ export function SlashCommandPlugin({ extraItems }: Props) {
       triggerFn={checkForTriggerMatch}
       options={options}
       menuRenderFn={(anchorElementRef, { selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }) => {
-        if (!anchorElementRef.current || options.length === 0) return null
+        if (!anchorElementRef.current || options.length === 0) {
+          cleanupRef.current?.()
+          return null
+        }
+
+        // Schedule auto-positioning after portal renders
+        requestAnimationFrame(() => {
+          if (anchorElementRef.current) startAutoPosition(anchorElementRef.current)
+        })
+
         return createPortal(
-          <div className="z-50 bg-popover border border-border rounded-lg shadow-lg overflow-y-auto max-h-[300px] w-[280px] p-1">
+          <div
+            ref={menuRef}
+            className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg overflow-y-auto w-[280px] p-1"
+            style={{ maxHeight: '300px' }}
+          >
             {options.map((option, i) => (
               <button
                 key={option.key}
@@ -153,7 +212,7 @@ export function SlashCommandPlugin({ extraItems }: Props) {
               </button>
             ))}
           </div>,
-          anchorElementRef.current,
+          document.body,
         )
       }}
     />

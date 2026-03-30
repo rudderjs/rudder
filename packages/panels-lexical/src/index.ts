@@ -8,6 +8,9 @@ export { BlockRegistryContext, BlockNodeComponent } from './lexical/BlockNodeCom
 export { SlashCommandPlugin, SlashMenuOption } from './lexical/SlashCommandPlugin.js'
 export { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
 
+export { useYjsCollab } from './hooks/useYjsCollab.js'
+export type { UseYjsCollabOptions, UseYjsCollabReturn, YjsProvider, YjsCollabRef } from './hooks/useYjsCollab.js'
+
 export { RichContentField } from './RichContentField.js'
 export { registerLexical } from './register.js'
 export { PanelLexicalServiceProvider, panelsLexical } from './PanelLexicalServiceProvider.js'

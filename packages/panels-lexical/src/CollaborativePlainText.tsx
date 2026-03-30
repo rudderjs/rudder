@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useEffect } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
@@ -7,12 +7,7 @@ import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin'
 import { LexicalCollaboration } from '@lexical/react/LexicalCollaborationContext'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { $getRoot, $createParagraphNode, $createTextNode, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH } from 'lexical'
-
-interface YjsProvider {
-  awareness: { setLocalStateField(field: string, state: Record<string, unknown>): void }
-  once(event: string, callback: () => void): void
-  destroy(): void
-}
+import { useYjsCollab } from './hooks/useYjsCollab.js'
 
 interface Props {
   value:       string
@@ -47,60 +42,12 @@ export function CollaborativePlainText({
   className, multiline = false,
 }: Props) {
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
-
-  // ── Per-field collaborative state ─────────────────────────
-  const [collabReady, setCollabReady] = useState(false)
-  const [providerSynced, setProviderSynced] = useState(false)
-  const collabRef = useRef<{ doc: import('yjs').Doc; provider: YjsProvider; Y: typeof import('yjs') } | null>(null)
-
   const fragmentName = `text:${fieldName}`
 
-  useEffect(() => {
-    let destroyed = false
-
-    Promise.all([import('yjs'), import('y-websocket')]).then(([Y, ws]) => {
-      if (destroyed) return
-
-      const doc = new Y.Doc()
-      const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const wsUrl    = `${wsProto}://${window.location.host}${wsPath}`
-      const roomName = `${docName}:${fragmentName}`
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop: TypeScript resolves it as { default } but runtime exposes WebsocketProvider directly
-      const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
-      provider.awareness.setLocalStateField('user', {
-        name:  userName  ?? `User-${Math.floor(Math.random() * 1000)}`,
-        color: userColor ?? `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`,
-      })
-
-      provider.once('synced', () => {
-        if (!destroyed) setProviderSynced(true)
-      })
-
-      collabRef.current = { doc, provider, Y }
-      setCollabReady(true)
-    })
-
-    return () => {
-      destroyed = true
-      collabRef.current?.provider?.destroy()
-      collabRef.current?.doc?.destroy()
-      collabRef.current = null
-      setCollabReady(false)
-      setProviderSynced(false)
-    }
-  }, [wsPath, docName, fragmentName]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const providerFactory = useMemo(() => {
-    if (!collabReady || !collabRef.current) return undefined
-    const { doc, provider } = collabRef.current
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical's ProviderFactory signature uses Map<string, any> internally
-    return (_id: string, yjsDocMap: Map<string, any>) => {
-      yjsDocMap.set(_id, doc)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast to satisfy Lexical's Provider type
-      return provider as unknown as any
-    }
-  }, [collabReady])
+  // ── Collaborative state (shared hook) ──
+  const { collabReady, providerSynced, collabRef, providerFactory } = useYjsCollab({
+    wsPath, docName, fragmentName, userName, userColor,
+  })
 
   const initialConfig = useMemo(() => ({
     namespace: fragmentName,
