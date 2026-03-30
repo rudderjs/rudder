@@ -375,8 +375,8 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       else if (draftableEnabled && publishAction === 'unpublish') toast.success((i18n as Record<string, string>).unpublishedToast ?? 'Unpublished.')
       else toast.success((i18n as Record<string, string>).savedToast ?? 'Saved.')
 
-      // Destroy local Yjs providers before clearing server rooms — prevents y-websocket
-      // from auto-reconnecting and re-pushing stale data to freshly cleared rooms.
+      // After save: clear all Yjs persistence (WebSocket rooms + IndexedDB) to prevent
+      // stale data from overwriting fresh DB values on next page load.
       if (formYjs.yjs && resourceSlug && recordId) {
         if (isRestorePreview && collabRef.current?.fieldsMap) {
           const doc = collabRef.current
@@ -384,8 +384,20 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
             for (const [k, v] of Object.entries(values)) doc.fieldsMap.set(k, v)
           })
         }
-        // Destroy the form-level Yjs provider
+        // Destroy the form-level Yjs providers (WebSocket + IndexedDB)
         collabRef.current?.provider?.destroy()
+        collabRef.current?.idb?.destroy()
+        // Clear IndexedDB persistence for this document
+        if (formYjs.docName) {
+          try {
+            const { clearDocument } = await import('y-indexeddb')
+            await clearDocument(formYjs.docName)
+          } catch { /* y-indexeddb may not export clearDocument — fall back to deleting the DB */
+            try {
+              indexedDB.deleteDatabase(formYjs.docName)
+            } catch { /* ignore */ }
+          }
+        }
         // Clear server Y.Doc rooms
         await fetch(`/${pathSegment}/api/${resourceSlug}/${recordId}/_sync-live`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       }
