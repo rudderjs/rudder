@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './fields/types.js'
 import { BooleanInput } from './fields/BooleanInput.js'
@@ -23,13 +24,7 @@ export type { FieldInputProps } from './fields/types.js'
 export function FieldInput(props: FieldInputProps) {
   const { field } = props
 
-  // Check registry first — custom fields and plugin-registered fields take priority
-  const customKey = field.component ?? field.type
-  const Custom = getField(customKey)
-  if (Custom) {
-    return <Custom {...props} />
-  }
-
+  // Built-in field types — always rendered consistently on SSR and client
   switch (field.type) {
     case 'boolean':       return <BooleanInput {...props} />
     case 'select':        return <SelectInput {...props} />
@@ -48,6 +43,39 @@ export function FieldInput(props: FieldInputProps) {
     case 'belongsTo':     return <BelongsToInput {...props} />
     case 'belongsToMany': return <BelongsToManyInput {...props} />
     case 'richcontent':   return <RichContentInput {...props} />
-    default:              return <TextInput {...props} />
+    case 'text':
+    case 'email':
+    case 'number':
+    case 'date':
+    case 'datetime':      return <TextInput {...props} />
   }
+
+  // Unknown type — plugin field that registers async (e.g. mediaPicker).
+  // Resolve on client only to avoid SSR/client hydration mismatch.
+  return <PluginFieldInput {...props} />
+}
+
+/** Resolves a plugin-registered field component on client mount. */
+function PluginFieldInput(props: FieldInputProps) {
+  const customKey = props.field.component ?? props.field.type
+  const [Comp, setComp] = useState<React.ComponentType<FieldInputProps> | null>(null)
+
+  useEffect(() => {
+    const existing = getField(customKey)
+    if (existing) { setComp(() => existing as React.ComponentType<FieldInputProps>); return }
+
+    const interval = setInterval(() => {
+      const comp = getField(customKey)
+      if (comp) {
+        setComp(() => comp as React.ComponentType<FieldInputProps>)
+        clearInterval(interval)
+      }
+    }, 50)
+    return () => clearInterval(interval)
+  }, [customKey])
+
+  if (Comp) return <Comp {...props} />
+
+  // Loading placeholder — rendered on both SSR and client initial render
+  return <TextInput {...props} />
 }
