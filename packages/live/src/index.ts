@@ -113,7 +113,14 @@ export function livePrisma(config: PrismaPersistenceConfig = {}): LivePersistenc
 
   async function getClient(): Promise<PrismaLikeClient> {
     if (cachedClient) return cachedClient
-    const { PrismaClient } = await import('@prisma/client') as typeof import('@prisma/client')
+    // Try to resolve PrismaClient from DI container first (already configured)
+    try {
+      const core = await import(/* @vite-ignore */ '@boostkit/core') as { app(): { make(k: string): unknown } }
+      const prisma = core.app().make('prisma') as PrismaLikeClient
+      if (prisma) { cachedClient = prisma; return cachedClient }
+    } catch { /* DI not available — fall back to direct instantiation */ }
+    // Fall back to creating a new PrismaClient
+    const { PrismaClient } = await import(/* @vite-ignore */ '@prisma/client') as { PrismaClient: new () => unknown }
     cachedClient = new PrismaClient() as unknown as PrismaLikeClient
     return cachedClient
   }
