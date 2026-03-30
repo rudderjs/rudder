@@ -30,7 +30,8 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "node --import tsx --test src/__tests__/*.test.ts"
   },
   "dependencies": {},
   "peerDependencies": {

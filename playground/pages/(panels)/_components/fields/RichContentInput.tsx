@@ -35,6 +35,8 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
         docName={field.yjs ? (docName ?? null) : null}
         fragmentName={`richcontent:${field.name}`}
         {...(Array.isArray(field.extra?.['blocks']) ? { blocks: field.extra['blocks'] as unknown[] } : {})}
+        {...(field.extra?.['toolbar'] !== undefined ? { toolbar: field.extra['toolbar'] } : {})}
+        {...(field.extra?.['slashCommand'] !== undefined ? { slashCommand: field.extra['slashCommand'] } : {})}
         {...(userName !== undefined ? { userName } : {})}
         {...(userColor !== undefined ? { userColor } : {})}
       />

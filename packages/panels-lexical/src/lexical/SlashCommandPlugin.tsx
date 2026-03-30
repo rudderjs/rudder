@@ -21,17 +21,20 @@ class SlashMenuOption extends MenuOption {
   icon: string
   description: string
   group?: string | undefined
+  /** Toolbar tool name this option corresponds to (for filtering). */
+  tool?: string | undefined
   onSelect: (editor: LexicalEditor) => void
 
   constructor(
     title: string,
-    opts: { icon: string; description: string; group?: string; onSelect: (editor: LexicalEditor) => void },
+    opts: { icon: string; description: string; group?: string; tool?: string; onSelect: (editor: LexicalEditor) => void },
   ) {
     super(title)
     this.title = title
     this.icon = opts.icon
     this.description = opts.description
     this.group = opts.group
+    this.tool = opts.tool
     this.onSelect = opts.onSelect
   }
 }
@@ -41,50 +44,50 @@ class SlashMenuOption extends MenuOption {
 function getDefaultOptions(): SlashMenuOption[] {
   return [
     new SlashMenuOption('Heading 1', {
-      icon: 'H1', description: 'Large heading', group: 'Basic',
+      icon: 'H1', description: 'Large heading', group: 'Basic', tool: 'heading',
       onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createHeadingNode('h1')])
       }),
     }),
     new SlashMenuOption('Heading 2', {
-      icon: 'H2', description: 'Medium heading', group: 'Basic',
+      icon: 'H2', description: 'Medium heading', group: 'Basic', tool: 'heading',
       onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createHeadingNode('h2')])
       }),
     }),
     new SlashMenuOption('Heading 3', {
-      icon: 'H3', description: 'Small heading', group: 'Basic',
+      icon: 'H3', description: 'Small heading', group: 'Basic', tool: 'heading',
       onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createHeadingNode('h3')])
       }),
     }),
     new SlashMenuOption('Bullet List', {
-      icon: '•', description: 'Unordered list', group: 'Lists',
+      icon: '•', description: 'Unordered list', group: 'Lists', tool: 'bulletList',
       onSelect: (editor) => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined),
     }),
     new SlashMenuOption('Numbered List', {
-      icon: '1.', description: 'Ordered list', group: 'Lists',
+      icon: '1.', description: 'Ordered list', group: 'Lists', tool: 'orderedList',
       onSelect: (editor) => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined),
     }),
     new SlashMenuOption('Quote', {
-      icon: '"', description: 'Block quote', group: 'Basic',
+      icon: '"', description: 'Block quote', group: 'Basic', tool: 'blockquote',
       onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createQuoteNode()])
       }),
     }),
     new SlashMenuOption('Code Block', {
-      icon: '</>', description: 'Code snippet', group: 'Basic',
+      icon: '</>', description: 'Code snippet', group: 'Basic', tool: 'codeBlock',
       onSelect: (editor) => editor.update(() => {
         const sel = $getSelection()
         if ($isRangeSelection(sel)) sel.insertNodes([$createCodeNode()])
       }),
     }),
     new SlashMenuOption('Divider', {
-      icon: '—', description: 'Horizontal rule', group: 'Basic',
+      icon: '—', description: 'Horizontal rule', group: 'Basic', tool: 'divider',
       onSelect: (editor) => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined),
     }),
   ]
@@ -95,9 +98,11 @@ function getDefaultOptions(): SlashMenuOption[] {
 interface Props {
   /** Additional slash menu items (e.g. custom blocks) */
   extraItems?: SlashMenuOption[] | undefined
+  /** Filter default items to only these tools. undefined = show all. */
+  toolFilter?: string[] | undefined
 }
 
-export function SlashCommandPlugin({ extraItems }: Props) {
+export function SlashCommandPlugin({ extraItems, toolFilter }: Props) {
   const [editor] = useLexicalComposerContext()
   const [queryString, setQueryString] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -107,7 +112,12 @@ export function SlashCommandPlugin({ extraItems }: Props) {
   })
 
   const options = useMemo(() => {
-    const all = [...getDefaultOptions(), ...(extraItems ?? [])]
+    // Filter default options by toolbar tools (extraItems like blocks always pass through)
+    let defaults = getDefaultOptions()
+    if (toolFilter) {
+      defaults = defaults.filter(opt => !opt.tool || toolFilter.includes(opt.tool))
+    }
+    const all = [...defaults, ...(extraItems ?? [])]
     if (!queryString) return all
     const q = queryString.toLowerCase()
     return all.filter(opt =>
@@ -115,7 +125,7 @@ export function SlashCommandPlugin({ extraItems }: Props) {
       opt.description.toLowerCase().includes(q) ||
       (opt.group?.toLowerCase().includes(q))
     )
-  }, [queryString, extraItems])
+  }, [queryString, extraItems, toolFilter])
 
   const onSelectOption = useCallback(
     (option: SlashMenuOption, textNodeContainingQuery: { remove(): void } | null, closeMenu: () => void) => {

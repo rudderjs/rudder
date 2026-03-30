@@ -16,6 +16,8 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { useEffect } from 'react'
 import { SlashCommandPlugin } from './lexical/SlashCommandPlugin.js'
 import { FloatingToolbarPlugin } from './lexical/FloatingToolbarPlugin.js'
+import { FixedToolbarPlugin } from './lexical/FixedToolbarPlugin.js'
+import { resolveToolbar, type ToolbarProfile, type ToolbarTool, type ToolbarConfig } from './toolbar.js'
 import { DraggableBlockPlugin_EXPERIMENTAL } from '@lexical/react/LexicalDraggableBlockPlugin'
 import { $getRoot, $getSelection, $isRangeSelection, $parseSerializedNode, type LexicalEditor as LexicalEditorType, type SerializedLexicalNode } from 'lexical'
 import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
@@ -35,6 +37,10 @@ export interface Props {
   docName?:      string | null
   fragmentName?: string
   blocks?:       BlockMeta[]
+  /** Toolbar profile or explicit tool list. Default: 'default' (floating). */
+  toolbar?:      ToolbarProfile | ToolbarTool[]
+  /** Slash command: false to disable, or explicit tool list to filter. Default: follows toolbar. */
+  slashCommand?: boolean | ToolbarTool[]
   /** Stable user identity — passed to CollaborationPlugin so Lexical cursors match input/textarea cursors. */
   userName?:     string
   userColor?:    string
@@ -75,10 +81,16 @@ const THEME = {
 export function LexicalEditor({
   value, onChange, placeholder, disabled,
   wsPath, docName, fragmentName = 'richcontent',
-  blocks, userName, userColor,
+  blocks, toolbar: toolbarInput, slashCommand,
+  userName, userColor,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
+
+  // ── Toolbar config ──
+  const toolbarConfig = useMemo(() => resolveToolbar(toolbarInput), [toolbarInput])
+  const showSlashCommand = slashCommand !== false
+  const slashToolFilter = Array.isArray(slashCommand) ? slashCommand : (slashCommand === false ? [] : undefined)
 
   // ── Collaborative state (shared hook) ──
   const { collabReady, providerSynced, collabRef, isCollab, providerFactory } = useYjsCollab({
@@ -139,6 +151,10 @@ export function LexicalEditor({
   const editorContent = (
     <LexicalComposer initialConfig={initialConfig}>
       <div className="lexical-editor rounded-lg border border-input bg-background relative">
+        {/* Fixed toolbar — pinned above editor content */}
+        {toolbarConfig.fixed && toolbarConfig.tools.length > 0 && (
+          <FixedToolbarPlugin config={toolbarConfig} />
+        )}
         <div ref={anchorRef} className="relative">
         <div ref={cursorsContainerRef} className="cursors-container" />
         <RichTextPlugin
@@ -149,14 +165,22 @@ export function LexicalEditor({
           }
           placeholder={
             <div className="absolute top-3 left-3 text-muted-foreground/50 pointer-events-none text-sm">
-              {placeholder ?? 'Type "/" for commands…'}
+              {placeholder ?? (showSlashCommand ? 'Type "/" for commands…' : 'Start writing…')}
             </div>
           }
           ErrorBoundary={LexicalErrorBoundary}
         />
         <ListPlugin />
-        <SlashCommandPlugin extraItems={blockSlashItems} />
-        <FloatingToolbarPlugin />
+        {showSlashCommand && (
+          <SlashCommandPlugin
+            extraItems={blockSlashItems}
+            toolFilter={slashToolFilter ?? toolbarConfig.tools}
+          />
+        )}
+        {/* Floating toolbar — only when not using fixed toolbar and profile has tools */}
+        {!toolbarConfig.fixed && toolbarConfig.tools.length > 0 && (
+          <FloatingToolbarPlugin config={toolbarConfig} />
+        )}
 
         {collabActive ? (
           <CollaborationPlugin

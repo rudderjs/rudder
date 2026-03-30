@@ -9,8 +9,14 @@ import {
 import { $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
 import { computePosition, flip, offset, shift, autoUpdate } from '@floating-ui/dom'
 import { mergeRegister } from '@lexical/utils'
+import type { ToolbarConfig } from '../toolbar.js'
+import { hasTool } from '../toolbar.js'
 
-export function FloatingToolbarPlugin() {
+interface FloatingToolbarProps {
+  config?: ToolbarConfig | undefined
+}
+
+export function FloatingToolbarPlugin({ config }: FloatingToolbarProps = {}) {
   const [editor] = useLexicalComposerContext()
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
@@ -113,29 +119,75 @@ export function FloatingToolbarPlugin() {
     )
   }, [editor, updateToolbar])
 
-  const insertLink = useCallback(() => {
+  const [linkMode, setLinkMode] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const linkInputRef = useRef<HTMLInputElement>(null)
+
+  const toggleLink = useCallback(() => {
     if (isLink) {
       editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
+      setLinkMode(false)
     } else {
-      const url = prompt('URL:')
-      if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, url)
+      setLinkMode(true)
+      setLinkUrl('')
+      requestAnimationFrame(() => linkInputRef.current?.focus())
     }
   }, [editor, isLink])
 
+  const submitLink = useCallback(() => {
+    if (linkUrl.trim()) {
+      const url = linkUrl.trim().startsWith('http') ? linkUrl.trim() : `https://${linkUrl.trim()}`
+      editor.dispatchCommand(TOGGLE_LINK_COMMAND, url)
+    }
+    setLinkMode(false)
+    setLinkUrl('')
+  }, [editor, linkUrl])
+
   if (!isVisible) return null
+
+  const has = (tool: string) => !config || hasTool(config, tool as import('../toolbar.js').ToolbarTool)
+
+  const formatBtns = [
+    has('bold') && <ToolbarBtn key="b" active={isBold} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} label="B" title="Bold" className="font-bold" />,
+    has('italic') && <ToolbarBtn key="i" active={isItalic} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} label="I" title="Italic" className="italic" />,
+    has('underline') && <ToolbarBtn key="u" active={isUnderline} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} label="U" title="Underline" className="underline" />,
+    has('strikethrough') && <ToolbarBtn key="s" active={isStrikethrough} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')} label="S" title="Strikethrough" className="line-through" />,
+  ].filter(Boolean)
+
+  const extraBtns = [
+    has('code') && <ToolbarBtn key="code" active={isCode} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')} label="<>" title="Code" className="font-mono text-xs" />,
+    has('link') && <ToolbarBtn key="link" active={isLink || linkMode} onClick={toggleLink} label="🔗" title="Link" />,
+  ].filter(Boolean)
 
   return createPortal(
     <div
       ref={toolbarRef}
       className="fixed z-50 flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-lg p-1"
     >
-      <ToolbarBtn active={isBold} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} label="B" title="Bold" className="font-bold" />
-      <ToolbarBtn active={isItalic} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} label="I" title="Italic" className="italic" />
-      <ToolbarBtn active={isUnderline} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} label="U" title="Underline" className="underline" />
-      <ToolbarBtn active={isStrikethrough} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')} label="S" title="Strikethrough" className="line-through" />
-      <div className="w-px h-5 bg-border mx-0.5" />
-      <ToolbarBtn active={isCode} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')} label="<>" title="Code" className="font-mono text-xs" />
-      <ToolbarBtn active={isLink} onClick={insertLink} label="link" title="Link" />
+      {linkMode ? (
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(e) => { e.preventDefault(); submitLink() }}
+        >
+          <input
+            ref={linkInputRef}
+            type="text"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder="Paste URL…"
+            className="h-6 w-40 rounded border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+            onKeyDown={(e) => { if (e.key === 'Escape') { setLinkMode(false); setLinkUrl('') } }}
+          />
+          <button type="submit" className="px-1.5 py-0.5 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90">↵</button>
+          <button type="button" onClick={() => { setLinkMode(false); setLinkUrl('') }} className="px-1 py-0.5 rounded text-xs text-muted-foreground hover:bg-accent/50">✕</button>
+        </form>
+      ) : (
+        <>
+          {formatBtns}
+          {formatBtns.length > 0 && extraBtns.length > 0 && <div className="w-px h-5 bg-border mx-0.5" />}
+          {extraBtns}
+        </>
+      )}
     </div>,
     document.body,
   )
