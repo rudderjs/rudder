@@ -7,7 +7,7 @@ import {
   COMMAND_PRIORITY_LOW,
 } from 'lexical'
 import { $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
-import { computePosition, flip, offset, shift } from '@floating-ui/dom'
+import { computePosition, flip, offset, shift, autoUpdate } from '@floating-ui/dom'
 import { mergeRegister } from '@lexical/utils'
 
 export function FloatingToolbarPlugin() {
@@ -20,6 +20,8 @@ export function FloatingToolbarPlugin() {
   const [isStrikethrough, setIsStrikethrough] = useState(false)
   const [isCode, setIsCode] = useState(false)
   const [isLink, setIsLink] = useState(false)
+
+  const cleanupRef = useRef<(() => void) | null>(null)
 
   const positionToolbar = useCallback(() => {
     const nativeSelection = window.getSelection()
@@ -64,31 +66,37 @@ export function FloatingToolbarPlugin() {
     requestAnimationFrame(() => positionToolbar())
   }, [positionToolbar])
 
-  // Reposition toolbar on scroll so it follows the selection
+  // Close toolbar on click outside
   useEffect(() => {
     if (!isVisible) return
-
-    // Find the scrollable ancestor (the panel's scroll container)
-    const rootEl = editor.getRootElement()
-    if (!rootEl) return
-
-    let scrollParent: HTMLElement | Window = window
-    let el: HTMLElement | null = rootEl.parentElement
-    while (el) {
-      const { overflow, overflowY } = getComputedStyle(el)
-      if (overflow === 'auto' || overflow === 'scroll' || overflowY === 'auto' || overflowY === 'scroll') {
-        scrollParent = el
-        break
+    const handleMouseDown = (e: MouseEvent) => {
+      const toolbar = toolbarRef.current
+      if (toolbar && !toolbar.contains(e.target as Node)) {
+        setIsVisible(false)
       }
-      el = el.parentElement
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [isVisible])
+
+  // Auto-track scroll/resize to keep toolbar positioned
+  useEffect(() => {
+    if (!isVisible) {
+      cleanupRef.current?.()
+      cleanupRef.current = null
+      return
     }
 
-    const onScroll = () => requestAnimationFrame(() => positionToolbar())
-    scrollParent.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll, { passive: true })
+    const toolbar = toolbarRef.current
+    const rootEl = editor.getRootElement()
+    if (!toolbar || !rootEl) return
+
+    // Use the editor root as the reference for autoUpdate's scroll ancestor detection
+    cleanupRef.current = autoUpdate(rootEl, toolbar, positionToolbar)
+
     return () => {
-      scrollParent.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onScroll)
+      cleanupRef.current?.()
+      cleanupRef.current = null
     }
   }, [isVisible, editor, positionToolbar])
 
