@@ -114,7 +114,9 @@ boostkit/
 │   │                   #   rememberTable, autosave, Yjs field persist, inline editing (Column.editable())
 │   │                   #   + Dashboard builder: Widget.schema(), Dashboard, drag-and-drop, per-user layout, lazy/polling
 │   │                   #   + Panel.use() plugin system — PanelPlugin with schemas/pages/register/boot hooks
-│   ├── panels-lexical/ # Lexical rich-text editor adapter — RichContentField, CollaborativePlainText, block editor
+│   ├── panels-lexical/ # Lexical rich-text editor adapter — RichContentField, CollaborativePlainText, block editor,
+│   │                   #   toolbar profiles (document/default/simple/minimal/none), slash commands, floating link editor,
+│   │                   #   useYjsCollab hook (WebSocket + IndexedDB providers), imperative editor refs for version restore
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
 │   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
@@ -381,6 +383,32 @@ There is **no `boostkit.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **`panels-lexical` cycle**: `@boostkit/panels` must NOT depend on `@boostkit/panels-lexical`. The `+Layout.tsx` registers it client-side via `if (typeof window !== 'undefined') import('@boostkit/panels-lexical').then(...)`. `RichContentField` lives in `@boostkit/panels-lexical`, not `@boostkit/panels`.
 - **Plugin element registration**: Plugin schema elements use `registerLazyElement` (SSR-safe via `React.lazy`). Plugin SSR resolvers use `registerResolver` (via `PanelPlugin.resolvers`). Plugins publish `_register-{name}.ts` files auto-discovered by `+Layout.tsx` via `import.meta.glob('../_register-*.ts', { eager: true })`.
 - **Media plugin pattern**: `@boostkit/media` uses `PanelPlugin.resolvers` for SSR data + `_register-media.ts` for client component. Zero media-specific code in panels.
+
+### Collaborative Editing Architecture
+
+Each collaborative field gets its own Y.Doc + WebSocket room. The form has a separate Y.Map for simple fields.
+
+**Three persistence layers** (all work together):
+- **WebSocket** — real-time sync between users (server memory, lost on restart)
+- **IndexedDB** — browser-local persistence (survives refresh + server restart)
+- **livePrisma/liveRedis** — server-side persistence (survives everything, cross-device)
+
+**Key implementation rules:**
+- IndexedDB provider must be created **before** WebSocket provider (fire-and-forget, no await). IndexedDB is local (~ms) and naturally loads before WebSocket (network latency), ensuring local content isn't overwritten by empty server rooms.
+- Never clear Y.Doc rooms on normal save — rooms already have correct content.
+- SeedPlugin checks **actual root content** (`root.length > 0` or `root.getTextContent()`) not state vector (`sv.length`). State vector can be > 1 from provider metadata alone.
+- SeedPlugin uses a **retry pattern** — CollaborationPlugin may overwrite the first seed, so retry until content sticks (max 5 attempts).
+- Version restore uses **imperative editor refs** (`EditorRefPlugin.setContent()`) — writes to the editor which propagates through CollaborationPlugin binding to Y.Doc and all connected users. Never fight Yjs — use it.
+- Registration keys for editor components use `_lexical:` prefix (`_lexical:richcontent`, `_lexical:collaborativePlainText`) to avoid collision with the `FieldInput` registry shortcut.
+
+**Y.Doc room naming:**
+- Form fields map: `panel:{resource}:{recordId}`
+- Text fields: `panel:{resource}:{recordId}:text:{fieldName}`
+- Rich text fields: `panel:{resource}:{recordId}:richcontent:{fieldName}`
+
+**Config layers:**
+- `config/live.ts` `providers: ['websocket', 'indexeddb']` — controls form-level Y.Map providers
+- `.persist(['websocket', 'indexeddb'])` or `.collaborative()` on a field — marks it as collaborative, enables per-field Y.Doc
 
 ## create-boostkit-app
 
