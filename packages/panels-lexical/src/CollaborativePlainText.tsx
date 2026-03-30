@@ -165,21 +165,28 @@ function SeedPlugin({ value, yjsRef }: { value: string; yjsRef: React.RefObject<
     if (seeded.current || !value) return
     seeded.current = true
 
-    // Check Y.Doc state vector — if > 1, the doc has content from server sync
+    // Check if Y.Doc already has meaningful text content
     const yjs = yjsRef.current
     if (yjs) {
-      const sv = yjs.Y.encodeStateVector(yjs.doc)
-      if (sv.length > 1) return // Y.Doc has content — CollaborationPlugin will render it
+      const root = yjs.doc.get('root', yjs.Y.XmlText)
+      if (root && root.length > 0) return // Y.Doc has content — CollaborationPlugin will render it
     }
 
-    // Y.Doc is empty (fresh room, no prior content) — seed from DB value
-    editor.update(() => {
-      const root = $getRoot()
-      root.clear()
-      const p = $createParagraphNode()
-      p.append($createTextNode(value))
-      root.append(p)
-    })
+    // Y.Doc is empty — seed from DB value, with retry for race with CollaborationPlugin
+    let attempts = 0
+    const doSeed = () => {
+      if (attempts++ > 5) return
+      editor.update(() => {
+        const root = $getRoot()
+        if (root.getTextContent().trim() !== '') return // content exists, stop
+        root.clear()
+        const p = $createParagraphNode()
+        p.append($createTextNode(value))
+        root.append(p)
+      })
+      setTimeout(doSeed, attempts * 200)
+    }
+    doSeed()
   }, [editor, value, yjsRef])
 
   return null
