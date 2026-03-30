@@ -10,12 +10,12 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
   // Always start null to avoid SSR/client hydration mismatch — editor registers async on client
   const [RichEditor, setRichEditor] = useState<ComponentType<Record<string, unknown>> | null>(null)
   useEffect(() => {
-    if (getField('richcontent')) {
-      setRichEditor(() => getField('richcontent')!)
+    if (getField('_lexical:richcontent')) {
+      setRichEditor(() => getField('_lexical:richcontent')!)
       return
     }
     const interval = setInterval(() => {
-      const comp = getField('richcontent')
+      const comp = getField('_lexical:richcontent')
       if (comp) {
         setRichEditor(() => comp)
         clearInterval(interval)

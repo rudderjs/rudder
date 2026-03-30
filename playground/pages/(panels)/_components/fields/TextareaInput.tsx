@@ -11,7 +11,7 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
   useEffect(() => { setMounted(true) }, [])
 
   if (mounted && field.yjs && wsPath && docName) {
-    const CollabText = getField('collaborativePlainText')
+    const CollabText = getField('_lexical:collaborativePlainText')
     if (CollabText) {
       return (
         <CollabText

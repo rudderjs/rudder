@@ -36,7 +36,7 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
   useEffect(() => { setMounted(true) }, [])
 
   if (mounted && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
-    const CollabText = getField('collaborativePlainText')
+    const CollabText = getField('_lexical:collaborativePlainText')
     if (CollabText) {
       return (
         <CollabText

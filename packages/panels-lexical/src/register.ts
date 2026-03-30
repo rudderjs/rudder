@@ -13,6 +13,6 @@ import { CollaborativePlainText } from './CollaborativePlainText.js'
  * ```
  */
 export function registerLexical(): void {
-  registerField('richcontent', LexicalEditor)
-  registerField('collaborativePlainText', CollaborativePlainText)
+  registerField('_lexical:richcontent', LexicalEditor)
+  registerField('_lexical:collaborativePlainText', CollaborativePlainText)
 }
