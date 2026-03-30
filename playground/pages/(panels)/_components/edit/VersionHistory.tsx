@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { PanelI18n, FieldMeta } from '@boostkit/panels'
 
 export interface VersionEntry {
@@ -79,7 +79,7 @@ export function VersionHistory({ pathSegment, slug, id, values, fields, onRestor
   }
 
   // Load on first render
-  if (!loaded && !loading) void loadVersions()
+  useEffect(() => { if (!loaded && !loading) void loadVersions() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute which fields differ between current and selected version
   const diffs = useMemo(() => {
