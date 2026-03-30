@@ -106,6 +106,8 @@ export function useYjsCollab(opts: UseYjsCollabOptions): UseYjsCollabReturn {
 
     return () => {
       destroyed = true
+      // Disconnect before destroy to prevent "WebSocket closed before established" warnings
+      try { (collabRef.current?.provider as any)?.disconnect?.() } catch { /* ignore */ } // eslint-disable-line @typescript-eslint/no-explicit-any
       collabRef.current?.provider?.destroy()
       idbProvider?.destroy()
       collabRef.current?.doc?.destroy()
