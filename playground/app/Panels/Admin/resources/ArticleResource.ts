@@ -109,6 +109,30 @@ export class ArticleResource extends Resource {
             }
           }),
 
+        Action.make('resync')
+          .label('Re-sync Live Data')
+          .confirm('Clear stale collaborative data and re-seed from database for selected articles?')
+          .bulk()
+          .handler(async (records) => {
+            const { Live } = await import('@boostkit/live')
+            for (const record of records as Article[]) {
+              const id = (record as any).id as string
+              const docName = `panel:articles:${id}`
+              // Clear all Y.Doc rooms (main + per-field)
+              await Live.clearDocument(docName)
+              const fieldPrefixes = ['text:title', 'text:excerpt', 'text:slug', 'richcontent:content', 'richcontent:body']
+              for (const prefix of fieldPrefixes) {
+                await Live.clearDocument(`${docName}:${prefix}`)
+              }
+              // Re-seed from saved DB data
+              const saved = await Article.query().find(id)
+              if (saved) {
+                const row = saved as Record<string, unknown>
+                await Live.seed(docName, row)
+              }
+            }
+          }),
+
         Action.make('delete')
           .label('Delete')
           .destructive()
