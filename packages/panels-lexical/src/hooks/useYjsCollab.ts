@@ -69,13 +69,25 @@ export function useYjsCollab(opts: UseYjsCollabOptions): UseYjsCollabReturn {
     if (!isCollab) return
     let destroyed = false
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let idbProvider: any = null
+
     Promise.all([import('yjs'), import('y-websocket')]).then(([Y, ws]) => {
       if (destroyed) return
 
       const doc = new Y.Doc()
+      const roomName = `${docName}:${fragmentName}`
+
+      // Add IndexedDB persistence FIRST (before WebSocket connects).
+      // IndexedDB loads synchronously-ish into the doc. WebSocket is created
+      // with { connect: false } — it won't connect until CollaborationPlugin
+      // calls connect(), by which time IndexedDB content is already in the doc.
+      ;(import('y-indexeddb') as Promise<any>).then(idb => { // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (!destroyed) idbProvider = new idb.IndexeddbPersistence(roomName, doc)
+      }).catch(() => {})
+
       const wsProto  = window.location.protocol === 'https:' ? 'wss' : 'ws'
       const wsUrl    = `${wsProto}://${window.location.host}${wsPath}`
-      const roomName = `${docName}:${fragmentName}`
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- y-websocket CJS interop
       const provider = new (ws as any).WebsocketProvider(wsUrl, roomName, doc, { connect: false }) as YjsProvider
@@ -95,6 +107,7 @@ export function useYjsCollab(opts: UseYjsCollabOptions): UseYjsCollabReturn {
     return () => {
       destroyed = true
       collabRef.current?.provider?.destroy()
+      idbProvider?.destroy()
       collabRef.current?.doc?.destroy()
       collabRef.current = null
       setCollabReady(false)

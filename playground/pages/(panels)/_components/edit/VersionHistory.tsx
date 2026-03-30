@@ -110,8 +110,6 @@ export function VersionHistory({ pathSegment, slug, id, values, fields, onRestor
       toRestore[diff.name] = diff.version
     }
     onRestoreAll(toRestore)
-    const { toast } = window as unknown as { toast?: { success: (msg: string) => void } }
-    // Dynamic import for toast
     import('sonner').then(({ toast }) => toast.success(i18n.allFieldsRestored ?? 'All fields restored.')).catch(() => {})
   }
 

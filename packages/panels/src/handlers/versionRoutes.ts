@@ -186,23 +186,6 @@ export function mountVersionRoutes(
     }
   }, mw)
 
-  // POST /{panel}/api/{resource}/{id}/_clear-room — clear a single Y.Doc room
-  router.post(`${base}/:id/_clear-room`, async (req: AppRequest, res: AppResponse) => {
-    if (!isCollab) return res.json({ message: 'Not collaborative.' })
-    const body = req.body as { room?: string }
-    if (!body.room) return res.status(400).json({ message: 'Missing room name.' })
-    try {
-      const { Live } = await import(/* @vite-ignore */ '@boostkit/live')
-      await Live.clearDocument(body.room)
-      // Clear again after delay to catch y-websocket auto-reconnect
-      setTimeout(async () => {
-        try { await Live.clearDocument(body.room!) } catch { /* ignore */ }
-      }, 500)
-      return res.json({ message: 'Room cleared.' })
-    } catch {
-      return res.json({ message: 'No live provider — skipped.' })
-    }
-  }, mw)
 
   // GET /{panel}/api/{resource}/{id}/_versions/{versionId} — detail
   router.get(`${base}/:id/_versions/:versionId`, async (req: AppRequest, res: AppResponse) => {

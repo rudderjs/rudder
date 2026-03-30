@@ -189,6 +189,12 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
         })
       }
 
+      if (needsIndexeddb) {
+        const { IndexeddbPersistence } = await import('y-indexeddb')
+        if (destroyed) return
+        idbProvider = new IndexeddbPersistence(formYjs.docName!, doc)
+      }
+
       if (needsWebsocket && formYjs.wsLivePath) {
         const { WebsocketProvider } = await import('y-websocket')
         if (destroyed) return
@@ -206,11 +212,8 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
         wsProvider.once('synced', () => { if (!destroyed) seedAfterSync() })
       }
 
-      if (needsIndexeddb) {
-        const { IndexeddbPersistence } = await import('y-indexeddb')
-        if (destroyed) return
-        idbProvider = new IndexeddbPersistence(formYjs.docName!, doc)
-        if (!needsWebsocket) idbProvider.once('synced', () => { if (!destroyed) seedAfterSync() })
+      if (!needsWebsocket && needsIndexeddb) {
+        seedAfterSync()
       }
 
       collabRef.current = { doc, provider: wsProvider, idb: idbProvider, fieldsMap, suppress }
@@ -453,7 +456,6 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
     values,
     initialValues: (form as { initialValues?: Record<string, unknown> }).initialValues ?? {},
     saving,
-    isRestorePreview: false,
     yjs: !!formYjs.yjs,
     syncAllFieldsToDoc: formYjs.yjs && collabRef.current?.fieldsMap ? (vals) => {
       const doc = collabRef.current

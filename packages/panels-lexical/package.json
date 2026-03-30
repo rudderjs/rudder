@@ -47,13 +47,17 @@
     "@lexical/utils": ">=0.20",
     "@floating-ui/dom": ">=1",
     "yjs": ">=13",
-    "y-websocket": ">=2"
+    "y-websocket": ">=2",
+    "y-indexeddb": ">=9"
   },
   "peerDependenciesMeta": {
     "yjs": {
       "optional": true
     },
     "y-websocket": {
+      "optional": true
+    },
+    "y-indexeddb": {
       "optional": true
     }
   },

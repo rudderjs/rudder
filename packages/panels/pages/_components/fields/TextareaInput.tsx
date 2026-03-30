@@ -2,11 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { getField } from '@boostkit/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
-import { getCollabTextRef } from './TextInput.js'
-
-// Re-export for convenience — textarea collab fields use the same registry
-export { getCollabTextRef }
-
 /** Global registry for textarea collab refs */
 const collabTextareaRefs = new Map<string, { current: { setContent(text: string): void } | null }>()
 

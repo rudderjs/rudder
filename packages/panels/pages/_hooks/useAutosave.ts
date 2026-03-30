@@ -15,8 +15,6 @@ interface UseAutosaveOptions {
   initialValues: Record<string, unknown>
   /** Whether a manual save is in progress (skip autosave). */
   saving: boolean
-  /** Whether the form is in restore preview mode (skip autosave). */
-  isRestorePreview: boolean
   /** Sync collaborative fields before save. */
   syncAllFieldsToDoc?: ((values: Record<string, unknown>) => void) | undefined
   /** Whether form uses Yjs. */
@@ -54,8 +52,8 @@ export function useAutosave(opts: UseAutosaveOptions) {
     const currentValues = valuesRef.current
     const serialized = JSON.stringify(currentValues)
 
-    // Skip if: manual save in progress, restore preview, or nothing changed since last autosave
-    if (currentOpts.saving || currentOpts.isRestorePreview) return
+    // Skip if: manual save in progress or nothing changed since last autosave
+    if (currentOpts.saving) return
     if (serialized === lastSavedRef.current) return
     if (!isDirty(currentValues, currentOpts.initialValues)) return
 

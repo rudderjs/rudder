@@ -216,7 +216,7 @@ export class ArticleResource extends Resource {
               TextField.make('caption').label('Caption'),
             ]),
         ])
-        .collaborative(),
+        .persist(['websocket', 'indexeddb']),
 
       RichContentField.make('body')
         .label('Body (Lexical)')

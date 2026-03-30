@@ -326,19 +326,30 @@ function SeedPlugin({ value, yjsRef }: { value: unknown; yjsRef: React.RefObject
       if (root && root.length > 0) return // Y.Doc has content — CollaborationPlugin will render it
     }
 
-    // Y.Doc is empty (fresh room, no prior content) — seed from DB value
+    // Y.Doc is empty (fresh room, no prior content) — seed from DB value.
+    // editor.update() propagates through CollaborationPlugin binding to Y.Doc.
     try {
       const serialized = typeof value === 'string' ? JSON.parse(value) : value
       const children = (serialized as { root?: { children?: unknown[] } })?.root?.children
       if (Array.isArray(children) && children.length > 0) {
-        editor.update(() => {
-          const root = $getRoot()
-          root.clear()
-          for (const child of children) {
-            const node = $parseSerializedNode(child as SerializedLexicalNode)
-            root.append(node)
-          }
-        })
+        // Retry pattern: CollaborationPlugin may overwrite the first seed with empty Y.Doc state.
+        // Retry until content sticks or max attempts reached.
+        let attempts = 0
+        const doSeed = () => {
+          if (attempts++ > 5) return
+          editor.update(() => {
+            const root = $getRoot()
+            if (root.getTextContent().trim() !== '') return // content exists, stop
+            root.clear()
+            for (const child of children) {
+              const node = $parseSerializedNode(child as SerializedLexicalNode)
+              root.append(node)
+            }
+          })
+          // Retry with increasing delay
+          setTimeout(doSeed, attempts * 200)
+        }
+        doSeed()
       }
     } catch (e) {
       console.error('[LexicalEditor] SeedPlugin failed:', e)
