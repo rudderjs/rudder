@@ -138,12 +138,21 @@ export function SlashCommandPlugin({ extraItems }: Props) {
     const menu = menuRef.current
     if (!menu) return
 
+    // Capture the selection range once when the menu opens — don't re-read on
+    // every scroll/resize update, otherwise clicking outside moves the popover.
+    const sel = window.getSelection()
+    const openRange = sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : null
+    const reference = openRange
+      ? { getBoundingClientRect: () => openRange.getBoundingClientRect() } as Element
+      : anchorEl
+
     const updatePosition = () => {
-      computePosition(anchorEl, menu, {
+
+      computePosition(reference, menu, {
         placement: 'bottom-start',
         strategy: 'fixed',
         middleware: [
-          offset(0),
+          offset(2),
           shift({ padding: 8 }),
           size({
             padding: 8,
@@ -164,6 +173,24 @@ export function SlashCommandPlugin({ extraItems }: Props) {
     cleanupRef.current = autoUpdate(anchorEl, menu, updatePosition)
   }, [])
 
+  // Close menu on click outside
+  const menuVisible = useRef(false)
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (!menuVisible.current) return
+      const menu = menuRef.current
+      if (menu && !menu.contains(e.target as Node)) {
+        // Click outside the menu — simulate Escape to dismiss the typeahead
+        const rootEl = editor.getRootElement()
+        if (rootEl) {
+          rootEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        }
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [editor, queryString])
+
   // Clean up auto-update on unmount
   useEffect(() => () => { cleanupRef.current?.() }, [])
 
@@ -176,8 +203,10 @@ export function SlashCommandPlugin({ extraItems }: Props) {
       menuRenderFn={(anchorElementRef, { selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }) => {
         if (!anchorElementRef.current || options.length === 0) {
           cleanupRef.current?.()
+          menuVisible.current = false
           return null
         }
+        menuVisible.current = true
 
         // Schedule auto-positioning after portal renders
         requestAnimationFrame(() => {
