@@ -1,0 +1,42 @@
+{
+  "name": "@boostkit/ai",
+  "version": "0.0.1",
+  "description": "AI engine — providers, agents, tools, streaming, middleware",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/boostkitjs/boostkit",
+    "directory": "packages/ai"
+  },
+  "type": "module",
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@boostkit/core": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": ">=0.30.0",
+    "openai": ">=4.70.0",
+    "@google/genai": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}
