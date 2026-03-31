@@ -38,6 +38,7 @@
     "@boostkit/core": "workspace:*",
     "@boostkit/panels": "workspace:*",
     "react": ">=18",
+    "react-dom": ">=18",
     "lexical": ">=0.20",
     "@lexical/react": ">=0.20",
     "@lexical/rich-text": ">=0.20",

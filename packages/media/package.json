@@ -38,7 +38,8 @@
     "@boostkit/panels": "*",
     "@boostkit/router": "*",
     "@boostkit/storage": "*",
-    "react": ">=18"
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "peerDependenciesMeta": {
     "@boostkit/image": {
