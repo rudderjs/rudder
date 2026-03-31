@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { MapControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
+import { Vector3 } from 'three'
 import type { OrthographicCamera } from 'three'
 import type { CanvasNode, DepartmentNode, AgentNode, KnowledgeBaseNode, ConnectionNode } from '../../canvas/CanvasNode.js'
 import type { CanvasStoreReturn } from '../../canvas/useCanvasStore.js'
@@ -33,20 +34,60 @@ export function CanvasScene({
   activeTool,
   editable,
 }: CanvasSceneProps) {
-  const { camera } = useThree()
+  const { camera, gl } = useThree()
   const controlsRef = useRef<any>(null)
 
   // Isometric camera setup
   useEffect(() => {
     const cam = camera as OrthographicCamera
-    // Position camera for isometric view (45° angle)
     cam.position.set(200, 200, 200)
     cam.lookAt(0, 0, 0)
     cam.zoom = viewport.viewport.zoom
     cam.updateProjectionMatrix()
   }, [camera, viewport.viewport.zoom])
 
-  // Sync viewport on controls change
+  // Intercept wheel events for Figma-style controls:
+  // - Regular scroll (trackpad two-finger) → pan via MapControls
+  // - ctrlKey scroll (pinch / ctrl+wheel) → zoom via MapControls
+  useEffect(() => {
+    const canvas = gl.domElement
+    const handleWheel = (e: WheelEvent) => {
+      if (!controlsRef.current) return
+      // ctrlKey = pinch or ctrl+scroll → let MapControls zoom
+      if (e.ctrlKey || e.metaKey) return
+
+      // Regular scroll → convert to pan
+      e.preventDefault()
+      e.stopImmediatePropagation()
+
+      const cam = camera as OrthographicCamera
+      const controls = controlsRef.current
+
+      // Pan in screen space using camera's local axes
+      const factor = 1 / cam.zoom
+      const right = new Vector3().setFromMatrixColumn(cam.matrixWorld, 0)
+      const up = new Vector3().setFromMatrixColumn(cam.matrixWorld, 1)
+
+      const offset = new Vector3()
+      offset.addScaledVector(right, e.deltaX * factor)
+      offset.addScaledVector(up, -e.deltaY * factor)
+
+      cam.position.add(offset)
+      controls.target.add(offset)
+      controls.update()
+
+      viewport.setViewport({
+        zoom: cam.zoom,
+        panX: cam.position.x,
+        panY: cam.position.z,
+      })
+    }
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+    return () => canvas.removeEventListener('wheel', handleWheel, { capture: true })
+  }, [camera, gl, viewport])
+
+  // Sync viewport on MapControls change (zoom via pinch)
   const handleControlsChange = useCallback(() => {
     const cam = camera as OrthographicCamera
     viewport.setViewport({
@@ -60,7 +101,6 @@ export function CanvasScene({
   const handleBackgroundClick = useCallback((e: any) => {
     const nodeType = toolToNodeType(activeTool)
     if (nodeType && editable) {
-      // Add node at click position
       const defaultProps = getDefaultProps(nodeType)
       store.addNode(nodeType, 'root', defaultProps, { x: e.point.x, y: e.point.z })
       return
@@ -90,8 +130,14 @@ export function CanvasScene({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodeId, editable, store, onSelectNode])
 
+  // Disable MapControls during node drag so pointer events don't corrupt its state
+  const handleDragStart = useCallback(() => {
+    if (controlsRef.current) controlsRef.current.enabled = false
+  }, [])
+
   // Node event handlers
   const handleDragEnd = useCallback((id: string, x: number, y: number) => {
+    if (controlsRef.current) controlsRef.current.enabled = true
     store.moveNode(id, x, y)
   }, [store])
 
@@ -120,12 +166,16 @@ export function CanvasScene({
 
   return (
     <>
-      {/* Camera controls — pan + zoom, no rotation */}
+      {/* MapControls: right-drag = pan, pinch/ctrl+scroll = zoom */}
       <MapControls
         ref={controlsRef}
         enableRotate={false}
+        enableZoom={true}
+        enablePan={true}
+        screenSpacePanning={true}
+        minZoom={0.3}
+        maxZoom={5}
         onChange={handleControlsChange}
-        enabled={activeTool === 'select' || activeTool === 'pan'}
       />
 
       {/* Lighting */}
@@ -146,13 +196,14 @@ export function CanvasScene({
       {/* Grid */}
       <IsometricGrid />
 
-      {/* Department zones (render first — they're the base layer) */}
+      {/* Department zones */}
       {departments.map(node => (
         <DepartmentZone
           key={node.id}
           node={node}
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           editable={editable}
         />
@@ -165,6 +216,7 @@ export function CanvasScene({
           node={node}
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           editable={editable}
         />
@@ -177,6 +229,7 @@ export function CanvasScene({
           node={node}
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           editable={editable}
         />

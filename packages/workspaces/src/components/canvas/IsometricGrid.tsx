@@ -8,7 +8,7 @@ interface IsometricGridProps {
 }
 
 /** Subtle isometric grid for visual alignment */
-export function IsometricGrid({ size = 100, divisions = 20, color = '#e2e8f0' }: IsometricGridProps) {
+export function IsometricGrid({ size = 100, divisions = 20, color = '#cbd5e1' }: IsometricGridProps) {
   const lines = useMemo(() => {
     const step = size / divisions
     const half = size / 2
@@ -36,7 +36,7 @@ export function IsometricGrid({ size = 100, divisions = 20, color = '#e2e8f0' }:
               itemSize={3}
             />
           </bufferGeometry>
-          <lineBasicMaterial color={color} transparent opacity={0.3} />
+          <lineBasicMaterial color={color} transparent opacity={0.5} />
         </line>
       ))}
     </group>

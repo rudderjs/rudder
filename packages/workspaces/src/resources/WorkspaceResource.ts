@@ -36,13 +36,9 @@ export class WorkspaceResource extends Resource {
   detail(_record?: Record<string, unknown>) {
     return [
       Canvas.make('workspace')
-        .editable()
-        .collaborative()
-        .persist(),
+        .editable(),
 
       Chat.make('workspace-chat')
-        .collaborative()
-        .persist()
         .height(400),
     ]
   }

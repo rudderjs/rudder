@@ -62,6 +62,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
           wsPath: props.collaborative ? (props.wsPath ?? '/ws-live') : null,
           roomName: `workspace:${props.workspaceId ?? 'default'}:canvas`,
           initialNodes: props.initialNodes,
+          persist: props.persist,
           userName: props.userName,
           userColor: props.userColor,
         })
