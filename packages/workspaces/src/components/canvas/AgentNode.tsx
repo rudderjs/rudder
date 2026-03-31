@@ -1,62 +1,92 @@
 // @ts-nocheck — Three.js JSX validated by Vite, not tsc
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { Html } from '@react-three/drei'
+import { useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import type { Mesh } from 'three'
+import type { Group } from 'three'
 import type { AgentNode as AgentNodeType } from '../../canvas/CanvasNode.js'
 
 interface AgentNodeProps {
   node: AgentNodeType
   selected: boolean
   onSelect: (id: string) => void
+  onDragStart: () => void
   onDragEnd: (id: string, x: number, y: number) => void
   editable: boolean
 }
 
 /** 3D box representing an AI agent with status LED */
-export function AgentNode({ node, selected, onSelect, onDragEnd, editable }: AgentNodeProps) {
-  const meshRef = useRef<Mesh>(null)
-  const [dragging, setDragging] = useState(false)
-  const [dragOffset, setDragOffset] = useState({ x: 0, z: 0 })
+export function AgentNode({ node, selected, onSelect, onDragStart, onDragEnd, editable }: AgentNodeProps) {
+  const groupRef = useRef<Group>(null)
+  const dragging = useRef(false)
+  const dragOffset = useRef({ x: 0, z: 0 })
   const [hovered, setHovered] = useState(false)
+  const { gl, raycaster, camera } = useThree()
 
   const size = 12
   const active = node.props.active !== false
 
-  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-    if (!editable) return
+  // Window-level pointer handlers for smooth drag
+  useEffect(() => {
+    const canvas = gl.domElement
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!dragging.current || !groupRef.current) return
+      const rect = canvas.getBoundingClientRect()
+      const mouse = {
+        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      }
+      raycaster.setFromCamera(mouse, camera)
+      const t = -raycaster.ray.origin.y / raycaster.ray.direction.y
+      if (t > 0) {
+        const worldX = raycaster.ray.origin.x + raycaster.ray.direction.x * t
+        const worldZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t
+        groupRef.current.position.x = worldX - dragOffset.current.x
+        groupRef.current.position.z = worldZ - dragOffset.current.z
+      }
+    }
+
+    const handlePointerUp = () => {
+      if (!dragging.current) return
+      dragging.current = false
+      canvas.style.cursor = ''
+      if (groupRef.current) {
+        onDragEnd(node.id, groupRef.current.position.x, groupRef.current.position.z)
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [gl, raycaster, camera, node.id, onDragEnd])
+
+  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
     onSelect(node.id)
-    setDragging(true)
-    setDragOffset({ x: e.point.x - node.x, z: e.point.z - node.y })
-  }
-
-  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-    if (!dragging || !meshRef.current) return
-    e.stopPropagation()
-    meshRef.current.position.x = e.point.x - dragOffset.x
-    meshRef.current.position.z = e.point.z - dragOffset.z
-  }
-
-  const handlePointerUp = () => {
-    if (!dragging) return
-    setDragging(false)
-    if (meshRef.current) {
-      onDragEnd(node.id, meshRef.current.position.x, meshRef.current.position.z)
-    }
-  }
+    if (!editable) return
+    // Raycast to y=0 ground plane for consistent offset with drag move
+    const ray = e.ray ?? raycaster.ray
+    const t = -ray.origin.y / ray.direction.y
+    const groundX = ray.origin.x + ray.direction.x * t
+    const groundZ = ray.origin.z + ray.direction.z * t
+    dragging.current = true
+    dragOffset.current = { x: groundX - node.x, z: groundZ - node.y }
+    gl.domElement.style.cursor = 'grabbing'
+    onDragStart()
+  }, [editable, node.id, node.x, node.y, onSelect, onDragStart, gl, raycaster])
 
   return (
-    <group>
-      {/* Agent body */}
+    <group ref={groupRef} position={[node.x, 0, node.y]}>
+      {/* Agent body — positions are now relative to group */}
       <mesh
-        ref={meshRef}
-        position={[node.x, size / 2 + 2, node.y]}
+        position={[0, size / 2 + 2, 0]}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
+        onPointerEnter={() => { setHovered(true); gl.domElement.style.cursor = editable ? 'grab' : 'pointer' }}
+        onPointerLeave={() => { setHovered(false); if (!dragging.current) gl.domElement.style.cursor = '' }}
         castShadow
       >
         <boxGeometry args={[size, size, size]} />
@@ -68,7 +98,7 @@ export function AgentNode({ node, selected, onSelect, onDragEnd, editable }: Age
       </mesh>
 
       {/* Status LED */}
-      <mesh position={[node.x + size / 2 - 2, size + 4, node.y - size / 2 + 2]}>
+      <mesh position={[size / 2 - 2, size + 4, -size / 2 + 2]}>
         <sphereGeometry args={[1.5, 16, 16]} />
         <meshStandardMaterial
           color={active ? '#22c55e' : '#94a3b8'}
@@ -79,9 +109,8 @@ export function AgentNode({ node, selected, onSelect, onDragEnd, editable }: Age
 
       {/* Name label */}
       <Html
-        position={[node.x, size + 8, node.y]}
+        position={[0, size + 8, 0]}
         center
-        distanceFactor={300}
         style={{ pointerEvents: 'none' }}
       >
         <div style={{

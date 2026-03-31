@@ -12,6 +12,8 @@ export interface CanvasStoreOptions {
   roomName: string
   /** Initial nodes to populate if room is empty */
   initialNodes?: Record<string, CanvasNode> | undefined
+  /** Persist to IndexedDB (survives page reload). Default: false. */
+  persist?: boolean | undefined
   /** Display name for presence */
   userName?: string | undefined
   /** Cursor color */
@@ -48,7 +50,7 @@ export interface CanvasStoreReturn {
  * Structure: Y.Map<nodeId, Y.Map<field, value>> where props is also a Y.Map
  */
 export function useCanvasStore(opts: CanvasStoreOptions): CanvasStoreReturn {
-  const { wsPath, roomName, initialNodes, userName, userColor } = opts
+  const { wsPath, roomName, initialNodes, persist = false, userName, userColor } = opts
   const isCollab = !!wsPath
 
   const [ready, setReady] = useState(false)
@@ -88,10 +90,12 @@ export function useCanvasStore(opts: CanvasStoreOptions): CanvasStoreReturn {
       yModuleRef.current = Y
       yMapRef.current = yMap
 
-      // IndexedDB persistence (fire-and-forget, before WebSocket)
-      ;(import('y-indexeddb') as Promise<any>).then(idb => {
-        if (!destroyed) idbProvider = new idb.IndexeddbPersistence(roomName, doc)
-      }).catch(() => {})
+      // IndexedDB persistence (only when persist is enabled)
+      if (persist) {
+        ;(import('y-indexeddb') as Promise<any>).then(idb => {
+          if (!destroyed) idbProvider = new idb.IndexeddbPersistence(roomName, doc)
+        }).catch(() => {})
+      }
 
       // WebSocket provider
       if (isCollab && ws) {
