@@ -31,14 +31,30 @@
     "@boostkit/panels": "workspace:*"
   },
   "peerDependencies": {
-    "@boostkit/router": "workspace:*"
+    "@boostkit/router": "workspace:*",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "three": ">=0.160.0",
+    "@react-three/fiber": ">=8",
+    "@react-three/drei": ">=9",
+    "yjs": ">=13",
+    "y-websocket": ">=2",
+    "y-indexeddb": ">=9"
   },
   "peerDependenciesMeta": {
-    "@boostkit/router": { "optional": true }
+    "@boostkit/router": { "optional": true },
+    "three": { "optional": true },
+    "@react-three/fiber": { "optional": true },
+    "@react-three/drei": { "optional": true },
+    "yjs": { "optional": true },
+    "y-websocket": { "optional": true },
+    "y-indexeddb": { "optional": true }
   },
   "devDependencies": {
     "@boostkit/router": "workspace:*",
     "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"

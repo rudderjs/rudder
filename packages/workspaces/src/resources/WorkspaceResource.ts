@@ -26,6 +26,9 @@ export class WorkspaceResource extends Resource {
 
       TextareaField.make('description')
         .label('Description'),
+
+      // CanvasField.make('nodes') will be added in Task 2
+      // For now, nodes are edited via the canvas on the detail page
     ])
   }
 }

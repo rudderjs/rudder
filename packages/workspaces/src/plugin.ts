@@ -1,9 +1,5 @@
 import type { PanelPlugin } from '@boostkit/panels'
 import { WorkspaceResource } from './resources/WorkspaceResource.js'
-import { DepartmentResource } from './resources/DepartmentResource.js'
-import { AgentResource } from './resources/AgentResource.js'
-import { KnowledgeBaseResource } from './resources/KnowledgeBaseResource.js'
-import { DocumentResource } from './resources/DocumentResource.js'
 
 const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
 
@@ -17,7 +13,7 @@ export interface WorkspacesConfig {
 // ─── Plugin Factory ──────────────────────────────────────
 
 /**
- * Workspaces panel plugin — departments, agents, knowledge base CRUD.
+ * Workspaces panel plugin — collaborative AI workspace canvas.
  *
  * @example
  * import { workspaces } from '@boostkit/workspaces'
@@ -26,27 +22,22 @@ export interface WorkspacesConfig {
  *   .use(workspaces())
  *   .resources([...])
  */
-export function workspaces(config?: WorkspacesConfig): PanelPlugin {
+export function workspaces(_config?: WorkspacesConfig): PanelPlugin {
   return {
     schemas: [
       { from: `${schemaDir}/workspaces.prisma`, to: 'prisma/schema', tag: 'workspaces-schema', orm: 'prisma' as const },
     ],
 
     register(panel) {
-      // Append workspace resources to the panel's existing resources
       const existing = panel.getResources()
       panel.resources([
         ...existing,
         WorkspaceResource,
-        DepartmentResource,
-        AgentResource,
-        KnowledgeBaseResource,
-        DocumentResource,
       ])
     },
 
     async boot(_panel) {
-      // Phase 3: mount orchestrator/chat API routes here
+      // Phase 3: mount orchestrator/chat API routes
     },
   }
 }
