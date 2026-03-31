@@ -334,6 +334,9 @@ importers:
       react:
         specifier: '>=18'
         version: 19.2.4
+      react-dom:
+        specifier: '>=18'
+        version: 19.2.4(react@19.2.4)
     devDependencies:
       '@boostkit/core':
         specifier: workspace:*
@@ -562,6 +565,9 @@ importers:
 
   packages/panels-lexical:
     dependencies:
+      react-dom:
+        specifier: '>=18'
+        version: 19.2.4(react@19.2.4)
       y-indexeddb:
         specifier: '>=9'
         version: 9.0.12(yjs@13.6.29)
