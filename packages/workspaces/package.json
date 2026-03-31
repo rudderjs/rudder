@@ -9,7 +9,7 @@
     "directory": "packages/workspaces"
   },
   "type": "module",
-  "files": ["dist", "schema"],
+  "files": ["dist", "schema", "pages"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

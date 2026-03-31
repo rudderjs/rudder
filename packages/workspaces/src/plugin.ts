@@ -2,6 +2,7 @@ import type { PanelPlugin } from '@boostkit/panels'
 import { WorkspaceResource } from './resources/WorkspaceResource.js'
 
 const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
+const pagesDir  = new URL(/* @vite-ignore */ '../pages', import.meta.url).pathname
 
 // ─── Config ──────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ export function workspaces(_config?: WorkspacesConfig): PanelPlugin {
     schemas: [
       { from: `${schemaDir}/workspaces.prisma`, to: 'prisma/schema', tag: 'workspaces-schema', orm: 'prisma' as const },
     ],
+    pages: pagesDir,
 
     register(panel) {
       const existing = panel.getResources()
