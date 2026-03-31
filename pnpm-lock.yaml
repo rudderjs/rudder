@@ -809,6 +809,28 @@ importers:
         specifier: ^7.1.0
         version: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/workspaces:
+    dependencies:
+      '@boostkit/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@boostkit/core':
+        specifier: workspace:*
+        version: link:../core
+      '@boostkit/panels':
+        specifier: workspace:*
+        version: link:../panels
+    devDependencies:
+      '@boostkit/router':
+        specifier: workspace:*
+        version: link:../router
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   playground:
     dependencies:
       '@base-ui-components/react':

@@ -1,0 +1,45 @@
+{
+  "name": "@boostkit/workspaces",
+  "version": "0.0.1",
+  "description": "AI workspace builder — departments, agents, knowledge base, orchestrator",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/boostkitjs/boostkit",
+    "directory": "packages/workspaces"
+  },
+  "type": "module",
+  "files": ["dist", "schema"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@boostkit/core": "workspace:*",
+    "@boostkit/ai": "workspace:*",
+    "@boostkit/panels": "workspace:*"
+  },
+  "peerDependencies": {
+    "@boostkit/router": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@boostkit/router": { "optional": true }
+  },
+  "devDependencies": {
+    "@boostkit/router": "workspace:*",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

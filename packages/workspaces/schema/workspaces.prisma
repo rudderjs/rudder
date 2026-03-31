@@ -1,0 +1,104 @@
+// ─── Workspace ─────────────────────────────────────────────
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  layout      String   @default("{}")    // JSON: node positions, connections, canvas config
+
+  departments Department[]
+  knowledgeBases KnowledgeBase[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("workspaces")
+}
+
+// ─── Department ───────────────────────────────────────────
+
+model Department {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+  color         String   @default("#3b82f6")   // hex color for canvas zone
+  instructions  String?                        // domain-specific instructions for agents in this dept
+
+  agents        Agent[]
+
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@map("departments")
+}
+
+// ─── Agent ────────────────────────────────────────────────
+
+model Agent {
+  id              String   @id @default(cuid())
+  departmentId    String
+  department      Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  name            String
+  role            String?                          // brief role description
+  systemPrompt    String   @default("")            // agent instructions
+  model           String   @default("")            // provider/model string (e.g. "anthropic/claude-sonnet-4-5")
+  temperature     Float?
+  maxTokens       Int?
+  tools           String   @default("[]")          // JSON: array of tool names/configs
+  failover        String   @default("[]")          // JSON: array of fallback provider/model strings
+  active          Boolean  @default(true)
+
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([departmentId])
+  @@map("agents")
+}
+
+// ─── Knowledge Base ───────────────────────────────────────
+
+model KnowledgeBase {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+
+  documents     Document[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@map("knowledge_bases")
+}
+
+// ─── Document ─────────────────────────────────────────────
+
+model Document {
+  id              String   @id @default(cuid())
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  title           String
+  type            String   @default("text")        // "text" | "file" | "url"
+  content         String?                          // text content or URL
+  filename        String?                          // original filename (for file type)
+  mime            String?
+  size            Int?
+  meta            String   @default("{}")          // JSON: custom metadata
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([knowledgeBaseId])
+  @@map("documents")
+}
