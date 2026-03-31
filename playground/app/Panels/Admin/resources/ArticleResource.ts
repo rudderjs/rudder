@@ -60,6 +60,7 @@ export class ArticleResource extends Resource {
           DataField.make('featured').badge(),
         ]),
       ])
+      .live()
       .sortBy('createdAt', 'DESC')
       .titleField('title')
       .softDeletes()

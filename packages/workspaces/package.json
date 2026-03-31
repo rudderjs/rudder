@@ -9,7 +9,7 @@
     "directory": "packages/workspaces"
   },
   "type": "module",
-  "files": ["dist", "schema", "pages"],
+  "files": ["dist", "schema"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -28,6 +28,7 @@
   "dependencies": {
     "@boostkit/core": "workspace:*",
     "@boostkit/ai": "workspace:*",
+    "@boostkit/orm": "workspace:*",
     "@boostkit/panels": "workspace:*",
     "zod": "^3.23.0"
   },
@@ -56,9 +57,13 @@
   "devDependencies": {
     "@boostkit/router": "workspace:*",
     "@boostkit/broadcast": "workspace:*",
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
+    "@types/three": "^0.175.0",
     "react": "^19.0.0",
+    "three": "^0.175.0",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"

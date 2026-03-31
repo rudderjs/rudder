@@ -2,8 +2,12 @@ import {
   Resource, Table, Form, Column,
   TextField, TextareaField,
 } from '@boostkit/panels'
+import { Workspace } from '../models/Workspace.js'
+import { Canvas } from '../canvas/Canvas.js'
+import { Chat } from '../chat/Chat.js'
 
 export class WorkspaceResource extends Resource {
+  static model = Workspace
   static label = 'Workspaces'
   static labelSingular = 'Workspace'
   static icon = 'layout-dashboard'
@@ -26,9 +30,20 @@ export class WorkspaceResource extends Resource {
 
       TextareaField.make('description')
         .label('Description'),
-
-      // CanvasField.make('nodes') will be added in Task 2
-      // For now, nodes are edited via the canvas on the detail page
     ])
+  }
+
+  detail(_record?: Record<string, unknown>) {
+    return [
+      Canvas.make('workspace')
+        .editable()
+        .collaborative()
+        .persist(),
+
+      Chat.make('workspace-chat')
+        .collaborative()
+        .persist()
+        .height(400),
+    ]
   }
 }

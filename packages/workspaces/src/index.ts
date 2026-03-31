@@ -3,6 +3,9 @@
 // Plugin
 export { workspaces, type WorkspacesConfig } from './plugin.js'
 
+// Models
+export { Workspace } from './models/Workspace.js'
+
 // Resources
 export { WorkspaceResource } from './resources/WorkspaceResource.js'
 
@@ -45,3 +48,10 @@ export { generateIndex, generateNIndices } from './canvas/fractional-index.js'
 // Hooks (React)
 export { useCanvasStore, type CanvasStoreOptions, type CanvasStoreReturn } from './canvas/useCanvasStore.js'
 export { useCanvasViewport, type CanvasViewport, type UseCanvasViewportOptions, type UseCanvasViewportReturn } from './canvas/useCanvasViewport.js'
+
+// React Components (client-only — use with ClientOnly wrapper or dynamic import)
+export { WorkspaceCanvas } from './components/canvas/WorkspaceCanvas.js'
+export { ChatPanel } from './components/chat/ChatPanel.js'
+export { ChatMessage } from './components/chat/ChatMessage.js'
+export { ChatInput } from './components/chat/ChatInput.js'
+export { StreamingMessage } from './components/chat/StreamingMessage.js'

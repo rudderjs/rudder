@@ -1,5 +1,9 @@
-import { randomUUID } from 'node:crypto'
 import type { AiMessage, ConversationStore } from './types.js'
+
+function generateId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
 
 export class MemoryConversationStore implements ConversationStore {
   private readonly conversations = new Map<string, {
@@ -9,7 +13,7 @@ export class MemoryConversationStore implements ConversationStore {
   }>()
 
   async create(title?: string): Promise<string> {
-    const id = randomUUID()
+    const id = generateId()
     this.conversations.set(id, {
       title: title ?? 'New conversation',
       messages: [],
