@@ -1,8 +1,8 @@
 interface ChatMessageProps {
   role: 'user' | 'assistant'
   content: string
-  userName?: string
-  timestamp?: number
+  userName?: string | undefined
+  timestamp?: number | undefined
 }
 
 /** Single message bubble */

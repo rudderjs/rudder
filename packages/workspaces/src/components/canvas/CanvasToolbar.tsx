@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CanvasNodeType } from '../../../src/canvas/CanvasNode.js'
+import type { CanvasNodeType } from '../../canvas/CanvasNode.js'
 
 export type CanvasTool = 'select' | 'pan' | 'add-department' | 'add-agent' | 'add-kb' | 'connect' | 'delete'
 

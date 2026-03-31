@@ -1,6 +1,8 @@
 import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@boostkit/panels'
 import { panelsLexical } from '@boostkit/panels-lexical/server'
 import { media } from '@boostkit/media/server'
+import { workspaces } from '@boostkit/workspaces'
+
 import configs from '../../../config/index.js'
 import { TodoResource }         from './resources/TodoResource.js'
 import { UserResource }         from './resources/UserResource.js'
@@ -29,6 +31,7 @@ export const adminPanel = Panel.make('admin')
   .path('/admin')
   .use(panelsLexical())
   .use(media(configs.media))
+  .use(workspaces())
   .branding({
     title: 'BoostKit',
     logo: '/logo.svg',
