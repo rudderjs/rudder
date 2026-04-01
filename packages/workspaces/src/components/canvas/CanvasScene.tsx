@@ -1,6 +1,6 @@
 // @ts-nocheck — Three.js JSX validated by Vite, not tsc
-import { useCallback, useEffect, useRef } from 'react'
-import { MapControls } from '@react-three/drei'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MapControls, Html } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import type { OrthographicCamera } from 'three'
@@ -15,6 +15,13 @@ import { ConnectionLine } from './ConnectionLine.js'
 import { IsometricGrid } from './IsometricGrid.js'
 import { PresenceCursors } from './PresenceCursors.js'
 import { toolToNodeType } from './CanvasToolbar.js'
+
+const GRID_SNAP = 10
+
+/** Snap a value to the nearest grid unit */
+function snap(v: number): number {
+  return Math.round(v / GRID_SNAP) * GRID_SNAP
+}
 
 interface CanvasSceneProps {
   store: CanvasStoreReturn
@@ -34,36 +41,36 @@ export function CanvasScene({
   activeTool,
   editable,
 }: CanvasSceneProps) {
-  const { camera, gl } = useThree()
+  const { camera, gl, raycaster } = useThree()
   const controlsRef = useRef<any>(null)
 
+  // Department paint-to-draw state
+  const [drawingDept, setDrawingDept] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null)
+  const drawingRef = useRef(false)
+
   // Isometric camera setup
+  const [camPos, setCamPos] = useState({ x: 200, y: 200, z: 200 })
   useEffect(() => {
     const cam = camera as OrthographicCamera
-    cam.position.set(200, 200, 200)
+    cam.position.set(camPos.x, camPos.y, camPos.z)
     cam.lookAt(0, 0, 0)
     cam.zoom = viewport.viewport.zoom
     cam.updateProjectionMatrix()
-  }, [camera, viewport.viewport.zoom])
+  }, [camera, viewport.viewport.zoom, camPos])
 
-  // Intercept wheel events for Figma-style controls:
-  // - Regular scroll (trackpad two-finger) → pan via MapControls
-  // - ctrlKey scroll (pinch / ctrl+wheel) → zoom via MapControls
+  // Intercept wheel events for Figma-style controls
   useEffect(() => {
     const canvas = gl.domElement
     const handleWheel = (e: WheelEvent) => {
       if (!controlsRef.current) return
-      // ctrlKey = pinch or ctrl+scroll → let MapControls zoom
       if (e.ctrlKey || e.metaKey) return
 
-      // Regular scroll → convert to pan
       e.preventDefault()
       e.stopImmediatePropagation()
 
       const cam = camera as OrthographicCamera
       const controls = controlsRef.current
 
-      // Pan in screen space using camera's local axes
       const factor = 1 / cam.zoom
       const right = new Vector3().setFromMatrixColumn(cam.matrixWorld, 0)
       const up = new Vector3().setFromMatrixColumn(cam.matrixWorld, 1)
@@ -97,14 +104,100 @@ export function CanvasScene({
     })
   }, [camera, viewport])
 
-  // Click on empty space to deselect or add node
+  // ─── Raycast helper: pointer → y=0 ground plane ───
+  const raycastGround = useCallback((e: PointerEvent): { x: number; z: number } | null => {
+    const canvas = gl.domElement
+    const rect = canvas.getBoundingClientRect()
+    const mouse = {
+      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    }
+    raycaster.setFromCamera(mouse, camera)
+    const t = -raycaster.ray.origin.y / raycaster.ray.direction.y
+    if (t <= 0) return null
+    return {
+      x: raycaster.ray.origin.x + raycaster.ray.direction.x * t,
+      z: raycaster.ray.origin.z + raycaster.ray.direction.z * t,
+    }
+  }, [gl, raycaster, camera])
+
+  // ─── Department paint-to-draw (window-level for smooth drawing) ───
+  useEffect(() => {
+    if (activeTool !== 'add-department' || !editable) return
+
+    const canvas = gl.domElement
+
+    const handlePointerDown = (e: PointerEvent) => {
+      // Only left click
+      if (e.button !== 0) return
+      const hit = raycastGround(e)
+      if (!hit) return
+
+      const sx = snap(hit.x)
+      const sz = snap(hit.z)
+      drawingRef.current = true
+      setDrawingDept({ startX: sx, startZ: sz, endX: sx, endZ: sz })
+      if (controlsRef.current) controlsRef.current.enabled = false
+    }
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!drawingRef.current) return
+      const hit = raycastGround(e)
+      if (!hit) return
+      setDrawingDept(prev => prev ? { ...prev, endX: snap(hit.x), endZ: snap(hit.z) } : null)
+    }
+
+    const handlePointerUp = () => {
+      if (!drawingRef.current) return
+      drawingRef.current = false
+      if (controlsRef.current) controlsRef.current.enabled = true
+
+      setDrawingDept(prev => {
+        if (!prev) return null
+        const x = Math.min(prev.startX, prev.endX)
+        const z = Math.min(prev.startZ, prev.endZ)
+        const w = Math.abs(prev.endX - prev.startX)
+        const h = Math.abs(prev.endZ - prev.startZ)
+
+        // Minimum size to avoid accidental click-creates
+        if (w >= GRID_SNAP && h >= GRID_SNAP) {
+          const cx = x + w / 2
+          const cz = z + h / 2
+          store.addNode('department', 'root', {
+            name: 'New Department',
+            color: '#3b82f6',
+            instructions: '',
+          }, { x: cx, y: cz }, { width: w, height: h })
+        }
+        return null
+      })
+    }
+
+    canvas.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      canvas.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [activeTool, editable, gl, raycastGround, store])
+
+  // ─── Background click — only for select tool (deselect) or non-department add tools ───
   const handleBackgroundClick = useCallback((e: any) => {
+    // Department tool uses its own DOM-level handler above
+    if (activeTool === 'add-department') return
+
+    e.stopPropagation()
+
     const nodeType = toolToNodeType(activeTool)
     if (nodeType && editable) {
       const defaultProps = getDefaultProps(nodeType)
-      store.addNode(nodeType, 'root', defaultProps, { x: e.point.x, y: e.point.z })
+      store.addNode(nodeType, 'root', defaultProps, { x: snap(e.point.x), y: snap(e.point.z) })
       return
     }
+
+    // Select tool — deselect
     onSelectNode(null)
   }, [activeTool, editable, store, onSelectNode])
 
@@ -130,15 +223,14 @@ export function CanvasScene({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodeId, editable, store, onSelectNode])
 
-  // Disable MapControls during node drag so pointer events don't corrupt its state
+  // Disable MapControls during node drag
   const handleDragStart = useCallback(() => {
     if (controlsRef.current) controlsRef.current.enabled = false
   }, [])
 
-  // Node event handlers
   const handleDragEnd = useCallback((id: string, x: number, y: number) => {
     if (controlsRef.current) controlsRef.current.enabled = true
-    store.moveNode(id, x, y)
+    store.moveNode(id, snap(x), snap(y))
   }, [store])
 
   const handleSelect = useCallback((id: string) => {
@@ -163,6 +255,14 @@ export function CanvasScene({
       case 'connection': connections.push(node as ConnectionNode); break
     }
   }
+
+  // Drawing preview rectangle
+  const deptPreview = drawingDept ? {
+    x: Math.min(drawingDept.startX, drawingDept.endX),
+    z: Math.min(drawingDept.startZ, drawingDept.endZ),
+    w: Math.abs(drawingDept.endX - drawingDept.startX),
+    h: Math.abs(drawingDept.endZ - drawingDept.startZ),
+  } : null
 
   return (
     <>
@@ -195,6 +295,16 @@ export function CanvasScene({
 
       {/* Grid */}
       <IsometricGrid />
+
+      {/* Department drawing preview */}
+      {deptPreview && deptPreview.w > 0 && deptPreview.h > 0 && (
+        <mesh
+          position={[deptPreview.x + deptPreview.w / 2, 0.5, deptPreview.z + deptPreview.h / 2]}
+        >
+          <boxGeometry args={[deptPreview.w, 1, deptPreview.h]} />
+          <meshStandardMaterial color="#3b82f6" transparent opacity={0.3} />
+        </mesh>
+      )}
 
       {/* Department zones */}
       {departments.map(node => (
@@ -248,6 +358,48 @@ export function CanvasScene({
 
       {/* Presence cursors */}
       <PresenceCursors awareness={store.awareness} />
+
+      {/* DEBUG: Camera controls — remove after finding best values */}
+      <Html position={[0, 0, 0]} style={{ pointerEvents: 'auto' }} zIndexRange={[100, 100]}>
+        <div style={{
+          position: 'fixed', top: 12, left: 12, background: 'rgba(0,0,0,0.85)', color: '#fff',
+          padding: '10px 14px', borderRadius: 8, fontSize: 11, fontFamily: 'monospace', zIndex: 999,
+          display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240,
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>Camera</div>
+          {(['x', 'y', 'z'] as const).map(axis => (
+            <label key={axis} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 12 }}>{axis.toUpperCase()}</span>
+              <input
+                type="range" min={-500} max={500} step={10}
+                value={camPos[axis]}
+                onChange={e => setCamPos(p => ({ ...p, [axis]: Number(e.target.value) }))}
+                style={{ flex: 1 }}
+              />
+              <span style={{ width: 36, textAlign: 'right' }}>{camPos[axis]}</span>
+            </label>
+          ))}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid #444', paddingTop: 6, marginTop: 2 }}>
+            <span style={{ width: 40 }}>Zoom</span>
+            <input
+              type="range" min={0.3} max={5} step={0.1}
+              value={viewport.viewport.zoom}
+              onChange={e => {
+                const z = Number(e.target.value)
+                const cam = camera as any
+                cam.zoom = z
+                cam.updateProjectionMatrix()
+                viewport.setViewport({ zoom: z })
+              }}
+              style={{ flex: 1 }}
+            />
+            <span style={{ width: 36, textAlign: 'right' }}>{viewport.viewport.zoom.toFixed(1)}</span>
+          </label>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+            pos: [{camPos.x}, {camPos.y}, {camPos.z}] zoom: {viewport.viewport.zoom.toFixed(1)}
+          </div>
+        </div>
+      </Html>
     </>
   )
 }

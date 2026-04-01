@@ -1,5 +1,4 @@
 // @ts-nocheck — Three.js JSX validated by Vite, not tsc
-import { useMemo } from 'react'
 
 interface IsometricGridProps {
   size?: number
@@ -7,38 +6,14 @@ interface IsometricGridProps {
   color?: string
 }
 
-/** Subtle isometric grid for visual alignment */
-export function IsometricGrid({ size = 100, divisions = 20, color = '#cbd5e1' }: IsometricGridProps) {
-  const lines = useMemo(() => {
-    const step = size / divisions
-    const half = size / 2
-    const positions: [number, number, number][][] = []
-
-    for (let i = -half; i <= half; i += step) {
-      // X-axis lines
-      positions.push([[-half, 0, i], [half, 0, i]])
-      // Z-axis lines
-      positions.push([[i, 0, -half], [i, 0, half]])
-    }
-
-    return positions
-  }, [size, divisions])
-
+/** Large grid floor that fills the visible canvas */
+export function IsometricGrid({ size = 2000, divisions = 200, color = '#cbd5e1' }: IsometricGridProps) {
   return (
-    <group>
-      {lines.map((line, i) => (
-        <line key={i}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              count={2}
-              array={new Float32Array([...line[0]!, ...line[1]!])}
-              itemSize={3}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color={color} transparent opacity={0.5} />
-        </line>
-      ))}
-    </group>
+    <gridHelper
+      args={[size, divisions, color, color]}
+      position={[0, -0.5, 0]}
+      material-transparent={true}
+      material-opacity={0.4}
+    />
   )
 }

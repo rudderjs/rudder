@@ -26,7 +26,7 @@ export interface CanvasStoreReturn {
   /** Whether Yjs is connected and synced */
   ready: boolean
   /** Add a new node */
-  addNode(type: CanvasNodeType, parentId: string, props: Record<string, unknown>, position?: { x: number; y: number }): string
+  addNode(type: CanvasNodeType, parentId: string, props: Record<string, unknown>, position?: { x: number; y: number }, size?: { width: number; height: number }): string
   /** Update a node's properties (merges into props) */
   updateNodeProps(id: string, props: Record<string, unknown>): void
   /** Move a node to a new position */
@@ -154,6 +154,7 @@ export function useCanvasStore(opts: CanvasStoreOptions): CanvasStoreReturn {
     parentId: string,
     props: Record<string, unknown>,
     position?: { x: number; y: number },
+    size?: { width: number; height: number },
   ): string => {
     const doc = docRef.current
     const yMap = yMapRef.current
@@ -175,8 +176,8 @@ export function useCanvasStore(opts: CanvasStoreOptions): CanvasStoreReturn {
       nodeMap.set('x', position?.x ?? 0)
       nodeMap.set('y', position?.y ?? 0)
       nodeMap.set('z', 0)
-      nodeMap.set('width', type === 'department' ? 200 : 80)
-      nodeMap.set('height', type === 'department' ? 150 : 80)
+      nodeMap.set('width', size?.width ?? (type === 'department' ? 200 : 80))
+      nodeMap.set('height', size?.height ?? (type === 'department' ? 150 : 80))
       nodeMap.set('version', 1)
       nodeMap.set('updatedBy', userName ?? '')
       nodeMap.set('updatedAt', Date.now())
