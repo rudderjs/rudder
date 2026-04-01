@@ -13,6 +13,8 @@ interface ThreeCanvasProps {
   onSelectNode: (id: string | null) => void
   activeTool: CanvasTool
   editable: boolean
+  camPos: { x: number; y: number; z: number }
+  onCamPosChange: (pos: { x: number; y: number; z: number }) => void
   onReady?: (() => void) | undefined
 }
 
@@ -33,6 +35,8 @@ export default function ThreeCanvas({
   onSelectNode,
   activeTool,
   editable,
+  camPos,
+  onCamPosChange,
   onReady,
 }: ThreeCanvasProps) {
   return (
@@ -40,7 +44,7 @@ export default function ThreeCanvas({
       orthographic
       camera={{
         zoom: viewport.viewport.zoom,
-        position: [200, 200, 200],
+        position: [camPos.x, camPos.y, camPos.z],
         near: -1000,
         far: 2000,
       }}
@@ -61,6 +65,8 @@ export default function ThreeCanvas({
           onSelectNode={onSelectNode}
           activeTool={activeTool}
           editable={editable}
+          camPos={camPos}
+          onCamPosChange={onCamPosChange}
         />
       </Suspense>
     </Canvas>
