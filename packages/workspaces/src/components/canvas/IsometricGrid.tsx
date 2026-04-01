@@ -6,12 +6,12 @@ interface IsometricGridProps {
   color?: string
 }
 
-/** Large grid floor that fills the visible canvas */
-export function IsometricGrid({ size = 2000, divisions = 200, color = '#cbd5e1' }: IsometricGridProps) {
+/** Large grid floor — 10-unit cells matching GRID_SNAP */
+export function IsometricGrid({ size = 2000, divisions = 200, color = '#94a3b8' }: IsometricGridProps) {
   return (
     <gridHelper
       args={[size, divisions, color, color]}
-      position={[0, -0.5, 0]}
+      position={[0, -0.1, 0]}
       material-transparent={true}
       material-opacity={0.4}
     />

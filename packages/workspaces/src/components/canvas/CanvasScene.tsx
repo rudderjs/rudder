@@ -239,7 +239,17 @@ export function CanvasScene({
 
   const handleDragEnd = useCallback((id: string, x: number, y: number) => {
     if (controlsRef.current) controlsRef.current.enabled = true
-    store.moveNode(id, snap(x), snap(y))
+    // For departments: snap edges (top-left corner), then convert back to center
+    const node = store.nodes.get(id)
+    if (node && (node.type === 'department')) {
+      const w = node.width || 200
+      const h = node.height || 150
+      const left = snap(x - w / 2)
+      const top = snap(y - h / 2)
+      store.moveNode(id, left + w / 2, top + h / 2)
+    } else {
+      store.moveNode(id, snap(x), snap(y))
+    }
   }, [store])
 
   const handleSelect = useCallback((id: string) => {
@@ -305,12 +315,12 @@ export function CanvasScene({
       {/* Grid */}
       <IsometricGrid />
 
-      {/* Department drawing preview */}
-      {deptPreview && deptPreview.w > 0 && deptPreview.h > 0 && (
+      {/* Department drawing preview — show from first click, min 1 unit so it's always visible */}
+      {deptPreview && (
         <mesh
           position={[deptPreview.x + deptPreview.w / 2, 0.5, deptPreview.z + deptPreview.h / 2]}
         >
-          <boxGeometry args={[deptPreview.w, 1, deptPreview.h]} />
+          <boxGeometry args={[Math.max(deptPreview.w, 1), 1, Math.max(deptPreview.h, 1)]} />
           <meshStandardMaterial color="#3b82f6" transparent opacity={0.3} />
         </mesh>
       )}

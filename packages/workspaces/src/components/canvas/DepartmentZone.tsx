@@ -26,7 +26,7 @@ export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragEn
   const color = node.props.color || '#3b82f6'
   const width = node.width || 200
   const depth = node.height || 150
-  const height = 2
+  const height = 1
 
   // Window-level pointer handlers for smooth drag
   useEffect(() => {
