@@ -44,8 +44,15 @@ export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragEn
       if (t > 0) {
         const worldX = raycaster.ray.origin.x + raycaster.ray.direction.x * t
         const worldZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t
-        groupRef.current.position.x = worldX - dragOffset.current.x
-        groupRef.current.position.z = worldZ - dragOffset.current.z
+        const cx = worldX - dragOffset.current.x
+        const cz = worldZ - dragOffset.current.z
+        // Snap edges to grid (10-unit), then convert back to center
+        const w = node.width || 200
+        const d = node.height || 150
+        const snapLeft = Math.round((cx - w / 2) / 10) * 10
+        const snapTop = Math.round((cz - d / 2) / 10) * 10
+        groupRef.current.position.x = snapLeft + w / 2
+        groupRef.current.position.z = snapTop + d / 2
       }
     }
 
