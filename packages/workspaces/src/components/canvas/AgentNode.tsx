@@ -42,8 +42,8 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragEnd, ed
       if (t > 0) {
         const worldX = raycaster.ray.origin.x + raycaster.ray.direction.x * t
         const worldZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t
-        groupRef.current.position.x = worldX - dragOffset.current.x
-        groupRef.current.position.z = worldZ - dragOffset.current.z
+        groupRef.current.position.x = Math.round((worldX - dragOffset.current.x) / 10) * 10
+        groupRef.current.position.z = Math.round((worldZ - dragOffset.current.z) / 10) * 10
       }
     }
 
