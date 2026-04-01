@@ -1,6 +1,6 @@
 // @ts-nocheck — Three.js JSX validated by Vite, not tsc
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MapControls, Html } from '@react-three/drei'
+import { MapControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import type { OrthographicCamera } from 'three'
@@ -30,6 +30,8 @@ interface CanvasSceneProps {
   onSelectNode: (id: string | null) => void
   activeTool: CanvasTool
   editable: boolean
+  camPos: { x: number; y: number; z: number }
+  onCamPosChange: (pos: { x: number; y: number; z: number }) => void
 }
 
 /** Three.js scene contents: camera, lights, controls, and all node renderers */
@@ -40,6 +42,8 @@ export function CanvasScene({
   onSelectNode,
   activeTool,
   editable,
+  camPos,
+  onCamPosChange,
 }: CanvasSceneProps) {
   const { camera, gl, raycaster } = useThree()
   const controlsRef = useRef<any>(null)
@@ -49,7 +53,6 @@ export function CanvasScene({
   const drawingRef = useRef(false)
 
   // Isometric camera setup
-  const [camPos, setCamPos] = useState({ x: 200, y: 200, z: 200 })
   useEffect(() => {
     const cam = camera as OrthographicCamera
     cam.position.set(camPos.x, camPos.y, camPos.z)
@@ -358,48 +361,6 @@ export function CanvasScene({
 
       {/* Presence cursors */}
       <PresenceCursors awareness={store.awareness} />
-
-      {/* DEBUG: Camera controls — remove after finding best values */}
-      <Html position={[0, 0, 0]} style={{ pointerEvents: 'auto' }} zIndexRange={[100, 100]}>
-        <div style={{
-          position: 'fixed', top: 12, left: 12, background: 'rgba(0,0,0,0.85)', color: '#fff',
-          padding: '10px 14px', borderRadius: 8, fontSize: 11, fontFamily: 'monospace', zIndex: 999,
-          display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240,
-        }}>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>Camera</div>
-          {(['x', 'y', 'z'] as const).map(axis => (
-            <label key={axis} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 12 }}>{axis.toUpperCase()}</span>
-              <input
-                type="range" min={-500} max={500} step={10}
-                value={camPos[axis]}
-                onChange={e => setCamPos(p => ({ ...p, [axis]: Number(e.target.value) }))}
-                style={{ flex: 1 }}
-              />
-              <span style={{ width: 36, textAlign: 'right' }}>{camPos[axis]}</span>
-            </label>
-          ))}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid #444', paddingTop: 6, marginTop: 2 }}>
-            <span style={{ width: 40 }}>Zoom</span>
-            <input
-              type="range" min={0.3} max={5} step={0.1}
-              value={viewport.viewport.zoom}
-              onChange={e => {
-                const z = Number(e.target.value)
-                const cam = camera as any
-                cam.zoom = z
-                cam.updateProjectionMatrix()
-                viewport.setViewport({ zoom: z })
-              }}
-              style={{ flex: 1 }}
-            />
-            <span style={{ width: 36, textAlign: 'right' }}>{viewport.viewport.zoom.toFixed(1)}</span>
-          </label>
-          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
-            pos: [{camPos.x}, {camPos.y}, {camPos.z}] zoom: {viewport.viewport.zoom.toFixed(1)}
-          </div>
-        </div>
-      </Html>
     </>
   )
 }
