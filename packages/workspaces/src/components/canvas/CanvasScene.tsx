@@ -50,16 +50,22 @@ export function CanvasScene({
 
   // Department paint-to-draw state
   const [drawingDept, setDrawingDept] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null)
+  const drawingDeptRef = useRef(drawingDept)
+  drawingDeptRef.current = drawingDept
   const drawingRef = useRef(false)
 
-  // Isometric camera setup
+  // Isometric camera setup — only resets on camPos change (debug sliders) or mount
   useEffect(() => {
     const cam = camera as OrthographicCamera
     cam.position.set(camPos.x, camPos.y, camPos.z)
     cam.lookAt(0, 0, 0)
-    cam.zoom = viewport.viewport.zoom
     cam.updateProjectionMatrix()
-  }, [camera, viewport.viewport.zoom, camPos])
+    // Also reset MapControls target to origin when camera angle changes
+    if (controlsRef.current) {
+      controlsRef.current.target.set(0, 0, 0)
+      controlsRef.current.update()
+    }
+  }, [camera, camPos])
 
   // Intercept wheel events for Figma-style controls
   useEffect(() => {
@@ -155,25 +161,25 @@ export function CanvasScene({
       drawingRef.current = false
       if (controlsRef.current) controlsRef.current.enabled = true
 
-      setDrawingDept(prev => {
-        if (!prev) return null
-        const x = Math.min(prev.startX, prev.endX)
-        const z = Math.min(prev.startZ, prev.endZ)
-        const w = Math.abs(prev.endX - prev.startX)
-        const h = Math.abs(prev.endZ - prev.startZ)
+      // Read current drawing state and create node (outside state updater to avoid React strict-mode double-fire)
+      const prev = drawingDeptRef.current
+      setDrawingDept(null)
+      if (!prev) return
 
-        // Minimum size to avoid accidental click-creates
-        if (w >= GRID_SNAP && h >= GRID_SNAP) {
-          const cx = x + w / 2
-          const cz = z + h / 2
-          store.addNode('department', 'root', {
-            name: 'New Department',
-            color: '#3b82f6',
-            instructions: '',
-          }, { x: cx, y: cz }, { width: w, height: h })
-        }
-        return null
-      })
+      const x = Math.min(prev.startX, prev.endX)
+      const z = Math.min(prev.startZ, prev.endZ)
+      const w = Math.abs(prev.endX - prev.startX)
+      const h = Math.abs(prev.endZ - prev.startZ)
+
+      if (w >= GRID_SNAP && h >= GRID_SNAP) {
+        const cx = x + w / 2
+        const cz = z + h / 2
+        store.addNode('department', 'root', {
+          name: 'New Department',
+          color: '#3b82f6',
+          instructions: '',
+        }, { x: cx, y: cz }, { width: w, height: h })
+      }
     }
 
     canvas.addEventListener('pointerdown', handlePointerDown)
