@@ -146,7 +146,7 @@ export function generateNodeId(): string {
 
 // ─── Handle Positions ────────────────────────────────────
 
-const AGENT_HALF = 6    // agent box size=12, half=6
+const AGENT_HALF = 5    // agent box size=10, half=5
 const KB_HALF = 8       // KB cylinder radius=8
 
 /** Get world position of a handle on a node */
@@ -156,19 +156,24 @@ export function getHandleWorldPos(
   overrideX?: number,
   overrideZ?: number,
 ): { x: number; z: number } {
-  const nx = overrideX ?? node.x
-  const nz = overrideZ ?? node.y  // node.y = z in world space
+  let nx = overrideX ?? node.x
+  let nz = overrideZ ?? node.y  // node.y = z in world space
 
   let hw: number, hh: number
   if (node.type === 'department') {
     hw = (node.width || 200) / 2
     hh = (node.height || 150) / 2
   } else if (node.type === 'agent') {
+    // Agent is offset by half-size into the cell, so handles are relative to cell corner + size
     hw = AGENT_HALF
     hh = AGENT_HALF
+    nx += AGENT_HALF
+    nz += AGENT_HALF
   } else if (node.type === 'knowledgeBase') {
     hw = KB_HALF
     hh = KB_HALF
+    nx += KB_HALF
+    nz += KB_HALF
   } else {
     hw = 6; hh = 6
   }

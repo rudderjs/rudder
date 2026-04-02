@@ -44,9 +44,9 @@ export function KBNode({ node, selected, onSelect, onDragStart, onDragMove, onDr
       if (t > 0) {
         const worldX = raycaster.ray.origin.x + raycaster.ray.direction.x * t
         const worldZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t
-        groupRef.current.position.x = Math.round((worldX - dragOffset.current.x) / 10) * 10
-        groupRef.current.position.z = Math.round((worldZ - dragOffset.current.z) / 10) * 10
-        onDragMove(node.id, groupRef.current.position.x, groupRef.current.position.z)
+        groupRef.current.position.x = Math.round((worldX - dragOffset.current.x - radius) / 10) * 10 + radius
+        groupRef.current.position.z = Math.round((worldZ - dragOffset.current.z - radius) / 10) * 10 + radius
+        onDragMove(node.id, groupRef.current.position.x - radius, groupRef.current.position.z - radius)
       }
     }
 
@@ -55,7 +55,7 @@ export function KBNode({ node, selected, onSelect, onDragStart, onDragMove, onDr
       dragging.current = false
       canvas.style.cursor = ''
       if (groupRef.current) {
-        onDragEnd(node.id, groupRef.current.position.x, groupRef.current.position.z)
+        onDragEnd(node.id, groupRef.current.position.x - radius, groupRef.current.position.z - radius)
       }
     }
 
@@ -82,7 +82,7 @@ export function KBNode({ node, selected, onSelect, onDragStart, onDragMove, onDr
   }, [editable, activeTool, node.id, node.x, node.y, onSelect, onDragStart, gl, raycaster])
 
   return (
-    <group ref={groupRef} position={[node.x, 0, node.y]}>
+    <group ref={groupRef} position={[node.x + radius, 0, node.y + radius]}>
       {/* KB cylinder */}
       <mesh
         position={[0, height / 2 + 2, 0]}

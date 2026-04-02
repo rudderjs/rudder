@@ -25,7 +25,7 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
   const [hovered, setHovered] = useState(false)
   const { gl, raycaster, camera } = useThree()
 
-  const size = 12
+  const size = 10
   const active = node.props.active !== false
 
   // Window-level pointer handlers for smooth drag
@@ -44,9 +44,9 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
       if (t > 0) {
         const worldX = raycaster.ray.origin.x + raycaster.ray.direction.x * t
         const worldZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t
-        groupRef.current.position.x = Math.round((worldX - dragOffset.current.x) / 10) * 10
-        groupRef.current.position.z = Math.round((worldZ - dragOffset.current.z) / 10) * 10
-        onDragMove(node.id, groupRef.current.position.x, groupRef.current.position.z)
+        groupRef.current.position.x = Math.round((worldX - dragOffset.current.x - size / 2) / 10) * 10 + size / 2
+        groupRef.current.position.z = Math.round((worldZ - dragOffset.current.z - size / 2) / 10) * 10 + size / 2
+        onDragMove(node.id, groupRef.current.position.x - size / 2, groupRef.current.position.z - size / 2)
       }
     }
 
@@ -55,7 +55,7 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
       dragging.current = false
       canvas.style.cursor = ''
       if (groupRef.current) {
-        onDragEnd(node.id, groupRef.current.position.x, groupRef.current.position.z)
+        onDragEnd(node.id, groupRef.current.position.x - size / 2, groupRef.current.position.z - size / 2)
       }
     }
 
@@ -88,10 +88,10 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
   }, [editable, activeTool, node.id, node.x, node.y, onSelect, onDragStart, gl, raycaster])
 
   return (
-    <group ref={groupRef} position={[node.x, 0, node.y]}>
+    <group ref={groupRef} position={[node.x + size / 2, 0, node.y + size / 2]}>
       {/* Agent body — positions are now relative to group */}
       <mesh
-        position={[0, size / 2 + 2, 0]}
+        position={[0, size / 2, 0]}
         onPointerDown={handlePointerDown}
         onPointerEnter={() => { setHovered(true); gl.domElement.style.cursor = editable ? 'grab' : 'pointer' }}
         onPointerLeave={() => { setHovered(false); if (!dragging.current) gl.domElement.style.cursor = '' }}
@@ -106,7 +106,7 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
       </mesh>
 
       {/* Status LED */}
-      <mesh position={[size / 2 - 2, size + 4, -size / 2 + 2]}>
+      <mesh position={[size / 2 - 2, size + 1, -size / 2 + 2]}>
         <sphereGeometry args={[1.5, 16, 16]} />
         <meshStandardMaterial
           color={active ? '#22c55e' : '#94a3b8'}
@@ -117,7 +117,7 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
 
       {/* Name label */}
       <Html
-        position={[0, size + 8, 0]}
+        position={[0, size + 4, 0]}
         center
         style={{ pointerEvents: 'none' }}
       >
