@@ -4,7 +4,8 @@ import { MapControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { Vector3, MOUSE, Raycaster, Vector2 } from 'three'
 import type { OrthographicCamera } from 'three'
-import type { CanvasNode, DepartmentNode, AgentNode, KnowledgeBaseNode, ConnectionNode } from '../../canvas/CanvasNode.js'
+import type { CanvasNode, DepartmentNode, AgentNode, KnowledgeBaseNode, ConnectionNode, HandlePosition } from '../../canvas/CanvasNode.js'
+import { findClosestHandle, getHandleWorldPos, getAllHandles } from '../../canvas/CanvasNode.js'
 import type { CanvasStoreReturn } from '../../canvas/useCanvasStore.js'
 import type { UseCanvasViewportReturn } from '../../canvas/useCanvasViewport.js'
 import type { CanvasTool } from './CanvasToolbar.js'
@@ -50,6 +51,7 @@ export function CanvasScene({
 
   // Connection tool state
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null)
+  const [connectSourceHandle, setConnectSourceHandle] = useState<HandlePosition>('right')
   const [cursorPos, setCursorPos] = useState<{ x: number; z: number } | null>(null)
 
   // Department paint-to-draw state
@@ -236,11 +238,17 @@ export function CanvasScene({
       if (!hit) return
 
       const nodeId = findNearestNode(hit.x, hit.z)
-      if (!nodeId) return // Must start on a node
+      if (!nodeId) return
+
+      // Find closest handle on the source node
+      const sourceNode = store.nodes.get(nodeId)
+      const handle = sourceNode ? findClosestHandle(sourceNode, hit.x, hit.z) : 'right'
+      const handlePos = sourceNode ? getHandleWorldPos(sourceNode, handle) : { x: hit.x, z: hit.z }
 
       connectingRef.current = true
       setConnectSourceId(nodeId)
-      setCursorPos({ x: hit.x, z: hit.z })
+      setConnectSourceHandle(handle)
+      setCursorPos({ x: handlePos.x, z: handlePos.z })
       if (controlsRef.current) controlsRef.current.enabled = false
     }
 
@@ -261,9 +269,13 @@ export function CanvasScene({
       if (hit && sourceId) {
         const targetId = findNearestNode(hit.x, hit.z)
         if (targetId && targetId !== sourceId) {
+          const targetNode = store.nodes.get(targetId)
+          const toHandle = targetNode ? findClosestHandle(targetNode, hit.x, hit.z) : 'left'
           store.addNode('connection', 'root', {
             fromId: sourceId,
+            fromHandle: connectSourceHandle,
             toId: targetId,
+            toHandle: toHandle,
             label: '',
             style: 'solid',
           })
@@ -501,14 +513,34 @@ export function CanvasScene({
         />
       ))}
 
-      {/* Connection preview — L-shaped thick path on the floor */}
+      {/* Handle dots — visible when connect tool is active */}
+      {activeTool === 'connect' && editable && (() => {
+        const dots: JSX.Element[] = []
+        for (const [id, node] of store.nodes) {
+          if (node.type === 'connection' || node.type === 'root') continue
+          const handles = getAllHandles(node)
+          for (const [name, pos] of Object.entries(handles)) {
+            dots.push(
+              <mesh key={`${id}-${name}`} position={[pos.x, 1.2, pos.z]}>
+                <sphereGeometry args={[1.2, 10, 10]} />
+                <meshStandardMaterial color="#6366f1" transparent opacity={0.6} />
+              </mesh>
+            )
+          }
+        }
+        return dots
+      })()}
+
+      {/* Connection preview — L-shaped from handle to cursor */}
       {connectSourceId && cursorPos && (() => {
         const sourceNode = store.nodes.get(connectSourceId)
         if (!sourceNode) return null
+        const hp = getHandleWorldPos(sourceNode, connectSourceHandle)
         return (
           <ConnectionPreview
-            fromX={sourceNode.x} fromZ={sourceNode.y}
+            fromX={hp.x} fromZ={hp.z}
             toX={cursorPos.x} toZ={cursorPos.z}
+            fromHandle={connectSourceHandle}
             color="#6366f1"
           />
         )
