@@ -1,9 +1,9 @@
 // @ts-nocheck — Three.js JSX validated by Vite, not tsc
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
-import { Html, Line } from '@react-three/drei'
+import { Html } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Shape, ExtrudeGeometry, ShapeGeometry } from 'three'
+import { Shape, ExtrudeGeometry, ShapeGeometry, BackSide } from 'three'
 import type { Group } from 'three'
 import type { AgentNode as AgentNodeType } from '../../canvas/CanvasNode.js'
 
@@ -21,7 +21,12 @@ interface AgentNodeProps {
   editable: boolean
   activeTool: string
   shadowCfg?: ShadowCfg | undefined
+  outlineCfg?: OutlineCfg | undefined
   elevation?: number | undefined
+}
+
+interface OutlineCfg {
+  thickness: number
 }
 
 // ─── SVG → Three.js Shape conversion ─────────────────────────
@@ -88,16 +93,13 @@ const EXTRUDE_SETTINGS = {
   bevelSegments: 3,
 }
 
-/** Sample smooth points from a Shape for outline rendering */
-function shapeToOutline(shape: Shape, z: number, divisions = 64): [number, number, number][] {
-  const pts = shape.getPoints(divisions)
-  // Close the loop
-  if (pts.length > 0) pts.push(pts[0])
-  return pts.map(p => [p.x, p.y, z] as [number, number, number])
-}
+const OUTLINE_THICKNESS = 0.055  // how much the outline shell expands in X/Y
+// Shape centroids for offset compensation when scaling from origin
+const BODY_CENTER_Y = 2.9   // body shape vertical center (approx)
+const HEAD_CENTER_Y = 7.64  // head circle center Y
 
 /** 3D person silhouette representing an AI agent (Isoflow style) */
-export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, onDragEnd, editable, activeTool, shadowCfg, elevation = 0 }: AgentNodeProps) {
+export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, onDragEnd, editable, activeTool, shadowCfg, outlineCfg, elevation = 0 }: AgentNodeProps) {
   const groupRef = useRef<Group>(null)
   const dragging = useRef(false)
   const dragOffset = useRef({ x: 0, z: 0 })
@@ -107,44 +109,16 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
   const size = 10
   const active = node.props.active !== false
 
-  // Build extruded geometries + outline points + flat shadow shapes (once)
+  // Build extruded geometries + flat shadow shapes (once)
   const geoms = useMemo(() => {
     const bodyShape = createBodyShape()
     const headShape = createHeadShape()
     const bg = new ExtrudeGeometry(bodyShape, EXTRUDE_SETTINGS)
     const hg = new ExtrudeGeometry(headShape, EXTRUDE_SETTINGS)
-    // Front face outlines
-    const bodyOutline = shapeToOutline(bodyShape, 0)
-    const headOutline = shapeToOutline(headShape, 0)
-    // Back face outlines
-    const bodyOutlineBack = shapeToOutline(bodyShape, EXTRUDE_DEPTH)
-    const headOutlineBack = shapeToOutline(headShape, EXTRUDE_DEPTH)
     // Flat shadow shapes (same silhouette, no extrusion)
     const bodyShadow = new ShapeGeometry(bodyShape, 64)
     const headShadow = new ShapeGeometry(headShape, 64)
-
-    // Side connecting edges at key silhouette points (front→back)
-    const [blX, blY] = sv(20, 220)    // bottom-left
-    const [brX, brY] = sv(200, 220)   // bottom-right
-    const [lsX, lsY] = sv(20, 180.39) // left shoulder start
-    const [rsX, rsY] = sv(200, 180.39)// right shoulder end
-    const [htX, htY] = sv(110, 2)     // head top
-    const sideEdges: [number, number, number][][] = [
-      [[blX, blY, 0], [blX, blY, EXTRUDE_DEPTH]],  // bottom-left
-      [[brX, brY, 0], [brX, brY, EXTRUDE_DEPTH]],   // bottom-right
-      [[lsX, lsY, 0], [lsX, lsY, EXTRUDE_DEPTH]],  // left shoulder
-      [[rsX, rsY, 0], [rsX, rsY, EXTRUDE_DEPTH]],   // right shoulder
-    ]
-    // Head side edges (top and bottom)
-    const headR = 50 * S
-    const [hcX, hcY] = sv(110, 52)
-    const headSideEdges: [number, number, number][][] = [
-      [[hcX, hcY + headR, 0], [hcX, hcY + headR, EXTRUDE_DEPTH]],  // head top
-      [[hcX - headR, hcY, 0], [hcX - headR, hcY, EXTRUDE_DEPTH]],  // head left
-      [[hcX + headR, hcY, 0], [hcX + headR, hcY, EXTRUDE_DEPTH]],  // head right
-    ]
-
-    return { body: bg, head: hg, bodyOutline, headOutline, bodyOutlineBack, headOutlineBack, bodyShadow, headShadow, sideEdges, headSideEdges }
+    return { body: bg, head: hg, bodyShadow, headShadow }
   }, [])
 
   // Dispose geometries on unmount
@@ -248,20 +222,24 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
         <meshStandardMaterial color={meshColor} roughness={0.5} metalness={0.05} />
       </mesh>
 
-      {/* Isoflow-style outlines — front face (thick) */}
-      <Line points={geoms.bodyOutline} color={edgeColor} lineWidth={4} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      <Line points={geoms.headOutline} color={edgeColor} lineWidth={4} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      {/* Back face (thinner) */}
-      <Line points={geoms.bodyOutlineBack} color={edgeColor} lineWidth={2} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      <Line points={geoms.headOutlineBack} color={edgeColor} lineWidth={2} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      {/* Side connecting edges — body corners */}
-      {geoms.sideEdges.map((pts, i) => (
-        <Line key={`bs${i}`} points={pts} color={edgeColor} lineWidth={3} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      ))}
-      {/* Side connecting edges — head */}
-      {geoms.headSideEdges.map((pts, i) => (
-        <Line key={`hs${i}`} points={pts} color={edgeColor} lineWidth={3} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      ))}
+      {/* Inverted hull outline — scales X/Y from shape center, not Z */}
+      {(() => {
+        const t = 1 + (outlineCfg?.thickness ?? OUTLINE_THICKNESS)
+        const th = outlineCfg?.thickness ?? OUTLINE_THICKNESS
+        return <>
+          <mesh geometry={geoms.body}
+            position={[0, -BODY_CENTER_Y * th, -EXTRUDE_DEPTH / 2 - EXTRUDE_DEPTH * th * 0.5]}
+            scale={[t, t, 1 + th]}>
+            <meshBasicMaterial color={edgeColor} side={BackSide} />
+          </mesh>
+          <mesh geometry={geoms.head}
+            position={[0, -HEAD_CENTER_Y * th, -EXTRUDE_DEPTH / 2 - EXTRUDE_DEPTH * th * 0.5]}
+            scale={[t, t, 1 + th]}>
+            <meshBasicMaterial color={edgeColor} side={BackSide} />
+          </mesh>
+        </>
+      })()}
+
 
       {/* Ground shadow — darkens whatever surface is below (grid or department) */}
       <group

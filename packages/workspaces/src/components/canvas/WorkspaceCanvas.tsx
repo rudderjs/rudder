@@ -59,6 +59,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         const [activeTool, setActiveTool] = useState<any>('select')
         const [camPos, setCamPos] = useState({ x: 200, y: 200, z: 200 })
         const [shadowCfg, setShadowCfg] = useState({ x: 0, z: 0, scaleX: 1, scaleZ: 0.7, radius: 0.5, opacity: 0.2 })
+        const [outlineCfg, setOutlineCfg] = useState({ thickness: 0.055 })
 
         const store = useCanvasStore({
           wsPath: props.collaborative ? (props.wsPath ?? '/ws-live') : null,
@@ -112,6 +113,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
               camPos={camPos}
               onCamPosChange={setCamPos}
               shadowCfg={shadowCfg}
+              outlineCfg={outlineCfg}
               onReady={() => setCanvasReady(true)}
             />
 
@@ -182,6 +184,18 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                     <span style={{ width: 36, textAlign: 'right', fontSize: 10 }}>{val}</span>
                   </label>
                 ))}
+                {/* Outline controls */}
+                <div style={{ fontWeight: 700, marginTop: 8, borderTop: '1px solid #444', paddingTop: 6 }}>Outline</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 48, fontSize: 10 }}>thick</span>
+                  <input
+                    type="range" min={0} max={0.15} step={0.005}
+                    value={outlineCfg.thickness}
+                    onChange={e => setOutlineCfg({ thickness: Number(e.target.value) })}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ width: 36, textAlign: 'right', fontSize: 10 }}>{outlineCfg.thickness}</span>
+                </label>
               </div>
             )}
           </div>

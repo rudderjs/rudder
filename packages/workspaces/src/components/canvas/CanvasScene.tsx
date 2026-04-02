@@ -42,6 +42,7 @@ interface CanvasSceneProps {
   camPos: { x: number; y: number; z: number }
   onCamPosChange: (pos: { x: number; y: number; z: number }) => void
   shadowCfg?: { x: number; z: number; scaleX: number; scaleZ: number; radius: number; opacity: number } | undefined
+  outlineCfg?: { thickness: number } | undefined
 }
 
 /** Three.js scene contents: camera, lights, controls, and all node renderers */
@@ -55,6 +56,7 @@ export function CanvasScene({
   camPos,
   onCamPosChange,
   shadowCfg,
+  outlineCfg,
 }: CanvasSceneProps) {
   const { camera, gl, raycaster } = useThree()
   const controlsRef = useRef<any>(null)
@@ -538,6 +540,7 @@ export function CanvasScene({
           editable={canDrag}
           activeTool={activeTool}
           shadowCfg={shadowCfg}
+          outlineCfg={outlineCfg}
         />
       ))}
 

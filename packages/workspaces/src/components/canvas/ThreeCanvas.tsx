@@ -16,6 +16,7 @@ interface ThreeCanvasProps {
   camPos: { x: number; y: number; z: number }
   onCamPosChange: (pos: { x: number; y: number; z: number }) => void
   shadowCfg?: { x: number; z: number; scaleX: number; scaleZ: number; radius: number; opacity: number } | undefined
+  outlineCfg?: { thickness: number } | undefined
   onReady?: (() => void) | undefined
 }
 
@@ -39,6 +40,7 @@ export default function ThreeCanvas({
   camPos,
   onCamPosChange,
   shadowCfg,
+  outlineCfg,
   onReady,
 }: ThreeCanvasProps) {
   return (
@@ -70,6 +72,7 @@ export default function ThreeCanvas({
           camPos={camPos}
           onCamPosChange={onCamPosChange}
           shadowCfg={shadowCfg}
+          outlineCfg={outlineCfg}
         />
       </Suspense>
     </Canvas>
