@@ -11,13 +11,14 @@ interface AgentNodeProps {
   selected: boolean
   onSelect: (id: string) => void
   onDragStart: () => void
+  onDragMove: (id: string, x: number, z: number) => void
   onDragEnd: (id: string, x: number, y: number) => void
   editable: boolean
   activeTool: string
 }
 
 /** 3D box representing an AI agent with status LED */
-export function AgentNode({ node, selected, onSelect, onDragStart, onDragEnd, editable, activeTool }: AgentNodeProps) {
+export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, onDragEnd, editable, activeTool }: AgentNodeProps) {
   const groupRef = useRef<Group>(null)
   const dragging = useRef(false)
   const dragOffset = useRef({ x: 0, z: 0 })
@@ -45,6 +46,7 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragEnd, ed
         const worldZ = raycaster.ray.origin.z + raycaster.ray.direction.z * t
         groupRef.current.position.x = Math.round((worldX - dragOffset.current.x) / 10) * 10
         groupRef.current.position.z = Math.round((worldZ - dragOffset.current.z) / 10) * 10
+        onDragMove(node.id, groupRef.current.position.x, groupRef.current.position.z)
       }
     }
 
@@ -67,8 +69,13 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragEnd, ed
 
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
+    console.log('[AgentNode] pointerDown', { nodeId: node.id, editable, activeTool })
     onSelect(node.id)
-    if (!editable || activeTool === 'connect' || activeTool === 'delete') return
+    if (!editable || activeTool === 'connect' || activeTool === 'delete') {
+      console.log('[AgentNode] SKIP drag — tool:', activeTool, 'editable:', editable)
+      return
+    }
+    console.log('[AgentNode] START drag')
     // Raycast to y=0 ground plane for consistent offset with drag move
     const ray = e.ray ?? raycaster.ray
     const t = -ray.origin.y / ray.direction.y

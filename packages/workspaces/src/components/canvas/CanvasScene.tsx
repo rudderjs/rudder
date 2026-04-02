@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
-import { Vector3, MOUSE } from 'three'
+import { Vector3, MOUSE, Raycaster, Vector2 } from 'three'
 import type { OrthographicCamera } from 'three'
 import type { CanvasNode, DepartmentNode, AgentNode, KnowledgeBaseNode, ConnectionNode } from '../../canvas/CanvasNode.js'
 import type { CanvasStoreReturn } from '../../canvas/useCanvasStore.js'
@@ -11,7 +11,7 @@ import type { CanvasTool } from './CanvasToolbar.js'
 import { DepartmentZone } from './DepartmentZone.js'
 import { AgentNode as AgentNodeComponent } from './AgentNode.js'
 import { KBNode } from './KBNode.js'
-import { ConnectionLine } from './ConnectionLine.js'
+import { ConnectionLine, ConnectionPreview } from './ConnectionLine.js'
 import { IsometricGrid } from './IsometricGrid.js'
 import { PresenceCursors } from './PresenceCursors.js'
 import { toolToNodeType } from './CanvasToolbar.js'
@@ -196,6 +196,94 @@ export function CanvasScene({
     }
   }, [activeTool, editable, gl, raycastGround, store])
 
+  // ─── Connection tool — click-drag-release (paint a line on the floor) ───
+  const connectingRef = useRef(false)
+  const connectSourceRef = useRef(connectSourceId)
+  connectSourceRef.current = connectSourceId
+
+  /** Find nearest node to a ground-plane hit point */
+  const findNearestNode = useCallback((hitX: number, hitZ: number): string | null => {
+    let closest: string | null = null
+    let closestDist = Infinity
+
+    for (const [id, node] of store.nodes) {
+      if (node.type === 'connection' || node.type === 'root') continue
+      const dx = hitX - node.x
+      const dz = hitZ - node.y
+      if (node.type === 'department') {
+        const hw = (node.width || 200) / 2
+        const hh = (node.height || 150) / 2
+        if (Math.abs(dx) <= hw && Math.abs(dz) <= hh) {
+          const dist = Math.abs(dx) + Math.abs(dz)
+          if (dist < closestDist) { closest = id; closestDist = dist }
+        }
+      } else {
+        const dist = Math.sqrt(dx * dx + dz * dz)
+        if (dist < 20 && dist < closestDist) { closest = id; closestDist = dist }
+      }
+    }
+    return closest
+  }, [store.nodes])
+
+  useEffect(() => {
+    if (activeTool !== 'connect' || !editable) return
+
+    const canvas = gl.domElement
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      const hit = raycastGround(e)
+      if (!hit) return
+
+      const nodeId = findNearestNode(hit.x, hit.z)
+      if (!nodeId) return // Must start on a node
+
+      connectingRef.current = true
+      setConnectSourceId(nodeId)
+      setCursorPos({ x: hit.x, z: hit.z })
+      if (controlsRef.current) controlsRef.current.enabled = false
+    }
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!connectingRef.current) return
+      const hit = raycastGround(e)
+      if (hit) setCursorPos({ x: hit.x, z: hit.z })
+    }
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (!connectingRef.current) return
+      connectingRef.current = false
+      if (controlsRef.current) controlsRef.current.enabled = true
+
+      const hit = raycastGround(e)
+      const sourceId = connectSourceRef.current
+
+      if (hit && sourceId) {
+        const targetId = findNearestNode(hit.x, hit.z)
+        if (targetId && targetId !== sourceId) {
+          store.addNode('connection', 'root', {
+            fromId: sourceId,
+            toId: targetId,
+            label: '',
+            style: 'solid',
+          })
+        }
+      }
+
+      setConnectSourceId(null)
+      setCursorPos(null)
+    }
+
+    canvas.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      canvas.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [activeTool, editable, gl, raycastGround, findNearestNode, store])
+
   // ─── Background click — only for select tool (deselect) or non-department add tools ───
   const handleBackgroundClick = useCallback((e: any) => {
     // Department tool uses its own DOM-level handler above
@@ -247,13 +335,22 @@ export function CanvasScene({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodeId, editable, store, onSelectNode])
 
-  // Disable MapControls during node drag
+  // Live drag position for connection updates
+  const [dragOverride, setDragOverride] = useState<{ id: string; x: number; z: number } | null>(null)
+
+  // Disable MapControls during node drag — but not for connect/delete tools
   const handleDragStart = useCallback(() => {
+    if (activeTool === 'connect' || activeTool === 'delete') return
     if (controlsRef.current) controlsRef.current.enabled = false
+  }, [activeTool])
+
+  const handleDragMove = useCallback((id: string, x: number, z: number) => {
+    setDragOverride({ id, x, z })
   }, [])
 
   const handleDragEnd = useCallback((id: string, x: number, y: number) => {
     if (controlsRef.current) controlsRef.current.enabled = true
+    setDragOverride(null)
     // For departments: snap edges (top-left corner), then convert back to center
     const node = store.nodes.get(id)
     if (node && (node.type === 'department')) {
@@ -270,24 +367,15 @@ export function CanvasScene({
   const handleSelect = useCallback((id: string) => {
     if (activeTool === 'delete' && editable) {
       store.deleteNode(id)
-    } else if (activeTool === 'connect' && editable) {
-      if (!connectSourceId) {
-        // First click — set source
-        setConnectSourceId(id)
-      } else if (connectSourceId !== id) {
-        // Second click — create connection
-        store.addNode('connection', 'root', {
-          fromId: connectSourceId,
-          toId: id,
-          label: '',
-          style: 'solid',
-        })
-        setConnectSourceId(null)
-      }
+    } else if (activeTool === 'connect') {
+      // Handled at DOM level — do nothing here
     } else {
       onSelectNode(id)
     }
-  }, [activeTool, editable, store, onSelectNode, connectSourceId])
+  }, [activeTool, editable, store, onSelectNode])
+
+  // Only allow dragging with select tool
+  const canDrag = editable && (activeTool === 'select' || activeTool === 'pan')
 
   // Categorize nodes
   const departments: DepartmentNode[] = []
@@ -364,8 +452,9 @@ export function CanvasScene({
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
           onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
-          editable={editable}
+          editable={canDrag}
           activeTool={activeTool}
         />
       ))}
@@ -378,8 +467,9 @@ export function CanvasScene({
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
           onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
-          editable={editable}
+          editable={canDrag}
           activeTool={activeTool}
         />
       ))}
@@ -392,8 +482,9 @@ export function CanvasScene({
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
           onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
-          editable={editable}
+          editable={canDrag}
           activeTool={activeTool}
         />
       ))}
@@ -406,22 +497,20 @@ export function CanvasScene({
           nodes={store.nodes}
           selected={selectedNodeId === node.id}
           onSelect={handleSelect}
+          dragOverride={dragOverride}
         />
       ))}
 
-      {/* Connection preview line (from source to cursor) */}
+      {/* Connection preview — L-shaped thick path on the floor */}
       {connectSourceId && cursorPos && (() => {
         const sourceNode = store.nodes.get(connectSourceId)
         if (!sourceNode) return null
-        const sy = sourceNode.type === 'department' ? 2 : 10
-        const from = new Float32Array([sourceNode.x, sy, sourceNode.y, cursorPos.x, 5, cursorPos.z])
         return (
-          <line>
-            <bufferGeometry>
-              <bufferAttribute attach="attributes-position" count={2} array={from} itemSize={3} />
-            </bufferGeometry>
-            <lineBasicMaterial color="#6366f1" linewidth={2} transparent opacity={0.6} />
-          </line>
+          <ConnectionPreview
+            fromX={sourceNode.x} fromZ={sourceNode.y}
+            toX={cursorPos.x} toZ={cursorPos.z}
+            color="#6366f1"
+          />
         )
       })()}
 

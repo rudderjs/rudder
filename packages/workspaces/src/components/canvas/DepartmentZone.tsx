@@ -11,13 +11,14 @@ interface DepartmentZoneProps {
   selected: boolean
   onSelect: (id: string) => void
   onDragStart: () => void
+  onDragMove: (id: string, x: number, z: number) => void
   onDragEnd: (id: string, x: number, y: number) => void
   editable: boolean
   activeTool: string
 }
 
 /** Translucent colored platform representing a department */
-export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragEnd, editable, activeTool }: DepartmentZoneProps) {
+export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragMove, onDragEnd, editable, activeTool }: DepartmentZoneProps) {
   const groupRef = useRef<Group>(null)
   const meshRef = useRef<Mesh>(null)
   const dragging = useRef(false)
@@ -54,6 +55,7 @@ export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragEn
         const snapTop = Math.round((cz - d / 2) / 10) * 10
         groupRef.current.position.x = snapLeft + w / 2
         groupRef.current.position.z = snapTop + d / 2
+        onDragMove(node.id, groupRef.current.position.x, groupRef.current.position.z)
       }
     }
 
