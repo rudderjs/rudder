@@ -237,7 +237,7 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
       <group
         position={[shadowCfg?.x ?? 0, 0.05, shadowCfg?.z ?? 0]}
         rotation={[-Math.PI / 2, 0, 0]}
-        scale={[shadowCfg?.scaleX ?? 1.1, shadowCfg?.scaleZ ?? 1, 1]}
+        scale={[shadowCfg?.scaleX ?? 1, shadowCfg?.scaleZ ?? 0.7, 1]}
       >
         <mesh geometry={geoms.bodyShadow}>
           <meshBasicMaterial color="#000" transparent opacity={shadowCfg?.opacity ?? 0.1} />
