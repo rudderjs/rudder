@@ -122,7 +122,29 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
     // Flat shadow shapes (same silhouette, no extrusion)
     const bodyShadow = new ShapeGeometry(bodyShape, 64)
     const headShadow = new ShapeGeometry(headShape, 64)
-    return { body: bg, head: hg, bodyOutline, headOutline, bodyOutlineBack, headOutlineBack, bodyShadow, headShadow }
+
+    // Side connecting edges at key silhouette points (front→back)
+    const [blX, blY] = sv(20, 220)    // bottom-left
+    const [brX, brY] = sv(200, 220)   // bottom-right
+    const [lsX, lsY] = sv(20, 180.39) // left shoulder start
+    const [rsX, rsY] = sv(200, 180.39)// right shoulder end
+    const [htX, htY] = sv(110, 2)     // head top
+    const sideEdges: [number, number, number][][] = [
+      [[blX, blY, 0], [blX, blY, EXTRUDE_DEPTH]],  // bottom-left
+      [[brX, brY, 0], [brX, brY, EXTRUDE_DEPTH]],   // bottom-right
+      [[lsX, lsY, 0], [lsX, lsY, EXTRUDE_DEPTH]],  // left shoulder
+      [[rsX, rsY, 0], [rsX, rsY, EXTRUDE_DEPTH]],   // right shoulder
+    ]
+    // Head side edges (top and bottom)
+    const headR = 50 * S
+    const [hcX, hcY] = sv(110, 52)
+    const headSideEdges: [number, number, number][][] = [
+      [[hcX, hcY + headR, 0], [hcX, hcY + headR, EXTRUDE_DEPTH]],  // head top
+      [[hcX - headR, hcY, 0], [hcX - headR, hcY, EXTRUDE_DEPTH]],  // head left
+      [[hcX + headR, hcY, 0], [hcX + headR, hcY, EXTRUDE_DEPTH]],  // head right
+    ]
+
+    return { body: bg, head: hg, bodyOutline, headOutline, bodyOutlineBack, headOutlineBack, bodyShadow, headShadow, sideEdges, headSideEdges }
   }, [])
 
   // Dispose geometries on unmount
@@ -226,24 +248,32 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
         <meshStandardMaterial color={meshColor} roughness={0.5} metalness={0.05} />
       </mesh>
 
-      {/* Clean silhouette outlines — front face */}
-      <Line points={geoms.bodyOutline} color={edgeColor} lineWidth={3} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      <Line points={geoms.headOutline} color={edgeColor} lineWidth={3} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      {/* Back face */}
-      <Line points={geoms.bodyOutlineBack} color={edgeColor} lineWidth={1.5} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
-      <Line points={geoms.headOutlineBack} color={edgeColor} lineWidth={1.5} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      {/* Isoflow-style outlines — front face (thick) */}
+      <Line points={geoms.bodyOutline} color={edgeColor} lineWidth={4} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      <Line points={geoms.headOutline} color={edgeColor} lineWidth={4} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      {/* Back face (thinner) */}
+      <Line points={geoms.bodyOutlineBack} color={edgeColor} lineWidth={2} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      <Line points={geoms.headOutlineBack} color={edgeColor} lineWidth={2} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      {/* Side connecting edges — body corners */}
+      {geoms.sideEdges.map((pts, i) => (
+        <Line key={`bs${i}`} points={pts} color={edgeColor} lineWidth={3} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      ))}
+      {/* Side connecting edges — head */}
+      {geoms.headSideEdges.map((pts, i) => (
+        <Line key={`hs${i}`} points={pts} color={edgeColor} lineWidth={3} position={[0, 0, -EXTRUDE_DEPTH / 2]} />
+      ))}
 
-      {/* Ground shadow — person silhouette flat on floor */}
+      {/* Ground shadow — darkens whatever surface is below (grid or department) */}
       <group
-        position={[shadowCfg?.x ?? 0, 0.05, shadowCfg?.z ?? 0]}
+        position={[shadowCfg?.x ?? 0, 0.02, shadowCfg?.z ?? 0]}
         rotation={[-Math.PI / 2, 0, 0]}
         scale={[shadowCfg?.scaleX ?? 1, shadowCfg?.scaleZ ?? 0.7, 1]}
       >
-        <mesh geometry={geoms.bodyShadow}>
-          <meshBasicMaterial color="#000" transparent opacity={shadowCfg?.opacity ?? 0.1} />
+        <mesh geometry={geoms.bodyShadow} renderOrder={2}>
+          <meshBasicMaterial color="#000" transparent opacity={shadowCfg?.opacity ?? 0.2} depthWrite={false} />
         </mesh>
-        <mesh geometry={geoms.headShadow}>
-          <meshBasicMaterial color="#000" transparent opacity={shadowCfg?.opacity ?? 0.1} />
+        <mesh geometry={geoms.headShadow} renderOrder={2}>
+          <meshBasicMaterial color="#000" transparent opacity={shadowCfg?.opacity ?? 0.2} depthWrite={false} />
         </mesh>
       </group>
 
