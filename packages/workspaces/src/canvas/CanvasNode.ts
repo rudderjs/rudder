@@ -70,9 +70,13 @@ export type DocumentProps = {
   size?: number | undefined
 }
 
+export type HandlePosition = 'top' | 'bottom' | 'left' | 'right'
+
 export type ConnectionProps = {
   fromId: string
+  fromHandle?: HandlePosition | undefined
   toId: string
+  toHandle?: HandlePosition | undefined
   label?: string | undefined
   style?: 'solid' | 'dashed' | 'dotted' | undefined
 }
@@ -135,4 +139,71 @@ export function createRootNode(): RootNode {
 /** Generate a random node ID */
 export function generateNodeId(): string {
   return `node_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+// ─── Handle Positions ────────────────────────────────────
+
+const AGENT_HALF = 6    // agent box size=12, half=6
+const KB_HALF = 8       // KB cylinder radius=8
+
+/** Get world position of a handle on a node */
+export function getHandleWorldPos(
+  node: CanvasNode,
+  handle: HandlePosition,
+  overrideX?: number,
+  overrideZ?: number,
+): { x: number; z: number } {
+  const nx = overrideX ?? node.x
+  const nz = overrideZ ?? node.y  // node.y = z in world space
+
+  let hw: number, hh: number
+  if (node.type === 'department') {
+    hw = (node.width || 200) / 2
+    hh = (node.height || 150) / 2
+  } else if (node.type === 'agent') {
+    hw = AGENT_HALF
+    hh = AGENT_HALF
+  } else if (node.type === 'knowledgeBase') {
+    hw = KB_HALF
+    hh = KB_HALF
+  } else {
+    hw = 6; hh = 6
+  }
+
+  switch (handle) {
+    case 'top':    return { x: nx, z: nz - hh }
+    case 'bottom': return { x: nx, z: nz + hh }
+    case 'left':   return { x: nx - hw, z: nz }
+    case 'right':  return { x: nx + hw, z: nz }
+  }
+}
+
+/** Get all 4 handle positions for a node */
+export function getAllHandles(
+  node: CanvasNode,
+  overrideX?: number,
+  overrideZ?: number,
+): Record<HandlePosition, { x: number; z: number }> {
+  return {
+    top: getHandleWorldPos(node, 'top', overrideX, overrideZ),
+    bottom: getHandleWorldPos(node, 'bottom', overrideX, overrideZ),
+    left: getHandleWorldPos(node, 'left', overrideX, overrideZ),
+    right: getHandleWorldPos(node, 'right', overrideX, overrideZ),
+  }
+}
+
+/** Find the closest handle to a world point */
+export function findClosestHandle(
+  node: CanvasNode,
+  hitX: number,
+  hitZ: number,
+): HandlePosition {
+  const handles = getAllHandles(node)
+  let best: HandlePosition = 'right'
+  let bestDist = Infinity
+  for (const [name, pos] of Object.entries(handles) as [HandlePosition, { x: number; z: number }][]) {
+    const d = Math.abs(hitX - pos.x) + Math.abs(hitZ - pos.z)
+    if (d < bestDist) { best = name; bestDist = d }
+  }
+  return best
 }
