@@ -1,6 +1,6 @@
 # @boostkit/workspaces
 
-AI workspace builder for BoostKit — collaborative 3D canvas with departments, agents, knowledge bases, and connections.
+AI workspace builder for BoostKit — collaborative 3D isometric canvas with departments, agents, knowledge bases, and connections.
 
 ## Installation
 
@@ -47,45 +47,70 @@ Workspace
         └── conn-001       (type: connection, fromId → toId)
 ```
 
-## Canvas Element (schema element)
+## Canvas Element
 
 ```ts
 // In resource detail or page schema
 Canvas.make('workspace')
-  .scope((q) => q.where('id', record.id))
   .editable()
   .collaborative()    // Yjs real-time sync
-  .persist()          // per-user viewport in localStorage
+  .persist()          // IndexedDB + localStorage persistence
 ```
 
-## CanvasField (form field)
+## Canvas Controls (Figma-style)
 
-```ts
-// In resource form — saves to nodes JSON column
-CanvasField.make('nodes')
-  .editable()
-  .collaborative()
-  .height(500)
-```
+| Input | Action |
+|---|---|
+| Two-finger trackpad drag | Pan |
+| Pinch / ctrl+scroll | Zoom |
+| Mouse scroll wheel | Pan |
+| Middle-mouse drag | Pan |
+| Left click | Select / add node (depends on tool) |
+| Delete / Backspace | Delete selected node |
 
-## Collaboration
+- Custom wheel interceptor distinguishes trackpad scroll (pan) from pinch (zoom) via `ctrlKey`
+- MapControls from drei handles zoom math for orthographic cameras
+- MapControls automatically disabled during node drag to prevent state corruption
 
-- **Node positions** synced via Yjs Y.Map — all users see drag/drop in real-time
-- **Node props** use nested Y.Map — concurrent field edits merge cleanly
-- **Presence** — cursor positions and selected nodes via Yjs Awareness
-- **Per-user viewport** — zoom/pan stored in localStorage (not shared)
-- **Fractional indexing** — CRDT-safe sibling ordering
+## Grid Snapping
+
+All positions snap to a 10-unit grid (`GRID_SNAP = 10`):
+
+- **Department draw**: start/end points snap, edges align to grid
+- **Department drag**: edges snap live during drag (not center)
+- **Agent/KB drag**: center snaps live during drag
+- **Agent/KB click-to-add**: position snapped on placement
+
+## Department Paint-to-Draw
+
+With the department tool selected:
+
+1. Click on the grid floor — marks start corner (snapped)
+2. Drag — blue transparent preview rectangle expands in real-time
+3. Release — department created at that position and size
+4. Minimum 10x10 units to prevent accidental creates
+
+## Node Drag
+
+All node types use a consistent drag architecture:
+
+- `<group ref>` wraps all children (mesh, LED, label) — entire node moves as one unit
+- Window-level `pointermove`/`pointerup` events for smooth tracking even when pointer leaves the mesh
+- Raycast to y=0 ground plane for world-space position
+- Drag offset computed via y=0 raycast on pointerdown (not mesh surface hit)
+- Live grid-snapping during drag
 
 ## Three.js Scene
 
-Isometric 3D view with:
-- Department zones (translucent colored platforms)
-- Agent nodes (boxes with status LED)
-- Knowledge Base nodes (cylinders)
-- Connection arrows between nodes
-- MapControls (pan/zoom, no rotation)
-- Floating HTML info cards via drei `<Html>`
-- Toolbar (select, pan, add department/agent/KB, connect, delete)
+Isometric 3D orthographic view with:
+
+- **Department zones** — translucent colored platforms (1-unit height)
+- **Agent nodes** — boxes with green status LED
+- **Knowledge Base nodes** — cylinders with accent disk
+- **Connection arrows** between nodes
+- **Grid floor** — gridHelper, 2000x200 (10-unit cells)
+- **Html labels** — fixed screen size (no `distanceFactor`)
+- **Toolbar** — select, pan, add department/agent/KB, connect, delete
 
 ## Node Types
 
@@ -96,3 +121,34 @@ Isometric 3D view with:
 | `knowledgeBase` | Cylinder | name, description |
 | `document` | File icon | title, type, content |
 | `connection` | Arrow line | fromId, toId, label, style |
+
+## Collaboration
+
+- **Node positions** synced via Yjs Y.Map — all users see drag/drop in real-time
+- **Node props** use nested Y.Map — concurrent field edits merge cleanly
+- **Presence** — cursor positions and selected nodes via Yjs Awareness
+- **Per-user viewport** — zoom/pan stored in localStorage (not shared)
+- **Fractional indexing** — CRDT-safe sibling ordering
+- **IndexedDB persistence** — opt-in via `.persist()` on Canvas element
+- **WebSocket sync** — opt-in via `.collaborative()` on Canvas element
+
+## Chat Element
+
+```ts
+Chat.make('workspace-chat')
+  .collaborative()
+  .persist()
+  .height(400)
+```
+
+Renders a chat panel with message input, streaming responses, and conversation history. Uses `@boostkit/ai` agents for responses, with the orchestrator routing to department agents based on canvas node data.
+
+## Orchestrator
+
+The orchestrator is a special agent that:
+
+1. Receives user messages
+2. Analyzes intent and selects relevant departments
+3. Calls department agents as tools (`invoke_department`)
+4. Synthesizes results into a final response
+5. Streams to chat UI via `@boostkit/broadcast` WebSocket channels
