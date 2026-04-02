@@ -17,13 +17,14 @@ const LINE_WIDTH = 1.5
 const LINE_HEIGHT = 0.3
 const HANDLE_GAP = 6  // Small stem extending from handle before bending
 
-/** Offset a handle position by GAP in its exit direction */
-function handleOffset(pos: { x: number; z: number }, handle: string): { x: number; z: number } {
+/** Offset a handle position by GAP in its exit direction. Invert for inline (go inward). */
+function handleOffset(pos: { x: number; z: number }, handle: string, invert = false): { x: number; z: number } {
+  const g = invert ? -HANDLE_GAP : HANDLE_GAP
   switch (handle) {
-    case 'right':  return { x: pos.x + HANDLE_GAP, z: pos.z }
-    case 'left':   return { x: pos.x - HANDLE_GAP, z: pos.z }
-    case 'bottom': return { x: pos.x, z: pos.z + HANDLE_GAP }
-    case 'top':    return { x: pos.x, z: pos.z - HANDLE_GAP }
+    case 'right':  return { x: pos.x + g, z: pos.z }
+    case 'left':   return { x: pos.x - g, z: pos.z }
+    case 'bottom': return { x: pos.x, z: pos.z + g }
+    case 'top':    return { x: pos.x, z: pos.z - g }
     default:       return pos
   }
 }
@@ -80,63 +81,146 @@ function FloorSegment({
   )
 }
 
-/** L-shaped connection on the floor, using handle positions */
+/** Check if a node is inside a department's bounds */
+function isNodeInsideDepartment(child: CanvasNode, dept: CanvasNode): boolean {
+  if (dept.type !== 'department') return false
+  const hw = (dept.width || 200) / 2
+  const hh = (dept.height || 150) / 2
+  return Math.abs(child.x - dept.x) <= hw && Math.abs(child.y - dept.y) <= hh
+}
+
+/** Dotted floor segment for parent-child relationships */
+function DottedFloorSegment({
+  from, to, color,
+}: {
+  from: [number, number, number]
+  to: [number, number, number]
+  color: string
+}) {
+  const dx = to[0] - from[0]
+  const dz = to[2] - from[2]
+  const length = Math.sqrt(dx * dx + dz * dz)
+  if (length < 0.1) return null
+
+  // Draw dashes along the segment
+  const count = Math.max(1, Math.floor(length / 6))
+  const dashes: JSX.Element[] = []
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count
+    const px = from[0] + dx * t
+    const pz = from[2] + dz * t
+    const angle = Math.atan2(dx, dz)
+    const dashLen = Math.min(3, length / count * 0.6)
+    dashes.push(
+      <mesh key={i} position={[px, LINE_Y, pz]} rotation={[0, angle, 0]}>
+        <boxGeometry args={[LINE_WIDTH * 0.8, LINE_HEIGHT, dashLen]} />
+        <meshStandardMaterial color={color} transparent opacity={0.5} />
+      </mesh>
+    )
+  }
+  return <>{dashes}</>
+}
+
+/** Connection on the floor — L-shaped for regular, straight dotted for parent-child */
 export function ConnectionLine({ node, nodes, selected, onSelect, dragOverride }: ConnectionLineProps) {
   const fromNode = nodes.get(node.props.fromId)
   const toNode = nodes.get(node.props.toId)
 
+  // Get override positions for dragging nodes
+  const fOverX = dragOverride?.id === node.props.fromId ? dragOverride.x : undefined
+  const fOverZ = dragOverride?.id === node.props.fromId ? dragOverride.z : undefined
+  const tOverX = dragOverride?.id === node.props.toId ? dragOverride.x : undefined
+  const tOverZ = dragOverride?.id === node.props.toId ? dragOverride.z : undefined
+
+  // Detect parent-child using live drag positions
+  const isInline = useMemo(() => {
+    if (!fromNode || !toNode) return false
+    // Use drag override positions if available
+    const fNode = dragOverride?.id === fromNode.id
+      ? { ...fromNode, x: dragOverride.x, y: dragOverride.z }
+      : fromNode
+    const tNode = dragOverride?.id === toNode.id
+      ? { ...toNode, x: dragOverride.x, y: dragOverride.z }
+      : toNode
+    return isNodeInsideDepartment(fNode, tNode) || isNodeInsideDepartment(tNode, fNode)
+  }, [fromNode, toNode, dragOverride])
+
   const geometry = useMemo(() => {
     if (!fromNode || !toNode) return null
 
-    // Get override positions for dragging nodes
-    const fOverX = dragOverride?.id === node.props.fromId ? dragOverride.x : undefined
-    const fOverZ = dragOverride?.id === node.props.fromId ? dragOverride.z : undefined
-    const tOverX = dragOverride?.id === node.props.toId ? dragOverride.x : undefined
-    const tOverZ = dragOverride?.id === node.props.toId ? dragOverride.z : undefined
+    const fx = fOverX ?? fromNode.x
+    const fz = fOverZ ?? fromNode.y
+    const tx = tOverX ?? toNode.x
+    const tz = tOverZ ?? toNode.y
 
-    const fromHandle = node.props.fromHandle ?? 'right'
-    const toHandle = node.props.toHandle ?? 'left'
+    const routing = node.props.routing ?? 'L'
+    const fromHandle = node.props.fromHandle ?? (isInline ? 'bottom' : 'right')
+    const toHandle = node.props.toHandle ?? (isInline ? 'top' : 'left')
 
     const fp = getHandleWorldPos(fromNode, fromHandle, fOverX, fOverZ)
     const tp = getHandleWorldPos(toNode, toHandle, tOverX, tOverZ)
 
-    // Small stems from both handles, then L-bend between them
-    const fo = handleOffset(fp, fromHandle)
-    const toOff = handleOffset(tp, toHandle)
-    const corner = smartCorner(fo, toOff, fromHandle)
-
     const from = [fp.x, LINE_Y, fp.z] as [number, number, number]
-    const fromOffPt = [fo.x, LINE_Y, fo.z] as [number, number, number]
-    const toOffPt = [toOff.x, LINE_Y, toOff.z] as [number, number, number]
     const to = [tp.x, LINE_Y, tp.z] as [number, number, number]
     const mid = [(fp.x + tp.x) / 2, LINE_Y + 1, (fp.z + tp.z) / 2] as [number, number, number]
 
-    return { from, fromOff: fromOffPt, corner, toOff: toOffPt, to, mid }
-  }, [fromNode, toNode, node.props, dragOverride])
+    if (routing === 'straight') {
+      return { type: 'straight' as const, isInline, from, to, mid }
+    }
+
+    // L-shaped routing with stems — inline stems go inward, regular go outward
+    const fo = handleOffset(fp, fromHandle, isInline)
+    const toOff = handleOffset(tp, toHandle, isInline)
+    const corner = smartCorner(fo, toOff, fromHandle)
+
+    const fromOffPt = [fo.x, LINE_Y, fo.z] as [number, number, number]
+    const toOffPt = [toOff.x, LINE_Y, toOff.z] as [number, number, number]
+
+    return { type: 'L' as const, isInline, from, fromOff: fromOffPt, corner, toOff: toOffPt, to, mid }
+  }, [fromNode, toNode, node.props, dragOverride, fOverX, fOverZ, tOverX, tOverZ, isInline])
 
   if (!geometry) return null
   const color = selected ? '#6366f1' : '#3b82f6'
+  const isDotted = geometry.isInline
+  const Seg = isDotted ? DottedFloorSegment : FloorSegment
 
+  const label = node.props.label ? (
+    <Html position={geometry.mid} center style={{ pointerEvents: 'none' }}>
+      <div style={{
+        padding: '2px 6px', background: 'rgba(255,255,255,0.9)',
+        borderRadius: '3px', fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap',
+      }}>
+        {node.props.label}
+      </div>
+    </Html>
+  ) : null
+
+  const endDot = (
+    <mesh position={geometry.to}>
+      <sphereGeometry args={[isDotted ? 1.2 : 1.5, 12, 12]} />
+      <meshStandardMaterial color={color} transparent={isDotted} opacity={isDotted ? 0.5 : 1} />
+    </mesh>
+  )
+
+  if (geometry.type === 'straight') {
+    return (
+      <group onClick={(e) => { e.stopPropagation(); onSelect(node.id) }}>
+        <Seg from={geometry.from} to={geometry.to} color={color} />
+        {endDot}
+        {label}
+      </group>
+    )
+  }
+
+  // L-shaped with stems
   return (
     <group onClick={(e) => { e.stopPropagation(); onSelect(node.id) }}>
-      <FloorSegment from={geometry.from} to={geometry.fromOff} color={color} />
-      <FloorSegment from={geometry.fromOff} to={geometry.corner} color={color} />
-      <FloorSegment from={geometry.corner} to={geometry.toOff} color={color} />
-      <FloorSegment from={geometry.toOff} to={geometry.to} color={color} />
-      <mesh position={geometry.to}>
-        <sphereGeometry args={[1.5, 12, 12]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {node.props.label && (
-        <Html position={geometry.mid} center style={{ pointerEvents: 'none' }}>
-          <div style={{
-            padding: '2px 6px', background: 'rgba(255,255,255,0.9)',
-            borderRadius: '3px', fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap',
-          }}>
-            {node.props.label}
-          </div>
-        </Html>
-      )}
+      <Seg from={geometry.from} to={geometry.fromOff} color={color} />
+      <Seg from={geometry.fromOff} to={geometry.corner} color={color} />
+      <Seg from={geometry.corner} to={geometry.toOff} color={color} />
+      <Seg from={geometry.toOff} to={geometry.to} color={color} />
+      {endDot}
+      {label}
     </group>
   )
 }
