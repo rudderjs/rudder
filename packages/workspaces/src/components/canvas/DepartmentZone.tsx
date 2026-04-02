@@ -28,7 +28,6 @@ export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragMo
   const color = node.props.color || '#3b82f6'
   const width = node.width || 200
   const depth = node.height || 150
-  const height = 0.1
 
   // Window-level pointer handlers for smooth drag
   useEffect(() => {
@@ -92,20 +91,16 @@ export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragMo
 
   return (
     <group ref={groupRef} position={[node.x, 0, node.y]}>
-      {/* Solid backing plane — masks the grid beneath */}
-      <mesh position={[0, -0.01, 0]}>
-        <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial color="#f0f4f8" roughness={1} />
-      </mesh>
-
-      {/* Translucent color layer on top */}
+      {/* Flat plane — polygonOffset ensures it renders above grid */}
       <mesh
         ref={meshRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.01, 0]}
+        renderOrder={1}
         onPointerDown={handlePointerDown}
-        castShadow
         receiveShadow
       >
-        <boxGeometry args={[width, height, depth]} />
+        <planeGeometry args={[width, depth]} />
         <meshStandardMaterial
           color={color}
           transparent
@@ -125,7 +120,7 @@ export function DepartmentZone({ node, selected, onSelect, onDragStart, onDragMo
 
       {/* Label */}
       <Html
-        position={[0, height + 2, -depth / 2 + 10]}
+        position={[0, 2, -depth / 2 + 10]}
         center
         style={{ pointerEvents: 'none' }}
       >

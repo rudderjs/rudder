@@ -501,10 +501,12 @@ export function CanvasScene({
       {/* Department drawing preview — show from first click, min 1 unit so it's always visible */}
       {deptPreview && (
         <mesh
-          position={[deptPreview.x + deptPreview.w / 2, 0.05, deptPreview.z + deptPreview.h / 2]}
+          position={[deptPreview.x + deptPreview.w / 2, 0.01, deptPreview.z + deptPreview.h / 2]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          renderOrder={1}
         >
-          <boxGeometry args={[Math.max(deptPreview.w, 1), 0.1, Math.max(deptPreview.h, 1)]} />
-          <meshStandardMaterial color="#3b82f6" transparent opacity={0.3} />
+          <planeGeometry args={[Math.max(deptPreview.w, 1), Math.max(deptPreview.h, 1)]} />
+          <meshStandardMaterial color="#3b82f6" transparent opacity={0.3} depthWrite={false} />
         </mesh>
       )}
 

@@ -58,7 +58,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
         const [activeTool, setActiveTool] = useState<any>('select')
         const [camPos, setCamPos] = useState({ x: 200, y: 200, z: 200 })
-        const [shadowCfg, setShadowCfg] = useState({ x: 0, z: 0, scaleX: 1.1, scaleZ: 1, radius: 1, opacity: 0.1 })
+        const [shadowCfg, setShadowCfg] = useState({ x: 0, z: 0, scaleX: 1, scaleZ: 0.5, radius: 0.5, opacity: 0.2 })
 
         const store = useCanvasStore({
           wsPath: props.collaborative ? (props.wsPath ?? '/ws-live') : null,
