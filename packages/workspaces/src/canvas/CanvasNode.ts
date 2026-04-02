@@ -72,6 +72,8 @@ export type DocumentProps = {
 
 export type HandlePosition = 'top' | 'bottom' | 'left' | 'right'
 
+export type ConnectionRouting = 'L' | 'straight'
+
 export type ConnectionProps = {
   fromId: string
   fromHandle?: HandlePosition | undefined
@@ -79,6 +81,7 @@ export type ConnectionProps = {
   toHandle?: HandlePosition | undefined
   label?: string | undefined
   style?: 'solid' | 'dashed' | 'dotted' | undefined
+  routing?: ConnectionRouting | undefined
 }
 
 // ─── Typed Nodes ──────────────────────────────────────────
