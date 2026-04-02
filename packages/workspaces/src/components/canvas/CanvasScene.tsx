@@ -19,6 +19,14 @@ import { toolToNodeType } from './CanvasToolbar.js'
 
 const GRID_SNAP = 10
 
+/** Check if a node is inside a department's bounds */
+function isNodeInsideDept(child: CanvasNode, dept: CanvasNode): boolean {
+  if (dept.type !== 'department') return false
+  const hw = (dept.width || 200) / 2
+  const hh = (dept.height || 150) / 2
+  return Math.abs(child.x - dept.x) <= hw && Math.abs(child.y - dept.y) <= hh
+}
+
 /** Snap a value to the nearest grid unit */
 function snap(v: number): number {
   return Math.round(v / GRID_SNAP) * GRID_SNAP
@@ -33,6 +41,7 @@ interface CanvasSceneProps {
   editable: boolean
   camPos: { x: number; y: number; z: number }
   onCamPosChange: (pos: { x: number; y: number; z: number }) => void
+  shadowCfg?: { x: number; z: number; scaleX: number; scaleZ: number; radius: number; opacity: number } | undefined
 }
 
 /** Three.js scene contents: camera, lights, controls, and all node renderers */
@@ -45,6 +54,7 @@ export function CanvasScene({
   editable,
   camPos,
   onCamPosChange,
+  shadowCfg,
 }: CanvasSceneProps) {
   const { camera, gl, raycaster } = useThree()
   const controlsRef = useRef<any>(null)
@@ -54,6 +64,7 @@ export function CanvasScene({
   const [connectSourceHandle, setConnectSourceHandle] = useState<HandlePosition>('right')
   const [cursorPos, setCursorPos] = useState<{ x: number; z: number } | null>(null)
   const [snapTargetHandle, setSnapTargetHandle] = useState<HandlePosition | null>(null)
+  const [snapTargetId, setSnapTargetId] = useState<string | null>(null)
 
   // Department paint-to-draw state
   const [drawingDept, setDrawingDept] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null)
@@ -206,8 +217,29 @@ export function CanvasScene({
   const connectSourceHandleRef = useRef(connectSourceHandle)
   connectSourceHandleRef.current = connectSourceHandle
 
-  /** Find nearest node to a ground-plane hit point */
+  /** Find nearest node to a ground-plane hit point.
+   *  Prioritizes handle proximity — clicking a department handle selects the department
+   *  even when a child agent is nearby inside. */
   const findNearestNode = useCallback((hitX: number, hitZ: number): string | null => {
+    const HANDLE_SNAP_DIST = 12  // prioritize if click is near a handle
+
+    // First pass: check if click is very close to any node's handle
+    let handleNode: string | null = null
+    let handleDist = Infinity
+    for (const [id, node] of store.nodes) {
+      if (node.type === 'connection' || node.type === 'root') continue
+      const handles = getAllHandles(node)
+      for (const pos of Object.values(handles)) {
+        const d = Math.abs(hitX - pos.x) + Math.abs(hitZ - pos.z)
+        if (d < HANDLE_SNAP_DIST && d < handleDist) {
+          handleNode = id
+          handleDist = d
+        }
+      }
+    }
+    if (handleNode) return handleNode
+
+    // Second pass: standard proximity (prefer small nodes over departments)
     let closest: string | null = null
     let closestDist = Infinity
 
@@ -269,10 +301,12 @@ export function CanvasScene({
           const hp = getHandleWorldPos(nearNode, handle)
           setCursorPos({ x: hp.x, z: hp.z })
           setSnapTargetHandle(handle)
+          setSnapTargetId(nearNodeId)
           return
         }
       }
       setSnapTargetHandle(null)
+      setSnapTargetId(null)
       setCursorPos({ x: hit.x, z: hit.z })
     }
 
@@ -442,13 +476,13 @@ export function CanvasScene({
         screenSpacePanning={true}
         mouseButtons={{ MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }}
         minZoom={0.3}
-        maxZoom={5}
+        maxZoom={15}
         onChange={handleControlsChange}
       />
 
-      {/* Lighting */}
+      {/* Lighting — from top-left of isometric view so shadow falls bottom-right */}
       <ambientLight intensity={0.6} />
-      <directionalLight position={[100, 150, 100]} intensity={0.8} castShadow />
+      <directionalLight position={[-80, 200, -80]} intensity={0.8} castShadow />
 
       {/* Background click plane */}
       <mesh
@@ -467,9 +501,9 @@ export function CanvasScene({
       {/* Department drawing preview — show from first click, min 1 unit so it's always visible */}
       {deptPreview && (
         <mesh
-          position={[deptPreview.x + deptPreview.w / 2, 0.5, deptPreview.z + deptPreview.h / 2]}
+          position={[deptPreview.x + deptPreview.w / 2, 0.05, deptPreview.z + deptPreview.h / 2]}
         >
-          <boxGeometry args={[Math.max(deptPreview.w, 1), 1, Math.max(deptPreview.h, 1)]} />
+          <boxGeometry args={[Math.max(deptPreview.w, 1), 0.1, Math.max(deptPreview.h, 1)]} />
           <meshStandardMaterial color="#3b82f6" transparent opacity={0.3} />
         </mesh>
       )}
@@ -501,6 +535,7 @@ export function CanvasScene({
           onDragEnd={handleDragEnd}
           editable={canDrag}
           activeTool={activeTool}
+          shadowCfg={shadowCfg}
         />
       ))}
 
@@ -554,12 +589,21 @@ export function CanvasScene({
         const sourceNode = store.nodes.get(connectSourceId)
         if (!sourceNode) return null
         const hp = getHandleWorldPos(sourceNode, connectSourceHandle)
+        // Detect inline (one node inside the other) for inverted stems
+        let inline = false
+        if (snapTargetId) {
+          const targetNode = store.nodes.get(snapTargetId)
+          if (targetNode) {
+            inline = isNodeInsideDept(sourceNode, targetNode) || isNodeInsideDept(targetNode, sourceNode)
+          }
+        }
         return (
           <ConnectionPreview
             fromX={hp.x} fromZ={hp.z}
             toX={cursorPos.x} toZ={cursorPos.z}
             fromHandle={connectSourceHandle}
             toHandle={snapTargetHandle}
+            inline={inline}
             color="#6366f1"
           />
         )

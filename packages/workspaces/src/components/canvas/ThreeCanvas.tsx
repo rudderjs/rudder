@@ -15,6 +15,7 @@ interface ThreeCanvasProps {
   editable: boolean
   camPos: { x: number; y: number; z: number }
   onCamPosChange: (pos: { x: number; y: number; z: number }) => void
+  shadowCfg?: { x: number; z: number; scaleX: number; scaleZ: number; radius: number; opacity: number } | undefined
   onReady?: (() => void) | undefined
 }
 
@@ -37,6 +38,7 @@ export default function ThreeCanvas({
   editable,
   camPos,
   onCamPosChange,
+  shadowCfg,
   onReady,
 }: ThreeCanvasProps) {
   return (
@@ -67,6 +69,7 @@ export default function ThreeCanvas({
           editable={editable}
           camPos={camPos}
           onCamPosChange={onCamPosChange}
+          shadowCfg={shadowCfg}
         />
       </Suspense>
     </Canvas>

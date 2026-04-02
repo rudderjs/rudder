@@ -11,7 +11,7 @@ export function IsometricGrid({ size = 2000, divisions = 200, color = '#94a3b8' 
   return (
     <gridHelper
       args={[size, divisions, color, color]}
-      position={[0, -0.1, 0]}
+      position={[0, -0.5, 0]}
       material-transparent={true}
       material-opacity={0.4}
     />

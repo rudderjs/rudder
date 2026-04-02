@@ -58,6 +58,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
         const [activeTool, setActiveTool] = useState<any>('select')
         const [camPos, setCamPos] = useState({ x: 200, y: 200, z: 200 })
+        const [shadowCfg, setShadowCfg] = useState({ x: 0, z: 0, scaleX: 1.1, scaleZ: 1, radius: 1, opacity: 0.1 })
 
         const store = useCanvasStore({
           wsPath: props.collaborative ? (props.wsPath ?? '/ws-live') : null,
@@ -110,6 +111,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
               editable={props.editable ?? false}
               camPos={camPos}
               onCamPosChange={setCamPos}
+              shadowCfg={shadowCfg}
               onReady={() => setCanvasReady(true)}
             />
 
@@ -149,7 +151,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid #444', paddingTop: 6, marginTop: 2 }}>
                   <span style={{ width: 40 }}>Zoom</span>
                   <input
-                    type="range" min={0.3} max={5} step={0.1}
+                    type="range" min={0.3} max={15} step={0.1}
                     value={viewport.viewport.zoom}
                     onChange={e => viewport.setViewport({ zoom: Number(e.target.value) })}
                     style={{ flex: 1 }}
@@ -159,6 +161,27 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
                   pos: [{camPos.x}, {camPos.y}, {camPos.z}] zoom: {viewport.viewport.zoom.toFixed(1)}
                 </div>
+                {/* Shadow controls */}
+                <div style={{ fontWeight: 700, marginTop: 8, borderTop: '1px solid #444', paddingTop: 6 }}>Shadow</div>
+                {([
+                  ['x', -10, 10, 0.5, shadowCfg.x],
+                  ['z', -10, 10, 0.5, shadowCfg.z],
+                  ['scaleX', 0.5, 5, 0.1, shadowCfg.scaleX],
+                  ['scaleZ', 0.5, 5, 0.1, shadowCfg.scaleZ],
+                  ['radius', 0.5, 6, 0.1, shadowCfg.radius],
+                  ['opacity', 0, 0.4, 0.01, shadowCfg.opacity],
+                ] as const).map(([key, min, max, step, val]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 48, fontSize: 10 }}>{key}</span>
+                    <input
+                      type="range" min={min} max={max} step={step}
+                      value={val}
+                      onChange={e => setShadowCfg(p => ({ ...p, [key]: Number(e.target.value) }))}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ width: 36, textAlign: 'right', fontSize: 10 }}>{val}</span>
+                  </label>
+                ))}
               </div>
             )}
           </div>

@@ -227,20 +227,22 @@ export function ConnectionLine({ node, nodes, selected, onSelect, dragOverride }
 
 /** Preview L-shaped connection */
 export function ConnectionPreview({
-  fromX, fromZ, toX, toZ, fromHandle = 'right', toHandle = null, color = '#6366f1',
+  fromX, fromZ, toX, toZ, fromHandle = 'right', toHandle = null, inline = false, color = '#6366f1',
 }: {
   fromX: number; fromZ: number; toX: number; toZ: number
   fromHandle?: 'top' | 'bottom' | 'left' | 'right'
   toHandle?: 'top' | 'bottom' | 'left' | 'right' | null
+  inline?: boolean
   color?: string
 }) {
   const fp = { x: fromX, z: fromZ }
   const tp = { x: toX, z: toZ }
-  const fo = handleOffset(fp, fromHandle)
+  const Seg = inline ? DottedFloorSegment : FloorSegment
 
   if (toHandle) {
-    // Snapped to target — show full routing with both stems
-    const toOff = handleOffset(tp, toHandle)
+    // Snapped to target — show full routing with both stems (inverted for inline)
+    const fo = handleOffset(fp, fromHandle, inline)
+    const toOff = handleOffset(tp, toHandle, inline)
     const corner = smartCorner(fo, toOff, fromHandle)
     const from = [fp.x, LINE_Y, fp.z] as [number, number, number]
     const fromOffPt = [fo.x, LINE_Y, fo.z] as [number, number, number]
@@ -248,24 +250,22 @@ export function ConnectionPreview({
     const to = [tp.x, LINE_Y, tp.z] as [number, number, number]
     return (
       <>
-        <FloorSegment from={from} to={fromOffPt} color={color} />
-        <FloorSegment from={fromOffPt} to={corner} color={color} />
-        <FloorSegment from={corner} to={toOffPt} color={color} />
-        <FloorSegment from={toOffPt} to={to} color={color} />
+        <Seg from={from} to={fromOffPt} color={color} />
+        <Seg from={fromOffPt} to={corner} color={color} />
+        <Seg from={corner} to={toOffPt} color={color} />
+        <Seg from={toOffPt} to={to} color={color} />
       </>
     )
   }
 
-  // No snap — simple routing to cursor
-  const corner = smartCorner(fo, tp, fromHandle)
+  // No snap — route directly from handle to cursor (no stem, avoids outer tail)
+  const corner = smartCorner(fp, tp, fromHandle)
   const from = [fp.x, LINE_Y, fp.z] as [number, number, number]
-  const fromOff = [fo.x, LINE_Y, fo.z] as [number, number, number]
   const to = [tp.x, LINE_Y, tp.z] as [number, number, number]
   return (
     <>
-      <FloorSegment from={from} to={fromOff} color={color} />
-      <FloorSegment from={fromOff} to={corner} color={color} />
-      <FloorSegment from={corner} to={to} color={color} />
+      <Seg from={from} to={corner} color={color} />
+      <Seg from={corner} to={to} color={color} />
     </>
   )
 }

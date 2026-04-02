@@ -15,10 +15,11 @@ interface KBNodeProps {
   onDragEnd: (id: string, x: number, y: number) => void
   editable: boolean
   activeTool: string
+  elevation?: number | undefined
 }
 
 /** Cylinder representing a knowledge base */
-export function KBNode({ node, selected, onSelect, onDragStart, onDragMove, onDragEnd, editable, activeTool }: KBNodeProps) {
+export function KBNode({ node, selected, onSelect, onDragStart, onDragMove, onDragEnd, editable, activeTool, elevation = 0 }: KBNodeProps) {
   const groupRef = useRef<Group>(null)
   const dragging = useRef(false)
   const dragOffset = useRef({ x: 0, z: 0 })
@@ -82,7 +83,7 @@ export function KBNode({ node, selected, onSelect, onDragStart, onDragMove, onDr
   }, [editable, activeTool, node.id, node.x, node.y, onSelect, onDragStart, gl, raycaster])
 
   return (
-    <group ref={groupRef} position={[node.x + radius, 0, node.y + radius]}>
+    <group ref={groupRef} position={[node.x + radius, elevation, node.y + radius]}>
       {/* KB cylinder */}
       <mesh
         position={[0, height / 2 + 2, 0]}
