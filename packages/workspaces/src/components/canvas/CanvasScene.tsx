@@ -53,6 +53,7 @@ export function CanvasScene({
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null)
   const [connectSourceHandle, setConnectSourceHandle] = useState<HandlePosition>('right')
   const [cursorPos, setCursorPos] = useState<{ x: number; z: number } | null>(null)
+  const [snapTargetHandle, setSnapTargetHandle] = useState<HandlePosition | null>(null)
 
   // Department paint-to-draw state
   const [drawingDept, setDrawingDept] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null)
@@ -202,6 +203,8 @@ export function CanvasScene({
   const connectingRef = useRef(false)
   const connectSourceRef = useRef(connectSourceId)
   connectSourceRef.current = connectSourceId
+  const connectSourceHandleRef = useRef(connectSourceHandle)
+  connectSourceHandleRef.current = connectSourceHandle
 
   /** Find nearest node to a ground-plane hit point */
   const findNearestNode = useCallback((hitX: number, hitZ: number): string | null => {
@@ -265,9 +268,11 @@ export function CanvasScene({
           const handle = findClosestHandle(nearNode, hit.x, hit.z)
           const hp = getHandleWorldPos(nearNode, handle)
           setCursorPos({ x: hp.x, z: hp.z })
+          setSnapTargetHandle(handle)
           return
         }
       }
+      setSnapTargetHandle(null)
       setCursorPos({ x: hit.x, z: hit.z })
     }
 
@@ -286,7 +291,7 @@ export function CanvasScene({
           const toHandle = targetNode ? findClosestHandle(targetNode, hit.x, hit.z) : 'left'
           store.addNode('connection', 'root', {
             fromId: sourceId,
-            fromHandle: connectSourceHandle,
+            fromHandle: connectSourceHandleRef.current,
             toId: targetId,
             toHandle: toHandle,
             label: '',
@@ -554,6 +559,7 @@ export function CanvasScene({
             fromX={hp.x} fromZ={hp.z}
             toX={cursorPos.x} toZ={cursorPos.z}
             fromHandle={connectSourceHandle}
+            toHandle={snapTargetHandle}
             color="#6366f1"
           />
         )

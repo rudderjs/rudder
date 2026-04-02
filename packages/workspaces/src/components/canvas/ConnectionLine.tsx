@@ -15,6 +15,18 @@ interface ConnectionLineProps {
 const LINE_Y = 1.0
 const LINE_WIDTH = 1.5
 const LINE_HEIGHT = 0.3
+const HANDLE_GAP = 6  // Small stem extending from handle before bending
+
+/** Offset a handle position by GAP in its exit direction */
+function handleOffset(pos: { x: number; z: number }, handle: string): { x: number; z: number } {
+  switch (handle) {
+    case 'right':  return { x: pos.x + HANDLE_GAP, z: pos.z }
+    case 'left':   return { x: pos.x - HANDLE_GAP, z: pos.z }
+    case 'bottom': return { x: pos.x, z: pos.z + HANDLE_GAP }
+    case 'top':    return { x: pos.x, z: pos.z - HANDLE_GAP }
+    default:       return pos
+  }
+}
 
 /** Pick the L-bend corner that follows the handle exit direction cleanly */
 function smartCorner(
@@ -88,13 +100,18 @@ export function ConnectionLine({ node, nodes, selected, onSelect, dragOverride }
     const fp = getHandleWorldPos(fromNode, fromHandle, fOverX, fOverZ)
     const tp = getHandleWorldPos(toNode, toHandle, tOverX, tOverZ)
 
+    // Small stems from both handles, then L-bend between them
+    const fo = handleOffset(fp, fromHandle)
+    const toOff = handleOffset(tp, toHandle)
+    const corner = smartCorner(fo, toOff, fromHandle)
+
     const from = [fp.x, LINE_Y, fp.z] as [number, number, number]
+    const fromOffPt = [fo.x, LINE_Y, fo.z] as [number, number, number]
+    const toOffPt = [toOff.x, LINE_Y, toOff.z] as [number, number, number]
     const to = [tp.x, LINE_Y, tp.z] as [number, number, number]
-    // Smart L-routing: pick the bend direction that gives the cleanest path
-    const corner = smartCorner(fp, tp, fromHandle)
     const mid = [(fp.x + tp.x) / 2, LINE_Y + 1, (fp.z + tp.z) / 2] as [number, number, number]
 
-    return { from, corner, to, mid }
+    return { from, fromOff: fromOffPt, corner, toOff: toOffPt, to, mid }
   }, [fromNode, toNode, node.props, dragOverride])
 
   if (!geometry) return null
@@ -102,8 +119,10 @@ export function ConnectionLine({ node, nodes, selected, onSelect, dragOverride }
 
   return (
     <group onClick={(e) => { e.stopPropagation(); onSelect(node.id) }}>
-      <FloorSegment from={geometry.from} to={geometry.corner} color={color} />
-      <FloorSegment from={geometry.corner} to={geometry.to} color={color} />
+      <FloorSegment from={geometry.from} to={geometry.fromOff} color={color} />
+      <FloorSegment from={geometry.fromOff} to={geometry.corner} color={color} />
+      <FloorSegment from={geometry.corner} to={geometry.toOff} color={color} />
+      <FloorSegment from={geometry.toOff} to={geometry.to} color={color} />
       <mesh position={geometry.to}>
         <sphereGeometry args={[1.5, 12, 12]} />
         <meshStandardMaterial color={color} />
@@ -124,17 +143,44 @@ export function ConnectionLine({ node, nodes, selected, onSelect, dragOverride }
 
 /** Preview L-shaped connection */
 export function ConnectionPreview({
-  fromX, fromZ, toX, toZ, fromHandle = 'right', color = '#6366f1',
+  fromX, fromZ, toX, toZ, fromHandle = 'right', toHandle = null, color = '#6366f1',
 }: {
   fromX: number; fromZ: number; toX: number; toZ: number
-  fromHandle?: 'top' | 'bottom' | 'left' | 'right'; color?: string
+  fromHandle?: 'top' | 'bottom' | 'left' | 'right'
+  toHandle?: 'top' | 'bottom' | 'left' | 'right' | null
+  color?: string
 }) {
-  const from = [fromX, LINE_Y, fromZ] as [number, number, number]
-  const to = [toX, LINE_Y, toZ] as [number, number, number]
-  const corner = smartCorner({ x: fromX, z: fromZ }, { x: toX, z: toZ }, fromHandle)
+  const fp = { x: fromX, z: fromZ }
+  const tp = { x: toX, z: toZ }
+  const fo = handleOffset(fp, fromHandle)
+
+  if (toHandle) {
+    // Snapped to target — show full routing with both stems
+    const toOff = handleOffset(tp, toHandle)
+    const corner = smartCorner(fo, toOff, fromHandle)
+    const from = [fp.x, LINE_Y, fp.z] as [number, number, number]
+    const fromOffPt = [fo.x, LINE_Y, fo.z] as [number, number, number]
+    const toOffPt = [toOff.x, LINE_Y, toOff.z] as [number, number, number]
+    const to = [tp.x, LINE_Y, tp.z] as [number, number, number]
+    return (
+      <>
+        <FloorSegment from={from} to={fromOffPt} color={color} />
+        <FloorSegment from={fromOffPt} to={corner} color={color} />
+        <FloorSegment from={corner} to={toOffPt} color={color} />
+        <FloorSegment from={toOffPt} to={to} color={color} />
+      </>
+    )
+  }
+
+  // No snap — simple routing to cursor
+  const corner = smartCorner(fo, tp, fromHandle)
+  const from = [fp.x, LINE_Y, fp.z] as [number, number, number]
+  const fromOff = [fo.x, LINE_Y, fo.z] as [number, number, number]
+  const to = [tp.x, LINE_Y, tp.z] as [number, number, number]
   return (
     <>
-      <FloorSegment from={from} to={corner} color={color} />
+      <FloorSegment from={from} to={fromOff} color={color} />
+      <FloorSegment from={fromOff} to={corner} color={color} />
       <FloorSegment from={corner} to={to} color={color} />
     </>
   )
