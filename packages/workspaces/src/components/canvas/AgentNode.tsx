@@ -222,20 +222,33 @@ export function AgentNode({ node, selected, onSelect, onDragStart, onDragMove, o
         <meshStandardMaterial color={meshColor} roughness={0.5} metalness={0.05} />
       </mesh>
 
-      {/* Inverted hull outline — scales X/Y from shape center, not Z */}
+      {/* Outline — front face (inverted hull, X/Y only) */}
       {(() => {
-        const t = 1 + (outlineCfg?.thickness ?? OUTLINE_THICKNESS)
         const th = outlineCfg?.thickness ?? OUTLINE_THICKNESS
+        const t = 1 + th
         return <>
+          {/* Front silhouette border */}
           <mesh geometry={geoms.body}
-            position={[0, -BODY_CENTER_Y * th, -EXTRUDE_DEPTH / 2 - EXTRUDE_DEPTH * th * 0.5]}
-            scale={[t, t, 1 + th]}>
+            position={[0, -BODY_CENTER_Y * th, -EXTRUDE_DEPTH / 2]}
+            scale={[t, t, 1]}>
             <meshBasicMaterial color={edgeColor} side={BackSide} />
           </mesh>
           <mesh geometry={geoms.head}
-            position={[0, -HEAD_CENTER_Y * th, -EXTRUDE_DEPTH / 2 - EXTRUDE_DEPTH * th * 0.5]}
-            scale={[t, t, 1 + th]}>
+            position={[0, -HEAD_CENTER_Y * th, -EXTRUDE_DEPTH / 2]}
+            scale={[t, t, 1]}>
             <meshBasicMaterial color={edgeColor} side={BackSide} />
+          </mesh>
+
+          {/* Back face border — flat shape behind the back face */}
+          <mesh geometry={geoms.bodyShadow}
+            position={[0, -BODY_CENTER_Y * th, EXTRUDE_DEPTH / 2 + 0.01]}
+            scale={[t, t, 1]}>
+            <meshBasicMaterial color={edgeColor} />
+          </mesh>
+          <mesh geometry={geoms.headShadow}
+            position={[0, -HEAD_CENTER_Y * th, EXTRUDE_DEPTH / 2 + 0.01]}
+            scale={[t, t, 1]}>
+            <meshBasicMaterial color={edgeColor} />
           </mesh>
         </>
       })()}
