@@ -114,6 +114,8 @@ boostkit/
 │   │                   #   rememberTable, autosave, Yjs field persist, inline editing (Column.editable())
 │   │                   #   + Dashboard builder: Widget.schema(), Dashboard, drag-and-drop, per-user layout, lazy/polling
 │   │                   #   + Panel.use() plugin system — PanelPlugin with schemas/pages/register/boot hooks
+│   │                   #   + AI chat sidebar: unified chat + resource agents, POST /{panel}/api/_chat,
+│   │                   #     run_agent tool, forceAgent bypass, resource context, field animation via SSE
 │   ├── panels-lexical/ # Lexical rich-text editor adapter — RichContentField, CollaborativePlainText, block editor,
 │   │                   #   toolbar profiles (document/default/simple/minimal/none), slash commands, floating link editor,
 │   │                   #   useYjsCollab hook (WebSocket + IndexedDB providers), imperative editor refs for version restore
@@ -160,7 +162,7 @@ boostkit/
 | `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, global chat panel, field typing animation), `registerLazyElement`/`registerResolver` for plugins |
+| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` tool, resource context, field typing animation), `registerLazyElement`/`registerResolver` for plugins |
 | `@boostkit/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
 | `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@boostkit/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
