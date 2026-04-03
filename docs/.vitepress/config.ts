@@ -164,6 +164,16 @@ export default defineConfig({
           ],
         },
         {
+          text: 'AI',
+          items: [
+            { text: 'Overview', link: '/packages/ai/' },
+            { text: 'Agents', link: '/packages/ai/agents' },
+            { text: 'Tools', link: '/packages/ai/tools' },
+            { text: 'Streaming', link: '/packages/ai/streaming' },
+            { text: 'Middleware & Testing', link: '/packages/ai/middleware' },
+          ],
+        },
+        {
           text: 'Panels',
           items: [
             { text: 'Overview', link: '/packages/panels/' },
@@ -175,6 +185,7 @@ export default defineConfig({
             { text: 'Globals', link: '/packages/panels/globals' },
             { text: 'Custom Pages', link: '/packages/panels/pages' },
             { text: 'Editor', link: '/packages/panels/editor' },
+            { text: 'AI Agents', link: '/packages/panels/agents' },
             { text: 'Media Library', link: '/packages/media/' },
             { text: 'API Routes', link: '/packages/panels/api' },
           ],
