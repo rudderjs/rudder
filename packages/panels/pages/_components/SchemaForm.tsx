@@ -37,12 +37,14 @@ interface SchemaFormProps {
   backUrl?: string
   /** Agent field updates — each entry triggers a typing animation. Append to trigger new animations. */
   agentFieldUpdates?: Array<{ field: string; value: string }>
+  /** Resource agent definitions (for form action dropdown). */
+  agents?: Array<{ slug: string; label: string; icon?: string; fields: string[] }>
 }
 
 // Text-based field types that get per-field Y.Doc (not shared Y.Map)
 const TEXT_TYPES = new Set(['text', 'textarea', 'email', 'richcontent', 'content'])
 
-export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submitMethod, prefill, mode = 'create', cancelUrl, recordId, resourceSlug, backUrl, agentFieldUpdates }: SchemaFormProps) {
+export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submitMethod, prefill, mode = 'create', cancelUrl, recordId, resourceSlug, backUrl, agentFieldUpdates, agents }: SchemaFormProps) {
   const pathSegment = panelPath.replace(/^\//, '')
   const isStandalone = (form as SchemaFormMeta & { standalone?: boolean }).standalone === true
   const rawFormYjs = form as SchemaFormMeta & { yjs?: boolean; wsLivePath?: string | null; docName?: string | null; liveProviders?: string[] }
@@ -432,37 +434,66 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
   // ── Agent field updates (typing animation) ──────────────
   const agentTimersRef = useRef<Map<string, number>>(new Map())
   const processedCountRef = useRef(0)
+  /** Cached imperative refs for collaborative text editors. */
+  const collabRefCache = useRef<Map<string, { setContent(text: string): void }>>(new Map())
+
+  /** Resolve and cache the imperative editor ref for a collaborative text field. */
+  async function resolveCollabRef(fieldName: string): Promise<{ setContent(text: string): void } | null> {
+    const cached = collabRefCache.current.get(fieldName)
+    if (cached) return cached
+
+    try {
+      const { getCollabTextRef } = await import('./fields/TextInput.js')
+      const ref = getCollabTextRef(fieldName)
+      if (ref) { collabRefCache.current.set(fieldName, ref); return ref }
+    } catch { /* */ }
+
+    try {
+      const { getCollabTextareaRef } = await import('./fields/TextareaInput.js')
+      const ref = getCollabTextareaRef(fieldName)
+      if (ref) { collabRefCache.current.set(fieldName, ref); return ref }
+    } catch { /* */ }
+
+    return null
+  }
 
   useEffect(() => {
-    if (!agentFieldUpdates || agentFieldUpdates.length <= processedCountRef.current) return
+    if (!agentFieldUpdates) return
+    // Reset counter when array is cleared (new agent run)
+    if (agentFieldUpdates.length < processedCountRef.current) {
+      processedCountRef.current = 0
+      collabRefCache.current.clear()
+    }
+    if (agentFieldUpdates.length <= processedCountRef.current) return
 
-    // Process only new entries
     const newUpdates = agentFieldUpdates.slice(processedCountRef.current)
     processedCountRef.current = agentFieldUpdates.length
 
     for (const { field, value } of newUpdates) {
-      // Cancel any running animation for this field
       const prev = agentTimersRef.current.get(field)
       if (prev) clearInterval(prev)
 
-      // Animate: progressively reveal text
-      let pos = 0
-      const chunkSize = 3
-      const tick = () => {
-        pos = Math.min(pos + chunkSize, value.length)
-        const partial = value.slice(0, pos)
-        setValues(p => ({ ...p, [field]: partial }))
-        void updateTextFieldRef(field, partial)
-        if (pos >= value.length) {
-          const t = agentTimersRef.current.get(field)
-          if (t) clearInterval(t)
-          agentTimersRef.current.delete(field)
+      // Pre-resolve the collab ref before starting animation
+      resolveCollabRef(field).then(collabRef => {
+        let pos = 0
+        const chunkSize = 3
+        const tick = () => {
+          pos = Math.min(pos + chunkSize, value.length)
+          const partial = value.slice(0, pos)
+          setValues(p => ({ ...p, [field]: partial }))
+          // For collaborative editors, use the cached imperative ref
+          if (collabRef) collabRef.setContent(partial)
+          if (pos >= value.length) {
+            const t = agentTimersRef.current.get(field)
+            if (t) clearInterval(t)
+            agentTimersRef.current.delete(field)
+          }
         }
-      }
-      tick()
-      if (value.length > chunkSize) {
-        agentTimersRef.current.set(field, window.setInterval(tick, 20))
-      }
+        tick()
+        if (value.length > chunkSize) {
+          agentTimersRef.current.set(field, window.setInterval(tick, 20))
+        }
+      })
     }
   }, [agentFieldUpdates]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -689,6 +720,10 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
                   onPublish={() => void handleEditSave('publish')}
                   onUnpublish={() => void handleEditSave('unpublish')}
                   i18n={i18n as PanelI18n & Record<string, string>}
+                  agents={agents}
+                  resourceSlug={resourceSlug}
+                  recordId={recordId}
+                  apiBase={`${panelPath}/api`}
                 />
               ) : (
                 <div className="flex items-center gap-3">

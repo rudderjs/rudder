@@ -4,6 +4,7 @@ import { Component, type ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import { I18nProvider }   from '../_hooks/useI18n.js'
+import { AiChatProvider } from '../_components/agents/AiChatContext.js'
 import type { PanelNavigationMeta } from '@boostkit/panels'
 // Auto-discover plugin registrations (fields, lazy elements, etc.)
 // Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
@@ -105,11 +106,13 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
 
   return (
     <PanelErrorBoundary>
-      <I18nProvider locale={data.panelMeta.locale}>
-        <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
-          {children}
-        </AdminLayout>
-      </I18nProvider>
+      <AiChatProvider>
+        <I18nProvider locale={data.panelMeta.locale}>
+          <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
+            {children}
+          </AdminLayout>
+        </I18nProvider>
+      </AiChatProvider>
     </PanelErrorBoundary>
   )
 }
