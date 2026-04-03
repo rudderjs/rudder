@@ -269,7 +269,7 @@ Route.post('/api/ai/stream', async (req) => {
   const readable = new ReadableStream({
     async start(controller) {
       for await (const chunk of stream) {
-        if (chunk.type === 'text') {
+        if (chunk.type === 'text-delta') {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.text })}\n\n`))
         }
       }
