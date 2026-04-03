@@ -12,6 +12,7 @@ import { localization } from '@boostkit/localization'
 import { database } from '@boostkit/orm-prisma'
 import { broadcasting } from '@boostkit/broadcast'
 import { live }   from '@boostkit/live'
+import { ai }     from '@boostkit/ai'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
@@ -34,6 +35,7 @@ export default [
   notifications(),
   broadcasting(),
   live(configs.live),
+  ai(configs.ai),
 
   // ── Application ─────────────────────────────────────────
   AppServiceProvider,

@@ -1,4 +1,3 @@
-import { resolveOptionalPeer } from '@boostkit/core'
 import type {
   ProviderFactory,
   ProviderAdapter,
@@ -41,7 +40,7 @@ class AnthropicAdapter implements ProviderAdapter {
 
   private async getClient(): Promise<any> {
     if (this.client) return this.client
-    const sdk = await resolveOptionalPeer<any>('@anthropic-ai/sdk')
+    const sdk = await import(/* @vite-ignore */ '@anthropic-ai/sdk')
     const Anthropic = sdk.default ?? sdk.Anthropic
     this.client = new Anthropic({
       apiKey: this.config.apiKey,

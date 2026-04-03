@@ -10,8 +10,9 @@ import session  from './session.js'
 import live     from './live.js'
 import localization from './localization.js'
 import media    from './media.js'
+import ai       from './ai.js'
 
-const configs = { app, server, database, queue, mail, cache, storage, auth, session, live, localization, media }
+const configs = { app, server, database, queue, mail, cache, storage, auth, session, live, localization, media, ai }
 
 export type Configs = typeof configs
 

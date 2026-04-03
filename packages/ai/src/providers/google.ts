@@ -1,4 +1,3 @@
-import { resolveOptionalPeer } from '@boostkit/core'
 import type {
   ProviderFactory,
   ProviderAdapter,
@@ -40,7 +39,7 @@ class GoogleAdapter implements ProviderAdapter {
 
   private async getClient(): Promise<any> {
     if (this.client) return this.client
-    const sdk = await resolveOptionalPeer<any>('@google/genai')
+    const sdk: any = await import(/* @vite-ignore */ '@google/genai')
     const GoogleGenAI = sdk.GoogleGenAI ?? sdk.default
     this.client = new GoogleGenAI({ apiKey: this.config.apiKey })
     return this.client

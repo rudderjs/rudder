@@ -222,6 +222,72 @@ Route.post('/api/contact', async (req, res) => {
   return res.json({ ok: true, message: `Thanks ${result.data.name}, your message has been received!` })
 }, [CsrfMiddleware()])
 
+// ── AI test routes ───────────────────────────────────────────────────────────
+
+import { AI, agent, toolDefinition } from '@boostkit/ai'
+
+// Simple prompt — uses default provider
+Route.get('/api/ai/prompt', async (_req, res) => {
+  const response = await AI.prompt('Say hello in 3 different languages. Keep it short.')
+  res.json({ text: response.text, usage: response.usage })
+})
+
+// Agent with instructions
+Route.post('/api/ai/chat', async (req, res) => {
+  const { message } = req.body as { message: string }
+  const response = await AI.agent('You are a helpful assistant. Be concise.').prompt(message)
+  res.json({ text: response.text, usage: response.usage })
+})
+
+// Agent with tools
+Route.get('/api/ai/tools', async (_req, res) => {
+  const weatherTool = toolDefinition({
+    name: 'get_weather',
+    description: 'Get the current weather for a city',
+    inputSchema: z.object({ city: z.string() }),
+  }).server(async ({ city }) => `The weather in ${city} is 22°C and sunny.`)
+
+  const response = await agent({
+    instructions: 'You help people check the weather. Use the get_weather tool when asked about weather.',
+    tools: [weatherTool],
+  }).prompt('What is the weather like in Tokyo and Paris?')
+
+  res.json({
+    text: response.text,
+    steps: response.steps.length,
+    toolCalls: response.steps.flatMap(s => s.toolCalls ?? []).map(tc => ({ name: tc.name, input: tc.input, result: tc.result })),
+    usage: response.usage,
+  })
+})
+
+// Streaming response
+Route.post('/api/ai/stream', async (req) => {
+  const { message } = (await (req.raw as any).req.json()) as { message: string }
+  const { stream, response } = AI.agent('You are a helpful assistant. Be concise.').stream(message)
+
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of stream) {
+        if (chunk.type === 'text') {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.text })}\n\n`))
+        }
+      }
+      const final = await response
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, usage: final.usage })}\n\n`))
+      controller.close()
+    },
+  })
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
+})
+
 // Auth routes — delegate all /api/auth/* requests to better-auth, with a stricter rate limit
 Route.all('/api/auth/*', (req) => {
   const auth = app().make<BetterAuthInstance>('auth')

@@ -12,4 +12,7 @@ export default defineConfig({
   server: {
     allowedHosts: true,
   },
+  ssr: {
+    external: ['@anthropic-ai/sdk', 'openai', '@google/generative-ai'],
+  },
 })

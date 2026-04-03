@@ -1,4 +1,3 @@
-import { resolveOptionalPeer } from '@boostkit/core'
 import type {
   ProviderFactory,
   ProviderAdapter,
@@ -42,7 +41,7 @@ export class OpenAIAdapter implements ProviderAdapter {
 
   private async getClient(): Promise<any> {
     if (this.client) return this.client
-    const sdk = await resolveOptionalPeer<any>('openai')
+    const sdk = await import(/* @vite-ignore */ 'openai')
     const OpenAI = sdk.default ?? sdk.OpenAI
     this.client = new OpenAI({
       apiKey: this.config.apiKey,
