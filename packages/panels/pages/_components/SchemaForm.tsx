@@ -177,11 +177,9 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
             setValues(prev => ({ ...prev, [key]: fieldsMap.get(key) }))
           } else if (textFieldSet.has(key)) {
             // Text-type collaborative field — updated by AI agent via Y.Map.
-            // Push through the imperative editor ref so the Lexical/collab binding picks it up.
+            // Animate the text appearing with a typing effect.
             const val = fieldsMap.get(key)
-            setValues(prev => ({ ...prev, [key]: val }))
-            // Also update the collaborative editor if mounted
-            void updateTextFieldRef(key, val)
+            void updateTextFieldAnimated(key, val)
           }
         })
       })
@@ -410,31 +408,70 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
   }
 
   // ── Update collaborative text field via imperative ref ────
-  /** Push a value into a collaborative text/richcontent editor.
-   * Works for AI agent updates (via Y.Map observer) and version restore. */
-  async function updateTextFieldRef(name: string, value: unknown) {
+
+  /** Active typing animations — cancel previous when a new value arrives for the same field. */
+  const typingTimersRef = useRef<Map<string, number>>(new Map())
+
+  /** Resolve the imperative editor ref for a text-type field. */
+  async function getTextRef(name: string): Promise<{ setContent(text: string): void } | null> {
     const field = form.fields.find(f => (f as FieldMeta).name === name) as FieldMeta | undefined
-    if (!field?.yjs || !TEXT_TYPES.has(field.type)) return
+    if (!field?.yjs || !TEXT_TYPES.has(field.type)) return null
 
     if (field.type === 'richcontent' || field.type === 'content') {
-      import('./fields/RichContentInput.js').then(({ getRichContentRef }) => {
-        const ref = getRichContentRef(name)
-        if (ref) ref.setContent(value)
-      }).catch(() => {})
-    } else {
-      // text, textarea, email — use collab text ref
-      import('./fields/TextInput.js').then(({ getCollabTextRef }) => {
-        const ref = getCollabTextRef(name)
-        if (ref) {
-          ref.setContent(String(value ?? ''))
-        } else {
-          import('./fields/TextareaInput.js').then(({ getCollabTextareaRef }) => {
-            const ref2 = getCollabTextareaRef(name)
-            if (ref2) ref2.setContent(String(value ?? ''))
-          }).catch(() => {})
-        }
-      }).catch(() => {})
+      const { getRichContentRef } = await import('./fields/RichContentInput.js')
+      return getRichContentRef(name) ?? null
     }
+
+    try {
+      const { getCollabTextRef } = await import('./fields/TextInput.js')
+      const ref = getCollabTextRef(name)
+      if (ref) return ref
+    } catch { /* not available */ }
+
+    try {
+      const { getCollabTextareaRef } = await import('./fields/TextareaInput.js')
+      return getCollabTextareaRef(name) ?? null
+    } catch { /* not available */ }
+
+    return null
+  }
+
+  /** Set a text field value instantly (used by version restore). */
+  async function updateTextFieldRef(name: string, value: unknown) {
+    // Cancel any running typing animation for this field
+    const timer = typingTimersRef.current.get(name)
+    if (timer) { clearInterval(timer); typingTimersRef.current.delete(name) }
+
+    const ref = await getTextRef(name)
+    if (ref) ref.setContent(String(value ?? ''))
+  }
+
+  /** Set a text field value with a typing animation (used by AI agent updates). */
+  async function updateTextFieldAnimated(name: string, value: unknown) {
+    const text = String(value ?? '')
+    if (!text) return updateTextFieldRef(name, value)
+
+    // Cancel any previous animation for this field
+    const prev = typingTimersRef.current.get(name)
+    if (prev) { clearInterval(prev); typingTimersRef.current.delete(name) }
+
+    const ref = await getTextRef(name)
+    if (!ref) return
+
+    // Typing animation — reveal ~3 characters per frame at 20ms intervals
+    let pos = 0
+    const charsPerTick = 3
+    ref.setContent('')
+    const timer = window.setInterval(() => {
+      pos = Math.min(pos + charsPerTick, text.length)
+      ref.setContent(text.slice(0, pos))
+      setValues(prev => ({ ...prev, [name]: text.slice(0, pos) }))
+      if (pos >= text.length) {
+        clearInterval(timer)
+        typingTimersRef.current.delete(name)
+      }
+    }, 20)
+    typingTimersRef.current.set(name, timer)
   }
 
   // ── Version restore ──────────────────────────────────────
