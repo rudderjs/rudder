@@ -274,7 +274,7 @@ async function main(): Promise<void> {
     `Done! Get started:\n\n` +
     nextSteps.join('\n') +
     hintsStr +
-    `\n\n  Docs: https://github.com/rudderjs/rudderjs`
+    `\n\n  Docs: https://github.com/rudderjs/rudder`
   )
 }
 

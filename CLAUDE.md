@@ -11,7 +11,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **Monorepo**: pnpm workspaces + Turborepo
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@rudderjs/*`
-- **GitHub**: https://github.com/rudderjs/rudderjs
+- **GitHub**: https://github.com/rudderjs/rudder
 - **Status**: Early development — 31 packages published to npm
 
 ---

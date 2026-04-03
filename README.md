@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f5a623" alt="npm" /></a>
-  <a href="https://github.com/rudderjs/rudderjs/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <a href="https://github.com/rudderjs/rudder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-powered-646cff" alt="Vite" />
 </p>
@@ -554,4 +554,4 @@ RudderJS is in **early development**. All packages are functional and the playgr
 
 ## License
 
-MIT © [Suleiman Shahbari](https://github.com/rudderjs/rudderjs)
+MIT © [Suleiman Shahbari](https://github.com/rudderjs/rudder)

@@ -1,6 +1,6 @@
 # create-rudderjs-app
 
-Interactive CLI scaffolder for [RudderJS](https://github.com/rudderjs/rudderjs) — a Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
+Interactive CLI scaffolder for [RudderJS](https://github.com/rudderjs/rudder) — a Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
 
 ## Usage
 

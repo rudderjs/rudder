@@ -23,7 +23,7 @@ export default defineConfig({
       {
         text: 'v0.1.0',
         items: [
-          { text: 'Changelog', link: 'https://github.com/rudderjs/rudderjs/releases' },
+          { text: 'Changelog', link: 'https://github.com/rudderjs/rudder/releases' },
           { text: 'Contributing Guide', link: '/contributing/' },
         ],
       },
@@ -232,7 +232,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/rudderjs/rudderjs' },
+      { icon: 'github', link: 'https://github.com/rudderjs/rudder' },
     ],
 
     footer: {
@@ -241,7 +241,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/rudderjs/rudderjs/edit/main/docs/:path',
+      pattern: 'https://github.com/rudderjs/rudder/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
   },

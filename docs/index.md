@@ -17,7 +17,7 @@ hero:
       link: /guide/
     - theme: alt
       text: View on GitHub
-      link: https://github.com/rudderjs/rudderjs
+      link: https://github.com/rudderjs/rudder
 
 features:
   - icon: ⚡

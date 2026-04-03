@@ -128,7 +128,7 @@ export const adminPanel = Panel.make('admin')
           .schema(() => [
             List.make('Quick Links').items([
               { label: 'Documentation', description: 'Read the RudderJS docs', href: '/docs', icon: '📖' },
-              { label: 'GitHub', description: 'View source code', href: 'https://github.com/rudderjs/rudderjs', icon: '🐙' },
+              { label: 'GitHub', description: 'View source code', href: 'https://github.com/rudderjs/rudder', icon: '🐙' },
               { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
             ]),
           ]),
