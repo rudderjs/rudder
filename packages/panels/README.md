@@ -625,6 +625,81 @@ Adds trash toggle, restore, and force-delete.
 
 ---
 
+## AI Agents
+
+Define AI agents on resources — they read record data, update fields in real-time, and stream progress to a global chat panel.
+
+```ts
+import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@boostkit/panels'
+
+export class ArticleResource extends Resource {
+  static model = Article
+
+  form(form: Form) {
+    return form.fields([
+      TextField.make('title').required(),
+      TextareaField.make('excerpt'),
+      TextField.make('metaTitle'),
+      TextareaField.make('metaDescription'),
+    ])
+  }
+
+  agents() {
+    return [
+      ResourceAgent.make('seo')
+        .label('Improve SEO')
+        .icon('Search')
+        .instructions('Analyse and improve the meta title and description for better SEO.')
+        .fields(['metaTitle', 'metaDescription']),
+
+      ResourceAgent.make('summarize')
+        .label('Write Excerpt')
+        .icon('Sparkles')
+        .instructions('Write a concise excerpt based on the article title and content.')
+        .fields(['excerpt']),
+    ]
+  }
+}
+```
+
+Agents appear in the form's action bar as an "AI Agents" dropdown. When triggered, output streams into a global AI chat panel (toggle from the header). Updated fields show a typing animation.
+
+### Class-Based Agents
+
+For complex agents with custom tools:
+
+```ts
+import { ResourceAgent } from '@boostkit/panels'
+import { toolDefinition } from '@boostkit/ai'
+import { z } from 'zod'
+
+class TranslateAgent extends ResourceAgent {
+  constructor() {
+    super('translate')
+    this.label('Translate').icon('Languages')
+    this.fields(['title', 'content', 'metaDescription'])
+  }
+
+  resolveInstructions() {
+    return 'Translate all fields. Preserve formatting.'
+  }
+
+  extraTools() {
+    return [
+      toolDefinition({
+        name: 'lookup_term',
+        description: 'Look up domain-specific term translation',
+        inputSchema: z.object({ term: z.string(), lang: z.string() }),
+      }).server(async ({ term, lang }) => `"${term}" → ...`),
+    ]
+  }
+}
+```
+
+Requires `@boostkit/ai` as a peer dependency.
+
+---
+
 ## Dark Mode
 
 Built-in light/dark/system theme toggle. Persists to `localStorage`.
