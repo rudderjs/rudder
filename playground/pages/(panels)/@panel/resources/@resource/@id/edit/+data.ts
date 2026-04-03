@@ -16,8 +16,8 @@ export async function data(pageContext: PageContextServer) {
 
   const resource     = new ResourceClass()
   const fullMeta     = resource.toMeta()
-  // Edit page only needs identity labels — form config is in formElement
-  const resourceMeta = { label: fullMeta.label, labelSingular: fullMeta.labelSingular }
+  // Edit page only needs identity labels + agents — form config is in formElement
+  const resourceMeta = { label: fullMeta.label, labelSingular: fullMeta.labelSingular, agents: fullMeta.agents }
   const panelMeta    = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext)
 

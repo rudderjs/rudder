@@ -9,7 +9,7 @@ export function flattenSchemaFields(schema: SchemaItem[]): FieldMeta[] {
     if (item.type === 'section') {
       result.push(...(item as SectionMeta).fields)
     } else if (item.type === 'tabs') {
-      for (const tab of (item as TabsMeta).tabs) if (tab.fields) result.push(...tab.fields)
+      for (const tab of (item as TabsMeta).tabs) result.push(...tab.fields)
     } else {
       result.push(item as FieldMeta)
     }
