@@ -50,7 +50,7 @@ export class SectionsDemo extends Page {
           List.make('Resources')
             .items([
               { label: 'Documentation', description: 'Read the RudderJS docs', href: '/docs', icon: '📖' },
-              { label: 'GitHub', description: 'View source code', href: 'https://github.com/rudderjs/rudderjs', icon: '🐙' },
+              { label: 'GitHub', description: 'View source code', href: 'https://github.com/rudderjs/rudder', icon: '🐙' },
               { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
             ]),
         ),

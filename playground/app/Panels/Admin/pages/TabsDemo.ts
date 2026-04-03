@@ -75,7 +75,7 @@ export class TabsDemo extends Page {
             List.make('Resources')
               .items([
                 { label: 'Documentation', href: '/docs', icon: '📖' },
-                { label: 'GitHub', href: 'https://github.com/rudderjs/rudderjs', icon: '🐙' },
+                { label: 'GitHub', href: 'https://github.com/rudderjs/rudder', icon: '🐙' },
               ]),
           ]),
       ]).persist('session'),

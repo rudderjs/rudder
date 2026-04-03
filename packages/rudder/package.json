@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rudderjs/rudderjs",
+    "url": "https://github.com/rudderjs/rudder",
     "directory": "packages/rudder"
   },
   "type": "module",
