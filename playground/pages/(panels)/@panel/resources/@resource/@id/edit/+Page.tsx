@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { SchemaForm }  from '../../../../../_components/SchemaForm.js'
 import type { SchemaFormMeta, PanelI18n } from '@boostkit/panels'
 import { useI18n } from '../../../../../_hooks/useI18n.js'
-import { AgentSidebar } from '../../../../../_components/agents/AgentSidebar.js'
-import { AgentToolbar } from '../../../../../_components/agents/AgentToolbar.js'
+import { useAiChat } from '../../../../../_components/agents/AiChatContext.js'
 import type { Data } from './+data.js'
 
 export default function EditPage() {
@@ -18,14 +17,10 @@ export default function EditPage() {
   config({ title: `${i18n.edit} ${resourceMeta.labelSingular} — ${panelName}` })
 
   const agents = resourceMeta.agents ?? []
-  const hasAgents = agents.length > 0
-  const [agentSidebarOpen, setAgentSidebarOpen] = useState(false)
 
-  // Agent field updates — append to trigger typing animation in SchemaForm
-  const [agentFieldUpdates, setAgentFieldUpdates] = useState<Array<{ field: string; value: string }>>([])
-  const handleFieldUpdate = useCallback((field: string, value: string) => {
-    setAgentFieldUpdates(prev => [...prev, { field, value }])
-  }, [])
+  // Field updates from global AI chat panel
+  let fieldUpdates: Array<{ field: string; value: string }> = []
+  try { fieldUpdates = useAiChat().fieldUpdates } catch { /* no provider */ }
 
   // Back navigation
   const defaultBack = `/${pathSegment}/resources/${slug}`
@@ -40,42 +35,20 @@ export default function EditPage() {
   }
 
   return (
-    <div className="flex h-full">
-      <div className="flex-1 p-6 overflow-y-auto">
-        {hasAgents && (
-          <div className="max-w-2xl mb-2 flex justify-end">
-            <AgentToolbar
-              hasAgents={hasAgents}
-              open={agentSidebarOpen}
-              onToggle={() => setAgentSidebarOpen(v => !v)}
-            />
-          </div>
-        )}
-        <div className="max-w-2xl">
-          <SchemaForm
-            form={formElement as SchemaFormMeta}
-            panelPath={`/${pathSegment}`}
-            i18n={i18n}
-            mode="edit"
-            recordId={id}
-            resourceSlug={slug}
-            backUrl={backHref}
-            agentFieldUpdates={agentFieldUpdates}
-          />
-        </div>
-      </div>
-
-      {hasAgents && (
-        <AgentSidebar
-          agents={agents}
+    <div className="p-6">
+      <div className="max-w-2xl">
+        <SchemaForm
+          form={formElement as SchemaFormMeta}
+          panelPath={`/${pathSegment}`}
+          i18n={i18n}
+          mode="edit"
           recordId={id}
           resourceSlug={slug}
-          apiBase={`/${pathSegment}/api`}
-          open={agentSidebarOpen}
-          onClose={() => setAgentSidebarOpen(false)}
-          onFieldUpdate={handleFieldUpdate}
+          backUrl={backHref}
+          agentFieldUpdates={fieldUpdates}
+          agents={agents}
         />
-      )}
+      </div>
     </div>
   )
 }

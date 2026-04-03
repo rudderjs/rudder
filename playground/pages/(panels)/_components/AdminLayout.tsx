@@ -8,6 +8,8 @@ import { useI18n } from '../_hooks/useI18n.js'
 import { ResourceIcon } from './ResourceIcon.js'
 import { ThemeProvider } from './ThemeProvider.js'
 import { ThemeToggle } from './ThemeToggle.js'
+import { AiChatPanel } from './agents/AiChatPanel.js'
+import { useAiChat } from './agents/AiChatContext.js'
 import {
   Sidebar,
   SidebarContent,
@@ -599,11 +601,15 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
           </div>
           <div className="ms-auto flex items-center gap-2 px-4">
             <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
+            <AiChatToggle />
             <ThemeToggle />
           </div>
         </header>
-        <div className="flex flex-1 flex-col overflow-y-auto">
-          {children}
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-y-auto">
+            {children}
+          </div>
+          <AiChatPanel />
         </div>
       </SidebarInset>
 
@@ -692,12 +698,16 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
           ))}
         </nav>
         <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
+        <AiChatToggle />
         <ThemeToggle />
         <UserDropdown />
       </header>
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+      <div className="flex flex-1 overflow-hidden">
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+        <AiChatPanel />
+      </div>
       <Toaster richColors position="bottom-right" />
     </div>
   )
@@ -717,5 +727,29 @@ export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: P
         {content}
       </ThemeProvider>
     </TooltipProvider>
+  )
+}
+
+// ─── AI Chat Toggle ──────────────────────────────────────────
+
+function AiChatToggle() {
+  let ctx: ReturnType<typeof useAiChat> | null = null
+  try { ctx = useAiChat() } catch { /* AiChatProvider not mounted */ }
+  if (!ctx) return null
+
+  const { open, setOpen } = ctx
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(!open)}
+      className={`p-2 rounded-md transition-colors ${
+        open ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+      }`}
+      aria-label="AI Chat"
+    >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+      </svg>
+    </button>
   )
 }
