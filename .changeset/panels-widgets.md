@@ -1,8 +1,8 @@
 ---
-'@boostkit/panels': minor
+'@rudderjs/panels': minor
 ---
 
-Add Chart and List schema elements, shared WidgetRenderer component, Resource.widgets(), and merge @boostkit/dashboards into panels.
+Add Chart and List schema elements, shared WidgetRenderer component, Resource.widgets(), and merge @rudderjs/dashboards into panels.
 
 - `Chart.make(title)` — line, bar, pie, doughnut, area charts with `.chartType()`, `.labels()`, `.datasets()`, `.height()`
 - `List.make(title)` — card with items list, each with optional description, href, icon; `.items()`, `.limit()`
@@ -10,4 +10,4 @@ Add Chart and List schema elements, shared WidgetRenderer component, Resource.wi
 - `Resource.widgets(record?)` — define schema element widgets scoped to the show page
 - `recharts` added as optional peer dependency
 - Dashboard i18n keys added (en + ar): customizeDashboard, doneDashboard, addWidget, removeWidget, noWidgets, availableWidgets
-- `@boostkit/dashboards` merged into `@boostkit/panels` — Widget, Dashboard, DashboardGrid, per-user layout persistence now import from `@boostkit/panels`
+- `@rudderjs/dashboards` merged into `@rudderjs/panels` — Widget, Dashboard, DashboardGrid, per-user layout persistence now import from `@rudderjs/panels`

@@ -75,7 +75,7 @@ async function send(ws: WebSocket, q: MsgQueue, data: unknown): Promise<Msg> {
 
 // ─── All tests in one top-level describe so node:test runs them sequentially ──
 
-describe('@boostkit/ws', () => {
+describe('@rudderjs/ws', () => {
 
   // ─── Channel classes ─────────────────────────────────────
 

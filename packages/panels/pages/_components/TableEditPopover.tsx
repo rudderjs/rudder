@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@boostkit/panels'
+import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@rudderjs/panels'
 import { FieldInput } from './FieldInput.js'
 import { formatCellValue } from './formatCellValue.js'
 

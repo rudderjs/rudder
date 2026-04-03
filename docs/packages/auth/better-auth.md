@@ -1,11 +1,11 @@
 # Setup with better-auth
 
-Full setup guide for integrating [better-auth](https://better-auth.com) with BoostKit via `@boostkit/auth`.
+Full setup guide for integrating [better-auth](https://better-auth.com) with RudderJS via `@rudderjs/auth`.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/auth better-auth
+pnpm add @rudderjs/auth better-auth
 ```
 
 ## 1. Prisma Schema
@@ -76,8 +76,8 @@ pnpm exec prisma db push
 
 ```ts
 // config/auth.ts
-import { Env } from '@boostkit/support'
-import type { BetterAuthConfig } from '@boostkit/auth'
+import { Env } from '@rudderjs/support'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret:           Env.get('AUTH_SECRET', 'change-me-at-least-32-chars!!'),
@@ -100,8 +100,8 @@ APP_URL=http://localhost:3000
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@boostkit/orm-prisma'
-import { auth } from '@boostkit/auth'
+import { database } from '@rudderjs/orm-prisma'
+import { auth } from '@rudderjs/auth'
 import configs from '../config/index.js'
 
 export default [
@@ -111,7 +111,7 @@ export default [
 ]
 ```
 
-If you are **not** using `@boostkit/orm-prisma`, pass the database config explicitly:
+If you are **not** using `@rudderjs/orm-prisma`, pass the database config explicitly:
 
 ```ts
 auth(configs.auth, { driver: 'sqlite', url: 'file:./dev.db' })
@@ -132,10 +132,10 @@ better-auth exposes built-in routes at `/api/auth/*` — no manual registration 
 
 ## 5. Protecting Routes
 
-Use the built-in `AuthMiddleware()` factory from `@boostkit/auth`:
+Use the built-in `AuthMiddleware()` factory from `@rudderjs/auth`:
 
 ```ts
-import { AuthMiddleware } from '@boostkit/auth'
+import { AuthMiddleware } from '@rudderjs/auth'
 
 const authMw = AuthMiddleware()
 
@@ -202,8 +202,8 @@ window.location.href = '/api/auth/sign-in/social?provider=github&callbackURL=/da
 ## 8. Accessing the Auth Instance
 
 ```ts
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
+import { app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 const auth = app().make<BetterAuthInstance>('auth')
 

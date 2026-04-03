@@ -8,7 +8,7 @@ export class CancelledError extends Error {
   }
 }
 
-// ─── Artisan Registry ──────────────────────────────────────
+// ─── Rudder Registry ──────────────────────────────────────
 
 export type ConsoleHandler = (args: string[], opts: Record<string, unknown>) => void | Promise<void>
 
@@ -34,7 +34,7 @@ export class CommandBuilder {
   getDescription(): string { return this._description }
 }
 
-export class ArtisanRegistry {
+export class CommandRegistry {
   private _commands: CommandBuilder[] = []
   private _classes:  (new () => Command)[] = []
 
@@ -259,13 +259,13 @@ export abstract class Command {
   abstract handle(): void | Promise<void>
 }
 
-// ─── Global artisan singleton ──────────────────────────────
+// ─── Global rudder singleton ──────────────────────────────
 
 const _g = globalThis as Record<string, unknown>
-if (!_g['__boostkit_artisan__']) _g['__boostkit_artisan__'] = new ArtisanRegistry()
+if (!_g['__rudderjs_rudder__']) _g['__rudderjs_rudder__'] = new CommandRegistry()
 
-/** Global Artisan command registry — import and call artisan.command() in routes/console.ts */
-export const artisan = _g['__boostkit_artisan__'] as ArtisanRegistry
+/** Global Rudder command registry — import and call rudder.command() in routes/console.ts */
+export const rudder = _g['__rudderjs_rudder__'] as CommandRegistry
 
-/** Alias for artisan — Laravel-style capitalised name */
-export const Artisan = artisan
+/** Alias for rudder — Laravel-style capitalised name */
+export const Rudder = rudder

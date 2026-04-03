@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { artisan } from '@boostkit/core'
+import { rudder } from '@rudderjs/core'
 import { ScheduledTask, schedule, Schedule, scheduler } from './index.js'
 
 function makeTask(cb: () => void = () => {}): ScheduledTask {
@@ -162,14 +162,14 @@ describe('Scheduler singleton', () => {
 
 describe('scheduler() provider', () => {
   beforeEach(() => {
-    artisan.reset()
+    rudder.reset()
     schedule.reset()
   })
 
   it('registers schedule:run, schedule:work and schedule:list on boot', () => {
     const Provider = scheduler()
     new Provider({} as never).boot?.()
-    const names = artisan.getCommands().map((c) => c.name)
+    const names = rudder.getCommands().map((c) => c.name)
     assert.ok(names.includes('schedule:run'))
     assert.ok(names.includes('schedule:work'))
     assert.ok(names.includes('schedule:list'))
@@ -178,7 +178,7 @@ describe('scheduler() provider', () => {
   it('schedule:run reports no tasks when registry is empty', async () => {
     const Provider = scheduler()
     new Provider({} as never).boot?.()
-    const cmd = artisan.getCommands().find(c => c.name === 'schedule:run')!
+    const cmd = rudder.getCommands().find(c => c.name === 'schedule:run')!
 
     const logs: string[] = []
     const orig = console.log
@@ -192,7 +192,7 @@ describe('scheduler() provider', () => {
   it('schedule:list reports no tasks when registry is empty', () => {
     const Provider = scheduler()
     new Provider({} as never).boot?.()
-    const cmd = artisan.getCommands().find(c => c.name === 'schedule:list')!
+    const cmd = rudder.getCommands().find(c => c.name === 'schedule:list')!
 
     const logs: string[] = []
     const orig = console.log
@@ -207,7 +207,7 @@ describe('scheduler() provider', () => {
     schedule.call(() => {}).everySecond().description('tick')
     const Provider = scheduler()
     new Provider({} as never).boot?.()
-    const cmd = artisan.getCommands().find(c => c.name === 'schedule:run')!
+    const cmd = rudder.getCommands().find(c => c.name === 'schedule:run')!
 
     const logs: string[] = []
     const orig = console.log

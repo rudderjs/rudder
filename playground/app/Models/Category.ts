@@ -1,4 +1,4 @@
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class Category extends Model {
   static table = 'category'

@@ -1,16 +1,16 @@
-# create-boostkit-app
+# create-rudderjs-app
 
-Interactive CLI scaffolder for [BoostKit](https://github.com/boostkitjs/boostkit) — a Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
+Interactive CLI scaffolder for [RudderJS](https://github.com/rudderjs/rudderjs) — a Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
 
 ## Usage
 
 The installer auto-detects your package manager from the command you use:
 
 ```bash
-pnpm create boostkit-app
-npm create boostkit-app@latest
-yarn create boostkit-app
-bunx create-boostkit-app
+pnpm create rudderjs-app
+npm create rudderjs-app@latest
+yarn create rudderjs-app
+bunx create-rudderjs-app
 ```
 
 All four package managers are fully supported — generated files, install commands, and next-step instructions adapt automatically.
@@ -38,27 +38,27 @@ The installer walks you through up to 12 prompts (several are conditional):
 
 | Choice | Description | Package |
 |--------|-------------|---------|
-| Authentication | Login, register, sessions | `@boostkit/auth` |
-| Cache | Memory + Redis drivers | `@boostkit/cache` |
-| Queue | Background jobs | `@boostkit/queue` |
-| Storage | File uploads (local + S3) | `@boostkit/storage` |
-| Mail | SMTP + log driver | `@boostkit/mail` |
-| Notifications | Multi-channel notifications | `@boostkit/notification` |
-| Scheduler | Cron-like task scheduling | `@boostkit/schedule` |
-| WebSocket | Real-time channels | `@boostkit/broadcast` |
-| Real-time Collab | Yjs CRDT sync | `@boostkit/live` |
-| AI | LLM providers (Anthropic, OpenAI, Google, Ollama) | `@boostkit/ai` |
-| Admin Panel | Auto-generated CRUD admin | `@boostkit/panels` |
+| Authentication | Login, register, sessions | `@rudderjs/auth` |
+| Cache | Memory + Redis drivers | `@rudderjs/cache` |
+| Queue | Background jobs | `@rudderjs/queue` |
+| Storage | File uploads (local + S3) | `@rudderjs/storage` |
+| Mail | SMTP + log driver | `@rudderjs/mail` |
+| Notifications | Multi-channel notifications | `@rudderjs/notification` |
+| Scheduler | Cron-like task scheduling | `@rudderjs/schedule` |
+| WebSocket | Real-time channels | `@rudderjs/broadcast` |
+| Real-time Collab | Yjs CRDT sync | `@rudderjs/live` |
+| AI | LLM providers (Anthropic, OpenAI, Google, Ollama) | `@rudderjs/ai` |
+| Admin Panel | Auto-generated CRUD admin | `@rudderjs/panels` |
 
 **Panel plugin sub-prompts** (shown after main checklist when dependencies are met):
-- **Media library** — shown when panels + storage selected. Adds `@boostkit/media` + `@boostkit/image`, `config/media.ts`, wires `Panel.use(media())`
-- **AI workspaces** — shown when panels + ai selected. Adds `@boostkit/workspaces`, wires `Panel.use(workspaces())`
+- **Media library** — shown when panels + storage selected. Adds `@rudderjs/media` + `@rudderjs/image`, `config/media.ts`, wires `Panel.use(media())`
+- **AI workspaces** — shown when panels + ai selected. Adds `@rudderjs/workspaces`, wires `Panel.use(workspaces())`
 
 When **panels** is selected, scaffolds `app/Panels/AdminPanel.ts` with `Panel.make()`, `UserResource` (if auth+orm), `TodoResource` (if todo), and wires `panels()` provider.
 
 When **ai** is selected, generates `config/ai.ts`, `ai()` provider, an AI chat demo page at `/ai-chat`, and `POST /api/ai/chat` route.
 
-Only selected packages get their dependencies, providers, config files, and schema files added to the generated project. Base packages (`core`, `router`, `server-hono`, `middleware`, `vite`, `artisan`, `cli`) are always included.
+Only selected packages get their dependencies, providers, config files, and schema files added to the generated project. Base packages (`core`, `router`, `server-hono`, `middleware`, `vite`, `rudder`, `cli`) are always included.
 
 ## What gets generated
 
@@ -75,7 +75,7 @@ my-app/
 ├── routes/
 │   ├── api.ts          # JSON API routes
 │   ├── web.ts          # Web/redirect routes
-│   ├── console.ts      # Artisan commands
+│   ├── console.ts      # Rudder commands
 │   └── channels.ts     # (if WebSocket selected) Channel auth
 ├── pages/
 │   ├── +config.ts              # Root config — includes renderer when single framework
@@ -122,7 +122,7 @@ my-app/
 ## Local development / testing
 
 ```bash
-cd create-boostkit-app
+cd create-rudderjs-app
 pnpm build
 node dist/index.js          # launches the interactive CLI
 ```

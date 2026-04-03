@@ -1,21 +1,21 @@
-# @boostkit/queue
+# @rudderjs/queue
 
 Queue job abstractions, registry, and provider factory.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/queue
+pnpm add @rudderjs/queue
 ```
 
-This package provides the `Job` base class, the `DispatchBuilder` fluent interface, the `QueueAdapter` contract, and the `queue()` provider factory. It does not include a driver — use it with `@boostkit/queue-bullmq` or `@boostkit/queue-inngest` for real background processing, or rely on the built-in `sync` driver for in-process execution.
+This package provides the `Job` base class, the `DispatchBuilder` fluent interface, the `QueueAdapter` contract, and the `queue()` provider factory. It does not include a driver — use it with `@rudderjs/queue-bullmq` or `@rudderjs/queue-inngest` for real background processing, or rely on the built-in `sync` driver for in-process execution.
 
 ## Defining a Job
 
 Extend `Job` and implement `handle()`:
 
 ```ts
-import { Job } from '@boostkit/queue'
+import { Job } from '@rudderjs/queue'
 
 export class SendEmailJob extends Job {
   static queue   = 'default'
@@ -65,7 +65,7 @@ await SendEmailJob.dispatch('bob@example.com', 'Reset password')
 Register the queue provider in `bootstrap/providers.ts` using the `queue()` factory:
 
 ```ts
-import { queue } from '@boostkit/queue'
+import { queue } from '@rudderjs/queue'
 import configs from '../config/index.js'
 
 export default [
@@ -77,7 +77,7 @@ export default [
 Define the queue config in `config/queue.ts`:
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'sync'),
@@ -121,9 +121,9 @@ connections: {
 
 When `QUEUE_CONNECTION=sync`, calling `SendEmailJob.dispatch(...).send()` executes `handle()` inline before returning.
 
-## Artisan Commands
+## Rudder Commands
 
-The queue provider registers the following artisan commands. Commands that require adapter support (anything beyond `sync`) throw an error when invoked with an unsupported driver.
+The queue provider registers the following rudder commands. Commands that require adapter support (anything beyond `sync`) throw an error when invoked with an unsupported driver.
 
 | Command | Description |
 |---|---|
@@ -134,12 +134,12 @@ The queue provider registers the following artisan commands. Commands that requi
 | `queue:retry [queue]` | Re-enqueue all failed jobs. |
 
 ```bash
-pnpm artisan queue:work
-pnpm artisan queue:work notifications
+pnpm rudder queue:work
+pnpm rudder queue:work notifications
 
-pnpm artisan queue:status
-pnpm artisan queue:failed default
-pnpm artisan queue:retry default
+pnpm rudder queue:status
+pnpm rudder queue:failed default
+pnpm rudder queue:retry default
 ```
 
 The `sync` driver does not support `queue:work` — it throws an error with a hint to switch to `bullmq`. The `sync` driver executes jobs inline at dispatch time, so no background worker is needed.
@@ -147,7 +147,7 @@ The `sync` driver does not support `queue:work` — it throws an error with a hi
 ## Notes
 
 - The built-in `sync` driver requires no additional packages and is always available.
-- For Redis-backed queuing, use `@boostkit/queue-bullmq`.
-- For serverless/event-driven queuing, use `@boostkit/queue-inngest`.
+- For Redis-backed queuing, use `@rudderjs/queue-bullmq`.
+- For serverless/event-driven queuing, use `@rudderjs/queue-inngest`.
 - Job payloads are passed as constructor arguments — ensure they are serializable if using an external driver.
 - `static queue` sets the default queue name for the job class; `static retries` sets the retry count; `static delay` sets the default dispatch delay in milliseconds (default `0`).

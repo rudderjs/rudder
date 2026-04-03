@@ -1,20 +1,20 @@
-# @boostkit/artisan
+# @rudderjs/rudder
 
-Command registry and class-based command primitives for the BoostKit CLI.
+Command registry and class-based command primitives for the RudderJS CLI.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/artisan
+pnpm add @rudderjs/rudder
 ```
 
 ## Quick Start
 
 ```ts
-import { Artisan, Command } from '@boostkit/artisan'
+import { Rudder, Command } from '@rudderjs/rudder'
 
 // Functional command
-Artisan.command('greet {name}', (args) => {
+Rudder.command('greet {name}', (args) => {
   console.log(`Hello, ${args[0]}!`)
 }).description('Print a greeting')
 
@@ -28,7 +28,7 @@ class PingCommand extends Command {
   }
 }
 
-Artisan.register(PingCommand)
+Rudder.register(PingCommand)
 ```
 
 ---
@@ -57,49 +57,49 @@ Command signatures describe arguments and options in a Laravel-style DSL:
 
 ## API Reference
 
-### `artisan` / `Artisan`
+### `rudder` / `Rudder`
 
 Global singleton registry (both names refer to the same instance):
 
 ```ts
-import { artisan, Artisan } from '@boostkit/artisan'
+import { rudder, Rudder } from '@rudderjs/rudder'
 ```
 
-#### `Artisan.command(name, handler)`
+#### `Rudder.command(name, handler)`
 
 Registers a functional command. Returns a `CommandBuilder` for chaining.
 
 ```ts
-Artisan.command('db:seed {table?}', async (args, opts) => {
+Rudder.command('db:seed {table?}', async (args, opts) => {
   // args: string[]  (positional values in order)
   // opts: Record<string, unknown>
 }).description('Seed the database')
 ```
 
-#### `Artisan.register(...CommandClasses)`
+#### `Rudder.register(...CommandClasses)`
 
 Registers one or more class-based `Command` subclasses.
 
 ```ts
-Artisan.register(MigrateCommand, SeedCommand)
+Rudder.register(MigrateCommand, SeedCommand)
 ```
 
-#### `Artisan.reset()`
+#### `Rudder.reset()`
 
 Clears all registered commands and classes. Useful in tests.
 
-#### `Artisan.getCommands()` / `Artisan.getClasses()`
+#### `Rudder.getCommands()` / `Rudder.getClasses()`
 
-Returns the internal arrays (used by `@boostkit/cli` to discover commands).
+Returns the internal arrays (used by `@rudderjs/cli` to discover commands).
 
 ---
 
 ### `CommandBuilder`
 
-Returned by `Artisan.command()`. Supports fluent chaining:
+Returned by `Rudder.command()`. Supports fluent chaining:
 
 ```ts
-Artisan.command('migrate', handler)
+Rudder.command('migrate', handler)
   .description('Run database migrations')  // or .purpose(...)
 ```
 
@@ -207,7 +207,7 @@ async handle() {
 Thrown when the user cancels an interactive prompt (Ctrl+C).
 
 ```ts
-import { CancelledError } from '@boostkit/artisan'
+import { CancelledError } from '@rudderjs/rudder'
 
 try {
   const answer = await this.ask('Name?')
@@ -226,7 +226,7 @@ Parses a command signature string into a structured `ParsedSignature` object.
 Throws if the signature does not start with a valid command name.
 
 ```ts
-import { parseSignature } from '@boostkit/artisan'
+import { parseSignature } from '@rudderjs/rudder'
 
 const parsed = parseSignature('users:create {name} {email?} {--force} {--role=admin}')
 // parsed.name → 'users:create'
@@ -264,5 +264,5 @@ interface CommandOptDef {
 
 - `@clack/prompts` is lazy-loaded (singleton) — only imported on the first prompt call.
 - `process.exit()` is never called — prompt cancellation throws `CancelledError` instead.
-- `artisan` / `Artisan` are both exported and refer to the same global singleton.
-- The registry is consumed by `@boostkit/cli` at runtime to build the CLI help and dispatch commands.
+- `rudder` / `Rudder` are both exported and refer to the same global singleton.
+- The registry is consumed by `@rudderjs/cli` at runtime to build the CLI help and dispatch commands.

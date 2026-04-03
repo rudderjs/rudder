@@ -2,7 +2,7 @@
 
 Resource agents bring AI capabilities directly into your admin panel. Define agents on resources that can read record data, update fields in real-time, and stream progress to an integrated chat sidebar.
 
-Requires `@boostkit/ai` as a peer dependency.
+Requires `@rudderjs/ai` as a peer dependency.
 
 ---
 
@@ -11,7 +11,7 @@ Requires `@boostkit/ai` as a peer dependency.
 Override the `agents()` method on a resource to define available agents:
 
 ```ts
-import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@boostkit/panels'
+import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   static model = Article
@@ -69,8 +69,8 @@ Every agent automatically gets:
 For complex agents with custom tools or dynamic instructions:
 
 ```ts
-import { ResourceAgent } from '@boostkit/panels'
-import { toolDefinition } from '@boostkit/ai'
+import { ResourceAgent } from '@rudderjs/panels'
+import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 
 class TranslateAgent extends ResourceAgent {

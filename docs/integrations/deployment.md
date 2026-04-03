@@ -1,16 +1,16 @@
 # Deployment
 
-BoostKit apps use `vike-photon` to wire `bootstrap/app.ts` as the HTTP server, making them deployable to any runtime that supports the Fetch API — Node.js, Cloudflare Workers, Bun, or Deno.
+RudderJS apps use `vike-photon` to wire `bootstrap/app.ts` as the HTTP server, making them deployable to any runtime that supports the Fetch API — Node.js, Cloudflare Workers, Bun, or Deno.
 
 ## Entry Point
 
-`bootstrap/app.ts` is the entry point. It exports the `BoostKit` instance, which `vike-photon` uses as the HTTP server:
+`bootstrap/app.ts` is the entry point. It exports the `RudderJS` instance, which `vike-photon` uses as the HTTP server:
 
 ```ts
 // bootstrap/app.ts
 import 'reflect-metadata'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 // ...
 
 export default Application.configure({ ... }).create()
@@ -34,7 +34,7 @@ export default {
 
 ## Node.js
 
-BoostKit runs natively on Node.js 18+. The Hono adapter starts a Node.js HTTP server automatically.
+RudderJS runs natively on Node.js 18+. The Hono adapter starts a Node.js HTTP server automatically.
 
 ### Production build
 
@@ -65,7 +65,7 @@ For persistent Node.js processes:
 ```bash
 pnpm add -g pm2
 
-pm2 start dist/server/index.mjs --name boostkit-app
+pm2 start dist/server/index.mjs --name rudderjs-app
 pm2 save
 pm2 startup   # Configure auto-start on reboot
 ```
@@ -75,7 +75,7 @@ pm2 startup   # Configure auto-start on reboot
 ```js
 module.exports = {
   apps: [{
-    name:       'boostkit-app',
+    name:       'rudderjs-app',
     script:     'dist/server/index.mjs',
     env_production: {
       NODE_ENV:     'production',
@@ -124,7 +124,7 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV:     production
-      DATABASE_URL: postgres://boostkit:secret@db:5432/boostkit
+      DATABASE_URL: postgres://rudderjs:secret@db:5432/rudderjs
       AUTH_SECRET:  your-32-char-secret-here
     depends_on:
       - db
@@ -132,9 +132,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER:     boostkit
+      POSTGRES_USER:     rudderjs
       POSTGRES_PASSWORD: secret
-      POSTGRES_DB:       boostkit
+      POSTGRES_DB:       rudderjs
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -174,7 +174,7 @@ CMD ["node", "dist/server/index.mjs"]
 
 ## Cloudflare Workers
 
-BoostKit's WinterCG-compatible entry point works on Cloudflare Workers.
+RudderJS's WinterCG-compatible entry point works on Cloudflare Workers.
 
 ### Prerequisites
 
@@ -185,7 +185,7 @@ pnpm add -D wrangler
 ### `wrangler.toml`
 
 ```toml
-name       = "my-boostkit-app"
+name       = "my-rudderjs-app"
 main       = "dist/server/index.mjs"
 compatibility_date = "2024-01-01"
 

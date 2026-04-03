@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/core'
+import type { MiddlewareHandler } from '@rudderjs/core'
 import type { RouterLike } from '../types.js'
 import type { Panel } from '../../Panel.js'
 import { FormRegistry } from '../../registries/FormRegistry.js'
@@ -97,14 +97,14 @@ export function mountFormRoutes(
       // Broadcast live refresh to linked tables
       if (entry.refreshes && entry.refreshes.length > 0) {
         try {
-          const broadcastPkg = '@boostkit/broadcast'
+          const broadcastPkg = '@rudderjs/broadcast'
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
           for (const tableId of entry.refreshes) {
             const slug = tableId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
             broadcast(`live:table:${slug}`, 'refresh', { source: 'form', formId })
           }
-        } catch { /* @boostkit/broadcast not available */ }
+        } catch { /* @rudderjs/broadcast not available */ }
       }
 
       return res.json({ success: true, ...responseData })

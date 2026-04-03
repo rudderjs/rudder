@@ -1,4 +1,4 @@
 export default {
-  title:       'Todos — BoostKit',
+  title:       'Todos — RudderJS',
   description: 'Manage your todos.',
 }

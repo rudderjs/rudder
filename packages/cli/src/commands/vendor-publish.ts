@@ -58,7 +58,7 @@ export function vendorPublishCommand(program: Command): void {
       // Read from globalThis — populated by ServiceProvider.publishes() during app boot.
       // Using globalThis avoids module-cache fragmentation across tsx/ESM load paths.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const registry: Map<string, PublishGroup[]> = (globalThis as any).__boostkit_publish_registry__ ?? new Map()
+      const registry: Map<string, PublishGroup[]> = (globalThis as any).__rudderjs_publish_registry__ ?? new Map()
       const cwd      = process.cwd()
 
       // ── Build filtered entries ───────────────────────────

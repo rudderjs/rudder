@@ -6,8 +6,8 @@
  */
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { EventDispatcher, dispatcher, dispatch, events } from '@boostkit/core'
-import type { Listener } from '@boostkit/core'
+import { EventDispatcher, dispatcher, dispatch, events } from '@rudderjs/core'
+import type { Listener } from '@rudderjs/core'
 
 // ─── Test events ───────────────────────────────────────────
 

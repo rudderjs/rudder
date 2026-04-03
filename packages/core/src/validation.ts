@@ -1,5 +1,5 @@
 import { z, ZodType, ZodError } from 'zod'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 // ─── Validation Error ──────────────────────────────────────
 

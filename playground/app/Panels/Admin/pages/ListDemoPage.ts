@@ -1,4 +1,4 @@
-import { Page, Heading, Text, List, ViewMode, Column, DataField, SelectField, SelectFilter } from '@boostkit/panels'
+import { Page, Heading, Text, List, ViewMode, Column, DataField, SelectField, SelectFilter } from '@rudderjs/panels'
 import { Category } from '../../../Models/Category.js'
 import { Article } from '../../../Models/Article.js'
 import { Todo } from '../../../Models/Todo.js'

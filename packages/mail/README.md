@@ -1,18 +1,18 @@
-# @boostkit/mail
+# @rudderjs/mail
 
 Mail facade, mailable abstraction, and provider factory with built-in `log` and `smtp` drivers.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/mail
+pnpm add @rudderjs/mail
 ```
 
 ## Setup
 
 ```ts
 // config/mail.ts
-import type { MailConfig } from '@boostkit/mail'
+import type { MailConfig } from '@rudderjs/mail'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
@@ -36,7 +36,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@boostkit/mail'
+import { mail } from '@rudderjs/mail'
 import configs from '../config/index.js'
 
 export default [mail(configs.mail)]
@@ -47,7 +47,7 @@ export default [mail(configs.mail)]
 Mailables describe an email. Extend `Mailable` and implement `build()` to set the subject, HTML, and plain-text body using the fluent protected methods.
 
 ```ts
-import { Mailable } from '@boostkit/mail'
+import { Mailable } from '@rudderjs/mail'
 
 export class WelcomeEmail extends Mailable {
   constructor(private readonly name: string) { super() }
@@ -64,7 +64,7 @@ export class WelcomeEmail extends Mailable {
 ## Sending Mail
 
 ```ts
-import { Mail } from '@boostkit/mail'
+import { Mail } from '@rudderjs/mail'
 import { WelcomeEmail } from './WelcomeEmail.js'
 
 // Single recipient
@@ -142,7 +142,7 @@ Sends emails via SMTP using Nodemailer. Requires `pnpm add nodemailer`.
 Exported for standalone use and testing:
 
 ```ts
-import { LogAdapter } from '@boostkit/mail'
+import { LogAdapter } from '@rudderjs/mail'
 
 const adapter = new LogAdapter()
 await adapter.send(mailable, { to: ['user@example.com'], from: { address: 'noreply@app.com' } })

@@ -1,11 +1,11 @@
-# @boostkit/localization
+# @rudderjs/localization
 
-Laravel-style localization for BoostKit. JSON translation files, named interpolation, pluralization, and per-request locale via AsyncLocalStorage.
+Laravel-style localization for RudderJS. JSON translation files, named interpolation, pluralization, and per-request locale via AsyncLocalStorage.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/localization
+pnpm add @rudderjs/localization
 ```
 
 ## Setup
@@ -34,7 +34,7 @@ lang/
 ```ts
 // config/localization.ts
 import { resolve } from 'node:path'
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 
 export default {
   locale: Env.get('APP_LOCALE', 'en'),
@@ -47,7 +47,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { localization } from '@boostkit/localization'
+import { localization } from '@rudderjs/localization'
 import configs from '../config/index.js'
 
 export default [
@@ -60,9 +60,9 @@ export default [
 ### __() - synchronous, cache-only lookup
 
 ```ts
-import { __ } from '@boostkit/localization'
+import { __ } from '@rudderjs/localization'
 
-__('messages.welcome', { app: 'BoostKit' }) // 'Welcome to BoostKit!'
+__('messages.welcome', { app: 'RudderJS' }) // 'Welcome to RudderJS!'
 __('messages.items', 3) // '3 items'
 ```
 
@@ -71,7 +71,7 @@ Returns the key if not found.
 ### trans() - async, loads namespace on first access
 
 ```ts
-import { trans } from '@boostkit/localization'
+import { trans } from '@rudderjs/localization'
 
 await trans('messages.greeting', { name: 'Alice' }) // 'Hello, Alice!'
 await trans('messages.items', 0) // 'no items'
@@ -107,7 +107,7 @@ await trans('messages.item', 2) // 'many items'
 ## Locale helpers
 
 ```ts
-import { getLocale, setLocale, runWithLocale, LocalizationMiddleware } from '@boostkit/localization'
+import { getLocale, setLocale, runWithLocale, LocalizationMiddleware } from '@rudderjs/localization'
 
 const current = getLocale()
 
@@ -137,4 +137,4 @@ __('messages.nav.profile')
 
 ## Fallback locale
 
-If a key is missing in the current locale, BoostKit automatically checks the configured fallback locale.
+If a key is missing in the current locale, RudderJS automatically checks the configured fallback locale.

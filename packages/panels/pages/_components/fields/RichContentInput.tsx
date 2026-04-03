@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, type ComponentType } from 'react'
-import { getField } from '@boostkit/panels'
+import { getField } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 
 /** Global registry of editor refs for version restore. Keyed by field name. */

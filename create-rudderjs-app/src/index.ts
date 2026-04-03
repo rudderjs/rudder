@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const pm      = detectPackageManager()
 
   console.log()
-  intro(' create-boostkit-app ')
+  intro(' create-rudderjs-app ')
 
   // ── Project name ───────────────────────────────────────
 
@@ -221,11 +221,11 @@ async function main(): Promise<void> {
     await fs.writeFile(abs, content, 'utf8')
   }
 
-  // Copy auth pages from installer's own @boostkit/auth dependency
+  // Copy auth pages from installer's own @rudderjs/auth dependency
   if (packages.auth) {
     try {
       const require      = createRequire(import.meta.url)
-      const authPkgPath  = require.resolve('@boostkit/auth/package.json')
+      const authPkgPath  = require.resolve('@rudderjs/auth/package.json')
       const authPagesDir = path.join(path.dirname(authPkgPath), 'pages', primary)
       await fs.cp(authPagesDir, path.join(target, 'pages', '(auth)'), { recursive: true })
     } catch {
@@ -258,9 +258,9 @@ async function main(): Promise<void> {
       `  ${pmExec(pm, 'prisma generate')}`,
       `  ${pmExec(pm, 'prisma db push')}`,
     ] : []),
-    ...(!install && packages.auth ? [`  ${pmRun(pm, 'artisan')} vendor:publish --tag=auth-pages-${primary}`] : []),
-    ...(packages.panels ? [`  ${pmRun(pm, 'artisan')} vendor:publish --tag=panels-pages --force`] : []),
-    ...(withMedia ? [`  ${pmRun(pm, 'artisan')} vendor:publish --tag=media-pages --force`] : []),
+    ...(!install && packages.auth ? [`  ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-pages-${primary}`] : []),
+    ...(packages.panels ? [`  ${pmRun(pm, 'rudder')} vendor:publish --tag=panels-pages --force`] : []),
+    ...(withMedia ? [`  ${pmRun(pm, 'rudder')} vendor:publish --tag=media-pages --force`] : []),
     `  ${pmRun(pm, 'dev')}`,
   ]
 
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
     `Done! Get started:\n\n` +
     nextSteps.join('\n') +
     hintsStr +
-    `\n\n  Docs: https://github.com/boostkitjs/boostkit`
+    `\n\n  Docs: https://github.com/rudderjs/rudderjs`
   )
 }
 

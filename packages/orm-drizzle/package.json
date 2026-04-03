@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/orm-drizzle",
+  "name": "@rudderjs/orm-drizzle",
   "version": "0.0.6",
-  "description": "Drizzle ORM adapter for BoostKit. Implements OrmAdapterProvider / OrmAdapter / QueryBuilder<T> using Drizzle's SQL-like fluent API.",
+  "description": "Drizzle ORM adapter for RudderJS. Implements OrmAdapterProvider / OrmAdapter / QueryBuilder<T> using Drizzle's SQL-like fluent API.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/orm-drizzle"
   },
   "type": "module",
@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.38.0",
-    "@boostkit/contracts": "workspace:*"
+    "@rudderjs/contracts": "workspace:*"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.0.0",

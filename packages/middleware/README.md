@@ -1,11 +1,11 @@
-# @boostkit/middleware
+# @rudderjs/middleware
 
 HTTP middleware base class, pipeline runner, built-in middleware, and cache-backed rate limiting.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/middleware
+pnpm add @rudderjs/middleware
 ```
 
 ---
@@ -15,7 +15,7 @@ pnpm add @boostkit/middleware
 The simplest middleware is a plain async function:
 
 ```ts
-import type { MiddlewareHandler } from '@boostkit/contracts'
+import type { MiddlewareHandler } from '@rudderjs/contracts'
 
 export const requestId: MiddlewareHandler = async (req, res, next) => {
   const id = req.headers['x-request-id'] ?? crypto.randomUUID()
@@ -29,8 +29,8 @@ export const requestId: MiddlewareHandler = async (req, res, next) => {
 For more complex cases, extend `Middleware` and use `fromClass()` or `.toHandler()`:
 
 ```ts
-import { Middleware, fromClass } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Middleware, fromClass } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
@@ -52,7 +52,7 @@ Route.get('/api/me', handler, [fromClass(AuthMiddleware)])
 Runs a sequence of middleware in order. The destination callback is called after all middleware pass.
 
 ```ts
-import { Pipeline } from '@boostkit/middleware'
+import { Pipeline } from '@rudderjs/middleware'
 
 // Constructor accepts an array
 const pipeline = new Pipeline([
@@ -81,7 +81,7 @@ All built-in middleware are **callable factory functions** — no `new`, no `.to
 Double-submit cookie CSRF protection. Sets a `csrf_token` cookie on GET requests and validates it on mutating requests via `X-CSRF-Token` header or `_token` body field. Returns `419` on mismatch.
 
 ```ts
-import { CsrfMiddleware, getCsrfToken } from '@boostkit/middleware'
+import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
 
 // Apply to web routes only (not API routes)
 Route.post('/contact', handler, [CsrfMiddleware()])
@@ -106,7 +106,7 @@ fetch('/contact', { method: 'POST', headers: { 'X-CSRF-Token': token } })
 Cache-backed rate limiter. Returns a `MiddlewareHandler` with fluent configuration methods.
 
 ```ts
-import { RateLimit } from '@boostkit/middleware'
+import { RateLimit } from '@rudderjs/middleware'
 
 // Global — 60 requests/minute per IP
 m.use(RateLimit.perMinute(60))
@@ -135,7 +135,7 @@ Sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Ret
 | `.message(text)` | Custom 429 response message |
 | `.skipIf(fn)` | Skip when `(req) => boolean` returns `true` |
 
-Requires `@boostkit/cache` to be registered. **Fails open** (allows the request) if no cache adapter is configured.
+Requires `@rudderjs/cache` to be registered. **Fails open** (allows the request) if no cache adapter is configured.
 
 ---
 
@@ -144,7 +144,7 @@ Requires `@boostkit/cache` to be registered. **Fails open** (allows the request)
 Class-based — use `.toHandler()` or `fromClass()`:
 
 ```ts
-import { CorsMiddleware } from '@boostkit/middleware'
+import { CorsMiddleware } from '@rudderjs/middleware'
 
 const cors = new CorsMiddleware({
   origin:  ['https://app.example.com'],
@@ -161,6 +161,6 @@ Defaults: `origin: '*'`, standard HTTP methods, `Content-Type` + `Authorization`
 
 - Prefer plain `MiddlewareHandler` functions over class-based middleware — simpler, no instantiation needed.
 - `CsrfMiddleware()` belongs on **web routes** only. API routes authenticate via tokens, not CSRF cookies.
-- `RateLimit` uses `@boostkit/cache` — the `memory` driver does not share state across processes. Use `redis` for distributed deployments.
+- `RateLimit` uses `@rudderjs/cache` — the `memory` driver does not share state across processes. Use `redis` for distributed deployments.
 - Static asset paths (`/assets/app.js`, `/@vite/client`) are automatically skipped by both `ThrottleMiddleware` and `RateLimit`.
 - `sideEffects: false` — fully tree-shakable.

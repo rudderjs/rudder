@@ -1,6 +1,6 @@
-import type { QueryBuilder, OrmAdapter } from '@boostkit/contracts'
+import type { QueryBuilder, OrmAdapter } from '@rudderjs/contracts'
 
-export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState } from '@boostkit/contracts'
+export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState } from '@rudderjs/contracts'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
@@ -17,7 +17,7 @@ export class ModelRegistry {
 
   static getAdapter(): OrmAdapter {
     if (!this.adapter) {
-      throw new Error('[BoostKit ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
+      throw new Error('[RudderJS ORM] No ORM adapter registered. Did you add a database provider to your providers list?')
     }
     return this.adapter
   }
@@ -214,7 +214,7 @@ export abstract class Model {
     const enhanced = q as any
     enhanced.scope = (name: string, ...args: unknown[]) => {
       const scopeFn = localScopes[name]
-      if (!scopeFn) throw new Error(`[BoostKit ORM] Scope "${name}" is not defined on ${modelClass.name}.`)
+      if (!scopeFn) throw new Error(`[RudderJS ORM] Scope "${name}" is not defined on ${modelClass.name}.`)
       return scopeFn(enhanced, ...args)
     }
     enhanced.withoutGlobalScope = (name: string) => {
@@ -271,7 +271,7 @@ export abstract class Model {
     const self = this as typeof Model
     let payload = data as Record<string, unknown>
     const result = await self._fireEvent('creating', payload)
-    if (result === false) throw new Error(`[BoostKit ORM] Create cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
     if (result && typeof result === 'object') payload = result
 
     const record = await Model._q(this).create(payload as Partial<InstanceType<T>>)
@@ -291,7 +291,7 @@ export abstract class Model {
     const self = this as typeof Model
     let payload = data as Record<string, unknown>
     const result = await self._fireEvent('updating', id, payload)
-    if (result === false) throw new Error(`[BoostKit ORM] Update cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
     if (result && typeof result === 'object') payload = result
 
     const record = await Model._q(this).update(id, payload as Partial<InstanceType<T>>)
@@ -304,7 +304,7 @@ export abstract class Model {
   static async delete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
     const self = this as typeof Model
     const result = await self._fireEvent('deleting', id)
-    if (result === false) throw new Error(`[BoostKit ORM] Delete cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[RudderJS ORM] Delete cancelled by observer on ${self.name}.`)
 
     await Model._q(this).delete(id)
 
@@ -315,7 +315,7 @@ export abstract class Model {
   static async restore<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T>> {
     const self = this as typeof Model
     const result = await self._fireEvent('restoring', id)
-    if (result === false) throw new Error(`[BoostKit ORM] Restore cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[RudderJS ORM] Restore cancelled by observer on ${self.name}.`)
 
     const record = await Model._q(this).restore(id)
 
@@ -327,7 +327,7 @@ export abstract class Model {
   static async forceDelete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
     const self = this as typeof Model
     const result = await self._fireEvent('deleting', id)
-    if (result === false) throw new Error(`[BoostKit ORM] Delete cancelled by observer on ${self.name}.`)
+    if (result === false) throw new Error(`[RudderJS ORM] Delete cancelled by observer on ${self.name}.`)
 
     await Model._q(this).forceDelete(id)
 

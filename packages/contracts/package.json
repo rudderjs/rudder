@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/contracts",
+  "name": "@rudderjs/contracts",
   "version": "0.0.3",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/contracts"
   },
   "type": "module",

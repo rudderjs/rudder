@@ -1,4 +1,4 @@
-import { Page } from '@boostkit/panels'
+import { Page } from '@rudderjs/panels'
 
 export class CustomPage extends Page {
   static slug  = 'custom'

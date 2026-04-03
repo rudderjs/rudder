@@ -1,21 +1,21 @@
-# @boostkit/panels-lexical
+# @rudderjs/panels-lexical
 
-Lexical rich-text editor adapter for `@boostkit/panels`. Provides rich content editing, collaborative text fields, and block-based content for panel resources.
+Lexical rich-text editor adapter for `@rudderjs/panels`. Provides rich content editing, collaborative text fields, and block-based content for panel resources.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/panels-lexical
+pnpm add @rudderjs/panels-lexical
 ```
 
-Requires `@boostkit/panels` and Lexical peer dependencies.
+Requires `@rudderjs/panels` and Lexical peer dependencies.
 
 ## Setup
 
 Register the editor in your panel layout:
 
 ```ts
-import { registerLexical } from '@boostkit/panels-lexical'
+import { registerLexical } from '@rudderjs/panels-lexical'
 registerLexical()
 ```
 
@@ -42,7 +42,7 @@ For Tailwind CSS to scan the component classes, add to your CSS:
 ### Basic
 
 ```ts
-import { RichContentField } from '@boostkit/panels-lexical'
+import { RichContentField } from '@rudderjs/panels-lexical'
 
 RichContentField.make('body').label('Body')
 ```
@@ -124,7 +124,7 @@ RichContentField.make('content').slashCommand(['heading', 'bulletList'])
 ### Custom Blocks
 
 ```ts
-import { Block, TextField, TextareaField, SelectField } from '@boostkit/panels'
+import { Block, TextField, TextareaField, SelectField } from '@rudderjs/panels'
 
 RichContentField.make('article')
   .toolbar('document')
@@ -186,7 +186,7 @@ For production, enable `livePrisma()` in your live config for full persistence:
 
 ```ts
 // config/live.ts
-import { livePrisma } from '@boostkit/live'
+import { livePrisma } from '@rudderjs/live'
 
 export default {
   path: '/ws-live',
@@ -263,4 +263,4 @@ Version history uses a **comparison view** — not a preview mode:
 
 ## Without this package
 
-If `@boostkit/panels-lexical` is not installed, rich content fields fall back to a plain `<textarea>` and collaborative text fields use native inputs without real-time sync.
+If `@rudderjs/panels-lexical` is not installed, rich content fields fall back to a plain `<textarea>` and collaborative text fields use native inputs without real-time sync.

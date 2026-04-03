@@ -1,13 +1,13 @@
-# @boostkit/cli
+# @rudderjs/cli
 
-BoostKit CLI — code generators, module scaffolding, and artisan command dispatch.
+RudderJS CLI — code generators, module scaffolding, and rudder command dispatch.
 
 ## Installation
 
-The CLI is automatically included when you scaffold a project with `create-boostkit-app`. For manual setup:
+The CLI is automatically included when you scaffold a project with `create-rudderjs-app`. For manual setup:
 
 ```bash
-pnpm add -D @boostkit/cli
+pnpm add -D @rudderjs/cli
 ```
 
 Add to `package.json`:
@@ -15,7 +15,7 @@ Add to `package.json`:
 ```json
 {
   "scripts": {
-    "artisan": "node node_modules/@boostkit/cli/dist/index.js"
+    "rudder": "node node_modules/@rudderjs/cli/dist/index.js"
   }
 }
 ```
@@ -23,17 +23,17 @@ Add to `package.json`:
 ## Usage
 
 ```bash
-pnpm artisan --help               # List all commands
-pnpm artisan make:controller User # Generate a controller
-pnpm artisan db:seed              # Run a user-defined command
+pnpm rudder --help               # List all commands
+pnpm rudder make:controller User # Generate a controller
+pnpm rudder db:seed              # Run a user-defined command
 ```
 
-**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the BoostKit application before dispatching commands — all service providers, DI bindings, and database connections are available.
+**Must be run from a directory containing `bootstrap/app.ts`**. The CLI boots the RudderJS application before dispatching commands — all service providers, DI bindings, and database connections are available.
 
 ## How It Works
 
 1. The CLI locates `bootstrap/app.ts` by walking up from the current directory
-2. It calls `boostkit.boot()` — boots all service providers
+2. It calls `rudderjs.boot()` — boots all service providers
 3. Route loaders for `commands` are executed (registers commands from `routes/console.ts`)
 4. The CLI dispatches the matching command with parsed arguments and options
 
@@ -49,7 +49,7 @@ pnpm artisan db:seed              # Run a user-defined command
 | `make:middleware <Name>` | `app/Http/Middleware/<Name>Middleware.ts` | Middleware class |
 | `make:request <Name>` | `app/Http/Requests/<Name>Request.ts` | FormRequest class |
 | `make:provider <Name>` | `app/Providers/<Name>ServiceProvider.ts` | ServiceProvider |
-| `make:command <Name>` | `app/Commands/<Name>.ts` | Artisan command class |
+| `make:command <Name>` | `app/Commands/<Name>.ts` | Rudder command class |
 | `make:event <Name>` | `app/Events/<Name>.ts` | Event class |
 | `make:listener <Name>` | `app/Listeners/<Name>.ts` | Event listener class |
 | `make:mail <Name>` | `app/Mail/<Name>.ts` | Mailable class |
@@ -73,31 +73,31 @@ All `make:*` commands support `--force` to overwrite existing files.
 Copies publishable assets (pages, config, migrations) declared by service providers into your application.
 
 ```bash
-pnpm artisan vendor:publish                              # publish all available assets
-pnpm artisan vendor:publish --list                       # list available assets without copying
-pnpm artisan vendor:publish --tag=panels-pages           # publish by tag
-pnpm artisan vendor:publish --provider=PanelServiceProvider  # publish by provider
-pnpm artisan vendor:publish --tag=panels-pages --force   # overwrite existing files
+pnpm rudder vendor:publish                              # publish all available assets
+pnpm rudder vendor:publish --list                       # list available assets without copying
+pnpm rudder vendor:publish --tag=panels-pages           # publish by tag
+pnpm rudder vendor:publish --provider=PanelServiceProvider  # publish by provider
+pnpm rudder vendor:publish --tag=panels-pages --force   # overwrite existing files
 ```
 
-Assets are declared by packages in their service provider's `boot()` method via `this.publishes()`. See `@boostkit/core` for the `ServiceProvider` API.
+Assets are declared by packages in their service provider's `boot()` method via `this.publishes()`. See `@rudderjs/core` for the `ServiceProvider` API.
 
 ### Database Commands
 
-Laravel-style migration commands that delegate to the appropriate ORM tool. The CLI auto-detects which ORM is installed by checking `package.json` for `@boostkit/orm-prisma` or `@boostkit/orm-drizzle`.
+Laravel-style migration commands that delegate to the appropriate ORM tool. The CLI auto-detects which ORM is installed by checking `package.json` for `@rudderjs/orm-prisma` or `@rudderjs/orm-drizzle`.
 
 | Command | Description | Prisma | Drizzle |
 |---|---|---|---|
-| `artisan migrate` | Run pending migrations | `prisma migrate dev` (dev) / `prisma migrate deploy` (prod) | `drizzle-kit migrate` |
-| `artisan migrate:fresh` | Drop all + re-migrate | `prisma migrate reset --force` | `drizzle-kit migrate --force` |
-| `artisan migrate:status` | Show migration status | `prisma migrate status` | `drizzle-kit check` |
-| `artisan make:migration <name>` | Create new migration | `prisma migrate dev --create-only --name <name>` | `drizzle-kit generate --name <name>` |
-| `artisan db:push` | Push schema directly (no migration file) | `prisma db push` | `drizzle-kit push` |
-| `artisan db:generate` | Regenerate DB client | `prisma generate` | No-op (Drizzle schemas are TypeScript) |
+| `rudder migrate` | Run pending migrations | `prisma migrate dev` (dev) / `prisma migrate deploy` (prod) | `drizzle-kit migrate` |
+| `rudder migrate:fresh` | Drop all + re-migrate | `prisma migrate reset --force` | `drizzle-kit migrate --force` |
+| `rudder migrate:status` | Show migration status | `prisma migrate status` | `drizzle-kit check` |
+| `rudder make:migration <name>` | Create new migration | `prisma migrate dev --create-only --name <name>` | `drizzle-kit generate --name <name>` |
+| `rudder db:push` | Push schema directly (no migration file) | `prisma db push` | `drizzle-kit push` |
+| `rudder db:generate` | Regenerate DB client | `prisma generate` | No-op (Drizzle schemas are TypeScript) |
 
 ### `route:list`
 
-Lists all registered API routes (from `@boostkit/router`) and Vike filesystem page routes.
+Lists all registered API routes (from `@rudderjs/router`) and Vike filesystem page routes.
 
 ## `make:module` Scaffold
 
@@ -114,16 +114,16 @@ app/Modules/Blog/
 
 It also auto-registers `BlogServiceProvider` in `bootstrap/providers.ts`.
 
-After scaffolding, run `pnpm artisan module:publish --generate` to merge the Prisma shard and regenerate the client.
+After scaffolding, run `pnpm rudder module:publish --generate` to merge the Prisma shard and regenerate the client.
 
 ## User-Defined Commands
 
 Commands defined in `routes/console.ts` are auto-registered:
 
 ```ts
-import { artisan } from '@boostkit/core'
+import { rudder } from '@rudderjs/core'
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })
 }).description('Seed the database')
 ```
@@ -131,7 +131,7 @@ artisan.command('db:seed', async () => {
 Class-based commands:
 
 ```ts
-import { Command, artisan } from '@boostkit/core'
+import { Command, rudder } from '@rudderjs/core'
 
 class SeedCommand extends Command {
   readonly signature = 'db:seed {--count=10}'
@@ -144,7 +144,7 @@ class SeedCommand extends Command {
   }
 }
 
-artisan.register(SeedCommand)
+rudder.register(SeedCommand)
 ```
 
 ## Notes
@@ -152,5 +152,5 @@ artisan.register(SeedCommand)
 - The CLI must be run from (or below) a directory containing `bootstrap/app.ts`
 - All `make:*` generators use `--force` to overwrite existing files
 - `make:controller` appends `Controller` suffix if missing; `make:middleware` appends `Middleware`; `make:request` appends `Request`; `make:provider` appends `ServiceProvider`
-- `module:publish` uses `// <boostkit:modules:start>` / `// <boostkit:modules:end>` markers to replace previously merged content
+- `module:publish` uses `// <rudderjs:modules:start>` / `// <rudderjs:modules:end>` markers to replace previously merged content
 - Built with [Commander.js](https://github.com/tj/commander.js) and [@clack/prompts](https://github.com/bombshell-dev/clack)

@@ -1,11 +1,11 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { ServiceProvider, type Application, app } from '@boostkit/core'
-import type { AppRequest, AppResponse, MiddlewareHandler } from '@boostkit/contracts'
+import { ServiceProvider, type Application, app } from '@rudderjs/core'
+import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 
 // ─── Module Augmentation ───────────────────────────────────
 
-declare module '@boostkit/contracts' {
+declare module '@rudderjs/contracts' {
   interface AppRequest {
     session: SessionInstance
   }
@@ -18,7 +18,7 @@ export interface SessionConfig {
   lifetime: number    // minutes, default 120
   secret:   string
   cookie: {
-    name:     string  // default 'boostkit_session'
+    name:     string  // default 'rudderjs_session'
     secure:   boolean
     httpOnly: boolean
     sameSite: 'lax' | 'strict' | 'none'
@@ -162,7 +162,7 @@ const _als = new AsyncLocalStorage<SessionInstance>()
 export class Session {
   private static current(): SessionInstance {
     const s = _als.getStore()
-    if (!s) throw new Error('[BoostKit Session] No session in context. Use sessionMiddleware.')
+    if (!s) throw new Error('[RudderJS Session] No session in context. Use sessionMiddleware.')
     return s
   }
 
@@ -373,7 +373,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
  * Requires session() provider to be registered in bootstrap/providers.ts.
  *
  * Usage in routes:
- *   import { SessionMiddleware } from '@boostkit/session'
+ *   import { SessionMiddleware } from '@rudderjs/session'
  *   Route.get('/path', handler, [SessionMiddleware()])
  */
 export function SessionMiddleware(): MiddlewareHandler {
@@ -390,12 +390,12 @@ export function SessionMiddleware(): MiddlewareHandler {
  *                    redis  (requires ioredis: pnpm add ioredis)
  *
  * Usage in bootstrap/providers.ts:
- *   import { session } from '@boostkit/session'
+ *   import { session } from '@rudderjs/session'
  *   import configs from '../config/index.js'
  *   export default [..., session(configs.session), ...]
  *
  * Usage in bootstrap/app.ts:
- *   import { sessionMiddleware } from '@boostkit/session'
+ *   import { sessionMiddleware } from '@rudderjs/session'
  *   .withMiddleware((m) => { m.use(sessionMiddleware(configs.session)) })
  */
 export function session(config: SessionConfig): new (app: Application) => ServiceProvider {

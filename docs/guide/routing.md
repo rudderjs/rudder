@@ -1,6 +1,6 @@
 # Routing
 
-BoostKit supports two routing styles: **fluent** (Laravel-style) and **decorator-based** (NestJS-style). Both use the same global `router` singleton from `@boostkit/router`.
+RudderJS supports two routing styles: **fluent** (Laravel-style) and **decorator-based** (NestJS-style). Both use the same global `router` singleton from `@rudderjs/router`.
 
 ## Route Files
 
@@ -20,8 +20,8 @@ Application.configure({ ... })
 
 ```ts
 // routes/api.ts
-import { router } from '@boostkit/router'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { router } from '@rudderjs/router'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -101,9 +101,9 @@ router.post('/admin', handler, [authMiddleware, adminMiddleware])
 For larger apps, group related routes into controller classes:
 
 ```ts
-import { Controller, Get, Post, Put, Delete, Middleware, router } from '@boostkit/router'
-import { Injectable } from '@boostkit/core'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Controller, Get, Post, Put, Delete, Middleware, router } from '@rudderjs/router'
+import { Injectable } from '@rudderjs/core'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { authMiddleware } from '../Http/Middleware/auth.js'
 import { UserService } from '../Services/UserService.js'
 

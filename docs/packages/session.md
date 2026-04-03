@@ -1,11 +1,11 @@
-# @boostkit/session
+# @rudderjs/session
 
-HTTP session support for BoostKit — signed cookie sessions (default) and Redis-backed sessions, with a static `Session` facade and per-request `req.session`.
+HTTP session support for RudderJS — signed cookie sessions (default) and Redis-backed sessions, with a static `Session` facade and per-request `req.session`.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/session
+pnpm add @rudderjs/session
 ```
 
 For Redis sessions, also install:
@@ -20,15 +20,15 @@ pnpm add ioredis
 
 ```ts
 // config/session.ts
-import { Env } from '@boostkit/support'
-import type { SessionConfig } from '@boostkit/session'
+import { Env } from '@rudderjs/support'
+import type { SessionConfig } from '@rudderjs/session'
 
 export default {
   driver:   Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis',
   lifetime: 120,  // minutes
   secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
   cookie: {
-    name:     'boostkit_session',
+    name:     'rudderjs_session',
     secure:   Env.getBool('SESSION_SECURE', false),
     httpOnly: true,
     sameSite: 'lax',
@@ -49,7 +49,7 @@ export default { ..., session }
 
 ```ts
 // bootstrap/providers.ts
-import { session } from '@boostkit/session'
+import { session } from '@rudderjs/session'
 import configs from '../config/index.js'
 
 export default [
@@ -65,9 +65,9 @@ Session middleware should be applied to web routes only — not API routes (thos
 
 ```ts
 // routes/web.ts
-import { Route } from '@boostkit/router'
-import { SessionMiddleware } from '@boostkit/session'
-import { CsrfMiddleware } from '@boostkit/middleware'
+import { Route } from '@rudderjs/router'
+import { SessionMiddleware } from '@rudderjs/session'
+import { CsrfMiddleware } from '@rudderjs/middleware'
 
 const webMw = [SessionMiddleware(), CsrfMiddleware()]
 
@@ -106,7 +106,7 @@ Route.get('/profile', (req, res) => {
 Use the static `Session` facade anywhere within a request context (requires `SessionMiddleware()` to be active):
 
 ```ts
-import { Session } from '@boostkit/session'
+import { Session } from '@rudderjs/session'
 
 Session.put('theme', 'dark')
 const theme = Session.get<string>('theme')
@@ -165,7 +165,7 @@ const has = req.session.has('cart')
 Mirrors `SessionInstance` as static methods. Backed by `AsyncLocalStorage` — safe to use in any async code within a request.
 
 ```ts
-import { Session } from '@boostkit/session'
+import { Session } from '@rudderjs/session'
 
 Session.get<T>(key, fallback?)
 Session.put(key, value)
@@ -177,14 +177,14 @@ Session.all()
 Session.regenerate()
 ```
 
-Throws `[BoostKit Session] No session in context` if called outside a request wrapped by `SessionMiddleware()`.
+Throws `[RudderJS Session] No session in context` if called outside a request wrapped by `SessionMiddleware()`.
 
 ### `SessionMiddleware()`
 
 Zero-config factory that reads session config from the DI container. Requires `session(config)` provider to be registered.
 
 ```ts
-import { SessionMiddleware } from '@boostkit/session'
+import { SessionMiddleware } from '@rudderjs/session'
 
 Route.get('/settings', handler, [SessionMiddleware()])
 ```
@@ -194,7 +194,7 @@ Route.get('/settings', handler, [SessionMiddleware()])
 Lower-level version that takes config directly — use when you don't have a service provider registered.
 
 ```ts
-import { sessionMiddleware } from '@boostkit/session'
+import { sessionMiddleware } from '@rudderjs/session'
 
 const mw = sessionMiddleware(myConfig)
 ```
@@ -240,7 +240,7 @@ Provider factory for `bootstrap/providers.ts`. Binds `session.config` to the DI 
 | `driver` | `'cookie' \| 'redis'` | `'cookie'` | Session storage driver |
 | `lifetime` | `number` | `120` | Session lifetime in **minutes** |
 | `secret` | `string` | — | HMAC signing secret (cookie driver) |
-| `cookie.name` | `string` | `'boostkit_session'` | Cookie name |
+| `cookie.name` | `string` | `'rudderjs_session'` | Cookie name |
 | `cookie.secure` | `boolean` | `false` | Send cookie over HTTPS only |
 | `cookie.httpOnly` | `boolean` | `true` | Prevent JS access to cookie |
 | `cookie.sameSite` | `'lax' \| 'strict' \| 'none'` | `'lax'` | SameSite policy |
@@ -255,7 +255,7 @@ Provider factory for `bootstrap/providers.ts`. Binds `session.config` to the DI 
 
 ## Notes
 
-- Apply `SessionMiddleware()` to **web routes only** — API routes should use stateless auth (tokens/cookies managed by `@boostkit/auth`).
+- Apply `SessionMiddleware()` to **web routes only** — API routes should use stateless auth (tokens/cookies managed by `@rudderjs/auth`).
 - `SessionMiddleware()` and `CsrfMiddleware()` are typically combined for web routes since CSRF validation depends on an established session.
 - The cookie driver stores all data in the cookie — keep values small. Use the Redis driver for larger payloads.
 - Session data is saved automatically after the route handler returns. Manual `save()` calls are not needed.

@@ -13,7 +13,7 @@ interface PanelContext {
 }
 
 async function getPrisma(): Promise<{ media: PrismaMedia }> {
-  const { resolve } = await import(/* @vite-ignore */ '@boostkit/core')
+  const { resolve } = await import(/* @vite-ignore */ '@rudderjs/core')
   return resolve<{ media: PrismaMedia }>('prisma')
 }
 

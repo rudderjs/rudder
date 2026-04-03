@@ -5,18 +5,18 @@
 - **Node.js** 18 or later
 - Any of: **pnpm**, **npm**, **yarn**, or **bun**
 
-## Option 1: create-boostkit-app (Recommended)
+## Option 1: create-rudderjs-app (Recommended)
 
-The fastest way to start a new BoostKit project is with the official scaffolder. Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
+The fastest way to start a new RudderJS project is with the official scaffolder. Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
 
 ```bash
-pnpm create boostkit-app my-app
+pnpm create rudderjs-app my-app
 # or
-npm create boostkit-app@latest my-app
+npm create rudderjs-app@latest my-app
 # or
-yarn create boostkit-app my-app
+yarn create rudderjs-app my-app
 # or
-bunx create-boostkit-app my-app
+bunx create-rudderjs-app my-app
 ```
 
 The CLI walks you through a series of prompts, adapting follow-up questions based on your choices:
@@ -40,7 +40,7 @@ After scaffolding, the CLI prints the exact commands for your package manager. F
 
 | Step | pnpm | npm | yarn | bun |
 |------|------|-----|------|-----|
-| Migrate | `pnpm artisan migrate` | `npm run artisan migrate` | `yarn artisan migrate` | `bun artisan migrate` |
+| Migrate | `pnpm rudder migrate` | `npm run rudder migrate` | `yarn rudder migrate` | `bun rudder migrate` |
 | Dev server | `pnpm dev` | `npm run dev` | `yarn dev` | `bun dev` |
 
 Your app will be running at `http://localhost:3000`.
@@ -69,12 +69,12 @@ shadcn/ui is only offered when React and Tailwind are both selected.
 
 ## Option 2: Manual Installation
 
-If you prefer to set up manually or add BoostKit to an existing Vite project:
+If you prefer to set up manually or add RudderJS to an existing Vite project:
 
 ### 1. Install the core packages
 
 ```bash
-pnpm add @boostkit/core @boostkit/server-hono @boostkit/router
+pnpm add @rudderjs/core @rudderjs/server-hono @rudderjs/router
 pnpm add -D vite typescript
 ```
 
@@ -83,14 +83,14 @@ pnpm add -D vite typescript
 For Prisma (recommended for new projects):
 
 ```bash
-pnpm add @boostkit/orm @boostkit/orm-prisma @prisma/client
+pnpm add @rudderjs/orm @rudderjs/orm-prisma @prisma/client
 pnpm add -D prisma
 ```
 
 For Drizzle:
 
 ```bash
-pnpm add @boostkit/orm @boostkit/orm-drizzle drizzle-orm better-sqlite3
+pnpm add @rudderjs/orm @rudderjs/orm-drizzle drizzle-orm better-sqlite3
 ```
 
 ### 3. Bootstrap the application
@@ -100,8 +100,8 @@ Create `bootstrap/app.ts`. This is both the bootstrap file **and** the applicati
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 import providers from './providers.ts'
 import configs from '../config/index.ts'
 
@@ -122,8 +122,8 @@ export default Application.configure({
 Create `bootstrap/providers.ts`:
 
 ```ts
-import type { Application, ServiceProvider } from '@boostkit/core'
-import { database } from '@boostkit/orm-prisma'
+import type { Application, ServiceProvider } from '@rudderjs/core'
+import { database } from '@rudderjs/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import configs from '../config/index.js'
 
@@ -169,11 +169,11 @@ pnpm add    vike-solid              # Solid
 
 ```ts
 import { defineConfig } from 'vite'
-import boostkit from '@boostkit/vite'
+import rudderjs from '@rudderjs/vite'
 import react from '@vitejs/plugin-react'   // React only
 
 export default defineConfig({
-  plugins: [boostkit(), react()],
+  plugins: [rudderjs(), react()],
 })
 ```
 

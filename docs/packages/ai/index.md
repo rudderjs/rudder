@@ -1,11 +1,11 @@
 # AI Engine
 
-`@boostkit/ai` is a multi-provider AI engine with agents, tools, streaming, middleware, structured output, and conversation memory.
+`@rudderjs/ai` is a multi-provider AI engine with agents, tools, streaming, middleware, structured output, and conversation memory.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/ai
+pnpm add @rudderjs/ai
 ```
 
 Install the provider SDK(s) you need:
@@ -21,7 +21,7 @@ pnpm add @google/genai        # Google (Gemini)
 
 ```ts
 // config/ai.ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('AI_MODEL', 'anthropic/claude-sonnet-4-5'),
@@ -38,7 +38,7 @@ Register the provider:
 
 ```ts
 // bootstrap/providers.ts
-import { ai } from '@boostkit/ai'
+import { ai } from '@rudderjs/ai'
 import configs from '../config/index.js'
 
 export default [ai(configs.ai), ...]

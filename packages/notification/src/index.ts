@@ -1,6 +1,6 @@
-import { ServiceProvider, type Application } from '@boostkit/core'
-import { MailRegistry, type Mailable } from '@boostkit/mail'
-import { ModelRegistry } from '@boostkit/orm'
+import { ServiceProvider, type Application } from '@rudderjs/core'
+import { MailRegistry, type Mailable } from '@rudderjs/mail'
+import { ModelRegistry } from '@rudderjs/orm'
 
 // ─── Notifiable ────────────────────────────────────────────
 
@@ -68,18 +68,18 @@ export class MailChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toMail) {
       throw new Error(
-        `[BoostKit Notification] ${notification.constructor.name} uses the 'mail' channel but does not implement toMail().`
+        `[RudderJS Notification] ${notification.constructor.name} uses the 'mail' channel but does not implement toMail().`
       )
     }
 
     const adapter = MailRegistry.get()
     if (!adapter) {
-      throw new Error('[BoostKit Notification] No mail adapter registered. Add mail() to providers.')
+      throw new Error('[RudderJS Notification] No mail adapter registered. Add mail() to providers.')
     }
 
     if (!notifiable.email) {
       throw new Error(
-        `[BoostKit Notification] Notifiable (id=${notifiable.id}) has no email address for mail channel.`
+        `[RudderJS Notification] Notifiable (id=${notifiable.id}) has no email address for mail channel.`
       )
     }
 
@@ -98,7 +98,7 @@ export class DatabaseChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toDatabase) {
       throw new Error(
-        `[BoostKit Notification] ${notification.constructor.name} uses the 'database' channel but does not implement toDatabase().`
+        `[RudderJS Notification] ${notification.constructor.name} uses the 'database' channel but does not implement toDatabase().`
       )
     }
 
@@ -139,7 +139,7 @@ export class Notifier {
           const channel = ChannelRegistry.get(channelName)
           if (!channel) {
             throw new Error(
-              `[BoostKit Notification] Unknown channel "${channelName}". Register it with ChannelRegistry.register().`
+              `[RudderJS Notification] Unknown channel "${channelName}". Register it with ChannelRegistry.register().`
             )
           }
           await channel.send(notifiable, notification)
@@ -169,7 +169,7 @@ export const notify = (
  * (mail, database) into the ChannelRegistry.
  *
  * Usage in bootstrap/providers.ts:
- *   import { notifications } from '@boostkit/notification'
+ *   import { notifications } from '@rudderjs/notification'
  *   export default [..., notifications(), ...]
  */
 export function notifications(): new (app: Application) => ServiceProvider {

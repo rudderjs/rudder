@@ -11,7 +11,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
-} from '@boostkit/contracts'
+} from '@rudderjs/contracts'
 
 // ─── Minimal Drizzle DB interface ──────────────────────────
 
@@ -196,7 +196,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       .insert(this.table)
       .values(data)
       .returning() as unknown as Promise<T[]>)
-    if (!result[0]) throw new Error('[BoostKit ORM Drizzle] create() returned no rows.')
+    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] create() returned no rows.')
     return result[0]
   }
 
@@ -207,7 +207,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       .set(data)
       .where(eq(pkCol, id))
       .returning() as unknown as Promise<T[]>)
-    if (!result[0]) throw new Error('[BoostKit ORM Drizzle] update() returned no rows.')
+    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] update() returned no rows.')
     return result[0]
   }
 
@@ -311,7 +311,7 @@ class DrizzleAdapter implements OrmAdapter {
       }
     }
 
-    if (!db) throw new Error('[BoostKit ORM Drizzle] Failed to initialize database client.')
+    if (!db) throw new Error('[RudderJS ORM Drizzle] Failed to initialize database client.')
     return new DrizzleAdapter(db, config.tables ?? {}, config.primaryKey ?? 'id')
   }
 
@@ -319,7 +319,7 @@ class DrizzleAdapter implements OrmAdapter {
     const schema = this.tables[table] ?? DrizzleTableRegistry.get(table)
     if (!schema) {
       throw new Error(
-        `[BoostKit ORM Drizzle] No table schema registered for "${table}". ` +
+        `[RudderJS ORM Drizzle] No table schema registered for "${table}". ` +
         `Pass tables: { ${table}: myTable } in drizzle() config or call ` +
         `DrizzleTableRegistry.register("${table}", myTable).`
       )

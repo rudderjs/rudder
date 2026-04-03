@@ -1,7 +1,7 @@
 import { useState, useCallback, useContext, createContext } from 'react'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { $getNodeByKey } from 'lexical'
-import type { FieldMeta, BlockMeta } from '@boostkit/panels'
+import type { FieldMeta, BlockMeta } from '@rudderjs/panels'
 import { $isBlockNode } from './BlockNode.js'
 
 export const BlockRegistryContext = createContext<Map<string, BlockMeta>>(new Map())

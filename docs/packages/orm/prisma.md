@@ -1,11 +1,11 @@
-# @boostkit/orm-prisma
+# @rudderjs/orm-prisma
 
-Prisma-backed ORM adapter for BoostKit.
+Prisma-backed ORM adapter for RudderJS.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/orm-prisma @prisma/client
+pnpm add @rudderjs/orm-prisma @prisma/client
 ```
 
 After adding Prisma, initialise the schema and generate the client:
@@ -22,7 +22,7 @@ The simplest way to wire Prisma is the `database()` factory. It handles connecti
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@boostkit/orm-prisma'
+import { database } from '@rudderjs/orm-prisma'
 import configs from '../config/index.js'
 
 export default [
@@ -31,12 +31,12 @@ export default [
 ]
 ```
 
-`database()` binds the raw `PrismaClient` to the DI container as `'prisma'`. This lets `auth()` from `@boostkit/auth` auto-discover it — no need to pass database config to `auth()` separately.
+`database()` binds the raw `PrismaClient` to the DI container as `'prisma'`. This lets `auth()` from `@rudderjs/auth` auto-discover it — no need to pass database config to `auth()` separately.
 
 A typical `config/database.ts`:
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('DB_DRIVER', 'sqlite') as 'sqlite' | 'postgresql' | 'libsql',
@@ -53,9 +53,9 @@ export default {
 Wire the adapter in your `DatabaseServiceProvider`:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
-import { prisma } from '@boostkit/orm-prisma'
-import { ModelRegistry } from '@boostkit/orm'
+import { ServiceProvider } from '@rudderjs/core'
+import { prisma } from '@rudderjs/orm-prisma'
+import { ModelRegistry } from '@rudderjs/orm'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   async boot(): Promise<void> {
@@ -115,7 +115,7 @@ The adapter auto-detects the driver from the `DATABASE_URL` scheme (`file:` → 
 The high-level factory for `bootstrap/providers.ts`. Accepts a `DatabaseConfig` and returns a `ServiceProvider` class that handles the full lifecycle:
 
 ```ts
-import { database } from '@boostkit/orm-prisma'
+import { database } from '@rudderjs/orm-prisma'
 
 export default [
   database({
@@ -137,7 +137,7 @@ On `boot()`, it:
 Returns an `OrmAdapterProvider` with a single `create()` method that resolves the Prisma client and returns a live `OrmAdapter`.
 
 ```ts
-import { prisma } from '@boostkit/orm-prisma'
+import { prisma } from '@rudderjs/orm-prisma'
 
 const provider = prisma({ driver: 'sqlite', url: 'file:./dev.db' })
 const adapter  = await provider.create()
@@ -167,10 +167,10 @@ model User {
 }
 ```
 
-The BoostKit `User` model sets `static table = 'user'` to match the Prisma accessor name (lowercase model name):
+The RudderJS `User` model sets `static table = 'user'` to match the Prisma accessor name (lowercase model name):
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static table = 'user'   // matches Prisma accessor — prismaClient.user
@@ -185,8 +185,8 @@ export class User extends Model {
 
 ## Notes
 
-- `@prisma/client` is a required peer dependency — install it alongside `@boostkit/orm-prisma`.
-- Run `pnpm exec prisma generate` whenever you change `schema.prisma`. If you forget, BoostKit will throw a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
+- `@prisma/client` is a required peer dependency — install it alongside `@rudderjs/orm-prisma`.
+- Run `pnpm exec prisma generate` whenever you change `schema.prisma`. If you forget, RudderJS will throw a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
 - Use `pnpm exec prisma db push` during development to sync schema changes to the database without creating migration files.
 - Use `pnpm exec prisma migrate dev` when you want tracked migration files for production deployments.
 - The `static table` on a Model must match the Prisma accessor name. Single-word models are lowercase (e.g. model `User` → accessor `user`). Multi-word models use camelCase (e.g. model `BlogPost` → accessor `blogPost`). Always verify the accessor against the generated `PrismaClient` type.

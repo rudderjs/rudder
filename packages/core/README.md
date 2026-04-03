@@ -1,19 +1,19 @@
-# @boostkit/core
+# @rudderjs/core
 
 Application bootstrap, service provider lifecycle, and framework-level runtime orchestration.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/core
+pnpm add @rudderjs/core
 ```
 
 ## Usage
 
 ```ts
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
-import { RateLimit } from '@boostkit/middleware'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
+import { RateLimit } from '@rudderjs/middleware'
 
 export default Application.configure({
   server:    hono(configs.server),
@@ -49,10 +49,10 @@ export default Application.configure({
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
-- `AppBuilder`, `BoostKit`
+- `AppBuilder`, `RudderJS`
 - `app()`, `resolve()`
 - `defineConfig()`
-- Re-exports from `@boostkit/artisan`, `@boostkit/support`, and `@boostkit/contracts` types plus built-in DI and Events primitives
+- Re-exports from `@rudderjs/rudder`, `@rudderjs/support`, and `@rudderjs/contracts` types plus built-in DI and Events primitives
 
 ## Configuration
 
@@ -68,9 +68,9 @@ export default Application.configure({
 Providers can register other providers at runtime — useful for modules, conditional features, and package composition:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
-import { cache } from '@boostkit/cache'
-import { panels } from '@boostkit/panels'
+import { ServiceProvider } from '@rudderjs/core'
+import { cache } from '@rudderjs/cache'
+import { panels } from '@rudderjs/panels'
 import { adminPanel } from '../Panels/Admin/AdminPanel.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -95,10 +95,10 @@ export class AppServiceProvider extends ServiceProvider {
 
 ## Publishing Assets
 
-Service providers can declare publishable assets (pages, config files, migrations) that users copy into their app with `pnpm artisan vendor:publish`.
+Service providers can declare publishable assets (pages, config files, migrations) that users copy into their app with `pnpm rudder vendor:publish`.
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 
 export class MyPackageServiceProvider extends ServiceProvider {
   register(): void {}
@@ -125,15 +125,15 @@ this.publishes([
 Users publish with:
 
 ```bash
-pnpm artisan vendor:publish --tag=my-package-pages
-pnpm artisan vendor:publish --provider=MyPackageServiceProvider
-pnpm artisan vendor:publish --list   # see all available assets
+pnpm rudder vendor:publish --tag=my-package-pages
+pnpm rudder vendor:publish --provider=MyPackageServiceProvider
+pnpm rudder vendor:publish --list   # see all available assets
 ```
 
 ## Events
 
 ```ts
-import { dispatch, dispatcher, events } from '@boostkit/core'
+import { dispatch, dispatcher, events } from '@rudderjs/core'
 
 // Define an event
 class UserCreated {
@@ -148,7 +148,7 @@ class SendWelcomeEmail {
 }
 
 // Register via provider in bootstrap/providers.ts
-import { events } from '@boostkit/core'
+import { events } from '@rudderjs/core'
 export default [
   events({ UserCreated: [SendWelcomeEmail] }),
 ]
@@ -190,5 +190,5 @@ await dispatch(new UserCreated(42))
 ## Notes
 
 - `Application.create()` is singleton-based and can recreate in development/local mode when config is passed.
-- `BoostKit.boot()` boots providers; `BoostKit.handleRequest()` lazily creates the HTTP handler.
+- `RudderJS.boot()` boots providers; `RudderJS.handleRequest()` lazily creates the HTTP handler.
 - `ValidationError` is always caught by the exception handler and returned as 422 JSON — no try/catch needed in routes.

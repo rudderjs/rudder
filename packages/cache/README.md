@@ -1,18 +1,18 @@
-# @boostkit/cache
+# @rudderjs/cache
 
 Cache facade, registry, and provider factory with built-in memory and Redis drivers.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/cache
+pnpm add @rudderjs/cache
 ```
 
 ## Setup
 
 ```ts
 // bootstrap/providers.ts
-import { cache } from '@boostkit/cache'
+import { cache } from '@rudderjs/cache'
 import configs from '../config/index.js'
 export default [cache(configs.cache)]
 ```
@@ -20,7 +20,7 @@ export default [cache(configs.cache)]
 ## Cache Facade
 
 ```ts
-import { Cache } from '@boostkit/cache'
+import { Cache } from '@rudderjs/cache'
 
 await Cache.set('key', 'value', 300)        // store with 60s TTL
 await Cache.set('key', 'value')             // store forever

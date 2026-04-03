@@ -12,7 +12,7 @@ async function loadSharp(): Promise<Sharp> {
     return _sharp
   } catch {
     throw new Error(
-      '[BoostKit Image] sharp is required but not installed.\n  Install it: pnpm add sharp',
+      '[RudderJS Image] sharp is required but not installed.\n  Install it: pnpm add sharp',
     )
   }
 }
@@ -142,7 +142,7 @@ export class ImageProcessor {
 
   /**
    * Process and write to a storage disk.
-   * Requires `@boostkit/storage` to be installed.
+   * Requires `@rudderjs/storage` to be installed.
    */
   async toStorage(disk: string, filePath: string): Promise<void> {
     const buffer = await this.toBuffer()
@@ -175,11 +175,11 @@ export class ImageProcessor {
    * Process all defined conversions and write to a storage disk.
    * Files are saved as `{directory}/{name}.{format}`.
    *
-   * Requires `@boostkit/storage` and `.conversions()` to be set.
+   * Requires `@rudderjs/storage` and `.conversions()` to be set.
    */
   async generateToStorage(disk: string, directory: string): Promise<ConversionResult[]> {
     if (!this._conversions?.length) {
-      throw new Error('[BoostKit Image] No conversions defined. Call .conversions([...]) first.')
+      throw new Error('[RudderJS Image] No conversions defined. Call .conversions([...]) first.')
     }
 
     const { Storage } = await this._loadStorage()
@@ -291,10 +291,10 @@ export class ImageProcessor {
 
   private async _loadStorage(): Promise<{ Storage: { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void> } } }> {
     try {
-      return await import('@boostkit/storage') as { Storage: { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void> } } }
+      return await import('@rudderjs/storage') as { Storage: { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void> } } }
     } catch {
       throw new Error(
-        '[BoostKit Image] toStorage() requires @boostkit/storage.\n  Install it: pnpm add @boostkit/storage',
+        '[RudderJS Image] toStorage() requires @rudderjs/storage.\n  Install it: pnpm add @rudderjs/storage',
       )
     }
   }

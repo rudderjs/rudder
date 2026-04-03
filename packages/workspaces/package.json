@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/workspaces",
+  "name": "@rudderjs/workspaces",
   "version": "0.0.1",
   "description": "AI workspace builder — departments, agents, knowledge base, orchestrator",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/workspaces"
   },
   "type": "module",
@@ -26,15 +26,15 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/ai": "workspace:*",
-    "@boostkit/orm": "workspace:*",
-    "@boostkit/panels": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/ai": "workspace:*",
+    "@rudderjs/orm": "workspace:*",
+    "@rudderjs/panels": "workspace:*",
     "zod": "^4.0.0"
   },
   "peerDependencies": {
-    "@boostkit/router": "workspace:*",
-    "@boostkit/broadcast": "workspace:*",
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/broadcast": "workspace:*",
     "react": ">=18",
     "react-dom": ">=18",
     "three": ">=0.160.0",
@@ -45,8 +45,8 @@
     "y-indexeddb": ">=9"
   },
   "peerDependenciesMeta": {
-    "@boostkit/router": { "optional": true },
-    "@boostkit/broadcast": { "optional": true },
+    "@rudderjs/router": { "optional": true },
+    "@rudderjs/broadcast": { "optional": true },
     "three": { "optional": true },
     "@react-three/fiber": { "optional": true },
     "@react-three/drei": { "optional": true },
@@ -55,8 +55,8 @@
     "y-indexeddb": { "optional": true }
   },
   "devDependencies": {
-    "@boostkit/router": "workspace:*",
-    "@boostkit/broadcast": "workspace:*",
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/broadcast": "workspace:*",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
     "@types/node": "^20.0.0",

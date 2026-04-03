@@ -1,8 +1,8 @@
-# Contributing to BoostKit
+# Contributing to RudderJS
 
 ## Package Development Guide
 
-This document covers the rules and patterns for developing packages in the BoostKit monorepo.
+This document covers the rules and patterns for developing packages in the RudderJS monorepo.
 
 ---
 
@@ -50,18 +50,18 @@ Use for:
 Packages the user must install themselves. The package **requires** them but does not install them — the user's app owns the version.
 
 Use for:
-- Framework packages like `@boostkit/core` (adapters declare it as a peer, not a dep)
+- Framework packages like `@rudderjs/core` (adapters declare it as a peer, not a dep)
 - Packages where version alignment matters (two copies would break things)
 
 ```json
 {
   "peerDependencies": {
-    "@boostkit/core": "workspace:*"
+    "@rudderjs/core": "workspace:*"
   }
 }
 ```
 
-> **Rule:** Never add `@boostkit/core` to `dependencies` of adapter packages (`server-hono`, `router`, etc.). Use `peerDependencies` only. Two copies of core in the same app would create two separate DI containers and break everything.
+> **Rule:** Never add `@rudderjs/core` to `dependencies` of adapter packages (`server-hono`, `router`, etc.). Use `peerDependencies` only. Two copies of core in the same app would create two separate DI containers and break everything.
 
 ### `optionalDependencies` vs lazy `import()`
 
@@ -102,7 +102,7 @@ The package that provides the optional feature should list it in `peerDependenci
 
 ### Pattern: Always-required dep
 
-`@boostkit/validation` always needs Zod. It imports it at the top level.
+`@rudderjs/validation` always needs Zod. It imports it at the top level.
 
 ```json
 // packages/validation/package.json
@@ -115,20 +115,20 @@ The package that provides the optional feature should list it in `peerDependenci
 
 ### Pattern: Adapter declares core as peer
 
-`@boostkit/server-hono` is an adapter for core. It needs core's types and `ServiceProvider`, but must not own a copy of core.
+`@rudderjs/server-hono` is an adapter for core. It needs core's types and `ServiceProvider`, but must not own a copy of core.
 
 ```json
 // packages/server-hono/package.json
 {
   "peerDependencies": {
-    "@boostkit/core": "workspace:*"
+    "@rudderjs/core": "workspace:*"
   }
 }
 ```
 
 ### Pattern: Optional driver via lazy import
 
-`@boostkit/cache` supports both `memory` (zero deps) and `redis` (needs `ioredis`). The Redis adapter lazy-loads ioredis:
+`@rudderjs/cache` supports both `memory` (zero deps) and `redis` (needs `ioredis`). The Redis adapter lazy-loads ioredis:
 
 ```ts
 // packages/cache/src/index.ts
@@ -145,7 +145,7 @@ class RedisAdapter implements CacheAdapter {
 
 `ioredis` is listed as an optional peer — not in `dependencies`. If the user configures `driver: 'memory'`, ioredis is never touched.
 
-Same pattern in `@boostkit/storage` for `@aws-sdk/client-s3` (S3 driver).
+Same pattern in `@rudderjs/storage` for `@aws-sdk/client-s3` (S3 driver).
 
 ---
 
@@ -154,26 +154,26 @@ Same pattern in `@boostkit/storage` for `@aws-sdk/client-s3` (S3 driver).
 The dependency flow is strictly one-directional:
 
 ```
-@boostkit/contracts   (no deps — pure types)
+@rudderjs/contracts   (no deps — pure types)
         |
-@boostkit/support     (no boostkit deps)
-@boostkit/middleware  (depends on contracts, cache)
-@boostkit/validation  (depends on zod)
+@rudderjs/support     (no rudderjs deps)
+@rudderjs/middleware  (depends on contracts, cache)
+@rudderjs/validation  (depends on zod)
         |
-@boostkit/router      @boostkit/server-hono
+@rudderjs/router      @rudderjs/server-hono
         |
-@boostkit/core        (the orchestrator)
+@rudderjs/core        (the orchestrator)
         |
-@boostkit/orm-prisma  @boostkit/cache  @boostkit/storage  @boostkit/queue-*
+@rudderjs/orm-prisma  @rudderjs/cache  @rudderjs/storage  @rudderjs/queue-*
 ```
 
 **Never** create an upward dependency. Examples of what is forbidden:
-- `@boostkit/router` depending on `@boostkit/core` (use `peerDependencies`)
-- `@boostkit/middleware` depending on `@boostkit/core`
-- `@boostkit/contracts` importing anything at runtime
+- `@rudderjs/router` depending on `@rudderjs/core` (use `peerDependencies`)
+- `@rudderjs/middleware` depending on `@rudderjs/core`
+- `@rudderjs/contracts` importing anything at runtime
 
-If two packages need to share a type, put the type in `@boostkit/contracts`.
-If a lower-level package needs a core feature at runtime, load it via `resolveOptionalPeer()` from `@boostkit/support`.
+If two packages need to share a type, put the type in `@rudderjs/contracts`.
+If a lower-level package needs a core feature at runtime, load it via `resolveOptionalPeer()` from `@rudderjs/support`.
 
 ---
 
@@ -193,15 +193,15 @@ Before merging two packages, all six criteria must pass:
 If any item fails, keep the packages separate.
 
 **Examples of merges that passed all criteria:**
-- `@boostkit/di` → merged into `@boostkit/core` (always together, no adapter boundary)
-- `@boostkit/events` → merged into `@boostkit/core` (same lifecycle, zero external deps)
-- `@boostkit/validation` → merged into `@boostkit/core` (always co-deployed, Zod is a hard dep)
+- `@rudderjs/di` → merged into `@rudderjs/core` (always together, no adapter boundary)
+- `@rudderjs/events` → merged into `@rudderjs/core` (same lifecycle, zero external deps)
+- `@rudderjs/validation` → merged into `@rudderjs/core` (always co-deployed, Zod is a hard dep)
 
 **Examples of packages kept separate:**
-- `@boostkit/cache` — has an adapter boundary (`CacheAdapter` interface, user-extendable)
-- `@boostkit/storage` — has an adapter boundary + optional S3 dep
-- `@boostkit/server-hono` — portability boundary (different adapters for different HTTP servers)
-- `@boostkit/queue-bullmq` — optional dep on BullMQ + Redis
+- `@rudderjs/cache` — has an adapter boundary (`CacheAdapter` interface, user-extendable)
+- `@rudderjs/storage` — has an adapter boundary + optional S3 dep
+- `@rudderjs/server-hono` — portability boundary (different adapters for different HTTP servers)
+- `@rudderjs/queue-bullmq` — optional dep on BullMQ + Redis
 
 ---
 
@@ -212,7 +212,7 @@ When one package depends on another in the monorepo, always use `workspace:*`:
 ```json
 {
   "dependencies": {
-    "@boostkit/contracts": "workspace:*"
+    "@rudderjs/contracts": "workspace:*"
   }
 }
 ```

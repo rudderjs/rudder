@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/cli",
+  "name": "@rudderjs/cli",
   "version": "0.0.6",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/cli"
   },
   "type": "module",
@@ -12,7 +12,7 @@
     "dist"
   ],
   "bin": {
-    "artisan": "./dist/index.js"
+    "rudder": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,13 +25,13 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/artisan": "workspace:*",
+    "@rudderjs/rudder": "workspace:*",
     "commander": "^12.0.0",
     "chalk": "^5.0.0",
     "@clack/prompts": "^1.0.0"
   },
   "devDependencies": {
-    "@boostkit/router": "workspace:*",
+    "@rudderjs/router": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0",
     "tsx": "^4.0.0"

@@ -98,7 +98,7 @@ export class Action {
   }
 
   async execute(records: unknown[]): Promise<void> {
-    if (!this._handler) throw new Error(`[BoostKit Panels] Action "${this._name}" has no handler defined.`)
+    if (!this._handler) throw new Error(`[RudderJS Panels] Action "${this._name}" has no handler defined.`)
     await this._handler(records)
   }
 

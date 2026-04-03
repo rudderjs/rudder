@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string, table: string): string {
-  return `import { Model } from '@boostkit/orm'
+  return `import { Model } from '@rudderjs/orm'
 
 export class ${className} extends Model {
   static table = '${table}'

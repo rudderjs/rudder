@@ -11,8 +11,8 @@ type Binding<T = unknown> = { factory: Factory<T>; singleton: boolean }
 
 // ─── Decorators ────────────────────────────────────────────
 
-const INJECTABLE_METADATA = 'boostkit:injectable'
-const INJECT_METADATA     = 'boostkit:inject'
+const INJECTABLE_METADATA = 'rudderjs:injectable'
+const INJECT_METADATA     = 'rudderjs:inject'
 
 /** Mark a class as injectable (auto-resolved by the container) */
 export function Injectable(): ClassDecorator {
@@ -85,7 +85,7 @@ export class Container {
 
     const label = typeof key === 'symbol' ? key.toString() : `"${String(key)}"`
     throw new Error(
-      `[BoostKit] Cannot resolve ${label} from the DI container.\n` +
+      `[RudderJS] Cannot resolve ${label} from the DI container.\n` +
       `  Did you forget to add @Injectable() to the class, or register it in a ServiceProvider?`
     )
   }
@@ -105,7 +105,7 @@ export class Container {
   private autoResolve<T>(target: Constructor<T>): T {
     if (typeof Reflect === 'undefined' || typeof Reflect.getMetadata !== 'function') {
       throw new Error(
-        `[BoostKit] reflect-metadata is not loaded.\n` +
+        `[RudderJS] reflect-metadata is not loaded.\n` +
         `  Add: import 'reflect-metadata' at the top of your bootstrap/app.ts`
       )
     }
@@ -113,7 +113,7 @@ export class Container {
     const isInjectable = Reflect.getMetadata(INJECTABLE_METADATA, target)
     if (!isInjectable) {
       throw new Error(
-        `[BoostKit] "${target.name}" is not decorated with @Injectable().\n` +
+        `[RudderJS] "${target.name}" is not decorated with @Injectable().\n` +
         `  Add @Injectable() above the class declaration to enable auto-resolution.`
       )
     }

@@ -3,7 +3,7 @@
 Dependency injection container with decorator-based constructor injection.
 
 ```bash
-pnpm add @boostkit/core reflect-metadata
+pnpm add @rudderjs/core reflect-metadata
 ```
 
 > Install `reflect-metadata` as a regular dependency — it is required at runtime. Import it once at the top of your application entry point, before any other imports that use decorators.
@@ -37,7 +37,7 @@ import 'reflect-metadata'
 Mark a class with `@Injectable()` to allow the container to auto-resolve it from constructor parameter types. Use `@Inject(token)` to override a specific parameter's resolution key.
 
 ```ts
-import { Injectable, Inject, container } from '@boostkit/core'
+import { Injectable, Inject, container } from '@rudderjs/core'
 
 @Injectable()
 class DatabaseConnection {
@@ -68,7 +68,7 @@ const service = container.make(UserService)
 ## Manual Bindings
 
 ```ts
-import { container } from '@boostkit/core'
+import { container } from '@rudderjs/core'
 
 // Factory — new instance on every make()
 container.bind(PaymentService, () => new StripePaymentService())
@@ -77,7 +77,7 @@ container.bind(PaymentService, () => new StripePaymentService())
 container.singleton('mailer', c => new Mailer(c.make('config')))
 
 // Pre-built value
-container.instance('app.name', 'BoostKit')
+container.instance('app.name', 'RudderJS')
 
 // Alias — make('payment') resolves PaymentService
 container.alias('payment', PaymentService)
@@ -126,14 +126,14 @@ Overrides the resolution token for a specific constructor parameter. Use this wh
 
 ## `container` Global Singleton
 
-`container` is a module-level singleton exported from `@boostkit/core`. All service providers, `app().make()`, and `resolve()` use this same instance.
+`container` is a module-level singleton exported from `@rudderjs/core`. All service providers, `app().make()`, and `resolve()` use this same instance.
 
 ```ts
-import { container } from '@boostkit/core'
+import { container } from '@rudderjs/core'
 
 const service = container.make(UserService)
 // equivalent to:
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 const service = resolve(UserService)
 ```
 

@@ -1,4 +1,4 @@
-import { Mailable } from '@boostkit/mail'
+import { Mailable } from '@rudderjs/mail'
 
 export class WelcomeEmail extends Mailable {
   constructor(private readonly userName: string) {
@@ -7,12 +7,12 @@ export class WelcomeEmail extends Mailable {
 
   build(): this {
     return this
-      .subject(`Welcome to BoostKit, ${this.userName}!`)
+      .subject(`Welcome to RudderJS, ${this.userName}!`)
       .html(`
         <h1>Welcome, ${this.userName}!</h1>
-        <p>Thanks for joining BoostKit. Your account is ready.</p>
-        <p>— The BoostKit Team</p>
+        <p>Thanks for joining RudderJS. Your account is ready.</p>
+        <p>— The RudderJS Team</p>
       `)
-      .text(`Welcome, ${this.userName}!\n\nThanks for joining BoostKit. Your account is ready.\n\n— The BoostKit Team`)
+      .text(`Welcome, ${this.userName}!\n\nThanks for joining RudderJS. Your account is ready.\n\n— The RudderJS Team`)
   }
 }

@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/core'
+import type { MiddlewareHandler } from '@rudderjs/core'
 import type { Panel } from '../Panel.js'
 import type { PanelContext } from '../types.js'
 
@@ -14,7 +14,7 @@ export function buildPanelMiddleware(panel: Panel): MiddlewareHandler[] {
     if (!user) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { app } = await import(/* @vite-ignore */ '@boostkit/core') as any
+        const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as any
         const auth    = app().make('auth')
         const session = await auth.api.getSession({
           headers: new Headers(req.headers as Record<string, string>),

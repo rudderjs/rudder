@@ -1,4 +1,4 @@
-import { Field } from '@boostkit/panels'
+import { Field } from '@rudderjs/panels'
 
 /**
  * CanvasField — form field that renders a mini 3D workspace canvas.

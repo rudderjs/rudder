@@ -1,4 +1,4 @@
-import { ServiceProvider, type Application } from '@boostkit/core'
+import { ServiceProvider, type Application } from '@rudderjs/core'
 
 // ─── Adapter Contract ──────────────────────────────────────
 
@@ -30,7 +30,7 @@ export class CacheRegistry {
 export class Cache {
   private static store(): CacheAdapter {
     const a = CacheRegistry.get()
-    if (!a) throw new Error('[BoostKit Cache] No cache adapter registered. Add cache() to providers.')
+    if (!a) throw new Error('[RudderJS Cache] No cache adapter registered. Add cache() to providers.')
     return a
   }
 
@@ -238,7 +238,7 @@ export interface CacheConfig {
  *                    redis  (requires ioredis: pnpm add ioredis)
  *
  * Usage in bootstrap/providers.ts:
- *   import { cache } from '@boostkit/cache'
+ *   import { cache } from '@rudderjs/cache'
  *   import configs from '../config/index.js'
  *   export default [..., cache(configs.cache), ...]
  */
@@ -258,7 +258,7 @@ export function cache(config: CacheConfig): new (app: Application) => ServicePro
       } else if (driver === 'redis') {
         adapter = new RedisAdapter(storeConfig as RedisCacheConfig)
       } else {
-        throw new Error(`[BoostKit Cache] Unknown driver "${driver}". Available: memory, redis`)
+        throw new Error(`[RudderJS Cache] Unknown driver "${driver}". Available: memory, redis`)
       }
 
       CacheRegistry.set(adapter)

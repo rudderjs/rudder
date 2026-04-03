@@ -1,5 +1,5 @@
-import { PanelRegistry, flattenFields } from '@boostkit/panels'
-import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@boostkit/panels'
+import { PanelRegistry, flattenFields } from '@rudderjs/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@rudderjs/panels'
 import { getSessionUser } from '../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
 

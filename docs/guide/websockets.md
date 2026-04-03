@@ -1,22 +1,22 @@
 # Real-time
 
-BoostKit ships two real-time packages that share the same port and process as your HTTP server:
+RudderJS ships two real-time packages that share the same port and process as your HTTP server:
 
 | Package | Purpose |
 |---|---|
-| `@boostkit/broadcast` | Channel-based pub/sub — events, notifications, presence |
-| `@boostkit/live` | Yjs CRDT — collaborative editing, shared document state |
+| `@rudderjs/broadcast` | Channel-based pub/sub — events, notifications, presence |
+| `@rudderjs/live` | Yjs CRDT — collaborative editing, shared document state |
 
 ---
 
-## Broadcasting (`@boostkit/broadcast`)
+## Broadcasting (`@rudderjs/broadcast`)
 
 Channel-based WebSocket pub/sub with public, private, and presence channels. No Pusher, no Echo, no external service.
 
 ### Installation
 
 ```bash
-pnpm add @boostkit/broadcast
+pnpm add @rudderjs/broadcast
 ```
 
 ### Setup
@@ -25,7 +25,7 @@ pnpm add @boostkit/broadcast
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
+import { broadcasting } from '@rudderjs/broadcast'
 
 export default [
   // ... other providers
@@ -50,7 +50,7 @@ export default Application.configure({ ... })
 
 ```ts
 // routes/channels.ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 Broadcast.channel('private-orders.*', async (req) => {
   const user = await getUserFromToken(req.token)
@@ -77,7 +77,7 @@ Broadcast.channel('presence-room.*', async (req) => {
 Push events from anywhere on the server — route handlers, jobs, service classes:
 
 ```ts
-import { broadcast } from '@boostkit/broadcast'
+import { broadcast } from '@rudderjs/broadcast'
 
 // Inside a route
 Route.post('/orders/:id/ship', async (req) => {
@@ -92,7 +92,7 @@ Route.post('/orders/:id/ship', async (req) => {
 Private and presence channels require an auth callback registered with `Broadcast.channel()`:
 
 ```ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 // Private — return true/false
 Broadcast.channel('private-user.*', async (req, channel) => {
@@ -118,7 +118,7 @@ The pattern supports `*` as a wildcard (matches non-dot characters). Use `privat
 Publish the client to your project:
 
 ```bash
-pnpm artisan vendor:publish --tag=broadcast-client
+pnpm rudder vendor:publish --tag=broadcast-client
 ```
 
 Then use it in your frontend pages:
@@ -164,25 +164,25 @@ BKSocket automatically reconnects after 3 seconds if the connection drops, and r
 ### Stats
 
 ```ts
-import { broadcastStats } from '@boostkit/broadcast'
+import { broadcastStats } from '@rudderjs/broadcast'
 
 const { connections, channels } = broadcastStats()
 ```
 
 ```bash
-pnpm artisan broadcast:connections
+pnpm rudder broadcast:connections
 ```
 
 ---
 
-## Live Collaboration (`@boostkit/live`)
+## Live Collaboration (`@rudderjs/live`)
 
 Yjs CRDT document sync — every client always sees the same shared state, with conflict-free merging even when offline.
 
 ### Installation
 
 ```bash
-pnpm add @boostkit/live
+pnpm add @rudderjs/live
 # Client side
 pnpm add yjs y-websocket
 ```
@@ -191,8 +191,8 @@ pnpm add yjs y-websocket
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
-import { live }         from '@boostkit/live'
+import { broadcasting } from '@rudderjs/broadcast'
+import { live }         from '@rudderjs/live'
 
 export default [
   broadcasting(),  // /ws       — pub/sub channels
@@ -205,7 +205,7 @@ export default [
 By default documents are kept in memory (resets on restart). For production, use a persistence adapter:
 
 ```ts
-import { live, liveRedis, livePrisma } from '@boostkit/live'
+import { live, liveRedis, livePrisma } from '@rudderjs/live'
 
 // Redis — append-only log per document
 live({ persistence: liveRedis({ url: process.env.REDIS_URL }) })
@@ -239,7 +239,7 @@ live({
 
 ### Client
 
-`@boostkit/live` is server-side only. On the client use standard Yjs packages:
+`@rudderjs/live` is server-side only. On the client use standard Yjs packages:
 
 ```ts
 import * as Y from 'yjs'
@@ -260,7 +260,7 @@ provider.awareness.on('change', () => {
 })
 ```
 
-### Artisan Commands
+### Rudder Commands
 
 | Command | Description |
 |---|---|
@@ -273,7 +273,7 @@ provider.awareness.on('change', () => {
 
 Both packages hook into Node.js HTTP `upgrade` events on your existing server — no separate port or process needed.
 
-- **Dev (Vite):** `@boostkit/vite` monkey-patches `http.createServer` to intercept srvx's server and attach the upgrade handler
-- **Production:** `@boostkit/server-hono`'s `listen()` attaches the handler to the HTTP server after `serve()` starts
+- **Dev (Vite):** `@rudderjs/vite` monkey-patches `http.createServer` to intercept srvx's server and attach the upgrade handler
+- **Production:** `@rudderjs/server-hono`'s `listen()` attaches the handler to the HTTP server after `serve()` starts
 
-The chain: HTTP server → `@boostkit/broadcast` handles `/ws` → `@boostkit/live` handles `/ws-live` → Vite HMR handles the rest.
+The chain: HTTP server → `@rudderjs/broadcast` handles `/ws` → `@rudderjs/live` handles `/ws-live` → Vite HMR handles the rest.

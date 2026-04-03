@@ -9,7 +9,7 @@ export interface SessionUser {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getSessionUser(pageContext: any): Promise<SessionUser | undefined> {
   try {
-    const { app } = await import('@boostkit/core')
+    const { app } = await import('@rudderjs/core')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const auth    = app().make<any>('auth')
     const session = await auth.api.getSession({

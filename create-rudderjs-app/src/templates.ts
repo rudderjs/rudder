@@ -94,7 +94,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     if (ctx.packages.auth)          files['prisma/schema/auth.prisma']         = prismaAuth()
     if (ctx.packages.notifications) files['prisma/schema/notification.prisma'] = prismaNotification()
     if (ctx.withTodo)               files['prisma/schema/todo.prisma']         = prismaTodo()
-    files['prisma/schema/modules.prisma'] = '// <boostkit:modules:start>\n// <boostkit:modules:end>\n'
+    files['prisma/schema/modules.prisma'] = '// <rudderjs:modules:start>\n// <rudderjs:modules:end>\n'
   }
 
   if (ctx.tailwind) {
@@ -228,14 +228,14 @@ function packageJson(ctx: TemplateContext): string {
 
   // Base framework deps (always included)
   const deps: Record<string, string> = {
-    '@boostkit/artisan':      'latest',
-    '@boostkit/vite':         'latest',
-    '@boostkit/contracts':    'latest',
-    '@boostkit/core':         'latest',
-    '@boostkit/middleware':   'latest',
-    '@boostkit/router':       'latest',
-    '@boostkit/server-hono':  'latest',
-    '@boostkit/support':      'latest',
+    '@rudderjs/rudder':      'latest',
+    '@rudderjs/vite':         'latest',
+    '@rudderjs/contracts':    'latest',
+    '@rudderjs/core':         'latest',
+    '@rudderjs/middleware':   'latest',
+    '@rudderjs/router':       'latest',
+    '@rudderjs/server-hono':  'latest',
+    '@rudderjs/support':      'latest',
     'dotenv':                 '^16.4.0',
     'reflect-metadata':       '^0.2.2',
     'vike':                   '^0.4.239',
@@ -249,39 +249,39 @@ function packageJson(ctx: TemplateContext): string {
 
   // ORM deps
   if (ctx.orm === 'prisma') {
-    deps['@boostkit/orm']        = 'latest'
-    deps['@boostkit/orm-prisma'] = 'latest'
+    deps['@rudderjs/orm']        = 'latest'
+    deps['@rudderjs/orm-prisma'] = 'latest'
     deps['@prisma/client']       = '^7.0.0'
   } else if (ctx.orm === 'drizzle') {
-    deps['@boostkit/orm']         = 'latest'
-    deps['@boostkit/orm-drizzle'] = 'latest'
+    deps['@rudderjs/orm']         = 'latest'
+    deps['@rudderjs/orm-drizzle'] = 'latest'
   }
 
   // Optional package deps
-  if (ctx.packages.auth)         { deps['@boostkit/auth'] = 'latest'; deps['@boostkit/session'] = 'latest' }
-  if (ctx.packages.cache)         deps['@boostkit/cache']        = 'latest'
-  if (ctx.packages.queue)         deps['@boostkit/queue']        = 'latest'
-  if (ctx.packages.storage)       deps['@boostkit/storage']      = 'latest'
-  if (ctx.packages.mail)          deps['@boostkit/mail']         = 'latest'
-  if (ctx.packages.notifications) deps['@boostkit/notification'] = 'latest'
-  if (ctx.packages.scheduler)     deps['@boostkit/schedule']     = 'latest'
-  if (ctx.packages.broadcast)     deps['@boostkit/broadcast']    = 'latest'
-  if (ctx.packages.live)          deps['@boostkit/live']         = 'latest'
-  if (ctx.packages.ai)          deps['@boostkit/ai']           = 'latest'
+  if (ctx.packages.auth)         { deps['@rudderjs/auth'] = 'latest'; deps['@rudderjs/session'] = 'latest' }
+  if (ctx.packages.cache)         deps['@rudderjs/cache']        = 'latest'
+  if (ctx.packages.queue)         deps['@rudderjs/queue']        = 'latest'
+  if (ctx.packages.storage)       deps['@rudderjs/storage']      = 'latest'
+  if (ctx.packages.mail)          deps['@rudderjs/mail']         = 'latest'
+  if (ctx.packages.notifications) deps['@rudderjs/notification'] = 'latest'
+  if (ctx.packages.scheduler)     deps['@rudderjs/schedule']     = 'latest'
+  if (ctx.packages.broadcast)     deps['@rudderjs/broadcast']    = 'latest'
+  if (ctx.packages.live)          deps['@rudderjs/live']         = 'latest'
+  if (ctx.packages.ai)          deps['@rudderjs/ai']           = 'latest'
   if (ctx.packages.panels) {
-    deps['@boostkit/panels']         = 'latest'
-    deps['@boostkit/panels-lexical'] = 'latest'
+    deps['@rudderjs/panels']         = 'latest'
+    deps['@rudderjs/panels-lexical'] = 'latest'
   }
   if (ctx.withMedia) {
-    deps['@boostkit/media'] = 'latest'
-    deps['@boostkit/image'] = 'latest'
+    deps['@rudderjs/media'] = 'latest'
+    deps['@rudderjs/image'] = 'latest'
   }
   if (ctx.withWorkspaces) {
-    deps['@boostkit/workspaces'] = 'latest'
+    deps['@rudderjs/workspaces'] = 'latest'
   }
 
   const devDeps: Record<string, string> = {
-    '@boostkit/cli': 'latest',
+    '@rudderjs/cli': 'latest',
     '@types/node':   '^20.0.0',
     'tsx':           '^4.21.0',
     'typescript':    '^5.4.0',
@@ -316,7 +316,7 @@ function packageJson(ctx: TemplateContext): string {
       start:        'node ./dist/server/index.mjs',
       preview:      'node ./dist/server/index.mjs',
       typecheck:    'tsc --noEmit',
-      artisan:      'tsx node_modules/@boostkit/cli/src/index.ts',
+      rudder:      'tsx node_modules/@rudderjs/cli/src/index.ts',
     },
     ...pmField,
     dependencies:    deps,
@@ -372,14 +372,14 @@ function viteConfig(ctx: TemplateContext): string {
 
   const imports: string[] = [
     `import { defineConfig } from 'vite'`,
-    `import boostkit from '@boostkit/vite'`,
+    `import rudderjs from '@rudderjs/vite'`,
   ]
   if (tailwind) imports.push(`import tailwindcss from '@tailwindcss/vite'`)
   if (hasReact)  imports.push(`import react from '@vitejs/plugin-react'`)
   if (hasVue)    imports.push(`import vue from '@vitejs/plugin-vue'`)
   if (hasSolid)  imports.push(`import solid from 'vike-solid/vite'`)
 
-  const plugins: string[] = ['boostkit()']
+  const plugins: string[] = ['rudderjs()']
   if (tailwind) plugins.push('tailwindcss()')
 
   if (hasReact) {
@@ -616,7 +616,7 @@ function prismaNotification(): string {
 }
 
 function prismaTodo(): string {
-  return `// <boostkit:modules:start>
+  return `// <rudderjs:modules:start>
 // module: Todo (Todo.prisma)
 model Todo {
   id        String   @id @default(cuid())
@@ -625,7 +625,7 @@ model Todo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-// <boostkit:modules:end>
+// <rudderjs:modules:end>
 `
 }
 
@@ -770,9 +770,9 @@ function indexCss(ctx: TemplateContext): string {
 function bootstrapApp(): string {
   return `import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
-import { RateLimit, fromClass } from '@boostkit/middleware'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
+import { RateLimit, fromClass } from '@rudderjs/middleware'
 import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
@@ -799,62 +799,62 @@ export default Application.configure({
 
 function bootstrapProviders(ctx: TemplateContext): string {
   const imports: string[] = [
-    "import type { Application, ServiceProvider } from '@boostkit/core'",
+    "import type { Application, ServiceProvider } from '@rudderjs/core'",
   ]
   const providers: string[] = []
 
   if (ctx.orm === 'prisma') {
-    imports.push("import { database } from '@boostkit/orm-prisma'")
+    imports.push("import { database } from '@rudderjs/orm-prisma'")
     providers.push("database(configs.database),  // boots first — binds PrismaClient to DI as 'prisma'")
   } else if (ctx.orm === 'drizzle') {
-    imports.push("import { database } from '@boostkit/orm-drizzle'")
+    imports.push("import { database } from '@rudderjs/orm-drizzle'")
     providers.push("database(configs.database),  // boots first — binds Drizzle to DI as 'drizzle'")
   }
 
   if (ctx.packages.auth) {
-    imports.push("import { auth } from '@boostkit/auth'")
+    imports.push("import { auth } from '@rudderjs/auth'")
     providers.push('auth(configs.auth),')
   }
 
   // events is from core — always available
-  imports.push("import { events } from '@boostkit/core'")
+  imports.push("import { events } from '@rudderjs/core'")
   providers.push('events({}),')
 
   if (ctx.packages.queue) {
-    imports.push("import { queue } from '@boostkit/queue'")
+    imports.push("import { queue } from '@rudderjs/queue'")
     providers.push('queue(configs.queue),')
   }
   if (ctx.packages.mail) {
-    imports.push("import { mail } from '@boostkit/mail'")
+    imports.push("import { mail } from '@rudderjs/mail'")
     providers.push('mail(configs.mail),')
   }
   if (ctx.packages.notifications) {
-    imports.push("import { notifications } from '@boostkit/notification'")
+    imports.push("import { notifications } from '@rudderjs/notification'")
     providers.push('notifications(),')
   }
   if (ctx.packages.cache) {
-    imports.push("import { cache } from '@boostkit/cache'")
+    imports.push("import { cache } from '@rudderjs/cache'")
     providers.push('cache(configs.cache),')
   }
   if (ctx.packages.storage) {
-    imports.push("import { storage } from '@boostkit/storage'")
+    imports.push("import { storage } from '@rudderjs/storage'")
     providers.push('storage(configs.storage),')
   }
   if (ctx.packages.auth) {
-    imports.push("import { session } from '@boostkit/session'")
+    imports.push("import { session } from '@rudderjs/session'")
     providers.push('session(configs.session),')
   }
   if (ctx.packages.scheduler) {
-    imports.push("import { scheduler } from '@boostkit/schedule'")
+    imports.push("import { scheduler } from '@rudderjs/schedule'")
     providers.push('scheduler(),')
   }
   if (ctx.packages.ai) {
-    imports.push("import { ai } from '@boostkit/ai'")
+    imports.push("import { ai } from '@rudderjs/ai'")
     providers.push('ai(configs.ai),')
   }
 
   if (ctx.packages.panels) {
-    imports.push("import { panels } from '@boostkit/panels'")
+    imports.push("import { panels } from '@rudderjs/panels'")
     imports.push("import { adminPanel } from '../app/Panels/AdminPanel.js'")
     providers.push('panels([adminPanel]),')
   }
@@ -881,10 +881,10 @@ export default [
 // ─── config files ──────────────────────────────────────────
 
 function configApp(): string {
-  return `import { Env } from '@boostkit/support'
+  return `import { Env } from '@rudderjs/support'
 
 export default {
-  name:  Env.get('APP_NAME',  'BoostKit'),
+  name:  Env.get('APP_NAME',  'RudderJS'),
   env:   Env.get('APP_ENV',   'development'),
   debug: Env.getBool('APP_DEBUG', false),
   url:   Env.get('APP_URL', 'http://localhost:3000'),
@@ -893,7 +893,7 @@ export default {
 }
 
 function configServer(): string {
-  return `import { Env } from '@boostkit/support'
+  return `import { Env } from '@rudderjs/support'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -924,7 +924,7 @@ function configDatabase(ctx: TemplateContext): string {
     },`,
   }
 
-  return `import { Env } from '@boostkit/support'
+  return `import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('DB_CONNECTION', '${defaultConn}'),
@@ -937,8 +937,8 @@ ${connections[ctx.db]}
 }
 
 function configQueue(): string {
-  return `import { Env } from '@boostkit/support'
-import type { QueueConfig } from '@boostkit/queue'
+  return `import { Env } from '@rudderjs/support'
+import type { QueueConfig } from '@rudderjs/queue'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'sync'),
@@ -961,14 +961,14 @@ export default {
 }
 
 function configMail(): string {
-  return `import { Env } from '@boostkit/support'
+  return `import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
 
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME',    'BoostKit'),
+    name:    Env.get('MAIL_FROM_NAME',    'RudderJS'),
   },
 
   mailers: {
@@ -990,8 +990,8 @@ export default {
 }
 
 function configCache(): string {
-  return `import { Env } from '@boostkit/support'
-import type { CacheConfig } from '@boostkit/cache'
+  return `import { Env } from '@rudderjs/support'
+import type { CacheConfig } from '@rudderjs/cache'
 
 export default {
   default: Env.get('CACHE_STORE', 'memory'),
@@ -1007,7 +1007,7 @@ export default {
       host:     Env.get('REDIS_HOST', '127.0.0.1'),
       port:     Env.getNumber('REDIS_PORT', 6379),
       password: Env.get('REDIS_PASSWORD', ''),
-      prefix:   Env.get('CACHE_PREFIX', 'boostkit:'),
+      prefix:   Env.get('CACHE_PREFIX', 'rudderjs:'),
     },
   },
 } satisfies CacheConfig
@@ -1016,8 +1016,8 @@ export default {
 
 function configStorage(): string {
   return `import path from 'node:path'
-import { Env } from '@boostkit/support'
-import type { StorageConfig } from '@boostkit/storage'
+import { Env } from '@rudderjs/support'
+import type { StorageConfig } from '@rudderjs/storage'
 
 export default {
   default: Env.get('FILESYSTEM_DISK', 'local'),
@@ -1050,8 +1050,8 @@ export default {
 }
 
 function configAuth(_ctx: TemplateContext): string {
-  return `import { Env } from '@boostkit/support'
-import type { BetterAuthConfig } from '@boostkit/auth'
+  return `import { Env } from '@rudderjs/support'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret:           Env.get('AUTH_SECRET', 'please-set-AUTH_SECRET-min-32-chars!!'),
@@ -1115,22 +1115,22 @@ export default configs
 function envDts(): string {
   return `import type { Configs } from './config/index.js'
 
-declare module '@boostkit/core' {
+declare module '@rudderjs/core' {
   interface AppConfig extends Configs {}
 }
 `
 }
 
 function configSession(): string {
-  return `import { Env } from '@boostkit/support'
-import type { SessionConfig } from '@boostkit/session'
+  return `import { Env } from '@rudderjs/support'
+import type { SessionConfig } from '@rudderjs/session'
 
 export default {
   driver:   Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis',
   lifetime: 120,
   secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
   cookie: {
-    name:     'boostkit_session',
+    name:     'rudderjs_session',
     secure:   Env.getBool('SESSION_SECURE', false),
     httpOnly: true,
     sameSite: 'lax' as const,
@@ -1142,8 +1142,8 @@ export default {
 }
 
 function configAi(): string {
-  return `import { Env } from '@boostkit/support'
-import type { AiConfig } from '@boostkit/ai'
+  return `import { Env } from '@rudderjs/support'
+import type { AiConfig } from '@rudderjs/ai'
 
 export default {
   default: Env.get('AI_MODEL', 'anthropic/claude-sonnet-4-5'),
@@ -1174,7 +1174,7 @@ export default {
 }
 
 function configMedia(): string {
-  return `import type { MediaPluginConfig } from '@boostkit/media/server'
+  return `import type { MediaPluginConfig } from '@rudderjs/media/server'
 
 export default {
   libraries: {
@@ -1195,7 +1195,7 @@ export default {
 // ─── app files ─────────────────────────────────────────────
 
 function userModel(): string {
-  return `import { Model } from '@boostkit/orm'
+  return `import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   // Prisma accessor is the model name lowercased
@@ -1213,7 +1213,7 @@ export class User extends Model {
 }
 
 function appServiceProvider(): string {
-  return `import { ServiceProvider } from '@boostkit/core'
+  return `import { ServiceProvider } from '@rudderjs/core'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {
@@ -1229,8 +1229,8 @@ export class AppServiceProvider extends ServiceProvider {
 }
 
 function requestIdMiddleware(): string {
-  return `import { Middleware } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+  return `import { Middleware } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 /**
  * Attaches a unique X-Request-Id header to every response.
@@ -1253,19 +1253,19 @@ export class RequestIdMiddleware extends Middleware {
 
 function adminPanel(ctx: TemplateContext): string {
   const imports: string[] = [
-    "import { Panel } from '@boostkit/panels'",
-    "import { panelsLexical } from '@boostkit/panels-lexical'",
+    "import { Panel } from '@rudderjs/panels'",
+    "import { panelsLexical } from '@rudderjs/panels-lexical'",
   ]
   const plugins: string[] = ['panelsLexical()']
   const resources: string[] = []
 
   if (ctx.withMedia) {
-    imports.push("import { media } from '@boostkit/media/server'")
+    imports.push("import { media } from '@rudderjs/media/server'")
     imports.push("import configs from '../../config/index.js'")
     plugins.push('media(configs.media)')
   }
   if (ctx.withWorkspaces) {
-    imports.push("import { workspaces } from '@boostkit/workspaces'")
+    imports.push("import { workspaces } from '@rudderjs/workspaces'")
     plugins.push('workspaces()')
   }
   if (ctx.packages.auth && ctx.orm) {
@@ -1292,8 +1292,8 @@ ${resArray}
 }
 
 function userResource(): string {
-  return `import { Resource } from '@boostkit/panels'
-import { TextField, EmailField, DateField, BooleanField } from '@boostkit/panels'
+  return `import { Resource } from '@rudderjs/panels'
+import { TextField, EmailField, DateField, BooleanField } from '@rudderjs/panels'
 
 export class UserResource extends Resource {
   static model = 'user'
@@ -1329,8 +1329,8 @@ export class UserResource extends Resource {
 }
 
 function todoResource(): string {
-  return `import { Resource } from '@boostkit/panels'
-import { TextField, BooleanField, DateField } from '@boostkit/panels'
+  return `import { Resource } from '@rudderjs/panels'
+import { TextField, BooleanField, DateField } from '@rudderjs/panels'
 
 export class TodoResource extends Resource {
   static model = 'todo'
@@ -1368,21 +1368,21 @@ export class TodoResource extends Resource {
 
 function routesApi(ctx: TemplateContext): string {
   const imports: string[] = [
-    "import { router } from '@boostkit/router'",
+    "import { router } from '@rudderjs/router'",
   ]
   const lines: string[] = []
 
   if (ctx.packages.auth || ctx.packages.ai) {
-    imports.push("import { app } from '@boostkit/core'")
+    imports.push("import { app } from '@rudderjs/core'")
   }
   if (ctx.packages.auth) {
-    imports.push("import type { BetterAuthInstance } from '@boostkit/auth'")
-    imports.push("import { RateLimit } from '@boostkit/middleware'")
+    imports.push("import type { BetterAuthInstance } from '@rudderjs/auth'")
+    imports.push("import { RateLimit } from '@rudderjs/middleware'")
     lines.push('')
     lines.push("const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')")
   }
   if (ctx.packages.ai) {
-    imports.push("import { AI } from '@boostkit/ai'")
+    imports.push("import { AI } from '@rudderjs/ai'")
   }
 
   lines.push('')
@@ -1434,7 +1434,7 @@ router.post('/api/ai/chat', async (req, res) => {
 }
 
 function routesWeb(): string {
-  return `import { router } from '@boostkit/router'
+  return `import { router } from '@rudderjs/router'
 
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
@@ -1446,9 +1446,9 @@ function routesWeb(): string {
 }
 
 function routesConsole(): string {
-  return `import { artisan } from '@boostkit/artisan'
+  return `import { rudder } from '@rudderjs/rudder'
 
-artisan.command('inspire', () => {
+rudder.command('inspire', () => {
   const quotes = [
     'The best way to predict the future is to create it.',
     'Build something people want.',
@@ -1460,7 +1460,7 @@ artisan.command('inspire', () => {
   console.log(\`\\n  "\${quote}"\\n\`)
 }).description('Display an inspiring quote')
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   // TODO: add your seed data here
   console.log('No seed data configured. Edit routes/console.ts to add seed logic.')
 }).description('Seed the database with sample data')
@@ -1532,8 +1532,8 @@ export default {
 }
 
 function pagesIndexData(): string {
-  return `import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
+  return `import { app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 export type Data = {
   user: { id: string; name: string; email: string } | null
@@ -1592,7 +1592,7 @@ export default function Page() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
       <h1 className="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p className="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
+      <p className="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
       {user ? (
         <div className="flex flex-col items-center gap-3">
@@ -1661,7 +1661,7 @@ async function signOut() {
 <template>
   <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
     <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-    <p class="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
+    <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
     <div v-if="user" class="flex flex-col items-center gap-3">
       <p class="text-sm text-muted-foreground">
@@ -1718,7 +1718,7 @@ export default function Page() {
   return (
     <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
       <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p class="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
+      <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
       {user() ? (
         <div class="flex flex-col items-center gap-3">
@@ -1930,9 +1930,9 @@ export interface Todo {
 }
 
 function todoService(): string {
-  return `import { Injectable } from '@boostkit/core'
-import { resolve } from '@boostkit/core'
-import type { OrmAdapter } from '@boostkit/orm'
+  return `import { Injectable } from '@rudderjs/core'
+import { resolve } from '@rudderjs/core'
+import type { OrmAdapter } from '@rudderjs/orm'
 import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
 
 @Injectable()
@@ -1963,8 +1963,8 @@ export class TodoService {
 }
 
 function todoServiceProvider(): string {
-  return `import { ServiceProvider } from '@boostkit/core'
-import { router } from '@boostkit/router'
+  return `import { ServiceProvider } from '@rudderjs/core'
+import { router } from '@rudderjs/router'
 import { TodoService } from './TodoService.js'
 import { TodoInputSchema, TodoUpdateSchema } from './TodoSchema.js'
 
@@ -2040,7 +2040,7 @@ export default {
 }
 
 function todoPageData(): string {
-  return `import { resolve } from '@boostkit/core'
+  return `import { resolve } from '@rudderjs/core'
 import { TodoService } from '../../app/Modules/Todo/TodoService.js'
 import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
 

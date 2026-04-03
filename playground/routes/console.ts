@@ -1,14 +1,14 @@
-import { Artisan } from '@boostkit/artisan'
-import { Schedule } from '@boostkit/schedule'
-import { Cache } from '@boostkit/cache'
+import { Rudder } from '@rudderjs/rudder'
+import { Schedule } from '@rudderjs/schedule'
+import { Cache } from '@rudderjs/cache'
 import { User } from '../app/Models/User.js'
 import { Category } from '../app/Models/Category.js'
 import { SendEmails } from '../app/Commands/SendEmails.js'
 
 // Class-based commands (Laravel-style)
-Artisan.register(SendEmails)
+Rudder.register(SendEmails)
 
-Artisan.command('inspire', () => {
+Rudder.command('inspire', () => {
   const quotes = [
     'The best way to predict the future is to create it.',
     'Build something people want.',
@@ -20,7 +20,7 @@ Artisan.command('inspire', () => {
   console.log(`\n  "${quote}"\n`)
 }).description('Display an inspiring quote')
 
-Artisan.command('db:seed', async () => {
+Rudder.command('db:seed', async () => {
   console.log('Seeding database...')
 
   await User.create({ name: 'Alice',   email: 'alice2@example.com',   role: 'admin' })

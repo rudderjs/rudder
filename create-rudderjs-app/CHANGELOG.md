@@ -1,4 +1,4 @@
-# create-boostkit-app
+# create-rudderjs-app
 
 ## 0.0.4
 
@@ -13,7 +13,7 @@
 - Fix multiple template issues discovered during end-to-end scaffolding test
 
   - Self-contained `tsconfig.json` (no longer extends `../tsconfig.base.json` which doesn't exist outside the monorepo)
-  - All `@boostkit/*` dependencies use `'latest'` dist-tag instead of `'^0.0.1'` (which pnpm semver treats as exact version)
+  - All `@rudderjs/*` dependencies use `'latest'` dist-tag instead of `'^0.0.1'` (which pnpm semver treats as exact version)
   - Add `@better-auth/prisma-adapter` to dependencies (required by better-auth@1.5.3+)
   - Add `shadcn` to dependencies (required by generated `src/index.css` for `@import "shadcn/tailwind.css"`)
   - Add `pnpm.onlyBuiltDependencies` to allow native builds (required by pnpm v10)
@@ -27,7 +27,7 @@
 
 - Quality pass: bug fixes, expanded tests, and docs improvements across core packages.
 
-  - `@boostkit/support`: fix `ConfigRepository.get()` returning fallback for falsy values (`0`, `false`, `''`); add prototype pollution protection to `set()`; fix `Collection.toJSON()` returning `T[]` not a string; fix `Env.getBool()` to be case-insensitive; fix `isObject()` to correctly return `false` for `Date`, `Map`, `RegExp`, etc.
-  - `@boostkit/contracts`: fix `MiddlewareHandler` return type (`void` → `unknown | Promise<unknown>`)
-  - `@boostkit/middleware`: add array constructor to `Pipeline` — `new Pipeline([...handlers])` now works
-  - `create-boostkit-app`: remove deprecated `.toHandler()` from `RateLimit` in scaffolded templates; remove nonexistent `.withExceptions()` call
+  - `@rudderjs/support`: fix `ConfigRepository.get()` returning fallback for falsy values (`0`, `false`, `''`); add prototype pollution protection to `set()`; fix `Collection.toJSON()` returning `T[]` not a string; fix `Env.getBool()` to be case-insensitive; fix `isObject()` to correctly return `false` for `Date`, `Map`, `RegExp`, etc.
+  - `@rudderjs/contracts`: fix `MiddlewareHandler` return type (`void` → `unknown | Promise<unknown>`)
+  - `@rudderjs/middleware`: add array constructor to `Pipeline` — `new Pipeline([...handlers])` now works
+  - `create-rudderjs-app`: remove deprecated `.toHandler()` from `RateLimit` in scaffolded templates; remove nonexistent `.withExceptions()` call

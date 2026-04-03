@@ -133,7 +133,7 @@ describe('Collection', () => {
 // ─── Env ───────────────────────────────────────────────────
 
 describe('Env', () => {
-  const KEY = 'BOOSTKIT_TEST_SUPPORT'
+  const KEY = 'RUDDERJS_TEST_SUPPORT'
 
   beforeEach(() => { delete process.env[KEY] })
   afterEach(()  => { delete process.env[KEY] })
@@ -221,7 +221,7 @@ describe('Env', () => {
 // ─── env() helper ──────────────────────────────────────────
 
 describe('env()', () => {
-  const KEY = 'BOOSTKIT_TEST_ENV_HELPER'
+  const KEY = 'RUDDERJS_TEST_ENV_HELPER'
 
   beforeEach(() => { delete process.env[KEY] })
   afterEach(()  => { delete process.env[KEY] })
@@ -244,13 +244,13 @@ describe('env()', () => {
 
 describe('ConfigRepository', () => {
   it('get() returns top-level value', () => {
-    const repo = new ConfigRepository({ app: { name: 'BoostKit' } })
-    assert.deepStrictEqual(repo.get('app'), { name: 'BoostKit' })
+    const repo = new ConfigRepository({ app: { name: 'RudderJS' } })
+    assert.deepStrictEqual(repo.get('app'), { name: 'RudderJS' })
   })
 
   it('get() returns nested value with dot notation', () => {
-    const repo = new ConfigRepository({ app: { name: 'BoostKit' } })
-    assert.strictEqual(repo.get('app.name'), 'BoostKit')
+    const repo = new ConfigRepository({ app: { name: 'RudderJS' } })
+    assert.strictEqual(repo.get('app.name'), 'RudderJS')
   })
 
   it('get() returns fallback for missing key', () => {
@@ -486,8 +486,8 @@ describe('sleep()', () => {
 // ─── defineEnv ─────────────────────────────────────────────
 
 describe('defineEnv()', () => {
-  const KEY1 = 'BOOSTKIT_DEFINE_ENV_NAME'
-  const KEY2 = 'BOOSTKIT_DEFINE_ENV_PORT'
+  const KEY1 = 'RUDDERJS_DEFINE_ENV_NAME'
+  const KEY2 = 'RUDDERJS_DEFINE_ENV_PORT'
 
   beforeEach(() => {
     delete process.env[KEY1]

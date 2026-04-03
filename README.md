@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" alt="BoostKit — Boost Your Node App" width="480" />
+  <img src="./logo.png" alt="RudderJS — Boost Your Node App" width="480" />
 </p>
 
 <p align="center">
@@ -7,17 +7,17 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@boostkit/core"><img src="https://img.shields.io/npm/v/@boostkit/core?label=core&color=f5a623" alt="npm" /></a>
-  <a href="https://github.com/boostkitjs/boostkit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f5a623" alt="npm" /></a>
+  <a href="https://github.com/rudderjs/rudderjs/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-powered-646cff" alt="Vite" />
 </p>
 
 ---
 
-BoostKit is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, an Artisan CLI, queues, scheduling, and more — without the PHP runtime.
+RudderJS is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, an Rudder CLI, queues, scheduling, and more — without the PHP runtime.
 
-## Why BoostKit?
+## Why RudderJS?
 
 Modern web development forces a choice between **developer experience** and **architectural freedom**.
 
@@ -25,9 +25,9 @@ Modern web development forces a choice between **developer experience** and **ar
 - **Express/Hono** gives you freedom but you spend weeks wiring up auth, ORMs, queues, and DI from scratch
 - **NestJS** is structured but heavy, Angular-style, and API-only
 
-BoostKit is the middle ground: a **batteries-included architecture that stays entirely modular and UI-agnostic**.
+RudderJS is the middle ground: a **batteries-included architecture that stays entirely modular and UI-agnostic**.
 
-| | Next.js | NestJS | BoostKit |
+| | Next.js | NestJS | RudderJS |
 |---|---|---|---|
 | **Philosophy** | Component-first | Angular-style DI | Laravel-style DX |
 | **Build tool** | Webpack / Turbopack | Webpack / esbuild | **Vite** |
@@ -40,8 +40,8 @@ BoostKit is the middle ground: a **batteries-included architecture that stays en
 
 ## Key Features
 
-- **Laravel-inspired DX** — service providers, fluent bootstrap, Artisan CLI, FormRequest validation
-- **Pay-as-you-go** — 31 optional `@boostkit/*` packages; use only what you need
+- **Laravel-inspired DX** — service providers, fluent bootstrap, Rudder CLI, FormRequest validation
+- **Pay-as-you-go** — 31 optional `@rudderjs/*` packages; use only what you need
 - **AI-native** — multi-provider AI engine (Anthropic, OpenAI, Google, Ollama), Agent class with tool system, streaming
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
@@ -55,13 +55,13 @@ BoostKit is the middle ground: a **batteries-included architecture that stays en
 Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
 
 ```bash
-pnpm create boostkit-app my-app
+pnpm create rudderjs-app my-app
 # or
-npm create boostkit-app@latest my-app
+npm create rudderjs-app@latest my-app
 # or
-yarn create boostkit-app my-app
+yarn create rudderjs-app my-app
 # or
-bunx create-boostkit-app my-app
+bunx create-rudderjs-app my-app
 ```
 
 The interactive installer asks you to choose your database, frontend framework (React / Vue / Solid), Tailwind, shadcn/ui, and authentication pages — then scaffolds a production-ready project.
@@ -84,9 +84,9 @@ pnpm dev
 ```ts
 // bootstrap/app.ts
 import 'reflect-metadata'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
-import { RateLimit } from '@boostkit/middleware'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
+import { RateLimit } from '@rudderjs/middleware'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -110,7 +110,7 @@ export default Application.configure({
 
 ```ts
 // routes/api.ts
-import { Route } from '@boostkit/router'
+import { Route } from '@rudderjs/router'
 
 Route.get('/api/users', async (_req, res) => {
   const users = await User.all()
@@ -123,15 +123,15 @@ Route.post('/api/users', async (req, res) => {
 })
 ```
 
-### 3. Artisan CLI + Scheduling
+### 3. Rudder CLI + Scheduling
 
 ```ts
 // routes/console.ts
-import { Cache } from '@boostkit/cache'
-import { Artisan }  from '@boostkit/artisan'
-import { Schedule } from '@boostkit/schedule'
+import { Cache } from '@rudderjs/cache'
+import { Rudder }  from '@rudderjs/rudder'
+import { Schedule } from '@rudderjs/schedule'
 
-Artisan.command('db:seed', async () => {
+Rudder.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })
   console.log('Seeded.')
 }).description('Seed the database')
@@ -145,7 +145,7 @@ Schedule.call(async () => {
 
 ```ts
 // app/Models/User.ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static table = 'user'
@@ -159,9 +159,9 @@ export class User extends Model {
 
 ```ts
 // app/Controllers/UserController.ts
-import { Controller, Get, Post, Middleware } from '@boostkit/router'
-import { RateLimit } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Controller, Get, Post, Middleware } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 @Controller('/api/users')
 export class UserController {
@@ -182,7 +182,7 @@ Register the controller once in your routes file:
 
 ```ts
 // routes/api.ts
-import { Route } from '@boostkit/router'
+import { Route } from '@rudderjs/router'
 import { UserController } from '../app/Controllers/UserController.js'
 
 Route.registerController(UserController)
@@ -194,7 +194,7 @@ Or use fluent routing for simpler cases — both styles work side by side.
 
 ```ts
 // app/Providers/AppServiceProvider.ts
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 import { UserService } from '../Services/UserService.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -207,7 +207,7 @@ export class AppServiceProvider extends ServiceProvider {
 
 ```ts
 // Anywhere in your routes or services
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../app/Services/UserService.js'
 
 const users = await resolve(UserService).findAll()
@@ -230,14 +230,14 @@ export class AppServiceProvider extends ServiceProvider {
 
 ```ts
 // app/Mail/WelcomeEmail.ts
-import { Mailable } from '@boostkit/mail'
+import { Mailable } from '@rudderjs/mail'
 
 export class WelcomeEmail extends Mailable {
   constructor(private readonly userName: string) { super() }
 
   build(): this {
     return this
-      .subject(`Welcome to BoostKit, ${this.userName}!`)
+      .subject(`Welcome to RudderJS, ${this.userName}!`)
       .html(`<h1>Welcome, ${this.userName}!</h1><p>Your account is ready.</p>`)
       .text(`Welcome, ${this.userName}! Your account is ready.`)
   }
@@ -245,7 +245,7 @@ export class WelcomeEmail extends Mailable {
 ```
 
 ```ts
-import { Mail } from '@boostkit/mail'
+import { Mail } from '@rudderjs/mail'
 
 await Mail.to(user.email).send(new WelcomeEmail(user.name))
 ```
@@ -265,7 +265,7 @@ export class UserRegistered {
 
 ```ts
 // bootstrap/providers.ts — register listeners
-import { events } from '@boostkit/core'
+import { events } from '@rudderjs/core'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
 
@@ -277,7 +277,7 @@ export default [
 
 ```ts
 // Dispatch from anywhere
-import { dispatch } from '@boostkit/core'
+import { dispatch } from '@rudderjs/core'
 
 await dispatch(new UserRegistered(user.id, user.name, user.email))
 ```
@@ -286,13 +286,13 @@ await dispatch(new UserRegistered(user.id, user.name, user.email))
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
+import { broadcasting } from '@rudderjs/broadcast'
 export default [ broadcasting(), /* ...other providers */ ]
 ```
 
 ```ts
 // routes/channels.ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 // Private — return true/false
 Broadcast.channel('private-orders.*', async (req) => {
@@ -308,14 +308,14 @@ Broadcast.channel('presence-room.*', async (req) => {
 
 ```ts
 // Broadcast from any route or job
-import { broadcast } from '@boostkit/broadcast'
+import { broadcast } from '@rudderjs/broadcast'
 
 broadcast('chat', 'message', { user: 'Alice', text: 'Hello!' })
 broadcast('private-orders.42', 'status.updated', { status: 'shipped' })
 ```
 
 ```ts
-// Client (BKSocket — publish with: pnpm artisan vendor:publish --tag=broadcast-client)
+// Client (BKSocket — publish with: pnpm rudder vendor:publish --tag=broadcast-client)
 import { BKSocket } from './vendor/BKSocket'
 
 const socket = new BKSocket('ws://localhost:3000/ws')
@@ -332,13 +332,13 @@ room.on('presence.members', (members) => setOnlineUsers(members))
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
-import { live }         from '@boostkit/live'
+import { broadcasting } from '@rudderjs/broadcast'
+import { live }         from '@rudderjs/live'
 export default [ broadcasting(), live() ]
 ```
 
 ```ts
-// Client — standard yjs + y-websocket (server-side is handled by @boostkit/live)
+// Client — standard yjs + y-websocket (server-side is handled by @rudderjs/live)
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 
@@ -362,7 +362,7 @@ HTTP, WebSocket channels, and CRDT sync all share the same port — no separate 
 
 ```ts
 // app/Panels/Admin/AdminPanel.ts
-import { Panel, Dashboard, Widget } from '@boostkit/panels'
+import { Panel, Dashboard, Widget } from '@rudderjs/panels'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -381,7 +381,7 @@ export const adminPanel = Panel.make('admin')
 
 ```ts
 // app/Panels/Admin/resources/ArticleResource.ts
-import { Resource, TextField, RichContentField, SelectField, FileField } from '@boostkit/panels'
+import { Resource, TextField, RichContentField, SelectField, FileField } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   static model = Article
@@ -405,9 +405,9 @@ Register panels with extensions — each extension gets dynamically registered v
 
 ```ts
 // bootstrap/providers.ts (or inside AppServiceProvider)
-import { panels } from '@boostkit/panels'
-import { panelsLexical } from '@boostkit/panels-lexical/server'
-import { media } from '@boostkit/media/server'
+import { panels } from '@rudderjs/panels'
+import { panelsLexical } from '@rudderjs/panels-lexical/server'
+import { media } from '@rudderjs/media/server'
 
 panels([adminPanel], [
   panelsLexical(),
@@ -424,14 +424,14 @@ Full-featured file browser built as a panels extension:
 - **Folders** — DB-only hierarchy, breadcrumb navigation via Vike `navigate()`
 - **Preview** — images, video, audio, PDF, text, JSON, CSV rendered natively in the browser
 - **Scoped access** — shared files (all users) or private files (per user)
-- **Image conversions** — auto-generates thumbnails via `@boostkit/image` on upload
+- **Image conversions** — auto-generates thumbnails via `@rudderjs/image` on upload
 
 ### 13. Image Processing
 
 Fluent image processing API, independent of the media library:
 
 ```ts
-import { image } from '@boostkit/image'
+import { image } from '@rudderjs/image'
 
 // Resize, convert, optimize
 const buffer = await image(uploadedFile)
@@ -453,7 +453,7 @@ await image(file)
 ### 14. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
-import { config, dump, dd, app, resolve } from '@boostkit/core'
+import { config, dump, dd, app, resolve } from '@rudderjs/core'
 
 config('app.name')       // → 'my-app'
 config('cache.ttl', 60)  // → 60 (with fallback)
@@ -471,61 +471,61 @@ const svc = resolve<UserService>(UserService)
 ### Foundation
 | Package | Description |
 |---|---|
-| `@boostkit/core` | Application bootstrap, DI container, Events, ServiceProvider lifecycle |
-| `@boostkit/router` | Fluent + decorator-based HTTP routing |
-| `@boostkit/middleware` | Pipeline, CORS, logger, CSRF, rate limiting |
-| `@boostkit/artisan` | Artisan CLI registry, Command base class |
-| `@boostkit/cli` | `make:*` generators — controller, model, job, middleware, module |
-| `@boostkit/support` | Env, Collection, ConfigRepository, helpers |
-| `@boostkit/contracts` | Shared TypeScript types (no runtime) |
+| `@rudderjs/core` | Application bootstrap, DI container, Events, ServiceProvider lifecycle |
+| `@rudderjs/router` | Fluent + decorator-based HTTP routing |
+| `@rudderjs/middleware` | Pipeline, CORS, logger, CSRF, rate limiting |
+| `@rudderjs/rudder` | Rudder CLI registry, Command base class |
+| `@rudderjs/cli` | `make:*` generators — controller, model, job, middleware, module |
+| `@rudderjs/support` | Env, Collection, ConfigRepository, helpers |
+| `@rudderjs/contracts` | Shared TypeScript types (no runtime) |
 
 ### HTTP & Frontend
 | Package | Description |
 |---|---|
-| `@boostkit/server-hono` | Hono HTTP adapter |
-| `@boostkit/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
-| `@boostkit/vite` | Vite + Vike plugin with SSR externals and BoostKit integration |
+| `@rudderjs/server-hono` | Hono HTTP adapter |
+| `@rudderjs/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
+| `@rudderjs/vite` | Vite + Vike plugin with SSR externals and RudderJS integration |
 
 ### Database
 | Package | Description |
 |---|---|
-| `@boostkit/orm` | Model base class, ModelRegistry, QueryBuilder |
-| `@boostkit/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
-| `@boostkit/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
+| `@rudderjs/orm` | Model base class, ModelRegistry, QueryBuilder |
+| `@rudderjs/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
+| `@rudderjs/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
 
 ### Auth
 | Package | Description |
 |---|---|
-| `@boostkit/auth` | better-auth service provider + `AuthMiddleware()` |
+| `@rudderjs/auth` | better-auth service provider + `AuthMiddleware()` |
 
 ### Infrastructure
 | Package | Description |
 |---|---|
-| `@boostkit/queue` | Job base class, queue contract |
-| `@boostkit/queue-bullmq` | BullMQ Redis-backed queue |
-| `@boostkit/queue-inngest` | Inngest serverless queue |
-| `@boostkit/cache` | Cache facade, memory + Redis drivers (`ioredis` optional) |
-| `@boostkit/storage` | Storage facade, local + S3/R2/MinIO (`@aws-sdk/client-s3` optional) |
-| `@boostkit/mail` | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
-| `@boostkit/notification` | Multi-channel notifications (mail, database) |
-| `@boostkit/schedule` | Task scheduler, cron-based |
-| `@boostkit/broadcast` | WebSocket channels — pub/sub, private, presence |
-| `@boostkit/live` | Yjs CRDT real-time document sync |
+| `@rudderjs/queue` | Job base class, queue contract |
+| `@rudderjs/queue-bullmq` | BullMQ Redis-backed queue |
+| `@rudderjs/queue-inngest` | Inngest serverless queue |
+| `@rudderjs/cache` | Cache facade, memory + Redis drivers (`ioredis` optional) |
+| `@rudderjs/storage` | Storage facade, local + S3/R2/MinIO (`@aws-sdk/client-s3` optional) |
+| `@rudderjs/mail` | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
+| `@rudderjs/notification` | Multi-channel notifications (mail, database) |
+| `@rudderjs/schedule` | Task scheduler, cron-based |
+| `@rudderjs/broadcast` | WebSocket channels — pub/sub, private, presence |
+| `@rudderjs/live` | Yjs CRDT real-time document sync |
 
 ### Admin & Media
 | Package | Description |
 |---|---|
-| `@boostkit/panels` | Admin panel builder — resources, fields, dashboards, widgets, versioning, collaboration |
-| `@boostkit/panels-lexical` | Lexical rich-text editor for panels (optional extension) |
-| `@boostkit/media` | Media library — file browser, uploads, folders, preview, image conversions |
-| `@boostkit/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
+| `@rudderjs/panels` | Admin panel builder — resources, fields, dashboards, widgets, versioning, collaboration |
+| `@rudderjs/panels-lexical` | Lexical rich-text editor for panels (optional extension) |
+| `@rudderjs/media` | Media library — file browser, uploads, folders, preview, image conversions |
+| `@rudderjs/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
 ### AI & Workspaces
 | Package | Description |
 |---|---|
-| `@boostkit/ai` | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware |
-| `@boostkit/workspaces` | AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator |
-| `@boostkit/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
+| `@rudderjs/ai` | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware |
+| `@rudderjs/workspaces` | AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator |
+| `@rudderjs/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
 ---
 
@@ -545,13 +545,13 @@ const svc = resolve<UserService>(UserService)
 
 ## Status
 
-BoostKit is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
+RudderJS is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 31 packages published to npm under `@boostkit/*`
+- 31 packages published to npm under `@rudderjs/*`
 - Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, media library, AI engine with multi-provider support, and AI workspace canvas — all end-to-end
 
 ---
 
 ## License
 
-MIT © [Suleiman Shahbari](https://github.com/boostkitjs/boostkit)
+MIT © [Suleiman Shahbari](https://github.com/rudderjs/rudderjs)

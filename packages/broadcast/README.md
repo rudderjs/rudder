@@ -1,11 +1,11 @@
-# @boostkit/broadcast
+# @rudderjs/broadcast
 
-Native WebSocket server for BoostKit — channel-based pub/sub with public, private, and presence channels. Runs on the same port as your HTTP server. No Pusher, no Echo, no external service required.
+Native WebSocket server for RudderJS — channel-based pub/sub with public, private, and presence channels. Runs on the same port as your HTTP server. No Pusher, no Echo, no external service required.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/broadcast
+pnpm add @rudderjs/broadcast
 ```
 
 ## Setup
@@ -13,7 +13,7 @@ pnpm add @boostkit/broadcast
 Register the provider in `bootstrap/providers.ts`:
 
 ```ts
-import { broadcasting } from '@boostkit/broadcast'
+import { broadcasting } from '@rudderjs/broadcast'
 
 export default [
   // ... other providers
@@ -36,7 +36,7 @@ export default Application.configure({ ... })
 Create `routes/channels.ts` to register auth callbacks:
 
 ```ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 // Private channels — return true/false
 Broadcast.channel('private-orders.*', async (req) => {
@@ -54,7 +54,7 @@ Broadcast.channel('presence-room.*', async (req) => {
 
 ## Channels
 
-BoostKit WebSockets are organized into three types:
+RudderJS WebSockets are organized into three types:
 
 | Type | Class | Prefix | Auth |
 |---|---|---|---|
@@ -69,7 +69,7 @@ BoostKit WebSockets are organized into three types:
 Push an event to all subscribers of a channel from anywhere in your application:
 
 ```ts
-import { broadcast } from '@boostkit/broadcast'
+import { broadcast } from '@rudderjs/broadcast'
 
 // In a route handler, job, or event listener
 broadcast('orders', 'order.shipped', { orderId: 123 })
@@ -81,7 +81,7 @@ broadcast('private-orders.42', 'status.updated', { status: 'delivered' })
 Register an auth callback for private/presence channels. The pattern supports `*` as a wildcard (matches non-dot characters):
 
 ```ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 Broadcast.channel('private-user.*', async (req, channel) => {
   // req.headers — HTTP headers from the upgrade request
@@ -94,7 +94,7 @@ Broadcast.channel('private-user.*', async (req, channel) => {
 ### `broadcastStats()`
 
 ```ts
-import { broadcastStats } from '@boostkit/broadcast'
+import { broadcastStats } from '@rudderjs/broadcast'
 
 broadcastStats()  // → { connections: 5, channels: 3 }
 ```
@@ -104,7 +104,7 @@ broadcastStats()  // → { connections: 5, channels: 3 }
 Publish the client asset:
 
 ```bash
-pnpm artisan vendor:publish --tag=ws-client
+pnpm rudder vendor:publish --tag=ws-client
 ```
 
 Then use it in your frontend:
@@ -160,7 +160,7 @@ All communication uses JSON over a single `/ws` path.
 
 WebSocket connections share the same port as your HTTP server. The `ws` package intercepts HTTP `upgrade` events before they reach Hono:
 
-- **Dev (Vite):** the `@boostkit/vite` plugin hooks into Vite's dev server
-- **Production:** `@boostkit/server-hono`'s `listen()` attaches to the underlying Node.js HTTP server
+- **Dev (Vite):** the `@rudderjs/vite` plugin hooks into Vite's dev server
+- **Production:** `@rudderjs/server-hono`'s `listen()` attaches to the underlying Node.js HTTP server
 
 This means no extra port, no proxy configuration.

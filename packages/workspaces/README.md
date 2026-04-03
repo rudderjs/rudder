@@ -1,11 +1,11 @@
-# @boostkit/workspaces
+# @rudderjs/workspaces
 
-AI workspace builder for BoostKit — collaborative 3D isometric canvas with departments, agents, knowledge bases, and connections.
+AI workspace builder for RudderJS — collaborative 3D isometric canvas with departments, agents, knowledge bases, and connections.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/workspaces
+pnpm add @rudderjs/workspaces
 ```
 
 For the 3D canvas (optional peer deps):
@@ -17,8 +17,8 @@ pnpm add three @react-three/fiber @react-three/drei yjs y-websocket y-indexeddb
 ## Setup
 
 ```ts
-import { Panel } from '@boostkit/panels'
-import { workspaces } from '@boostkit/workspaces'
+import { Panel } from '@rudderjs/panels'
+import { workspaces } from '@rudderjs/workspaces'
 
 export const adminPanel = Panel.make('admin')
   .use(workspaces())
@@ -28,7 +28,7 @@ export const adminPanel = Panel.make('admin')
 Publish schema and run migrations:
 
 ```bash
-pnpm artisan vendor:publish --tag=workspaces-schema
+pnpm rudder vendor:publish --tag=workspaces-schema
 pnpm exec prisma generate
 pnpm exec prisma db push
 ```
@@ -141,7 +141,7 @@ Chat.make('workspace-chat')
   .height(400)
 ```
 
-Renders a chat panel with message input, streaming responses, and conversation history. Uses `@boostkit/ai` agents for responses, with the orchestrator routing to department agents based on canvas node data.
+Renders a chat panel with message input, streaming responses, and conversation history. Uses `@rudderjs/ai` agents for responses, with the orchestrator routing to department agents based on canvas node data.
 
 ## Orchestrator
 
@@ -151,4 +151,4 @@ The orchestrator is a special agent that:
 2. Analyzes intent and selects relevant departments
 3. Calls department agents as tools (`invoke_department`)
 4. Synthesizes results into a final response
-5. Streams to chat UI via `@boostkit/broadcast` WebSocket channels
+5. Streams to chat UI via `@rudderjs/broadcast` WebSocket channels

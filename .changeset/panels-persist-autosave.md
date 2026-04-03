@@ -1,5 +1,5 @@
 ---
-'@boostkit/panels': minor
+'@rudderjs/panels': minor
 ---
 
 Add autosave, form persistence, and per-field persist with Yjs provider support.

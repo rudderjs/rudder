@@ -1,23 +1,23 @@
-# @boostkit/core
+# @rudderjs/core
 
 ## 0.0.6
 
 ### Patch Changes
 
-- Update @boostkit/artisan dependency to 0.0.2 which exports Artisan and CancelledError.
+- Update @rudderjs/rudder dependency to 0.0.2 which exports Rudder and CancelledError.
 
 ## 0.0.5
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/artisan@0.0.2
+  - @rudderjs/rudder@0.0.2
 
 ## 0.0.4
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/support@0.0.3
-  - @boostkit/contracts@0.0.2
-  - @boostkit/router@0.0.3
+  - @rudderjs/support@0.0.3
+  - @rudderjs/contracts@0.0.2
+  - @rudderjs/router@0.0.3

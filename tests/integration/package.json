@@ -1,5 +1,5 @@
 {
-  "name": "@boostkit/integration-tests",
+  "name": "@rudderjs/integration-tests",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,12 +8,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@boostkit/cache": "workspace:*",
-    "@boostkit/contracts": "workspace:*",
-    "@boostkit/core": "workspace:*",
-    "@boostkit/orm": "workspace:*",
-    "@boostkit/orm-drizzle": "workspace:*",
-    "@boostkit/session": "workspace:*",
+    "@rudderjs/cache": "workspace:*",
+    "@rudderjs/contracts": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/orm": "workspace:*",
+    "@rudderjs/orm-drizzle": "workspace:*",
+    "@rudderjs/session": "workspace:*",
     "better-sqlite3": "^12.0.0",
     "drizzle-orm": "^0.38.0"
   },

@@ -1,5 +1,5 @@
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
+import { app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 export type Data = {
   user: { id: string; name: string; email: string } | null

@@ -1,6 +1,6 @@
 # API Routes
 
-`@boostkit/panels` auto-generates a full CRUD API for each registered resource. All routes are mounted under the panel's path prefix.
+`@rudderjs/panels` auto-generates a full CRUD API for each registered resource. All routes are mounted under the panel's path prefix.
 
 ---
 

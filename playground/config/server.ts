@@ -1,4 +1,4 @@
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 
 export default {
   port:       Env.getNumber('PORT', 3000),

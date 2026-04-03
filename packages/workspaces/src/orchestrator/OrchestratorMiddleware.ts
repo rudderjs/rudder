@@ -1,9 +1,9 @@
-import type { AiMiddleware } from '@boostkit/ai'
+import type { AiMiddleware } from '@rudderjs/ai'
 
 /**
  * Broadcast middleware — streams all chunks to a WebSocket channel.
  *
- * Uses `@boostkit/broadcast` (dynamically imported to avoid hard dependency).
+ * Uses `@rudderjs/broadcast` (dynamically imported to avoid hard dependency).
  * Clients subscribe to the channel to receive real-time stream chunks.
  *
  * @example
@@ -17,20 +17,20 @@ export function broadcastMiddleware(channel: string): AiMiddleware {
     name: 'broadcast',
 
     onChunk(ctx, chunk) {
-      import('@boostkit/broadcast').then(({ broadcast }) => {
+      import('@rudderjs/broadcast').then(({ broadcast }) => {
         broadcast(channel, 'stream:chunk', chunk)
       }).catch(() => {})
       return chunk
     },
 
     async onFinish(ctx) {
-      import('@boostkit/broadcast').then(({ broadcast }) => {
+      import('@rudderjs/broadcast').then(({ broadcast }) => {
         broadcast(channel, 'stream:finish', { requestId: ctx.requestId })
       }).catch(() => {})
     },
 
     async onError(ctx, error) {
-      import('@boostkit/broadcast').then(({ broadcast }) => {
+      import('@rudderjs/broadcast').then(({ broadcast }) => {
         broadcast(channel, 'stream:error', {
           requestId: ctx.requestId,
           error: error instanceof Error ? error.message : String(error),

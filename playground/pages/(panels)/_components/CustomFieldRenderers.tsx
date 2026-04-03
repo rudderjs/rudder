@@ -1,4 +1,4 @@
-import type { FieldMeta } from '@boostkit/panels'
+import type { FieldMeta } from '@rudderjs/panels'
 
 /**
  * Custom field renderer props — same interface as built-in FieldInput.

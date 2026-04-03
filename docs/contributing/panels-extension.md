@@ -1,12 +1,12 @@
 # Creating a Panels Extension Package
 
-A panels extension adds new capabilities to `@boostkit/panels` without modifying it — new field types, editor integrations, custom renderers. `@boostkit/panels-lexical` is the canonical example.
+A panels extension adds new capabilities to `@rudderjs/panels` without modifying it — new field types, editor integrations, custom renderers. `@rudderjs/panels-lexical` is the canonical example.
 
 ---
 
 ## How panels extensions work
 
-`@boostkit/panels` ships with a **registry system** for pluggable components:
+`@rudderjs/panels` ships with a **registry system** for pluggable components:
 
 ```ts
 // packages/panels/src/editorRegistry.ts
@@ -19,7 +19,7 @@ export function registerEditor(key: string, Component: React.ComponentType<...>)
 
 When a field renders, it checks the registry first and falls back to a built-in. Your extension calls `register*()` at startup — the panels package never imports your package directly.
 
-This is the **critical rule**: `@boostkit/panels` must never import `@boostkit/panels-*`. The dependency only flows one way.
+This is the **critical rule**: `@rudderjs/panels` must never import `@rudderjs/panels-*`. The dependency only flows one way.
 
 ---
 
@@ -44,7 +44,7 @@ packages/panels-myext/
 
 ```json
 {
-  "name": "@boostkit/panels-myext",
+  "name": "@rudderjs/panels-myext",
   "type": "module",
   "exports": {
     ".": {
@@ -53,17 +53,17 @@ packages/panels-myext/
     }
   },
   "peerDependencies": {
-    "@boostkit/panels": "*",
+    "@rudderjs/panels": "*",
     "react": "^18 || ^19"
   },
   "devDependencies": {
-    "@boostkit/panels": "workspace:*",
+    "@rudderjs/panels": "workspace:*",
     "react": "^19"
   }
 }
 ```
 
-`@boostkit/panels` is a **peer dependency** (user must have it) and a **devDependency** (for local development). It is never in `dependencies`.
+`@rudderjs/panels` is a **peer dependency** (user must have it) and a **devDependency** (for local development). It is never in `dependencies`.
 
 ---
 
@@ -73,8 +73,8 @@ Expose a `register*()` function that installs your components into the panels re
 
 ```ts
 // src/index.ts
-import { editorRegistry } from '@boostkit/panels'
-import type { EditorProps } from '@boostkit/panels'
+import { editorRegistry } from '@rudderjs/panels'
+import type { EditorProps } from '@rudderjs/panels'
 
 export function registerMyExt() {
   // Lazy import the heavy React component — avoids bundling it on the server
@@ -106,7 +106,7 @@ export function myExtProvider() {
     ]
 
     async boot() {
-      // Server-side boot if needed (e.g. register artisan commands)
+      // Server-side boot if needed (e.g. register rudder commands)
     }
   }
 }
@@ -116,7 +116,7 @@ Register it in the app:
 
 ```ts
 // bootstrap/providers.ts
-import { myExtProvider } from '@boostkit/panels-myext'
+import { myExtProvider } from '@rudderjs/panels-myext'
 
 export default [
   panels([AdminPanel]),
@@ -128,14 +128,14 @@ export default [
 
 ## Loading the extension (avoiding the cycle)
 
-**Never** statically import your extension from inside `@boostkit/panels`. Instead, `+Layout.tsx` (the panels layout, published to the app) loads extensions dynamically:
+**Never** statically import your extension from inside `@rudderjs/panels`. Instead, `+Layout.tsx` (the panels layout, published to the app) loads extensions dynamically:
 
 ```ts
 // pages/(panels)/@panel/+Layout.tsx
 'use client'
 
 // Dynamic import — no static dep, no Turbo cycle, loads on the client only
-import('@boostkit/panels-myext')
+import('@rudderjs/panels-myext')
   .then(({ registerMyExt }) => registerMyExt())
   .catch(() => {}) // not installed — silent skip
 ```
@@ -166,7 +166,7 @@ static publishable = [
 ### User runs:
 
 ```bash
-pnpm artisan vendor:publish --tag=panels-myext-pages
+pnpm rudder vendor:publish --tag=panels-myext-pages
 ```
 
 This copies your `pages/` directory into `pages/(panels)/` in their app, where Vite processes the files directly as part of the build.
@@ -177,7 +177,7 @@ During development in the monorepo, the playground uses **copied files**, not a 
 
 ```bash
 # From playground/
-pnpm artisan vendor:publish --tag=panels-myext-pages --force
+pnpm rudder vendor:publish --tag=panels-myext-pages --force
 ```
 
 ---
@@ -222,7 +222,7 @@ If your published components use Tailwind classes, tell the user to add a `@sour
 
 ```css
 /* src/index.css */
-@source "../node_modules/@boostkit/panels-myext/dist";
+@source "../node_modules/@rudderjs/panels-myext/dist";
 ```
 
 Document this clearly in your README — it's easy to forget and results in missing styles.
@@ -236,7 +236,7 @@ If your package has server-only dependencies, add them to the `SSR_EXTERNALS` li
 ```ts
 const SSR_EXTERNALS = [
   // ... existing entries
-  '@boostkit/panels-myext-heavy-dep',
+  '@rudderjs/panels-myext-heavy-dep',
 ]
 ```
 
@@ -246,7 +246,7 @@ This prevents Node.js-only code from leaking into the client bundle.
 
 ## Reference implementation
 
-Study `@boostkit/panels-lexical` as the complete reference:
+Study `@rudderjs/panels-lexical` as the complete reference:
 
 | File | Purpose |
 |---|---|

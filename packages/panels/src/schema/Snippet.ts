@@ -2,10 +2,10 @@
 // Tabbed code display with copy button.
 //
 //   Snippet.make('Install')
-//     .tab('npm', 'npx create-boostkit-app')
-//     .tab('yarn', 'yarn create boostkit-app')
-//     .tab('pnpm', 'pnpm create boostkit-app')
-//     .tab('bun', 'bunx create-boostkit-app')
+//     .tab('npm', 'npx create-rudderjs-app')
+//     .tab('yarn', 'yarn create rudderjs-app')
+//     .tab('pnpm', 'pnpm create rudderjs-app')
+//     .tab('bun', 'bunx create-rudderjs-app')
 
 export interface SnippetTab {
   label:     string

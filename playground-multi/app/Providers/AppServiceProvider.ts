@@ -1,4 +1,4 @@
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {

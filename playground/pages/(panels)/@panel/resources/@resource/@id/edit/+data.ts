@@ -1,5 +1,5 @@
-import { PanelRegistry, resolveForm, flattenFields } from '@boostkit/panels'
-import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow, PanelSchemaElementMeta } from '@boostkit/panels'
+import { PanelRegistry, resolveForm, flattenFields } from '@rudderjs/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow, PanelSchemaElementMeta } from '@rudderjs/panels'
 import { buildPanelContext } from '../../../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 
@@ -59,7 +59,7 @@ export async function data(pageContext: PageContextServer) {
 
     if (formMeta.wsLivePath && record) {
       try {
-        const { Live } = await import('@boostkit/live')
+        const { Live } = await import('@rudderjs/live')
         const fieldData: Record<string, unknown> = {}
         const collabFields = formFields.filter((f: Field) => f.isYjs())
 
@@ -69,7 +69,7 @@ export async function data(pageContext: PageContextServer) {
         }
 
         await Live.seed(resourceDocName, fieldData)
-      } catch { /* @boostkit/live not available */ }
+      } catch { /* @rudderjs/live not available */ }
     }
   }
 

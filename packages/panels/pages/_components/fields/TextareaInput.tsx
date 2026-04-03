@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getField } from '@boostkit/panels'
+import { getField } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 /** Global registry for textarea collab refs */

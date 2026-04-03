@@ -1,5 +1,5 @@
-import { Agent } from '@boostkit/ai'
-import type { HasTools, AnyTool } from '@boostkit/ai'
+import { Agent } from '@rudderjs/ai'
+import type { HasTools, AnyTool } from '@rudderjs/ai'
 
 export class ResearchAgent extends Agent implements HasTools {
   instructions(): string {

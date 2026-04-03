@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Dialog, Form, TextField, EmailField, TextareaField, SelectField, NumberField, Stats, Stat, List } from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+import { Page, Heading, Text, Dialog, Form, TextField, EmailField, TextareaField, SelectField, NumberField, Stats, Stat, List } from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 
 export class DialogsDemo extends Page {
   static slug  = 'dialogs-demo'

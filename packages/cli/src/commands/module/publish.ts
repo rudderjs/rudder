@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import type { Command } from 'commander'
 import { intro, outro, spinner, log } from '@clack/prompts'
 
-export const MARKERS_RE = /\/\/ <boostkit:modules:start>[\s\S]*?\/\/ <boostkit:modules:end>/m
+export const MARKERS_RE = /\/\/ <rudderjs:modules:start>[\s\S]*?\/\/ <rudderjs:modules:end>/m
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ export function buildMergedBlock(shards: Array<{ module: string; file: string; c
     .map(s => `// module: ${s.module} (${s.file})\n${s.content.trim()}`)
     .join('\n\n')
 
-  return `// <boostkit:modules:start>\n${inner}\n// <boostkit:modules:end>`
+  return `// <rudderjs:modules:start>\n${inner}\n// <rudderjs:modules:end>`
 }
 
 function runCommand(cmd: string, args: string[], cwd: string): Promise<void> {

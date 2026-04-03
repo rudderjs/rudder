@@ -1,12 +1,12 @@
-import { Env } from '@boostkit/core'
-import type { SessionConfig } from '@boostkit/session'
+import { Env } from '@rudderjs/core'
+import type { SessionConfig } from '@rudderjs/session'
 
 export default {
   driver:   Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis',
   lifetime: 120,
   secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
   cookie: {
-    name:     'boostkit_session',
+    name:     'rudderjs_session',
     secure:   Env.getBool('SESSION_SECURE', false),
     httpOnly: true,
     sameSite: 'lax' as const,

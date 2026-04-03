@@ -1,4 +1,4 @@
-import { FormRequest, z } from '@boostkit/core'
+import { FormRequest, z } from '@rudderjs/core'
 
 const schema = z.object({
   name:  z.string().min(2, 'Name must be at least 2 characters.'),

@@ -1,8 +1,8 @@
 import {
   Page, Heading, Text, Card, Alert, Divider, Each, View, Example, Snippet, Code, Playground,
   Stats, Stat, TextField, ToggleField, SelectField, NumberField, ColorField,
-} from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+} from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 import { Article } from '../../../Models/Article.js'
 import { User } from '../../../Models/User.js'
 
@@ -117,13 +117,13 @@ Divider.make('Advanced Options')`)
       Example.make('View')
         .description('Render schema from a data object.')
         .code(`View.make()
-  .data({ name: 'BoostKit', version: '0.0.3' })
+  .data({ name: 'RudderJS', version: '0.0.3' })
   .content((data) => [
     Alert.make(\`Running \${data.name} v\${data.version}\`).info(),
   ])`)
         .schema([
           View.make()
-            .data({ name: 'BoostKit', version: '0.0.3' })
+            .data({ name: 'RudderJS', version: '0.0.3' })
             .content((data) => [
               Alert.make(`Running ${data.name} v${data.version}`).info(),
             ]),
@@ -195,11 +195,11 @@ Divider.make('Advanced Options')`)
       Heading.make('Snippet').level(2),
       Text.make('Tabbed code display with copy button.'),
 
-      Snippet.make('Install BoostKit')
-        .tab('npm', 'npx create-boostkit-app my-app', 'bash')
-        .tab('pnpm', 'pnpm create boostkit-app my-app', 'bash')
-        .tab('yarn', 'yarn create boostkit-app my-app', 'bash')
-        .tab('bun', 'bunx create-boostkit-app my-app', 'bash'),
+      Snippet.make('Install RudderJS')
+        .tab('npm', 'npx create-rudderjs-app my-app', 'bash')
+        .tab('pnpm', 'pnpm create rudderjs-app my-app', 'bash')
+        .tab('yarn', 'yarn create rudderjs-app my-app', 'bash')
+        .tab('bun', 'bunx create-rudderjs-app my-app', 'bash'),
 
       Snippet.make('Resource API')
         .tab('table()', `table(table: Table) {

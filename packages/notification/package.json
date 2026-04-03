@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/notification",
+  "name": "@rudderjs/notification",
   "version": "0.0.5",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/notification"
   },
   "type": "module",
@@ -29,9 +29,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/mail": "workspace:*",
-    "@boostkit/orm": "workspace:*"
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/mail": "workspace:*",
+    "@rudderjs/orm": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

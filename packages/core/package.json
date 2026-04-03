@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/core",
+  "name": "@rudderjs/core",
   "version": "0.0.8",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/core"
   },
   "type": "module",
@@ -32,10 +32,10 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/*.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@boostkit/artisan": "workspace:*",
-    "@boostkit/contracts": "workspace:*",
-    "@boostkit/router": "workspace:*",
-    "@boostkit/support": "workspace:*",
+    "@rudderjs/rudder": "workspace:*",
+    "@rudderjs/contracts": "workspace:*",
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/support": "workspace:*",
     "reflect-metadata": "^0.2.2",
     "zod": "^4.0.0"
   },

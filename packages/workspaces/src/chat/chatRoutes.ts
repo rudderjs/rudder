@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import { Orchestrator } from '../orchestrator/Orchestrator.js'
 import type { CanvasNode } from '../canvas/CanvasNode.js'
 

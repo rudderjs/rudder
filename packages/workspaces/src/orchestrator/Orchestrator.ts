@@ -7,7 +7,7 @@ import {
   type AgentResponse,
   type AgentStreamResponse,
   type StreamChunk,
-} from '@boostkit/ai'
+} from '@rudderjs/ai'
 import { createDepartmentTool } from './DepartmentTool.js'
 import type { CanvasNode } from '../canvas/CanvasNode.js'
 

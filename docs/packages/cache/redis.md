@@ -1,6 +1,6 @@
 # Redis Driver
 
-Redis cache adapter built into `@boostkit/cache` via ioredis.
+Redis cache adapter built into `@rudderjs/cache` via ioredis.
 
 ## Installation
 
@@ -14,7 +14,7 @@ Add a `redis` store to your cache configuration:
 
 ```ts
 // config/cache.ts
-import type { CacheConfig } from '@boostkit/cache'
+import type { CacheConfig } from '@rudderjs/cache'
 
 export default {
   default: Env.get('CACHE_DRIVER', 'redis'),
@@ -28,13 +28,13 @@ export default {
       port: Env.getNumber('REDIS_PORT', 6379),
       password: Env.get('REDIS_PASSWORD'),
       db: Env.getNumber('REDIS_DB', 0),
-      prefix: 'boostkit:cache:',
+      prefix: 'rudderjs:cache:',
     },
   },
 } satisfies CacheConfig
 ```
 
-No changes are needed in `bootstrap/providers.ts` — `@boostkit/cache` automatically uses the Redis driver when it sees `driver: 'redis'` in a store config.
+No changes are needed in `bootstrap/providers.ts` — `@rudderjs/cache` automatically uses the Redis driver when it sees `driver: 'redis'` in a store config.
 
 ## Configuration
 

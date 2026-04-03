@@ -8,89 +8,89 @@
 - Updated dependencies
 - Updated dependencies
 - Updated dependencies
-  - @boostkit/auth@0.1.0
-  - @boostkit/orm-prisma@0.0.8
-  - @boostkit/server-hono@0.0.5
-  - @boostkit/vite@0.0.4
+  - @rudderjs/auth@0.1.0
+  - @rudderjs/orm-prisma@0.0.8
+  - @rudderjs/server-hono@0.0.5
+  - @rudderjs/vite@0.0.4
 
 ## 0.0.6
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/vite@0.0.3
+  - @rudderjs/vite@0.0.3
 
 ## 0.0.5
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/vite@0.0.2
+  - @rudderjs/vite@0.0.2
 
 ## 0.0.4
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/core@0.0.6
-  - @boostkit/auth@0.0.4
-  - @boostkit/cache@0.0.5
-  - @boostkit/events@0.0.4
-  - @boostkit/mail@0.0.4
-  - @boostkit/notification@0.0.4
-  - @boostkit/orm@0.0.5
-  - @boostkit/orm-prisma@0.0.7
-  - @boostkit/queue@0.0.4
-  - @boostkit/schedule@0.0.4
-  - @boostkit/session@0.0.4
-  - @boostkit/storage@0.0.5
-  - @boostkit/middleware@0.0.6
-  - @boostkit/mail-nodemailer@0.0.4
-  - @boostkit/queue-bullmq@0.0.5
+  - @rudderjs/core@0.0.6
+  - @rudderjs/auth@0.0.4
+  - @rudderjs/cache@0.0.5
+  - @rudderjs/events@0.0.4
+  - @rudderjs/mail@0.0.4
+  - @rudderjs/notification@0.0.4
+  - @rudderjs/orm@0.0.5
+  - @rudderjs/orm-prisma@0.0.7
+  - @rudderjs/queue@0.0.4
+  - @rudderjs/schedule@0.0.4
+  - @rudderjs/session@0.0.4
+  - @rudderjs/storage@0.0.5
+  - @rudderjs/middleware@0.0.6
+  - @rudderjs/mail-nodemailer@0.0.4
+  - @rudderjs/queue-bullmq@0.0.5
 
 ## 0.0.3
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/artisan@0.0.2
-  - @boostkit/core@0.0.5
-  - @boostkit/auth@0.0.3
-  - @boostkit/cache@0.0.4
-  - @boostkit/events@0.0.3
-  - @boostkit/mail@0.0.3
-  - @boostkit/notification@0.0.3
-  - @boostkit/orm@0.0.4
-  - @boostkit/orm-prisma@0.0.6
-  - @boostkit/queue@0.0.3
-  - @boostkit/schedule@0.0.3
-  - @boostkit/session@0.0.3
-  - @boostkit/storage@0.0.4
-  - @boostkit/middleware@0.0.5
-  - @boostkit/mail-nodemailer@0.0.3
-  - @boostkit/queue-bullmq@0.0.4
+  - @rudderjs/rudder@0.0.2
+  - @rudderjs/core@0.0.5
+  - @rudderjs/auth@0.0.3
+  - @rudderjs/cache@0.0.4
+  - @rudderjs/events@0.0.3
+  - @rudderjs/mail@0.0.3
+  - @rudderjs/notification@0.0.3
+  - @rudderjs/orm@0.0.4
+  - @rudderjs/orm-prisma@0.0.6
+  - @rudderjs/queue@0.0.3
+  - @rudderjs/schedule@0.0.3
+  - @rudderjs/session@0.0.3
+  - @rudderjs/storage@0.0.4
+  - @rudderjs/middleware@0.0.5
+  - @rudderjs/mail-nodemailer@0.0.3
+  - @rudderjs/queue-bullmq@0.0.4
 
 ## 0.0.2
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/contracts@0.0.2
-  - @boostkit/middleware@0.0.4
-  - @boostkit/core@0.0.4
-  - @boostkit/auth@0.0.2
-  - @boostkit/router@0.0.3
-  - @boostkit/server-hono@0.0.4
-  - @boostkit/session@0.0.2
-  - @boostkit/validation@0.0.2
-  - @boostkit/cache@0.0.3
-  - @boostkit/events@0.0.2
-  - @boostkit/mail@0.0.2
-  - @boostkit/notification@0.0.2
-  - @boostkit/orm@0.0.3
-  - @boostkit/orm-prisma@0.0.5
-  - @boostkit/queue@0.0.2
-  - @boostkit/schedule@0.0.2
-  - @boostkit/storage@0.0.3
-  - @boostkit/mail-nodemailer@0.0.2
-  - @boostkit/queue-bullmq@0.0.3
+  - @rudderjs/contracts@0.0.2
+  - @rudderjs/middleware@0.0.4
+  - @rudderjs/core@0.0.4
+  - @rudderjs/auth@0.0.2
+  - @rudderjs/router@0.0.3
+  - @rudderjs/server-hono@0.0.4
+  - @rudderjs/session@0.0.2
+  - @rudderjs/validation@0.0.2
+  - @rudderjs/cache@0.0.3
+  - @rudderjs/events@0.0.2
+  - @rudderjs/mail@0.0.2
+  - @rudderjs/notification@0.0.2
+  - @rudderjs/orm@0.0.3
+  - @rudderjs/orm-prisma@0.0.5
+  - @rudderjs/queue@0.0.2
+  - @rudderjs/schedule@0.0.2
+  - @rudderjs/storage@0.0.3
+  - @rudderjs/mail-nodemailer@0.0.2
+  - @rudderjs/queue-bullmq@0.0.3

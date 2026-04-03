@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { navigate } from 'vike/client/router'
 import { toast } from 'sonner'
-import type { PanelI18n } from '@boostkit/panels'
+import type { PanelI18n } from '@rudderjs/panels'
 
 interface UseEditFormOptions {
   pathSegment:   string

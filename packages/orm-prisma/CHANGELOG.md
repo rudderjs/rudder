@@ -1,4 +1,4 @@
-# @boostkit/orm-prisma
+# @rudderjs/orm-prisma
 
 ## 0.0.8
 
@@ -11,19 +11,19 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/core@0.0.6
-  - @boostkit/orm@0.0.5
+  - @rudderjs/core@0.0.6
+  - @rudderjs/orm@0.0.5
 
 ## 0.0.6
 
 ### Patch Changes
 
-- @boostkit/core@0.0.5
-- @boostkit/orm@0.0.4
+- @rudderjs/core@0.0.5
+- @rudderjs/orm@0.0.4
 
 ## 0.0.5
 
 ### Patch Changes
 
-- @boostkit/core@0.0.4
-- @boostkit/orm@0.0.3
+- @rudderjs/core@0.0.4
+- @rudderjs/orm@0.0.3

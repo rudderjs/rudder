@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'BoostKit',
+  title: 'RudderJS',
   description: 'Laravel-inspired Node.js full-stack framework built on Vike + Vite',
   lang: 'en-US',
 
@@ -12,7 +12,7 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.png',
-    siteTitle: 'BoostKit',
+    siteTitle: 'RudderJS',
 
     nav: [
       { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
@@ -23,7 +23,7 @@ export default defineConfig({
       {
         text: 'v0.1.0',
         items: [
-          { text: 'Changelog', link: 'https://github.com/boostkitjs/boostkit/releases' },
+          { text: 'Changelog', link: 'https://github.com/rudderjs/rudderjs/releases' },
           { text: 'Contributing Guide', link: '/contributing/' },
         ],
       },
@@ -34,7 +34,7 @@ export default defineConfig({
         {
           text: 'Getting Started',
           items: [
-            { text: 'What is BoostKit?', link: '/guide/' },
+            { text: 'What is RudderJS?', link: '/guide/' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Your First App', link: '/guide/your-first-app' },
             { text: 'Directory Structure', link: '/guide/directory-structure' },
@@ -52,7 +52,7 @@ export default defineConfig({
             { text: 'Validation', link: '/guide/validation' },
             { text: 'Database & Models', link: '/guide/database' },
             { text: 'Frontend Pages & SSR', link: '/guide/frontend-pages' },
-            { text: 'Artisan Console', link: '/guide/artisan' },
+            { text: 'Rudder Console', link: '/guide/rudder' },
           ],
         },
         {
@@ -74,11 +74,11 @@ export default defineConfig({
           text: 'Core',
           items: [
             { text: 'Package Catalog', link: '/packages/' },
-            { text: '@boostkit/core', link: '/packages/core/' },
-            { text: '@boostkit/contracts', link: '/packages/core/contracts' },
-            { text: '@boostkit/support', link: '/packages/core/support' },
+            { text: '@rudderjs/core', link: '/packages/core/' },
+            { text: '@rudderjs/contracts', link: '/packages/core/contracts' },
+            { text: '@rudderjs/support', link: '/packages/core/support' },
             { text: 'DI Container', link: '/packages/core/di' },
-            { text: '@boostkit/middleware', link: '/packages/core/middleware' },
+            { text: '@rudderjs/middleware', link: '/packages/core/middleware' },
             { text: 'Rate Limiting & CSRF', link: '/packages/rate-limit' },
             { text: 'Validation (core)', link: '/packages/core/validation' },
           ],
@@ -86,81 +86,81 @@ export default defineConfig({
         {
           text: 'Build',
           items: [
-            { text: '@boostkit/vite', link: '/packages/vite/' },
-            { text: '@boostkit/image', link: '/packages/image/' },
+            { text: '@rudderjs/vite', link: '/packages/vite/' },
+            { text: '@rudderjs/image', link: '/packages/image/' },
           ],
         },
         {
           text: 'Server',
           items: [
-            { text: '@boostkit/router', link: '/packages/server/router' },
-            { text: '@boostkit/server-hono', link: '/packages/server/hono' },
+            { text: '@rudderjs/router', link: '/packages/server/router' },
+            { text: '@rudderjs/server-hono', link: '/packages/server/hono' },
           ],
         },
         {
           text: 'ORM',
           items: [
-            { text: '@boostkit/orm', link: '/packages/orm/' },
-            { text: '@boostkit/orm-prisma', link: '/packages/orm/prisma' },
-            { text: '@boostkit/orm-drizzle', link: '/packages/orm/drizzle' },
+            { text: '@rudderjs/orm', link: '/packages/orm/' },
+            { text: '@rudderjs/orm-prisma', link: '/packages/orm/prisma' },
+            { text: '@rudderjs/orm-drizzle', link: '/packages/orm/drizzle' },
           ],
         },
         {
           text: 'Queue',
           items: [
-            { text: '@boostkit/queue', link: '/packages/queue/' },
-            { text: '@boostkit/queue-bullmq', link: '/packages/queue/bullmq' },
-            { text: '@boostkit/queue-inngest', link: '/packages/queue/inngest' },
+            { text: '@rudderjs/queue', link: '/packages/queue/' },
+            { text: '@rudderjs/queue-bullmq', link: '/packages/queue/bullmq' },
+            { text: '@rudderjs/queue-inngest', link: '/packages/queue/inngest' },
           ],
         },
         {
           text: 'Auth',
           items: [
-            { text: '@boostkit/auth', link: '/packages/auth/' },
+            { text: '@rudderjs/auth', link: '/packages/auth/' },
             { text: 'Setup with better-auth', link: '/packages/auth/better-auth' },
           ],
         },
         {
           text: 'Session',
           items: [
-            { text: '@boostkit/session', link: '/packages/session' },
+            { text: '@rudderjs/session', link: '/packages/session' },
           ],
         },
         {
           text: 'Cache',
           items: [
-            { text: '@boostkit/cache', link: '/packages/cache/' },
+            { text: '@rudderjs/cache', link: '/packages/cache/' },
             { text: 'Redis Driver', link: '/packages/cache/redis' },
           ],
         },
         {
           text: 'Storage',
           items: [
-            { text: '@boostkit/storage', link: '/packages/storage/' },
+            { text: '@rudderjs/storage', link: '/packages/storage/' },
             { text: 'S3 / R2 / MinIO', link: '/packages/storage/s3' },
           ],
         },
         {
           text: 'Mail',
           items: [
-            { text: '@boostkit/mail', link: '/packages/mail/' },
+            { text: '@rudderjs/mail', link: '/packages/mail/' },
             { text: 'SMTP (Nodemailer)', link: '/packages/mail/nodemailer' },
           ],
         },
         {
           text: 'Real-time',
           items: [
-            { text: '@boostkit/broadcast', link: '/packages/broadcast' },
-            { text: '@boostkit/live', link: '/packages/live' },
+            { text: '@rudderjs/broadcast', link: '/packages/broadcast' },
+            { text: '@rudderjs/live', link: '/packages/live' },
           ],
         },
         {
           text: 'Features',
           items: [
             { text: 'Events (core)', link: '/packages/events' },
-            { text: '@boostkit/schedule', link: '/packages/schedule' },
-            { text: '@boostkit/notification', link: '/packages/notification' },
-            { text: '@boostkit/artisan', link: '/packages/artisan' },
+            { text: '@rudderjs/schedule', link: '/packages/schedule' },
+            { text: '@rudderjs/notification', link: '/packages/notification' },
+            { text: '@rudderjs/rudder', link: '/packages/rudder' },
           ],
         },
         {
@@ -194,7 +194,7 @@ export default defineConfig({
 
       '/cli/': [
         {
-          text: 'BoostKit CLI',
+          text: 'RudderJS CLI',
           items: [
             { text: 'Overview', link: '/cli/' },
             { text: 'make: Commands', link: '/cli/make-commands' },
@@ -232,7 +232,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/boostkitjs/boostkit' },
+      { icon: 'github', link: 'https://github.com/rudderjs/rudderjs' },
     ],
 
     footer: {
@@ -241,7 +241,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/boostkitjs/boostkit/edit/main/docs/:path',
+      pattern: 'https://github.com/rudderjs/rudderjs/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
   },

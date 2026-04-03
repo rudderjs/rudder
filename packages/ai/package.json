@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/ai",
+  "name": "@rudderjs/ai",
   "version": "0.0.1",
   "description": "AI engine — providers, agents, tools, streaming, middleware",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/ai"
   },
   "type": "module",
@@ -26,7 +26,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*",
+    "@rudderjs/core": "workspace:*",
     "zod": "^4.0.0"
   },
   "optionalDependencies": {

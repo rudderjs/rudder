@@ -1,6 +1,6 @@
 # Resources
 
-Resources are the core building block of `@boostkit/panels`. Each resource maps to an ORM model and defines the fields, filters, and actions for that model's CRUD interface.
+Resources are the core building block of `@rudderjs/panels`. Each resource maps to an ORM model and defines the fields, filters, and actions for that model's CRUD interface.
 
 Resource routes live under `/{panel}/resources/{slug}` — e.g., `/admin/resources/users`. This keeps them distinct from globals (`/{panel}/globals/{slug}`) and schema-based pages (`/{panel}/{slug}`).
 
@@ -15,7 +15,7 @@ import {
   TextField, EmailField, SelectField, DateField,
   SelectFilter,
   Action,
-} from '@boostkit/panels'
+} from '@rudderjs/panels'
 import { User } from '../../Models/User.js'
 
 export class UserResource extends Resource {
@@ -82,9 +82,9 @@ export class ArticleResource extends Resource {
 
 ### Live Table (`static live = true`)
 
-When any user creates, updates, or deletes a record, all viewers of that resource's table see the change instantly. Powered by `@boostkit/broadcast`. No Yjs required.
+When any user creates, updates, or deletes a record, all viewers of that resource's table see the change instantly. Powered by `@rudderjs/broadcast`. No Yjs required.
 
-**Requirements**: `@boostkit/broadcast` registered in providers.
+**Requirements**: `@rudderjs/broadcast` registered in providers.
 
 ### Versioned (`static versioned = true`)
 
@@ -211,7 +211,7 @@ fields() {
 
 Each text-based collaborative field gets its own WebSocket room (e.g., `panel:articles:{id}:text:title`) for complete isolation. Non-text collaborative fields share a single Y.Map in the form-level Y.Doc.
 
-**Requirements**: `@boostkit/live` registered in providers.
+**Requirements**: `@rudderjs/live` registered in providers.
 
 ### Composing Flags
 
@@ -234,7 +234,7 @@ Each text-based collaborative field gets its own WebSocket room (e.g., `panel:ar
 Define widgets on the show page for a specific resource. The `widgets()` method receives the current record and returns schema elements.
 
 ```ts
-import { Resource, Stats, Stat, Chart } from '@boostkit/panels'
+import { Resource, Stats, Stat, Chart } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   // ... fields, filters, etc.
@@ -260,7 +260,7 @@ Widgets render above the record fields on the show page. All schema element type
 The `WidgetRenderer` React component handles rendering of all widget types. It is used internally by the show page and also available for custom pages:
 
 ```tsx
-import { WidgetRenderer } from '@boostkit/panels/client'
+import { WidgetRenderer } from '@rudderjs/panels/client'
 
 <WidgetRenderer widgets={widgetData} panel="admin" />
 ```

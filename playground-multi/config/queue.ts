@@ -1,5 +1,5 @@
-import { Env } from '@boostkit/support'
-import type { QueueConfig } from '@boostkit/queue'
+import { Env } from '@rudderjs/support'
+import type { QueueConfig } from '@rudderjs/queue'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'sync'),

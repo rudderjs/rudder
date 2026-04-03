@@ -1,5 +1,5 @@
-import { ServiceProvider } from '@boostkit/core'
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import { debugWarn } from './debug.js'
 import { PanelRegistry } from './registries/PanelRegistry.js'
 import { registerResolver } from './registries/ResolverRegistry.js'
@@ -37,7 +37,7 @@ export class PanelServiceProvider extends ServiceProvider {
       tag:  'panels-pages',
     })
 
-    const { router } = await import('@boostkit/router') as {
+    const { router } = await import('@rudderjs/router') as {
       router: {
         get(path: string, handler: (req: AppRequest, res: AppResponse) => unknown, mw?: MiddlewareHandler[]): void
         post(path: string, handler: (req: AppRequest, res: AppResponse) => unknown, mw?: MiddlewareHandler[]): void
@@ -46,7 +46,7 @@ export class PanelServiceProvider extends ServiceProvider {
       }
     }
 
-    // Auto-detect session middleware from DI (bound by @boostkit/session provider)
+    // Auto-detect session middleware from DI (bound by @rudderjs/session provider)
     let sessionMw: MiddlewareHandler | undefined
     try {
       sessionMw = this.app.make<MiddlewareHandler>('session.middleware')
@@ -88,7 +88,7 @@ export class PanelServiceProvider extends ServiceProvider {
 // ─── Factory ───────────────────────────────────────────────
 
 import type { Panel as PanelType } from './Panel.js'
-import type { Application, ProviderClass } from '@boostkit/core'
+import type { Application, ProviderClass } from '@rudderjs/core'
 
 /**
  * Register one or more panels and mount their API routes.
@@ -98,8 +98,8 @@ import type { Application, ProviderClass } from '@boostkit/core'
  * via `this.app.register()`, keeping all panels-related wiring in one call.
  *
  * @example
- * import { panels } from '@boostkit/panels'
- * import { panelsLexical } from '@boostkit/panels-lexical/server'
+ * import { panels } from '@rudderjs/panels'
+ * import { panelsLexical } from '@rudderjs/panels-lexical/server'
  * import { adminPanel } from './panels.js'
  *
  * export default [

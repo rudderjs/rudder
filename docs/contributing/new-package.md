@@ -1,6 +1,6 @@
 # Creating a New Package
 
-This guide covers how to add a new `@boostkit/*` package to the monorepo. Follow these conventions so every package stays consistent, testable, and publishable.
+This guide covers how to add a new `@rudderjs/*` package to the monorepo. Follow these conventions so every package stays consistent, testable, and publishable.
 
 ---
 
@@ -10,7 +10,7 @@ Apply the **tight-coupling checklist** from `Architecture.md` first. A new packa
 
 - It has an **adapter boundary** (e.g., different databases, queues, cloud providers)
 - It has a **portability boundary** (Node.js-only vs edge-compatible)
-- It is **independently useful** without the rest of BoostKit
+- It is **independently useful** without the rest of RudderJS
 - It would be **optional** for most apps
 
 If the code is always deployed alongside an existing package and has no meaningful standalone behaviour, merge it instead.
@@ -29,7 +29,7 @@ cd my-feature
 
 ```json
 {
-  "name": "@boostkit/my-feature",
+  "name": "@rudderjs/my-feature",
   "version": "0.0.1",
   "description": "One-line description.",
   "type": "module",
@@ -52,7 +52,7 @@ cd my-feature
   "dependencies": {},
   "peerDependencies": {},
   "devDependencies": {
-    "@boostkit/tsconfig": "workspace:*"
+    "@rudderjs/tsconfig": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
@@ -65,11 +65,11 @@ cd my-feature
 | Use | When |
 |---|---|
 | `dependencies` | Always needed at runtime |
-| `peerDependencies` | Framework packages the user already has (`@boostkit/core`, `@boostkit/orm`) |
+| `peerDependencies` | Framework packages the user already has (`@rudderjs/core`, `@rudderjs/orm`) |
 | `devDependencies` | Build-time only — types, test utilities |
 | `optionalDependencies` | Heavy drivers the user opts into (`ioredis`, `@aws-sdk/client-s3`) |
 
-> **Never** put `@boostkit/core` in `dependencies`. It creates a circular dependency through the DI container. Use `peerDependencies` instead and resolve it at runtime with `resolveOptionalPeer('@boostkit/core')`.
+> **Never** put `@rudderjs/core` in `dependencies`. It creates a circular dependency through the DI container. Use `peerDependencies` instead and resolve it at runtime with `resolveOptionalPeer('@rudderjs/core')`.
 
 ---
 
@@ -164,7 +164,7 @@ If your package needs to boot with the application, expose a **factory function*
 
 ```ts
 // src/index.ts
-import type { ServiceProvider } from '@boostkit/core'
+import type { ServiceProvider } from '@rudderjs/core'
 
 export interface MyFeatureConfig {
   option: string
@@ -172,7 +172,7 @@ export interface MyFeatureConfig {
 
 export function myFeature(config: MyFeatureConfig): typeof ServiceProvider {
   return class MyFeatureProvider extends (
-    require('@boostkit/core') as typeof import('@boostkit/core')
+    require('@rudderjs/core') as typeof import('@rudderjs/core')
   ).ServiceProvider {
     async register() {
       this.app.singleton('my-feature', () => new MyFeature(config))
@@ -185,7 +185,7 @@ export function myFeature(config: MyFeatureConfig): typeof ServiceProvider {
 Then in the app's `providers.ts`:
 
 ```ts
-import { myFeature } from '@boostkit/my-feature'
+import { myFeature } from '@rudderjs/my-feature'
 
 export default [myFeature({ option: 'value' })]
 ```
@@ -202,7 +202,7 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { MyFeature } from './MyFeature.js'
 
-describe('@boostkit/my-feature', () => {
+describe('@rudderjs/my-feature', () => {
   describe('MyFeature', () => {
     it('does the thing', () => {
       const f = new MyFeature({ option: 'test' })
@@ -219,7 +219,7 @@ describe('@boostkit/my-feature', () => {
 **Testing rules:**
 
 - Always read the source before writing tests — test actual behaviour, not assumptions.
-- One top-level `describe` per file named after the package (`'@boostkit/my-feature'`). This prevents `node:test` concurrent describe interference.
+- One top-level `describe` per file named after the package (`'@rudderjs/my-feature'`). This prevents `node:test` concurrent describe interference.
 - No mocking of internal modules — test real behaviour. Mock only external I/O (network, filesystem) when unavoidable.
 - Run with `pnpm test` from the package directory.
 
@@ -227,15 +227,15 @@ describe('@boostkit/my-feature', () => {
 
 ## Optional peer resolution
 
-When your package optionally integrates with another BoostKit package, resolve it at runtime rather than importing it statically:
+When your package optionally integrates with another RudderJS package, resolve it at runtime rather than importing it statically:
 
 ```ts
-import { resolveOptionalPeer } from '@boostkit/support'
+import { resolveOptionalPeer } from '@rudderjs/support'
 
 // In a method, not at module level:
 async function getOrm() {
-  const orm = await resolveOptionalPeer('@boostkit/orm')
-  if (!orm) throw new Error('@boostkit/orm is required for this feature')
+  const orm = await resolveOptionalPeer('@rudderjs/orm')
+  if (!orm) throw new Error('@rudderjs/orm is required for this feature')
   return orm
 }
 ```

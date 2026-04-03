@@ -11,7 +11,7 @@ Schema elements are the building blocks for panel landing pages (`Panel.schema()
 Section heading with configurable level.
 
 ```ts
-import { Heading } from '@boostkit/panels'
+import { Heading } from '@rudderjs/panels'
 
 Heading.make('Welcome back')
 Heading.make('Section Title').level(2)   // 1 | 2 | 3 (default: 1)
@@ -22,7 +22,7 @@ Heading.make('Section Title').level(2)   // 1 | 2 | 3 (default: 1)
 Paragraph of text.
 
 ```ts
-import { Text } from '@boostkit/panels'
+import { Text } from '@rudderjs/panels'
 
 Text.make('Logged in as admin@example.com')
 Text.make('Manage your application from the sidebar.')
@@ -33,7 +33,7 @@ Text.make('Manage your application from the sidebar.')
 Syntax-highlighted code block. Lazy-loaded — no SSR cost. Uses shiki with a dual theme (github-light / github-dark-high-contrast). Includes a copy button.
 
 ```ts
-import { Code } from '@boostkit/panels'
+import { Code } from '@rudderjs/panels'
 
 Code.make('const x = 1').language('typescript').title('Example')
 Code.make('pnpm install').language('bash')
@@ -54,7 +54,7 @@ Row of stat cards. Each stat has a label, value, optional description, and trend
 **Static mode** — inline stat values:
 
 ```ts
-import { Stats, Stat } from '@boostkit/panels'
+import { Stats, Stat } from '@rudderjs/panels'
 
 Stats.make([
   Stat.make('Total Articles').value(await Article.query().count()).trend(12),
@@ -88,7 +88,7 @@ Stats.make('dashboard-stats')
 | `.data(fn)` | Async function returning `PanelStatMeta[]` (async mode) |
 | `.lazy()` | Defer loading to client-side (shows skeleton) |
 | `.poll(ms)` | Re-fetch every N milliseconds |
-| `.live()` | Push updates via WebSocket (requires `@boostkit/broadcast`) |
+| `.live()` | Push updates via WebSocket (requires `@rudderjs/broadcast`) |
 
 The `Stats` row auto-sizes: 1 stat = full width, 2 = two columns, 3 = three columns, 4 = four columns (max).
 
@@ -101,7 +101,7 @@ Three data source methods:
 **Resource-linked** — inherits the Resource's model, default sort, and field labels. "View all" links to the resource index.
 
 ```ts
-import { Table } from '@boostkit/panels'
+import { Table } from '@rudderjs/panels'
 import { ArticleResource } from './resources/ArticleResource.js'
 
 // Column names resolved from Resource fields
@@ -124,7 +124,7 @@ Table.make('Recent Articles')
 **Model-backed** — query any ORM model directly, no resource needed.
 
 ```ts
-import { Table, Column } from '@boostkit/panels'
+import { Table, Column } from '@rudderjs/panels'
 import { User } from 'App/Models/User.js'
 
 Table.make('All Users')
@@ -162,7 +162,7 @@ Table.make('Top Customers')
   .poll(60000)
 ```
 
-`DataSource<T>` is exported from `@boostkit/panels`:
+`DataSource<T>` is exported from `@rudderjs/panels`:
 
 ```ts
 type DataSource<T> = T[] | ((ctx: PanelContext) => T[] | Promise<T[]>)
@@ -185,7 +185,7 @@ type DataSource<T> = T[] | ((ctx: PanelContext) => T[] | Promise<T[]>)
 | `.paginated(mode?, perPage?)` | Enable pagination: `'pages'` or `'loadMore'` (default: `'pages'`, 15/page) |
 | `.lazy()` | Defer data loading to client-side (shows skeleton) |
 | `.poll(ms)` | Re-fetch data every N milliseconds |
-| `.live()` | Push updates via WebSocket (requires `@boostkit/broadcast`) |
+| `.live()` | Push updates via WebSocket (requires `@rudderjs/broadcast`) |
 | `.id(id)` | Explicit ID for API endpoint (auto-generated from title if not set) |
 | `.filters([...])` | Attach `SelectFilter` / `SearchFilter` dropdowns |
 | `.actions([...])` | Attach bulk/row `Action` handlers |
@@ -259,7 +259,7 @@ The `mode` parameter accepts the shared `PersistMode` type (see below), which is
 Typed display column for `Table.make()`. Distinct from `Field` — Column is for display/sort/search only, not for input or validation.
 
 ```ts
-import { Column } from '@boostkit/panels'
+import { Column } from '@rudderjs/panels'
 
 Column.make('title').label('Article Title').sortable().searchable()
 Column.make('status').label('Status').badge()
@@ -360,7 +360,7 @@ Note: `Column.onSave(fn)` receives `(record, value, ctx)` while `Table.onSave(fn
 
 #### Real-Time Updates (`.live()`)
 
-Push data updates to the client via WebSocket using `.live()`. When server data changes, the table refreshes automatically without polling. Requires `@boostkit/broadcast` to be registered.
+Push data updates to the client via WebSocket using `.live()`. When server data changes, the table refreshes automatically without polling. Requires `@rudderjs/broadcast` to be registered.
 
 ```ts
 Table.make('Live Orders')
@@ -387,7 +387,7 @@ Stats.make('live-metrics')
 Render line, bar, area, pie, or doughnut charts. Uses `recharts` (optional peer dependency).
 
 ```ts
-import { Chart } from '@boostkit/panels'
+import { Chart } from '@rudderjs/panels'
 
 Chart.make('Revenue')
   .chartType('line')          // 'line' | 'bar' | 'area' | 'pie' | 'doughnut'
@@ -409,7 +409,7 @@ Chart.make('Revenue')
 | `.description(text)` | Subtitle below the chart title |
 | `.lazy()` | Defer loading to client-side (shows skeleton) |
 | `.poll(ms)` | Re-fetch every N milliseconds |
-| `.live()` | Push updates via WebSocket (requires `@boostkit/broadcast`) |
+| `.live()` | Push updates via WebSocket (requires `@rudderjs/broadcast`) |
 
 Chart types:
 
@@ -442,7 +442,7 @@ Chart.make('Revenue Trend')
 Render a card with a list of items. Each item has a label, optional description, href, and icon.
 
 ```ts
-import { List } from '@boostkit/panels'
+import { List } from '@rudderjs/panels'
 
 List.make('Quick Links')
   .items([
@@ -461,7 +461,7 @@ List.make('Quick Links')
 | `.description(text)` | Subtitle below the list title |
 | `.lazy()` | Defer loading to client-side (shows skeleton) |
 | `.poll(ms)` | Re-fetch every N milliseconds |
-| `.live()` | Push updates via WebSocket (requires `@boostkit/broadcast`) |
+| `.live()` | Push updates via WebSocket (requires `@rudderjs/broadcast`) |
 
 ### `Tab` and `Tabs` (schema-level)
 
@@ -470,7 +470,7 @@ Group schema elements into tabbed sections. `Tab` is a first-class exported clas
 #### `Tab` — individual tab
 
 ```ts
-import { Tab, Tabs, Stats, Stat, Chart, Table, Column } from '@boostkit/panels'
+import { Tab, Tabs, Stats, Stat, Chart, Table, Column } from '@rudderjs/panels'
 
 Tabs.make('content-tabs', [
   Tab.make('Overview')
@@ -598,14 +598,14 @@ Tabs.make('my-tabs', [...])
 
 Default: `false` (no persistence). Must explicitly opt in.
 
-The `mode` parameter accepts the shared `PersistMode` type, exported from `@boostkit/panels`. The same type is used by `Table.remember()`.
+The `mode` parameter accepts the shared `PersistMode` type, exported from `@rudderjs/panels`. The same type is used by `Table.remember()`.
 
 #### `ListTab` — Resource list tabs
 
 For Resource list filtering tabs (e.g. All / Published / Draft), use `ListTab` -- distinct from the schema-level `Tab`:
 
 ```ts
-import { ListTab } from '@boostkit/panels'
+import { ListTab } from '@rudderjs/panels'
 
 // In Resource.tabs()
 tabs() {
@@ -624,7 +624,7 @@ tabs() {
 By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Use `.schema()` to define a custom landing page with schema elements, standalone widgets, and user-customizable dashboards.
 
 ```ts
-import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Dashboard, Widget } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Table, Chart, List, Dashboard, Widget } from '@rudderjs/panels'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -700,7 +700,7 @@ The schema function receives `PanelContext` (`{ user, headers, path }`) and can 
 Define widgets on the show page for a specific resource. The `widgets()` method receives the current record and returns schema elements.
 
 ```ts
-import { Resource, Stats, Stat, Chart, List } from '@boostkit/panels'
+import { Resource, Stats, Stat, Chart, List } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   // ... fields, filters, etc.
@@ -736,7 +736,7 @@ Widgets render above the record fields on the show page. All schema element type
 The `SchemaElementRenderer` React component renders any schema element type. It is used internally by the panel landing page, resource show page, and the dashboard builder. Also available for custom pages.
 
 ```tsx
-import { SchemaElementRenderer } from '@boostkit/panels/client'
+import { SchemaElementRenderer } from '@rudderjs/panels/client'
 
 export default function CustomPage({ data }) {
   return <SchemaElementRenderer widgets={data.widgets} panel="admin" />
@@ -766,7 +766,7 @@ Key concepts:
 A standalone form in the panel schema — not tied to a resource. Useful for contact forms, settings forms, feedback, etc. The submit handler runs server-side via a POST to `/{panel}/api/_forms/{id}/submit`.
 
 ```ts
-import { Form, TextField, EmailField, TextareaField } from '@boostkit/panels'
+import { Form, TextField, EmailField, TextareaField } from '@rudderjs/panels'
 
 Form.make('contact')
   .fields([
@@ -843,7 +843,7 @@ Form.make('settings')
 A presentational modal dialog. The trigger button opens the dialog; the content is defined via `.schema()`. Any schema element can be placed inside — most commonly a `Form`.
 
 ```ts
-import { Dialog, Form, TextField, EmailField, TextareaField } from '@boostkit/panels'
+import { Dialog, Form, TextField, EmailField, TextareaField } from '@rudderjs/panels'
 
 Dialog.make('contact-modal')
   .trigger('Contact Support')

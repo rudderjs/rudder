@@ -85,7 +85,7 @@ export function renderErrorPage(
   const vendorCount = frames.filter(f => f.isVendor).length
 
   const nodeVersion = process.version
-  const boostkitVersion = '0.0.2'
+  const rudderjsVersion = '0.0.2'
 
   const frameRow = (f: StackFrame, isApp: boolean) => `
     <div class="frame${isApp ? ' app' : ''}">
@@ -98,7 +98,7 @@ export function renderErrorPage(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(error.name)} — BoostKit</title>
+<title>${esc(error.name)} — RudderJS</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d0d0f;color:#d4d4d4;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}
@@ -157,7 +157,7 @@ table td{padding:8px 16px;font-family:ui-monospace,monospace;font-size:12px;colo
 
   <div class="badges">
     <span class="badge badge-gray">NODE ${esc(nodeVersion)}</span>
-    <span class="badge badge-gray">BOOSTKIT ${esc(boostkitVersion)}</span>
+    <span class="badge badge-gray">RUDDERJS ${esc(rudderjsVersion)}</span>
     <span class="badge badge-red">UNHANDLED</span>
   </div>
 

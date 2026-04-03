@@ -1,18 +1,18 @@
-# @boostkit/broadcast
+# @rudderjs/broadcast
 
 Channel-based WebSocket broadcasting with public, private, and presence channels. Runs on the same port as your HTTP server — no Pusher, no external service.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/broadcast
+pnpm add @rudderjs/broadcast
 ```
 
 ## Setup
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
+import { broadcasting } from '@rudderjs/broadcast'
 
 export default [broadcasting()]
 ```
@@ -26,7 +26,7 @@ export default [broadcasting()]
 
 ```ts
 // routes/channels.ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 Broadcast.channel('private-orders.*', async (req) => {
   return await verifyToken(req.token)
@@ -54,7 +54,7 @@ broadcasting({ path: '/socket' }) // custom path
 Register an auth callback for private or presence channels. Pattern `*` matches non-dot characters:
 
 ```ts
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 // Private channel — return true/false
 Broadcast.channel('private-user.*', async (req, channel) => {
@@ -76,7 +76,7 @@ Broadcast.channel('presence-room.*', async (req) => {
 Push an event to all subscribers of a channel from anywhere on the server:
 
 ```ts
-import { broadcast } from '@boostkit/broadcast'
+import { broadcast } from '@rudderjs/broadcast'
 
 broadcast('news', 'article.published', { id: 42, title: 'Hello' })
 broadcast('private-orders.1', 'status.updated', { status: 'shipped' })
@@ -85,21 +85,21 @@ broadcast('private-orders.1', 'status.updated', { status: 'shipped' })
 ### `broadcastStats()`
 
 ```ts
-import { broadcastStats } from '@boostkit/broadcast'
+import { broadcastStats } from '@rudderjs/broadcast'
 broadcastStats()  // { connections: number, channels: number }
 ```
 
 ### Channel Classes
 
 ```ts
-import { Channel, PrivateChannel, PresenceChannel } from '@boostkit/broadcast'
+import { Channel, PrivateChannel, PresenceChannel } from '@rudderjs/broadcast'
 
 new Channel('chat').name          // 'chat'
 new PrivateChannel('orders').name // 'private-orders'
 new PresenceChannel('room').name  // 'presence-room'
 ```
 
-## Artisan Commands
+## Rudder Commands
 
 | Command | Description |
 |---|---|
@@ -116,7 +116,7 @@ new PresenceChannel('room').name  // 'presence-room'
 ## Client
 
 ```bash
-pnpm artisan vendor:publish --tag=broadcast-client
+pnpm rudder vendor:publish --tag=broadcast-client
 ```
 
 ```ts

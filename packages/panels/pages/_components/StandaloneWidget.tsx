@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { WidgetCard } from './WidgetCard.js'
 import type { WidgetWithSchema } from './WidgetCard.js'
-import type { PanelI18n } from '@boostkit/panels'
+import type { PanelI18n } from '@rudderjs/panels'
 
 interface Props {
   widget:      WidgetWithSchema

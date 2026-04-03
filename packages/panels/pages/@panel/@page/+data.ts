@@ -1,7 +1,7 @@
 import { render } from 'vike/abort'
 import type { PageContextServer } from 'vike/types'
-import { PanelRegistry, resolveSchema } from '@boostkit/panels'
-import type { PanelNavigationMeta, PanelSchemaElementMeta } from '@boostkit/panels'
+import { PanelRegistry, resolveSchema } from '@rudderjs/panels'
+import type { PanelNavigationMeta, PanelSchemaElementMeta } from '@rudderjs/panels'
 import { buildPanelContext } from '../../_lib/buildPanelContext.js'
 import type { SessionUser } from '../../_lib/getSessionUser.js'
 

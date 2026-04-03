@@ -1,5 +1,5 @@
-import { Env } from '@boostkit/core'
-import type { QueueConfig } from '@boostkit/queue'
+import { Env } from '@rudderjs/core'
+import type { QueueConfig } from '@rudderjs/queue'
 import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
 
 export default {
@@ -12,7 +12,7 @@ export default {
 
     inngest: {
       driver:     'inngest',
-      appId:      Env.get('INNGEST_APP_ID',      'boostkit-app'),
+      appId:      Env.get('INNGEST_APP_ID',      'rudderjs-app'),
       eventKey:   Env.get('INNGEST_EVENT_KEY',   ''),
       signingKey: Env.get('INNGEST_SIGNING_KEY',  ''),
       // Job classes registered as Inngest functions.
@@ -26,9 +26,9 @@ export default {
       host:     Env.get('REDIS_HOST',     '127.0.0.1'),
       port:     Env.getNumber('REDIS_PORT', 6379),
       password: Env.get('REDIS_PASSWORD', ''),
-      prefix:   'boostkit',
+      prefix:   'rudderjs',
       // Job classes the worker can execute — add yours here.
-      // Run the worker: pnpm artisan queue:work
+      // Run the worker: pnpm rudder queue:work
       jobs: [WelcomeUserJob],
     },
   },

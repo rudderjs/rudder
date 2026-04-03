@@ -1,4 +1,4 @@
 export default {
-  title:       'Live Demo — BoostKit',
+  title:       'Live Demo — RudderJS',
   description: 'Real-time collaborative document sync powered by Yjs CRDT.',
 }

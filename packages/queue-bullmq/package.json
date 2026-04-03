@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/queue-bullmq",
+  "name": "@rudderjs/queue-bullmq",
   "version": "0.0.5",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/queue-bullmq"
   },
   "type": "module",
@@ -29,7 +29,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/queue": "workspace:*",
+    "@rudderjs/queue": "workspace:*",
     "bullmq": "^5.0.0"
   },
   "devDependencies": {

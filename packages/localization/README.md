@@ -1,9 +1,9 @@
-# @boostkit/localization
+# @rudderjs/localization
 
-Laravel-style localization for BoostKit. JSON translation files, named interpolation, pluralization, and per-request locale via AsyncLocalStorage.
+Laravel-style localization for RudderJS. JSON translation files, named interpolation, pluralization, and per-request locale via AsyncLocalStorage.
 
 ```bash
-pnpm add @boostkit/localization
+pnpm add @rudderjs/localization
 ```
 
 ---
@@ -45,7 +45,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { localization } from '@boostkit/localization'
+import { localization } from '@rudderjs/localization'
 import configs from '../config/index.js'
 
 export default [
@@ -60,9 +60,9 @@ export default [
 ### __() - synchronous (cache only)
 
 ```ts
-import { __ } from '@boostkit/localization'
+import { __ } from '@rudderjs/localization'
 
-__('messages.welcome', { app: 'BoostKit' }) // 'Welcome to BoostKit!'
+__('messages.welcome', { app: 'RudderJS' }) // 'Welcome to RudderJS!'
 __('messages.items', 3) // '3 items'
 ```
 
@@ -71,7 +71,7 @@ Returns the key string if not found. Use __() when the namespace is already load
 ### trans() - async (loads from disk)
 
 ```ts
-import { trans } from '@boostkit/localization'
+import { trans } from '@rudderjs/localization'
 
 await trans('messages.greeting', { name: 'Alice' }) // 'Hello, Alice!'
 await trans('messages.items', 0) // 'no items'
@@ -113,7 +113,7 @@ await trans('messages.item', 5) // 'many items'
 ## Locale switching
 
 ```ts
-import { getLocale, setLocale, LocalizationMiddleware } from '@boostkit/localization'
+import { getLocale, setLocale, LocalizationMiddleware } from '@rudderjs/localization'
 
 getLocale() // 'en'
 setLocale('es')

@@ -1,12 +1,12 @@
 # Validation
 
-BoostKit provides Zod-powered request validation through `@boostkit/core`. You can validate inline with `validate()`, use middleware factories with `validateWith()`, or extend `FormRequest` for class-based validation.
+RudderJS provides Zod-powered request validation through `@rudderjs/core`. You can validate inline with `validate()`, use middleware factories with `validateWith()`, or extend `FormRequest` for class-based validation.
 
 ## Quick Inline Validation
 
 ```ts
-import { validate, z } from '@boostkit/core'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { validate, z } from '@rudderjs/core'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
   const data = await validate(
@@ -30,7 +30,7 @@ router.post('/api/users', async (req: AppRequest, res: AppResponse) => {
 Create reusable validation middleware:
 
 ```ts
-import { validateWith, z } from '@boostkit/core'
+import { validateWith, z } from '@rudderjs/core'
 
 const requireCreateUser = validateWith(
   z.object({
@@ -57,7 +57,7 @@ For complex validation with authorization logic, extend `FormRequest`:
 
 ```ts
 // app/Http/Requests/CreateUserRequest.ts
-import { FormRequest, z } from '@boostkit/core'
+import { FormRequest, z } from '@rudderjs/core'
 
 export class CreateUserRequest extends FormRequest {
   rules() {
@@ -93,7 +93,7 @@ router.post('/api/users', async (req, res) => {
 `validate()` and `FormRequest.validate()` throw a `ValidationError` on failure. Catch it to return a structured error response:
 
 ```ts
-import { validate, ValidationError, z } from '@boostkit/core'
+import { validate, ValidationError, z } from '@rudderjs/core'
 
 router.post('/api/users', async (req, res) => {
   try {
@@ -125,10 +125,10 @@ Field paths from nested objects are joined with `.` (e.g. `address.city`). Top-l
 
 ## Using Zod Directly
 
-`@boostkit/core` re-exports `z` from Zod — no separate `zod` install needed:
+`@rudderjs/core` re-exports `z` from Zod — no separate `zod` install needed:
 
 ```ts
-import { z } from '@boostkit/core'
+import { z } from '@rudderjs/core'
 
 const UserSchema = z.object({
   id:    z.string().cuid(),
@@ -143,7 +143,7 @@ type User = z.infer<typeof UserSchema>
 ## Generating Form Requests
 
 ```bash
-pnpm artisan make:request CreateUser
+pnpm rudder make:request CreateUser
 # → app/Http/Requests/CreateUserRequest.ts
 ```
 

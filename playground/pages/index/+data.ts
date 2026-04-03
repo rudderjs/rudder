@@ -1,6 +1,6 @@
-import { resolve, app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
-import { trans } from '@boostkit/localization'
+import { resolve, app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
+import { trans } from '@rudderjs/localization'
 import { GreetingService } from '../../app/Services/GreetingService.js'
 import type { PageContextServer } from 'vike/types'
 

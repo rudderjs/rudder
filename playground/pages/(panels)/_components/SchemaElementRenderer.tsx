@@ -1,11 +1,11 @@
 'use client'
 
 import { lazy, Suspense, useState, useEffect } from 'react'
-import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@boostkit/panels'
-import { getElement, getLazyElement } from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@rudderjs/panels'
+import { getElement, getLazyElement } from '@rudderjs/panels'
 import { SchemaDataView } from './SchemaDataView.js'
 import { SchemaForm } from './SchemaForm.js'
-import type { SchemaFormMeta } from '@boostkit/panels'
+import type { SchemaFormMeta } from '@rudderjs/panels'
 import { CodeBlock, CopyButton } from './CodeBlock.js'
 import { FieldInput } from './FieldInput.js'
 

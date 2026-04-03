@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Table, Column, SelectField, TextareaField } from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+import { Page, Heading, Text, Table, Column, SelectField, TextareaField } from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 
 export class InlineEditDemo extends Page {
   static slug  = 'inline-edit-demo'

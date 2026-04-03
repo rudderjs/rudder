@@ -1,12 +1,12 @@
-# @boostkit/panels
+# @rudderjs/panels
 
-Admin panel builder for BoostKit. Define resources in TypeScript — panels auto-generates CRUD API routes and a polished React UI. Think Laravel Nova or Filament, but for Node.js: schema-driven, type-safe, and framework-agnostic.
+Admin panel builder for RudderJS. Define resources in TypeScript — panels auto-generates CRUD API routes and a polished React UI. Think Laravel Nova or Filament, but for Node.js: schema-driven, type-safe, and framework-agnostic.
 
 ---
 
 ## Overview
 
-`@boostkit/panels` turns your ORM models into fully functional admin interfaces with zero boilerplate. You define what data looks like; panels handles the rest.
+`@rudderjs/panels` turns your ORM models into fully functional admin interfaces with zero boilerplate. You define what data looks like; panels handles the rest.
 
 **Key features:**
 
@@ -21,7 +21,7 @@ Admin panel builder for BoostKit. Define resources in TypeScript — panels auto
 - **Server-side validation** — `.required()`, `.validate()`, and full `FormRequest` integration
 - **Column transforms** — `.compute()` to derive values server-side, `.display()` to format for output
 - **Dashboard builder** — drag-and-drop widget grids with per-user layout persistence
-- **Collaborative editing** — real-time co-editing via Yjs CRDT (requires `@boostkit/live`)
+- **Collaborative editing** — real-time co-editing via Yjs CRDT (requires `@rudderjs/live`)
 - **Draft recovery & versioning** — localStorage backup, restore banner, and full version history
 - **Custom pages & sub-pages** — add arbitrary schema-driven or React pages to the nav
 - **i18n + RTL** — built-in English and Arabic translations, automatic RTL layout
@@ -33,15 +33,15 @@ Admin panel builder for BoostKit. Define resources in TypeScript — panels auto
 ## Installation
 
 ```bash
-pnpm add @boostkit/panels
+pnpm add @rudderjs/panels
 ```
 
 Optional peer dependencies (install when you need them):
 
 ```bash
 pnpm add recharts          # Chart element
-pnpm add @boostkit/live    # Collaborative editing / .persist('websocket')
-pnpm add @boostkit/broadcast  # .live() real-time push updates
+pnpm add @rudderjs/live    # Collaborative editing / .persist('websocket')
+pnpm add @rudderjs/broadcast  # .live() real-time push updates
 ```
 
 ---
@@ -52,7 +52,7 @@ pnpm add @boostkit/broadcast  # .live() real-time push updates
 
 ```ts
 // app/Panels/Admin/resources/UserResource.ts
-import { Resource, TextField, EmailField, SelectField, DateField } from '@boostkit/panels'
+import { Resource, TextField, EmailField, SelectField, DateField } from '@rudderjs/panels'
 import { User } from '../../../Models/User.js'
 
 export class UserResource extends Resource {
@@ -76,7 +76,7 @@ export class UserResource extends Resource {
 
 ```ts
 // app/Panels/Admin/AdminPanel.ts
-import { Panel } from '@boostkit/panels'
+import { Panel } from '@rudderjs/panels'
 import { UserResource } from './resources/UserResource.js'
 
 export const adminPanel = Panel.make('admin')
@@ -91,7 +91,7 @@ export const adminPanel = Panel.make('admin')
 
 ```ts
 // bootstrap/providers.ts
-import { panels } from '@boostkit/panels'
+import { panels } from '@rudderjs/panels'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 
 export default [
@@ -104,10 +104,10 @@ export default [
 
 ```bash
 # First install
-pnpm artisan vendor:publish --tag=panels-pages
+pnpm rudder vendor:publish --tag=panels-pages
 
-# After upgrading @boostkit/panels — update to latest UI
-pnpm artisan vendor:publish --tag=panels-pages --force
+# After upgrading @rudderjs/panels — update to latest UI
+pnpm rudder vendor:publish --tag=panels-pages --force
 ```
 
 This copies the React pages into `pages/(panels)/` in your project.
@@ -287,7 +287,7 @@ export class TablesDemo extends Page {
 }
 ```
 
-> **Tip:** Alias the import if it conflicts with a schema element name (e.g. `Table` from `@boostkit/panels`).
+> **Tip:** Alias the import if it conflicts with a schema element name (e.g. `Table` from `@rudderjs/panels`).
 
 ---
 
@@ -349,7 +349,7 @@ When a locale is set, the panel:
 
 **RTL languages detected automatically**: `ar`, `he`, `fa`, `ur`, `ps`, `sd`, `ug`
 
-If `.locale()` is not called, the panel reads the active locale from `@boostkit/localization` — meaning all panels in a multilingual app use the right locale without extra config.
+If `.locale()` is not called, the panel reads the active locale from `@rudderjs/localization` — meaning all panels in a multilingual app use the right locale without extra config.
 
 ---
 
@@ -402,5 +402,5 @@ model PanelGlobal {
 | [Navigation](./navigation) | Navigation groups, badges, guard |
 | [Globals](./globals) | Single-record settings pages |
 | [Custom Pages](./pages) | Custom pages, sub-pages, navigation nesting, custom resource views |
-| [Editor](./editor) | Rich-text editor registry, `@boostkit/panels-lexical` |
+| [Editor](./editor) | Rich-text editor registry, `@rudderjs/panels-lexical` |
 | [API Routes](./api) | Auto-generated CRUD endpoints |

@@ -1,4 +1,4 @@
-import { Field } from '@boostkit/panels'
+import { Field } from '@rudderjs/panels'
 
 /**
  * ChatField — form field that embeds a chat interface.

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { navigate } from 'vike/client/router'
-import type { PanelNavigationMeta } from '@boostkit/panels'
+import type { PanelNavigationMeta } from '@rudderjs/panels'
 import { useI18n } from '../_hooks/useI18n.js'
 import {
   Dialog,

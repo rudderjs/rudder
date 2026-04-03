@@ -5,7 +5,7 @@ import { useData }     from 'vike-react/useData'
 import { useConfig }   from 'vike-react/useConfig'
 import { navigate }    from 'vike/client/router'
 import { CellValue, resolveCellValue } from '../../../../_components/CellValue.js'
-import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, RecordRow } from '@boostkit/panels'
+import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, RecordRow } from '@rudderjs/panels'
 import { useI18n } from '../../../../_hooks/useI18n.js'
 import {
   Table,
@@ -58,7 +58,7 @@ export default function ShowPage() {
         {widgetData && widgetData.length > 0 && (
           <div className="flex flex-col gap-4 mb-6">
             {widgetData.map((el, i: number) => (
-              <SchemaElementRenderer key={i} element={el as import('@boostkit/panels').PanelSchemaElementMeta} panelPath={`/${pathSegment}`} i18n={i18n} />
+              <SchemaElementRenderer key={i} element={el as import('@rudderjs/panels').PanelSchemaElementMeta} panelPath={`/${pathSegment}`} i18n={i18n} />
             ))}
           </div>
         )}

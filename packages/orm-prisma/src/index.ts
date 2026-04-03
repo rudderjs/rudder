@@ -23,7 +23,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
-} from '@boostkit/contracts'
+} from '@rudderjs/contracts'
 
 // ─── Prisma Query Builder ──────────────────────────────────
 
@@ -46,7 +46,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private get delegate(): PrismaModelDelegate {
     const d = this.prisma[this.table]
     if (!d) throw new Error(
-      `[BoostKit ORM] Prisma has no delegate for table "${this.table}". ` +
+      `[RudderJS ORM] Prisma has no delegate for table "${this.table}". ` +
       `Did you run "prisma generate" after adding the model to your schema?`
     )
     return d as PrismaModelDelegate
@@ -306,8 +306,8 @@ export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
 
 // ─── PrismaProvider ────────────────────────────────────────
 
-import { ServiceProvider, type Application } from '@boostkit/core'
-import { ModelRegistry } from '@boostkit/orm'
+import { ServiceProvider, type Application } from '@rudderjs/core'
+import { ModelRegistry } from '@rudderjs/orm'
 
 export function database(config?: DatabaseConfig): new (app: Application) => ServiceProvider {
   class PrismaServiceProvider extends ServiceProvider {

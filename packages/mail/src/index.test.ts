@@ -38,7 +38,7 @@ const fakeApp = { instance: () => undefined } as never
 
 const defaultConfig = {
   default: 'log',
-  from: { address: 'noreply@example.com', name: 'BoostKit' },
+  from: { address: 'noreply@example.com', name: 'RudderJS' },
   mailers: { log: { driver: 'log' } },
 }
 
@@ -136,7 +136,7 @@ describe('MailPendingSend', () => {
     sent = []
     MailRegistry.reset()
     MailRegistry.set({ send: async (m, o) => { sent.push({ mailable: m, options: o }) } })
-    MailRegistry.setFrom({ address: 'sender@example.com', name: 'BoostKit' })
+    MailRegistry.setFrom({ address: 'sender@example.com', name: 'RudderJS' })
   })
 
   it('Mail.to() returns a MailPendingSend', () => {
@@ -155,7 +155,7 @@ describe('MailPendingSend', () => {
 
   it('send() passes the from address from MailRegistry', async () => {
     await Mail.to('x@example.com').send(new SimpleMail())
-    assert.deepStrictEqual(sent[0]!.options.from, { address: 'sender@example.com', name: 'BoostKit' })
+    assert.deepStrictEqual(sent[0]!.options.from, { address: 'sender@example.com', name: 'RudderJS' })
   })
 
   it('cc() sets CC recipients', async () => {
@@ -244,7 +244,7 @@ describe('mail() provider', () => {
   it('sets the from address on the registry', async () => {
     const Provider = mail(defaultConfig)
     await new Provider(fakeApp).boot?.()
-    assert.deepStrictEqual(MailRegistry.getFrom(), { address: 'noreply@example.com', name: 'BoostKit' })
+    assert.deepStrictEqual(MailRegistry.getFrom(), { address: 'noreply@example.com', name: 'RudderJS' })
   })
 
   it('falls back to log driver when mailer config is missing', async () => {

@@ -1,21 +1,21 @@
-# @boostkit/orm
+# @rudderjs/orm
 
-ORM contracts and base Model abstraction for BoostKit adapters.
+ORM contracts and base Model abstraction for RudderJS adapters.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/orm
+pnpm add @rudderjs/orm
 ```
 
-This package provides the `Model` base class, `ModelRegistry`, `QueryBuilder`, and the `OrmAdapter` interface. It does not include a database driver — pair it with an adapter such as `@boostkit/orm-prisma` or `@boostkit/orm-drizzle`.
+This package provides the `Model` base class, `ModelRegistry`, `QueryBuilder`, and the `OrmAdapter` interface. It does not include a database driver — pair it with an adapter such as `@rudderjs/orm-prisma` or `@rudderjs/orm-drizzle`.
 
 ## Defining a Model
 
 Extend `Model` and set the static `table` property to the adapter-specific table or accessor name:
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static table = 'user'
@@ -107,7 +107,7 @@ const recent = await User.query()
 Global scopes are applied automatically to every query on a model. Define them in `static globalScopes` as a record of named scope functions:
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class Article extends Model {
   static table = 'article'
@@ -287,7 +287,7 @@ console.log(result.to)          // 40
 `ModelRegistry` is the global registry that connects Model classes to a live adapter instance. It must be populated in your database provider before any model queries run.
 
 ```ts
-import { ModelRegistry } from '@boostkit/orm'
+import { ModelRegistry } from '@rudderjs/orm'
 
 // Register the adapter (called inside DatabaseServiceProvider.boot())
 ModelRegistry.set(adapter)
@@ -323,4 +323,4 @@ Adapters may extend this interface with driver-specific methods (e.g. raw query 
 - For a complete setup walkthrough including migrations and seeding, see the [Database & Models guide](/guide/database).
 - `ModelRegistry.set()` must be called before any `Model.*` static method is invoked. Register the database provider first in `bootstrap/providers.ts`.
 - `Model.getTable()` defaults to the lowercase class name followed by `s`. This is not snake_case and does not match most adapter conventions — always set `static table` explicitly.
-- `@boostkit/orm` contains no runtime database code. It is safe to list as a direct dependency alongside an adapter package.
+- `@rudderjs/orm` contains no runtime database code. It is safe to list as a direct dependency alongside an adapter package.

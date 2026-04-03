@@ -1,4 +1,4 @@
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../../app/Services/UserService.js'
 
 export type Data = Awaited<ReturnType<typeof data>>

@@ -1,9 +1,9 @@
-# @boostkit/queue-bullmq
+# @rudderjs/queue-bullmq
 
-BullMQ Redis-backed queue adapter for BoostKit.
+BullMQ Redis-backed queue adapter for RudderJS.
 
 ```bash
-pnpm add @boostkit/queue-bullmq bullmq ioredis
+pnpm add @rudderjs/queue-bullmq bullmq ioredis
 ```
 
 ---
@@ -12,7 +12,7 @@ pnpm add @boostkit/queue-bullmq bullmq ioredis
 
 ```ts
 // config/queue.ts
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 import { SendEmailJob } from '../app/Jobs/SendEmailJob.js'
 
 export default {
@@ -23,7 +23,7 @@ export default {
       host:     Env.get('REDIS_HOST', '127.0.0.1'),
       port:     Env.getNumber('REDIS_PORT', 6379),
       password: Env.get('REDIS_PASSWORD', ''),
-      prefix:   'boostkit',
+      prefix:   'rudderjs',
       jobs:     [SendEmailJob],
     },
   },
@@ -32,7 +32,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { queue } from '@boostkit/queue'
+import { queue } from '@rudderjs/queue'
 import configs from '../config/index.js'
 
 export default [queue(configs.queue)]
@@ -43,7 +43,7 @@ export default [queue(configs.queue)]
 ## Defining a Job
 
 ```ts
-import { Job } from '@boostkit/queue'
+import { Job } from '@rudderjs/queue'
 
 export class SendEmailJob extends Job {
   static queue   = 'mail'
@@ -74,9 +74,9 @@ await SendEmailJob.dispatch('alice@example.com', 'Welcome!')
 ## Running the Worker
 
 ```bash
-pnpm artisan queue:work
-pnpm artisan queue:work mail
-pnpm artisan queue:work default,mail,notifications
+pnpm rudder queue:work
+pnpm rudder queue:work mail
+pnpm rudder queue:work default,mail,notifications
 ```
 
 Handles `SIGTERM`/`SIGINT` for graceful shutdown — in-flight jobs complete before the process exits.
@@ -91,7 +91,7 @@ Handles `SIGTERM`/`SIGINT` for graceful shutdown — in-flight jobs complete bef
 | `host` | `string` | `'127.0.0.1'` | Redis host |
 | `port` | `number` | `6379` | Redis port |
 | `password` | `string` | — | Redis password |
-| `prefix` | `string` | `'boostkit'` | Key prefix for all BullMQ Redis keys |
+| `prefix` | `string` | `'rudderjs'` | Key prefix for all BullMQ Redis keys |
 | `concurrency` | `number` | `1` | Jobs processed in parallel per worker |
 | `removeOnComplete` | `number` | `100` | Completed jobs to keep in Redis |
 | `removeOnFail` | `number` | `500` | Failed jobs to keep in Redis |

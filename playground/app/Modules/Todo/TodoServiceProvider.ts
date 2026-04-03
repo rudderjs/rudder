@@ -1,5 +1,5 @@
-import { ServiceProvider } from '@boostkit/core'
-import { router } from '@boostkit/router'
+import { ServiceProvider } from '@rudderjs/core'
+import { router } from '@rudderjs/router'
 import { TodoService } from './TodoService.js'
 import { TodoInputSchema, TodoUpdateSchema } from './TodoSchema.js'
 

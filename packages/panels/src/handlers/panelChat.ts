@@ -1,4 +1,4 @@
-import type { AppRequest, AppResponse, MiddlewareHandler } from '@boostkit/core'
+import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/core'
 import type { Panel } from '../Panel.js'
 import type { Resource } from '../Resource.js'
 import type { ResourceAgent, ResourceAgentContext } from '../agents/ResourceAgent.js'
@@ -12,7 +12,7 @@ let _ai: { agent: any; toolDefinition: any; z: any } | undefined
 
 async function loadAi() {
   if (!_ai) {
-    const ai  = await import(/* @vite-ignore */ '@boostkit/ai') as any
+    const ai  = await import(/* @vite-ignore */ '@rudderjs/ai') as any
     const zod = await import(/* @vite-ignore */ 'zod') as any
     _ai = { agent: ai.agent, toolDefinition: ai.toolDefinition, z: zod.z }
   }

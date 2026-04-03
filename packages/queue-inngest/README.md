@@ -1,9 +1,9 @@
-# @boostkit/queue-inngest
+# @rudderjs/queue-inngest
 
-Inngest serverless queue adapter for `@boostkit/queue`.
+Inngest serverless queue adapter for `@rudderjs/queue`.
 
 ```bash
-pnpm add @boostkit/queue-inngest inngest
+pnpm add @rudderjs/queue-inngest inngest
 ```
 
 ---
@@ -12,7 +12,7 @@ pnpm add @boostkit/queue-inngest inngest
 
 ```ts
 // config/queue.ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 import { SendWelcomeEmailJob } from '../app/Jobs/SendWelcomeEmailJob.js'
 
 export default {
@@ -20,7 +20,7 @@ export default {
   connections: {
     inngest: {
       driver:     'inngest',
-      appId:      Env.get('INNGEST_APP_ID', 'my-boostkit-app'),
+      appId:      Env.get('INNGEST_APP_ID', 'my-rudderjs-app'),
       signingKey: Env.get('INNGEST_SIGNING_KEY'),
       eventKey:   Env.get('INNGEST_EVENT_KEY'),
       jobs: [SendWelcomeEmailJob],
@@ -31,7 +31,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { queue } from '@boostkit/queue'
+import { queue } from '@rudderjs/queue'
 import configs from '../config/index.js'
 
 export default [queue(configs.queue)]
@@ -44,7 +44,7 @@ The queue provider automatically mounts the Inngest serve handler at `/api/innge
 ## Defining a Job
 
 ```ts
-import { Job } from '@boostkit/queue'
+import { Job } from '@rudderjs/queue'
 
 export class SendWelcomeEmailJob extends Job {
   static retries = 3
@@ -72,7 +72,7 @@ await SendWelcomeEmailJob.dispatch('alice@example.com', 'Alice').send()
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `appId` | `string` | `'boostkit-app'` | Unique app identifier shown in the Inngest dashboard |
+| `appId` | `string` | `'rudderjs-app'` | Unique app identifier shown in the Inngest dashboard |
 | `eventKey` | `string` | — | Inngest event key (required in production) |
 | `signingKey` | `string` | — | Inngest signing key (required in production) |
 | `jobs` | `Job[]` | `[]` | Job classes to register as Inngest functions |
@@ -81,13 +81,13 @@ await SendWelcomeEmailJob.dispatch('alice@example.com', 'Alice').send()
 
 ## Event Naming
 
-BoostKit maps job class names to Inngest event names:
+RudderJS maps job class names to Inngest event names:
 
 ```
-boostkit/job.<ClassName>
+rudderjs/job.<ClassName>
 ```
 
-`SendWelcomeEmailJob` → `boostkit/job.SendWelcomeEmailJob`
+`SendWelcomeEmailJob` → `rudderjs/job.SendWelcomeEmailJob`
 
 ---
 

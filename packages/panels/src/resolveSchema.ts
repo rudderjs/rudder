@@ -37,7 +37,7 @@ import { resolveChart }     from './resolvers/resolveChart.js'
 import { resolveList }      from './resolvers/resolveList.js'
 import { resolveField }     from './resolvers/resolveField.js'
 import { getResolver }      from './registries/ResolverRegistry.js'
-import { validateSerializable } from '@boostkit/support'
+import { validateSerializable } from '@rudderjs/support'
 
 export type PanelSchemaElementMeta =
   | TextElementMeta

@@ -1,11 +1,11 @@
-# @boostkit/storage
+# @rudderjs/storage
 
 Storage facade, disk registry, and provider factory with built-in `local` and `s3` drivers.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/storage
+pnpm add @rudderjs/storage
 ```
 
 ## Setup
@@ -13,8 +13,8 @@ pnpm add @boostkit/storage
 ```ts
 // config/storage.ts
 import path from 'node:path'
-import { Env } from '@boostkit/core'
-import type { StorageConfig } from '@boostkit/storage'
+import { Env } from '@rudderjs/core'
+import type { StorageConfig } from '@rudderjs/storage'
 
 export default {
   default: Env.get('FILESYSTEM_DISK', 'local'),
@@ -42,7 +42,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { storage } from '@boostkit/storage'
+import { storage } from '@rudderjs/storage'
 import configs from '../config/index.js'
 
 export default [storage(configs.storage)]
@@ -51,7 +51,7 @@ export default [storage(configs.storage)]
 ## Storage Facade
 
 ```ts
-import { Storage } from '@boostkit/storage'
+import { Storage } from '@rudderjs/storage'
 
 // Write a file
 await Storage.put('avatars/user-1.jpg', imageBuffer)
@@ -149,7 +149,7 @@ public: {
 **2. Create the symlink** once per project:
 
 ```bash
-pnpm artisan storage:link
+pnpm rudder storage:link
 # Linked: public/storage → storage/app/public
 ```
 
@@ -173,7 +173,7 @@ public/storage
 ## `storage:link` Command
 
 ```bash
-pnpm artisan storage:link
+pnpm rudder storage:link
 ```
 
 Creates a symlink from `public/storage` to `storage/app/public`. Re-running when the link already exists is safe — it prints `Link already exists.` and exits.
@@ -201,7 +201,7 @@ pnpm add @aws-sdk/client-s3
 Exported for standalone use without the provider:
 
 ```ts
-import { LocalAdapter } from '@boostkit/storage'
+import { LocalAdapter } from '@rudderjs/storage'
 
 const disk = new LocalAdapter({ driver: 'local', root: '/tmp/uploads' })
 await disk.put('file.txt', 'hello')

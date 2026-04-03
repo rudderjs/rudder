@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 
 export default {
   locale: Env.get('APP_LOCALE', 'ar'),

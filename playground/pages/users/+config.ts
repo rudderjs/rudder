@@ -1,4 +1,4 @@
 export default {
-  title:       'Users — BoostKit',
+  title:       'Users — RudderJS',
   description: 'Browse registered users.',
 }

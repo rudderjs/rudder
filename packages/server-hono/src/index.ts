@@ -10,7 +10,7 @@ import type {
   MiddlewareHandler,
   AppRequest,
   AppResponse,
-} from '@boostkit/contracts'
+} from '@rudderjs/contracts'
 
 // ─── Hono Adapter Config ───────────────────────────────────
 
@@ -121,8 +121,8 @@ function statusColor(status: number): string {
 }
 
 function nextReqId(): number {
-  g['__boostkit_req_n__'] = ((g['__boostkit_req_n__'] as number | undefined) ?? 0) + 1
-  return g['__boostkit_req_n__'] as number
+  g['__rudderjs_req_n__'] = ((g['__rudderjs_req_n__'] as number | undefined) ?? 0) + 1
+  return g['__rudderjs_req_n__'] as number
 }
 
 function ts(): string {
@@ -255,11 +255,11 @@ class HonoAdapter implements ServerAdapter {
   listen(port: number, callback?: () => void): void {
     const server = serve({ fetch: this.app.fetch, port: port }, () => {
       callback?.()
-      console.log(`[BoostKit] Server running on http://localhost:${port}`)
+      console.log(`[RudderJS] Server running on http://localhost:${port}`)
     })
-    // Attach the @boostkit/ws upgrade handler if registered.
-    // Uses globalThis so there is no hard dependency on @boostkit/ws.
-    const wsHandler = (globalThis as Record<string, unknown>)['__boostkit_ws_upgrade__'] as
+    // Attach the @rudderjs/ws upgrade handler if registered.
+    // Uses globalThis so there is no hard dependency on @rudderjs/ws.
+    const wsHandler = (globalThis as Record<string, unknown>)['__rudderjs_ws_upgrade__'] as
       | ((req: unknown, socket: unknown, head: unknown) => void)
       | undefined
     if (wsHandler) (server as unknown as { on: (e: string, h: unknown) => void }).on('upgrade', wsHandler)

@@ -1,10 +1,10 @@
 # Service Providers
 
-Service providers are the central place to bootstrap and wire up your application's features. They are BoostKit's equivalent of Laravel's service providers.
+Service providers are the central place to bootstrap and wire up your application's features. They are RudderJS's equivalent of Laravel's service providers.
 
 ## Overview
 
-Every significant piece of BoostKit functionality — database connections, queue adapters, cache stores, mailers — is registered through a service provider. When you add a new integration, you typically add one provider class to `bootstrap/providers.ts`.
+Every significant piece of RudderJS functionality — database connections, queue adapters, cache stores, mailers — is registered through a service provider. When you add a new integration, you typically add one provider class to `bootstrap/providers.ts`.
 
 ## Lifecycle
 
@@ -19,10 +19,10 @@ Each service provider has two lifecycle hooks:
 
 ## Creating a Provider
 
-Extend `ServiceProvider` from `@boostkit/core`:
+Extend `ServiceProvider` from `@rudderjs/core`:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 import { MyService } from '../Services/MyService.js'
 import { MyDependency } from '../Services/MyDependency.js'
 
@@ -49,14 +49,14 @@ export class AppServiceProvider extends ServiceProvider {
 List provider classes (not instances) in `bootstrap/providers.ts`:
 
 ```ts
-import type { Application, ServiceProvider } from '@boostkit/core'
-import { prismaProvider }          from '@boostkit/orm-prisma'
-import { auth }                    from '@boostkit/auth'
-import { queue }                   from '@boostkit/queue'
-import { cache }                   from '@boostkit/cache'
-import { mail }                    from '@boostkit/mail'
-import { session }                 from '@boostkit/session'
-import { notifications }           from '@boostkit/notification'
+import type { Application, ServiceProvider } from '@rudderjs/core'
+import { prismaProvider }          from '@rudderjs/orm-prisma'
+import { auth }                    from '@rudderjs/auth'
+import { queue }                   from '@rudderjs/queue'
+import { cache }                   from '@rudderjs/cache'
+import { mail }                    from '@rudderjs/mail'
+import { session }                 from '@rudderjs/session'
+import { notifications }           from '@rudderjs/notification'
 import { DatabaseServiceProvider } from '../app/Providers/DatabaseServiceProvider.js'
 import { AppServiceProvider }      from '../app/Providers/AppServiceProvider.js'
 import configs                     from '../config/index.js'
@@ -89,7 +89,7 @@ You can use them directly in the array — both class references and instantiate
 Inside providers (and anywhere after boot), use `app()` to retrieve the application container:
 
 ```ts
-import { app } from '@boostkit/core'
+import { app } from '@rudderjs/core'
 
 const service = app().make(UserService)
 ```
@@ -98,25 +98,25 @@ const service = app().make(UserService)
 
 | Factory | Package | What it registers |
 |---------|---------|------------------|
-| `prismaProvider(config)` | `@boostkit/orm-prisma` | PrismaClient bound to DI as `'prisma'` |
-| `queue(config)` | `@boostkit/queue` | Queue adapter, `queue:work` command |
-| `cache(config)` | `@boostkit/cache` | Cache adapter |
-| `storage(config)` | `@boostkit/storage` | Storage adapter, `storage:link` command |
-| `mail(config)` | `@boostkit/mail` | Mail adapter |
-| `events(listenMap)` | `@boostkit/core` | Event dispatcher, listener registration |
-| `scheduler()` | `@boostkit/schedule` | Schedule instance, `schedule:*` commands |
-| `auth(config)` | `@boostkit/auth` | Auth instance, `/api/auth/*` routes |
-| `session(config)` | `@boostkit/session` | Session driver (cookie/redis), `SessionMiddleware()` factory |
-| `notifications()` | `@boostkit/notification` | Mail + database channels |
+| `prismaProvider(config)` | `@rudderjs/orm-prisma` | PrismaClient bound to DI as `'prisma'` |
+| `queue(config)` | `@rudderjs/queue` | Queue adapter, `queue:work` command |
+| `cache(config)` | `@rudderjs/cache` | Cache adapter |
+| `storage(config)` | `@rudderjs/storage` | Storage adapter, `storage:link` command |
+| `mail(config)` | `@rudderjs/mail` | Mail adapter |
+| `events(listenMap)` | `@rudderjs/core` | Event dispatcher, listener registration |
+| `scheduler()` | `@rudderjs/schedule` | Schedule instance, `schedule:*` commands |
+| `auth(config)` | `@rudderjs/auth` | Auth instance, `/api/auth/*` routes |
+| `session(config)` | `@rudderjs/session` | Session driver (cookie/redis), `SessionMiddleware()` factory |
+| `notifications()` | `@rudderjs/notification` | Mail + database channels |
 
 ## DatabaseServiceProvider Pattern
 
 The database provider follows a consistent pattern:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
-import { prisma } from '@boostkit/orm-prisma'
-import { ModelRegistry } from '@boostkit/orm'
+import { ServiceProvider } from '@rudderjs/core'
+import { prisma } from '@rudderjs/orm-prisma'
+import { ModelRegistry } from '@rudderjs/orm'
 
 export class DatabaseServiceProvider extends ServiceProvider {
   async boot(): Promise<void> {
@@ -134,12 +134,12 @@ export class DatabaseServiceProvider extends ServiceProvider {
 
 ## Publishing Assets
 
-Packages can declare files that users copy into their application with `pnpm artisan vendor:publish`. This is BoostKit's equivalent of Laravel's `vendor:publish`.
+Packages can declare files that users copy into their application with `pnpm rudder vendor:publish`. This is RudderJS's equivalent of Laravel's `vendor:publish`.
 
 Call `this.publishes()` inside `boot()`:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 
 export class MyPackageServiceProvider extends ServiceProvider {
   register(): void {}
@@ -157,10 +157,10 @@ export class MyPackageServiceProvider extends ServiceProvider {
 Users then run:
 
 ```bash
-pnpm artisan vendor:publish --list                               # see what's available
-pnpm artisan vendor:publish --tag=my-package-pages               # publish by tag
-pnpm artisan vendor:publish --provider=MyPackageServiceProvider  # publish by provider
-pnpm artisan vendor:publish --force                              # overwrite existing files
+pnpm rudder vendor:publish --list                               # see what's available
+pnpm rudder vendor:publish --tag=my-package-pages               # publish by tag
+pnpm rudder vendor:publish --provider=MyPackageServiceProvider  # publish by provider
+pnpm rudder vendor:publish --force                              # overwrite existing files
 ```
 
 Published files are owned by the user — they can edit them freely. Re-running `vendor:publish` without `--force` skips files that already exist.
@@ -169,7 +169,7 @@ Published files are owned by the user — they can edit them freely. Re-running 
 
 - Keep providers focused — one concern per provider
 - Provider files live in `app/Providers/` by convention
-- Generate a stub with `pnpm artisan make:provider Name`
+- Generate a stub with `pnpm rudder make:provider Name`
 - The `register()` hook is synchronous; `boot()` can be `async`
 - Providers are classes — they can have constructor parameters injected if you instantiate them manually
 - Use `this.publishes()` in `boot()`, not `register()` — `register()` may be overridden by factory functions

@@ -1,5 +1,5 @@
-import { Notification, type Notifiable } from '@boostkit/notification'
-import { Mailable } from '@boostkit/mail'
+import { Notification, type Notifiable } from '@rudderjs/notification'
+import { Mailable } from '@rudderjs/mail'
 
 // ─── Welcome Mailable ──────────────────────────────────────
 
@@ -8,11 +8,11 @@ class WelcomeMail extends Mailable {
 
   build(): this {
     return this
-      .subject(`Welcome to BoostKit, ${this.notifiable.name ?? 'friend'}!`)
+      .subject(`Welcome to RudderJS, ${this.notifiable.name ?? 'friend'}!`)
       .text(
         `Hi ${this.notifiable.name ?? 'there'},\n\n` +
         `Your account is ready. Thanks for joining us!\n\n` +
-        `— The BoostKit Team`
+        `— The RudderJS Team`
       )
   }
 }

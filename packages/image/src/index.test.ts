@@ -30,7 +30,7 @@ async function createTestJpeg(width: number, height: number): Promise<Buffer> {
 let tmpDir: string
 
 before(async () => {
-  tmpDir = await mkdtemp(join(tmpdir(), 'boostkit-image-test-'))
+  tmpDir = await mkdtemp(join(tmpdir(), 'rudderjs-image-test-'))
 })
 
 after(async () => {
@@ -39,7 +39,7 @@ after(async () => {
 
 // ─── Factory ────────────────────────────────────────────────
 
-describe('@boostkit/image', () => {
+describe('@rudderjs/image', () => {
   describe('image() factory', () => {
     it('returns an ImageProcessor instance from Buffer', async () => {
       const buf = await createTestPng(10, 10)

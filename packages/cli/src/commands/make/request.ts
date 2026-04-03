@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string): string {
-  return `import { FormRequest, z } from '@boostkit/core'
+  return `import { FormRequest, z } from '@rudderjs/core'
 
 export class ${className} extends FormRequest {
   authorize(): boolean {

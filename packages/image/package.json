@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/image",
+  "name": "@rudderjs/image",
   "version": "0.0.1",
-  "description": "Fluent image processing for BoostKit — resize, crop, convert, optimize (sharp wrapper).",
+  "description": "Fluent image processing for RudderJS — resize, crop, convert, optimize (sharp wrapper).",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/image"
   },
   "type": "module",
@@ -32,15 +32,15 @@
     "sharp": ">=0.33.0"
   },
   "peerDependencies": {
-    "@boostkit/storage": "*"
+    "@rudderjs/storage": "*"
   },
   "peerDependenciesMeta": {
-    "@boostkit/storage": {
+    "@rudderjs/storage": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@boostkit/storage": "workspace:*",
+    "@rudderjs/storage": "workspace:*",
     "@types/node": "^20.0.0",
     "sharp": ">=0.33.0",
     "typescript": "^5.4.0"

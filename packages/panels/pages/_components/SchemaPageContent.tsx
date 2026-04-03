@@ -2,7 +2,7 @@
 
 import { DashboardGrid }  from './DashboardGrid.js'
 import { StandaloneWidget } from './StandaloneWidget.js'
-import type { WidgetMeta } from '@boostkit/panels'
+import type { WidgetMeta } from '@rudderjs/panels'
 import type { WidgetWithSchema } from './WidgetCard.js'
 import type { SchemaElement, DashboardEl, DashboardLayoutItem, I18nExtended } from './schema-types.js'
 import { renderSchemaElement, type RenderContext } from './renderSchemaElement.js'

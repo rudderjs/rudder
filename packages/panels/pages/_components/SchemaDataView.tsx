@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, type RefCallback } from 'reac
 import { useDataViewFetch } from './hooks/useDataViewFetch.js'
 import { useLiveUpdates } from './hooks/useLiveUpdates.js'
 import { usePersistence } from './hooks/usePersistence.js'
-import type { PanelI18n, PanelColumnMeta } from '@boostkit/panels'
+import type { PanelI18n, PanelColumnMeta } from '@rudderjs/panels'
 import { ResourceIcon } from './ResourceIcon.js'
 import { TableEditCell } from './TableEditCell.js'
 import { ConfirmDialog } from './ConfirmDialog.js'

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { ServiceProvider, type Application } from '@boostkit/core'
+import { ServiceProvider, type Application } from '@rudderjs/core'
 
 export interface LocalizationConfig {
 	locale: string
@@ -13,25 +13,25 @@ type TranslationMap = Record<string, unknown>
 
 const _G = globalThis as Record<string, unknown>
 const _DEFAULT_CONFIG: LocalizationConfig = { locale: 'en', fallback: 'en', path: './lang' }
-if (!_G['__boostkit_localization_cache__']) _G['__boostkit_localization_cache__'] = new Map<string, TranslationMap>()
-if (!_G['__boostkit_localization_als__']) _G['__boostkit_localization_als__'] = new AsyncLocalStorage<{ locale: string }>()
+if (!_G['__rudderjs_localization_cache__']) _G['__rudderjs_localization_cache__'] = new Map<string, TranslationMap>()
+if (!_G['__rudderjs_localization_als__']) _G['__rudderjs_localization_als__'] = new AsyncLocalStorage<{ locale: string }>()
 
 function _cache(): Map<string, TranslationMap> {
-	return _G['__boostkit_localization_cache__'] as Map<string, TranslationMap>
+	return _G['__rudderjs_localization_cache__'] as Map<string, TranslationMap>
 }
 
 export class LocalizationRegistry {
 
 	static configure(config: LocalizationConfig): void {
-		_G['__boostkit_localization_config__'] = config
+		_G['__rudderjs_localization_config__'] = config
 	}
 
 	static getConfig(): LocalizationConfig {
-		return (_G['__boostkit_localization_config__'] as LocalizationConfig | undefined) ?? _DEFAULT_CONFIG
+		return (_G['__rudderjs_localization_config__'] as LocalizationConfig | undefined) ?? _DEFAULT_CONFIG
 	}
 
 	static getAls(): AsyncLocalStorage<{ locale: string }> {
-		return _G['__boostkit_localization_als__'] as AsyncLocalStorage<{ locale: string }>
+		return _G['__rudderjs_localization_als__'] as AsyncLocalStorage<{ locale: string }>
 	}
 
 	static seed(locale: string, namespace: string, data: TranslationMap): void {
@@ -48,7 +48,7 @@ export class LocalizationRegistry {
 
 	static reset(): void {
 		_cache().clear()
-		_G['__boostkit_localization_config__'] = undefined
+		_G['__rudderjs_localization_config__'] = undefined
 	}
 }
 

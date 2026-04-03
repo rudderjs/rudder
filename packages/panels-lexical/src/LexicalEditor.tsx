@@ -26,7 +26,7 @@ import { $getRoot, $getSelection, $isRangeSelection, $isDecoratorNode, $createPa
 import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
 import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
-import type { BlockMeta } from '@boostkit/panels'
+import type { BlockMeta } from '@rudderjs/panels'
 import { useYjsCollab } from './hooks/useYjsCollab.js'
 
 /** Imperative handle for controlling the editor from parent */

@@ -1,6 +1,6 @@
 # Frontend Pages & SSR
 
-BoostKit uses [Vike](https://vike.dev) for file-based routing and SSR. Pages live in the `pages/` directory alongside your API routes and backend code — the frontend and backend share the same project, same DI container, and same service layer.
+RudderJS uses [Vike](https://vike.dev) for file-based routing and SSR. Pages live in the `pages/` directory alongside your API routes and backend code — the frontend and backend share the same project, same DI container, and same service layer.
 
 ::: tip What is Vike?
 Vike is to Vite what Next.js is to React — file-based routing and SSR, but UI-agnostic. It works with React, Vue, Solid, or no framework at all.
@@ -23,7 +23,7 @@ Each page is a directory under `pages/` containing one or more `+` prefixed file
 
 ## Root Config
 
-`pages/+config.ts` is the root Vike config for the entire app. It wires `vike-photon` to your BoostKit server and — for single-framework apps — declares the UI renderer here too:
+`pages/+config.ts` is the root Vike config for the entire app. It wires `vike-photon` to your RudderJS server and — for single-framework apps — declares the UI renderer here too:
 
 ```ts
 // pages/+config.ts — single framework (React)
@@ -86,7 +86,7 @@ A `+config.ts` in a parent directory applies to the entire subtree — you do no
 export default function HomePage() {
   return (
     <main>
-      <h1>Welcome to BoostKit</h1>
+      <h1>Welcome to RudderJS</h1>
       <p>Your full-stack app is running.</p>
     </main>
   )
@@ -97,7 +97,7 @@ export default function HomePage() {
 <!-- pages/index/+Page.vue -->
 <template>
   <main>
-    <h1>Welcome to BoostKit</h1>
+    <h1>Welcome to RudderJS</h1>
     <p>Your full-stack app is running.</p>
   </main>
 </template>
@@ -111,7 +111,7 @@ export default function HomePage() {
 
 ```ts
 // pages/users/+data.ts
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../../app/Services/UserService.js'
 
 // Export the type so +Page.tsx can import it
@@ -177,13 +177,13 @@ const { users } = useData<Data>()
 // pages/dashboard/+guard.ts
 import { redirect } from 'vike/abort'
 import type { GuardAsync } from 'vike/types'
-import type { BetterAuthInstance } from '@boostkit/auth'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
   // Guards run on both server and client — skip the check client-side
   if (!import.meta.env.SSR) return
 
-  const { app } = await import('@boostkit/core')
+  const { app } = await import('@rudderjs/core')
   const auth = app().make<BetterAuthInstance>('auth')
 
   const session = await auth.api.getSession({
@@ -241,7 +241,7 @@ Access the parameter in `+data.ts`:
 
 ```ts
 // pages/users/@id/+data.ts
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../../../app/Services/UserService.js'
 
 export type Data = Awaited<ReturnType<typeof data>>
@@ -283,7 +283,7 @@ export default function ErrorPage() {
 
 ## Multiple UI Frameworks
 
-When you select multiple frameworks in `create-boostkit-app`, the root `pages/+config.ts` has no renderer. Each page folder declares its own:
+When you select multiple frameworks in `create-rudderjs-app`, the root `pages/+config.ts` has no renderer. Each page folder declares its own:
 
 ```
 pages/
@@ -304,7 +304,7 @@ When React and Solid coexist, the Vite config uses `include`/`exclude` to route 
 ```ts
 // vite.config.ts
 plugins: [
-  boostkit(),
+  rudderjs(),
   react({ exclude: ['**/pages/solid-demo/**'] }),
   solid({ include: ['**/pages/solid-demo/**'] }),
 ]
@@ -314,7 +314,7 @@ plugins: [
 
 ## Pure API Mode
 
-Pages are optional. If you only need a backend API, omit the `pages/` directory entirely and remove Vike from your `vite.config.ts`. The BoostKit server and routing work fine without any frontend.
+Pages are optional. If you only need a backend API, omit the `pages/` directory entirely and remove Vike from your `vite.config.ts`. The RudderJS server and routing work fine without any frontend.
 
 ---
 

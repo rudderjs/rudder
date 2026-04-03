@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { MailRegistry, Mailable, type MailAdapter } from '@boostkit/mail'
-import { ModelRegistry, type OrmAdapter } from '@boostkit/orm'
+import { MailRegistry, Mailable, type MailAdapter } from '@rudderjs/mail'
+import { ModelRegistry, type OrmAdapter } from '@rudderjs/orm'
 import {
   ChannelRegistry,
   MailChannel,

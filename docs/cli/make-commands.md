@@ -5,7 +5,7 @@ The `make:*` commands scaffold boilerplate files from templates. All commands su
 ## Usage
 
 ```bash
-pnpm artisan make:<type> <Name> [--force]
+pnpm rudder make:<type> <Name> [--force]
 ```
 
 ## Commands Reference
@@ -15,7 +15,7 @@ pnpm artisan make:<type> <Name> [--force]
 Generates a controller class with decorator-based routing.
 
 ```bash
-pnpm artisan make:controller User
+pnpm rudder make:controller User
 # → app/Http/Controllers/UserController.ts
 ```
 
@@ -24,8 +24,8 @@ The `Controller` suffix is appended automatically if not provided. The route pre
 Generated file:
 
 ```ts
-import { Controller, Get } from '@boostkit/router'
-import type { Context } from '@boostkit/core'
+import { Controller, Get } from '@rudderjs/router'
+import type { Context } from '@rudderjs/core'
 
 @Controller('/users')
 export class UserController {
@@ -41,14 +41,14 @@ export class UserController {
 Generates an ORM model class. The table name is derived automatically from the class name in snake_case + pluralised (`Post` → `posts`, `BlogPost` → `blog_posts`).
 
 ```bash
-pnpm artisan make:model Post
+pnpm rudder make:model Post
 # → app/Models/Post.ts
 ```
 
 Generated file:
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class Post extends Model {
   static table = 'posts'
@@ -64,14 +64,14 @@ export class Post extends Model {
 Generates a queue job class.
 
 ```bash
-pnpm artisan make:job SendWelcomeEmail
+pnpm rudder make:job SendWelcomeEmail
 # → app/Jobs/SendWelcomeEmail.ts
 ```
 
 Generated file:
 
 ```ts
-import { Job } from '@boostkit/queue'
+import { Job } from '@rudderjs/queue'
 
 export class SendWelcomeEmail extends Job {
   static queue   = 'default'
@@ -92,15 +92,15 @@ export class SendWelcomeEmail extends Job {
 Generates a middleware class. The `Middleware` suffix is appended automatically if not provided.
 
 ```bash
-pnpm artisan make:middleware Auth
+pnpm rudder make:middleware Auth
 # → app/Http/Middleware/AuthMiddleware.ts
 ```
 
 Generated file:
 
 ```ts
-import { Middleware } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Middleware } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(
@@ -119,14 +119,14 @@ export class AuthMiddleware extends Middleware {
 Generates a FormRequest class for input validation. The `Request` suffix is appended automatically if not provided.
 
 ```bash
-pnpm artisan make:request CreateUser
+pnpm rudder make:request CreateUser
 # → app/Http/Requests/CreateUserRequest.ts
 ```
 
 Generated file:
 
 ```ts
-import { FormRequest, z } from '@boostkit/core'
+import { FormRequest, z } from '@rudderjs/core'
 
 export class CreateUserRequest extends FormRequest {
   authorize(): boolean {
@@ -146,14 +146,14 @@ export class CreateUserRequest extends FormRequest {
 Generates a service provider class. The `ServiceProvider` suffix is appended automatically if not provided.
 
 ```bash
-pnpm artisan make:provider App
+pnpm rudder make:provider App
 # → app/Providers/AppServiceProvider.ts
 ```
 
 Generated file:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {
@@ -169,17 +169,17 @@ export class AppServiceProvider extends ServiceProvider {
 
 ### `make:command`
 
-Generates a class-based Artisan command. The signature is auto-derived from the class name in kebab-case (`SendDigest` → `send-digest`).
+Generates a class-based Rudder command. The signature is auto-derived from the class name in kebab-case (`SendDigest` → `send-digest`).
 
 ```bash
-pnpm artisan make:command SendDigest
+pnpm rudder make:command SendDigest
 # → app/Commands/SendDigest.ts
 ```
 
 Generated file:
 
 ```ts
-import { Command } from '@boostkit/artisan'
+import { Command } from '@rudderjs/rudder'
 
 export class SendDigest extends Command {
   readonly signature   = 'send-digest {--force : Force the operation}'
@@ -201,10 +201,10 @@ export class SendDigest extends Command {
 Register it in `routes/console.ts`:
 
 ```ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 import { SendDigest } from '../app/Commands/SendDigest.js'
 
-artisan.register(SendDigest)
+rudder.register(SendDigest)
 ```
 
 ### `make:event`
@@ -212,7 +212,7 @@ artisan.register(SendDigest)
 Generates an event class.
 
 ```bash
-pnpm artisan make:event UserRegistered
+pnpm rudder make:event UserRegistered
 # → app/Events/UserRegistered.ts
 ```
 
@@ -231,14 +231,14 @@ export class UserRegistered {
 Generates an event listener class.
 
 ```bash
-pnpm artisan make:listener SendWelcomeEmail
+pnpm rudder make:listener SendWelcomeEmail
 # → app/Listeners/SendWelcomeEmail.ts
 ```
 
 Generated file:
 
 ```ts
-import type { Listener } from '@boostkit/core'
+import type { Listener } from '@rudderjs/core'
 
 export class SendWelcomeEmail implements Listener {
   async handle(event: unknown): Promise<void> {
@@ -252,14 +252,14 @@ export class SendWelcomeEmail implements Listener {
 Generates a Mailable class for sending email.
 
 ```bash
-pnpm artisan make:mail WelcomeMail
+pnpm rudder make:mail WelcomeMail
 # → app/Mail/WelcomeMail.ts
 ```
 
 Generated file:
 
 ```ts
-import { Mailable } from '@boostkit/mail'
+import { Mailable } from '@rudderjs/mail'
 
 export class WelcomeMail extends Mailable {
   constructor(/* inject data here */) {
@@ -285,7 +285,7 @@ export class WelcomeMail extends Mailable {
 | `make:middleware <Name>` | `app/Http/Middleware/<Name>Middleware.ts` | Middleware class |
 | `make:request <Name>` | `app/Http/Requests/<Name>Request.ts` | FormRequest class |
 | `make:provider <Name>` | `app/Providers/<Name>ServiceProvider.ts` | ServiceProvider class |
-| `make:command <Name>` | `app/Commands/<Name>.ts` | Class-based Artisan command |
+| `make:command <Name>` | `app/Commands/<Name>.ts` | Class-based Rudder command |
 | `make:event <Name>` | `app/Events/<Name>.ts` | Event class |
 | `make:listener <Name>` | `app/Listeners/<Name>.ts` | Event listener class |
 | `make:mail <Name>` | `app/Mail/<Name>.ts` | Mailable email class |

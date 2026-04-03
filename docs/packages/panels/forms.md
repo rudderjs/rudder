@@ -9,7 +9,7 @@ The submit handler runs server-side via `POST /{panel}/api/_forms/{id}/submit`. 
 ## Basic Form
 
 ```ts
-import { Form, TextField, EmailField, TextareaField } from '@boostkit/panels'
+import { Form, TextField, EmailField, TextareaField } from '@rudderjs/panels'
 
 Form.make('contact')
   .fields([
@@ -41,14 +41,14 @@ The `onSubmit` handler receives the validated form data and the current `PanelCo
 
 ## Field Types
 
-All field types from `@boostkit/panels` work in standalone forms.
+All field types from `@rudderjs/panels` work in standalone forms.
 
 ### `TextField`
 
 Single-line text input.
 
 ```ts
-import { TextField } from '@boostkit/panels'
+import { TextField } from '@rudderjs/panels'
 
 TextField.make('name').label('Name').required()
 TextField.make('title').label('Title').default('Untitled')
@@ -59,7 +59,7 @@ TextField.make('title').label('Title').default('Untitled')
 Text input with email validation.
 
 ```ts
-import { EmailField } from '@boostkit/panels'
+import { EmailField } from '@rudderjs/panels'
 
 EmailField.make('email').label('Email Address').required()
 ```
@@ -69,7 +69,7 @@ EmailField.make('email').label('Email Address').required()
 Masked text input. Hidden from table views by default.
 
 ```ts
-import { PasswordField } from '@boostkit/panels'
+import { PasswordField } from '@rudderjs/panels'
 
 PasswordField.make('password').label('Password').required()
 PasswordField.make('password').label('Password').required().confirm()  // adds confirm field
@@ -84,7 +84,7 @@ PasswordField.make('password').label('Password').required().confirm()  // adds c
 Numeric input with optional min, max, and step.
 
 ```ts
-import { NumberField } from '@boostkit/panels'
+import { NumberField } from '@rudderjs/panels'
 
 NumberField.make('age').label('Age').required()
 NumberField.make('price').label('Price ($)').min(0).step(0.01)
@@ -102,7 +102,7 @@ NumberField.make('quantity').label('Quantity').min(1).max(100).default(1)
 Multi-line text input.
 
 ```ts
-import { TextareaField } from '@boostkit/panels'
+import { TextareaField } from '@rudderjs/panels'
 
 TextareaField.make('bio').label('Bio')
 TextareaField.make('notes').label('Notes').rows(8)
@@ -117,7 +117,7 @@ TextareaField.make('notes').label('Notes').rows(8)
 Dropdown with label/value pairs. Supports single and multi-select.
 
 ```ts
-import { SelectField } from '@boostkit/panels'
+import { SelectField } from '@rudderjs/panels'
 
 SelectField.make('status').label('Status').default('draft').options([
   { label: 'Draft',     value: 'draft' },
@@ -146,7 +146,7 @@ SelectField.make('role').options(['admin', 'editor', 'user'])
 Checkbox that submits `true` / `false`.
 
 ```ts
-import { BooleanField } from '@boostkit/panels'
+import { BooleanField } from '@rudderjs/panels'
 
 BooleanField.make('active').label('Active')
 BooleanField.make('acceptTerms').label('I accept the terms').required()
@@ -157,7 +157,7 @@ BooleanField.make('acceptTerms').label('I accept the terms').required()
 Switch-style boolean input. Same value semantics as `BooleanField`.
 
 ```ts
-import { ToggleField } from '@boostkit/panels'
+import { ToggleField } from '@rudderjs/panels'
 
 ToggleField.make('featured').label('Featured Article')
 ToggleField.make('notifications').label('Email Notifications').default(true)
@@ -174,7 +174,7 @@ ToggleField.make('published').label('Published').onLabel('Live').offLabel('Draft
 Date picker. Optionally includes a time picker.
 
 ```ts
-import { DateField } from '@boostkit/panels'
+import { DateField } from '@rudderjs/panels'
 
 DateField.make('birthday').label('Birthday')
 DateField.make('startDate').label('Start Date').default(new Date().toISOString().split('T')[0])
@@ -190,7 +190,7 @@ DateField.make('publishedAt').label('Publish Time').withTime()
 Color picker. Stores the selected color as a hex string (e.g. `'#3b82f6'`).
 
 ```ts
-import { ColorField } from '@boostkit/panels'
+import { ColorField } from '@rudderjs/panels'
 
 ColorField.make('primaryColor').label('Brand Color').default('#3b82f6')
 ColorField.make('accentColor').label('Accent Color')
@@ -201,7 +201,7 @@ ColorField.make('accentColor').label('Accent Color')
 Comma-separated tag input. Stores as an array of strings.
 
 ```ts
-import { TagsField } from '@boostkit/panels'
+import { TagsField } from '@rudderjs/panels'
 
 TagsField.make('tags').label('Tags')
 TagsField.make('keywords').label('Keywords').placeholder('Add a keyword...')
@@ -216,7 +216,7 @@ TagsField.make('keywords').label('Keywords').placeholder('Add a keyword...')
 URL slug input with auto-generation from another field.
 
 ```ts
-import { SlugField } from '@boostkit/panels'
+import { SlugField } from '@rudderjs/panels'
 
 TextField.make('title').label('Title'),
 SlugField.make('slug').label('URL Slug').from('title')
@@ -229,7 +229,7 @@ When combined with the Field base class `.from()` + `.derive()` pattern, the fie
 Raw JSON editor with syntax highlighting. Stores the value as a parsed object.
 
 ```ts
-import { JsonField } from '@boostkit/panels'
+import { JsonField } from '@rudderjs/panels'
 
 JsonField.make('metadata').label('Metadata')
 JsonField.make('config').label('Configuration').default('{\n  "key": "value"\n}').rows(10)
@@ -244,7 +244,7 @@ JsonField.make('config').label('Configuration').default('{\n  "key": "value"\n}'
 File upload. Stores the uploaded file path on the configured disk.
 
 ```ts
-import { FileField } from '@boostkit/panels'
+import { FileField } from '@rudderjs/panels'
 
 // Image upload with preview thumbnail
 FileField.make('avatar').label('Profile Picture').image().accept('image/*').maxSize(5)
@@ -276,15 +276,15 @@ FileField.make('cover')
 | `.multiple()` | Allow multiple file uploads |
 | `.disk(name)` | Storage disk name (default: `'local'`) |
 | `.directory(path)` | Upload subdirectory (default: `'uploads'`) |
-| `.optimize()` | Auto-optimize images (requires `@boostkit/image`) |
-| `.conversions([...])` | Generate additional image sizes on upload (requires `@boostkit/image`) |
+| `.optimize()` | Auto-optimize images (requires `@rudderjs/image`) |
+| `.conversions([...])` | Generate additional image sizes on upload (requires `@rudderjs/image`) |
 
 ### `HiddenField`
 
 Not rendered in the form UI but included in submitted data. Useful for passing context values.
 
 ```ts
-import { HiddenField } from '@boostkit/panels'
+import { HiddenField } from '@rudderjs/panels'
 
 HiddenField.make('formType').default('contact')
 HiddenField.make('version').default(2)
@@ -350,7 +350,7 @@ Group fields into `Section` or `Tabs` layouts within a form. Any combination is 
 ### Sections
 
 ```ts
-import { Form, Section, TextField, EmailField, BooleanField, SelectField } from '@boostkit/panels'
+import { Form, Section, TextField, EmailField, BooleanField, SelectField } from '@rudderjs/panels'
 
 Form.make('settings')
   .description('Update your account settings.')
@@ -394,7 +394,7 @@ Form.make('settings')
 Use the `Tabs` schema element to create a tabbed layout within a form. Each tab holds fields:
 
 ```ts
-import { Form, Tabs, TextField, EmailField, TextareaField, ToggleField } from '@boostkit/panels'
+import { Form, Tabs, TextField, EmailField, TextareaField, ToggleField } from '@rudderjs/panels'
 
 Form.make('account')
   .fields([
@@ -491,7 +491,7 @@ If any field fails, the form does not call `.onSubmit()` and instead returns all
 Use `.from()` and `.derive()` to compute a field's value automatically as other fields change. The derived value is recomputed on the client in real time — no server round-trip.
 
 ```ts
-import { Form, TextField, TextareaField, NumberField } from '@boostkit/panels'
+import { Form, TextField, TextareaField, NumberField } from '@rudderjs/panels'
 
 Form.make('article-composer')
   .fields([
@@ -629,7 +629,7 @@ Execution order: `beforeSubmit` → `.onSubmit()` → `afterSubmit`.
 
 ## Live Table Refresh
 
-After a successful form submit, you can broadcast a live data refresh to one or more panel tables. The table re-fetches its data from the server without a full page reload. Requires `@boostkit/broadcast` to be registered.
+After a successful form submit, you can broadcast a live data refresh to one or more panel tables. The table re-fetches its data from the server without a full page reload. Requires `@rudderjs/broadcast` to be registered.
 
 ```ts
 Form.make('quick-add-article')
@@ -685,7 +685,7 @@ TextField.make('notes').persist(['websocket', 'indexeddb'])
 // syncs live over WebSocket; local changes survive offline via IndexedDB
 ```
 
-Requires `@boostkit/live` to be registered.
+Requires `@rudderjs/live` to be registered.
 
 ---
 
@@ -798,7 +798,7 @@ import {
   Form, Section, Tabs,
   TextField, EmailField, TextareaField, SelectField,
   BooleanField, ToggleField, SlugField, FileField,
-} from '@boostkit/panels'
+} from '@rudderjs/panels'
 import { User } from 'App/Models/User.js'
 
 Form.make('user-profile')

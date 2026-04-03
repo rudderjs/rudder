@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import type { Panel } from '../Panel.js'
 import type { Widget, WidgetSize, WidgetMeta } from '../schema/Widget.js'
 import type { Dashboard } from '../schema/Dashboard.js'
@@ -83,7 +83,7 @@ export function mountDashboardRoutes(
     const reqUser = req as AppRequest & { user?: PanelUser }
     if (reqUser.user?.id) return String(reqUser.user.id)
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): AppContainer }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): AppContainer }
       const auth = app().make('auth') as AuthLike | null
       if (auth?.api?.getSession) {
         const session = await auth.api.getSession({
@@ -145,7 +145,7 @@ export function mountDashboardRoutes(
     }
 
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): AppContainer }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): AppContainer }
       const prisma = app().make('prisma') as PrismaLayoutClient | null
       if (prisma?.panelDashboardLayout) {
         const record = await prisma.panelDashboardLayout.findFirst({
@@ -175,7 +175,7 @@ export function mountDashboardRoutes(
     }
 
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): AppContainer }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): AppContainer }
       const prisma = app().make('prisma') as PrismaLayoutClient | null
       if (prisma?.panelDashboardLayout) {
         await prisma.panelDashboardLayout.upsert({

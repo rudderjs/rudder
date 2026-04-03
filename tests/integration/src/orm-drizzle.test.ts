@@ -9,9 +9,9 @@ import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
 import { drizzle as dzSqlite } from 'drizzle-orm/better-sqlite3'
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
-import { drizzle, DrizzleTableRegistry } from '@boostkit/orm-drizzle'
-import { ModelRegistry } from '@boostkit/orm'
-import type { OrmAdapter } from '@boostkit/contracts'
+import { drizzle, DrizzleTableRegistry } from '@rudderjs/orm-drizzle'
+import { ModelRegistry } from '@rudderjs/orm'
+import type { OrmAdapter } from '@rudderjs/contracts'
 
 // ─── Schema ────────────────────────────────────────────────
 
@@ -295,7 +295,7 @@ describe('orm-drizzle — SQLite in-memory', () => {
 
   describe('ModelRegistry integration', () => {
     it('Model static methods work via ModelRegistry', async () => {
-      const { Model } = await import('@boostkit/orm')
+      const { Model } = await import('@rudderjs/orm')
       ModelRegistry.set(adapter)
 
       class User extends Model {

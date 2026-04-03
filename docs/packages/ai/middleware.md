@@ -5,7 +5,7 @@ AI middleware lets you intercept and modify agent behavior — logging, rate lim
 ## Defining Middleware
 
 ```ts
-import type { AiMiddleware } from '@boostkit/ai'
+import type { AiMiddleware } from '@rudderjs/ai'
 
 const loggingMiddleware: AiMiddleware = {
   name: 'logger',
@@ -29,8 +29,8 @@ const loggingMiddleware: AiMiddleware = {
 ### On an Agent Class
 
 ```ts
-import { Agent } from '@boostkit/ai'
-import type { HasMiddleware } from '@boostkit/ai'
+import { Agent } from '@rudderjs/ai'
+import type { HasMiddleware } from '@rudderjs/ai'
 
 class MyAgent extends Agent implements HasMiddleware {
   instructions() { return '...' }
@@ -41,7 +41,7 @@ class MyAgent extends Agent implements HasMiddleware {
 ### On an Anonymous Agent
 
 ```ts
-import { agent } from '@boostkit/ai'
+import { agent } from '@rudderjs/ai'
 
 const a = agent({
   instructions: '...',
@@ -61,7 +61,7 @@ const a = agent({
 ## Testing
 
 ```ts
-import { AiFake } from '@boostkit/ai'
+import { AiFake } from '@rudderjs/ai'
 
 const fake = AiFake.fake()
 fake.respondWith('Mocked response')

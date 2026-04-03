@@ -1,20 +1,20 @@
 # Database & Models
 
-BoostKit provides a unified `Model` base class that works with any ORM adapter. The adapter handles all database communication — your model code stays the same regardless of whether you use Prisma or Drizzle.
+RudderJS provides a unified `Model` base class that works with any ORM adapter. The adapter handles all database communication — your model code stays the same regardless of whether you use Prisma or Drizzle.
 
 ---
 
 ## Architecture
 
 ```
-Model (from @boostkit/orm)
+Model (from @rudderjs/orm)
   └── ModelRegistry.getAdapter()
         └── OrmAdapter (interface)
-              ├── PrismaAdapter  (@boostkit/orm-prisma)
-              └── DrizzleAdapter (@boostkit/orm-drizzle)
+              ├── PrismaAdapter  (@rudderjs/orm-prisma)
+              └── DrizzleAdapter (@rudderjs/orm-drizzle)
 ```
 
-`@boostkit/orm` defines the `Model` base class and `ModelRegistry`. The adapter packages implement the `OrmAdapter` interface and register themselves into the registry during the provider boot phase.
+`@rudderjs/orm` defines the `Model` base class and `ModelRegistry`. The adapter packages implement the `OrmAdapter` interface and register themselves into the registry during the provider boot phase.
 
 ---
 
@@ -38,7 +38,7 @@ Both adapters work identically from the Model layer. You can switch adapters wit
 ### 1. Install
 
 ```bash
-pnpm add @boostkit/orm @boostkit/orm-prisma @prisma/client
+pnpm add @rudderjs/orm @rudderjs/orm-prisma @prisma/client
 pnpm add -D prisma
 ```
 
@@ -51,7 +51,7 @@ pnpm add -D @types/better-sqlite3
 
 ### 2. Multi-file Prisma Schema
 
-BoostKit uses a **multi-file schema** layout. Instead of a single `prisma/schema.prisma`, schemas are split into separate files inside a `prisma/schema/` directory:
+RudderJS uses a **multi-file schema** layout. Instead of a single `prisma/schema.prisma`, schemas are split into separate files inside a `prisma/schema/` directory:
 
 ```
 prisma/
@@ -59,12 +59,12 @@ prisma/
 │   ├── base.prisma          # generator + datasource
 │   ├── user.prisma          # User model
 │   ├── post.prisma          # Post model
-│   ├── auth.prisma          # Auth models (published by @boostkit/auth)
-│   └── notification.prisma  # Notification model (published by @boostkit/notification)
+│   ├── auth.prisma          # Auth models (published by @rudderjs/auth)
+│   └── notification.prisma  # Notification model (published by @rudderjs/notification)
 └── prisma.config.ts         # Points to prisma/schema directory
 ```
 
-Each concern lives in its own file. BoostKit packages can publish their own schema files via `pnpm artisan vendor:publish --tag=<pkg>-schema` (see [Schema Publishing](#schema-publishing) below).
+Each concern lives in its own file. RudderJS packages can publish their own schema files via `pnpm rudder vendor:publish --tag=<pkg>-schema` (see [Schema Publishing](#schema-publishing) below).
 
 ### 3. Configure prisma.config.ts
 
@@ -124,15 +124,15 @@ model Post {
 ### 5. Push schema + generate client
 
 ```bash
-pnpm artisan db:push            # sync schema to the database (no migration file)
-pnpm artisan db:generate        # regenerate the Prisma client
+pnpm rudder db:push            # sync schema to the database (no migration file)
+pnpm rudder db:generate        # regenerate the Prisma client
 ```
 
 ### 5. Register the provider
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@boostkit/orm-prisma'
+import { database } from '@rudderjs/orm-prisma'
 import configs from '../config/index.js'
 
 export default [
@@ -146,7 +146,7 @@ export default [
 A typical `config/database.ts`:
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('DB_DRIVER', 'sqlite') as 'sqlite' | 'postgresql' | 'libsql',
@@ -165,7 +165,7 @@ export default {
 ### 1. Install
 
 ```bash
-pnpm add @boostkit/orm @boostkit/orm-drizzle drizzle-orm
+pnpm add @rudderjs/orm @rudderjs/orm-drizzle drizzle-orm
 pnpm add -D drizzle-kit
 ```
 
@@ -230,9 +230,9 @@ pnpm exec drizzle-kit push      # sync schema to the database (no migration file
 
 ```ts
 // app/Providers/DatabaseServiceProvider.ts
-import { ServiceProvider } from '@boostkit/core'
-import { drizzle } from '@boostkit/orm-drizzle'
-import { ModelRegistry } from '@boostkit/orm'
+import { ServiceProvider } from '@rudderjs/core'
+import { drizzle } from '@rudderjs/orm-drizzle'
+import { ModelRegistry } from '@rudderjs/orm'
 import * as schema from '../../database/schema.js'
 
 export class DatabaseServiceProvider extends ServiceProvider {
@@ -267,10 +267,10 @@ export default [
 
 ## Defining Models
 
-All models extend `Model` from `@boostkit/orm`:
+All models extend `Model` from `@rudderjs/orm`:
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   // Required: maps to the adapter-specific table/accessor
@@ -398,20 +398,20 @@ const total = await User.query().count()
 
 ## Unified Database Commands
 
-BoostKit provides a unified set of artisan commands that work with both Prisma and Drizzle. The commands auto-detect which ORM is in use and delegate to the appropriate tool.
+RudderJS provides a unified set of rudder commands that work with both Prisma and Drizzle. The commands auto-detect which ORM is in use and delegate to the appropriate tool.
 
 ```bash
-pnpm artisan migrate              # run pending migrations
-pnpm artisan migrate:fresh        # drop all tables + re-migrate from scratch
-pnpm artisan migrate:status       # show migration status
-pnpm artisan make:migration <name> # create a new migration file
-pnpm artisan db:push              # push schema directly (no migration file)
-pnpm artisan db:generate          # regenerate client (Prisma only)
+pnpm rudder migrate              # run pending migrations
+pnpm rudder migrate:fresh        # drop all tables + re-migrate from scratch
+pnpm rudder migrate:status       # show migration status
+pnpm rudder make:migration <name> # create a new migration file
+pnpm rudder db:push              # push schema directly (no migration file)
+pnpm rudder db:generate          # regenerate client (Prisma only)
 ```
 
 Under the hood, each command maps to the native ORM tool:
 
-| Artisan Command | Prisma Equivalent | Drizzle Equivalent |
+| Rudder Command | Prisma Equivalent | Drizzle Equivalent |
 |---|---|---|
 | `migrate` | `prisma migrate deploy` | `drizzle-kit migrate` |
 | `migrate:fresh` | `prisma migrate reset` | drop all + `drizzle-kit migrate` |
@@ -426,20 +426,20 @@ Under the hood, each command maps to the native ORM tool:
 # 1. Edit your schema files (prisma/schema/*.prisma or database/schema.ts)
 
 # 2a. Quick sync (no history, good for local iteration)
-pnpm artisan db:push
+pnpm rudder db:push
 
 # 2b. OR create a tracked migration (use this when the change is ready)
-pnpm artisan make:migration add_published_to_posts
+pnpm rudder make:migration add_published_to_posts
 
 # 3. Regenerate the client after schema changes (Prisma only)
-pnpm artisan db:generate
+pnpm rudder db:generate
 ```
 
 **Production deployment:**
 
 ```bash
 # Apply all pending migrations — safe to run in CI/CD
-pnpm artisan migrate
+pnpm rudder migrate
 ```
 
 Migration files are stored in `prisma/migrations/` (Prisma) or the `out` directory from `drizzle.config.ts` (Drizzle), and should be committed to version control.
@@ -448,20 +448,20 @@ Migration files are stored in `prisma/migrations/` (Prisma) or the `out` directo
 
 ## Schema Publishing
 
-BoostKit packages that require database tables can publish their own schema files into your project. This keeps package schemas separate from your application schemas while still allowing Prisma's multi-file schema to merge them all.
+RudderJS packages that require database tables can publish their own schema files into your project. This keeps package schemas separate from your application schemas while still allowing Prisma's multi-file schema to merge them all.
 
 ```bash
-pnpm artisan vendor:publish --tag=auth-schema          # publishes prisma/schema/auth.prisma
-pnpm artisan vendor:publish --tag=notification-schema   # publishes prisma/schema/notification.prisma
+pnpm rudder vendor:publish --tag=auth-schema          # publishes prisma/schema/auth.prisma
+pnpm rudder vendor:publish --tag=notification-schema   # publishes prisma/schema/notification.prisma
 ```
 
-After publishing, run `pnpm artisan db:push` or `pnpm artisan make:migration` to apply the new tables.
+After publishing, run `pnpm rudder db:push` or `pnpm rudder make:migration` to apply the new tables.
 
 ---
 
 ## Legacy Prisma/Drizzle Commands
 
-You can still use the native Prisma and Drizzle CLI commands directly if you prefer, but the unified artisan commands are recommended for consistency.
+You can still use the native Prisma and Drizzle CLI commands directly if you prefer, but the unified rudder commands are recommended for consistency.
 
 ### Prisma (direct)
 
@@ -484,14 +484,14 @@ You can still use the native Prisma and Drizzle CLI commands directly if you pre
 
 ## Seeding
 
-Define seed commands using the artisan registry in `routes/console.ts`:
+Define seed commands using the rudder registry in `routes/console.ts`:
 
 ```ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 import { User } from '../app/Models/User.js'
 import { Post } from '../app/Models/Post.js'
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   const alice = await User.create({
     id:    crypto.randomUUID(),
     name:  'Alice',
@@ -513,7 +513,7 @@ artisan.command('db:seed', async () => {
 Run it:
 
 ```bash
-pnpm artisan db:seed
+pnpm rudder db:seed
 ```
 
 ---

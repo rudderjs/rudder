@@ -1,4 +1,4 @@
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('DB_CONNECTION', 'sqlite'),

@@ -1,11 +1,11 @@
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
 
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME',    'BoostKit'),
+    name:    Env.get('MAIL_FROM_NAME',    'RudderJS'),
   },
 
   mailers: {

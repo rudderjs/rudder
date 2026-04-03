@@ -1,5 +1,5 @@
-import { ServiceProvider, artisan, type Application } from '@boostkit/core'
-import { resolveOptionalPeer } from '@boostkit/core'
+import { ServiceProvider, rudder, type Application } from '@rudderjs/core'
+import { resolveOptionalPeer } from '@rudderjs/core'
 
 // ─── Job Contract ──────────────────────────────────────────
 
@@ -52,7 +52,7 @@ export class DispatchBuilder<T extends Job> {
 
   async send(): Promise<void> {
     const adapter = QueueRegistry.get()
-    if (!adapter) throw new Error('[BoostKit Queue] No queue adapter registered')
+    if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
     await adapter.dispatch(this.job, { delay: this._delay, queue: this._queue })
   }
 }
@@ -175,10 +175,10 @@ export interface QueueConfig {
  * Reads `config.default` to pick the driver, then boots the matching adapter.
  *
  * Built-in drivers:  sync
- * Plugin drivers:    inngest (@boostkit/queue-inngest), bullmq (@boostkit/queue-bullmq)
+ * Plugin drivers:    inngest (@rudderjs/queue-inngest), bullmq (@rudderjs/queue-bullmq)
  *
  * Usage in bootstrap/providers.ts:
- *   import { queue } from '@boostkit/queue'
+ *   import { queue } from '@rudderjs/queue'
  *   import configs from '../config/index.js'
  *   export default [..., queue(configs.queue), ...]
  */
@@ -196,29 +196,29 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
       if (driver === 'sync') {
         adapter = new SyncAdapter()
       } else if (driver === 'inngest') {
-        const { inngest } = await resolveOptionalPeer<{ inngest: (c: unknown) => QueueAdapterProvider }>('@boostkit/queue-inngest')
+        const { inngest } = await resolveOptionalPeer<{ inngest: (c: unknown) => QueueAdapterProvider }>('@rudderjs/queue-inngest')
         adapter = inngest(connectionConfig).create()
       } else if (driver === 'bullmq') {
-        const { bullmq } = await resolveOptionalPeer<{ bullmq: (c: unknown) => QueueAdapterProvider }>('@boostkit/queue-bullmq')
+        const { bullmq } = await resolveOptionalPeer<{ bullmq: (c: unknown) => QueueAdapterProvider }>('@rudderjs/queue-bullmq')
         adapter = bullmq(connectionConfig).create()
       } else {
-        throw new Error(`[BoostKit Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
+        throw new Error(`[RudderJS Queue] Unknown driver "${driver}". Available: sync, inngest, bullmq`)
       }
 
       QueueRegistry.set(adapter)
       this.app.instance('queue', adapter)
 
-      artisan.command('queue:work', async (args) => {
+      rudder.command('queue:work', async (args) => {
         if (typeof adapter.work !== 'function') {
-          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support workers. Switch to "bullmq" in config/queue.ts.`)
+          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support workers. Switch to "bullmq" in config/queue.ts.`)
         }
         const queues = args[0] ?? 'default'
         await adapter.work(queues)
-      }).description('Start a queue worker — pnpm artisan queue:work [queues=default]')
+      }).description('Start a queue worker — pnpm rudder queue:work [queues=default]')
 
-      artisan.command('queue:status', async (args) => {
+      rudder.command('queue:status', async (args) => {
         if (typeof adapter.status !== 'function') {
-          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:status.`)
+          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:status.`)
         }
         const queueName = args[0] ?? 'default'
         const stats = await adapter.status(queueName)
@@ -229,20 +229,20 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
         console.log(`  Failed:    ${stats.failed}`)
         console.log(`  Delayed:   ${stats.delayed}`)
         console.log(`  Paused:    ${stats.paused}\n`)
-      }).description('Show queue stats — pnpm artisan queue:status [queue=default]')
+      }).description('Show queue stats — pnpm rudder queue:status [queue=default]')
 
-      artisan.command('queue:clear', async (args) => {
+      rudder.command('queue:clear', async (args) => {
         if (typeof adapter.flush !== 'function') {
-          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:clear.`)
+          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:clear.`)
         }
         const queueName = args[0] ?? 'default'
         await adapter.flush(queueName)
         console.log(`Queue "${queueName}" cleared.`)
-      }).description('Drain waiting + delayed jobs — pnpm artisan queue:clear [queue=default]')
+      }).description('Drain waiting + delayed jobs — pnpm rudder queue:clear [queue=default]')
 
-      artisan.command('queue:failed', async (args) => {
+      rudder.command('queue:failed', async (args) => {
         if (typeof adapter.failures !== 'function') {
-          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:failed.`)
+          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:failed.`)
         }
         const queueName = args[0] ?? 'default'
         const jobs = await adapter.failures(queueName)
@@ -259,21 +259,21 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
           console.log(`  Failed:   ${job.failedAt.toISOString()}`)
           console.log()
         }
-      }).description('List failed jobs — pnpm artisan queue:failed [queue=default]')
+      }).description('List failed jobs — pnpm rudder queue:failed [queue=default]')
 
-      artisan.command('queue:retry', async (args) => {
+      rudder.command('queue:retry', async (args) => {
         if (typeof adapter.retryFailed !== 'function') {
-          throw new Error(`[BoostKit Queue] Driver "${driver}" does not support queue:retry.`)
+          throw new Error(`[RudderJS Queue] Driver "${driver}" does not support queue:retry.`)
         }
         const queueName = args[0] ?? 'default'
         const count = await adapter.retryFailed(queueName)
         console.log(`Re-enqueued ${count} failed job(s) from queue "${queueName}".`)
-      }).description('Retry all failed jobs — pnpm artisan queue:retry [queue=default]')
+      }).description('Retry all failed jobs — pnpm rudder queue:retry [queue=default]')
 
       // Cloud adapters (Inngest etc.) expose a serve endpoint.
       // Mount it automatically — no user config needed.
       if (typeof adapter.serveHandler === 'function') {
-        const { router } = await import('@boostkit/router')
+        const { router } = await import('@rudderjs/router')
         const handler = adapter.serveHandler()
         router.all('/api/inngest', (req) => handler(req.raw))
       }

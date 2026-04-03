@@ -1,24 +1,24 @@
-# @boostkit/schedule
+# @rudderjs/schedule
 
-Task scheduler with cron-based expressions, fluent API, and artisan commands.
+Task scheduler with cron-based expressions, fluent API, and rudder commands.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/schedule
+pnpm add @rudderjs/schedule
 ```
 
 ## Setup
 
 ```ts
 // bootstrap/providers.ts
-import { scheduler } from '@boostkit/schedule'
+import { scheduler } from '@rudderjs/schedule'
 export default [scheduler()]
 ```
 
 ```ts
 // routes/console.ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@rudderjs/schedule'
 
 schedule.call(async () => {
   await syncData()
@@ -86,13 +86,13 @@ Each `schedule.call(fn)` returns a `ScheduledTask` with a fluent configuration A
 | `.getDescription()` | `string` | Current description |
 | `.getTimezone()` | `string \| undefined` | Configured timezone |
 
-## Artisan Commands
+## Rudder Commands
 
 | Command | Description |
 |---------|-------------|
-| `pnpm artisan schedule:run` | Run all due tasks once and exit — for external cron triggers |
-| `pnpm artisan schedule:work` | Long-running daemon, polls every minute (Ctrl+C to stop) |
-| `pnpm artisan schedule:list` | Print all tasks with cron, description, and next run time |
+| `pnpm rudder schedule:run` | Run all due tasks once and exit — for external cron triggers |
+| `pnpm rudder schedule:work` | Long-running daemon, polls every minute (Ctrl+C to stop) |
+| `pnpm rudder schedule:list` | Print all tasks with cron, description, and next run time |
 
 ## Notes
 

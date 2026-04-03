@@ -1,17 +1,17 @@
 # Your First App
 
-This guide walks through building a simple REST API with BoostKit — a `/api/users` endpoint backed by a database model. By the end you'll have a working BoostKit application with routing, a service provider, and ORM integration.
+This guide walks through building a simple REST API with RudderJS — a `/api/users` endpoint backed by a database model. By the end you'll have a working RudderJS application with routing, a service provider, and ORM integration.
 
 ## Prerequisites
 
-You should have a BoostKit project scaffolded already. If not, see [Installation](/guide/installation).
+You should have a RudderJS project scaffolded already. If not, see [Installation](/guide/installation).
 
 ## 1. Define a Model
 
 Create `app/Models/User.ts`:
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static table = 'user'   // Prisma accessor name (lowercase model name)
@@ -52,7 +52,7 @@ pnpm exec prisma db push
 Wire the database in `bootstrap/providers.ts`. The `database()` factory handles connection, `ModelRegistry.set()`, and DI binding automatically:
 
 ```ts
-import { database } from '@boostkit/orm-prisma'
+import { database } from '@rudderjs/orm-prisma'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import configs from '../config/index.js'
 
@@ -65,7 +65,7 @@ export default [
 A minimal `config/database.ts`:
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: 'sqlite' as const,
@@ -100,7 +100,7 @@ export class UserService {
 Bind it in `app/Providers/AppServiceProvider.ts`:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 import { UserService } from '../Services/UserService.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -115,9 +115,9 @@ export class AppServiceProvider extends ServiceProvider {
 Edit `routes/api.ts`:
 
 ```ts
-import { router } from '@boostkit/router'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
-import { app } from '@boostkit/core'
+import { router } from '@rudderjs/router'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
+import { app } from '@rudderjs/core'
 import { UserService } from '../app/Services/UserService.js'
 
 router.get('/api/users', async (_req: AppRequest, res: AppResponse) => {
@@ -166,15 +166,15 @@ curl -X POST http://localhost:3000/api/users \
 curl http://localhost:3000/api/users/<id>
 ```
 
-## 7. Add an Artisan Seed Command
+## 7. Add an Rudder Seed Command
 
 Create a seed command in `routes/console.ts`:
 
 ```ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 import { User } from '../app/Models/User.js'
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com', role: 'admin' })
   await User.create({ name: 'Bob',   email: 'bob@example.com',   role: 'user' })
   console.log('Seeded 2 users.')
@@ -184,7 +184,7 @@ artisan.command('db:seed', async () => {
 Run it:
 
 ```bash
-pnpm artisan db:seed
+pnpm rudder db:seed
 ```
 
 ## Summary
@@ -195,7 +195,7 @@ In a few steps you have:
 2. **Service Provider** — connects the database, registers singleton services
 3. **Service** — business logic isolated in `UserService`
 4. **Routes** — `router.get/post` on `/api/users`
-5. **Artisan command** — seed script accessible via CLI
+5. **Rudder command** — seed script accessible via CLI
 
 ## Next Steps
 

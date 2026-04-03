@@ -1,46 +1,46 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { boostkit } from './index.js'
+import { rudderjs } from './index.js'
 
-describe('@boostkit/vite', () => {
-  it('exports boostkit function', () => {
-    assert.equal(typeof boostkit, 'function')
+describe('@rudderjs/vite', () => {
+  it('exports rudderjs function', () => {
+    assert.equal(typeof rudderjs, 'function')
   })
 
   it('returns a promise', () => {
-    const result = boostkit()
+    const result = rudderjs()
     assert.ok(result instanceof Promise)
   })
 
   it('promise has _vikeVitePluginOptions (Vike detection)', () => {
-    const result = boostkit() as any
+    const result = rudderjs() as any
     assert.ok('_vikeVitePluginOptions' in result)
     assert.deepEqual(result._vikeVitePluginOptions, {})
   })
 
   it('resolves to an array of plugins', async () => {
-    const plugins = await boostkit()
+    const plugins = await rudderjs()
     assert.ok(Array.isArray(plugins))
   })
 
-  it('includes boostkit:ws plugin', async () => {
-    const plugins = await boostkit()
-    const wsPlugin = plugins.find(p => p.name === 'boostkit:ws')
-    assert.ok(wsPlugin, 'boostkit:ws plugin should exist')
+  it('includes rudderjs:ws plugin', async () => {
+    const plugins = await rudderjs()
+    const wsPlugin = plugins.find(p => p.name === 'rudderjs:ws')
+    assert.ok(wsPlugin, 'rudderjs:ws plugin should exist')
     assert.equal(typeof wsPlugin.configureServer, 'function')
   })
 
-  it('includes boostkit:config plugin', async () => {
-    const plugins = await boostkit()
-    const configPlugin = plugins.find(p => p.name === 'boostkit:config')
-    assert.ok(configPlugin, 'boostkit:config plugin should exist')
+  it('includes rudderjs:config plugin', async () => {
+    const plugins = await rudderjs()
+    const configPlugin = plugins.find(p => p.name === 'rudderjs:config')
+    assert.ok(configPlugin, 'rudderjs:config plugin should exist')
     assert.equal(typeof configPlugin.config, 'function')
   })
 
-  it('boostkit:config returns correct config shape', async () => {
-    const plugins = await boostkit()
-    const configPlugin = plugins.find(p => p.name === 'boostkit:config')!
+  it('rudderjs:config returns correct config shape', async () => {
+    const plugins = await rudderjs()
+    const configPlugin = plugins.find(p => p.name === 'rudderjs:config')!
     const config = (configPlugin.config as () => Record<string, unknown>)()
 
     // Check resolve alias
@@ -57,7 +57,7 @@ describe('@boostkit/vite', () => {
     assert.ok(ssr.external.includes('pg'), 'pg should be externalized')
     assert.ok(ssr.external.includes('better-sqlite3'), 'better-sqlite3 should be externalized')
     assert.ok(Array.isArray(ssr.noExternal), 'should have ssr.noExternal array')
-    assert.ok(ssr.noExternal.includes('@boostkit/server-hono'), 'server-hono should be non-external')
+    assert.ok(ssr.noExternal.includes('@rudderjs/server-hono'), 'server-hono should be non-external')
 
     // Check build config
     assert.ok(config.build, 'should have build config')
@@ -67,8 +67,8 @@ describe('@boostkit/vite', () => {
     assert.equal(build.rollupOptions.external('react'), false, 'react should not be external')
   })
 
-  it('default export is boostkit', async () => {
+  it('default export is rudderjs', async () => {
     const mod = await import('./index.js')
-    assert.equal(mod.default, mod.boostkit)
+    assert.equal(mod.default, mod.rudderjs)
   })
 })

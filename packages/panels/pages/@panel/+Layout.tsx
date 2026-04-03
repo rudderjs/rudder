@@ -5,13 +5,13 @@ import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import { I18nProvider }   from '../_hooks/useI18n.js'
 import { AiChatProvider } from '../_components/agents/AiChatContext.js'
-import type { PanelNavigationMeta } from '@boostkit/panels'
+import type { PanelNavigationMeta } from '@rudderjs/panels'
 // Auto-discover plugin registrations (fields, lazy elements, etc.)
 // Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
 import.meta.glob('../_register-*.ts', { eager: true })
 // Lexical uses registerField — only register on client to avoid SSR/client hydration mismatch
 if (typeof window !== 'undefined') {
-  import('@boostkit/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
+  import('@rudderjs/panels-lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
 }
 
 // ── Error Boundary ──────────────────────────────────────────────────────────

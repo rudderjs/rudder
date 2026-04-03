@@ -1,12 +1,12 @@
 # Dependency Injection
 
-BoostKit includes a lightweight but powerful DI container (part of `@boostkit/core`) with support for constructor injection using TypeScript decorators.
+RudderJS includes a lightweight but powerful DI container (part of `@rudderjs/core`) with support for constructor injection using TypeScript decorators.
 
 ## Quick Start
 
 ```ts
 import 'reflect-metadata'
-import { Container, Injectable, Inject } from '@boostkit/core'
+import { Container, Injectable, Inject } from '@rudderjs/core'
 
 @Injectable()
 class Logger {
@@ -127,10 +127,10 @@ container.reset()
 
 ## Global Container
 
-BoostKit exports a **global container singleton** that is the same instance used by the application. Use `app()` to access it anywhere after boot:
+RudderJS exports a **global container singleton** that is the same instance used by the application. Use `app()` to access it anywhere after boot:
 
 ```ts
-import { app } from '@boostkit/core'
+import { app } from '@rudderjs/core'
 
 const service = app().make(UserService)
 ```

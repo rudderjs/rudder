@@ -1,4 +1,4 @@
 export default {
-  title:       'WebSocket Demo — BoostKit',
+  title:       'WebSocket Demo — RudderJS',
   description: 'Live broadcast messaging demo using WebSocket channels.',
 }

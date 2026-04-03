@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/vite",
+  "name": "@rudderjs/vite",
   "version": "0.0.5",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/vite"
   },
   "type": "module",

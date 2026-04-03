@@ -1,4 +1,4 @@
-# @boostkit/server-hono
+# @rudderjs/server-hono
 
 ## 0.0.5
 
@@ -11,4 +11,4 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/contracts@0.0.2
+  - @rudderjs/contracts@0.0.2

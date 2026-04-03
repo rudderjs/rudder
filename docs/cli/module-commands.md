@@ -7,7 +7,7 @@ The `module:*` commands help you create and manage self-contained feature module
 Scaffolds a complete feature module — schema, service, provider, test, and a Prisma shard — all inside `app/Modules/<Name>/`.
 
 ```bash
-pnpm artisan make:module Blog
+pnpm rudder make:module Blog
 ```
 
 This creates the following structure:
@@ -48,7 +48,7 @@ export type Blog = z.infer<typeof BlogOutputSchema>
 **`BlogService.ts`** — Injectable service with CRUD stubs:
 
 ```ts
-import { Injectable } from '@boostkit/core'
+import { Injectable } from '@rudderjs/core'
 import type { BlogInput, Blog } from './BlogSchema.js'
 
 @Injectable()
@@ -62,8 +62,8 @@ export class BlogService {
 **`BlogServiceProvider.ts`** — Registers DI bindings and REST routes:
 
 ```ts
-import { ServiceProvider } from '@boostkit/core'
-import { router } from '@boostkit/router'
+import { ServiceProvider } from '@rudderjs/core'
+import { router } from '@rudderjs/router'
 import { BlogService } from './BlogService.js'
 import { BlogInputSchema } from './BlogSchema.js'
 
@@ -108,18 +108,18 @@ model Blog {
 ### After scaffolding
 
 1. Edit the files to add your domain fields
-2. Run `pnpm artisan module:publish --generate` to merge the shard and regenerate the Prisma client
+2. Run `pnpm rudder module:publish --generate` to merge the shard and regenerate the Prisma client
 
 ## `module:publish`
 
 Merges all `*.prisma` shards from `app/Modules/` into the main `prisma/schema.prisma` file.
 
 ```bash
-pnpm artisan module:publish
-pnpm artisan module:publish Blog          # only merge Blog's shard
-pnpm artisan module:publish --generate   # merge + run prisma generate
-pnpm artisan module:publish --migrate    # merge + run prisma migrate dev
-pnpm artisan module:publish --migrate --name add-blog-table
+pnpm rudder module:publish
+pnpm rudder module:publish Blog          # only merge Blog's shard
+pnpm rudder module:publish --generate   # merge + run prisma generate
+pnpm rudder module:publish --migrate    # merge + run prisma migrate dev
+pnpm rudder module:publish --migrate --name add-blog-table
 ```
 
 ### Options
@@ -147,14 +147,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// <boostkit:modules:start>
+// <rudderjs:modules:start>
 // module: Blog (Blog.prisma)
 model Blog {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-// <boostkit:modules:end>
+// <rudderjs:modules:end>
 ```
 
 On subsequent runs, the content between the markers is replaced — running `module:publish` multiple times is safe.
@@ -165,13 +165,13 @@ The typical module development workflow:
 
 ```bash
 # 1. Scaffold the module
-pnpm artisan make:module Blog
+pnpm rudder make:module Blog
 
 # 2. Edit the schema shard
 vi app/Modules/Blog/Blog.prisma
 
 # 3. Publish shards to main schema and regenerate client
-pnpm artisan module:publish --generate
+pnpm rudder module:publish --generate
 
 # 4. Sync schema to database (dev)
 pnpm exec prisma db push

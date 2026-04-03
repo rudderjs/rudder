@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/core'
+import type { MiddlewareHandler } from '@rudderjs/core'
 import type { RouterLike } from '../types.js'
 import type { Panel } from '../../Panel.js'
 import { importImage } from './shared.js'
@@ -13,7 +13,7 @@ export function mountUploadRoutes(
   // Upload endpoint — used by FileField / ImageField
   router.post(`${apiBase}/_upload`, async (req, res) => {
     try {
-      const { Storage } = await import(/* @vite-ignore */ '@boostkit/storage')
+      const { Storage } = await import(/* @vite-ignore */ '@rudderjs/storage')
       // req.raw is the Hono Context (c); c.req.parseBody() parses multipart/form-data
       const body = await ((req.raw as Record<string, unknown>)['req'] as { parseBody(): Promise<Record<string, unknown>> }).parseBody()
       const file      = body['file'] as File
@@ -34,7 +34,7 @@ export function mountUploadRoutes(
           const { image } = await importImage()
           buffer = await image(buffer).optimize().format('webp').quality(85).toBuffer()
           ext = 'webp'
-        } catch { /* @boostkit/image not installed — skip */ }
+        } catch { /* @rudderjs/image not installed — skip */ }
       }
 
       const baseName = `${Date.now()}-${Math.random().toString(36).slice(2)}`

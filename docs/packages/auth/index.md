@@ -1,11 +1,11 @@
-# @boostkit/auth
+# @rudderjs/auth
 
-Authentication types, service provider factory, and middleware for BoostKit applications — powered by [better-auth](https://better-auth.com).
+Authentication types, service provider factory, and middleware for RudderJS applications — powered by [better-auth](https://better-auth.com).
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/auth better-auth
+pnpm add @rudderjs/auth better-auth
 ```
 
 ## Quick Setup
@@ -14,8 +14,8 @@ pnpm add @boostkit/auth better-auth
 
 ```ts
 // config/auth.ts
-import { Env } from '@boostkit/support'
-import type { BetterAuthConfig } from '@boostkit/auth'
+import { Env } from '@rudderjs/support'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret:           Env.get('AUTH_SECRET', 'change-me-32-chars-min'),
@@ -30,8 +30,8 @@ Register `database()` first — `auth()` will auto-discover the Prisma client fr
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@boostkit/orm-prisma'
-import { auth } from '@boostkit/auth'
+import { database } from '@rudderjs/orm-prisma'
+import { auth } from '@rudderjs/auth'
 import configs from '../config/index.js'
 
 export default [
@@ -41,13 +41,13 @@ export default [
 ]
 ```
 
-> If you are not using `@boostkit/orm-prisma`, pass database config as the second argument:
+> If you are not using `@rudderjs/orm-prisma`, pass database config as the second argument:
 > `auth(configs.auth, { driver: 'sqlite', url: 'file:./dev.db' })`
 
 ### 3. Protect routes
 
 ```ts
-import { AuthMiddleware } from '@boostkit/auth'
+import { AuthMiddleware } from '@rudderjs/auth'
 
 const authMw = AuthMiddleware()
 
@@ -67,7 +67,7 @@ For a full setup guide including Prisma schema, social providers, and auth route
 Returns a `ServiceProvider` class that initialises better-auth and binds the auth instance to the DI container as `'auth'`.
 
 ```ts
-import { auth } from '@boostkit/auth'
+import { auth } from '@rudderjs/auth'
 
 export default [
   auth(configs.auth),
@@ -98,7 +98,7 @@ auth(configs.auth, {
 Zero-config factory that validates the better-auth session on each request and attaches the authenticated user to `req.user`. Returns `401` if no valid session exists.
 
 ```ts
-import { AuthMiddleware } from '@boostkit/auth'
+import { AuthMiddleware } from '@rudderjs/auth'
 
 const authMw = AuthMiddleware()
 
@@ -165,8 +165,8 @@ interface AuthResult {
 The raw better-auth instance type — use when calling better-auth APIs directly:
 
 ```ts
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
+import { app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 const auth = app().make<BetterAuthInstance>('auth')
 
@@ -181,13 +181,13 @@ const session = await auth.api.getSession({ headers: request.headers })
 The auth package provides its own Prisma schema file containing the `User`, `Session`, `Account`, and `Verification` models. Publish it into your project's multi-file schema directory:
 
 ```bash
-pnpm artisan vendor:publish --tag=auth-schema
+pnpm rudder vendor:publish --tag=auth-schema
 ```
 
 This creates `prisma/schema/auth.prisma`. Then push the schema:
 
 ```bash
-pnpm artisan db:push
+pnpm rudder db:push
 ```
 
 If you are using Drizzle instead of Prisma, the auth package auto-detects the ORM at runtime and works with the Drizzle adapter directly — no schema publishing needed. Define the auth tables in your Drizzle schema file as described in the [better-auth Drizzle documentation](https://www.better-auth.com/docs/adapters/drizzle).
@@ -199,7 +199,7 @@ If you are using Drizzle instead of Prisma, the auth package auto-detects the OR
 The auth package can publish pre-built authentication pages into your project:
 
 ```bash
-pnpm artisan vendor:publish --tag=auth-pages
+pnpm rudder vendor:publish --tag=auth-pages
 ```
 
 This creates the following pages under `pages/(auth)/`:
@@ -242,13 +242,13 @@ The login page supports a `redirect` query parameter. After successful authentic
 
 ## Drizzle Support
 
-`@boostkit/auth` auto-detects which ORM is in use at runtime. When `@boostkit/orm-drizzle` is registered instead of `@boostkit/orm-prisma`, the auth provider automatically uses better-auth's Drizzle adapter. No additional configuration is needed beyond having the auth tables defined in your Drizzle schema.
+`@rudderjs/auth` auto-detects which ORM is in use at runtime. When `@rudderjs/orm-drizzle` is registered instead of `@rudderjs/orm-prisma`, the auth provider automatically uses better-auth's Drizzle adapter. No additional configuration is needed beyond having the auth tables defined in your Drizzle schema.
 
 ---
 
 ## Notes
 
-- `@boostkit/auth` includes `better-auth` as a direct dependency — no separate install needed beyond `@boostkit/auth`.
+- `@rudderjs/auth` includes `better-auth` as a direct dependency — no separate install needed beyond `@rudderjs/auth`.
 - `AUTH_SECRET` must be at least 32 characters.
 - Auth routes (`/api/auth/*`) are registered during provider `boot()`, before `routes/api.ts` loads — they always resolve before any `/api/*` catch-all.
 - The deprecated alias `betterAuth` still works — prefer `auth`.

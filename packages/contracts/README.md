@@ -1,13 +1,13 @@
-# @boostkit/contracts
+# @rudderjs/contracts
 
 Framework-level TypeScript contracts for HTTP, routing, middleware, and server adapters.
 
-This package is **type-only** — it contains no runtime code. All `@boostkit/*` packages depend on it as the shared type language for HTTP primitives.
+This package is **type-only** — it contains no runtime code. All `@rudderjs/*` packages depend on it as the shared type language for HTTP primitives.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/contracts
+pnpm add @rudderjs/contracts
 ```
 
 Prefer `import type` in application code to guarantee zero runtime cost.
@@ -19,7 +19,7 @@ Prefer `import type` in application code to guarantee zero runtime cost.
 Normalised incoming HTTP request passed to route handlers and middleware.
 
 ```ts
-import type { AppRequest } from '@boostkit/contracts'
+import type { AppRequest } from '@rudderjs/contracts'
 ```
 
 | Field | Type | Description |
@@ -40,7 +40,7 @@ import type { AppRequest } from '@boostkit/contracts'
 Response builder passed alongside `AppRequest`.
 
 ```ts
-import type { AppResponse } from '@boostkit/contracts'
+import type { AppResponse } from '@rudderjs/contracts'
 ```
 
 | Method | Signature | Description |
@@ -57,7 +57,7 @@ import type { AppResponse } from '@boostkit/contracts'
 ## `RouteHandler` and `MiddlewareHandler`
 
 ```ts
-import type { RouteHandler, MiddlewareHandler } from '@boostkit/contracts'
+import type { RouteHandler, MiddlewareHandler } from '@rudderjs/contracts'
 
 // Route handler — receives req and res
 const handler: RouteHandler = async (req, res) => {
@@ -94,7 +94,7 @@ type MiddlewareHandler = (
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
 ```
 
-`'ALL'` is a BoostKit-specific wildcard used by the router to match any HTTP method.
+`'ALL'` is a RudderJS-specific wildcard used by the router to match any HTTP method.
 
 ---
 
@@ -113,7 +113,7 @@ interface RouteDefinition {
 
 ## `ServerAdapter` and `ServerAdapterProvider`
 
-Implemented by server adapter packages (e.g. `@boostkit/server-hono`). You do not implement these directly in application code.
+Implemented by server adapter packages (e.g. `@rudderjs/server-hono`). You do not implement these directly in application code.
 
 ```ts
 interface ServerAdapter {
@@ -142,5 +142,5 @@ type FetchHandler = (
 ## Notes
 
 - No runtime code — `sideEffects: false`, fully tree-shakable.
-- All types are re-exported from `@boostkit/core` for convenience.
+- All types are re-exported from `@rudderjs/core` for convenience.
 - Server adapters map their native request/response objects to `AppRequest`/`AppResponse`. The `raw` field provides escape-hatch access to adapter-specific APIs.

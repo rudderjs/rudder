@@ -1,4 +1,4 @@
-import { Field } from '@boostkit/panels'
+import { Field } from '@rudderjs/panels'
 
 /**
  * A form field that opens a media browser dialog to pick files.

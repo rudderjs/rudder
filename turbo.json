@@ -9,7 +9,7 @@
         "dist/**"
       ]
     },
-    "@boostkit/docs#build": {
+    "@rudderjs/docs#build": {
       "dependsOn": [
         "^build"
       ],

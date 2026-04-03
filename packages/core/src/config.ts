@@ -1,4 +1,4 @@
-import { config as _config } from '@boostkit/support'
+import { config as _config } from '@rudderjs/support'
 
 // ─── AppConfig ─────────────────────────────────────────────
 
@@ -8,7 +8,7 @@ import { config as _config } from '@boostkit/support'
  * @example
  * // config/index.ts
  * import type configs from './index.js'
- * declare module '@boostkit/core' {
+ * declare module '@rudderjs/core' {
  *   interface AppConfig extends typeof configs {}
  * }
  */

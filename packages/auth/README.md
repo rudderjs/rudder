@@ -1,11 +1,11 @@
-# @boostkit/auth
+# @rudderjs/auth
 
-Authentication for BoostKit, powered by [better-auth](https://www.better-auth.com/). Provides email/password login, session management, password reset, and an auth middleware -- with auto-detection of your ORM (Prisma or Drizzle) and database driver.
+Authentication for RudderJS, powered by [better-auth](https://www.better-auth.com/). Provides email/password login, session management, password reset, and an auth middleware -- with auto-detection of your ORM (Prisma or Drizzle) and database driver.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/auth
+pnpm add @rudderjs/auth
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ pnpm add @boostkit/auth
 
 ```ts
 // bootstrap/providers.ts
-import { auth } from '@boostkit/auth'
+import { auth } from '@rudderjs/auth'
 import configs from '../config/index.ts'
 
 export default [
@@ -35,7 +35,7 @@ auth(configs.auth, { driver: 'postgresql', url: process.env['DATABASE_URL'] })
 Auth ships its own schema files for every supported ORM and database driver. Publish the correct one with:
 
 ```bash
-pnpm artisan vendor:publish --tag=auth-schema
+pnpm rudder vendor:publish --tag=auth-schema
 ```
 
 The command auto-detects your ORM (Prisma or Drizzle) and DB driver (SQLite, PostgreSQL, or MySQL), then publishes the appropriate file:
@@ -49,7 +49,7 @@ After publishing, run your ORM's migration or push command to apply the schema.
 
 ```ts
 // config/auth.ts
-import type { BetterAuthConfig } from '@boostkit/auth'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret: process.env['AUTH_SECRET'],
@@ -66,10 +66,10 @@ export default {
 Auth ships pre-built login, register, forgot-password, and reset-password pages for React, Vue, and Solid. Publish them with:
 
 ```bash
-pnpm artisan vendor:publish --tag=auth-pages          # React (default)
-pnpm artisan vendor:publish --tag=auth-pages-react
-pnpm artisan vendor:publish --tag=auth-pages-vue
-pnpm artisan vendor:publish --tag=auth-pages-solid
+pnpm rudder vendor:publish --tag=auth-pages          # React (default)
+pnpm rudder vendor:publish --tag=auth-pages-react
+pnpm rudder vendor:publish --tag=auth-pages-vue
+pnpm rudder vendor:publish --tag=auth-pages-solid
 ```
 
 Pages are published to the `pages/(auth)/` route group. They use Vike's `navigate()` for smooth client-side transitions between auth pages and after successful login/register.
@@ -106,8 +106,8 @@ The published auth pages include forgot-password and reset-password forms that w
 `AuthMiddleware()` verifies the session via better-auth and attaches the authenticated user to `req.user`. Returns 401 if no valid session exists.
 
 ```ts
-import { AuthMiddleware } from '@boostkit/auth'
-import { Route } from '@boostkit/router'
+import { AuthMiddleware } from '@rudderjs/auth'
+import { Route } from '@rudderjs/router'
 
 Route.post('/api/posts', handler, [AuthMiddleware()])
 ```

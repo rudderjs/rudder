@@ -12,7 +12,7 @@ export class AiRegistry {
   /** Get a registered provider factory by name */
   static getFactory(name: string): ProviderFactory {
     const f = this.factories.get(name)
-    if (!f) throw new Error(`[BoostKit AI] Unknown AI provider "${name}". Register it first.`)
+    if (!f) throw new Error(`[RudderJS AI] Unknown AI provider "${name}". Register it first.`)
     return f
   }
 
@@ -23,14 +23,14 @@ export class AiRegistry {
 
   /** Get the default provider/model string */
   static getDefault(): string {
-    if (!this._default) throw new Error('[BoostKit AI] No default model set. Add ai() to providers with a config.')
+    if (!this._default) throw new Error('[RudderJS AI] No default model set. Add ai() to providers with a config.')
     return this._default
   }
 
   /** Parse 'provider/model' string into [providerName, modelId] */
   static parseModelString(modelString: string): [string, string] {
     const slash = modelString.indexOf('/')
-    if (slash === -1) throw new Error(`[BoostKit AI] Invalid model string "${modelString}". Expected "provider/model" format.`)
+    if (slash === -1) throw new Error(`[RudderJS AI] Invalid model string "${modelString}". Expected "provider/model" format.`)
     return [modelString.slice(0, slash), modelString.slice(slash + 1)]
   }
 

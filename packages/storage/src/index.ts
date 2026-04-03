@@ -1,4 +1,4 @@
-import { ServiceProvider, artisan, type Application } from '@boostkit/core'
+import { ServiceProvider, rudder, type Application } from '@rudderjs/core'
 import nodePath from 'node:path'
 import fs from 'node:fs/promises'
 
@@ -46,7 +46,7 @@ export class StorageRegistry {
   static get(name?: string): StorageAdapter {
     const key = name ?? this.defaultDisk
     const a   = this.adapters.get(key)
-    if (!a) throw new Error(`[BoostKit Storage] Disk "${key}" not found. Check your storage config.`)
+    if (!a) throw new Error(`[RudderJS Storage] Disk "${key}" not found. Check your storage config.`)
     return a
   }
 
@@ -247,7 +247,7 @@ class S3Adapter implements StorageAdapter {
   }
 
   path(_filePath: string): string {
-    throw new Error('[BoostKit Storage] path() is not available for S3 disks.')
+    throw new Error('[RudderJS Storage] path() is not available for S3 disks.')
   }
 }
 
@@ -273,7 +273,7 @@ export interface StorageConfig {
  * Built-in drivers:  local (writes to filesystem), s3 (AWS S3, MinIO, Cloudflare R2)
  *
  * Usage in bootstrap/providers.ts:
- *   import { storage } from '@boostkit/storage'
+ *   import { storage } from '@rudderjs/storage'
  *   import configs from '../config/index.js'
  *   export default [..., storage(configs.storage), ...]
  */
@@ -293,7 +293,7 @@ export function storage(config: StorageConfig): new (app: Application) => Servic
         } else if (driver === 's3') {
           adapter = new S3Adapter(diskConfig as unknown as S3DiskConfig)
         } else {
-          throw new Error(`[BoostKit Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
+          throw new Error(`[RudderJS Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
         }
 
         StorageRegistry.set(name, adapter)
@@ -302,7 +302,7 @@ export function storage(config: StorageConfig): new (app: Application) => Servic
       this.app.instance('storage', StorageRegistry.get())
 
       // storage:link — creates public/storage → storage/app/public symlink
-      artisan.command('storage:link', async () => {
+      rudder.command('storage:link', async () => {
         const target = nodePath.resolve(process.cwd(), 'storage/app/public')
         const link   = nodePath.resolve(process.cwd(), 'public/storage')
         await fs.mkdir(target, { recursive: true })

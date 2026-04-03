@@ -1,5 +1,5 @@
-import { Field } from '@boostkit/panels'
-import type { BlockMeta } from '@boostkit/panels'
+import { Field } from '@rudderjs/panels'
+import type { BlockMeta } from '@rudderjs/panels'
 import type { ToolbarProfile, ToolbarTool } from './toolbar.js'
 
 export class RichContentField extends Field {

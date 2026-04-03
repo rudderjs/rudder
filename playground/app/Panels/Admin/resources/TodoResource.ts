@@ -1,4 +1,4 @@
-import { Resource, TextField, BooleanField, DateField, NumberField, Action, SelectFilter, Table, Form, Column } from '@boostkit/panels'
+import { Resource, TextField, BooleanField, DateField, NumberField, Action, SelectFilter, Table, Form, Column } from '@rudderjs/panels'
 import { Todo } from '../../../Models/Todo.js'
 
 export class TodoResource extends Resource {

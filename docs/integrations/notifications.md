@@ -1,6 +1,6 @@
 # Notifications
 
-This guide walks through setting up multi-channel notifications in a BoostKit application using `@boostkit/notification`. Notifications can be sent via email, stored in a database, or dispatched through custom channels (SMS, Slack, push notifications, etc.).
+This guide walks through setting up multi-channel notifications in a RudderJS application using `@rudderjs/notification`. Notifications can be sent via email, stored in a database, or dispatched through custom channels (SMS, Slack, push notifications, etc.).
 
 ## Overview
 
@@ -14,7 +14,7 @@ The notification system consists of:
 ## Installation
 
 ```bash
-pnpm add @boostkit/notification @boostkit/mail
+pnpm add @rudderjs/notification @rudderjs/mail
 ```
 
 ## 1. Register the Provider
@@ -22,8 +22,8 @@ pnpm add @boostkit/notification @boostkit/mail
 In `bootstrap/providers.ts`, add `notifications()` **after** `mail()`:
 
 ```ts
-import { mail }          from '@boostkit/mail'
-import { notifications } from '@boostkit/notification'
+import { mail }          from '@rudderjs/mail'
+import { notifications } from '@rudderjs/notification'
 import configs           from '../config/index.js'
 
 export default [
@@ -66,13 +66,13 @@ Extend `Notification` and implement `via()` plus the appropriate `to*()` methods
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification, type Notifiable } from '@boostkit/notification'
-import { Mailable } from '@boostkit/mail'
+import { Notification, type Notifiable } from '@rudderjs/notification'
+import { Mailable } from '@rudderjs/mail'
 
 class WelcomeMail extends Mailable {
   build() {
     return this
-      .subject('Welcome to BoostKit!')
+      .subject('Welcome to RudderJS!')
       .text('Thanks for joining. We are glad to have you.')
   }
 }
@@ -104,7 +104,7 @@ export class WelcomeNotification extends Notification {
 Use the `notify()` helper from anywhere in your application:
 
 ```ts
-import { notify } from '@boostkit/notification'
+import { notify } from '@rudderjs/notification'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
 // Single recipient
@@ -162,7 +162,7 @@ import {
   type NotificationChannel,
   type Notifiable,
   type Notification,
-} from '@boostkit/notification'
+} from '@rudderjs/notification'
 
 interface SmsNotifiable extends Notifiable {
   phone: string
@@ -213,8 +213,8 @@ class OrderShippedNotification extends Notification {
 
 | Channel | Package | Description |
 |---------|---------|-------------|
-| `mail` | `@boostkit/mail` | Sends email via the configured mail adapter |
-| `database` | `@boostkit/orm` | Stores notification as a JSON row |
+| `mail` | `@rudderjs/mail` | Sends email via the configured mail adapter |
+| `database` | `@rudderjs/orm` | Stores notification as a JSON row |
 | Custom | Your code | Register any channel with `ChannelRegistry` |
 
 ## Notes

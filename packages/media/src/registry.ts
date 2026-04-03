@@ -10,7 +10,7 @@ export interface MediaLibrary {
 }
 
 // globalThis-backed registry — survives Vite SSR module duplication
-const KEY = '__boostkit_media_libraries__'
+const KEY = '__rudderjs_media_libraries__'
 const g = globalThis as Record<string, unknown>
 
 function getMap(): Map<string, MediaLibrary> {

@@ -1,13 +1,13 @@
-# @boostkit/orm-drizzle
+# @rudderjs/orm-drizzle
 
-Drizzle ORM adapter for BoostKit. Implements the `OrmAdapterProvider` / `OrmAdapter` / `QueryBuilder<T>` contract using Drizzle's SQL-like fluent API.
+Drizzle ORM adapter for RudderJS. Implements the `OrmAdapterProvider` / `OrmAdapter` / `QueryBuilder<T>` contract using Drizzle's SQL-like fluent API.
 
 ---
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/orm-drizzle drizzle-orm
+pnpm add @rudderjs/orm-drizzle drizzle-orm
 ```
 
 Install the driver for your database:
@@ -62,9 +62,9 @@ Pass your table schemas to the `drizzle()` factory via the `tables` map:
 
 ```ts
 // app/Providers/DatabaseServiceProvider.ts
-import { ServiceProvider }    from '@boostkit/core'
-import { drizzle }            from '@boostkit/orm-drizzle'
-import { ModelRegistry }      from '@boostkit/orm'
+import { ServiceProvider }    from '@rudderjs/core'
+import { drizzle }            from '@rudderjs/orm-drizzle'
+import { ModelRegistry }      from '@rudderjs/orm'
 import { users, posts }       from '../schema.js'
 
 export class DatabaseServiceProvider extends ServiceProvider {
@@ -89,7 +89,7 @@ export class DatabaseServiceProvider extends ServiceProvider {
 
 ```ts
 // app/Models/User.ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static table = 'users'   // must match the key in tables: {}
@@ -127,7 +127,7 @@ As an alternative to passing `tables` in config, register tables globally — us
 
 ```ts
 // bootstrap/app.ts or a service provider
-import { DrizzleTableRegistry } from '@boostkit/orm-drizzle'
+import { DrizzleTableRegistry } from '@rudderjs/orm-drizzle'
 import { users, posts }         from '../app/schema.js'
 
 DrizzleTableRegistry.register('users', users)
@@ -163,7 +163,7 @@ drizzle({ driver: 'postgresql', url: 'postgres://user:pass@localhost/mydb', tabl
 
 ## API Reference
 
-All methods mirror the `@boostkit/orm` `QueryBuilder<T>` contract:
+All methods mirror the `@rudderjs/orm` `QueryBuilder<T>` contract:
 
 | Method | Description |
 |--------|-------------|

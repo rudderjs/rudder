@@ -1,5 +1,5 @@
-import { agent } from '@boostkit/ai'
-import type { Agent } from '@boostkit/ai'
+import { agent } from '@rudderjs/ai'
+import type { Agent } from '@rudderjs/ai'
 import type { CanvasNode, AgentNode, DepartmentNode } from '../canvas/CanvasNode.js'
 
 /**

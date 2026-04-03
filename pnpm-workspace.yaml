@@ -1,7 +1,7 @@
 packages:
   - packages/*
   - tests/*
-  - create-boostkit-app
+  - create-rudderjs-app
   - playground
   - playground-multi
   - docs

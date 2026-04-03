@@ -1,11 +1,11 @@
-# @boostkit/ai
+# @rudderjs/ai
 
-AI engine for BoostKit — providers, agents, tools, streaming, middleware, structured output, conversation memory, and testing fakes.
+AI engine for RudderJS — providers, agents, tools, streaming, middleware, structured output, conversation memory, and testing fakes.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/ai
+pnpm add @rudderjs/ai
 ```
 
 Install the provider SDK(s) you need:
@@ -32,7 +32,7 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { ai } from '@boostkit/ai'
+import { ai } from '@rudderjs/ai'
 export default [ai(configs.ai), ...]
 ```
 
@@ -41,8 +41,8 @@ export default [ai(configs.ai), ...]
 ### Agent Class
 
 ```ts
-import { Agent, toolDefinition, stepCountIs } from '@boostkit/ai'
-import type { HasTools } from '@boostkit/ai'
+import { Agent, toolDefinition, stepCountIs } from '@rudderjs/ai'
+import type { HasTools } from '@rudderjs/ai'
 import { z } from 'zod'
 
 const searchTool = toolDefinition({
@@ -67,7 +67,7 @@ console.log(response.text)
 ### Anonymous Agent
 
 ```ts
-import { agent, AI } from '@boostkit/ai'
+import { agent, AI } from '@rudderjs/ai'
 
 const response = await agent('You summarize text.').prompt('Summarize this...')
 
@@ -78,7 +78,7 @@ const response = await AI.prompt('Hello world')
 ### Tools (Server + Client)
 
 ```ts
-import { toolDefinition } from '@boostkit/ai'
+import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 
 // Server tool — executes on backend
@@ -101,7 +101,7 @@ const themeTool = toolDefinition({
 ### Structured Output
 
 ```ts
-import { agent, Output } from '@boostkit/ai'
+import { agent, Output } from '@rudderjs/ai'
 import { z } from 'zod'
 
 const output = Output.object({
@@ -129,7 +129,7 @@ const final = await response // full AgentResponse when stream completes
 ### Middleware
 
 ```ts
-import type { AiMiddleware } from '@boostkit/ai'
+import type { AiMiddleware } from '@rudderjs/ai'
 
 const loggingMiddleware: AiMiddleware = {
   name: 'logger',
@@ -144,7 +144,7 @@ const loggingMiddleware: AiMiddleware = {
 ### Testing
 
 ```ts
-import { AiFake, AI } from '@boostkit/ai'
+import { AiFake, AI } from '@rudderjs/ai'
 
 const fake = AiFake.fake()
 fake.respondWith('Mocked response')

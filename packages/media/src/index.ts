@@ -26,5 +26,5 @@ export type { MediaLibrary } from './registry.js'
 export { MediaElement } from './components/MediaElement.js'
 export { MediaPickerInput } from './components/MediaPickerInput.js'
 
-// Server exports available via '@boostkit/media/server'
+// Server exports available via '@rudderjs/media/server'
 export { media, MediaServiceProvider } from './MediaServiceProvider.js'

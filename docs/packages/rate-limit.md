@@ -1,16 +1,16 @@
 # Rate Limiting & CSRF
 
-`@boostkit/middleware` includes cache-backed rate limiting with standard X-RateLimit-* headers.
+`@rudderjs/middleware` includes cache-backed rate limiting with standard X-RateLimit-* headers.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/middleware
+pnpm add @rudderjs/middleware
 ```
 
 ## Usage
 
-`@boostkit/middleware` requires `@boostkit/cache` to be registered in your providers first, as it uses the cache store to track request counts per key.
+`@rudderjs/middleware` requires `@rudderjs/cache` to be registered in your providers first, as it uses the cache store to track request counts per key.
 
 ### Global Middleware
 
@@ -18,9 +18,9 @@ Apply rate limiting to all API requests in `bootstrap/app.ts`:
 
 ```ts
 // bootstrap/app.ts
-import { Application } from '@boostkit/core'
-import { RateLimit } from '@boostkit/middleware'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { RateLimit } from '@rudderjs/middleware'
+import { hono } from '@rudderjs/server-hono'
 import configs from '../config/index.js'
 import providers from './providers.js'
 
@@ -44,8 +44,8 @@ export default Application.configure({
 Apply a stricter limit to a specific controller action:
 
 ```ts
-import { Controller, Post, Middleware } from '@boostkit/router'
-import { RateLimit } from '@boostkit/middleware'
+import { Controller, Post, Middleware } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
 
 @Controller('/api/auth')
 export class AuthController {
@@ -60,8 +60,8 @@ export class AuthController {
 ### Per-Route with Fluent Router
 
 ```ts
-import { router } from '@boostkit/router'
-import { RateLimit } from '@boostkit/middleware'
+import { router } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
 
 router.post(
   '/api/auth/login',
@@ -154,7 +154,7 @@ The `message` field reflects the value set via `.message()`, or the default show
 
 ## Notes
 
-- `@boostkit/cache` must be registered in `bootstrap/providers.ts` before rate limiting middleware is applied.
+- `@rudderjs/cache` must be registered in `bootstrap/providers.ts` before rate limiting middleware is applied.
 - Static assets and Vite internals are automatically excluded from rate limiting.
 - Counters are stored with a TTL matching the window duration — they expire automatically.
 - In a multi-process deployment, use the `redis` cache driver so counters are shared across instances.
@@ -176,7 +176,7 @@ The `message` field reflects the value set via `.message()`, or the default show
 Register on web routes in `bootstrap/app.ts` or per route-group. Exclude routes that manage their own CSRF (e.g. `better-auth`):
 
 ```ts
-import { CsrfMiddleware } from '@boostkit/middleware'
+import { CsrfMiddleware } from '@rudderjs/middleware'
 
 Application.configure({ ... })
   .withMiddleware((m) => {
@@ -190,7 +190,7 @@ Application.configure({ ... })
 Use `getCsrfToken()` to read the cookie value and attach it to requests:
 
 ```ts
-import { getCsrfToken } from '@boostkit/middleware'
+import { getCsrfToken } from '@rudderjs/middleware'
 
 await fetch('/api/contact', {
   method:  'POST',

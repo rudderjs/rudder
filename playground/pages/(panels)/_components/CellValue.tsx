@@ -1,5 +1,5 @@
-import type { PanelI18n } from '@boostkit/panels'
-import { ensureNodeMap } from '@boostkit/panels'
+import type { PanelI18n } from '@rudderjs/panels'
+import { ensureNodeMap } from '@rudderjs/panels'
 import { Badge } from '@/components/ui/badge.js'
 
 interface CellValueProps {

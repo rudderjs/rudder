@@ -1,13 +1,13 @@
 # Panels
 
-`@boostkit/panels` provides a multi-panel admin and user-facing dashboard system. Define resources with typed fields, filters, and actions — BoostKit auto-generates the CRUD API and a fully functional UI.
+`@rudderjs/panels` provides a multi-panel admin and user-facing dashboard system. Define resources with typed fields, filters, and actions — RudderJS auto-generates the CRUD API and a fully functional UI.
 
 Inspired by Filament PHP, Laravel Nova, and Payload CMS.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/panels
+pnpm add @rudderjs/panels
 ```
 
 ## Quick Start
@@ -16,7 +16,7 @@ pnpm add @boostkit/panels
 
 ```ts
 // app/Panels/Admin/resources/UserResource.ts
-import { Resource, TextField, EmailField, BooleanField, DateField } from '@boostkit/panels'
+import { Resource, TextField, EmailField, BooleanField, DateField } from '@rudderjs/panels'
 import { User } from '../../Models/User.js'
 
 export class UserResource extends Resource {
@@ -39,7 +39,7 @@ export class UserResource extends Resource {
 
 ```ts
 // app/Panels/Admin/AdminPanel.ts
-import { Panel } from '@boostkit/panels'
+import { Panel } from '@rudderjs/panels'
 import { UserResource } from './resources/UserResource.js'
 
 export const adminPanel = Panel.make('admin')
@@ -52,7 +52,7 @@ export const adminPanel = Panel.make('admin')
 
 ```ts
 // bootstrap/providers.ts
-import { panels } from '@boostkit/panels'
+import { panels } from '@rudderjs/panels'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 
 export default [
@@ -64,7 +64,7 @@ export default [
 **4. Publish the UI pages:**
 
 ```bash
-pnpm artisan vendor:publish --tag=panels-pages
+pnpm rudder vendor:publish --tag=panels-pages
 ```
 
 This copies the panel UI pages into your app under `pages/(panels)/`. Vike picks them up automatically — visit `/admin` in the browser.
@@ -76,7 +76,7 @@ This copies the panel UI pages into your app under `pages/(panels)/`. Vike picks
 By default, visiting the panel root (e.g. `/admin`) redirects to the first resource. Define `.schema()` on your panel to render a custom landing page with stats, headings, and data tables instead.
 
 ```ts
-import { Panel, Heading, Text, Stats, Stat, Table } from '@boostkit/panels'
+import { Panel, Heading, Text, Stats, Stat, Table } from '@rudderjs/panels'
 
 Panel.make('admin')
   .resources([UserResource, ArticleResource])
@@ -219,7 +219,7 @@ Group related fields into visual sections or tabs. Both can be freely mixed with
 A titled card — optionally collapsible and multi-column:
 
 ```ts
-import { Section, TextField, TextareaField, SelectField, FileField } from '@boostkit/panels'
+import { Section, TextField, TextareaField, SelectField, FileField } from '@rudderjs/panels'
 
 fields() {
   return [
@@ -265,7 +265,7 @@ fields() {
 Divide fields into tabs within a single card:
 
 ```ts
-import { Tabs } from '@boostkit/panels'
+import { Tabs } from '@rudderjs/panels'
 
 fields() {
   return [
@@ -294,10 +294,10 @@ fields() {
 
 ## File Uploads
 
-`FileField` uploads files directly from the admin form. Files are uploaded to the panel's `/_upload` endpoint (auto-mounted per panel) and stored via `@boostkit/storage`.
+`FileField` uploads files directly from the admin form. Files are uploaded to the panel's `/_upload` endpoint (auto-mounted per panel) and stored via `@rudderjs/storage`.
 
 ```ts
-import { FileField } from '@boostkit/panels'
+import { FileField } from '@rudderjs/panels'
 
 FileField.make('coverImage')
   .label('Cover Image')
@@ -325,7 +325,7 @@ public: {
 **2. Create the symlink once:**
 
 ```bash
-pnpm artisan storage:link
+pnpm rudder storage:link
 # Linked: public/storage → storage/app/public
 ```
 
@@ -350,7 +350,7 @@ public/storage
 Filters appear above the resource table as dropdowns. Each active filter appends `?filter[name]=value` to the URL.
 
 ```ts
-import { SelectFilter, SearchFilter } from '@boostkit/panels'
+import { SelectFilter, SearchFilter } from '@rudderjs/panels'
 
 filters() {
   return [
@@ -421,7 +421,7 @@ The callback receives:
 Actions run on selected records (bulk or single):
 
 ```ts
-import { Action } from '@boostkit/panels'
+import { Action } from '@rudderjs/panels'
 
 actions() {
   return [
@@ -464,7 +464,7 @@ actions() {
 Single-record settings pages — same field system as Resources but no list/create/delete.
 
 ```ts
-import { Global, TextField, ToggleField, Section } from '@boostkit/panels'
+import { Global, TextField, ToggleField, Section } from '@rudderjs/panels'
 
 export class SiteSettingsGlobal extends Global {
   static slug  = 'site-settings'
@@ -506,7 +506,7 @@ export class ArticleResource extends Resource {
 
 | Flag | What it does | Requires |
 |------|-------------|----------|
-| `live` | Table auto-refreshes when anyone saves | `@boostkit/broadcast` |
+| `live` | Table auto-refreshes when anyone saves | `@rudderjs/broadcast` |
 | `versioned` | JSON snapshots on each save, version history with restore | `PanelVersion` table |
 | `draftable` | Draft/publish workflow with Save Draft + Publish buttons | `draftStatus` column |
 | `softDeletes` | Trash, restore, force-delete | `deletedAt` column |
@@ -541,7 +541,7 @@ fields() {
 
 Text-based fields get their own Y.Doc + Lexical editor with live cursors. Value-based fields (toggles, selects, dates, etc.) sync via Y.Map (last-write-wins). The edit page shows connection status and presence avatars automatically.
 
-Requires `@boostkit/live` registered in providers.
+Requires `@rudderjs/live` registered in providers.
 
 ---
 
@@ -618,7 +618,7 @@ The API responds with 403 when `policy()` returns `false`.
 
 ## Auto-Generated API Routes
 
-For each resource, `@boostkit/panels` mounts:
+For each resource, `@rudderjs/panels` mounts:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -684,7 +684,7 @@ Use `resourceData()` in your `+data.ts` to fetch the same data the default table
 
 ```ts
 // pages/(panels)/@panel/articles/+data.ts
-import { resourceData } from '@boostkit/panels'
+import { resourceData } from '@rudderjs/panels'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof resourceData>>

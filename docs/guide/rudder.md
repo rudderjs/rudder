@@ -1,25 +1,25 @@
-# Artisan Console
+# Rudder Console
 
-BoostKit's Artisan CLI lets you run commands from the terminal. It works similarly to Laravel's Artisan — you define commands in `routes/console.ts` and run them with `pnpm artisan`.
+RudderJS's Rudder CLI lets you run commands from the terminal. It works similarly to Laravel's Rudder — you define commands in `routes/console.ts` and run them with `pnpm rudder`.
 
 ## Running Commands
 
 ```bash
-pnpm artisan --help          # List all available commands
-pnpm artisan db:seed         # Run a specific command
-pnpm artisan make:model Post # Generate a model stub
+pnpm rudder --help          # List all available commands
+pnpm rudder db:seed         # Run a specific command
+pnpm rudder make:model Post # Generate a model stub
 ```
 
 The CLI **must be run from a directory containing `bootstrap/app.ts`** — it boots the full application before running commands, so providers and services are available.
 
 ## Defining Commands (Console Routes)
 
-Register commands in `routes/console.ts` using the `artisan` singleton:
+Register commands in `routes/console.ts` using the `rudder` singleton:
 
 ```ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   const { User } = await import('../app/Models/User.js')
   await User.create({ name: 'Alice', email: 'alice@example.com' })
   console.log('Seeded users.')
@@ -29,7 +29,7 @@ artisan.command('db:seed', async () => {
 Inline command handlers receive positional args as `string[]` and options as a `Record<string, unknown>`:
 
 ```ts
-artisan.command('greet {name}', async (args, opts) => {
+rudder.command('greet {name}', async (args, opts) => {
   console.log(`Hello, ${args[0]}!`)
 }).description('Greet a user by name')
 ```
@@ -39,7 +39,7 @@ artisan.command('greet {name}', async (args, opts) => {
 For complex commands with typed input, output helpers, and interactive prompts, extend `Command`:
 
 ```ts
-import { Command } from '@boostkit/core'
+import { Command } from '@rudderjs/core'
 import { User } from '../app/Models/User.js'
 
 export class SeedCommand extends Command {
@@ -62,10 +62,10 @@ export class SeedCommand extends Command {
 Register it:
 
 ```ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 import { SeedCommand } from '../app/Commands/SeedCommand.js'
 
-artisan.register(SeedCommand)
+rudder.register(SeedCommand)
 ```
 
 ## Command Signature Syntax
@@ -89,7 +89,7 @@ readonly signature = 'import:users {file} {--dry-run} {--limit=100}'
 ```
 
 ```bash
-pnpm artisan import:users users.csv --dry-run --limit=50
+pnpm rudder import:users users.csv --dry-run --limit=50
 ```
 
 ## Command Output Helpers
@@ -126,7 +126,7 @@ const allOpts = this.options()           // all options as object
 Class-based commands can prompt the user interactively. All methods throw `CancelledError` on Ctrl+C:
 
 ```ts
-import { CancelledError } from '@boostkit/artisan'
+import { CancelledError } from '@rudderjs/rudder'
 
 async handle() {
   try {
@@ -159,14 +159,14 @@ Package providers can register commands automatically. For example:
 - `storage()` provider → `storage:link`
 - `scheduler()` provider → `schedule:run`, `schedule:work`, `schedule:list`
 
-These appear in `pnpm artisan --help` once the provider is registered in `bootstrap/providers.ts`.
+These appear in `pnpm rudder --help` once the provider is registered in `bootstrap/providers.ts`.
 
 ## Scheduling Commands
 
-Use `@boostkit/schedule` to run artisan commands on a cron schedule:
+Use `@rudderjs/schedule` to run rudder commands on a cron schedule:
 
 ```ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@rudderjs/schedule'
 
 schedule.command('db:sync').daily().description('Sync data daily')
 schedule.call(async () => {
@@ -175,21 +175,21 @@ schedule.call(async () => {
 ```
 
 ```bash
-pnpm artisan schedule:work    # long-running process
-pnpm artisan schedule:run     # run due tasks once (for external cron)
-pnpm artisan schedule:list    # list all scheduled tasks
+pnpm rudder schedule:work    # long-running process
+pnpm rudder schedule:run     # run due tasks once (for external cron)
+pnpm rudder schedule:list    # list all scheduled tasks
 ```
 
 ## Generating Commands
 
 ```bash
-pnpm artisan make:middleware Auth
+pnpm rudder make:middleware Auth
 # No dedicated make:command yet — extend Command manually and register in routes/console.ts
 ```
 
 ## Notes
 
-- `artisan` singleton is stored on `globalThis.__boostkit_artisan__` — safe to import from multiple packages without duplicate registries
+- `rudder` singleton is stored on `globalThis.__rudderjs_rudder__` — safe to import from multiple packages without duplicate registries
 - Commands registered in `routes/console.ts` are loaded during boot before any command runs
-- The CLI is a separate package (`@boostkit/cli`) — it orchestrates boot and command dispatch
+- The CLI is a separate package (`@rudderjs/cli`) — it orchestrates boot and command dispatch
 - Use `--force` with `make:*` commands to overwrite existing files

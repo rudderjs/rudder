@@ -1,11 +1,11 @@
-# @boostkit/support
+# @rudderjs/support
 
 Shared utility primitives — collections, environment access, config lookup, debug helpers, and general-purpose functions.
 
-All exports are also available from `@boostkit/core` for convenience.
+All exports are also available from `@rudderjs/core` for convenience.
 
 ```bash
-pnpm add @boostkit/support
+pnpm add @rudderjs/support
 ```
 
 ---
@@ -15,9 +15,9 @@ pnpm add @boostkit/support
 Read values from the application's `ConfigRepository` using dot-notation keys. The config store is populated from your `config/` files at bootstrap time via `Application.configure({ config: configs })`.
 
 ```ts
-import { config } from '@boostkit/core'
+import { config } from '@rudderjs/core'
 
-config('app.name')              // → 'BoostKit'
+config('app.name')              // → 'RudderJS'
 config('app.env')               // → 'development'
 config('app.debug')             // → false
 config('server.port', 3000)     // → number (with fallback)
@@ -30,7 +30,7 @@ Keys follow the `file.key` pattern — `app.name` reads `configs.app.name` from 
 
 ```ts
 // routes/api.ts
-import { config } from '@boostkit/core'
+import { config } from '@rudderjs/core'
 
 router.get('/api/config', (_req, res) => res.json({
   name:  config('app.name'),
@@ -51,10 +51,10 @@ router.get('/api/config', (_req, res) => res.json({
 
 ## `dd()` / `dump()`
 
-Debug helpers inspired by Laravel. Both are importable from `@boostkit/core`.
+Debug helpers inspired by Laravel. Both are importable from `@rudderjs/core`.
 
 ```ts
-import { dd, dump } from '@boostkit/core'
+import { dd, dump } from '@rudderjs/core'
 
 // dump() — pretty-prints to the terminal, server keeps running
 dump({ user, session })
@@ -77,16 +77,16 @@ dd(req.body)
 Simple helper for reading a string environment variable — consistent with `config()` and `dd()`.
 
 ```ts
-import { env } from '@boostkit/core'
+import { env } from '@rudderjs/core'
 
-env('APP_NAME', 'BoostKit')   // → 'BoostKit'
+env('APP_NAME', 'RudderJS')   // → 'RudderJS'
 env('APP_ENV')                // throws if missing and no fallback
 ```
 
 For typed access (numbers, booleans, existence checks) use the `Env` object:
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 Env.getNumber('PORT', 3000)        // number
 Env.getBool('APP_DEBUG', false)    // boolean  ('true' | '1' → true)
@@ -109,7 +109,7 @@ Env.has('REDIS_URL')               // boolean
 Validate environment variables at startup using a Zod schema. Throws a clear error listing all missing or invalid keys before the application boots.
 
 ```ts
-import { defineEnv } from '@boostkit/support'
+import { defineEnv } from '@rudderjs/support'
 import { z } from 'zod'
 
 export const env = defineEnv(z.object({
@@ -130,7 +130,7 @@ export const env = defineEnv(z.object({
 A typed, chainable wrapper around arrays — inspired by Laravel Collections.
 
 ```ts
-import { Collection } from '@boostkit/support'
+import { Collection } from '@rudderjs/support'
 
 const users = Collection.of([
   { id: 1, name: 'Alice', role: 'admin' },
@@ -172,7 +172,7 @@ users.count()   // 3
 ## Helper Functions
 
 ```ts
-import { sleep, ucfirst, pick, omit, tap, deepClone, isObject, toSnakeCase, toCamelCase } from '@boostkit/support'
+import { sleep, ucfirst, pick, omit, tap, deepClone, isObject, toSnakeCase, toCamelCase } from '@rudderjs/support'
 
 await sleep(500)
 
@@ -209,15 +209,15 @@ isObject({})                           // true
 Dynamically resolves an optional peer dependency at runtime without bundler errors when the package is absent. Used internally by adapters.
 
 ```ts
-import { resolveOptionalPeer } from '@boostkit/support'
+import { resolveOptionalPeer } from '@rudderjs/support'
 
-const mod = await resolveOptionalPeer('@boostkit/router')
+const mod = await resolveOptionalPeer('@rudderjs/router')
 ```
 
 ---
 
 ## Notes
 
-- All exports are re-exported from `@boostkit/core` — you rarely need to import `@boostkit/support` directly.
+- All exports are re-exported from `@rudderjs/core` — you rarely need to import `@rudderjs/support` directly.
 - `defineEnv` validates eagerly at module evaluation time. Failures surface at boot, not at runtime.
 - `dd()` calls `process.exit(1)` — development use only.

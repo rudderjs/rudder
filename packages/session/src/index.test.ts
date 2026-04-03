@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { SessionInstance, Session, sessionMiddleware, session, type SessionConfig } from './index.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

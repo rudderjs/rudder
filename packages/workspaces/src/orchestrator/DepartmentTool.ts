@@ -1,5 +1,5 @@
-import { toolDefinition } from '@boostkit/ai'
-import type { AnyTool } from '@boostkit/ai'
+import { toolDefinition } from '@rudderjs/ai'
+import type { AnyTool } from '@rudderjs/ai'
 import { z } from 'zod'
 import { buildDepartmentAgent } from './buildDepartmentAgent.js'
 import type { CanvasNode, DepartmentNode } from '../canvas/CanvasNode.js'

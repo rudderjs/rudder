@@ -5,8 +5,8 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string): string {
-  return `import { Agent } from '@boostkit/ai'
-import type { HasTools, AnyTool } from '@boostkit/ai'
+  return `import { Agent } from '@rudderjs/ai'
+import type { HasTools, AnyTool } from '@rudderjs/ai'
 
 export class ${className} extends Agent implements HasTools {
   instructions(): string {

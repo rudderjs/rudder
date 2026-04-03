@@ -19,7 +19,7 @@ export default function Page() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
       <h1 className="text-4xl font-bold tracking-tight">playground-multi</h1>
-      <p className="text-muted-foreground">Built with BoostKit — Laravel-inspired Node.js framework.</p>
+      <p className="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
       {user ? (
         <div className="flex flex-col items-center gap-3">

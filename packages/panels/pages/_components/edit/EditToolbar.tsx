@@ -1,4 +1,4 @@
-import type { PanelI18n } from '@boostkit/panels'
+import type { PanelI18n } from '@rudderjs/panels'
 import { t } from '../../_lib/formHelpers.js'
 import type { AutosaveStatus } from '../../_hooks/useAutosave.js'
 

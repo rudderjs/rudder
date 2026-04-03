@@ -1,7 +1,7 @@
-import { router } from '@boostkit/router'
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
-import { RateLimit } from '@boostkit/middleware'
+import { router } from '@rudderjs/router'
+import { app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
+import { RateLimit } from '@rudderjs/middleware'
 
 const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')
 

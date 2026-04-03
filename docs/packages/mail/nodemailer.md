@@ -1,11 +1,11 @@
 # SMTP (Nodemailer)
 
-Nodemailer SMTP support built into `@boostkit/mail`.
+Nodemailer SMTP support built into `@rudderjs/mail`.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/mail nodemailer
+pnpm add @rudderjs/mail nodemailer
 ```
 
 ## Setup
@@ -14,13 +14,13 @@ Add an SMTP mailer to your mail configuration:
 
 ```ts
 // config/mail.ts
-import type { MailConfig } from '@boostkit/mail'
+import type { MailConfig } from '@rudderjs/mail'
 
 export default {
   default: Env.get('MAIL_MAILER', 'smtp'),
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name: Env.get('MAIL_FROM_NAME', 'BoostKit App'),
+    name: Env.get('MAIL_FROM_NAME', 'RudderJS App'),
   },
   mailers: {
     log: {
@@ -38,7 +38,7 @@ export default {
 } satisfies MailConfig
 ```
 
-No changes are needed in `bootstrap/providers.ts` — `@boostkit/mail` loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
+No changes are needed in `bootstrap/providers.ts` — `@rudderjs/mail` loads the `nodemailer` driver when it sees `driver: 'smtp'` in a mailer config.
 
 ## Configuration
 
@@ -55,13 +55,13 @@ No changes are needed in `bootstrap/providers.ts` — `@boostkit/mail` loads the
 
 ## `nodemailer(config, from)`
 
-`nodemailer(config, from)` is exported from `@boostkit/mail` and returns a `MailAdapterProvider` for the `'smtp'` driver.
+`nodemailer(config, from)` is exported from `@rudderjs/mail` and returns a `MailAdapterProvider` for the `'smtp'` driver.
 
 ```ts
-import { nodemailer } from '@boostkit/mail'
+import { nodemailer } from '@rudderjs/mail'
 
 // Used internally by the mail() provider when driver='smtp'.
-const provider = nodemailer(smtpConfig, { address: 'hello@example.com', name: 'BoostKit App' })
+const provider = nodemailer(smtpConfig, { address: 'hello@example.com', name: 'RudderJS App' })
 ```
 
 The `from` parameter sets the default sender envelope for all messages delivered through this adapter.
@@ -79,7 +79,7 @@ The `from` parameter sets the default sender envelope for all messages delivered
 
 ## Notes
 
-- The adapter is exported as `'nodemailer'` and also matched by `@boostkit/mail` when `driver: 'smtp'` is set — no manual provider registration is required.
+- The adapter is exported as `'nodemailer'` and also matched by `@rudderjs/mail` when `driver: 'smtp'` is set — no manual provider registration is required.
 - `encryption: 'tls'` enables STARTTLS and is the recommended setting for port `587`.
 - `encryption: 'ssl'` wraps the entire connection in TLS and is used with port `465`.
 - `encryption: 'none'` sends mail without transport encryption — only use this on trusted internal networks or for local development relays.

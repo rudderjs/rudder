@@ -1,6 +1,6 @@
 # Changesets
 
-This directory contains changesets for BoostKit releases.
+This directory contains changesets for RudderJS releases.
 
 ## How to create a release
 

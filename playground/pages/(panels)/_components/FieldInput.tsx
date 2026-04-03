@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getField } from '@boostkit/panels'
+import { getField } from '@rudderjs/panels'
 import type { FieldInputProps } from './fields/types.js'
 import { BooleanInput } from './fields/BooleanInput.js'
 import { SelectInput } from './fields/SelectInput.js'

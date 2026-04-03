@@ -1,19 +1,19 @@
 {
-  "name": "create-boostkit-app",
+  "name": "create-rudderjs-app",
   "version": "0.0.14",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
-    "directory": "create-boostkit-app"
+    "url": "https://github.com/rudderjs/rudderjs",
+    "directory": "create-rudderjs-app"
   },
   "type": "module",
   "files": [
     "dist"
   ],
-  "description": "Create a new BoostKit application",
+  "description": "Create a new RudderJS application",
   "bin": {
-    "create-boostkit-app": "./dist/index.js"
+    "create-rudderjs-app": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "exports": {
@@ -29,7 +29,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/auth": "workspace:*",
+    "@rudderjs/auth": "workspace:*",
     "@clack/prompts": "^1.0.0"
   },
   "devDependencies": {

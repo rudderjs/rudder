@@ -1,4 +1,4 @@
-import { Broadcast } from '@boostkit/broadcast'
+import { Broadcast } from '@rudderjs/broadcast'
 
 // Private channel — only the owner can subscribe.
 Broadcast.channel('private-user.*', async (_req, _channel) => {

@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/server-hono",
+  "name": "@rudderjs/server-hono",
   "version": "0.0.6",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/server-hono"
   },
   "type": "module",
@@ -28,7 +28,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@boostkit/contracts": "workspace:*",
+    "@rudderjs/contracts": "workspace:*",
     "@hono/node-server": "^1.19.9",
     "@photonjs/hono": "^0.1.12",
     "hono": "^4.12.0"

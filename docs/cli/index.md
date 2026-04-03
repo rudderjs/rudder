@@ -1,21 +1,21 @@
-# BoostKit CLI
+# RudderJS CLI
 
-The BoostKit CLI (`@boostkit/cli`) provides code generators and artisan command dispatch. It is the bridge between the terminal and your BoostKit application.
+The RudderJS CLI (`@rudderjs/cli`) provides code generators and rudder command dispatch. It is the bridge between the terminal and your RudderJS application.
 
 ## Installation
 
-The CLI is included when you scaffold a project with `create-boostkit-app`. For manual setup:
+The CLI is included when you scaffold a project with `create-rudderjs-app`. For manual setup:
 
 ```bash
-pnpm add -D @boostkit/cli
+pnpm add -D @rudderjs/cli
 ```
 
-Add the `artisan` script to `package.json`:
+Add the `rudder` script to `package.json`:
 
 ```json
 {
   "scripts": {
-    "artisan": "node node_modules/@boostkit/cli/dist/index.js"
+    "rudder": "node node_modules/@rudderjs/cli/dist/index.js"
   }
 }
 ```
@@ -23,20 +23,20 @@ Add the `artisan` script to `package.json`:
 ## Running the CLI
 
 ```bash
-pnpm artisan --help         # Show all available commands
-pnpm artisan <command>      # Run a command
-pnpm artisan <command> -h   # Command-specific help
+pnpm rudder --help         # Show all available commands
+pnpm rudder <command>      # Run a command
+pnpm rudder <command> -h   # Command-specific help
 ```
 
-**Important**: The CLI must be run from a directory containing `bootstrap/app.ts`. It boots the BoostKit application (calling `boostkit.boot()`) before dispatching commands, which means all service providers are active — database connections, DI bindings, and configuration are all available.
+**Important**: The CLI must be run from a directory containing `bootstrap/app.ts`. It boots the RudderJS application (calling `rudderjs.boot()`) before dispatching commands, which means all service providers are active — database connections, DI bindings, and configuration are all available.
 
 ## How It Works
 
-When you run `pnpm artisan <command>`:
+When you run `pnpm rudder <command>`:
 
 1. The CLI locates `bootstrap/app.ts` by walking up from the current directory
-2. It calls `boostkit.boot()` — boots all service providers (DB connects, bindings register)
-3. Route loaders for `commands` are executed, which calls `artisan.command(...)` in `routes/console.ts`
+2. It calls `rudderjs.boot()` — boots all service providers (DB connects, bindings register)
+3. Route loaders for `commands` are executed, which calls `rudder.command(...)` in `routes/console.ts`
 4. The CLI dispatches the matching command with parsed arguments
 
 This means your custom commands in `routes/console.ts` have full access to the DI container and ORM.
@@ -58,39 +58,39 @@ This means your custom commands in `routes/console.ts` have full access to the D
 In `routes/console.ts`:
 
 ```ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 
-artisan.command('hello {name}', async (args) => {
+rudder.command('hello {name}', async (args) => {
   console.log(`Hello, ${args.name}!`)
 }).description('Print a greeting')
 ```
 
-Or extend `Command` for more complex commands. See the [Artisan guide](/guide/artisan) for details.
+Or extend `Command` for more complex commands. See the [Rudder guide](/guide/rudder) for details.
 
 ## The `--force` Flag
 
 All `make:*` generators support `--force` to overwrite existing files:
 
 ```bash
-pnpm artisan make:model Post --force
+pnpm rudder make:model Post --force
 ```
 
 ## Database Commands
 
-BoostKit provides unified artisan commands for database migrations and schema management. These commands auto-detect whether your project uses Prisma or Drizzle and delegate to the appropriate tool.
+RudderJS provides unified rudder commands for database migrations and schema management. These commands auto-detect whether your project uses Prisma or Drizzle and delegate to the appropriate tool.
 
 | Command | Description |
 |---------|-------------|
-| `pnpm artisan migrate` | Run all pending migrations |
-| `pnpm artisan migrate:fresh` | Drop all tables and re-run all migrations from scratch |
-| `pnpm artisan migrate:status` | Show which migrations have been applied and which are pending |
-| `pnpm artisan make:migration <name>` | Create a new migration file |
-| `pnpm artisan db:push` | Push the schema directly to the database (no migration file) |
-| `pnpm artisan db:generate` | Regenerate the ORM client (Prisma only, no-op for Drizzle) |
+| `pnpm rudder migrate` | Run all pending migrations |
+| `pnpm rudder migrate:fresh` | Drop all tables and re-run all migrations from scratch |
+| `pnpm rudder migrate:status` | Show which migrations have been applied and which are pending |
+| `pnpm rudder make:migration <name>` | Create a new migration file |
+| `pnpm rudder db:push` | Push the schema directly to the database (no migration file) |
+| `pnpm rudder db:generate` | Regenerate the ORM client (Prisma only, no-op for Drizzle) |
 
 ### Prisma / Drizzle Equivalents
 
-| Artisan Command | Prisma Equivalent | Drizzle Equivalent |
+| Rudder Command | Prisma Equivalent | Drizzle Equivalent |
 |---|---|---|
 | `migrate` | `prisma migrate deploy` | `drizzle-kit migrate` |
 | `migrate:fresh` | `prisma migrate reset` | drop all + `drizzle-kit migrate` |
@@ -103,22 +103,22 @@ BoostKit provides unified artisan commands for database migrations and schema ma
 
 ```bash
 # Development — quick schema sync
-pnpm artisan db:push
+pnpm rudder db:push
 
 # Development — create a tracked migration
-pnpm artisan make:migration add_status_to_posts
+pnpm rudder make:migration add_status_to_posts
 
 # Production — apply pending migrations
-pnpm artisan migrate
+pnpm rudder migrate
 
 # Check migration status
-pnpm artisan migrate:status
+pnpm rudder migrate:status
 
 # Reset everything (development only)
-pnpm artisan migrate:fresh
+pnpm rudder migrate:fresh
 
 # Regenerate client after schema changes (Prisma)
-pnpm artisan db:generate
+pnpm rudder db:generate
 ```
 
 ## Available Commands Reference

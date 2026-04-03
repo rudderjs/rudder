@@ -1,6 +1,6 @@
 import path from 'node:path'
-import { Env } from '@boostkit/support'
-import type { StorageConfig } from '@boostkit/storage'
+import { Env } from '@rudderjs/support'
+import type { StorageConfig } from '@rudderjs/storage'
 
 export default {
   default: Env.get('FILESYSTEM_DISK', 'local'),

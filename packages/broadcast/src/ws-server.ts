@@ -35,8 +35,8 @@ type ClientMsg =
 // ─── Global state ───────────────────────────────────────────
 
 const g       = globalThis as Record<string, unknown>
-const KEY     = '__boostkit_ws__'
-const AUTH_KEY = '__boostkit_ws_auth__'
+const KEY     = '__rudderjs_ws__'
+const AUTH_KEY = '__rudderjs_ws_auth__'
 
 /** Internal runtime state held on globalThis so it survives HMR reloads. */
 interface WsState {
@@ -269,7 +269,7 @@ export function broadcastStats(): { connections: number; channels: number } {
  * Returns a Node.js HTTP `upgrade` event handler.
  * Attach this to your http.Server to enable WebSocket connections on the given path.
  *
- * @internal Used by @boostkit/vite and @boostkit/server-hono.
+ * @internal Used by @rudderjs/vite and @rudderjs/server-hono.
  */
 export function getUpgradeHandler(
   wsPath = '/ws',

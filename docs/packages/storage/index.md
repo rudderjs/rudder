@@ -1,11 +1,11 @@
-# @boostkit/storage
+# @rudderjs/storage
 
 Storage facade, disk registry, and provider factory with local filesystem driver.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/storage
+pnpm add @rudderjs/storage
 ```
 
 ## Setup
@@ -15,8 +15,8 @@ pnpm add @boostkit/storage
 ```ts
 // config/storage.ts
 import path from 'node:path'
-import { Env } from '@boostkit/core'
-import type { StorageConfig } from '@boostkit/storage'
+import { Env } from '@rudderjs/core'
+import type { StorageConfig } from '@rudderjs/storage'
 
 export default {
   default: Env.get('FILESYSTEM_DISK', 'local'),
@@ -51,7 +51,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { storage } from '@boostkit/storage'
+import { storage } from '@rudderjs/storage'
 import configs from '../config/index.js'
 
 export default [
@@ -64,7 +64,7 @@ export default [
 ## Storage Facade
 
 ```ts
-import { Storage } from '@boostkit/storage'
+import { Storage } from '@rudderjs/storage'
 
 // Write a file
 await Storage.put('avatars/user-1.jpg', imageBuffer)
@@ -117,7 +117,7 @@ The `public` disk is designed for files that should be directly accessible via H
 
 ```bash
 # Run once per project setup
-pnpm artisan storage:link
+pnpm rudder storage:link
 # Linked: public/storage → storage/app/public
 ```
 
@@ -138,7 +138,7 @@ public/storage
 ## `storage:link` Command
 
 ```bash
-pnpm artisan storage:link
+pnpm rudder storage:link
 ```
 
 Creates `public/storage → storage/app/public`. Safe to re-run — prints `Link already exists.` if already linked.
@@ -177,7 +177,7 @@ interface LocalDiskConfig {
 
 ## `storage(config)`
 
-`storage(config)` returns a BoostKit `ServiceProvider` class that registers the configured disks and binds the `Storage` facade during `boot()`.
+`storage(config)` returns a RudderJS `ServiceProvider` class that registers the configured disks and binds the `Storage` facade during `boot()`.
 
 ## Notes
 
@@ -187,4 +187,4 @@ interface LocalDiskConfig {
 - `delete()` is a no-op if the file does not exist.
 - `list()` returns only files (not subdirectories) in the given directory.
 - `path()` throws for S3 disks — use `url()` for a public reference instead.
-- For S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), see the [S3 driver](./s3) — built into `@boostkit/storage`, requires `@aws-sdk/client-s3`.
+- For S3-compatible object storage (AWS S3, Cloudflare R2, MinIO), see the [S3 driver](./s3) — built into `@rudderjs/storage`, requires `@aws-sdk/client-s3`.

@@ -51,9 +51,9 @@ describe('make:controller — stub()', () => {
     assert.ok(out.includes("@Controller('/users')"))
   })
 
-  it('imports Controller and Get from @boostkit/router', () => {
+  it('imports Controller and Get from @rudderjs/router', () => {
     const out = controllerStub('UserController', '/users')
-    assert.ok(out.includes("from '@boostkit/router'"))
+    assert.ok(out.includes("from '@rudderjs/router'"))
   })
 })
 
@@ -84,9 +84,9 @@ describe('make:model — stub()', () => {
     assert.ok(out.includes("static table = 'users'"))
   })
 
-  it('imports Model from @boostkit/orm', () => {
+  it('imports Model from @rudderjs/orm', () => {
     const out = modelStub('User', 'users')
-    assert.ok(out.includes("from '@boostkit/orm'"))
+    assert.ok(out.includes("from '@rudderjs/orm'"))
   })
 })
 
@@ -103,9 +103,9 @@ describe('make:job — stub()', () => {
     assert.ok(out.includes('async handle()'))
   })
 
-  it('imports Job from @boostkit/queue', () => {
+  it('imports Job from @rudderjs/queue', () => {
     const out = jobStub('SendWelcomeEmail')
-    assert.ok(out.includes("from '@boostkit/queue'"))
+    assert.ok(out.includes("from '@rudderjs/queue'"))
   })
 })
 
@@ -117,9 +117,9 @@ describe('make:middleware — stub()', () => {
     assert.ok(out.includes('class AuthMiddleware extends Middleware'))
   })
 
-  it('imports Middleware from @boostkit/middleware', () => {
+  it('imports Middleware from @rudderjs/middleware', () => {
     const out = middlewareStub('AuthMiddleware')
-    assert.ok(out.includes("from '@boostkit/middleware'"))
+    assert.ok(out.includes("from '@rudderjs/middleware'"))
   })
 
   it('contains next() call', () => {
@@ -141,9 +141,9 @@ describe('make:request — stub()', () => {
     assert.ok(out.includes('authorize()'))
   })
 
-  it('imports z from @boostkit/core', () => {
+  it('imports z from @rudderjs/core', () => {
     const out = requestStub('CreateUserRequest')
-    assert.ok(out.includes("from '@boostkit/core'"))
+    assert.ok(out.includes("from '@rudderjs/core'"))
   })
 })
 
@@ -160,9 +160,9 @@ describe('make:provider — stub()', () => {
     assert.ok(out.includes('register()'))
   })
 
-  it('imports ServiceProvider from @boostkit/core', () => {
+  it('imports ServiceProvider from @rudderjs/core', () => {
     const out = providerStub('AppServiceProvider')
-    assert.ok(out.includes("from '@boostkit/core'"))
+    assert.ok(out.includes("from '@rudderjs/core'"))
   })
 })
 
@@ -179,9 +179,9 @@ describe('make:command — stub()', () => {
     assert.ok(out.includes("'send-emails"))
   })
 
-  it('imports Command from @boostkit/artisan', () => {
+  it('imports Command from @rudderjs/rudder', () => {
     const out = commandStub('SendEmails')
-    assert.ok(out.includes("from '@boostkit/artisan'"))
+    assert.ok(out.includes("from '@rudderjs/rudder'"))
   })
 
   it('single word command stays lowercase', () => {
@@ -217,9 +217,9 @@ describe('make:listener — stub()', () => {
     assert.ok(out.includes('async handle('))
   })
 
-  it('imports Listener from @boostkit/core', () => {
+  it('imports Listener from @rudderjs/core', () => {
     const out = listenerStub('SendWelcomeEmailListener')
-    assert.ok(out.includes("from '@boostkit/core'"))
+    assert.ok(out.includes("from '@rudderjs/core'"))
   })
 })
 
@@ -236,9 +236,9 @@ describe('make:mail — stub()', () => {
     assert.ok(out.includes('build()'))
   })
 
-  it('imports Mailable from @boostkit/mail', () => {
+  it('imports Mailable from @rudderjs/mail', () => {
     const out = mailStub('WelcomeMail')
-    assert.ok(out.includes("from '@boostkit/mail'"))
+    assert.ok(out.includes("from '@rudderjs/mail'"))
   })
 })
 
@@ -329,12 +329,12 @@ describe('prismaStub()', () => {
 
 describe('MARKERS_RE', () => {
   it('matches a markers block', () => {
-    const text = '// <boostkit:modules:start>\nmodel Foo {}\n// <boostkit:modules:end>'
+    const text = '// <rudderjs:modules:start>\nmodel Foo {}\n// <rudderjs:modules:end>'
     assert.ok(MARKERS_RE.test(text))
   })
 
   it('does not match partial markers', () => {
-    const text = '// <boostkit:modules:start>\nmodel Foo {}'
+    const text = '// <rudderjs:modules:start>\nmodel Foo {}'
     assert.ok(!MARKERS_RE.test(text))
   })
 })
@@ -343,8 +343,8 @@ describe('buildMergedBlock()', () => {
   it('wraps shards in markers', () => {
     const shards = [{ module: 'Blog', file: 'Blog.prisma', content: 'model Blog {}' }]
     const out = buildMergedBlock(shards)
-    assert.ok(out.startsWith('// <boostkit:modules:start>'))
-    assert.ok(out.endsWith('// <boostkit:modules:end>'))
+    assert.ok(out.startsWith('// <rudderjs:modules:start>'))
+    assert.ok(out.endsWith('// <rudderjs:modules:end>'))
   })
 
   it('annotates each shard with module and file name', () => {
@@ -379,7 +379,7 @@ describe('findPrismaFiles()', () => {
   let tmpDir: string
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'boostkit-cli-test-'))
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'rudderjs-cli-test-'))
   })
 
   afterEach(async () => {
@@ -445,7 +445,7 @@ describe('autoRegisterProvider()', () => {
   let tmpDir: string
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'boostkit-cli-test-'))
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'rudderjs-cli-test-'))
   })
 
   afterEach(async () => {
@@ -478,7 +478,7 @@ export const providers: any[] = [BlogServiceProvider]
     await fs.mkdir(bootstrapDir)
     await fs.writeFile(
       nodePath.join(bootstrapDir, 'providers.ts'),
-      `import type { ServiceProvider } from '@boostkit/core'\n\nexport const providers: any[] = []\n`
+      `import type { ServiceProvider } from '@rudderjs/core'\n\nexport const providers: any[] = []\n`
     )
 
     await autoRegisterProvider('Product', tmpDir)
@@ -502,23 +502,23 @@ describe('migrate — detectORM()', () => {
     await fs.rm(tmpDir, { recursive: true, force: true })
   })
 
-  it('returns "prisma" when @boostkit/orm-prisma is in dependencies', async () => {
+  it('returns "prisma" when @rudderjs/orm-prisma is in dependencies', async () => {
     await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
-      dependencies: { '@boostkit/orm-prisma': 'latest' },
+      dependencies: { '@rudderjs/orm-prisma': 'latest' },
     }))
     assert.equal(detectORM(tmpDir), 'prisma')
   })
 
-  it('returns "drizzle" when @boostkit/orm-drizzle is in dependencies', async () => {
+  it('returns "drizzle" when @rudderjs/orm-drizzle is in dependencies', async () => {
     await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
-      dependencies: { '@boostkit/orm-drizzle': 'latest' },
+      dependencies: { '@rudderjs/orm-drizzle': 'latest' },
     }))
     assert.equal(detectORM(tmpDir), 'drizzle')
   })
 
-  it('returns "prisma" when @boostkit/orm-prisma is in devDependencies', async () => {
+  it('returns "prisma" when @rudderjs/orm-prisma is in devDependencies', async () => {
     await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
-      devDependencies: { '@boostkit/orm-prisma': 'latest' },
+      devDependencies: { '@rudderjs/orm-prisma': 'latest' },
     }))
     assert.equal(detectORM(tmpDir), 'prisma')
   })
@@ -536,7 +536,7 @@ describe('migrate — detectORM()', () => {
 
   it('prefers prisma when both ORMs are listed', async () => {
     await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
-      dependencies: { '@boostkit/orm-prisma': 'latest', '@boostkit/orm-drizzle': 'latest' },
+      dependencies: { '@rudderjs/orm-prisma': 'latest', '@rudderjs/orm-drizzle': 'latest' },
     }))
     assert.equal(detectORM(tmpDir), 'prisma')
   })

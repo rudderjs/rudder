@@ -1,19 +1,19 @@
 # Authentication
 
-This guide walks through setting up full user authentication in a BoostKit app using `@boostkit/auth` and [better-auth](https://better-auth.com).
+This guide walks through setting up full user authentication in a RudderJS app using `@rudderjs/auth` and [better-auth](https://better-auth.com).
 
 ## Overview
 
-BoostKit's auth integration:
+RudderJS's auth integration:
 
-1. **`@boostkit/auth`** — shared `AuthUser`, `AuthSession`, `AuthResult` types + `auth()` provider factory
+1. **`@rudderjs/auth`** — shared `AuthUser`, `AuthSession`, `AuthResult` types + `auth()` provider factory
 2. **`AuthMiddleware()`** — zero-config middleware that validates sessions and sets `req.user`
 3. **better-auth** — the underlying auth library (handles sessions, OAuth, etc.)
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/auth better-auth
+pnpm add @rudderjs/auth better-auth
 ```
 
 ## 1. Configure the Database
@@ -85,8 +85,8 @@ pnpm exec prisma db push
 Create `config/auth.ts`:
 
 ```ts
-import { Env } from '@boostkit/support'
-import type { BetterAuthConfig } from '@boostkit/auth'
+import { Env } from '@rudderjs/support'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret:           Env.get('AUTH_SECRET', 'change-me-at-least-32-chars!!'),
@@ -109,8 +109,8 @@ Register `prismaProvider` first — `auth()` auto-discovers the Prisma client fr
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@boostkit/orm-prisma'
-import { auth } from '@boostkit/auth'
+import { database } from '@rudderjs/orm-prisma'
+import { auth } from '@rudderjs/auth'
 import configs from '../config/index.js'
 
 export default [
@@ -168,10 +168,10 @@ The response sets a session cookie automatically.
 
 ## 6. Protecting Routes
 
-Use `AuthMiddleware()` from `@boostkit/auth` — it validates the session and attaches the user to `req.user`:
+Use `AuthMiddleware()` from `@rudderjs/auth` — it validates the session and attaches the user to `req.user`:
 
 ```ts
-import { AuthMiddleware } from '@boostkit/auth'
+import { AuthMiddleware } from '@rudderjs/auth'
 
 const authMw = AuthMiddleware()
 
@@ -189,8 +189,8 @@ Route.get('/api/dashboard', handler, [authMw])
 Anywhere after boot:
 
 ```ts
-import { app } from '@boostkit/core'
-import type { BetterAuthInstance } from '@boostkit/auth'
+import { app } from '@rudderjs/core'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 const auth = app().make<BetterAuthInstance>('auth')
 
@@ -239,8 +239,8 @@ To enable password reset, configure the `sendResetPassword` callback in your aut
 
 ```ts
 // config/auth.ts
-import { Env } from '@boostkit/support'
-import type { BetterAuthConfig } from '@boostkit/auth'
+import { Env } from '@rudderjs/support'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret:           Env.get('AUTH_SECRET', 'change-me-at-least-32-chars!!'),
@@ -249,7 +249,7 @@ export default {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {
       // url is the full reset link: https://yourapp.com/reset-password?token=...
-      // Send the email using @boostkit/mail, nodemailer, or any email service
+      // Send the email using @rudderjs/mail, nodemailer, or any email service
       await mail.send(new PasswordResetMail(user, url))
     },
   },
@@ -262,7 +262,7 @@ export default {
 Publish the pre-built auth pages if you haven't already:
 
 ```bash
-pnpm artisan vendor:publish --tag=auth-pages
+pnpm rudder vendor:publish --tag=auth-pages
 ```
 
 This creates pages under `pages/(auth)/`:

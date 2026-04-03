@@ -8,7 +8,7 @@ import type { GuardAsync } from 'vike/types'
  * aborts the render and shows the error page (or redirects).
  *
  * In a real app, check a session cookie or JWT here.
- * BoostKit's resolve() works here too — you can inject AuthService, etc.
+ * RudderJS's resolve() works here too — you can inject AuthService, etc.
  *
  * Test:
  *   /users              → 401 (no token)

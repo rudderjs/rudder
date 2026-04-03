@@ -8,7 +8,7 @@ import { LocalAdapter, Storage, StorageRegistry, storage } from './index.js'
 // ─── Helpers ───────────────────────────────────────────────
 
 async function makeTmpDir(): Promise<string> {
-  return fs.mkdtemp(nodePath.join(os.tmpdir(), 'boostkit-storage-test-'))
+  return fs.mkdtemp(nodePath.join(os.tmpdir(), 'rudderjs-storage-test-'))
 }
 
 const fakeApp = { instance: () => undefined } as never

@@ -1,5 +1,5 @@
-import { Page, Heading, Text } from '@boostkit/panels'
-import { Media } from '@boostkit/media'
+import { Page, Heading, Text } from '@rudderjs/panels'
+import { Media } from '@rudderjs/media'
 
 export class MediaPage extends Page {
   static slug  = 'media-demo'

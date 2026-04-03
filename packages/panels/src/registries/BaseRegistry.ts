@@ -50,7 +50,7 @@ export function createSingletonRegistry<T>(
   opts?: { getKey: (item: T) => string; duplicateError?: (key: string) => string },
 ) {
   const g = globalThis as Record<string, unknown>
-  const storeKey = `__boostkit_${namespace}`
+  const storeKey = `__rudderjs_${namespace}`
   if (!g[storeKey]) g[storeKey] = new Map<string, T>()
   const map = g[storeKey] as Map<string, T>
   const getKey = opts?.getKey ?? ((item: T) => String(item))
@@ -90,7 +90,7 @@ export function createSingletonRegistry<T>(
  */
 export function createMapRegistry<T>(namespace: string) {
   const g = globalThis as Record<string, unknown>
-  const key = `__boostkit_${namespace}`
+  const key = `__rudderjs_${namespace}`
   if (!g[key]) g[key] = new Map<string, T>()
   const map = g[key] as Map<string, T>
   return {

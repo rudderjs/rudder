@@ -1,4 +1,4 @@
-import { Resource, TextField, SlugField, RelationField, HasMany, Table, Form, Column } from '@boostkit/panels'
+import { Resource, TextField, SlugField, RelationField, HasMany, Table, Form, Column } from '@rudderjs/panels'
 import { Category } from '../../../Models/Category.js'
 
 export class CategoryResource extends Resource {

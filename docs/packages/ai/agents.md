@@ -1,12 +1,12 @@
 # Agents
 
-Agents are the core abstraction in `@boostkit/ai`. An agent has instructions, tools, and a model — it runs a multi-step loop where the LLM can call tools and reason about results.
+Agents are the core abstraction in `@rudderjs/ai`. An agent has instructions, tools, and a model — it runs a multi-step loop where the LLM can call tools and reason about results.
 
 ## Agent Class
 
 ```ts
-import { Agent, toolDefinition, stepCountIs } from '@boostkit/ai'
-import type { HasTools } from '@boostkit/ai'
+import { Agent, toolDefinition, stepCountIs } from '@rudderjs/ai'
+import type { HasTools } from '@rudderjs/ai'
 import { z } from 'zod'
 
 const searchTool = toolDefinition({
@@ -35,7 +35,7 @@ console.log(response.steps.length) // number of LLM rounds
 For quick one-off agents:
 
 ```ts
-import { agent, AI } from '@boostkit/ai'
+import { agent, AI } from '@rudderjs/ai'
 
 // Inline agent with instructions
 const response = await agent('You summarize text.').prompt('Summarize this...')

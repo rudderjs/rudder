@@ -1,4 +1,4 @@
-import type { PanelUser } from '@boostkit/panels'
+import type { PanelUser } from '@rudderjs/panels'
 import type { PageContextServer } from 'vike/types'
 import { getSessionUser } from './getSessionUser.js'
 
@@ -24,7 +24,7 @@ export async function buildPanelContext(
 
   let sessionGet: ((key: string) => unknown) | undefined
   try {
-    const { app: getApp } = await import('@boostkit/core') as { app(): { make<T>(key: string): T } }
+    const { app: getApp } = await import('@rudderjs/core') as { app(): { make<T>(key: string): T } }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sessionConfig = getApp().make<any>('session.config')
     if (sessionConfig?.secret && sessionConfig?.cookie?.name) {

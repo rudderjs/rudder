@@ -2,7 +2,7 @@
 
 export {
   Application,
-  BoostKit,
+  RudderJS,
   AppBuilder,
   MiddlewareConfigurator,
   ExceptionConfigurator,
@@ -30,10 +30,10 @@ export type { ListenMap } from './events.js'
 
 export { FormRequest, ValidationError, validate, validateWith, z } from './validation.js'
 
-// ─── Artisan ───────────────────────────────────────────────
+// ─── Rudder ───────────────────────────────────────────────
 
-export { artisan, Artisan, ArtisanRegistry, CommandBuilder, Command, CancelledError, parseSignature } from '@boostkit/artisan'
-export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@boostkit/artisan'
+export { rudder, Rudder, CommandRegistry, CommandBuilder, Command, CancelledError, parseSignature } from '@rudderjs/rudder'
+export type { ConsoleHandler, CommandArgDef, CommandOptDef, ParsedSignature } from '@rudderjs/rudder'
 
 // ─── Support ───────────────────────────────────────────────
 
@@ -51,10 +51,10 @@ export {
   resolveOptionalPeer,
   dump,
   dd,
-} from '@boostkit/support'
+} from '@rudderjs/support'
 
 // ─── Typed config ──────────────────────────────────────────
-// Overrides the untyped config() from @boostkit/support with a version
+// Overrides the untyped config() from @rudderjs/support with a version
 // that infers return types from the augmented AppConfig interface.
 
 export { config } from './config.js'
@@ -73,4 +73,4 @@ export type {
   ServerAdapterFactory,
   FetchHandler,
   ServerAdapterProvider,
-} from '@boostkit/contracts'
+} from '@rudderjs/contracts'

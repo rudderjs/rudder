@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import type { RouteDefinition, MiddlewareHandler } from '@boostkit/contracts'
+import type { RouteDefinition, MiddlewareHandler } from '@rudderjs/contracts'
 import { hono } from './index.js'
 import { renderErrorPage } from './error-page.js'
 

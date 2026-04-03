@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react'
-import type { ResourceAgentMeta } from '@boostkit/panels'
+import type { ResourceAgentMeta } from '@rudderjs/panels'
 
 // ─── Chat message parts (structured content) ───────────────
 

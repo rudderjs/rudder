@@ -1,8 +1,8 @@
 import { Container, container } from './di.js'
 import { ServiceProvider } from './service-provider.js'
-import { Env, ConfigRepository, setConfigRepository } from '@boostkit/support'
-import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler, AppRequest } from '@boostkit/contracts'
-import { artisan } from '@boostkit/artisan'
+import { Env, ConfigRepository, setConfigRepository } from '@rudderjs/support'
+import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler, AppRequest } from '@rudderjs/contracts'
+import { rudder } from '@rudderjs/rudder'
 import { ValidationError } from './validation.js'
 
 // ─── Config ────────────────────────────────────────────────
@@ -39,7 +39,7 @@ export class Application {
 
   private constructor(config: BootConfig = {}) {
     this.container = container
-    this.name  = config.name  ?? Env.get('APP_NAME',  'BoostKit')
+    this.name  = config.name  ?? Env.get('APP_NAME',  'RudderJS')
     this.env   = config.env   ?? Env.get('APP_ENV',   'production')
     this.debug = config.debug ?? Env.getBool('APP_DEBUG', false)
 
@@ -79,21 +79,21 @@ export class Application {
 
     if (shouldRecreate) {
       container.reset()
-      g['__boostkit_app__'] = undefined
+      g['__rudderjs_app__'] = undefined
     }
 
-    if (!g['__boostkit_app__']) {
-      g['__boostkit_app__'] = new Application(config)
+    if (!g['__rudderjs_app__']) {
+      g['__rudderjs_app__'] = new Application(config)
     }
-    Application.instance = g['__boostkit_app__'] as Application
+    Application.instance = g['__rudderjs_app__'] as Application
     return Application.instance
   }
 
   static getInstance(): Application {
     const g = globalThis as Record<string, unknown>
-    const inst = (g['__boostkit_app__'] ?? Application.instance) as Application | undefined
+    const inst = (g['__rudderjs_app__'] ?? Application.instance) as Application | undefined
     if (!inst) {
-      throw new Error('[BoostKit] Application has not been created yet. Call Application.create() first.')
+      throw new Error('[RudderJS] Application has not been created yet. Call Application.create() first.')
     }
     return inst
   }
@@ -155,7 +155,7 @@ export class Application {
         const name  = instance.constructor.name || Provider.name || 'AnonymousProvider'
         const cause = err instanceof Error ? err.message : String(err)
         throw new Error(
-          `[BoostKit] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
+          `[RudderJS] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
           { cause: err },
         )
       }
@@ -181,7 +181,7 @@ export class Application {
         const name  = provider.constructor.name
         const cause = err instanceof Error ? err.message : String(err)
         throw new Error(
-          `[BoostKit] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
+          `[RudderJS] Provider "${name}" failed to boot.\n  Cause: ${cause}\n  Check your provider configuration in bootstrap/providers.ts`,
           { cause: err },
         )
       }
@@ -208,7 +208,7 @@ export class Application {
   /** @internal — testing only */
   static resetForTesting(): void {
     ;(Application as unknown as Record<string, unknown>)['instance'] = undefined
-    ;(globalThis as Record<string, unknown>)['__boostkit_app__'] = undefined
+    ;(globalThis as Record<string, unknown>)['__rudderjs_app__'] = undefined
   }
 }
 
@@ -278,7 +278,7 @@ export class ExceptionConfigurator {
     return this
   }
 
-  /** @internal — called by BoostKit to produce the combined error handler */
+  /** @internal — called by RudderJS to produce the combined error handler */
   buildHandler(): ErrorRenderer {
     const renders = this._renders.slice()
     const ignored = new Set(this._ignored)
@@ -335,18 +335,18 @@ export class AppBuilder {
     return this
   }
 
-  create(): BoostKit {
+  create(): RudderJS {
     const app = Application.create({
       ...(this._options.config    && { config:    this._options.config }),
       ...(this._options.providers && { providers: this._options.providers }),
     })
-    return new BoostKit(app, this._options.server, this._loaders, this._mwFn, this._excFn)
+    return new RudderJS(app, this._options.server, this._loaders, this._mwFn, this._excFn)
   }
 }
 
-// ─── BoostKit (Configured Application) ─────────────────────
+// ─── RudderJS (Configured Application) ─────────────────────
 
-export class BoostKit {
+export class RudderJS {
   /** Phase 1: providers only — safe to await in CLI (no Vike virtual imports) */
   private _providerBoot: Promise<void>
   /** Phase 2: provider boot + HTTP handler — created lazily on first handleRequest call */
@@ -383,13 +383,13 @@ export class BoostKit {
   private async _bootstrapProviders(): Promise<void> {
     this._suppressVikeNoise()
     if (this._app.isDevelopment()) {
-      artisan.reset()
-      const { router } = await import('@boostkit/router') as { router: { reset(): void } }
+      rudder.reset()
+      const { router } = await import('@rudderjs/router') as { router: { reset(): void } }
       router.reset()
     }
     await this._app.bootstrap()
     await Promise.all(this._loaders.map(l => l()))
-    console.log('[BoostKit] ready')
+    console.log('[RudderJS] ready')
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
@@ -399,7 +399,7 @@ export class BoostKit {
     const exc = new ExceptionConfigurator()
     this._excFn?.(exc)
     const errorHandler = exc.buildHandler()
-    const { router } = await import('@boostkit/router') as { router: { mount(adapter: ServerAdapter): void } }
+    const { router } = await import('@rudderjs/router') as { router: { mount(adapter: ServerAdapter): void } }
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
       router.mount(adapter)
@@ -415,7 +415,7 @@ export class BoostKit {
   async handleRequest(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
     if (!this._boot) this._boot = this._providerBoot.then(() => this._createHandler())
     await this._boot
-    if (!this._handler) throw new Error('[BoostKit] Request handler not initialized.')
+    if (!this._handler) throw new Error('[RudderJS] Request handler not initialized.')
     return this._handler(request, env, ctx)
   }
 

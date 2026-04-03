@@ -10,7 +10,7 @@ export function stub(name: string): string {
     .replace(/([A-Z])/g, (m, l, i) => (i === 0 ? l : `-${l}`))
     .toLowerCase()
 
-  return `import { Command } from '@boostkit/artisan'
+  return `import { Command } from '@rudderjs/rudder'
 
 export class ${name} extends Command {
   readonly signature   = '${kebab} {--force : Force the operation}'
@@ -33,7 +33,7 @@ export class ${name} extends Command {
 export function makeCommandCmd(program: Command): void {
   program
     .command('make:command <name>')
-    .description('Create a new artisan command class')
+    .description('Create a new rudder command class')
     .option('-f, --force', 'Overwrite existing file')
     .action(async (name: string, opts: { force?: boolean }) => {
       const filePath = resolve(process.cwd(), `app/Commands/${name}.ts`)
@@ -46,6 +46,6 @@ export function makeCommandCmd(program: Command): void {
       await mkdir(resolve(process.cwd(), 'app/Commands'), { recursive: true })
       await writeFile(filePath, stub(name))
       log.success(`Created app/Commands/${name}.ts`)
-      log.info(`Register it in routes/console.ts:\n  artisan.register(${name})`)
+      log.info(`Register it in routes/console.ts:\n  rudder.register(${name})`)
     })
 }

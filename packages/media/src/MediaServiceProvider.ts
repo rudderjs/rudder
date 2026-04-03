@@ -1,5 +1,5 @@
-import { ServiceProvider } from '@boostkit/core'
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import { mountMediaRoutes } from './handlers/mediaRoutes.js'
 import { resolveMedia } from './resolveMedia.js'
 import { registerLibrary, type MediaLibrary } from './registry.js'
@@ -29,8 +29,8 @@ export class MediaServiceProvider extends ServiceProvider {
       put(path: string, handler: RouteHandler, mw?: MiddlewareHandler[]): void
       delete(path: string, handler: RouteHandler, mw?: MiddlewareHandler[]): void
     }
-    const { router } = await import(/* @vite-ignore */ '@boostkit/router') as { router: RouterShape }
-    const { PanelRegistry } = await import(/* @vite-ignore */ '@boostkit/panels')
+    const { router } = await import(/* @vite-ignore */ '@rudderjs/router') as { router: RouterShape }
+    const { PanelRegistry } = await import(/* @vite-ignore */ '@rudderjs/panels')
     for (const panel of PanelRegistry.all()) {
       const mw: MiddlewareHandler[] = []
       const guard = panel.getGuard()
@@ -42,8 +42,8 @@ export class MediaServiceProvider extends ServiceProvider {
 
 // ─── PanelPlugin factory ────────────────────────────────────
 
-import type { Application, ProviderClass } from '@boostkit/core'
-import type { PanelPlugin } from '@boostkit/panels'
+import type { Application, ProviderClass } from '@rudderjs/core'
+import type { PanelPlugin } from '@rudderjs/panels'
 
 const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
 const pagesDir  = new URL(/* @vite-ignore */ '../pages', import.meta.url).pathname
@@ -124,7 +124,7 @@ export function media(config?: MediaPluginConfig): PanelPlugin {
         put(path: string, handler: RouteHandler, mw?: MiddlewareHandler[]): void
         delete(path: string, handler: RouteHandler, mw?: MiddlewareHandler[]): void
       }
-      const { router } = await import(/* @vite-ignore */ '@boostkit/router') as { router: RouterShape }
+      const { router } = await import(/* @vite-ignore */ '@rudderjs/router') as { router: RouterShape }
 
       const mw: MiddlewareHandler[] = []
       const guard = panel.getGuard()

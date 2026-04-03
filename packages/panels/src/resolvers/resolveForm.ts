@@ -140,13 +140,13 @@ export async function resolveForm(
     // Seed Y.Doc with initial values (server-side)
     if (needsWebsocket && Object.keys(initialValues).length > 0) {
       try {
-        const livePkg = '@boostkit/live'
+        const livePkg = '@rudderjs/live'
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { Live } = await import(/* @vite-ignore */ livePkg) as any
         if (Live?.seed) {
           await Live.seed(docName, initialValues)
         }
-      } catch { /* @boostkit/live not available */ }
+      } catch { /* @rudderjs/live not available */ }
     }
   }
 

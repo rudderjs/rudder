@@ -1,5 +1,5 @@
 ---
-'@boostkit/panels': minor
+'@rudderjs/panels': minor
 ---
 
 Add conditional fields, field-level access control, per-field validation, display transformers, and ComputedField.

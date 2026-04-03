@@ -1,14 +1,14 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Artisan, Command, CommandBuilder, ArtisanRegistry, parseSignature, CancelledError } from './index.js'
+import { Rudder, Command, CommandBuilder, CommandRegistry, parseSignature, CancelledError } from './index.js'
 
-// ─── ArtisanRegistry ──────────────────────────────────────
+// ─── CommandRegistry ──────────────────────────────────────
 
-describe('ArtisanRegistry', () => {
-  let registry: ArtisanRegistry
+describe('CommandRegistry', () => {
+  let registry: CommandRegistry
 
   beforeEach(() => {
-    registry = new ArtisanRegistry()
+    registry = new CommandRegistry()
   })
 
   it('command() registers and returns a CommandBuilder', () => {
@@ -83,44 +83,44 @@ describe('ArtisanRegistry', () => {
   })
 })
 
-// ─── Global artisan singleton ──────────────────────────────
+// ─── Global rudder singleton ──────────────────────────────
 
-describe('global artisan singleton', () => {
-  beforeEach(() => Artisan.reset())
+describe('global rudder singleton', () => {
+  beforeEach(() => Rudder.reset())
 
-  it('Artisan is the same instance across multiple imports', async () => {
-    const { Artisan: Artisan2 } = await import('./index.js')
-    assert.strictEqual(Artisan, Artisan2)
+  it('Rudder is the same instance across multiple imports', async () => {
+    const { Rudder: Rudder2 } = await import('./index.js')
+    assert.strictEqual(Rudder, Rudder2)
   })
 
-  it('Artisan.command() registers a command', () => {
+  it('Rudder.command() registers a command', () => {
     const name = `test:${Date.now()}`
-    Artisan.command(name, () => undefined)
-    const found = Artisan.getCommands().find(c => c.name === name)
+    Rudder.command(name, () => undefined)
+    const found = Rudder.getCommands().find(c => c.name === name)
     assert.ok(found)
   })
 
-  it('Artisan.register() registers class-based commands', () => {
+  it('Rudder.register() registers class-based commands', () => {
     class HelloCommand extends Command {
       readonly signature = 'hello'
       readonly description = 'hello cmd'
       handle(): void {}
     }
-    Artisan.register(HelloCommand)
-    assert.deepStrictEqual(Artisan.getClasses(), [HelloCommand])
+    Rudder.register(HelloCommand)
+    assert.deepStrictEqual(Rudder.getClasses(), [HelloCommand])
   })
 
-  it('Artisan.reset() clears registered commands and classes', () => {
+  it('Rudder.reset() clears registered commands and classes', () => {
     class A extends Command {
       readonly signature = 'a'
       readonly description = 'a'
       handle(): void {}
     }
-    Artisan.command('x', () => undefined)
-    Artisan.register(A)
-    Artisan.reset()
-    assert.strictEqual(Artisan.getCommands().length, 0)
-    assert.strictEqual(Artisan.getClasses().length, 0)
+    Rudder.command('x', () => undefined)
+    Rudder.register(A)
+    Rudder.reset()
+    assert.strictEqual(Rudder.getCommands().length, 0)
+    assert.strictEqual(Rudder.getClasses().length, 0)
   })
 })
 

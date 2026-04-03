@@ -2,27 +2,27 @@
 layout: home
 
 hero:
-  name: "BoostKit"
+  name: "RudderJS"
   text: "Node.js Full-Stack Framework"
   tagline: "Laravel's developer experience, reimagined for the Node.js ecosystem."
   image:
     src: /logo.png
-    alt: BoostKit
+    alt: RudderJS
   actions:
     - theme: brand
       text: Get Started
       link: /guide/installation
     - theme: alt
-      text: Why BoostKit?
+      text: Why RudderJS?
       link: /guide/
     - theme: alt
       text: View on GitHub
-      link: https://github.com/boostkitjs/boostkit
+      link: https://github.com/rudderjs/rudderjs
 
 features:
   - icon: ⚡
     title: Laravel-Inspired DX
-    details: Familiar patterns — service providers, artisan CLI, Eloquent-style ORM, fluent middleware pipeline — without the PHP runtime.
+    details: Familiar patterns — service providers, rudder CLI, Eloquent-style ORM, fluent middleware pipeline — without the PHP runtime.
   - icon: 🧩
     title: Modular by Design
     details: Every feature is an optional package. Use only what you need. Zero lock-in to any specific database, queue, or storage engine.

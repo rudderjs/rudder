@@ -1,6 +1,6 @@
-import { Route } from '@boostkit/router'
-import { CsrfMiddleware } from '@boostkit/middleware'
-import { SessionMiddleware } from '@boostkit/session'
+import { Route } from '@rudderjs/router'
+import { CsrfMiddleware } from '@rudderjs/middleware'
+import { SessionMiddleware } from '@rudderjs/session'
 
 // Web middleware — session + CSRF apply to all web routes (not API)
 const webMw = [

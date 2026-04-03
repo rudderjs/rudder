@@ -1,12 +1,12 @@
 # Coming from Next.js
 
-If you've been building with Next.js, you'll find BoostKit's patterns immediately familiar — with a few key differences that give you more control.
+If you've been building with Next.js, you'll find RudderJS's patterns immediately familiar — with a few key differences that give you more control.
 
 ## The Core Difference
 
 Next.js is **React-first**. Every architectural decision — routing, data fetching, server components — is built around React. The backend is an afterthought bolted on as API Routes.
 
-BoostKit is **backend-first**. The frontend (React, Vue, or Solid) is a rendering layer powered by [Vike](https://vike.dev). The backend has a real architecture: service providers, DI container, middleware pipeline, Artisan CLI.
+RudderJS is **backend-first**. The frontend (React, Vue, or Solid) is a rendering layer powered by [Vike](https://vike.dev). The backend has a real architecture: service providers, DI container, middleware pipeline, Rudder CLI.
 
 ::: tip What is Vike?
 Vike is to Vite what Next.js is to React — file-based routing and SSR, but UI-agnostic. It works with React, Vue, Solid, or no framework at all.
@@ -16,7 +16,7 @@ Vike is to Vite what Next.js is to React — file-based routing and SSR, but UI-
 
 ## Concept Mapping
 
-| Next.js | BoostKit | Notes |
+| Next.js | RudderJS | Notes |
 |---|---|---|
 | `pages/` or `app/` | `pages/` | Same file-based routing idea |
 | `page.tsx` | `+Page.tsx` | The `+` prefix is Vike's convention |
@@ -25,13 +25,13 @@ Vike is to Vite what Next.js is to React — file-based routing and SSR, but UI-
 | `app/api/route.ts` | `routes/api.ts` | Clean separation, not co-located with pages |
 | `next.config.js` | `vite.config.ts` | Vite config |
 | No DI | `ServiceProvider` + `resolve()` | Real dependency injection |
-| No CLI | `pnpm artisan make:*` | Laravel-style generators |
+| No CLI | `pnpm rudder make:*` | Laravel-style generators |
 
 ---
 
 ## Routing
 
-Both use file-based routing, but BoostKit uses the `+` prefix convention from Vike.
+Both use file-based routing, but RudderJS uses the `+` prefix convention from Vike.
 
 **Next.js**
 ```
@@ -42,7 +42,7 @@ app/
     layout.tsx      → layout wrapper
 ```
 
-**BoostKit**
+**RudderJS**
 ```
 pages/
   users/
@@ -65,10 +65,10 @@ export async function getServerSideProps() {
 }
 ```
 
-**BoostKit** — `+data.ts` runs server-side, result is passed to `+Page.tsx` via `useData()`:
+**RudderJS** — `+data.ts` runs server-side, result is passed to `+Page.tsx` via `useData()`:
 ```ts
 // pages/users/+data.ts
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../../app/Services/UserService.js'
 
 export type Data = { users: { id: string; name: string }[] }
@@ -105,16 +105,16 @@ export function middleware(req: NextRequest) {
 export const config = { matcher: ['/dashboard/:path*'] }
 ```
 
-**BoostKit** — per-page `+guard.ts`, co-located with the page it protects:
+**RudderJS** — per-page `+guard.ts`, co-located with the page it protects:
 ```ts
 // pages/dashboard/+guard.ts
 import { redirect } from 'vike/abort'
 import type { GuardAsync } from 'vike/types'
-import type { BetterAuthInstance } from '@boostkit/auth'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 
 export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
   if (!import.meta.env.SSR) return
-  const { app } = await import('@boostkit/core')
+  const { app } = await import('@rudderjs/core')
   const auth = app().make<BetterAuthInstance>('auth')
   const session = await auth.api.getSession({
     headers: new Headers(pageContext.headers ?? {}),
@@ -136,11 +136,11 @@ export async function GET() {
 }
 ```
 
-**BoostKit** — separate `routes/api.ts`, keeping backend and frontend cleanly separated:
+**RudderJS** — separate `routes/api.ts`, keeping backend and frontend cleanly separated:
 ```ts
 // routes/api.ts
-import { Route } from '@boostkit/router'
-import { resolve } from '@boostkit/core'
+import { Route } from '@rudderjs/router'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../app/Services/UserService.js'
 
 Route.get('/api/users', async (_req, res) => {
@@ -152,8 +152,8 @@ Route.get('/api/users', async (_req, res) => {
 Or use decorator-based controllers:
 ```ts
 // app/Controllers/UserController.ts
-import { Controller, Get } from '@boostkit/router'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Controller, Get } from '@rudderjs/router'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 @Controller('/api/users')
 export class UserController {
@@ -168,7 +168,7 @@ export class UserController {
 
 ## What You Gain
 
-Coming from Next.js, BoostKit gives you things that don't exist in the Next.js world:
+Coming from Next.js, RudderJS gives you things that don't exist in the Next.js world:
 
 **Real Dependency Injection**
 ```ts
@@ -177,36 +177,36 @@ this.app.singleton(UserRepository, () => new PrismaUserRepository())
 // → this.app.singleton(UserRepository, () => new DrizzleUserRepository())
 ```
 
-**Artisan CLI**
+**Rudder CLI**
 ```bash
-pnpm artisan make:controller UserController
-pnpm artisan make:model Post
-pnpm artisan make:job SendWelcomeEmail
-pnpm artisan make:module Blog
+pnpm rudder make:controller UserController
+pnpm rudder make:model Post
+pnpm rudder make:job SendWelcomeEmail
+pnpm rudder make:module Blog
 ```
 
 **Laravel debug helpers**
 ```ts
-import { dd, dump } from '@boostkit/core'
+import { dd, dump } from '@rudderjs/core'
 
 dump(user)     // pretty-prints to terminal, keeps server running
 dd(req.body)   // pretty-prints then stops (you've missed this)
 ```
 
-**True modularity** — don't need queues? Don't install `@boostkit/queue`. Don't need mail? Skip `@boostkit/mail`. Next.js ships everything whether you use it or not.
+**True modularity** — don't need queues? Don't install `@rudderjs/queue`. Don't need mail? Skip `@rudderjs/mail`. Next.js ships everything whether you use it or not.
 
 ---
 
 ## What's Different
 
-| | Next.js | BoostKit |
+| | Next.js | RudderJS |
 |---|---|---|
 | UI framework | React only | React, Vue, Solid, or none |
-| Backend DX | API Routes (simple) | Service Providers + DI + Artisan |
+| Backend DX | API Routes (simple) | Service Providers + DI + Rudder |
 | Build tool | Webpack / Turbopack | **Vite** (fast) |
 | Modularity | All-in | Pay-as-you-go |
 | Auth | NextAuth / Clerk | better-auth (built-in) |
-| CLI | None | Artisan (`make:*`, `db:seed`, custom commands) |
+| CLI | None | Rudder (`make:*`, `db:seed`, custom commands) |
 | Deployment | Vercel-optimized | Node.js, Bun, Deno, Cloudflare Workers |
 
 ---
@@ -214,7 +214,7 @@ dd(req.body)   // pretty-prints then stops (you've missed this)
 ## Getting Started
 
 ```bash
-pnpm create boostkit-app my-app
+pnpm create rudderjs-app my-app
 cd my-app
 pnpm install
 pnpm exec prisma generate

@@ -1,4 +1,4 @@
-import { ServiceProvider, artisan, type Application } from '@boostkit/core'
+import { ServiceProvider, rudder, type Application } from '@rudderjs/core'
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 import * as Y                                          from 'yjs'
 
@@ -115,7 +115,7 @@ export function livePrisma(config: PrismaPersistenceConfig = {}): LivePersistenc
     if (cachedClient) return cachedClient
     // Try to resolve PrismaClient from DI container first (already configured)
     try {
-      const core = await import(/* @vite-ignore */ '@boostkit/core') as { app(): { make(k: string): unknown } }
+      const core = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): { make(k: string): unknown } }
       const prisma = core.app().make('prisma') as PrismaLikeClient
       if (prisma) { cachedClient = prisma; return cachedClient }
     } catch { /* DI not available — fall back to direct instantiation */ }
@@ -175,12 +175,12 @@ export interface RedisLivePersistenceConfig {
   host?:     string
   port?:     number
   password?: string
-  /** Key prefix. Default: 'boostkit:live:' */
+  /** Key prefix. Default: 'rudderjs:live:' */
   prefix?:   string
 }
 
 export function liveRedis(config: RedisLivePersistenceConfig = {}): LivePersistence {
-  const prefix = config.prefix ?? 'boostkit:live:'
+  const prefix = config.prefix ?? 'rudderjs:live:'
   let   client: unknown
 
   async function getClient() {
@@ -249,11 +249,11 @@ interface Room {
 }
 
 const g       = globalThis as Record<string, unknown>
-const KEY     = '__boostkit_live__'
-const PERSIST_KEY = '__boostkit_live_persistence__'
+const KEY     = '__rudderjs_live__'
+const PERSIST_KEY = '__rudderjs_live_persistence__'
 
 /** Transaction origin used by server-side mutations (Live.updateMap, etc.) */
-const SERVER_ORIGIN = 'boostkit:server'
+const SERVER_ORIGIN = 'rudderjs:server'
 
 function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
   const rooms = g[KEY] as Map<string, Room> ?? new Map<string, Room>()
@@ -407,20 +407,20 @@ async function handleConnection(
 
 // ─── globalThis key for upgrade handler ─────────────────────
 
-export const LIVE_UPGRADE_KEY = '__boostkit_live_upgrade__'
+export const LIVE_UPGRADE_KEY = '__rudderjs_live_upgrade__'
 
 // ─── Factory ────────────────────────────────────────────────
 
 /**
  * Live — real-time collaborative document sync via Yjs CRDT.
  *
- * Same port as HTTP and @boostkit/ws — no separate server needed.
+ * Same port as HTTP and @rudderjs/ws — no separate server needed.
  *
  * Built-in persistence drivers: memory (default), prisma, redis.
  *
  * @example
  * // bootstrap/providers.ts
- * import { live, liveRedis } from '@boostkit/live'
+ * import { live, liveRedis } from '@rudderjs/live'
  * export default [
  *   broadcasting(),
  *   live(),                              // memory (dev)
@@ -447,7 +447,7 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
 
       // Chain into the broadcast-specific handler (not the combined handler)
       // to avoid circular references during HMR re-boots.
-      const prev = (g['__boostkit_ws_broadcast_upgrade__'] ?? g['__boostkit_ws_upgrade__']) as
+      const prev = (g['__rudderjs_ws_broadcast_upgrade__'] ?? g['__rudderjs_ws_upgrade__']) as
         | ((req: unknown, socket: unknown, head: unknown) => void)
         | undefined
 
@@ -463,9 +463,9 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
       }
 
       // Register as the active upgrade handler
-      g['__boostkit_ws_upgrade__'] = g[LIVE_UPGRADE_KEY]
+      g['__rudderjs_ws_upgrade__'] = g[LIVE_UPGRADE_KEY]
 
-      artisan.command('live:docs', async () => {
+      rudder.command('live:docs', async () => {
         const rooms = g[KEY] as Map<string, Room> | undefined
         if (!rooms || rooms.size === 0) {
           console.log('\n  No active documents.\n')
@@ -478,7 +478,7 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
         console.log()
       }).description('List active Live documents and connected clients')
 
-      artisan.command('live:clear <doc>', async (args) => {
+      rudder.command('live:clear <doc>', async (args) => {
         const docName = (args as unknown as Record<string, unknown>)['doc'] as string
         await persistence.clearDocument(docName)
         const rooms = g[KEY] as Map<string, Room> | undefined
@@ -494,11 +494,11 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
 /**
  * Live facade — programmatic access to Yjs documents from server-side code.
  *
- * Mirrors @boostkit/broadcast's `Broadcast` facade pattern.
+ * Mirrors @rudderjs/broadcast's `Broadcast` facade pattern.
  * Resolves persistence automatically — no manual threading required.
  *
  * @example
- * import { Live } from '@boostkit/live'
+ * import { Live } from '@rudderjs/live'
  *
  * await Live.seed('panel:articles:42', { title: 'Hello', body: '' })
  * const snapshot = Live.snapshot('panel:articles:42')

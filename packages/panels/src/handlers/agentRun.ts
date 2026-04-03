@@ -1,4 +1,4 @@
-import type { AppRequest, AppResponse } from '@boostkit/core'
+import type { AppRequest, AppResponse } from '@rudderjs/core'
 import type { Resource } from '../Resource.js'
 import type { ResourceAgent, ResourceAgentContext } from '../agents/ResourceAgent.js'
 import type { ModelClass, RecordRow } from '../types.js'

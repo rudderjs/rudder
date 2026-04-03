@@ -176,7 +176,7 @@ export class Panel {
 
   /**
    * Override the locale for this panel's UI strings and text direction.
-   * Defaults to the locale configured in @boostkit/localization (or 'en').
+   * Defaults to the locale configured in @rudderjs/localization (or 'en').
    *
    * @example
    * Panel.make('admin').locale('ar')

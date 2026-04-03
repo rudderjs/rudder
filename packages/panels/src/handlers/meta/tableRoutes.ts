@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, AppRequest } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest } from '@rudderjs/core'
 import type { RouterLike } from '../types.js'
 import type { Panel } from '../../Panel.js'
 import type { ModelClass, QueryBuilderLike, RecordRow } from '../../types.js'
@@ -311,7 +311,7 @@ export function mountTableRoutes(
 
       if (table.isLive()) {
         try {
-          const broadcastPkg = '@boostkit/broadcast'
+          const broadcastPkg = '@rudderjs/broadcast'
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
           broadcast(`live:table:${tableId}`, 'refresh', { field, recordId })
@@ -323,7 +323,7 @@ export function mountTableRoutes(
             const matchingResource = panel.getResources().find(R => R.getSlug() === slugFromId)
             if (matchingResource) broadcast(`panel:${slugFromId}`, 'record.updated', { id: recordId })
           }
-        } catch { /* @boostkit/broadcast not available */ }
+        } catch { /* @rudderjs/broadcast not available */ }
       }
 
       return res.json({ success: true })
@@ -366,11 +366,11 @@ export function mountTableRoutes(
       await action.execute(records)
       if (table.isLive()) {
         try {
-          const broadcastPkg = '@boostkit/broadcast'
+          const broadcastPkg = '@rudderjs/broadcast'
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { broadcast } = await import(/* @vite-ignore */ broadcastPkg) as any
           broadcast(`live:table:${tableId}`, 'refresh', { action: actionName })
-        } catch { /* @boostkit/broadcast not available */ }
+        } catch { /* @rudderjs/broadcast not available */ }
       }
       return res.json({ success: true })
     } catch (err) {

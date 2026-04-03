@@ -5,8 +5,8 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string): string {
-  return `import { Middleware } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+  return `import { Middleware } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 export class ${className} extends Middleware {
   async handle(

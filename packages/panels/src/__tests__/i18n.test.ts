@@ -53,17 +53,17 @@ describe('getPanelDir', () => {
 describe('getActiveLocale', () => {
   it('returns "en" when no global config set', () => {
     const g = globalThis as Record<string, unknown>
-    const prev = g['__boostkit_localization_config__']
-    delete g['__boostkit_localization_config__']
+    const prev = g['__rudderjs_localization_config__']
+    delete g['__rudderjs_localization_config__']
     assert.equal(getActiveLocale(), 'en')
-    g['__boostkit_localization_config__'] = prev
+    g['__rudderjs_localization_config__'] = prev
   })
 
   it('returns locale from global config', () => {
     const g = globalThis as Record<string, unknown>
-    g['__boostkit_localization_config__'] = { locale: 'ar' }
+    g['__rudderjs_localization_config__'] = { locale: 'ar' }
     assert.equal(getActiveLocale(), 'ar')
-    delete g['__boostkit_localization_config__']
+    delete g['__rudderjs_localization_config__']
   })
 })
 
@@ -90,11 +90,11 @@ describe('Panel.locale()', () => {
 
   it('falls back to getActiveLocale() when not set', () => {
     const g = globalThis as Record<string, unknown>
-    const prev = g['__boostkit_localization_config__']
-    delete g['__boostkit_localization_config__']
+    const prev = g['__rudderjs_localization_config__']
+    delete g['__rudderjs_localization_config__']
     const meta = Panel.make('x').path('/x').toMeta()
     assert.equal(meta.locale, 'en')
-    g['__boostkit_localization_config__'] = prev
+    g['__rudderjs_localization_config__'] = prev
   })
 })
 

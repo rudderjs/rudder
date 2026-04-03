@@ -1,6 +1,6 @@
 /**
  * Server-safe entry point — only exports the ServiceProvider.
- * Import this from bootstrap/providers.ts (Node.js / artisan context).
+ * Import this from bootstrap/providers.ts (Node.js / rudder context).
  * No React imports here.
  */
 export { MediaServiceProvider, media, mediaExtension } from './MediaServiceProvider.js'

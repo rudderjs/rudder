@@ -44,7 +44,7 @@ export interface ModelLike {
   query(): QueryBuilderLike<RecordRow>
 }
 
-/** Minimal interface for @boostkit/core `app()` factory. */
+/** Minimal interface for @rudderjs/core `app()` factory. */
 export interface AppLike {
   make(key: string): unknown
 }

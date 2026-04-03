@@ -5,7 +5,7 @@ Stream agent responses for real-time UI updates.
 ## Basic Streaming
 
 ```ts
-import { agent } from '@boostkit/ai'
+import { agent } from '@rudderjs/ai'
 
 const { stream, response } = agent('You are helpful.').stream('Tell me a story')
 
@@ -24,8 +24,8 @@ console.log(`Total tokens: ${final.usage.totalTokens}`)
 Stream to the browser via Server-Sent Events:
 
 ```ts
-import { Route } from '@boostkit/router'
-import { AI } from '@boostkit/ai'
+import { Route } from '@rudderjs/router'
+import { AI } from '@rudderjs/ai'
 
 Route.post('/api/ai/stream', async (req) => {
   const { message } = await req.json()

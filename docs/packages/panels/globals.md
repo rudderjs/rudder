@@ -8,7 +8,7 @@ Single-record settings pages — same field system as Resources but no list/crea
 
 ```ts
 // app/Panels/Admin/globals/SiteSettingsGlobal.ts
-import { Global, TextField, TextareaField, ToggleField, FileField, ColorField, Section } from '@boostkit/panels'
+import { Global, TextField, TextareaField, ToggleField, FileField, ColorField, Section } from '@rudderjs/panels'
 
 export class SiteSettingsGlobal extends Global {
   static slug  = 'site-settings'

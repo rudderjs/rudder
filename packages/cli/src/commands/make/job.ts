@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string): string {
-  return `import { Job } from '@boostkit/queue'
+  return `import { Job } from '@rudderjs/queue'
 
 export class ${className} extends Job {
   static queue   = 'default'

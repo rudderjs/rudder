@@ -1,4 +1,4 @@
-import { Command } from '@boostkit/artisan'
+import { Command } from '@rudderjs/rudder'
 
 export class SendEmails extends Command {
   readonly signature   = 'mail:send {--force : Skip confirmation}'

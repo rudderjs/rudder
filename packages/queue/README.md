@@ -1,18 +1,18 @@
-# @boostkit/queue
+# @rudderjs/queue
 
 Queue job abstractions, registry, and provider factory with built-in `sync` driver and plugin support for `inngest` and `bullmq`.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/queue
+pnpm add @rudderjs/queue
 ```
 
 ## Setup
 
 ```ts
 // config/queue.ts
-import type { QueueConfig } from '@boostkit/queue'
+import type { QueueConfig } from '@rudderjs/queue'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'sync'),
@@ -25,7 +25,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { queue } from '@boostkit/queue'
+import { queue } from '@rudderjs/queue'
 import configs from '../config/index.js'
 
 export default [queue(configs.queue)]
@@ -34,7 +34,7 @@ export default [queue(configs.queue)]
 ## Defining Jobs
 
 ```ts
-import { Job } from '@boostkit/queue'
+import { Job } from '@rudderjs/queue'
 
 export class SendWelcomeEmail extends Job {
   static override queue   = 'emails'
@@ -100,10 +100,10 @@ interface QueueConfig {
 // Sync (built-in — runs jobs immediately in-process)
 { driver: 'sync' }
 
-// BullMQ (requires: pnpm add @boostkit/queue-bullmq ioredis)
+// BullMQ (requires: pnpm add @rudderjs/queue-bullmq ioredis)
 { driver: 'bullmq', host: '127.0.0.1', port: 6379 }
 
-// Inngest (requires: pnpm add @boostkit/queue-inngest inngest)
+// Inngest (requires: pnpm add @rudderjs/queue-inngest inngest)
 { driver: 'inngest', eventKey: '...', signingKey: '...' }
 ```
 
@@ -121,10 +121,10 @@ Runs jobs immediately in the same process. No external dependencies. Good for de
 
 | Driver    | Package                    | Install                                    |
 |-----------|----------------------------|--------------------------------------------|
-| `bullmq`  | `@boostkit/queue-bullmq`   | `pnpm add @boostkit/queue-bullmq ioredis`  |
-| `inngest` | `@boostkit/queue-inngest`  | `pnpm add @boostkit/queue-inngest inngest` |
+| `bullmq`  | `@rudderjs/queue-bullmq`   | `pnpm add @rudderjs/queue-bullmq ioredis`  |
+| `inngest` | `@rudderjs/queue-inngest`  | `pnpm add @rudderjs/queue-inngest inngest` |
 
-## Artisan Commands
+## Rudder Commands
 
 | Command          | Description                                     |
 |------------------|-------------------------------------------------|
@@ -135,19 +135,19 @@ Runs jobs immediately in the same process. No external dependencies. Good for de
 | `queue:retry`    | Re-enqueue all failed jobs.                     |
 
 ```bash
-pnpm artisan queue:work
-pnpm artisan queue:work emails,default
-pnpm artisan queue:status
-pnpm artisan queue:status emails
-pnpm artisan queue:clear
-pnpm artisan queue:failed
-pnpm artisan queue:retry
+pnpm rudder queue:work
+pnpm rudder queue:work emails,default
+pnpm rudder queue:status
+pnpm rudder queue:status emails
+pnpm rudder queue:clear
+pnpm rudder queue:failed
+pnpm rudder queue:retry
 ```
 
 ## `QueueRegistry`
 
 ```ts
-import { QueueRegistry } from '@boostkit/queue'
+import { QueueRegistry } from '@rudderjs/queue'
 
 const adapter = QueueRegistry.get()  // QueueAdapter | null
 ```
@@ -157,7 +157,7 @@ const adapter = QueueRegistry.get()  // QueueAdapter | null
 Exported for standalone use and testing:
 
 ```ts
-import { SyncAdapter } from '@boostkit/queue'
+import { SyncAdapter } from '@rudderjs/queue'
 
 const adapter = new SyncAdapter()
 await adapter.dispatch(new MyJob())
@@ -168,5 +168,5 @@ await adapter.dispatch(new MyJob())
 - TTL/delay values are in **milliseconds**.
 - `sync` driver ignores `delay` — jobs run immediately.
 - `SyncAdapter` calls `job.failed()` before re-throwing on error.
-- All commands are registered in `boot()` — they appear in `pnpm artisan --help` regardless of driver.
+- All commands are registered in `boot()` — they appear in `pnpm rudder --help` regardless of driver.
 - Commands that the active driver doesn't support throw an error with a helpful message.

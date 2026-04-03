@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { artisan } from '@boostkit/core'
+import { rudder } from '@rudderjs/core'
 import { Job, DispatchBuilder, QueueRegistry, SyncAdapter, queue, type QueueAdapter, type DispatchOptions } from './index.js'
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -31,7 +31,7 @@ class SlowJob extends Job {
 const fakeApp = { instance: () => undefined } as never
 
 function runCommand(name: string, args: string[] = []): Promise<void> {
-  const cmd = artisan.getCommands().find(c => c.name === name)
+  const cmd = rudder.getCommands().find(c => c.name === name)
   if (!cmd) throw new Error(`Command "${name}" not registered`)
   return Promise.resolve(cmd.handler(args, {})) as Promise<void>
 }
@@ -201,12 +201,12 @@ describe('queue() provider', () => {
   })
 })
 
-// ─── artisan commands — sync driver (no work/status/etc.) ──
+// ─── rudder commands — sync driver (no work/status/etc.) ──
 
-describe('artisan commands — unsupported operations', () => {
+describe('rudder commands — unsupported operations', () => {
   beforeEach(async () => {
     QueueRegistry.reset()
-    artisan.reset()
+    rudder.reset()
     const Provider = queue({ default: 'sync', connections: { sync: { driver: 'sync' } } })
     await new Provider(fakeApp).boot?.()
   })
@@ -232,9 +232,9 @@ describe('artisan commands — unsupported operations', () => {
   })
 })
 
-// ─── artisan commands — full mock adapter ──────────────────
+// ─── rudder commands — full mock adapter ──────────────────
 
-describe('artisan commands — full adapter', () => {
+describe('rudder commands — full adapter', () => {
   let worked:  string[]
   let cleared: string[]
   let retried: string[]
@@ -245,7 +245,7 @@ describe('artisan commands — full adapter', () => {
     retried = []
 
     QueueRegistry.reset()
-    artisan.reset()
+    rudder.reset()
 
     const mockFull: QueueAdapter = {
       async dispatch() {},
@@ -263,19 +263,19 @@ describe('artisan commands — full adapter', () => {
     QueueRegistry.set(mockFull)
 
     // Register a fake provider that uses our mock adapter
-    artisan.command('queue:work', async (args) => {
+    rudder.command('queue:work', async (args) => {
       await mockFull.work!(args[0] ?? 'default')
     })
-    artisan.command('queue:status', async (args) => {
+    rudder.command('queue:status', async (args) => {
       await mockFull.status!(args[0] ?? 'default')
     })
-    artisan.command('queue:clear', async (args) => {
+    rudder.command('queue:clear', async (args) => {
       await mockFull.flush!(args[0] ?? 'default')
     })
-    artisan.command('queue:failed', async (args) => {
+    rudder.command('queue:failed', async (args) => {
       await mockFull.failures!(args[0] ?? 'default')
     })
-    artisan.command('queue:retry', async (args) => {
+    rudder.command('queue:retry', async (args) => {
       await mockFull.retryFailed!(args[0] ?? 'default')
     })
   })

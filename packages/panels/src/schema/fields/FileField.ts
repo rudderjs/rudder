@@ -35,14 +35,14 @@ export class FileField extends Field {
 
   /**
    * Auto-optimize uploaded images — strip metadata, convert to WebP, good quality defaults.
-   * Requires `@boostkit/image` (optional peer).
+   * Requires `@rudderjs/image` (optional peer).
    */
   optimize(): this { this._optimize = true; return this }
 
   /**
    * Generate additional image sizes on upload.
    * Each conversion is stored alongside the original using a `{name}-{convName}.{format}` naming convention.
-   * Requires `@boostkit/image` (optional peer).
+   * Requires `@rudderjs/image` (optional peer).
    *
    * @example
    * FileField.make('image')

@@ -1,11 +1,11 @@
-# @boostkit/schedule
+# @rudderjs/schedule
 
-Task scheduler with cron-based expressions, fluent API, and artisan commands.
+Task scheduler with cron-based expressions, fluent API, and rudder commands.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/schedule
+pnpm add @rudderjs/schedule
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ Register the scheduler provider in `bootstrap/providers.ts`:
 
 ```ts
 // bootstrap/providers.ts
-import { scheduler } from '@boostkit/schedule'
+import { scheduler } from '@rudderjs/schedule'
 
 export default [
   // ...other providers
@@ -26,7 +26,7 @@ Define scheduled tasks in `routes/console.ts` or inside a service provider's `bo
 
 ```ts
 // routes/console.ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@rudderjs/schedule'
 
 schedule.call(async () => {
   await syncExternalData()
@@ -48,7 +48,7 @@ schedule.call(async () => {
 Schedules an async or sync callback. Returns a `ScheduledTask` with a fluent configuration API:
 
 ```ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@rudderjs/schedule'
 
 schedule.call(async () => {
   await pingHealthCheck()
@@ -117,16 +117,16 @@ task.getDescription() // ''
 task.getTimezone()    // undefined
 ```
 
-## Artisan Commands
+## Rudder Commands
 
-`@boostkit/schedule` registers three commands automatically when `scheduler()` is included in providers:
+`@rudderjs/schedule` registers three commands automatically when `scheduler()` is included in providers:
 
 ### `schedule:run`
 
 Runs all tasks that are due at the current time, then exits. Designed to be triggered by an external cron job firing every minute:
 
 ```bash
-pnpm artisan schedule:run
+pnpm rudder schedule:run
 ```
 
 ### `schedule:work`
@@ -134,7 +134,7 @@ pnpm artisan schedule:run
 Long-running in-process daemon — starts all tasks and keeps them running on their cron schedules. Press Ctrl+C to stop:
 
 ```bash
-pnpm artisan schedule:work
+pnpm rudder schedule:work
 ```
 
 ### `schedule:list`
@@ -142,7 +142,7 @@ pnpm artisan schedule:work
 Prints all registered tasks with their cron expression, description, and next run time:
 
 ```bash
-pnpm artisan schedule:list
+pnpm rudder schedule:list
 ```
 
 ```

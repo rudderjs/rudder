@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/core'
+import type { MiddlewareHandler } from '@rudderjs/core'
 import type { RouterLike } from '../types.js'
 import type { Panel } from '../../Panel.js'
 import { StatsRegistry } from '../../registries/StatsRegistry.js'

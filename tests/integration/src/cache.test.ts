@@ -6,7 +6,7 @@
  */
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryAdapter, CacheRegistry, Cache } from '@boostkit/cache'
+import { MemoryAdapter, CacheRegistry, Cache } from '@rudderjs/cache'
 
 let adapter: MemoryAdapter
 

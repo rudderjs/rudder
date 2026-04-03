@@ -1,11 +1,11 @@
-# @boostkit/image
+# @rudderjs/image
 
-Fluent image processing for BoostKit -- resize, crop, convert, and optimize images. Thin wrapper over [sharp](https://sharp.pixelplumbing.com/).
+Fluent image processing for RudderJS -- resize, crop, convert, and optimize images. Thin wrapper over [sharp](https://sharp.pixelplumbing.com/).
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/image sharp
+pnpm add @rudderjs/image sharp
 ```
 
 `sharp` is an optional peer dependency -- it must be installed separately.
@@ -13,7 +13,7 @@ pnpm add @boostkit/image sharp
 ## Quick Start
 
 ```ts
-import { image } from '@boostkit/image'
+import { image } from '@rudderjs/image'
 
 // Resize and convert to WebP
 const buffer = await image(uploadedFile)
@@ -60,7 +60,7 @@ All return `this` for chaining.
 |---|---|---|
 | `toBuffer()` | `Promise<Buffer>` | Processed image as a Buffer. |
 | `toFile(path)` | `Promise<void>` | Write to filesystem. |
-| `toStorage(disk, path)` | `Promise<void>` | Write to a storage disk. Requires `@boostkit/storage`. |
+| `toStorage(disk, path)` | `Promise<void>` | Write to a storage disk. Requires `@rudderjs/storage`. |
 | `toStream()` | `Promise<ReadableStream>` | Readable stream of the processed image. |
 | `metadata()` | `Promise<ImageInfo>` | Image dimensions, format, size -- no processing. |
 | `generateToStorage(disk, dir)` | `Promise<ConversionResult[]>` | Process all conversions and write to storage. |
@@ -83,10 +83,10 @@ const results = await image(uploadedFile)
 
 ## Storage Integration
 
-`toStorage()` and `generateToStorage()` use `@boostkit/storage` to write files:
+`toStorage()` and `generateToStorage()` use `@rudderjs/storage` to write files:
 
 ```bash
-pnpm add @boostkit/storage
+pnpm add @rudderjs/storage
 ```
 
 Without it, use `toBuffer()` or `toFile()` directly.

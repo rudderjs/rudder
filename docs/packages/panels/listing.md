@@ -108,7 +108,7 @@ TextField.make('name').sortable()
 `SelectFilter` renders a `<select>` dropdown in the toolbar:
 
 ```ts
-import { SelectFilter, SearchFilter } from '@boostkit/panels'
+import { SelectFilter, SearchFilter } from '@rudderjs/panels'
 
 // Simple — column = value (default, column name = filter name)
 SelectFilter.make('role')
@@ -167,7 +167,7 @@ Multiple filters compose with AND logic.
 Tab filters provide a pill-style tab bar above the table for quick, predefined query scopes. Define them via the `tabs()` method on your resource:
 
 ```ts
-import { ListTab } from '@boostkit/panels'
+import { ListTab } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   // ...
@@ -248,7 +248,7 @@ What gets persisted:
 Appear in the multi-select bar when one or more rows are checked.
 
 ```ts
-import { Action } from '@boostkit/panels'
+import { Action } from '@rudderjs/panels'
 
 Action.make('markComplete')
   .label('Mark as Complete')

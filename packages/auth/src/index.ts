@@ -1,10 +1,10 @@
-import { ServiceProvider, type Application, app } from '@boostkit/core'
-import type { MiddlewareHandler } from '@boostkit/contracts'
+import { ServiceProvider, type Application, app } from '@rudderjs/core'
+import type { MiddlewareHandler } from '@rudderjs/contracts'
 import type { BetterAuthOptions } from 'better-auth'
 
 // ─── Module Augmentation ───────────────────────────────────
 
-declare module '@boostkit/contracts' {
+declare module '@rudderjs/contracts' {
   interface AppRequest {
     user?: AuthUser
   }
@@ -135,7 +135,7 @@ function mapDriver(driver?: string): 'sqlite' | 'postgresql' | 'mysql' {
  * creates its own PrismaClient internally (separate from the ORM's client).
  *
  * Usage in bootstrap/providers.ts:
- *   import { betterAuth } from '@boostkit/auth'
+ *   import { betterAuth } from '@rudderjs/auth'
  *   import configs from '../config/index.ts'
  *   export default [
  *     betterAuth(configs.auth, configs.database.connections[configs.database.default]),
@@ -192,7 +192,7 @@ export function auth(
         database = prismaAdapter(prisma as Parameters<typeof prismaAdapter>[0], { provider: mapDriver(dbConfig.driver) })
       } else {
         throw new Error(
-          '[@boostkit/auth] No database found. Register @boostkit/orm-prisma or @boostkit/orm-drizzle before auth, ' +
+          '[@rudderjs/auth] No database found. Register @rudderjs/orm-prisma or @rudderjs/orm-drizzle before auth, ' +
           'or pass a dbConfig as the second argument to auth().'
         )
       }
@@ -255,7 +255,7 @@ export type BetterAuthInstance = Awaited<ReturnType<typeof import('better-auth')
  * Requires betterAuth() provider to be registered in bootstrap/providers.ts.
  *
  * Usage in routes:
- *   import { AuthMiddleware } from '@boostkit/auth'
+ *   import { AuthMiddleware } from '@rudderjs/auth'
  *   const authMw = AuthMiddleware()
  *   Route.post('/api/posts', handler, [authMw])
  */

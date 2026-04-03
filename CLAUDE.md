@@ -6,12 +6,12 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project Overview
 
-**BoostKit** is a Laravel-inspired, framework-agnostic Node.js meta-framework built on top of **Vike + Vite**. It brings Laravel's developer experience (DI container, Eloquent-style ORM, Artisan CLI, middleware, form requests, queues) to the Node.js ecosystem — while remaining modular and UI-agnostic.
+**RudderJS** is a Laravel-inspired, framework-agnostic Node.js meta-framework built on top of **Vike + Vite**. It brings Laravel's developer experience (DI container, Eloquent-style ORM, Rudder CLI, middleware, form requests, queues) to the Node.js ecosystem — while remaining modular and UI-agnostic.
 
 - **Monorepo**: pnpm workspaces + Turborepo
 - **Language**: TypeScript (strict, ESM, NodeNext)
-- **npm scope**: `@boostkit/*`
-- **GitHub**: https://github.com/boostkitjs/boostkit
+- **npm scope**: `@rudderjs/*`
+- **GitHub**: https://github.com/rudderjs/rudderjs
 - **Status**: Early development — 31 packages published to npm
 
 ---
@@ -39,7 +39,7 @@ Running the playground (demo app):
 ```bash
 cd playground
 pnpm dev          # vike dev (Vite + SSR)
-pnpm artisan      # BoostKit CLI (tsx node_modules/@boostkit/cli/src/index.ts)
+pnpm rudder      # RudderJS CLI (tsx node_modules/@rudderjs/cli/src/index.ts)
 ```
 
 > Always run `pnpm build` from root before `pnpm dev` in playground — packages must be compiled first.
@@ -49,7 +49,7 @@ Prisma (run from `playground/`):
 pnpm exec prisma generate       # Regenerate client after schema changes
 pnpm exec prisma db push        # Sync schema → DB (dev, no migrations)
 pnpm exec prisma migrate dev    # Create a migration
-pnpm artisan db:seed            # Seed via artisan command
+pnpm rudder db:seed            # Seed via rudder command
 ```
 
 ---
@@ -77,25 +77,25 @@ npm requires browser passkey auth — press Enter when prompted to open the brow
 ## Monorepo Layout
 
 ```
-boostkit/
-├── packages/           # 31 published packages (@boostkit/*)
+rudderjs/
+├── packages/           # 31 published packages (@rudderjs/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
 │   ├── middleware/     # Middleware base, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
 │   │                   #   + RateLimit / RateLimitBuilder (cache-backed, merged from rate-limit pkg)
 │   ├── validation/     # FormRequest, validate(), validateWith(), ValidationError, z re-export
-│   ├── artisan/        # ArtisanRegistry, Command base class, parseSignature, artisan singleton
+│   ├── rudder/        # CommandRegistry, Command base class, parseSignature, rudder singleton
 │   ├── core/           # App bootstrapper, ServiceProvider, Forge, AppBuilder
-│   │                   #   re-exports: di · support · contracts types · artisan
+│   │                   #   re-exports: di · support · contracts types · rudder
 │   ├── router/         # Decorator routing + global router singleton
 │   ├── orm/            # ORM contract/interface + Model base class
 │   ├── orm-prisma/     # Prisma adapter (multi-driver)
 │   ├── orm-drizzle/    # Drizzle adapter (multi-driver: sqlite, postgresql, libsql)
-│   ├── queue/          # Queue contract/interface + queue:work artisan command
-│   ├── queue-inngest/  # Inngest adapter — events named boostkit/job.<ClassName>
-│   ├── queue-bullmq/   # BullMQ adapter — default prefix 'boostkit'
-│   ├── server-hono/    # Hono adapter (HonoConfig, logger [boostkit] tag, CORS)
+│   ├── queue/          # Queue contract/interface + queue:work rudder command
+│   ├── queue-inngest/  # Inngest adapter — events named rudderjs/job.<ClassName>
+│   ├── queue-bullmq/   # BullMQ adapter — default prefix 'rudderjs'
+│   ├── server-hono/    # Hono adapter (HonoConfig, logger [rudderjs] tag, CORS)
 │   ├── auth/           # Auth types (AuthUser, AuthSession, AuthResult) + betterAuth() factory
 │   │                   #   (merged from auth-better-auth — single package)
 │   ├── storage/        # Storage facade, LocalAdapter + S3Adapter (built-in)
@@ -124,10 +124,10 @@ boostkit/
 │   ├── ai/             # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system,
 │   │                   #   streaming, middleware, structured output, conversation memory, AI facade, AiFake
 │   ├── workspaces/     # AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator
-│   │                   #   Panel plugin: workspaces(). Uses @boostkit/ai for LLM, Prisma for persistence.
+│   │                   #   Panel plugin: workspaces(). Uses @rudderjs/ai for LLM, Prisma for persistence.
 │   ├── localization/   # i18n — trans(), setLocale(), locale-aware middleware, JSON translation files
-│   └── cli/            # make:*, module:*, module:publish, artisan user commands
-├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm/npm/yarn/bun create boostkit-app)
+│   └── cli/            # make:*, module:*, module:publish, rudder user commands
+├── create-rudderjs-app/   # Interactive scaffolder CLI (pnpm/npm/yarn/bun create rudderjs-app)
 │                          #   Prompts: name · DB · Todo · AI · frameworks · primary · Tailwind · shadcn
 ├── docs/               # VitePress documentation site
 └── playground/         # Demo app — primary integration reference
@@ -139,46 +139,46 @@ boostkit/
 
 | Package | Version | Notes |
 |---|---|---|
-| `@boostkit/contracts` | 0.0.1 | Pure TypeScript types: ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler |
-| `@boostkit/support` | 0.0.1 | Collection, Env, defineEnv, ConfigRepository, resolveOptionalPeer, helpers |
-| `@boostkit/middleware` | 0.0.2 | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware, RateLimit |
-| `@boostkit/validation` | 0.0.1 | FormRequest, validate(), validateWith(), ValidationError, z re-export |
-| `@boostkit/artisan` | 0.0.1 | ArtisanRegistry, Command base, parseSignature, artisan singleton |
-| `@boostkit/core` | 0.0.2 | Application, DI container, ServiceProvider, Forge, AppBuilder |
-| `@boostkit/server-hono` | 0.0.2 | Hono adapter, logger `[boostkit]` tag, CORS |
-| `@boostkit/router` | 0.0.2 | Fluent + decorator routing — metadata keys: `boostkit:controller:*/route:*` |
-| `@boostkit/queue` | 0.0.1 | Job, QueueAdapter interface, queue:work command |
-| `@boostkit/queue-inngest` | 0.0.2 | Inngest adapter — events: `boostkit/job.<ClassName>` |
-| `@boostkit/queue-bullmq` | 0.0.2 | BullMQ Redis-backed queue — default prefix: `'boostkit'` |
-| `@boostkit/orm` | 0.0.2 | Model, QueryBuilder, ModelRegistry |
-| `@boostkit/orm-prisma` | 0.0.1 | Prisma adapter, multi-driver |
-| `@boostkit/orm-drizzle` | 0.0.1 | Drizzle adapter — multi-driver (sqlite, postgresql, libsql) |
-| `@boostkit/cli` | 0.0.2 | make:*, module:*, module:publish — markers: `<boostkit:modules:start/end>` |
-| `@boostkit/auth` | 0.0.1 | AuthUser/Session/Result types + betterAuth() factory (merged from auth-better-auth) |
-| `@boostkit/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
-| `@boostkit/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
-| `@boostkit/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
-| `@boostkit/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
-| `@boostkit/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
-| `@boostkit/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
-| `@boostkit/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@boostkit/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` tool, resource context, field typing animation), `registerLazyElement`/`registerResolver` for plugins |
-| `@boostkit/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
-| `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
-| `@boostkit/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
-| `@boostkit/ai` | 0.0.1 | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware, Output, conversation memory, AI facade, AiFake |
-| `@boostkit/workspaces` | 0.0.1 | AI workspace canvas — Isoflow-style 3D nodes, departments, connections. Panel plugin: `workspaces()` |
-| `@boostkit/localization` | 0.0.1 | i18n — `trans()`, `setLocale()`, `getLocale()`, locale middleware, JSON translation files |
+| `@rudderjs/contracts` | 0.0.1 | Pure TypeScript types: ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler |
+| `@rudderjs/support` | 0.0.1 | Collection, Env, defineEnv, ConfigRepository, resolveOptionalPeer, helpers |
+| `@rudderjs/middleware` | 0.0.2 | Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware, RateLimit |
+| `@rudderjs/validation` | 0.0.1 | FormRequest, validate(), validateWith(), ValidationError, z re-export |
+| `@rudderjs/rudder` | 0.0.1 | CommandRegistry, Command base, parseSignature, rudder singleton |
+| `@rudderjs/core` | 0.0.2 | Application, DI container, ServiceProvider, Forge, AppBuilder |
+| `@rudderjs/server-hono` | 0.0.2 | Hono adapter, logger `[rudderjs]` tag, CORS |
+| `@rudderjs/router` | 0.0.2 | Fluent + decorator routing — metadata keys: `rudderjs:controller:*/route:*` |
+| `@rudderjs/queue` | 0.0.1 | Job, QueueAdapter interface, queue:work command |
+| `@rudderjs/queue-inngest` | 0.0.2 | Inngest adapter — events: `rudderjs/job.<ClassName>` |
+| `@rudderjs/queue-bullmq` | 0.0.2 | BullMQ Redis-backed queue — default prefix: `'rudderjs'` |
+| `@rudderjs/orm` | 0.0.2 | Model, QueryBuilder, ModelRegistry |
+| `@rudderjs/orm-prisma` | 0.0.1 | Prisma adapter, multi-driver |
+| `@rudderjs/orm-drizzle` | 0.0.1 | Drizzle adapter — multi-driver (sqlite, postgresql, libsql) |
+| `@rudderjs/cli` | 0.0.2 | make:*, module:*, module:publish — markers: `<rudderjs:modules:start/end>` |
+| `@rudderjs/auth` | 0.0.1 | AuthUser/Session/Result types + betterAuth() factory (merged from auth-better-auth) |
+| `@rudderjs/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
+| `@rudderjs/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
+| `@rudderjs/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
+| `@rudderjs/mail` | 0.0.1 | Mailable, Mail facade, LogAdapter + SMTP (Nodemailer), mail() factory |
+| `@rudderjs/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
+| `@rudderjs/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
+| `@rudderjs/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
+| `@rudderjs/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` tool, resource context, field typing animation), `registerLazyElement`/`registerResolver` for plugins |
+| `@rudderjs/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
+| `@rudderjs/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
+| `@rudderjs/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
+| `@rudderjs/ai` | 0.0.1 | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware, Output, conversation memory, AI facade, AiFake |
+| `@rudderjs/workspaces` | 0.0.1 | AI workspace canvas — Isoflow-style 3D nodes, departments, connections. Panel plugin: `workspaces()` |
+| `@rudderjs/localization` | 0.0.1 | i18n — `trans()`, `setLocale()`, `getLocale()`, locale middleware, JSON translation files |
 
 **Merged/removed packages** (code absorbed, originals deleted):
-- `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
-- `@boostkit/di` → merged into `@boostkit/core`
-- `@boostkit/rate-limit` → merged into `@boostkit/middleware`
-- `@boostkit/storage-s3` → merged into `@boostkit/storage`
-- `@boostkit/cache-redis` → merged into `@boostkit/cache`
-- `@boostkit/mail-nodemailer` → merged into `@boostkit/mail`
-- `@boostkit/events` → merged into `@boostkit/core`
-- `@boostkit/dashboards` → merged into `@boostkit/panels`
+- `@rudderjs/auth-better-auth` → merged into `@rudderjs/auth`
+- `@rudderjs/di` → merged into `@rudderjs/core`
+- `@rudderjs/rate-limit` → merged into `@rudderjs/middleware`
+- `@rudderjs/storage-s3` → merged into `@rudderjs/storage`
+- `@rudderjs/cache-redis` → merged into `@rudderjs/cache`
+- `@rudderjs/mail-nodemailer` → merged into `@rudderjs/mail`
+- `@rudderjs/events` → merged into `@rudderjs/core`
+- `@rudderjs/dashboards` → merged into `@rudderjs/panels`
 
 ---
 
@@ -187,38 +187,38 @@ boostkit/
 ### Dependency Flow
 
 ```
-@boostkit/contracts   (pure types, no runtime)
+@rudderjs/contracts   (pure types, no runtime)
        │
-@boostkit/support     (Env, Collection, helpers)
-@boostkit/middleware  (Pipeline, built-ins, RateLimit)
-@boostkit/validation  (FormRequest, z)
+@rudderjs/support     (Env, Collection, helpers)
+@rudderjs/middleware  (Pipeline, built-ins, RateLimit)
+@rudderjs/validation  (FormRequest, z)
        │
-@boostkit/router      @boostkit/server-hono
+@rudderjs/router      @rudderjs/server-hono
        │
-@boostkit/core        (Application, Container, ServiceProvider, bootstrap)
+@rudderjs/core        (Application, Container, ServiceProvider, bootstrap)
        │
-@boostkit/orm    @boostkit/queue    @boostkit/cache    @boostkit/storage
+@rudderjs/orm    @rudderjs/queue    @rudderjs/cache    @rudderjs/storage
        │              │              (redis built-in)   (s3 built-in)
  orm-prisma      queue-bullmq
  orm-drizzle     queue-inngest
        │
-@boostkit/auth                      @boostkit/mail   @boostkit/schedule
+@rudderjs/auth                      @rudderjs/mail   @rudderjs/schedule
        │
-@boostkit/notification              @boostkit/localization
+@rudderjs/notification              @rudderjs/localization
 
-@boostkit/ai          (4 providers, Agent, tools, streaming, middleware)
+@rudderjs/ai          (4 providers, Agent, tools, streaming, middleware)
        │
-@boostkit/broadcast   @boostkit/live     @boostkit/panels
+@rudderjs/broadcast   @rudderjs/live     @rudderjs/panels
        │              (Yjs CRDT)          (admin panel, resources, plugins)
        │                                        │
-       │                               @boostkit/panels-lexical
-       │                               @boostkit/media  (Panel.use plugin)
-       │                               @boostkit/workspaces (Panel.use plugin, uses @boostkit/ai)
+       │                               @rudderjs/panels-lexical
+       │                               @rudderjs/media  (Panel.use plugin)
+       │                               @rudderjs/workspaces (Panel.use plugin, uses @rudderjs/ai)
        │
-@boostkit/image       (standalone, used by media for conversions)
+@rudderjs/image       (standalone, used by media for conversions)
 ```
 
-> **Cycle resolution**: `@boostkit/core` loads `@boostkit/router` at runtime via `resolveOptionalPeer('@boostkit/router')`. Never add `@boostkit/core` to router's `dependencies` or `devDependencies`.
+> **Cycle resolution**: `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer('@rudderjs/router')`. Never add `@rudderjs/core` to router's `dependencies` or `devDependencies`.
 
 ### Dynamic Provider Registration
 
@@ -264,9 +264,9 @@ If any item fails, keep packages separate.
 // bootstrap/app.ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
-import { RateLimit } from '@boostkit/middleware'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
+import { RateLimit } from '@rudderjs/middleware'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -286,15 +286,15 @@ export default Application.configure({
   .create()
 ```
 
-#### `@boostkit/auth` — Auth (better-auth)
+#### `@rudderjs/auth` — Auth (better-auth)
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@boostkit/auth'
+import { betterAuth } from '@rudderjs/auth'
 export default [betterAuth(configs.auth), ...]
 
 // Usage
-import type { BetterAuthInstance } from '@boostkit/auth'
+import type { BetterAuthInstance } from '@rudderjs/auth'
 const auth = app().make<BetterAuthInstance>('auth')
 ```
 
@@ -302,10 +302,10 @@ const auth = app().make<BetterAuthInstance>('auth')
 - Mounts `/api/auth/*` — must register before the `/api/*` catch-all
 - Auth bound to DI as `'auth'`
 
-#### `@boostkit/middleware` — Rate Limiting
+#### `@rudderjs/middleware` — Rate Limiting
 
 ```ts
-import { RateLimit } from '@boostkit/middleware'
+import { RateLimit } from '@rudderjs/middleware'
 
 // Global
 m.use(RateLimit.perMinute(60).toHandler())
@@ -314,30 +314,30 @@ m.use(RateLimit.perMinute(60).toHandler())
 RateLimit.perMinute(10).message('Too many login attempts.').toHandler()
 ```
 
-Requires `@boostkit/cache` to be registered first. Fails open if no cache adapter.
+Requires `@rudderjs/cache` to be registered first. Fails open if no cache adapter.
 
-#### `@boostkit/storage` — S3 Driver
+#### `@rudderjs/storage` — S3 Driver
 
 S3 is built-in — no separate package needed:
 ```ts
-import { s3 } from '@boostkit/storage'
+import { s3 } from '@rudderjs/storage'
 // Also requires: pnpm add @aws-sdk/client-s3
 ```
 
-#### `@boostkit/cli` — Artisan CLI
+#### `@rudderjs/cli` — Rudder CLI
 
 ```bash
-pnpm artisan make:controller UserController
-pnpm artisan make:model Post
-pnpm artisan make:job SendWelcomeEmail
-pnpm artisan make:middleware Auth
-pnpm artisan make:request CreateUser
-pnpm artisan make:provider App
-pnpm artisan make:module Blog
-pnpm artisan module:publish   # merges *.prisma shards into prisma/schema.prisma
+pnpm rudder make:controller UserController
+pnpm rudder make:model Post
+pnpm rudder make:job SendWelcomeEmail
+pnpm rudder make:middleware Auth
+pnpm rudder make:request CreateUser
+pnpm rudder make:provider App
+pnpm rudder make:module Blog
+pnpm rudder module:publish   # merges *.prisma shards into prisma/schema.prisma
 ```
 
-Module scaffold markers in providers.ts: `// <boostkit:modules:start>` / `// <boostkit:modules:end>`
+Module scaffold markers in providers.ts: `// <rudderjs:modules:start>` / `// <rudderjs:modules:end>`
 
 ---
 
@@ -355,7 +355,7 @@ playground/
 │   └── Providers/DatabaseServiceProvider.ts + AppServiceProvider.ts
 ├── routes/
 │   ├── api.ts          # router.get/post/all()
-│   └── console.ts      # artisan.command()
+│   └── console.ts      # rudder.command()
 ├── pages/              # Vike file-based routing
 ├── prisma/schema.prisma
 └── vite.config.ts
@@ -374,7 +374,7 @@ playground/
 | Framework wiring | `bootstrap/app.ts` | Server adapter, providers, routing |
 | Build config | `vite.config.ts` | Vite + Vike plugins |
 
-There is **no `boostkit.config.ts`** — `bootstrap/app.ts` is the framework wiring file.
+There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wiring file.
 
 ---
 
@@ -395,15 +395,15 @@ There is **no `boostkit.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **Stale `dist/`**: Run `pnpm build` from root before running the playground
 - **Prisma client missing**: Run `pnpm exec prisma generate` from `playground/`
 - **Decorator errors**: Ensure `experimentalDecorators` and `emitDecoratorMetadata` in tsconfig.json
-- **Circular dep**: Never add `@boostkit/core` to router/server-hono's `dependencies` — `peerDependencies` only
+- **Circular dep**: Never add `@rudderjs/core` to router/server-hono's `dependencies` — `peerDependencies` only
 - **Port in use**: `lsof -ti :24678 -ti :3000 | xargs kill -9`
-- **`artisan` commands not appearing**: Run from `playground/` (needs `bootstrap/app.ts`)
+- **`rudder` commands not appearing**: Run from `playground/` (needs `bootstrap/app.ts`)
 - **RateLimit not working**: Requires a cache provider registered before middleware runs
-- **S3 disk errors**: Install `@aws-sdk/client-s3` — it's an optional dep of `@boostkit/storage`
-- **Panels pages not updated after source edit**: `packages/panels/pages/` are published copies. After editing source, re-run `pnpm artisan vendor:publish --tag=panels-pages --force` from `playground/`
-- **`panels-lexical` cycle**: `@boostkit/panels` must NOT depend on `@boostkit/panels-lexical`. The `+Layout.tsx` registers it client-side via `if (typeof window !== 'undefined') import('@boostkit/panels-lexical').then(...)`. `RichContentField` lives in `@boostkit/panels-lexical`, not `@boostkit/panels`.
+- **S3 disk errors**: Install `@aws-sdk/client-s3` — it's an optional dep of `@rudderjs/storage`
+- **Panels pages not updated after source edit**: `packages/panels/pages/` are published copies. After editing source, re-run `pnpm rudder vendor:publish --tag=panels-pages --force` from `playground/`
+- **`panels-lexical` cycle**: `@rudderjs/panels` must NOT depend on `@rudderjs/panels-lexical`. The `+Layout.tsx` registers it client-side via `if (typeof window !== 'undefined') import('@rudderjs/panels-lexical').then(...)`. `RichContentField` lives in `@rudderjs/panels-lexical`, not `@rudderjs/panels`.
 - **Plugin element registration**: Plugin schema elements use `registerLazyElement` (SSR-safe via `React.lazy`). Plugin SSR resolvers use `registerResolver` (via `PanelPlugin.resolvers`). Plugins publish `_register-{name}.ts` files auto-discovered by `+Layout.tsx` via `import.meta.glob('../_register-*.ts', { eager: true })`.
-- **Media plugin pattern**: `@boostkit/media` uses `PanelPlugin.resolvers` for SSR data + `_register-media.ts` for client component. Zero media-specific code in panels.
+- **Media plugin pattern**: `@rudderjs/media` uses `PanelPlugin.resolvers` for SSR data + `_register-media.ts` for client component. Zero media-specific code in panels.
 
 ### Collaborative Editing Architecture
 
@@ -431,7 +431,7 @@ Each collaborative field gets its own Y.Doc + WebSocket room. The form has a sep
 - `config/live.ts` `providers: ['websocket', 'indexeddb']` — controls form-level Y.Map providers
 - `.persist(['websocket', 'indexeddb'])` or `.collaborative()` on a field — marks it as collaborative, enables per-field Y.Doc
 
-## create-boostkit-app
+## create-rudderjs-app
 
 ### Prompts (in order)
 1. Project name
@@ -463,14 +463,14 @@ Helpers: `detectPackageManager()`, `pmExec(pm, bin)`, `pmRun(pm, script)`, `pmIn
 
 ### Template Gotchas
 - `tsconfig.json` must be self-contained — no `extends: ../tsconfig.base.json` (monorepo-only)
-- All `@boostkit/*` deps use `'latest'` — pnpm double-zero semver (`^0.0.x`) pins to exact version
+- All `@rudderjs/*` deps use `'latest'` — pnpm double-zero semver (`^0.0.x`) pins to exact version
 - Native-build field in `package.json` is PM-specific (see table above)
-- Use `database(configs.database)` from `@boostkit/orm-prisma` not `DatabaseServiceProvider` in providers.ts
+- Use `database(configs.database)` from `@rudderjs/orm-prisma` not `DatabaseServiceProvider` in providers.ts
 - `shadcn` dep only added when React + Tailwind are both selected
 - `src/index.css` not generated at all when Tailwind is not selected
 - React + Solid together: Vite plugins use `include`/`exclude` to disambiguate `.tsx` files
 - Secondary frameworks get demo pages at `pages/{fw}-demo/` (each with its own `+config.ts`)
-- `@boostkit/session` is in deps (providers.ts imports it)
+- `@rudderjs/session` is in deps (providers.ts imports it)
 
 ### Vike +config.ts Strategy
 - **Single framework**: renderer (`vike-react`/`vike-vue`/`vike-solid`) included in root `pages/+config.ts` alongside `vike-photon`. No `pages/index/+config.ts` generated.
@@ -478,7 +478,7 @@ Helpers: `detectPackageManager()`, `pmExec(pm, bin)`, `pmRun(pm, script)`, `pmIn
 
 ### Local Testing
 ```bash
-cd create-boostkit-app
+cd create-rudderjs-app
 pnpm build
 node dist/index.js        # launches the full interactive CLI
 ```

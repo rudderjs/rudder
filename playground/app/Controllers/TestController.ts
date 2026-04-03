@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Middleware } from '@boostkit/router'
-import { RateLimit } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Controller, Get, Post, Middleware } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 const limit = RateLimit.perMinute(30)
 

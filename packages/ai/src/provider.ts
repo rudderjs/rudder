@@ -1,4 +1,4 @@
-import { ServiceProvider, type Application } from '@boostkit/core'
+import { ServiceProvider, type Application } from '@rudderjs/core'
 import { AiRegistry } from './registry.js'
 import type { AiConfig } from './types.js'
 
@@ -7,7 +7,7 @@ import type { AiConfig } from './types.js'
  *
  * @example
  * // bootstrap/providers.ts
- * import { ai } from '@boostkit/ai'
+ * import { ai } from '@rudderjs/ai'
  * export default [ai(configs.ai), ...]
  */
 export function ai(config: AiConfig): new (app: Application) => ServiceProvider {

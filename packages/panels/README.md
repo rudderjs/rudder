@@ -1,9 +1,9 @@
-# @boostkit/panels
+# @rudderjs/panels
 
-Admin panel builder for BoostKit. Define resources and pages in TypeScript — the package auto-generates CRUD API routes and a polished React UI.
+Admin panel builder for RudderJS. Define resources and pages in TypeScript — the package auto-generates CRUD API routes and a polished React UI.
 
 ```bash
-pnpm add @boostkit/panels
+pnpm add @rudderjs/panels
 ```
 
 ---
@@ -12,7 +12,7 @@ pnpm add @boostkit/panels
 
 ```ts
 // app/Panels/Admin/AdminPanel.ts
-import { Panel } from '@boostkit/panels'
+import { Panel } from '@rudderjs/panels'
 import { UserResource } from './resources/UserResource.js'
 import { SiteSettingsGlobal } from './globals/SiteSettingsGlobal.js'
 
@@ -30,8 +30,8 @@ export const adminPanel = Panel.make('admin')
 Extend panels with `.use()`:
 
 ```ts
-import { media } from '@boostkit/media/server'
-import { panelsLexical } from '@boostkit/panels-lexical/server'
+import { media } from '@rudderjs/media/server'
+import { panelsLexical } from '@rudderjs/panels-lexical/server'
 
 export const adminPanel = Panel.make('admin')
   .path('/admin')
@@ -42,7 +42,7 @@ export const adminPanel = Panel.make('admin')
 
 ```ts
 // bootstrap/providers.ts
-import { panels } from '@boostkit/panels'
+import { panels } from '@rudderjs/panels'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 
 export default [
@@ -53,8 +53,8 @@ export default [
 Publish the React UI pages:
 
 ```bash
-pnpm artisan vendor:publish --tag=panels-pages
-pnpm artisan vendor:publish --tag=panels-pages --force  # after upgrading
+pnpm rudder vendor:publish --tag=panels-pages
+pnpm rudder vendor:publish --tag=panels-pages --force  # after upgrading
 ```
 
 ---
@@ -68,7 +68,7 @@ import {
   Resource, Table, Form, Column, Tab,
   TextField, TextareaField, SelectField, DateField, SelectFilter, Action,
   Stats, Stat,
-} from '@boostkit/panels'
+} from '@rudderjs/panels'
 import { Article } from '../../Models/Article.js'
 
 export class ArticleResource extends Resource {
@@ -249,9 +249,9 @@ Tabbed code display with copy button:
 
 ```ts
 Snippet.make('Install')
-  .tab('npm', 'npx create-boostkit-app', 'bash')
-  .tab('pnpm', 'pnpm create boostkit-app', 'bash')
-  .tab('yarn', 'yarn create boostkit-app', 'bash')
+  .tab('npm', 'npx create-rudderjs-app', 'bash')
+  .tab('pnpm', 'pnpm create rudderjs-app', 'bash')
+  .tab('yarn', 'yarn create rudderjs-app', 'bash')
 ```
 
 ### Example
@@ -472,7 +472,7 @@ View.make()
 Single-record settings pages:
 
 ```ts
-import { Global, Form, TextField, ToggleField, Section } from '@boostkit/panels'
+import { Global, Form, TextField, ToggleField, Section } from '@rudderjs/panels'
 
 export class SiteSettingsGlobal extends Global {
   static slug  = 'site-settings'
@@ -500,7 +500,7 @@ export class SiteSettingsGlobal extends Global {
 Custom pages with schema elements:
 
 ```ts
-import { Page, Heading, Text, Table, Column, Example, Alert, Each, Card, Stats, Stat } from '@boostkit/panels'
+import { Page, Heading, Text, Table, Column, Example, Alert, Each, Card, Stats, Stat } from '@rudderjs/panels'
 
 export class DashboardPage extends Page {
   static slug  = 'dashboard'
@@ -630,7 +630,7 @@ Adds trash toggle, restore, and force-delete.
 Define AI agents on resources — they read record data, update fields in real-time, and stream progress to a global chat panel.
 
 ```ts
-import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@boostkit/panels'
+import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   static model = Article
@@ -684,8 +684,8 @@ The chat endpoint (`POST /{panel}/api/_chat`) supports:
 For complex agents with custom tools:
 
 ```ts
-import { ResourceAgent } from '@boostkit/panels'
-import { toolDefinition } from '@boostkit/ai'
+import { ResourceAgent } from '@rudderjs/panels'
+import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 
 class TranslateAgent extends ResourceAgent {
@@ -711,7 +711,7 @@ class TranslateAgent extends ResourceAgent {
 }
 ```
 
-Requires `@boostkit/ai` as a peer dependency.
+Requires `@rudderjs/ai` as a peer dependency.
 
 ---
 

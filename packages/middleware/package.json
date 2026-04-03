@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/middleware",
+  "name": "@rudderjs/middleware",
   "version": "0.0.7",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/middleware"
   },
   "type": "module",
@@ -30,8 +30,8 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@boostkit/cache": "workspace:*",
-    "@boostkit/contracts": "workspace:*"
+    "@rudderjs/cache": "workspace:*",
+    "@rudderjs/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

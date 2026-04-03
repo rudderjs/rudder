@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/session",
+  "name": "@rudderjs/session",
   "version": "0.0.5",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/session"
   },
   "type": "module",
@@ -28,8 +28,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/contracts": "workspace:*",
-    "@boostkit/core": "workspace:*"
+    "@rudderjs/contracts": "workspace:*",
+    "@rudderjs/core": "workspace:*"
   },
   "optionalDependencies": {
     "ioredis": "^5.3.0"

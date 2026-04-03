@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Tab, Tabs, Table, Column, Chart, List, Stats, Stat } from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+import { Page, Heading, Text, Tab, Tabs, Table, Column, Chart, List, Stats, Stat } from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
 import { Category } from '../../../Models/Category.js'
@@ -75,7 +75,7 @@ export class TabsDemo extends Page {
             List.make('Resources')
               .items([
                 { label: 'Documentation', href: '/docs', icon: '📖' },
-                { label: 'GitHub', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
+                { label: 'GitHub', href: 'https://github.com/rudderjs/rudderjs', icon: '🐙' },
               ]),
           ]),
       ]).persist('session'),

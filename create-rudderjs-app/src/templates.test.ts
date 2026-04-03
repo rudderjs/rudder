@@ -169,11 +169,11 @@ describe('getTemplates() — secondary framework demo pages', () => {
 
 // ─── Auth pages ────────────────────────────────────────────
 // Auth page files (login/register) are NOT generated inline — they live in
-// @boostkit/auth/pages/ and are copied from node_modules after install,
-// or published via: artisan vendor:publish --tag=auth-pages-{framework}
+// @rudderjs/auth/pages/ and are copied from node_modules after install,
+// or published via: rudder vendor:publish --tag=auth-pages-{framework}
 
 describe('getTemplates() — auth pages', () => {
-  it('never generates login/register page files (come from @boostkit/auth)', () => {
+  it('never generates login/register page files (come from @rudderjs/auth)', () => {
     const withAuthFiles    = getTemplates(ctx({ packages: { ...defaultPkgs, auth: true } }))
     const withoutAuthFiles = getTemplates(ctx({ packages: noAuth }))
     for (const files of [withAuthFiles, withoutAuthFiles]) {
@@ -380,8 +380,8 @@ describe('getTemplates() — prisma schema', () => {
 
   it('includes module markers', () => {
     const schema = getTemplates(ctx())['prisma/schema/modules.prisma']!
-    assert.ok(schema.includes('// <boostkit:modules:start>'))
-    assert.ok(schema.includes('// <boostkit:modules:end>'))
+    assert.ok(schema.includes('// <rudderjs:modules:start>'))
+    assert.ok(schema.includes('// <rudderjs:modules:end>'))
   })
 })
 
@@ -415,68 +415,68 @@ describe('getTemplates() — package checklist', () => {
     assert.ok(!('config/database.ts' in files))
   })
 
-  it('auth not selected → no auth schema, no config/auth.ts, no @boostkit/auth in deps', () => {
+  it('auth not selected → no auth schema, no config/auth.ts, no @rudderjs/auth in deps', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
     assert.ok(!('prisma/schema/auth.prisma' in files))
     assert.ok(!('config/auth.ts' in files))
     assert.ok(!('config/session.ts' in files))
     assert.ok(!('app/Models/User.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok(!('@boostkit/auth' in pkg.dependencies))
-    assert.ok(!('@boostkit/session' in pkg.dependencies))
+    assert.ok(!('@rudderjs/auth' in pkg.dependencies))
+    assert.ok(!('@rudderjs/session' in pkg.dependencies))
   })
 
-  it('auth selected → auth schema, config/auth.ts, @boostkit/auth in deps', () => {
+  it('auth selected → auth schema, config/auth.ts, @rudderjs/auth in deps', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
     assert.ok('prisma/schema/auth.prisma' in files)
     assert.ok('config/auth.ts' in files)
     assert.ok('config/session.ts' in files)
     assert.ok('app/Models/User.ts' in files)
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok('@boostkit/auth' in pkg.dependencies)
-    assert.ok('@boostkit/session' in pkg.dependencies)
+    assert.ok('@rudderjs/auth' in pkg.dependencies)
+    assert.ok('@rudderjs/session' in pkg.dependencies)
   })
 
-  it('cache not selected → no config/cache.ts, no @boostkit/cache in deps', () => {
+  it('cache not selected → no config/cache.ts, no @rudderjs/cache in deps', () => {
     const files = getTemplates(ctx({ packages: noPkgs }))
     assert.ok(!('config/cache.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok(!('@boostkit/cache' in pkg.dependencies))
+    assert.ok(!('@rudderjs/cache' in pkg.dependencies))
   })
 
-  it('queue selected → config/queue.ts, @boostkit/queue in deps', () => {
+  it('queue selected → config/queue.ts, @rudderjs/queue in deps', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, queue: true } }))
     assert.ok('config/queue.ts' in files)
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok('@boostkit/queue' in pkg.dependencies)
+    assert.ok('@rudderjs/queue' in pkg.dependencies)
   })
 
-  it('notifications selected → @boostkit/notification in deps + prisma schema', () => {
+  it('notifications selected → @rudderjs/notification in deps + prisma schema', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, notifications: true } }))
     assert.ok('prisma/schema/notification.prisma' in files)
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok('@boostkit/notification' in pkg.dependencies)
+    assert.ok('@rudderjs/notification' in pkg.dependencies)
   })
 
   it('no packages selected → minimal providers.ts', () => {
     const files = getTemplates(ctx({ packages: noPkgs }))
     const providers = files['bootstrap/providers.ts']!
     assert.ok(providers.includes('AppServiceProvider'))
-    assert.ok(!providers.includes('@boostkit/auth'))
-    assert.ok(!providers.includes('@boostkit/cache'))
-    assert.ok(!providers.includes('@boostkit/queue'))
+    assert.ok(!providers.includes('@rudderjs/auth'))
+    assert.ok(!providers.includes('@rudderjs/cache'))
+    assert.ok(!providers.includes('@rudderjs/queue'))
   })
 
   it('all packages selected → full providers.ts', () => {
     const files = getTemplates(ctx({ packages: allPkgs }))
     const providers = files['bootstrap/providers.ts']!
-    assert.ok(providers.includes('@boostkit/auth'))
-    assert.ok(providers.includes('@boostkit/cache'))
-    assert.ok(providers.includes('@boostkit/queue'))
-    assert.ok(providers.includes('@boostkit/mail'))
-    assert.ok(providers.includes('@boostkit/storage'))
-    assert.ok(providers.includes('@boostkit/notification'))
-    assert.ok(providers.includes('@boostkit/schedule'))
+    assert.ok(providers.includes('@rudderjs/auth'))
+    assert.ok(providers.includes('@rudderjs/cache'))
+    assert.ok(providers.includes('@rudderjs/queue'))
+    assert.ok(providers.includes('@rudderjs/mail'))
+    assert.ok(providers.includes('@rudderjs/storage'))
+    assert.ok(providers.includes('@rudderjs/notification'))
+    assert.ok(providers.includes('@rudderjs/schedule'))
   })
 
   it('config/index.ts only re-exports existing configs', () => {
@@ -491,11 +491,11 @@ describe('getTemplates() — package checklist', () => {
   it('base deps always included regardless of package selection', () => {
     const files = getTemplates(ctx({ packages: noPkgs }))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok('@boostkit/core' in pkg.dependencies)
-    assert.ok('@boostkit/router' in pkg.dependencies)
-    assert.ok('@boostkit/server-hono' in pkg.dependencies)
-    assert.ok('@boostkit/middleware' in pkg.dependencies)
-    assert.ok('@boostkit/vite' in pkg.dependencies)
+    assert.ok('@rudderjs/core' in pkg.dependencies)
+    assert.ok('@rudderjs/router' in pkg.dependencies)
+    assert.ok('@rudderjs/server-hono' in pkg.dependencies)
+    assert.ok('@rudderjs/middleware' in pkg.dependencies)
+    assert.ok('@rudderjs/vite' in pkg.dependencies)
   })
 
   it('.env omits AUTH_SECRET when auth not selected', () => {

@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@boostkit/contracts'
+import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@rudderjs/contracts'
 import {
   Router, router, Route,
   Controller, Middleware,

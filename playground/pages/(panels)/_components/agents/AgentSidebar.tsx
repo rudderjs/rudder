@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ResourceAgentMeta } from '@boostkit/panels'
+import type { ResourceAgentMeta } from '@rudderjs/panels'
 import { AgentOutput, useAgentRun, type AgentStatus, type OnFieldUpdate } from './AgentOutput.js'
 
 interface Props {

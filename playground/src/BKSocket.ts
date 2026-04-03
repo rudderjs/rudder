@@ -1,5 +1,5 @@
-// BKSocket — BoostKit WebSocket client
-// Published by: pnpm artisan vendor:publish --tag=ws-client
+// BKSocket — RudderJS WebSocket client
+// Published by: pnpm rudder vendor:publish --tag=ws-client
 // Copy this file anywhere in your frontend source (e.g. src/BKSocket.ts)
 
 type Handler = (data: unknown) => void

@@ -1,5 +1,5 @@
 import type { PageContextServer } from 'vike/types'
-import type { MediaRecord } from '@boostkit/media'
+import type { MediaRecord } from '@rudderjs/media'
 
 export type Data = Awaited<ReturnType<typeof data>>
 
@@ -7,7 +7,7 @@ export async function data(pageContext: PageContextServer) {
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }
 
   // Resolve panel
-  const { PanelRegistry } = await import('@boostkit/panels')
+  const { PanelRegistry } = await import('@rudderjs/panels')
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
   if (!panel) throw new Error(`Panel "/${pathSegment}" not found.`)
 
@@ -20,7 +20,7 @@ export async function data(pageContext: PageContextServer) {
   const search = params.get('search') ?? ''
 
   // Get Prisma
-  const { resolve } = await import('@boostkit/core')
+  const { resolve } = await import('@rudderjs/core')
   const prisma = resolve<{ media: {
     findMany(args: Record<string, unknown>): Promise<unknown[]>
     findUnique(args: Record<string, unknown>): Promise<unknown | null>

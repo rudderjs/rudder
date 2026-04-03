@@ -20,8 +20,8 @@ import {
 import { WidgetSettingsDrawer } from './WidgetSettingsDrawer.js'
 import { WidgetCard } from './WidgetCard.js'
 import type { WidgetWithSchema } from './WidgetCard.js'
-import type { PanelI18n } from '@boostkit/panels'
-import type { WidgetMeta } from '@boostkit/panels'
+import type { PanelI18n } from '@rudderjs/panels'
+import type { WidgetMeta } from '@rudderjs/panels'
 
 // ── Size presets ────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
-import { Env } from '@boostkit/support'
-import type { BetterAuthConfig } from '@boostkit/auth'
+import { Env } from '@rudderjs/support'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 
 export default {
   secret:           Env.get('AUTH_SECRET', 'please-set-AUTH_SECRET-min-32-chars!!'),

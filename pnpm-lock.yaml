@@ -33,14 +33,14 @@ importers:
         specifier: ^8.57.1
         version: 8.57.1(eslint@10.0.3(jiti@2.6.1))(typescript@5.9.3)
 
-  create-boostkit-app:
+  create-rudderjs-app:
     dependencies:
-      '@boostkit/auth':
-        specifier: workspace:*
-        version: link:../packages/auth
       '@clack/prompts':
         specifier: ^1.0.0
         version: 1.0.1
+      '@rudderjs/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -60,7 +60,7 @@ importers:
 
   packages/ai:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -84,28 +84,12 @@ importers:
         specifier: '>=4.70.0'
         version: 6.33.0(ws@8.19.0)(zod@4.3.6)
 
-  packages/artisan:
-    dependencies:
-      '@clack/prompts':
-        specifier: ^1.0.0
-        version: 1.0.1
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   packages/auth:
     dependencies:
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
       better-auth:
@@ -146,7 +130,7 @@ importers:
 
   packages/broadcast:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
       ws:
@@ -165,7 +149,7 @@ importers:
 
   packages/cache:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -185,12 +169,12 @@ importers:
 
   packages/cli:
     dependencies:
-      '@boostkit/artisan':
-        specifier: workspace:*
-        version: link:../artisan
       '@clack/prompts':
         specifier: ^1.0.0
         version: 1.0.1
+      '@rudderjs/rudder':
+        specifier: workspace:*
+        version: link:../rudder
       chalk:
         specifier: ^5.0.0
         version: 5.6.2
@@ -198,7 +182,7 @@ importers:
         specifier: ^12.0.0
         version: 12.1.0
     devDependencies:
-      '@boostkit/router':
+      '@rudderjs/router':
         specifier: workspace:*
         version: link:../router
       '@types/node':
@@ -222,16 +206,16 @@ importers:
 
   packages/core:
     dependencies:
-      '@boostkit/artisan':
-        specifier: workspace:*
-        version: link:../artisan
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@boostkit/router':
+      '@rudderjs/router':
         specifier: workspace:*
         version: link:../router
-      '@boostkit/support':
+      '@rudderjs/rudder':
+        specifier: workspace:*
+        version: link:../rudder
+      '@rudderjs/support':
         specifier: workspace:*
         version: link:../support
       reflect-metadata:
@@ -253,7 +237,7 @@ importers:
 
   packages/image:
     devDependencies:
-      '@boostkit/storage':
+      '@rudderjs/storage':
         specifier: workspace:*
         version: link:../storage
       '@types/node':
@@ -269,7 +253,7 @@ importers:
 
   packages/live:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
       lib0:
@@ -301,7 +285,7 @@ importers:
 
   packages/localization:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -314,7 +298,7 @@ importers:
 
   packages/mail:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -338,19 +322,19 @@ importers:
         specifier: '>=18'
         version: 19.2.4(react@19.2.4)
     devDependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
-      '@boostkit/image':
+      '@rudderjs/image':
         specifier: workspace:*
         version: link:../image
-      '@boostkit/panels':
+      '@rudderjs/panels':
         specifier: workspace:*
         version: link:../panels
-      '@boostkit/router':
+      '@rudderjs/router':
         specifier: workspace:*
         version: link:../router
-      '@boostkit/storage':
+      '@rudderjs/storage':
         specifier: workspace:*
         version: link:../storage
       '@types/node':
@@ -368,10 +352,10 @@ importers:
 
   packages/middleware:
     dependencies:
-      '@boostkit/cache':
+      '@rudderjs/cache':
         specifier: workspace:*
         version: link:../cache
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -387,13 +371,13 @@ importers:
 
   packages/notification:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
-      '@boostkit/mail':
+      '@rudderjs/mail':
         specifier: workspace:*
         version: link:../mail
-      '@boostkit/orm':
+      '@rudderjs/orm':
         specifier: workspace:*
         version: link:../orm
     devDependencies:
@@ -406,7 +390,7 @@ importers:
 
   packages/orm:
     dependencies:
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -419,7 +403,7 @@ importers:
 
   packages/orm-drizzle:
     dependencies:
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
       drizzle-orm:
@@ -448,18 +432,18 @@ importers:
 
   packages/orm-prisma:
     dependencies:
-      '@boostkit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@boostkit/core':
-        specifier: workspace:*
-        version: link:../core
-      '@boostkit/orm':
-        specifier: workspace:*
-        version: link:../orm
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@rudderjs/orm':
+        specifier: workspace:*
+        version: link:../orm
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.0.0
@@ -498,16 +482,16 @@ importers:
 
   packages/panels:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
-      '@boostkit/image':
+      '@rudderjs/image':
         specifier: workspace:*
         version: link:../image
-      '@boostkit/router':
+      '@rudderjs/router':
         specifier: workspace:*
         version: link:../router
-      '@boostkit/support':
+      '@rudderjs/support':
         specifier: workspace:*
         version: link:../support
       dnd-kit-sortable-tree:
@@ -523,18 +507,6 @@ importers:
       '@base-ui-components/react':
         specifier: 1.0.0-rc.0
         version: 1.0.0-rc.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@boostkit/ai':
-        specifier: workspace:*
-        version: link:../ai
-      '@boostkit/broadcast':
-        specifier: workspace:*
-        version: link:../broadcast
-      '@boostkit/live':
-        specifier: workspace:*
-        version: link:../live
-      '@boostkit/storage':
-        specifier: workspace:*
-        version: link:../storage
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -544,6 +516,18 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.4)
+      '@rudderjs/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@rudderjs/broadcast':
+        specifier: workspace:*
+        version: link:../broadcast
+      '@rudderjs/live':
+        specifier: workspace:*
+        version: link:../live
+      '@rudderjs/storage':
+        specifier: workspace:*
+        version: link:../storage
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
@@ -578,12 +562,6 @@ importers:
         specifier: '>=9'
         version: 9.0.12(yjs@13.6.29)
     devDependencies:
-      '@boostkit/core':
-        specifier: workspace:*
-        version: link:../core
-      '@boostkit/panels':
-        specifier: workspace:*
-        version: link:../panels
       '@floating-ui/dom':
         specifier: ^1.6.0
         version: 1.7.6
@@ -605,6 +583,12 @@ importers:
       '@lexical/utils':
         specifier: ^0.41.0
         version: 0.41.0
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@rudderjs/panels':
+        specifier: workspace:*
+        version: link:../panels
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14
@@ -629,11 +613,11 @@ importers:
 
   packages/queue:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@boostkit/router':
+      '@rudderjs/router':
         specifier: workspace:*
         version: link:../router
       '@types/node':
@@ -645,7 +629,7 @@ importers:
 
   packages/queue-bullmq:
     dependencies:
-      '@boostkit/queue':
+      '@rudderjs/queue':
         specifier: workspace:*
         version: link:../queue
       bullmq:
@@ -661,7 +645,7 @@ importers:
 
   packages/queue-inngest:
     dependencies:
-      '@boostkit/queue':
+      '@rudderjs/queue':
         specifier: workspace:*
         version: link:../queue
       inngest:
@@ -677,7 +661,7 @@ importers:
 
   packages/router:
     dependencies:
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
       reflect-metadata:
@@ -697,9 +681,25 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/rudder:
+    dependencies:
+      '@clack/prompts':
+        specifier: ^1.0.0
+        version: 1.0.1
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      tsx:
+        specifier: ^4.0.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/schedule:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
       croner:
@@ -718,15 +718,15 @@ importers:
 
   packages/server-hono:
     dependencies:
-      '@boostkit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.12.3)
       '@photonjs/hono':
         specifier: ^0.1.12
         version: 0.1.12(@hono/node-server@1.19.9(hono@4.12.3))(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       hono:
         specifier: ^4.12.0
         version: 4.12.3
@@ -740,10 +740,10 @@ importers:
 
   packages/session:
     dependencies:
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -760,7 +760,7 @@ importers:
 
   packages/storage:
     dependencies:
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -817,16 +817,16 @@ importers:
 
   packages/workspaces:
     dependencies:
-      '@boostkit/ai':
+      '@rudderjs/ai':
         specifier: workspace:*
         version: link:../ai
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../core
-      '@boostkit/orm':
+      '@rudderjs/orm':
         specifier: workspace:*
         version: link:../orm
-      '@boostkit/panels':
+      '@rudderjs/panels':
         specifier: workspace:*
         version: link:../panels
       react-dom:
@@ -845,18 +845,18 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
-      '@boostkit/broadcast':
-        specifier: workspace:*
-        version: link:../broadcast
-      '@boostkit/router':
-        specifier: workspace:*
-        version: link:../router
       '@react-three/drei':
         specifier: ^10.0.0
         version: 10.7.7(@react-three/fiber@9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0))(@types/react@19.2.14)(@types/three@0.175.0)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)
       '@react-three/fiber':
         specifier: ^9.0.0
         version: 9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)
+      '@rudderjs/broadcast':
+        specifier: workspace:*
+        version: link:../broadcast
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../router
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
@@ -887,87 +887,6 @@ importers:
       '@base-ui/react':
         specifier: ^1.2.0
         version: 1.2.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@boostkit/ai':
-        specifier: workspace:*
-        version: link:../packages/ai
-      '@boostkit/artisan':
-        specifier: workspace:*
-        version: link:../packages/artisan
-      '@boostkit/auth':
-        specifier: workspace:*
-        version: link:../packages/auth
-      '@boostkit/broadcast':
-        specifier: workspace:*
-        version: link:../packages/broadcast
-      '@boostkit/cache':
-        specifier: workspace:*
-        version: link:../packages/cache
-      '@boostkit/contracts':
-        specifier: workspace:*
-        version: link:../packages/contracts
-      '@boostkit/core':
-        specifier: workspace:*
-        version: link:../packages/core
-      '@boostkit/image':
-        specifier: workspace:*
-        version: link:../packages/image
-      '@boostkit/live':
-        specifier: workspace:*
-        version: link:../packages/live
-      '@boostkit/localization':
-        specifier: workspace:*
-        version: link:../packages/localization
-      '@boostkit/mail':
-        specifier: workspace:*
-        version: link:../packages/mail
-      '@boostkit/media':
-        specifier: workspace:*
-        version: link:../packages/media
-      '@boostkit/middleware':
-        specifier: workspace:*
-        version: link:../packages/middleware
-      '@boostkit/notification':
-        specifier: workspace:*
-        version: link:../packages/notification
-      '@boostkit/orm':
-        specifier: workspace:*
-        version: link:../packages/orm
-      '@boostkit/orm-prisma':
-        specifier: workspace:*
-        version: link:../packages/orm-prisma
-      '@boostkit/panels':
-        specifier: workspace:*
-        version: link:../packages/panels
-      '@boostkit/panels-lexical':
-        specifier: workspace:*
-        version: link:../packages/panels-lexical
-      '@boostkit/queue':
-        specifier: workspace:*
-        version: link:../packages/queue
-      '@boostkit/queue-bullmq':
-        specifier: workspace:*
-        version: link:../packages/queue-bullmq
-      '@boostkit/router':
-        specifier: workspace:*
-        version: link:../packages/router
-      '@boostkit/schedule':
-        specifier: workspace:*
-        version: link:../packages/schedule
-      '@boostkit/server-hono':
-        specifier: workspace:*
-        version: link:../packages/server-hono
-      '@boostkit/session':
-        specifier: workspace:*
-        version: link:../packages/session
-      '@boostkit/storage':
-        specifier: workspace:*
-        version: link:../packages/storage
-      '@boostkit/vite':
-        specifier: workspace:*
-        version: link:../packages/vite
-      '@boostkit/workspaces':
-        specifier: workspace:*
-        version: link:../packages/workspaces
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1028,6 +947,87 @@ importers:
       '@react-three/fiber':
         specifier: ^9.0.0
         version: 9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)
+      '@rudderjs/ai':
+        specifier: workspace:*
+        version: link:../packages/ai
+      '@rudderjs/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
+      '@rudderjs/broadcast':
+        specifier: workspace:*
+        version: link:../packages/broadcast
+      '@rudderjs/cache':
+        specifier: workspace:*
+        version: link:../packages/cache
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@rudderjs/image':
+        specifier: workspace:*
+        version: link:../packages/image
+      '@rudderjs/live':
+        specifier: workspace:*
+        version: link:../packages/live
+      '@rudderjs/localization':
+        specifier: workspace:*
+        version: link:../packages/localization
+      '@rudderjs/mail':
+        specifier: workspace:*
+        version: link:../packages/mail
+      '@rudderjs/media':
+        specifier: workspace:*
+        version: link:../packages/media
+      '@rudderjs/middleware':
+        specifier: workspace:*
+        version: link:../packages/middleware
+      '@rudderjs/notification':
+        specifier: workspace:*
+        version: link:../packages/notification
+      '@rudderjs/orm':
+        specifier: workspace:*
+        version: link:../packages/orm
+      '@rudderjs/orm-prisma':
+        specifier: workspace:*
+        version: link:../packages/orm-prisma
+      '@rudderjs/panels':
+        specifier: workspace:*
+        version: link:../packages/panels
+      '@rudderjs/panels-lexical':
+        specifier: workspace:*
+        version: link:../packages/panels-lexical
+      '@rudderjs/queue':
+        specifier: workspace:*
+        version: link:../packages/queue
+      '@rudderjs/queue-bullmq':
+        specifier: workspace:*
+        version: link:../packages/queue-bullmq
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../packages/router
+      '@rudderjs/rudder':
+        specifier: workspace:*
+        version: link:../packages/rudder
+      '@rudderjs/schedule':
+        specifier: workspace:*
+        version: link:../packages/schedule
+      '@rudderjs/server-hono':
+        specifier: workspace:*
+        version: link:../packages/server-hono
+      '@rudderjs/session':
+        specifier: workspace:*
+        version: link:../packages/session
+      '@rudderjs/storage':
+        specifier: workspace:*
+        version: link:../packages/storage
+      '@rudderjs/vite':
+        specifier: workspace:*
+        version: link:../packages/vite
+      '@rudderjs/workspaces':
+        specifier: workspace:*
+        version: link:../packages/workspaces
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.2.1(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -1119,12 +1119,12 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
-      '@boostkit/cli':
-        specifier: workspace:*
-        version: link:../packages/cli
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.58.2
+      '@rudderjs/cli':
+        specifier: workspace:*
+        version: link:../packages/cli
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
@@ -1167,63 +1167,63 @@ importers:
 
   playground-multi:
     dependencies:
-      '@boostkit/artisan':
-        specifier: workspace:*
-        version: link:../packages/artisan
-      '@boostkit/auth':
-        specifier: workspace:*
-        version: link:../packages/auth
-      '@boostkit/cache':
-        specifier: workspace:*
-        version: link:../packages/cache
-      '@boostkit/contracts':
-        specifier: workspace:*
-        version: link:../packages/contracts
-      '@boostkit/core':
-        specifier: workspace:*
-        version: link:../packages/core
-      '@boostkit/mail':
-        specifier: workspace:*
-        version: link:../packages/mail
-      '@boostkit/middleware':
-        specifier: workspace:*
-        version: link:../packages/middleware
-      '@boostkit/notification':
-        specifier: workspace:*
-        version: link:../packages/notification
-      '@boostkit/orm':
-        specifier: workspace:*
-        version: link:../packages/orm
-      '@boostkit/orm-prisma':
-        specifier: workspace:*
-        version: link:../packages/orm-prisma
-      '@boostkit/queue':
-        specifier: workspace:*
-        version: link:../packages/queue
-      '@boostkit/router':
-        specifier: workspace:*
-        version: link:../packages/router
-      '@boostkit/schedule':
-        specifier: workspace:*
-        version: link:../packages/schedule
-      '@boostkit/server-hono':
-        specifier: workspace:*
-        version: link:../packages/server-hono
-      '@boostkit/session':
-        specifier: workspace:*
-        version: link:../packages/session
-      '@boostkit/storage':
-        specifier: workspace:*
-        version: link:../packages/storage
-      '@boostkit/support':
-        specifier: workspace:*
-        version: link:../packages/support
-      '@boostkit/vite':
-        specifier: workspace:*
-        version: link:../packages/vite
       '@prisma/client':
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
+      '@rudderjs/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
+      '@rudderjs/cache':
+        specifier: workspace:*
+        version: link:../packages/cache
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@rudderjs/mail':
+        specifier: workspace:*
+        version: link:../packages/mail
+      '@rudderjs/middleware':
+        specifier: workspace:*
+        version: link:../packages/middleware
+      '@rudderjs/notification':
+        specifier: workspace:*
+        version: link:../packages/notification
+      '@rudderjs/orm':
+        specifier: workspace:*
+        version: link:../packages/orm
+      '@rudderjs/orm-prisma':
+        specifier: workspace:*
+        version: link:../packages/orm-prisma
+      '@rudderjs/queue':
+        specifier: workspace:*
+        version: link:../packages/queue
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../packages/router
+      '@rudderjs/rudder':
+        specifier: workspace:*
+        version: link:../packages/rudder
+      '@rudderjs/schedule':
+        specifier: workspace:*
+        version: link:../packages/schedule
+      '@rudderjs/server-hono':
+        specifier: workspace:*
+        version: link:../packages/server-hono
+      '@rudderjs/session':
+        specifier: workspace:*
+        version: link:../packages/session
+      '@rudderjs/storage':
+        specifier: workspace:*
+        version: link:../packages/storage
+      '@rudderjs/support':
+        specifier: workspace:*
+        version: link:../packages/support
+      '@rudderjs/vite':
+        specifier: workspace:*
+        version: link:../packages/vite
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.2.1(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -1270,7 +1270,7 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
-      '@boostkit/cli':
+      '@rudderjs/cli':
         specifier: workspace:*
         version: link:../packages/cli
       '@types/better-sqlite3':
@@ -1309,22 +1309,22 @@ importers:
 
   tests/integration:
     dependencies:
-      '@boostkit/cache':
+      '@rudderjs/cache':
         specifier: workspace:*
         version: link:../../packages/cache
-      '@boostkit/contracts':
+      '@rudderjs/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@boostkit/core':
+      '@rudderjs/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@boostkit/orm':
+      '@rudderjs/orm':
         specifier: workspace:*
         version: link:../../packages/orm
-      '@boostkit/orm-drizzle':
+      '@rudderjs/orm-drizzle':
         specifier: workspace:*
         version: link:../../packages/orm-drizzle
-      '@boostkit/session':
+      '@rudderjs/session':
         specifier: workspace:*
         version: link:../../packages/session
       better-sqlite3:

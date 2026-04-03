@@ -8,7 +8,7 @@ Register custom pages alongside resources. Pages appear in the sidebar/topbar na
 
 ```ts
 // app/Panels/Admin/pages/DashboardPage.ts
-import { Page } from '@boostkit/panels'
+import { Page } from '@rudderjs/panels'
 
 export class DashboardPage extends Page {
   static slug  = 'dashboard'          // URL slug — defaults to class name sans "Page", lowercased
@@ -33,8 +33,8 @@ Resources and globals appear first in the nav, then pages — in the order liste
 Pages can define their content entirely via a `schema()` method — no Vike page file needed. The method receives `PanelContext` and can be async.
 
 ```ts
-import { Page, Heading, Text, Stats, Stat, Chart } from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+import { Page, Heading, Text, Stats, Stat, Chart } from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 import { User } from '../../../Models/User.js'
 
 export class ReportsPage extends Page {
@@ -263,7 +263,7 @@ Use `resourceData()` to fetch panel data without duplicating the built-in query 
 
 ```ts
 // pages/(panels)/@panel/resources/users/+data.ts
-import { resourceData } from '@boostkit/panels'
+import { resourceData } from '@rudderjs/panels'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof resourceData>>

@@ -5,8 +5,8 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string, prefix: string): string {
-  return `import { Controller, Get } from '@boostkit/router'
-import type { Context } from '@boostkit/core'
+  return `import { Controller, Get } from '@rudderjs/router'
+import type { Context } from '@rudderjs/core'
 
 @Controller('${prefix}')
 export class ${className} {

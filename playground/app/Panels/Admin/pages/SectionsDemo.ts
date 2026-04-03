@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Section, Stats, Stat, Chart, List, Table, Column, Tab, Tabs, Dialog, Form, TextField, TextareaField } from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+import { Page, Heading, Text, Section, Stats, Stat, Chart, List, Table, Column, Tab, Tabs, Dialog, Form, TextField, TextareaField } from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 import { Article } from '../../../Models/Article.js'
 
 export class SectionsDemo extends Page {
@@ -49,8 +49,8 @@ export class SectionsDemo extends Page {
         .schema(
           List.make('Resources')
             .items([
-              { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
-              { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
+              { label: 'Documentation', description: 'Read the RudderJS docs', href: '/docs', icon: '📖' },
+              { label: 'GitHub', description: 'View source code', href: 'https://github.com/rudderjs/rudderjs', icon: '🐙' },
               { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
             ]),
         ),

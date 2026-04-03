@@ -1,9 +1,9 @@
-# @boostkit/session
+# @rudderjs/session
 
-HTTP session support for BoostKit — signed cookie sessions (default) and Redis-backed sessions.
+HTTP session support for RudderJS — signed cookie sessions (default) and Redis-backed sessions.
 
 ```bash
-pnpm add @boostkit/session
+pnpm add @rudderjs/session
 ```
 
 For Redis sessions, also install `ioredis`:
@@ -20,15 +20,15 @@ pnpm add ioredis
 
 ```ts
 // config/session.ts
-import { Env } from '@boostkit/support'
-import type { SessionConfig } from '@boostkit/session'
+import { Env } from '@rudderjs/support'
+import type { SessionConfig } from '@rudderjs/session'
 
 export default {
   driver:   Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis',
   lifetime: 120,  // minutes
   secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
   cookie: {
-    name:     'boostkit_session',
+    name:     'rudderjs_session',
     secure:   Env.getBool('SESSION_SECURE', false),
     httpOnly: true,
     sameSite: 'lax',
@@ -41,7 +41,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { session } from '@boostkit/session'
+import { session } from '@rudderjs/session'
 import configs from '../config/index.js'
 
 export default [
@@ -53,8 +53,8 @@ export default [
 
 ```ts
 // routes/web.ts
-import { Route } from '@boostkit/router'
-import { SessionMiddleware } from '@boostkit/session'
+import { Route } from '@rudderjs/router'
+import { SessionMiddleware } from '@rudderjs/session'
 
 const webMw = [SessionMiddleware()]
 
@@ -79,7 +79,7 @@ Route.get('/profile', (req, res) => {
 ### `Session` facade
 
 ```ts
-import { Session } from '@boostkit/session'
+import { Session } from '@rudderjs/session'
 
 Session.put('theme', 'dark')
 const theme = Session.get<string>('theme')

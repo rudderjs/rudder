@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@boostkit/panels'
+import type { PanelSchemaElementMeta, PanelStatMeta, PanelColumnMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta } from '@rudderjs/panels'
 
 // Extended type to include custom widget types not in PanelSchemaElementMeta
 type WidgetRendererElement = PanelSchemaElementMeta

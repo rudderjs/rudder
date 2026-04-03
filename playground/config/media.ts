@@ -1,4 +1,4 @@
-import type { MediaPluginConfig } from '@boostkit/media/server'
+import type { MediaPluginConfig } from '@rudderjs/media/server'
 
 export default {
   libraries: {

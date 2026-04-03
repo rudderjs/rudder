@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 import chalk from 'chalk'
 
 export function stub(className: string): string {
-  return `import { ServiceProvider } from '@boostkit/core'
+  return `import { ServiceProvider } from '@rudderjs/core'
 
 export class ${className} extends ServiceProvider {
   register(): void {

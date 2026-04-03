@@ -1,11 +1,11 @@
-# @boostkit/router
+# @rudderjs/router
 
-Decorator-based and fluent HTTP router for BoostKit. Supports route-level middleware, controller registration, and mounting onto any server adapter.
+Decorator-based and fluent HTTP router for RudderJS. Supports route-level middleware, controller registration, and mounting onto any server adapter.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/router
+pnpm add @rudderjs/router
 ```
 
 ## Usage
@@ -13,7 +13,7 @@ pnpm add @boostkit/router
 ### Fluent routing
 
 ```ts
-import { router } from '@boostkit/router'
+import { router } from '@rudderjs/router'
 
 router.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 router.post('/api/users', async (req, res) => { /* ... */ })
@@ -28,8 +28,8 @@ router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Not found' 
 ### Decorator-based routing
 
 ```ts
-import { Controller, Get, Post, Delete, Middleware, router } from '@boostkit/router'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Controller, Get, Post, Delete, Middleware, router } from '@rudderjs/router'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 @Controller('/api/users')
 @Middleware([authMiddleware])       // applies to all routes in this controller

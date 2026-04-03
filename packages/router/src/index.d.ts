@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import type { ServerAdapter, RouteDefinition, RouteHandler, MiddlewareHandler, HttpMethod } from '@boostkit/core/server';
+import type { ServerAdapter, RouteDefinition, RouteHandler, MiddlewareHandler, HttpMethod } from '@rudderjs/core/server';
 /** Mark a class as a controller with an optional route prefix */
 export declare function Controller(prefix?: string): ClassDecorator;
 /** Attach middleware to a controller class or route method */
@@ -29,7 +29,7 @@ export declare class Router {
     registerController(ControllerClass: new () => object): this;
     /** Mount all routes onto a server adapter */
     mount(server: ServerAdapter): void;
-    /** Get all registered routes (useful for boostkit routes:list) */
+    /** Get all registered routes (useful for rudderjs routes:list) */
     list(): RouteDefinition[];
 }
 export declare const router: Router;

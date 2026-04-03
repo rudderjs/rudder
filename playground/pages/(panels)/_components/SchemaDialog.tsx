@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { SchemaDialogMeta, PanelI18n, PanelSchemaElementMeta } from '@boostkit/panels'
-import type { FormElementMeta } from '@boostkit/panels'
+import type { SchemaDialogMeta, PanelI18n, PanelSchemaElementMeta } from '@rudderjs/panels'
+import type { FormElementMeta } from '@rudderjs/panels'
 import { SchemaForm } from './SchemaForm.js'
 import { SchemaElementRenderer } from './SchemaElementRenderer.js'
 

@@ -7,8 +7,8 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { sessionMiddleware, Session, type SessionInstance, type SessionConfig } from '@boostkit/session'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { sessionMiddleware, Session, type SessionInstance, type SessionConfig } from '@rudderjs/session'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 // ─── Helpers ───────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { router } from '@boostkit/router'
+import { router } from '@rudderjs/router'
 
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing

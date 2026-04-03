@@ -1,9 +1,9 @@
-# @boostkit/orm-prisma
+# @rudderjs/orm-prisma
 
-Prisma adapter for `@boostkit/orm`.
+Prisma adapter for `@rudderjs/orm`.
 
 ```bash
-pnpm add @boostkit/orm-prisma @prisma/client prisma
+pnpm add @rudderjs/orm-prisma @prisma/client prisma
 ```
 
 ---
@@ -12,7 +12,7 @@ pnpm add @boostkit/orm-prisma @prisma/client prisma
 
 ```ts
 // config/database.ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: 'sqlite',
@@ -27,7 +27,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@boostkit/orm-prisma'
+import { database } from '@rudderjs/orm-prisma'
 import configs from '../config/index.js'
 
 export default [database(configs.database)]
@@ -63,8 +63,8 @@ pnpm add @libsql/client @prisma/adapter-libsql
 ## Manual Usage
 
 ```ts
-import { prisma } from '@boostkit/orm-prisma'
-import { ModelRegistry } from '@boostkit/orm'
+import { prisma } from '@rudderjs/orm-prisma'
+import { ModelRegistry } from '@rudderjs/orm'
 
 const adapter = await prisma({ driver: 'sqlite', url: 'file:./dev.db' }).create()
 await adapter.connect()
@@ -144,6 +144,6 @@ const page = await User.query()
 
 ## Notes
 
-- Run `pnpm exec prisma generate` after any schema change. If you forget, BoostKit throws a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
+- Run `pnpm exec prisma generate` after any schema change. If you forget, RudderJS throws a clear error: `Prisma has no delegate for table "x". Did you run prisma generate?`
 - The `client` option takes precedence — driver/url are ignored when a client is provided.
 - The adapter is bound in the DI container as `'db'` (OrmAdapter) and `'prisma'` (raw PrismaClient).

@@ -1,19 +1,19 @@
-# @boostkit/server-hono
+# @rudderjs/server-hono
 
-Hono-based HTTP server adapter for BoostKit. Implements the `ServerAdapterProvider` contract and wires up routing, middleware, CORS, request logging, and the Vike SSR fetch handler.
+Hono-based HTTP server adapter for RudderJS. Implements the `ServerAdapterProvider` contract and wires up routing, middleware, CORS, request logging, and the Vike SSR fetch handler.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/server-hono
+pnpm add @rudderjs/server-hono
 ```
 
 ## Usage
 
 ```ts
 // bootstrap/app.ts
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 import configs from '../config/index.js'
 import providers from './providers.js'
 
@@ -32,7 +32,7 @@ export default Application.configure({
 Typical `config/server.ts`:
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -96,4 +96,4 @@ In non-production environments, unhandled errors render a styled HTML error page
 ## Notes
 
 - `createFetchHandler()` is used by the Vike/Vite integration — not called directly
-- CORS from `HonoConfig.cors` and `CorsMiddleware` from `@boostkit/middleware` are independent — don't use both
+- CORS from `HonoConfig.cors` and `CorsMiddleware` from `@rudderjs/middleware` are independent — don't use both

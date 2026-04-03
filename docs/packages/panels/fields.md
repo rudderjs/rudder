@@ -26,7 +26,7 @@ Fields define how each column on a model is rendered in forms, tables, and the s
 | `BuilderField` | block picker | Multiple block types each with own schema |
 | `Block` | -- | Block type definition for use with `BuilderField` |
 | `RichContentField` | rich-text editor | Lexical rich-text with slash commands, blocks, and collaboration |
-| `FileField` | file input | Upload a file via `@boostkit/storage` |
+| `FileField` | file input | Upload a file via `@rudderjs/storage` |
 | `FileField.image()` | image upload | Upload an image -- shows preview thumbnail |
 | `RelationField` | select / chip multi-select | BelongsTo / belongsToMany relation |
 | `HasMany` | -- | Reverse relation table rendered on the show page |
@@ -173,7 +173,7 @@ Form.make('collab-notes')
 ### Section
 
 ```ts
-import { Section } from '@boostkit/panels'
+import { Section } from '@rudderjs/panels'
 
 Section.make('Personal Info')
   .description('Basic contact details')   // optional subtitle
@@ -190,7 +190,7 @@ Section.make('Personal Info')
 ### Tabs
 
 ```ts
-import { Tabs } from '@boostkit/panels'
+import { Tabs } from '@rudderjs/panels'
 
 Tabs.make()
   .tab('General',
@@ -226,10 +226,10 @@ fields() {
 
 ## File Upload
 
-`FileField` connects to `@boostkit/storage` via a panel-mounted upload endpoint (`POST /{panel}/api/_upload`).
+`FileField` connects to `@rudderjs/storage` via a panel-mounted upload endpoint (`POST /{panel}/api/_upload`).
 
 ```ts
-import { FileField } from '@boostkit/panels'
+import { FileField } from '@rudderjs/panels'
 
 FileField.make('avatar')
   .image()                        // show preview; changes type to 'image'
@@ -247,7 +247,7 @@ FileField.make('gallery')
   .multiple()                    // allow multiple files — value is string[]
 ```
 
-`@boostkit/storage` must be installed and configured for uploads to work.
+`@rudderjs/storage` must be installed and configured for uploads to work.
 
 ---
 
@@ -256,7 +256,7 @@ FileField.make('gallery')
 Use `RelationField` to render belongs-to and belongs-to-many dropdowns in create/edit forms.
 
 ```ts
-import { RelationField } from '@boostkit/panels'
+import { RelationField } from '@rudderjs/panels'
 
 // BelongsTo — FK lives on this model (e.g. parentId -> parent)
 RelationField.make('parentId')
@@ -299,7 +299,7 @@ export class CategoryResource extends Resource {
 Use `HasMany` to render a paginated relation table below the record on the show page.
 
 ```ts
-import { HasMany } from '@boostkit/panels'
+import { HasMany } from '@rudderjs/panels'
 
 // FK-based hasMany (e.g. sub-categories where parentId = current id)
 HasMany.make('children')
@@ -333,7 +333,7 @@ NumberField.make('priority').label('Priority').component('rating')
 Register the component in `pages/(panels)/_components/CustomFieldRenderers.tsx` (a published file -- edit it directly):
 
 ```tsx
-import type { FieldMeta } from '@boostkit/panels'
+import type { FieldMeta } from '@rudderjs/panels'
 import { RatingInput } from './fields/RatingInput.js'
 
 export interface FieldInputProps {
@@ -349,7 +349,7 @@ export const customFieldRenderers: Record<string, React.ComponentType<FieldInput
 
 Your custom component receives `{ field, value, onChange }` -- the same props as built-in field renderers.
 
-> **Note:** `CustomFieldRenderers.tsx` is a published file you own. Re-publishing with `--force` will overwrite it -- back it up or commit it before upgrading `@boostkit/panels`.
+> **Note:** `CustomFieldRenderers.tsx` is a published file you own. Re-publishing with `--force` will overwrite it -- back it up or commit it before upgrading `@rudderjs/panels`.
 
 ---
 
@@ -478,7 +478,7 @@ TextField.make('status')
 Always readonly; hidden from create and edit forms.
 
 ```ts
-import { ComputedField } from '@boostkit/panels'
+import { ComputedField } from '@rudderjs/panels'
 
 // Word count from excerpt
 ComputedField.make('wordCount')

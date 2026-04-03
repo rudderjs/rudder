@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Table, Column } from '@boostkit/panels'
-import type { PanelContext } from '@boostkit/panels'
+import { Page, Heading, Text, Table, Column } from '@rudderjs/panels'
+import type { PanelContext } from '@rudderjs/panels'
 
 export class ExternalDataDemo extends Page {
   static slug  = 'external-data'

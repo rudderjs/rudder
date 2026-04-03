@@ -1,5 +1,5 @@
-import { PanelRegistry, resolveDataView } from '@boostkit/panels'
-import type { PanelSchemaElementMeta } from '@boostkit/panels'
+import { PanelRegistry, resolveDataView } from '@rudderjs/panels'
+import type { PanelSchemaElementMeta } from '@rudderjs/panels'
 import { buildPanelContext } from '../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 

@@ -5,9 +5,9 @@ import {
   DateField, ColorField, TagsField, SlugField,
   JsonField, HiddenField, FileField,
   RepeaterField, BuilderField, Block,
-} from '@boostkit/panels'
-import { RichContentField } from '@boostkit/panels-lexical'
-import type { PanelContext } from '@boostkit/panels'
+} from '@rudderjs/panels'
+import { RichContentField } from '@rudderjs/panels-lexical'
+import type { PanelContext } from '@rudderjs/panels'
 
 export class FieldsDemo extends Page {
   static slug  = 'fields-demo'
@@ -59,11 +59,11 @@ export class FieldsDemo extends Page {
           ]),
         ]),
 
-      Snippet.make('Install BoostKit')
-        .tab('npm', 'npx create-boostkit-app my-app', 'bash')
-        .tab('pnpm', 'pnpm create boostkit-app my-app', 'bash')
-        .tab('yarn', 'yarn create boostkit-app my-app', 'bash')
-        .tab('bun', 'bunx create-boostkit-app my-app', 'bash'),
+      Snippet.make('Install RudderJS')
+        .tab('npm', 'npx create-rudderjs-app my-app', 'bash')
+        .tab('pnpm', 'pnpm create rudderjs-app my-app', 'bash')
+        .tab('yarn', 'yarn create rudderjs-app my-app', 'bash')
+        .tab('bun', 'bunx create-rudderjs-app my-app', 'bash'),
 
       Snippet.make('Resource Definition')
         .tab('table()', `table(table: Table) {
@@ -365,20 +365,20 @@ export class FieldsDemo extends Page {
       Heading.make('Code Blocks').level(2),
       Text.make('Code.make() renders syntax-highlighted code blocks with copy button.'),
 
-      Code.make(`import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+      Code.make(`import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 
 export default Application.configure({
   server: hono(configs.server),
   providers,
 }).create()`).language('typescript').title('bootstrap/app.ts'),
 
-      Code.make(`pnpm add @boostkit/core @boostkit/server-hono
+      Code.make(`pnpm add @rudderjs/core @rudderjs/server-hono
 pnpm build
 cd playground && pnpm dev`).language('bash').title('Quick Start'),
 
       Code.make(`{
-  "name": "@boostkit/panels",
+  "name": "@rudderjs/panels",
   "version": "0.0.3",
   "type": "module"
 }`).language('json').title('package.json'),
@@ -502,7 +502,7 @@ LIMIT 10;`).language('sql').title('Top Articles by Comments').lineNumbers(),
 
       // ── Rich Content Field ────────────────────────────────────
       Heading.make('Rich Content Field (Lexical)').level(2),
-      Text.make('RichContentField renders a Lexical rich-text editor. Requires @boostkit/panels-lexical. Supports custom blocks and real-time collaboration.'),
+      Text.make('RichContentField renders a Lexical rich-text editor. Requires @rudderjs/panels-lexical. Supports custom blocks and real-time collaboration.'),
 
       Form.make('richcontent-demo')
         .fields([
@@ -551,7 +551,7 @@ LIMIT 10;`).language('sql').title('Top Articles by Comments').lineNumbers(),
 
       // ── Collaborative Rich Content ────────────────────────────
       Heading.make('Collaborative Rich Content').level(2),
-      Text.make('Open this page in two browser tabs — type in one, see it appear instantly in the other. Uses Yjs CRDT via @boostkit/live WebSocket.'),
+      Text.make('Open this page in two browser tabs — type in one, see it appear instantly in the other. Uses Yjs CRDT via @rudderjs/live WebSocket.'),
 
       Form.make('collab-richcontent')
         .description('Real-time collaborative editor. Try editing in two tabs simultaneously.')

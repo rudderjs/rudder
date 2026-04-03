@@ -1,5 +1,5 @@
-import { Middleware } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Middleware } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 /**
  * Attaches a unique X-Request-Id header to every response.

@@ -7,9 +7,9 @@ import type { Plugin } from 'vite'
 const SSR_EXTERNALS = [
   '@clack/core',
   '@clack/prompts',
-  '@boostkit/queue-inngest',
-  '@boostkit/queue-bullmq',
-  '@boostkit/orm-drizzle',
+  '@rudderjs/queue-inngest',
+  '@rudderjs/queue-bullmq',
+  '@rudderjs/orm-drizzle',
   // Database drivers — Node.js-only, must not be bundled into the client
   'pg',
   'mysql2',
@@ -22,20 +22,20 @@ const SSR_EXTERNALS = [
   // Redis — server-only
   'ioredis',
   // Storage — server-only (uses node:fs, node:path)
-  '@boostkit/storage',
+  '@rudderjs/storage',
   // Image — uses sharp (native binary)
-  '@boostkit/image',
+  '@rudderjs/image',
 ]
 
 // ─── SSR no-externals ──────────────────────────────────────
-// @boostkit/server-hono dynamically imports @photonjs/hono which contains
+// @rudderjs/server-hono dynamically imports @photonjs/hono which contains
 // virtual module imports (virtual:photon:get-middlewares:*). When loaded
 // natively (as an externalized npm package), these virtual imports fail
 // with ERR_UNSUPPORTED_ESM_URL_SCHEME. Marking it non-external forces
 // Vite's runner to process it, so @photonjs/hono is also processed through
 // Vite's plugin system where virtual modules are properly resolved.
 const SSR_NO_EXTERNALS = [
-  '@boostkit/server-hono',
+  '@rudderjs/server-hono',
 ]
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -47,9 +47,9 @@ const _require = createRequire(process.cwd() + '/package.json')
 // ─── Main plugin ───────────────────────────────────────────
 
 /**
- * BoostKit Vite plugin.
+ * RudderJS Vite plugin.
  *
- * Registers Vike, sets the @/ path alias, and externalises BoostKit
+ * Registers Vike, sets the @/ path alias, and externalises RudderJS
  * optional-peer packages from the SSR bundle.
  *
  * Add your UI framework plugin (react, vue, solid…) separately.
@@ -57,15 +57,15 @@ const _require = createRequire(process.cwd() + '/package.json')
  * @example
  * // vite.config.ts
  * import { defineConfig } from 'vite'
- * import boostkit from '@boostkit/vite'
+ * import rudderjs from '@rudderjs/vite'
  * import tailwindcss from '@tailwindcss/vite'
  * import react from '@vitejs/plugin-react'
  *
  * export default defineConfig({
- *   plugins: [boostkit(), tailwindcss(), react()],
+ *   plugins: [rudderjs(), tailwindcss(), react()],
  * })
  */
-export function boostkit(): Promise<Plugin[]> {
+export function rudderjs(): Promise<Plugin[]> {
   // Build plugins asynchronously — we need a dynamic import to guarantee we
   // load vike from the *app root* (not packages/vite/node_modules).
   const promise = (async (): Promise<Plugin[]> => {
@@ -75,13 +75,13 @@ export function boostkit(): Promise<Plugin[]> {
       const vikeMod = await import(vikePath) as { default: () => Promise<Plugin[]> }
       vikePlugins = await vikeMod.default()
     } catch {
-      console.warn('[BoostKit] vike not found — install vike to enable SSR support.')
+      console.warn('[RudderJS] vike not found — install vike to enable SSR support.')
     }
 
     return [
       ...vikePlugins,
       {
-        name: 'boostkit:ws',
+        name: 'rudderjs:ws',
         configureServer() {
           // vike-photon patches vite.httpServer with { on: () => {} } (a no-op), so we
           // cannot rely on server.httpServer. Instead, intercept http.createServer so we
@@ -97,7 +97,7 @@ export function boostkit(): Promise<Plugin[]> {
           http.createServer = ((...args: Parameters<typeof http.createServer>) => {
             const srv = (orig as (...a: unknown[]) => import('node:http').Server)(...args)
             srv.on('upgrade', (req, socket, head) => {
-              const handler = (globalThis as Record<string, unknown>)['__boostkit_ws_upgrade__'] as
+              const handler = (globalThis as Record<string, unknown>)['__rudderjs_ws_upgrade__'] as
                 | ((req: unknown, socket: unknown, head: unknown) => void)
                 | undefined
               handler?.(req, socket, head)
@@ -107,16 +107,16 @@ export function boostkit(): Promise<Plugin[]> {
         },
       },
       {
-        name: 'boostkit:config',
+        name: 'rudderjs:config',
         configResolved(config) {
-          // Suppress "Sourcemap points to missing source files" for @boostkit/* packages.
+          // Suppress "Sourcemap points to missing source files" for @rudderjs/* packages.
           // Vite emits these via logger.warnOnce() when published dist/ has sourcemaps
           // referencing the original .ts sources not shipped in the npm package.
           const filter = (msg: string) =>
-            // Suppress sourcemap warnings for published @boostkit/* packages
+            // Suppress sourcemap warnings for published @rudderjs/* packages
             msg.includes('Sourcemap') &&
             msg.includes('missing source files') &&
-            msg.includes('@boostkit')
+            msg.includes('@rudderjs')
           const origWarn     = config.logger.warn.bind(config.logger)
           const origWarnOnce = config.logger.warnOnce.bind(config.logger)
           config.logger.warn     = (msg, opts) => { if (!filter(msg)) origWarn(msg, opts) }
@@ -169,4 +169,4 @@ export function boostkit(): Promise<Plugin[]> {
   return promise
 }
 
-export default boostkit
+export default rudderjs

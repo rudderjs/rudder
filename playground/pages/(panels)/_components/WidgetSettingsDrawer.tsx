@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { PanelI18n } from '@boostkit/panels'
-import type { WidgetMeta, WidgetSettingsField } from '@boostkit/panels'
+import type { PanelI18n } from '@rudderjs/panels'
+import type { WidgetMeta, WidgetSettingsField } from '@rudderjs/panels'
 
 interface Props {
   widget:          WidgetMeta

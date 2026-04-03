@@ -34,7 +34,7 @@ export interface CollaborativePlainTextProps {
  * @deprecated — Not a registry. Replaced by `registerField()` for editor components.
  * Kept for backward compatibility only.
  *
- * Previously populated by `@boostkit/panels-lexical`, now unused.
+ * Previously populated by `@rudderjs/panels-lexical`, now unused.
  * `FieldInput.tsx` uses `ComponentRegistry` instead.
  */
 export const editorRegistry: {

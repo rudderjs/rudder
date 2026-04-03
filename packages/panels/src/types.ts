@@ -67,7 +67,7 @@ export interface SchemaElementLike {
   toMeta(): unknown
 }
 
-// ─── ORM Model interface (structural — no @boostkit/orm dep) ──
+// ─── ORM Model interface (structural — no @rudderjs/orm dep) ──
 
 export interface PaginatedResult<T = Record<string, unknown>> {
   data:        T[]

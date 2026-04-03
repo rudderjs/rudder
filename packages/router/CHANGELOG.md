@@ -1,8 +1,8 @@
-# @boostkit/router
+# @rudderjs/router
 
 ## 0.0.3
 
 ### Patch Changes
 
 - Updated dependencies
-  - @boostkit/contracts@0.0.2
+  - @rudderjs/contracts@0.0.2

@@ -1,4 +1,4 @@
-import { ServiceProvider, artisan, type Application } from '@boostkit/core'
+import { ServiceProvider, rudder, type Application } from '@rudderjs/core'
 import { Cron } from 'croner'
 
 // ─── Scheduled Task ────────────────────────────────────────
@@ -138,7 +138,7 @@ export function scheduler(): new (app: Application) => ServiceProvider {
     register(): void {}
 
     boot(): void {
-      artisan.command('schedule:run', async () => {
+      rudder.command('schedule:run', async () => {
         const tasks = schedule.getTasks()
         if (tasks.length === 0) {
           console.log('[Schedule] No tasks registered.')
@@ -164,7 +164,7 @@ export function scheduler(): new (app: Application) => ServiceProvider {
         else           console.log(`[Schedule] ${ran} task(s) completed.`)
       }).description('Run all scheduled tasks that are due now')
 
-      artisan.command('schedule:work', async () => {
+      rudder.command('schedule:work', async () => {
         const tasks = schedule.getTasks()
         console.log(`[Schedule] Worker started — ${tasks.length} task(s) registered.`)
         console.log('[Schedule] Press Ctrl+C to stop.\n')
@@ -196,7 +196,7 @@ export function scheduler(): new (app: Application) => ServiceProvider {
         })
       }).description('Start the schedule worker (in-process cron, Ctrl+C to stop)')
 
-      artisan.command('schedule:list', () => {
+      rudder.command('schedule:list', () => {
         const tasks = schedule.getTasks()
         if (tasks.length === 0) {
           console.log('[Schedule] No tasks registered.')

@@ -1,5 +1,5 @@
 {
-  "welcome": "مرحباً بك في BoostKit!",
+  "welcome": "مرحباً بك في RudderJS!",
   "greeting": "مرحباً، :name!",
   "items": "{0} لا توجد عناصر|{1} عنصر واحد|{n} :count عناصر"
 }

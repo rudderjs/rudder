@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/contracts'
+import type { MiddlewareHandler } from '@rudderjs/contracts'
 
 /**
  * Attaches a unique X-Request-Id header to every response.

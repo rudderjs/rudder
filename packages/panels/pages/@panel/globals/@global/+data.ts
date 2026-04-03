@@ -1,5 +1,5 @@
-import { PanelRegistry, resolveForm } from '@boostkit/panels'
-import type { PanelSchemaElementMeta } from '@boostkit/panels'
+import { PanelRegistry, resolveForm } from '@rudderjs/panels'
+import type { PanelSchemaElementMeta } from '@rudderjs/panels'
 import { buildPanelContext } from '../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 
@@ -23,7 +23,7 @@ export async function data(pageContext: PageContextServer) {
   let record: Record<string, unknown> = {}
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { app } = await import('@boostkit/core') as any
+    const { app } = await import('@rudderjs/core') as any
     const prisma  = app().make('prisma')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row     = await (prisma as any).panelGlobal.findUnique({ where: { slug } })

@@ -1,26 +1,26 @@
-# @boostkit/artisan
+# @rudderjs/rudder
 
-Command registry and base class for defining and running Artisan commands.
+Command registry and base class for defining and running Rudder commands.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/artisan
+pnpm add @rudderjs/rudder
 ```
 
 ## Quick Start
 
-Use the `artisan` singleton to define inline commands in `routes/console.ts`:
+Use the `rudder` singleton to define inline commands in `routes/console.ts`:
 
 ```ts
 // routes/console.ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 
-artisan.command('greet {name}', async (args, opts) => {
+rudder.command('greet {name}', async (args, opts) => {
   console.log(`Hello, ${args[0]}!`)
 }).description('Greet a user by name')
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com' })
   console.log('Done.')
 }).description('Seed the database with initial data')
@@ -29,8 +29,8 @@ artisan.command('db:seed', async () => {
 Run from your project directory:
 
 ```bash
-pnpm artisan greet Alice
-pnpm artisan db:seed
+pnpm rudder greet Alice
+pnpm rudder db:seed
 ```
 
 ## Class-Based Commands
@@ -39,7 +39,7 @@ For complex commands with typed input, output helpers, and interactive prompts, 
 
 ```ts
 // app/Commands/SendDigestCommand.ts
-import { Command } from '@boostkit/artisan'
+import { Command } from '@rudderjs/rudder'
 
 export class SendDigestCommand extends Command {
   readonly signature   = 'mail:digest {--dry-run} {--type=weekly}'
@@ -69,14 +69,14 @@ export class SendDigestCommand extends Command {
 }
 ```
 
-Register it with `artisan.register()`:
+Register it with `rudder.register()`:
 
 ```ts
 // routes/console.ts
-import { artisan } from '@boostkit/artisan'
+import { rudder } from '@rudderjs/rudder'
 import { SendDigestCommand } from '../app/Commands/SendDigestCommand.js'
 
-artisan.register(SendDigestCommand)
+rudder.register(SendDigestCommand)
 ```
 
 ## Signature Syntax
@@ -157,7 +157,7 @@ All prompt methods are async and throw `CancelledError` if the user presses Ctrl
 | `secret(message)` | `Promise<string>` | Hidden input (password) |
 
 ```ts
-import { CancelledError } from '@boostkit/artisan'
+import { CancelledError } from '@rudderjs/rudder'
 
 async handle() {
   try {
@@ -180,27 +180,27 @@ async handle() {
 Thrown when the user cancels an interactive prompt (Ctrl+C). Import it to handle gracefully:
 
 ```ts
-import { CancelledError } from '@boostkit/artisan'
+import { CancelledError } from '@rudderjs/rudder'
 ```
 
-## `ArtisanRegistry` API
+## `CommandRegistry` API
 
-The `artisan` singleton is an instance of `ArtisanRegistry`, stored on `globalThis.__boostkit_artisan__` so a single registry is shared across all package boundaries.
+The `rudder` singleton is an instance of `CommandRegistry`, stored on `globalThis.__rudderjs_rudder__` so a single registry is shared across all package boundaries.
 
 | Method | Description |
 |---|---|
-| `artisan.command(name, handler)` | Register an inline command; returns a `CommandBuilder` with `.description(text)` / `.purpose(text)` |
-| `artisan.register(...Classes)` | Register one or more class-based commands extending `Command` |
-| `artisan.getCommands()` | Returns all registered `CommandBuilder` instances |
-| `artisan.getClasses()` | Returns all registered class constructors |
-| `artisan.reset()` | Clears all registrations (useful in tests) |
+| `rudder.command(name, handler)` | Register an inline command; returns a `CommandBuilder` with `.description(text)` / `.purpose(text)` |
+| `rudder.register(...Classes)` | Register one or more class-based commands extending `Command` |
+| `rudder.getCommands()` | Returns all registered `CommandBuilder` instances |
+| `rudder.getClasses()` | Returns all registered class constructors |
+| `rudder.reset()` | Clears all registrations (useful in tests) |
 
 ## `parseSignature(signature)`
 
 Low-level utility that parses a signature string into structured argument and option definitions. Throws if the signature does not start with a valid command name.
 
 ```ts
-import { parseSignature } from '@boostkit/artisan'
+import { parseSignature } from '@rudderjs/rudder'
 
 const parsed = parseSignature('make:model {name} {--table=users}')
 // {
@@ -236,9 +236,9 @@ interface CommandOptDef {
 
 ## Notes
 
-- The `artisan` singleton is stored on `globalThis.__boostkit_artisan__` — it is shared across all imports regardless of how many times `@boostkit/artisan` is loaded, preventing duplicate registries.
+- The `rudder` singleton is stored on `globalThis.__rudderjs_rudder__` — it is shared across all imports regardless of how many times `@rudderjs/rudder` is loaded, preventing duplicate registries.
 - `parseSignature` throws if the signature string does not start with a valid command name (letters, digits, `:`, `.`, `-`).
 - `@clack/prompts` is loaded lazily — it is only imported on the first interactive prompt call.
 - Prompt cancellation throws `CancelledError` instead of calling `process.exit()` — catch it to handle gracefully.
 - `table(headers, rows)` pads short rows with empty strings to match the header column count.
-- The BoostKit CLI (`@boostkit/cli`) loads `bootstrap/app.ts` and boots all providers before dispatching commands, so the database and other services are available inside `handle()`.
+- The RudderJS CLI (`@rudderjs/cli`) loads `bootstrap/app.ts` and boots all providers before dispatching commands, so the database and other services are available inside `handle()`.

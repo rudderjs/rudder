@@ -1,13 +1,13 @@
-import { Route } from '@boostkit/router'
-import { resolve, app, dd, dump, config, validate } from '@boostkit/core'
-import { broadcast, broadcastStats } from '@boostkit/broadcast'
-import { getLocale, runWithLocale, setLocale, trans } from '@boostkit/localization'
-import type { BetterAuthInstance } from '@boostkit/auth'
-import { AuthMiddleware } from '@boostkit/auth'
-import { Cache } from '@boostkit/cache'
-import { Storage } from '@boostkit/storage'
-import { RateLimit, CsrfMiddleware } from '@boostkit/middleware'
-import { notify } from '@boostkit/notification'
+import { Route } from '@rudderjs/router'
+import { resolve, app, dd, dump, config, validate } from '@rudderjs/core'
+import { broadcast, broadcastStats } from '@rudderjs/broadcast'
+import { getLocale, runWithLocale, setLocale, trans } from '@rudderjs/localization'
+import type { BetterAuthInstance } from '@rudderjs/auth'
+import { AuthMiddleware } from '@rudderjs/auth'
+import { Cache } from '@rudderjs/cache'
+import { Storage } from '@rudderjs/storage'
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
+import { notify } from '@rudderjs/notification'
 import { UserService } from '../app/Services/UserService.js'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
@@ -224,7 +224,7 @@ Route.post('/api/contact', async (req, res) => {
 
 // ── AI test routes ───────────────────────────────────────────────────────────
 
-import { AI, agent, toolDefinition } from '@boostkit/ai'
+import { AI, agent, toolDefinition } from '@rudderjs/ai'
 
 // Simple prompt — uses default provider
 Route.get('/api/ai/prompt', async (_req, res) => {

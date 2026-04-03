@@ -9,8 +9,8 @@ import {
   ServiceProvider,
   defineConfig,
   parseSignature,
-  Artisan,
-  artisan,
+  Rudder,
+  rudder,
   CancelledError,
   ValidationError,
   EventDispatcher,
@@ -25,7 +25,7 @@ import {
 function reset(): void {
   Application.resetForTesting()
   container.reset()
-  Artisan.reset()
+  Rudder.reset()
 }
 
 // ─── Application ──────────────────────────────────────────
@@ -674,7 +674,7 @@ describe('defineConfig()', () => {
 // ─── Core contract baseline ───────────────────────────────
 
 describe('Core contract baseline', () => {
-  beforeEach(() => Artisan.reset())
+  beforeEach(() => Rudder.reset())
 
   it('parseSignature() supports args, optional args, and options', () => {
     const parsed = parseSignature('users:create {name} {email?} {--admin} {--role=}')
@@ -690,20 +690,20 @@ describe('Core contract baseline', () => {
     ])
   })
 
-  it('Artisan registry stores commands with description metadata', () => {
+  it('Rudder registry stores commands with description metadata', () => {
     const unique = `test:contract:${Date.now()}`
-    const cmd = artisan.command(unique, () => undefined).description('contract command')
+    const cmd = rudder.command(unique, () => undefined).description('contract command')
 
-    const registered = Artisan.getCommands().find(c => c.name === unique)
+    const registered = Rudder.getCommands().find(c => c.name === unique)
     assert.strictEqual(registered, cmd)
     assert.strictEqual(registered?.getDescription(), 'contract command')
   })
 
-  it('Artisan.reset() clears registered commands', () => {
-    Artisan.command(`test:reset:${Date.now()}`, () => undefined)
-    assert.ok(Artisan.getCommands().length > 0)
-    Artisan.reset()
-    assert.strictEqual(Artisan.getCommands().length, 0)
+  it('Rudder.reset() clears registered commands', () => {
+    Rudder.command(`test:reset:${Date.now()}`, () => undefined)
+    assert.ok(Rudder.getCommands().length > 0)
+    Rudder.reset()
+    assert.strictEqual(Rudder.getCommands().length, 0)
   })
 
   it('CancelledError is re-exported from core', () => {

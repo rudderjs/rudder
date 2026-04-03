@@ -1,7 +1,7 @@
-import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@boostkit/panels'
-import { panelsLexical } from '@boostkit/panels-lexical/server'
-import { media } from '@boostkit/media/server'
-import { workspaces } from '@boostkit/workspaces'
+import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@rudderjs/panels'
+import { panelsLexical } from '@rudderjs/panels-lexical/server'
+import { media } from '@rudderjs/media/server'
+import { workspaces } from '@rudderjs/workspaces'
 
 import configs from '../../../config/index.js'
 import { TodoResource }         from './resources/TodoResource.js'
@@ -33,7 +33,7 @@ export const adminPanel = Panel.make('admin')
   .use(media(configs.media))
   .use(workspaces())
   .branding({
-    title: 'BoostKit',
+    title: 'RudderJS',
     logo: '/logo.svg',
   })
   .layout('sidebar')
@@ -127,8 +127,8 @@ export const adminPanel = Panel.make('admin')
           .icon('link')
           .schema(() => [
             List.make('Quick Links').items([
-              { label: 'Documentation', description: 'Read the BoostKit docs', href: '/docs', icon: '📖' },
-              { label: 'GitHub', description: 'View source code', href: 'https://github.com/boostkitjs/boostkit', icon: '🐙' },
+              { label: 'Documentation', description: 'Read the RudderJS docs', href: '/docs', icon: '📖' },
+              { label: 'GitHub', description: 'View source code', href: 'https://github.com/rudderjs/rudderjs', icon: '🐙' },
               { label: 'Support', description: 'Get help', href: '/contact', icon: '💬' },
             ]),
           ]),

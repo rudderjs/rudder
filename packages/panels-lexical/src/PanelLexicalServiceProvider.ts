@@ -1,4 +1,4 @@
-import { ServiceProvider } from '@boostkit/core'
+import { ServiceProvider } from '@rudderjs/core'
 
 export class PanelLexicalServiceProvider extends ServiceProvider {
   register(): void {}
@@ -23,7 +23,7 @@ export function panelsLexicalExtension(): new (...args: any[]) => PanelLexicalSe
 
 // ─── PanelPlugin factory ────────────────────────────────────
 
-import type { PanelPlugin } from '@boostkit/panels'
+import type { PanelPlugin } from '@rudderjs/panels'
 
 const pagesDir = new URL(/* @vite-ignore */ '../pages', import.meta.url).pathname
 
@@ -32,7 +32,7 @@ const pagesDir = new URL(/* @vite-ignore */ '../pages', import.meta.url).pathnam
  *
  * @example
  * ```ts
- * import { panelsLexical } from '@boostkit/panels-lexical/server'
+ * import { panelsLexical } from '@rudderjs/panels-lexical/server'
  *
  * Panel.make('admin')
  *   .use(panelsLexical())

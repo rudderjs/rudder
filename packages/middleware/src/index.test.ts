@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import {
   Middleware,
   Pipeline,
@@ -12,7 +12,7 @@ import {
   getCsrfToken,
   RateLimit,
 } from './index.js'
-import { CacheRegistry } from '@boostkit/cache'
+import { CacheRegistry } from '@rudderjs/cache'
 
 // ─── Test helpers ──────────────────────────────────────────
 

@@ -1,19 +1,19 @@
-# @boostkit/live
+# @rudderjs/live
 
-Real-time collaborative document sync via [Yjs](https://yjs.dev) CRDT. Works alongside `@boostkit/broadcast` — live uses the same port and process, no separate server needed.
+Real-time collaborative document sync via [Yjs](https://yjs.dev) CRDT. Works alongside `@rudderjs/broadcast` — live uses the same port and process, no separate server needed.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/live
+pnpm add @rudderjs/live
 ```
 
 ## Setup
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
-import { live }         from '@boostkit/live'
+import { broadcasting } from '@rudderjs/broadcast'
+import { live }         from '@rudderjs/live'
 
 export default [
   broadcasting(),  // /ws  — pub/sub channels
@@ -60,7 +60,7 @@ model LiveDocument {
 Then pass the adapter:
 
 ```ts
-import { live, livePrisma } from '@boostkit/live'
+import { live, livePrisma } from '@rudderjs/live'
 
 live({
   persistence: livePrisma({ model: 'liveDocument' }),
@@ -76,7 +76,7 @@ pnpm add ioredis
 ```
 
 ```ts
-import { live, liveRedis } from '@boostkit/live'
+import { live, liveRedis } from '@rudderjs/live'
 
 live({
   persistence: liveRedis({ url: env('REDIS_URL') }),
@@ -208,11 +208,11 @@ function Editor() {
 
 ---
 
-## Artisan Commands
+## Rudder Commands
 
 ```bash
-pnpm artisan live:docs          # List active documents and client counts
-pnpm artisan live:clear <doc>   # Clear a document from persistence
+pnpm rudder live:docs          # List active documents and client counts
+pnpm rudder live:clear <doc>   # Clear a document from persistence
 ```
 
 ---
@@ -247,7 +247,7 @@ For very large scale (millions of users), run [yhub](https://github.com/yjs/yhub
 Implement the `LivePersistence` interface to use any storage backend:
 
 ```ts
-import type { LivePersistence } from '@boostkit/live'
+import type { LivePersistence } from '@rudderjs/live'
 import * as Y from 'yjs'
 
 class MyAdapter implements LivePersistence {

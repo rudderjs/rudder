@@ -1,5 +1,5 @@
-import { Mail } from '@boostkit/mail'
-import type { Listener } from '@boostkit/core'
+import { Mail } from '@rudderjs/mail'
+import type { Listener } from '@rudderjs/core'
 import type { UserRegistered } from '../Events/UserRegistered.js'
 import { WelcomeEmail } from '../Mail/WelcomeEmail.js'
 

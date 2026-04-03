@@ -1,4 +1,4 @@
-# ⚡ BoostKit — Architecture Document
+# ⚡ RudderJS — Architecture Document
 > A Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
 
 ---
@@ -11,7 +11,7 @@
 | **Convention over config** | Sensible defaults, but fully escapable. |
 | **Framework-agnostic UI** | React, Vue, Solid — first-class support for all via Vike. |
 | **Fullstack-first** | Server and client code live together, co-located by feature. |
-| **Laravel DX** | Familiar patterns: service container, Eloquent-style ORM, Artisan CLI, middleware, form requests. |
+| **Laravel DX** | Familiar patterns: service container, Eloquent-style ORM, Rudder CLI, middleware, form requests. |
 
 ---
 
@@ -25,8 +25,8 @@
 | Language | TypeScript (strict, ESM, NodeNext) |
 | Runtime | Node.js 20+ / Bun |
 | HTTP server | Hono (default) / Express / Fastify / H3 (via adapter) |
-| ORM | Prisma adapter / Drizzle adapter (swappable via `@boostkit/orm-prisma`) |
-| Auth | better-auth (via `@boostkit/auth`) |
+| ORM | Prisma adapter / Drizzle adapter (swappable via `@rudderjs/orm-prisma`) |
+| Auth | better-auth (via `@rudderjs/auth`) |
 | Queues | BullMQ (default) / Inngest adapter |
 | Validation | Zod with a Laravel-style Form Request wrapper |
 | DI Container | Custom (inspired by tsyringe / InversifyJS — lighter) |
@@ -36,8 +36,8 @@
 ## Monorepo Structure
 
 ```
-boostkit/
-├── packages/               # 25 published packages (@boostkit/*)
+rudderjs/
+├── packages/               # 25 published packages (@rudderjs/*)
 │   ├── contracts/          # Pure TypeScript types — no runtime code (erased at build)
 │   │                       #   ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/            # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer
@@ -46,16 +46,16 @@ boostkit/
 │   ├── middleware/         # Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
 │   │                       #   + RateLimit callable handler (cache-backed), CsrfMiddleware() factory
 │   ├── validation/         # FormRequest, validate(), validateWith(), ValidationError, z re-export
-│   ├── core/               # Bootstrapper, Application, Forge, ServiceProvider, artisan registry
+│   ├── core/               # Bootstrapper, Application, Forge, ServiceProvider, rudder registry
 │   │                       #   re-exports contracts · support · di · middleware · validation
 │   ├── router/             # Global router singleton + decorator-based routing
 │   ├── orm/                # ORM contract + base Model + ModelRegistry
 │   ├── orm-prisma/         # Prisma adapter (multi-driver: pg, libsql, default)
 │   ├── orm-drizzle/        # Drizzle adapter (sqlite, postgresql, libsql)
-│   ├── server-hono/        # Hono adapter (HonoConfig, unified logger [boostkit], CORS)
-│   ├── queue/              # Queue contract + Job base class + queue:work artisan command
-│   ├── queue-inngest/      # Inngest adapter — events: boostkit/job.<ClassName>
-│   ├── queue-bullmq/       # BullMQ adapter — default prefix: 'boostkit'
+│   ├── server-hono/        # Hono adapter (HonoConfig, unified logger [rudderjs], CORS)
+│   ├── queue/              # Queue contract + Job base class + queue:work rudder command
+│   ├── queue-inngest/      # Inngest adapter — events: rudderjs/job.<ClassName>
+│   ├── queue-bullmq/       # BullMQ adapter — default prefix: 'rudderjs'
 │   ├── auth/               # AuthUser/Session/Result types + betterAuth() factory + AuthMiddleware()
 │   │                       #   (merged from auth-better-auth — single package)
 │   ├── session/            # HTTP session: SessionInstance, Session facade (AsyncLocalStorage)
@@ -70,8 +70,8 @@ boostkit/
 │   ├── schedule/           # Task scheduler — schedule singleton, schedule:run/work/list
 │   ├── notification/       # Multi-channel notifications (mail, database)
 │   ├── panels/             # Admin panel builder — CRUD resources, schema elements, widgets, dashboard builder
-│   └── cli/                # Artisan-style CLI (make:*, module:*, user commands)
-├── create-boostkit-app/    # Interactive CLI scaffolder (pnpm create boostkit-app)
+│   └── cli/                # Rudder-style CLI (make:*, module:*, user commands)
+├── create-rudderjs-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
 │                           #   Prompts: name · DB · Todo · frameworks (React/Vue/Solid)
 │                           #           primary framework · Tailwind · shadcn/ui
 ├── docs/                   # VitePress documentation site
@@ -120,7 +120,7 @@ my-app/
 │
 ├── routes/
 │   ├── api.ts                  # HTTP routes (router.get/post/all) — side-effect file
-│   └── console.ts              # Artisan commands (artisan.command()) — side-effect file
+│   └── console.ts              # Rudder commands (rudder.command()) — side-effect file
 │
 ├── config/
 │   ├── app.ts                  # APP_NAME, APP_ENV, APP_DEBUG
@@ -154,33 +154,33 @@ my-app/
 
 ```
 Level 1 (parallel — no framework deps):
-  @boostkit/contracts   @boostkit/support
+  @rudderjs/contracts   @rudderjs/support
           │                │               │
           └────────────────┴───────────────┘
                            │
           ┌────────────────┼──────────────────────────┐
           ▼                ▼                          ▼
-   @boostkit/router    @boostkit/middleware         @boostkit/server-hono
-   @boostkit/validation @boostkit/middleware
+   @rudderjs/router    @rudderjs/middleware         @rudderjs/server-hono
+   @rudderjs/validation @rudderjs/middleware
           │
           └──────────────────┐
                              ▼
-                      @boostkit/core (+ support + di + middleware + validation + router)
+                      @rudderjs/core (+ support + di + middleware + validation + router)
                              │
            ┌─────────────────┼──────────────────┐
            ▼                 ▼                  ▼
-    @boostkit/queue       @boostkit/cache       @boostkit/orm
-    @boostkit/mail        @boostkit/storage
-    @boostkit/schedule    @boostkit/auth        @boostkit/validation
+    @rudderjs/queue       @rudderjs/cache       @rudderjs/orm
+    @rudderjs/mail        @rudderjs/storage
+    @rudderjs/schedule    @rudderjs/auth        @rudderjs/validation
            │
     orm-prisma   queue-bullmq   queue-inngest
     mail-nodemailer
            │
-    @boostkit/panels
+    @rudderjs/panels
     (orm, auth, storage, dnd-kit)
 ```
 
-**Clean DAG — no cycles**: `@boostkit/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@boostkit/router` and `@boostkit/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@boostkit/core` lists `@boostkit/router` as a regular dependency and imports it with a plain `await import('@boostkit/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
+**Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@rudderjs/core` lists `@rudderjs/router` as a regular dependency and imports it with a plain `await import('@rudderjs/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
 
 ### Package Merge Policy (Tight-Coupling Only)
 
@@ -208,8 +208,8 @@ If any checklist item fails, keep the package separate.
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
@@ -221,7 +221,7 @@ export default Application.configure({
   .withRouting({
     web:      () => import('../routes/web.ts'),       // page + web form routes
     api:      () => import('../routes/api.ts'),       // JSON API routes
-    commands: () => import('../routes/console.ts'),   // artisan commands
+    commands: () => import('../routes/console.ts'),   // rudder commands
   })
   .withMiddleware((m) => {
     // Truly global middleware — applies to all requests (web + API)
@@ -234,7 +234,7 @@ export default Application.configure({
 
 `bootstrap/providers.ts`:
 ```ts
-import { betterAuth } from '@boostkit/auth'
+import { betterAuth } from '@rudderjs/auth'
 import configs from '../config/index.ts'
 
 export default [
@@ -268,8 +268,8 @@ export default {
 
 Side-effect file — just import and register, no exports needed:
 ```ts
-import { router } from '@boostkit/router'
-import { resolve } from '@boostkit/core'
+import { router } from '@rudderjs/router'
+import { resolve } from '@rudderjs/core'
 import { UserService } from '../app/Services/UserService.js'
 
 router.get('/api/users', async (_req, res) => {
@@ -290,12 +290,12 @@ router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not f
 
 ### Console Routes — `routes/console.ts`
 
-Side-effect file — register artisan commands, no exports needed:
+Side-effect file — register rudder commands, no exports needed:
 ```ts
-import { artisan } from '@boostkit/core'
+import { rudder } from '@rudderjs/core'
 import { User } from '../app/Models/User.js'
 
-artisan.command('db:seed', async () => {
+rudder.command('db:seed', async () => {
   await User.create({ name: 'Alice', email: 'alice@example.com', role: 'admin' })
   console.log('Done.')
 }).description('Seed the database with sample data')
@@ -322,7 +322,7 @@ export class UserService {
 }
 ```
 
-Import from `@boostkit/core` or `@boostkit/core/di`.
+Import from `@rudderjs/core` or `@rudderjs/core/di`.
 
 ---
 
@@ -346,7 +346,7 @@ model User {
 
 `app/Models/User.ts`:
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static table = 'user'   // matches Prisma's accessor (lowercase model name)
@@ -368,7 +368,7 @@ const paged   = await User.query().paginate(1, 15)
 
 ### Auth — better-auth
 
-`@boostkit/auth` wraps [better-auth](https://better-auth.com) as a `ServiceProvider`:
+`@rudderjs/auth` wraps [better-auth](https://better-auth.com) as a `ServiceProvider`:
 
 ```ts
 // config/auth.ts
@@ -383,7 +383,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@boostkit/auth'
+import { betterAuth } from '@rudderjs/auth'
 betterAuth(configs.auth)  // returns a ServiceProvider class
 ```
 
@@ -395,9 +395,9 @@ const session = await auth.api.getSession({ headers: new Headers(req.headers) })
 
 The provider must boot **before** `routes/api.ts` loads (place it before `AppServiceProvider` in `providers.ts`) so `/api/auth/*` routes are registered first and match before any `/api/*` catch-all.
 
-`AuthMiddleware()` from `@boostkit/auth` is a zero-config factory — it reads the `auth` binding from the DI container and uses `auth.api.getSession()` for real session verification:
+`AuthMiddleware()` from `@rudderjs/auth` is a zero-config factory — it reads the `auth` binding from the DI container and uses `auth.api.getSession()` for real session verification:
 ```ts
-import { AuthMiddleware } from '@boostkit/auth'
+import { AuthMiddleware } from '@rudderjs/auth'
 const authMw = AuthMiddleware()
 Route.get('/api/me', handler, [authMw])  // req.user: AuthUser | undefined
 ```
@@ -423,7 +423,7 @@ export default {
 Available adapter: `hono()` ✅
 
 The Hono adapter includes:
-- Unified request logger with ANSI colors (`[boostkit]` tag)
+- Unified request logger with ANSI colors (`[rudderjs]` tag)
 - Automatic CORS middleware when `cors` config is set
 - Vike's HTTP log suppression (no duplicate lines)
 
@@ -445,7 +445,7 @@ export class CreateUserRequest extends FormRequest {
 const data = await validate(z.object({ name: z.string() }), req)
 ```
 
-Import from `@boostkit/core` or `@boostkit/core/validation`.
+Import from `@rudderjs/core` or `@rudderjs/core/validation`.
 
 ---
 
@@ -461,11 +461,11 @@ await SendWelcomeEmail.dispatch(user).send()
 await SendWelcomeEmail.dispatch(user).delay(5000).onQueue('emails').send()
 ```
 
-Supported adapters: **BullMQ** (Redis-backed, `queue:work` artisan command) and **Inngest** (serverless).
+Supported adapters: **BullMQ** (Redis-backed, `queue:work` rudder command) and **Inngest** (serverless).
 
 Worker lifecycle with BullMQ:
 ```bash
-pnpm artisan queue:work            # start BullMQ worker (graceful shutdown on SIGTERM/SIGINT)
+pnpm rudder queue:work            # start BullMQ worker (graceful shutdown on SIGTERM/SIGINT)
 ```
 
 ---
@@ -473,7 +473,7 @@ pnpm artisan queue:work            # start BullMQ worker (graceful shutdown on S
 ### Cache
 
 ```ts
-import { cache } from '@boostkit/cache'
+import { cache } from '@rudderjs/cache'
 
 await cache().put('key', value, 300)   // TTL in seconds
 const hit = await cache().get('key')
@@ -488,7 +488,7 @@ Drivers: `memory` (built-in, default) and `redis` (built-in — install `ioredis
 ### Storage
 
 ```ts
-import { storage } from '@boostkit/storage'
+import { storage } from '@rudderjs/storage'
 
 await storage().put('avatars/user-1.jpg', buffer)
 const url  = await storage().url('avatars/user-1.jpg')
@@ -499,7 +499,7 @@ await storage().delete('avatars/user-1.jpg')
 Drivers: `local` (built-in, default) and `s3` (built-in — supports AWS S3, Cloudflare R2, MinIO). Install `@aws-sdk/client-s3` to use S3 disks.
 
 ```bash
-pnpm artisan storage:link    # creates public/storage symlink → storage/app/public
+pnpm rudder storage:link    # creates public/storage symlink → storage/app/public
 ```
 
 ---
@@ -507,7 +507,7 @@ pnpm artisan storage:link    # creates public/storage symlink → storage/app/pu
 ### Events
 
 ```ts
-import { dispatch, events } from '@boostkit/core'
+import { dispatch, events } from '@rudderjs/core'
 
 // Register a listener
 events().listen('user.registered', async (payload) => {
@@ -523,7 +523,7 @@ await dispatch('user.registered', { user })
 ### Mail
 
 ```ts
-import { mail } from '@boostkit/mail'
+import { mail } from '@rudderjs/mail'
 
 await mail().send({
   to:      'user@example.com',
@@ -539,7 +539,7 @@ Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (built
 ### Schedule
 
 ```ts
-import { schedule } from '@boostkit/schedule'
+import { schedule } from '@rudderjs/schedule'
 
 schedule().call(() => cleanupExpiredSessions())
   .everyHour()
@@ -550,9 +550,9 @@ schedule().command('db:seed')
 ```
 
 ```bash
-pnpm artisan schedule:run     # run due tasks once (good for cron)
-pnpm artisan schedule:work    # run loop (process.cwd, 60s interval)
-pnpm artisan schedule:list    # show all scheduled tasks
+pnpm rudder schedule:run     # run due tasks once (good for cron)
+pnpm rudder schedule:work    # run loop (process.cwd, 60s interval)
+pnpm rudder schedule:list    # show all scheduled tasks
 ```
 
 ---
@@ -562,9 +562,9 @@ pnpm artisan schedule:list    # show all scheduled tasks
 All built-in middleware are **callable factory functions** — no `new` keyword, no `.toHandler()`:
 
 ```ts
-import { RateLimit, CsrfMiddleware } from '@boostkit/middleware'
-import { AuthMiddleware } from '@boostkit/auth'
-import { SessionMiddleware } from '@boostkit/session'
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
+import { AuthMiddleware } from '@rudderjs/auth'
+import { SessionMiddleware } from '@rudderjs/session'
 
 // Global (bootstrap/app.ts)
 m.use(RateLimit.perMinute(60))
@@ -595,7 +595,7 @@ Route.post('/api/login', handler, [authLimit])
 ### Session
 
 ```ts
-import { Session } from '@boostkit/session'
+import { Session } from '@rudderjs/session'
 
 // Via facade (ALS-based — works anywhere in the call stack)
 Session.put('visits', (Session.get<number>('visits') ?? 0) + 1)
@@ -610,44 +610,44 @@ Drivers: `cookie` (HMAC-SHA256 signed, default) and `redis` (UUID session ID, ne
 
 ---
 
-### CLI (pnpm artisan — like Artisan)
+### CLI (pnpm rudder — like Rudder)
 
 ```bash
 # Scaffolding
-pnpm artisan make:controller UserController
-pnpm artisan make:model Post
-pnpm artisan make:job SendWelcomeEmail
-pnpm artisan make:request CreateUserRequest
-pnpm artisan make:middleware AuthMiddleware
-pnpm artisan make:provider PaymentServiceProvider
-pnpm artisan make:module Blog         # full module scaffold
+pnpm rudder make:controller UserController
+pnpm rudder make:model Post
+pnpm rudder make:job SendWelcomeEmail
+pnpm rudder make:request CreateUserRequest
+pnpm rudder make:middleware AuthMiddleware
+pnpm rudder make:provider PaymentServiceProvider
+pnpm rudder make:module Blog         # full module scaffold
 
 # Module Prisma shards
-pnpm artisan module:publish           # merge *.prisma into prisma/schema.prisma
+pnpm rudder module:publish           # merge *.prisma into prisma/schema.prisma
 
 # Queue
-pnpm artisan queue:work
+pnpm rudder queue:work
 
 # Schedule
-pnpm artisan schedule:run
-pnpm artisan schedule:work
-pnpm artisan schedule:list
+pnpm rudder schedule:run
+pnpm rudder schedule:work
+pnpm rudder schedule:list
 
 # Storage
-pnpm artisan storage:link
+pnpm rudder storage:link
 
 # User-defined (from routes/console.ts)
-pnpm artisan db:seed
+pnpm rudder db:seed
 ```
 
 ---
 
 ### Optional Peer Packages
 
-Packages like `@boostkit/queue-bullmq` are **optional peers** — the user installs only what they need.
+Packages like `@rudderjs/queue-bullmq` are **optional peers** — the user installs only what they need.
 
-They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@boostkit/core/support`. This helper:
-1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@boostkit/*`
+They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@rudderjs/core/support`. This helper:
+1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@rudderjs/*`
 2. Returns `import(resolvedAbsolutePath)` — an absolute path import that is opaque to Rollup/Vite static analysis
 
 All optional peer packages **must** include `"default": "./dist/index.js"` in their `exports` field — the CJS resolver used by `createRequire.resolve()` cannot see `"import"`-only entries.
@@ -660,10 +660,10 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 |-------|-------|
 | **v0.1** | ✅ Core, DI, Router, CLI scaffold, Hono adapter, Vike SSR |
 | **v0.2** | ✅ ORM (Prisma), Validation, Middleware, Queue (Inngest) |
-| **v0.3** | ✅ Fluent bootstrap, artisan console routes, DB seeding, multi-provider |
+| **v0.3** | ✅ Fluent bootstrap, rudder console routes, DB seeding, multi-provider |
 | **v0.4** | ✅ Auth (better-auth), Storage (S3), Cache (Redis), Events, Mail, Schedule, Rate Limiting, BullMQ |
-| **v0.5** | ✅ Package consolidation — create-boostkit-app scaffolder, notifications, Drizzle adapter |
-| **v0.6** | ✅ Rename Forge → BoostKit, npm publish (25 packages), package merges, docs site, README |
-| **v0.7** | ✅ Session package, AuthMiddleware, callable middleware (no .toHandler()), artisan test suite |
-| **v0.8** | ✅ create-boostkit-app multi-framework scaffolder (React/Vue/Solid, Tailwind, shadcn/ui) |
+| **v0.5** | ✅ Package consolidation — create-rudderjs-app scaffolder, notifications, Drizzle adapter |
+| **v0.6** | ✅ Rename Forge → RudderJS, npm publish (25 packages), package merges, docs site, README |
+| **v0.7** | ✅ Session package, AuthMiddleware, callable middleware (no .toHandler()), rudder test suite |
+| **v0.8** | ✅ create-rudderjs-app multi-framework scaffolder (React/Vue/Solid, Tailwind, shadcn/ui) |
 | **v1.0** | Deploy docs, GitHub Actions CI, stable API |

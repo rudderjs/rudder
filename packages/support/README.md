@@ -1,13 +1,13 @@
-# @boostkit/support
+# @rudderjs/support
 
-Shared utility primitives for BoostKit: collections, environment access, config lookup, debug helpers, and general-purpose functions.
+Shared utility primitives for RudderJS: collections, environment access, config lookup, debug helpers, and general-purpose functions.
 
-All exports are also available from `@boostkit/core` — you rarely need to install this package directly.
+All exports are also available from `@rudderjs/core` — you rarely need to install this package directly.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/support
+pnpm add @rudderjs/support
 ```
 
 ---
@@ -17,9 +17,9 @@ pnpm add @boostkit/support
 Read values from the application's `ConfigRepository` using dot-notation keys. The store is populated from your `config/` files at bootstrap time.
 
 ```ts
-import { config } from '@boostkit/core'
+import { config } from '@rudderjs/core'
 
-config('app.name')           // → 'BoostKit'
+config('app.name')           // → 'RudderJS'
 config('app.debug')          // → false
 config('cache.ttl', 60)      // → number (with fallback)
 ```
@@ -29,7 +29,7 @@ Keys follow the `file.key` pattern — `app.name` reads `configs.app.name` from 
 ### `ConfigRepository` class
 
 ```ts
-import { ConfigRepository } from '@boostkit/support'
+import { ConfigRepository } from '@rudderjs/support'
 
 const repo = new ConfigRepository({ db: { host: 'localhost', port: 5432 } })
 
@@ -50,7 +50,7 @@ repo.all()                     // entire data object
 Debug helpers inspired by Laravel.
 
 ```ts
-import { dd, dump } from '@boostkit/core'
+import { dd, dump } from '@rudderjs/core'
 
 // dump() — pretty-prints and continues
 dump({ user, session })
@@ -69,9 +69,9 @@ Both format arguments with `JSON.stringify` at 2-space indent. `dd()` calls `pro
 Read a string environment variable.
 
 ```ts
-import { env } from '@boostkit/support'
+import { env } from '@rudderjs/support'
 
-env('APP_NAME', 'BoostKit')   // → 'BoostKit'
+env('APP_NAME', 'RudderJS')   // → 'RudderJS'
 env('APP_ENV')                // throws if missing and no fallback
 ```
 
@@ -82,9 +82,9 @@ env('APP_ENV')                // throws if missing and no fallback
 Type-safe access to `process.env`.
 
 ```ts
-import { Env } from '@boostkit/support'
+import { Env } from '@rudderjs/support'
 
-Env.get('APP_NAME', 'BoostKit')       // string  (throws if missing and no fallback)
+Env.get('APP_NAME', 'RudderJS')       // string  (throws if missing and no fallback)
 Env.getNumber('PORT', 3000)           // number
 Env.getBool('APP_DEBUG', false)       // boolean — case-insensitive 'true' | '1' → true
 Env.has('REDIS_URL')                  // boolean
@@ -104,7 +104,7 @@ Env.has('REDIS_URL')                  // boolean
 Validate environment variables at startup using a Zod schema. Throws with a clear error listing all missing/invalid keys before the application boots.
 
 ```ts
-import { defineEnv } from '@boostkit/support'
+import { defineEnv } from '@rudderjs/support'
 import { z } from 'zod'
 
 export const env = defineEnv(z.object({
@@ -124,7 +124,7 @@ env.APP_DEBUG // boolean
 Fluent, typed wrapper around arrays — inspired by Laravel Collections.
 
 ```ts
-import { Collection } from '@boostkit/support'
+import { Collection } from '@rudderjs/support'
 
 const users = Collection.of([
   { id: 1, name: 'Alice', role: 'admin' },
@@ -163,7 +163,7 @@ JSON.stringify(users)   // '[{"id":1,...},{"id":2,...}]'  — no double-encoding
 ## Helper Functions
 
 ```ts
-import { sleep, ucfirst, pick, omit, tap, deepClone, isObject, toSnakeCase, toCamelCase } from '@boostkit/support'
+import { sleep, ucfirst, pick, omit, tap, deepClone, isObject, toSnakeCase, toCamelCase } from '@rudderjs/support'
 
 await sleep(500)
 
@@ -199,7 +199,7 @@ isObject(null)        // false
 
 ## Notes
 
-- All exports are re-exported from `@boostkit/core` — you rarely need to import `@boostkit/support` directly.
+- All exports are re-exported from `@rudderjs/core` — you rarely need to import `@rudderjs/support` directly.
 - `defineEnv()` validates eagerly at module evaluation time — failures surface at boot.
 - `dd()` calls `process.exit(1)` — development use only.
 - `resolveOptionalPeer()` resolves optional peer packages from the app root — used internally by adapters.

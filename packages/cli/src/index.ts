@@ -6,7 +6,7 @@ import { makeCommand } from './commands/make.js'
 import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
 import { migrateCommands } from './commands/migrate.js'
-import { artisan, parseSignature } from '@boostkit/artisan'
+import { rudder, parseSignature } from '@rudderjs/rudder'
 
 const C = {
   green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -31,7 +31,7 @@ async function resolveAppRoot(): Promise<string | null> {
     dir = parent
   }
 
-  // 2. Check immediate subdirectories of cwd (monorepo: boostkit root → playground/)
+  // 2. Check immediate subdirectories of cwd (monorepo: rudderjs root → playground/)
   const entries = await fs.readdir(process.cwd(), { withFileTypes: true }).catch(() => [])
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
@@ -47,7 +47,7 @@ async function resolveAppRoot(): Promise<string | null> {
 }
 
 /**
- * Bootstrap the BoostKit application so providers (DB, etc.) are ready before
+ * Bootstrap the RudderJS application so providers (DB, etc.) are ready before
  * running any command.
  */
 async function bootApp(): Promise<void> {
@@ -62,8 +62,8 @@ async function bootApp(): Promise<void> {
   try {
     const appFile = await resolveAppRoot()
     if (appFile) {
-      const { default: boostkit } = await import(appFile) as { default: { boot(): Promise<void> } }
-      await boostkit.boot()
+      const { default: rudderjs } = await import(appFile) as { default: { boot(): Promise<void> } }
+      await rudderjs.boot()
     } else {
       // Fallback: try loading console routes directly (no full app context)
       for (const ext of ['ts', 'js']) {
@@ -80,9 +80,9 @@ async function bootApp(): Promise<void> {
 
 async function main(): Promise<void> {
   program
-    .name('artisan')
+    .name('rudder')
     .helpOption('-h, --help', 'Display help for the given command')
-    .version('0.0.2', '-V, --version', 'Display BoostKit version')
+    .version('0.0.2', '-V, --version', 'Display RudderJS version')
 
   // Laravel-style custom help output
   program.configureHelp({
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
         else groups[ns] = [...(groups[ns] ?? []), c]
       }
 
-      let out = `\n  BoostKit Framework ${C.yellow('0.0.2')}\n`
+      let out = `\n  RudderJS Framework ${C.yellow('0.0.2')}\n`
       out += `\n  ${C.dim('Usage:')}\n`
       out += `    command [options] [arguments]\n`
       out += `\n  ${C.dim('Available commands:')}\n`
@@ -135,9 +135,9 @@ async function main(): Promise<void> {
     .action(async () => {
       let apiRoutes: Array<{ method: string; path: string; middleware: unknown[] }> = []
       try {
-        const { router } = await import('@boostkit/router') as { router: { list(): typeof apiRoutes } }
+        const { router } = await import('@rudderjs/router') as { router: { list(): typeof apiRoutes } }
         apiRoutes = router.list()
-      } catch { /* @boostkit/router not installed */ }
+      } catch { /* @rudderjs/router not installed */ }
 
       // ── Scan Vike filesystem routes ──────────────────────
       const vikeRoutes: Array<{ route: string; dir: string }> = []
@@ -209,8 +209,8 @@ async function main(): Promise<void> {
       console.log()
     })
 
-  // Inline commands (artisan.command())
-  for (const cmd of artisan.getCommands()) {
+  // Inline commands (rudder.command())
+  for (const cmd of rudder.getCommands()) {
     program
       .command(cmd.name)
       .description(cmd.getDescription())
@@ -221,8 +221,8 @@ async function main(): Promise<void> {
       })
   }
 
-  // Class-based commands (artisan.register())
-  for (const CommandClass of artisan.getClasses()) {
+  // Class-based commands (rudder.register())
+  for (const CommandClass of rudder.getClasses()) {
     const instance = new CommandClass()
     const { name, args, opts } = parseSignature(instance.signature)
 

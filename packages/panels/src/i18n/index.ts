@@ -18,9 +18,9 @@ export function getPanelDir(locale: string): 'ltr' | 'rtl' {
   return RTL_LOCALES.has(base) ? 'rtl' : 'ltr'
 }
 
-/** Get the current locale from globalThis (set by @boostkit/localization) if available, else 'en'. */
+/** Get the current locale from globalThis (set by @rudderjs/localization) if available, else 'en'. */
 export function getActiveLocale(): string {
   const g = globalThis as Record<string, unknown>
-  const config = g['__boostkit_localization_config__'] as { locale?: string } | undefined
+  const config = g['__rudderjs_localization_config__'] as { locale?: string } | undefined
   return config?.locale ?? 'en'
 }

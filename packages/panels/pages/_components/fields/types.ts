@@ -1,4 +1,4 @@
-import type { FieldMeta, PanelI18n } from '@boostkit/panels'
+import type { FieldMeta, PanelI18n } from '@rudderjs/panels'
 
 export interface FieldInputProps {
   field:       FieldMeta

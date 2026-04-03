@@ -1,6 +1,6 @@
-import { Env } from '@boostkit/core'
-import { livePrisma } from '@boostkit/live'
-import type { LiveConfig } from '@boostkit/live'
+import { Env } from '@rudderjs/core'
+import { livePrisma } from '@rudderjs/live'
+import type { LiveConfig } from '@rudderjs/live'
 
 export default {
   path: Env.get('LIVE_PATH', '/ws-live'),

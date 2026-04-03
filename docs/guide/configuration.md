@@ -1,6 +1,6 @@
 # Configuration
 
-BoostKit uses three distinct configuration layers. Understanding which layer handles what prevents confusion and duplication.
+RudderJS uses three distinct configuration layers. Understanding which layer handles what prevents confusion and duplication.
 
 ## The Three Layers
 
@@ -10,7 +10,7 @@ BoostKit uses three distinct configuration layers. Understanding which layer han
 | **Runtime config** | `config/*.ts` | Named, typed objects that read from `.env` |
 | **Framework wiring** | `bootstrap/app.ts` | Server adapter, providers, routing loaders |
 
-There is no `boostkit.config.ts`. The `bootstrap/app.ts` file is where you wire the framework — the equivalent of Laravel's `bootstrap/app.php`.
+There is no `rudderjs.config.ts`. The `bootstrap/app.ts` file is where you wire the framework — the equivalent of Laravel's `bootstrap/app.php`.
 
 ## Environment Variables (`.env`)
 
@@ -45,7 +45,7 @@ Each `config/*.ts` file exports a plain object that reads values from the enviro
 
 ```ts
 // config/server.ts
-import { Env } from '@boostkit/core/support'
+import { Env } from '@rudderjs/core/support'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -72,7 +72,7 @@ export default {
 For critical environment variables, use `defineEnv` with a Zod schema to validate at startup:
 
 ```ts
-import { defineEnv } from '@boostkit/core/support'
+import { defineEnv } from '@rudderjs/core/support'
 import { z } from 'zod'
 
 export const env = defineEnv(
@@ -118,7 +118,7 @@ Application.configure({
 Passing `config: configs` to `Application.configure()` binds each config object in the DI container, so you can retrieve it anywhere via:
 
 ```ts
-import { app } from '@boostkit/core'
+import { app } from '@rudderjs/core'
 
 const serverConfig = app().make<typeof configs.server>('config.server')
 ```
@@ -130,8 +130,8 @@ This file wires the framework together. It should contain **only structural deci
 ```ts
 import 'reflect-metadata'
 import 'dotenv/config'
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 import providers from './providers.ts'
 import configs from '../config/index.ts'
 
@@ -166,7 +166,7 @@ export default Application.configure({
 |--------|-------------|
 | `web` | Web routes (redirects, server guards) — loaded lazily on first HTTP request |
 | `api` | API routes — loaded lazily on first HTTP request |
-| `commands` | Artisan commands — loaded at CLI boot |
+| `commands` | Rudder commands — loaded at CLI boot |
 
 ### `.withMiddleware()`
 

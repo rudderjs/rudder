@@ -5,7 +5,7 @@ Providers can be registered at runtime using `app.register()`. This is useful wh
 ## API
 
 ```ts
-import { app } from '@boostkit/core'
+import { app } from '@rudderjs/core'
 
 app().register(MyServiceProvider)
 ```
@@ -24,8 +24,8 @@ An `AppServiceProvider` can register feature modules conditionally:
 
 ```ts
 // app/Providers/AppServiceProvider.ts
-import { app } from '@boostkit/core'
-import { PanelServiceProvider } from '@boostkit/panels'
+import { app } from '@rudderjs/core'
+import { PanelServiceProvider } from '@rudderjs/panels'
 import { TodoServiceProvider } from '../Modules/Todo/TodoServiceProvider.js'
 
 export class AppServiceProvider {
@@ -42,8 +42,8 @@ The `panels()` factory accepts an extensions array. Each extension is a provider
 
 ```ts
 // bootstrap/providers.ts
-import { panels } from '@boostkit/panels'
-import { media } from '@boostkit/media'
+import { panels } from '@rudderjs/panels'
+import { media } from '@rudderjs/media'
 import { AdminPanel } from '../app/Panels/AdminPanel.js'
 
 export default [

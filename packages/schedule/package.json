@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/schedule",
+  "name": "@rudderjs/schedule",
   "version": "0.0.6",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/schedule"
   },
   "type": "module",
@@ -28,7 +28,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*",
+    "@rudderjs/core": "workspace:*",
     "croner": "^9.0.0"
   },
   "devDependencies": {

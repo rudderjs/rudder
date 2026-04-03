@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { Resource } from '../Resource.js'

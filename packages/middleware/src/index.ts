@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/contracts'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/contracts'
 
 // ─── Base Middleware Class ─────────────────────────────────
 
@@ -92,7 +92,7 @@ export class LoggerMiddleware extends Middleware {
     const start = Date.now()
     await next()
     const ms = Date.now() - start
-    console.log(`[BoostKit] ${req.method} ${req.path} — ${ms}ms`)
+    console.log(`[RudderJS] ${req.method} ${req.path} — ${ms}ms`)
   }
 }
 
@@ -267,7 +267,7 @@ export function fromClass(MiddlewareClass: new () => Middleware): MiddlewareHand
 
 // ─── Rate Limiting ─────────────────────────────────────────
 
-import { CacheRegistry } from '@boostkit/cache'
+import { CacheRegistry } from '@rudderjs/cache'
 
 type KeyExtractor = 'ip' | 'route' | ((req: AppRequest) => string)
 
@@ -313,7 +313,7 @@ function makeRateLimitHandler(opts: RateLimitOptions): MiddlewareHandler {
     if (!cache) return next()
 
     const now    = Date.now()
-    const cKey   = `boostkit:rl:${buildKey(opts.keyBy, req)}`
+    const cKey   = `rudderjs:rl:${buildKey(opts.keyBy, req)}`
     const record = await cache.get<RateRecord>(cKey)
 
     let count:     number
@@ -383,7 +383,7 @@ export type RateLimitBuilder = RateLimitHandler
 /**
  * Cache-backed rate limiter middleware.
  *
- * Uses the active @boostkit/cache adapter — works with memory (dev) or Redis (prod).
+ * Uses the active @rudderjs/cache adapter — works with memory (dev) or Redis (prod).
  * Respects X-Forwarded-For and sets standard X-RateLimit-* + Retry-After headers.
  *
  * Usage:

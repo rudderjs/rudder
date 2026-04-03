@@ -1,5 +1,5 @@
 import React from 'react'
-import { registerElement } from '@boostkit/panels'
+import { registerElement } from '@rudderjs/panels'
 
 function ClientOnly({ height, loader, factory, elementProps }: {
   height: number
@@ -34,7 +34,7 @@ registerElement('canvas', (props: any) => {
   return React.createElement(ClientOnly, {
     height: props.element?.height ?? 500,
     loader: 'workspace',
-    factory: () => import('@boostkit/workspaces').then(m => ({ default: m.WorkspaceCanvas })),
+    factory: () => import('@rudderjs/workspaces').then(m => ({ default: m.WorkspaceCanvas })),
     elementProps: {
       workspaceId: props.element?.id ?? 'default',
       editable: props.element?.editable ?? false,
@@ -50,7 +50,7 @@ registerElement('chat', (props: any) => {
   return React.createElement(ClientOnly, {
     height: props.element?.height ?? 400,
     loader: 'chat',
-    factory: () => import('@boostkit/workspaces').then(m => ({ default: m.ChatPanel })),
+    factory: () => import('@rudderjs/workspaces').then(m => ({ default: m.ChatPanel })),
     elementProps: {
       workspaceId: props.element?.id ?? 'default',
       height: props.element?.height ?? 400,

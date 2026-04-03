@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/media",
+  "name": "@rudderjs/media",
   "version": "0.0.1",
-  "description": "Media library for @boostkit/panels — file browser, uploads, previews, image conversions.",
+  "description": "Media library for @rudderjs/panels — file browser, uploads, previews, image conversions.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/media"
   },
   "type": "module",
@@ -33,25 +33,25 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "@boostkit/core": "*",
-    "@boostkit/image": "*",
-    "@boostkit/panels": "*",
-    "@boostkit/router": "*",
-    "@boostkit/storage": "*",
+    "@rudderjs/core": "*",
+    "@rudderjs/image": "*",
+    "@rudderjs/panels": "*",
+    "@rudderjs/router": "*",
+    "@rudderjs/storage": "*",
     "react": ">=18",
     "react-dom": ">=18"
   },
   "peerDependenciesMeta": {
-    "@boostkit/image": {
+    "@rudderjs/image": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/image": "workspace:*",
-    "@boostkit/panels": "workspace:*",
-    "@boostkit/router": "workspace:*",
-    "@boostkit/storage": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/image": "workspace:*",
+    "@rudderjs/panels": "workspace:*",
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/storage": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.2.3",

@@ -8,7 +8,7 @@ import type {
 } from './types.js'
 
 /**
- * Testing fake for @boostkit/ai.
+ * Testing fake for @rudderjs/ai.
  *
  * @example
  * const fake = AiFake.fake()
@@ -62,20 +62,20 @@ export class AiFake {
 
   /** Assert at least one prompt was sent, optionally matching a predicate */
   assertPrompted(predicate?: (input: string) => boolean): void {
-    if (this.calls.length === 0) throw new Error('[BoostKit AI] Expected at least one prompt, but none were sent.')
+    if (this.calls.length === 0) throw new Error('[RudderJS AI] Expected at least one prompt, but none were sent.')
     if (predicate) {
       const match = this.calls.some(c => {
         const userMsg = c.messages.find(m => m.role === 'user')
         return userMsg ? predicate(userMsg.content) : false
       })
-      if (!match) throw new Error('[BoostKit AI] No prompt matched the predicate.')
+      if (!match) throw new Error('[RudderJS AI] No prompt matched the predicate.')
     }
   }
 
   /** Assert no prompts were sent */
   assertNothingPrompted(): void {
     if (this.calls.length > 0) {
-      throw new Error(`[BoostKit AI] Expected no prompts, but ${this.calls.length} were sent.`)
+      throw new Error(`[RudderJS AI] Expected no prompts, but ${this.calls.length} were sent.`)
     }
   }
 

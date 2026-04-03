@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { z, validate, validateWith, FormRequest, ValidationError } from './validation.js'
 
 // ─── Test helpers ──────────────────────────────────────────

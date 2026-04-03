@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { Resource } from '../Resource.js'
@@ -40,7 +40,7 @@ export function mountVersionRoutes(
     const id = param(req, 'id')
     const docName = `panel:${slug}:${id}`
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): { make(k: string): unknown } }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): { make(k: string): unknown } }
       const prisma = app().make('prisma') as PrismaVersionClient
       const versions = await prisma.panelVersion.findMany({
         where: { docName },
@@ -69,7 +69,7 @@ export function mountVersionRoutes(
     const body    = req.body as { label?: string; fields?: Record<string, unknown>; draftStatus?: string }
 
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): { make(k: string): unknown } }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): { make(k: string): unknown } }
       const prisma = app().make('prisma') as PrismaVersionClient
 
       let fieldValues: Record<string, unknown>
@@ -80,7 +80,7 @@ export function mountVersionRoutes(
       } else if (isCollab) {
         // Collaborative: read from Y.Doc
         try {
-          const { Live } = await import(/* @vite-ignore */ '@boostkit/live')
+          const { Live } = await import(/* @vite-ignore */ '@rudderjs/live')
           fieldValues = Live.readMap(docName, 'fields')
         } catch {
           // Y.Doc not available — fall back to DB record
@@ -133,7 +133,7 @@ export function mountVersionRoutes(
     const docName = `panel:${slug}:${id}`
 
     try {
-      const { Live } = await import(/* @vite-ignore */ '@boostkit/live')
+      const { Live } = await import(/* @vite-ignore */ '@rudderjs/live')
 
       const resource = new ResourceClass()
       const vFormFields = flattenFields(resource._resolveForm().getFields() as import('../Resource.js').FieldOrGrouping[])
@@ -191,7 +191,7 @@ export function mountVersionRoutes(
   router.get(`${base}/:id/_versions/:versionId`, async (req: AppRequest, res: AppResponse) => {
     const versionId = param(req, 'versionId')
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): { make(k: string): unknown } }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): { make(k: string): unknown } }
       const prisma = app().make('prisma') as PrismaVersionClient
       const version = await prisma.panelVersion.findUnique({ where: { id: versionId } })
       if (!version) return res.status(404).json({ message: 'Version not found.' })

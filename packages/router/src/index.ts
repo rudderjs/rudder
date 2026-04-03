@@ -5,14 +5,14 @@ import type {
   RouteHandler,
   MiddlewareHandler,
   HttpMethod,
-} from '@boostkit/contracts'
+} from '@rudderjs/contracts'
 
 // ─── Metadata Keys ─────────────────────────────────────────
 
-const CONTROLLER_PREFIX     = 'boostkit:controller:prefix'
-const CONTROLLER_MIDDLEWARE = 'boostkit:controller:middleware'
-const ROUTE_DEFINITIONS     = 'boostkit:route:definitions'
-const ROUTE_MIDDLEWARE      = 'boostkit:route:middleware'
+const CONTROLLER_PREFIX     = 'rudderjs:controller:prefix'
+const CONTROLLER_MIDDLEWARE = 'rudderjs:controller:middleware'
+const ROUTE_DEFINITIONS     = 'rudderjs:route:definitions'
+const ROUTE_MIDDLEWARE      = 'rudderjs:route:middleware'
 
 // ─── Route Meta (stored per method) ───────────────────────
 
@@ -152,7 +152,7 @@ export class Router {
     }
   }
 
-  /** Get all registered routes (useful for boostkit routes:list) */
+  /** Get all registered routes (useful for rudderjs routes:list) */
   list(): RouteDefinition[] {
     return [...this.routes]
   }

@@ -24,9 +24,9 @@ import {
   ViewMode,
   Stats,
   Stat,
-} from '@boostkit/panels'
-import { RichContentField } from '@boostkit/panels-lexical'
-import { MediaPickerField } from '@boostkit/media'
+} from '@rudderjs/panels'
+import { RichContentField } from '@rudderjs/panels-lexical'
+import { MediaPickerField } from '@rudderjs/media'
 import { Article } from '../../../Models/Article.js'
 
 export class ArticleResource extends Resource {
@@ -116,7 +116,7 @@ export class ArticleResource extends Resource {
           .confirm('Clear stale collaborative data and re-seed from database for selected articles?')
           .bulk()
           .handler(async (records) => {
-            const { Live } = await import('@boostkit/live')
+            const { Live } = await import('@rudderjs/live')
             for (const record of records as Article[]) {
               const id = (record as any).id as string
               const docName = `panel:articles:${id}`

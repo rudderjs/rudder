@@ -1,4 +1,4 @@
-import { Page, Heading, Text } from '@boostkit/panels'
+import { Page, Heading, Text } from '@rudderjs/panels'
 
 export class SimplePage extends Page {
   static slug  = 'simple-demo'

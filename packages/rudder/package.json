@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/artisan",
+  "name": "@rudderjs/rudder",
   "version": "0.0.2",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
-    "directory": "packages/artisan"
+    "url": "https://github.com/rudderjs/rudderjs",
+    "directory": "packages/rudder"
   },
   "type": "module",
   "files": [

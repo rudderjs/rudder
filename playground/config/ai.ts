@@ -1,5 +1,5 @@
-import { Env } from '@boostkit/core'
-import type { AiConfig } from '@boostkit/ai'
+import { Env } from '@rudderjs/core'
+import type { AiConfig } from '@rudderjs/ai'
 
 export default {
   default: Env.get('AI_MODEL', 'anthropic/claude-sonnet-4-5'),

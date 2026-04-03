@@ -1,6 +1,6 @@
-import { Env } from '@boostkit/core'
-import { dispatch } from '@boostkit/core'
-import type { BetterAuthConfig } from '@boostkit/auth'
+import { Env } from '@rudderjs/core'
+import { dispatch } from '@rudderjs/core'
+import type { BetterAuthConfig } from '@rudderjs/auth'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 
 export default {
@@ -9,7 +9,7 @@ export default {
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {
-      // In production, send a real email via @boostkit/mail
+      // In production, send a real email via @rudderjs/mail
       // For development, just log the reset URL
       console.log(`[Auth] Password reset for ${user.email}: ${url}`)
     },

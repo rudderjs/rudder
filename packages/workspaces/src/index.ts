@@ -1,4 +1,4 @@
-// @boostkit/workspaces — AI workspace builder
+// @rudderjs/workspaces — AI workspace builder
 
 // Plugin
 export { workspaces, type WorkspacesConfig } from './plugin.js'

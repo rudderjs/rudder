@@ -5,7 +5,7 @@ Tools give agents the ability to take actions — search databases, update recor
 ## Defining Tools
 
 ```ts
-import { toolDefinition } from '@boostkit/ai'
+import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 
 const weatherTool = toolDefinition({
@@ -57,7 +57,7 @@ const themeTool = toolDefinition({
 ## Using Tools with Agents
 
 ```ts
-import { agent } from '@boostkit/ai'
+import { agent } from '@rudderjs/ai'
 
 const a = agent({
   instructions: 'You help users check the weather.',

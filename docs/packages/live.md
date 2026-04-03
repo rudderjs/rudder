@@ -1,11 +1,11 @@
-# @boostkit/live
+# @rudderjs/live
 
 Yjs CRDT real-time document sync. Every connected client always sees the same shared state with conflict-free merging — even after going offline and reconnecting.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/live
+pnpm add @rudderjs/live
 # Client-side (in your app, not this package)
 pnpm add yjs y-websocket
 ```
@@ -14,8 +14,8 @@ pnpm add yjs y-websocket
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@boostkit/broadcast'
-import { live }         from '@boostkit/live'
+import { broadcasting } from '@rudderjs/broadcast'
+import { live }         from '@rudderjs/live'
 
 export default [
   broadcasting(),  // /ws       — pub/sub channels
@@ -42,7 +42,7 @@ pnpm add ioredis
 ```
 
 ```ts
-import { live, liveRedis } from '@boostkit/live'
+import { live, liveRedis } from '@rudderjs/live'
 
 live({
   persistence: liveRedis({ url: process.env.REDIS_URL }),
@@ -65,7 +65,7 @@ model LiveDocument {
 ```
 
 ```ts
-import { live, livePrisma } from '@boostkit/live'
+import { live, livePrisma } from '@rudderjs/live'
 
 live({
   persistence: livePrisma({ model: 'liveDocument' }),
@@ -77,7 +77,7 @@ live({
 Implement the `LivePersistence` interface to use any storage backend:
 
 ```ts
-import type { LivePersistence } from '@boostkit/live'
+import type { LivePersistence } from '@rudderjs/live'
 import * as Y from 'yjs'
 
 const myAdapter: LivePersistence = {
@@ -117,7 +117,7 @@ live({
 
 ## Client Usage
 
-`@boostkit/live` is **server-side only**. On the client, use standard Yjs packages directly:
+`@rudderjs/live` is **server-side only**. On the client, use standard Yjs packages directly:
 
 ```ts
 import * as Y from 'yjs'
@@ -180,10 +180,10 @@ Edits made offline are merged back automatically when the connection restores.
 
 ## Live Facade
 
-The `Live` facade provides server-side access to ydoc operations without needing to import Yjs directly. Used internally by `@boostkit/panels` for versioning.
+The `Live` facade provides server-side access to ydoc operations without needing to import Yjs directly. Used internally by `@rudderjs/panels` for versioning.
 
 ```ts
-import { Live } from '@boostkit/live'
+import { Live } from '@rudderjs/live'
 
 // Seed a ydoc with initial field data (idempotent — only sets fields not already in the map)
 await Live.seed('panel:articles:abc123', { title: 'Hello', excerpt: 'World' })
@@ -201,9 +201,9 @@ const persistence = Live.persistence()
 
 The facade resolves the persistence adapter from:
 1. DI container (`'live.persistence'` binding) — set by `live()` provider
-2. Global key (`__boostkit_live_persistence__`) — fallback
+2. Global key (`__rudderjs_live_persistence__`) — fallback
 
-## Artisan Commands
+## Rudder Commands
 
 | Command | Description |
 |---|---|
@@ -212,7 +212,7 @@ The facade resolves the persistence adapter from:
 
 ## How It Works
 
-`@boostkit/live` implements the [y-websocket](https://github.com/yjs/y-websocket) binary sync protocol directly:
+`@rudderjs/live` implements the [y-websocket](https://github.com/yjs/y-websocket) binary sync protocol directly:
 
 1. Client connects → server sends **SyncStep1** (server state vector)
 2. Client replies with **SyncStep2** (diff of what it has that the server doesn't)

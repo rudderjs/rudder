@@ -1,7 +1,7 @@
 import {
   Resource, Table, Form, Column,
   TextField, TextareaField,
-} from '@boostkit/panels'
+} from '@rudderjs/panels'
 import { Workspace } from '../models/Workspace.js'
 import { Canvas } from '../canvas/Canvas.js'
 import { Chat } from '../chat/Chat.js'

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PanelI18n, ResourceAgentMeta } from '@boostkit/panels'
+import type { PanelI18n, ResourceAgentMeta } from '@rudderjs/panels'
 import { useAiChat, type AgentRunRequest } from '../agents/AiChatContext.js'
 
 interface Props {

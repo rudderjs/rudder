@@ -3,7 +3,7 @@ import type { GuardAsync } from 'vike/types'
 
 export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
   if (!import.meta.env.SSR) return
-  const { PanelRegistry } = await import('@boostkit/panels')
+  const { PanelRegistry } = await import('@rudderjs/panels')
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
 
@@ -20,7 +20,7 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
   // Run the panel's guard if defined
   const panelGuard = panel.getGuard()
   if (panelGuard) {
-    const { app } = await import('@boostkit/core')
+    const { app } = await import('@rudderjs/core')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const auth    = app().make<any>('auth')
     const session = await auth.api.getSession({

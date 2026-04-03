@@ -1,11 +1,11 @@
 # Media Library
 
-Full-featured media library for `@boostkit/panels` -- file browser, uploads, image conversions, and preview.
+Full-featured media library for `@rudderjs/panels` -- file browser, uploads, image conversions, and preview.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/media sharp
+pnpm add @rudderjs/media sharp
 ```
 
 ## Setup
@@ -14,8 +14,8 @@ Register as a panels extension in your providers:
 
 ```ts
 // bootstrap/providers.ts
-import { panels } from '@boostkit/panels'
-import { media } from '@boostkit/media'
+import { panels } from '@rudderjs/panels'
+import { media } from '@rudderjs/media'
 
 export default [
   panels([AdminPanel], [
@@ -32,8 +32,8 @@ export default [
 Publish the Prisma schema shard and panel pages, then sync your database:
 
 ```bash
-pnpm artisan vendor:publish --tag=media-schema
-pnpm artisan vendor:publish --tag=media-pages
+pnpm rudder vendor:publish --tag=media-schema
+pnpm rudder vendor:publish --tag=media-pages
 pnpm exec prisma db push
 ```
 
@@ -44,7 +44,7 @@ pnpm exec prisma db push
 - **Preview panel** -- images, video, audio, PDF, text, CSV, JSON
 - **Folders** -- create, rename, move files between folders
 - **Scope** -- shared or private per user
-- **Image conversions** -- automatic thumbnail/preview generation via `@boostkit/image`
+- **Image conversions** -- automatic thumbnail/preview generation via `@rudderjs/image`
 
 ## Configuration
 

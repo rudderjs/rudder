@@ -1,11 +1,11 @@
-# @boostkit/cache
+# @rudderjs/cache
 
 Cache facade, registry, and provider factory with in-memory built-in driver.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/cache
+pnpm add @rudderjs/cache
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ pnpm add @boostkit/cache
 
 ```ts
 // config/cache.ts
-import type { CacheConfig } from '@boostkit/cache'
+import type { CacheConfig } from '@rudderjs/cache'
 
 export default {
   default: Env.get('CACHE_DRIVER', 'memory'),
@@ -30,7 +30,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { cache } from '@boostkit/cache'
+import { cache } from '@rudderjs/cache'
 import configs from '../config/index.js'
 
 export default [
@@ -45,7 +45,7 @@ export default [
 Import `Cache` and call methods directly — it operates on the configured `default` store.
 
 ```ts
-import { Cache } from '@boostkit/cache'
+import { Cache } from '@rudderjs/cache'
 
 // Store a value
 await Cache.set('key', 'value')
@@ -136,10 +136,10 @@ Each store entry must include a `driver` field. Additional fields depend on the 
 
 ## `cache(config)`
 
-`cache(config)` returns a BoostKit `ServiceProvider` class that registers the configured stores and binds the `Cache` facade during `boot()`.
+`cache(config)` returns a RudderJS `ServiceProvider` class that registers the configured stores and binds the `Cache` facade during `boot()`.
 
 ```ts
-import { cache } from '@boostkit/cache'
+import { cache } from '@rudderjs/cache'
 
 // In bootstrap/providers.ts
 cache(configs.cache)

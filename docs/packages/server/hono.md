@@ -1,11 +1,11 @@
-# @boostkit/server-hono
+# @rudderjs/server-hono
 
-Hono-based HTTP server adapter for BoostKit applications.
+Hono-based HTTP server adapter for RudderJS applications.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/server-hono
+pnpm add @rudderjs/server-hono
 ```
 
 ## Usage
@@ -13,8 +13,8 @@ pnpm add @boostkit/server-hono
 Pass the `hono()` adapter to `Application.configure()` in your `bootstrap/app.ts`:
 
 ```ts
-import { Application } from '@boostkit/core'
-import { hono } from '@boostkit/server-hono'
+import { Application } from '@rudderjs/core'
+import { hono } from '@rudderjs/server-hono'
 import configs from '../config/index.js'
 import providers from './providers.js'
 
@@ -35,7 +35,7 @@ export default Application.configure({
 A typical `config/server.ts`:
 
 ```ts
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 
 export default {
   port:       Env.getNumber('PORT', 3000),
@@ -65,7 +65,7 @@ export default {
 Returns a `ServerAdapterProvider` that the application bootstrapper uses to create and start the HTTP server.
 
 ```ts
-import { hono } from '@boostkit/server-hono'
+import { hono } from '@rudderjs/server-hono'
 
 const adapter = hono({
   port: 4000,
@@ -78,7 +78,7 @@ const adapter = hono({
 })
 ```
 
-The returned provider exposes three methods used internally by `@boostkit/core`:
+The returned provider exposes three methods used internally by `@rudderjs/core`:
 
 | Method | Description |
 |---|---|
@@ -90,11 +90,11 @@ The returned provider exposes three methods used internally by `@boostkit/core`:
 
 ### Unified Request Logger
 
-Every API and page request is logged to stdout with the `[boostkit]` tag. Static assets and Vite internals are filtered out. Two lines per request — on entry and on response:
+Every API and page request is logged to stdout with the `[rudderjs]` tag. Static assets and Vite internals are filtered out. Two lines per request — on entry and on response:
 
 ```
-10:30:15 AM [boostkit][request-1] HTTP request  → /api/users
-10:30:15 AM [boostkit][request-1] HTTP response ← /api/users 200
+10:30:15 AM [rudderjs][request-1] HTTP request  → /api/users
+10:30:15 AM [rudderjs][request-1] HTTP response ← /api/users 200
 ```
 
 Colors are applied per status range: 2xx → magenta, 3xx → cyan, 4xx → yellow, 5xx → red.

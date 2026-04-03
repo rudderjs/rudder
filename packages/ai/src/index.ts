@@ -1,4 +1,4 @@
-// @boostkit/ai — AI engine
+// @rudderjs/ai — AI engine
 
 // Types
 export type {

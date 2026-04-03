@@ -1,24 +1,24 @@
-# @boostkit/validation
+# @rudderjs/validation
 
 Zod-powered request validation with FormRequest and middleware helpers.
 
 ```bash
-pnpm add @boostkit/validation
+pnpm add @rudderjs/validation
 ```
 
 ---
 
 ## Usage
 
-There are three ways to validate incoming requests in BoostKit. All three use Zod schemas and throw a `ValidationError` on failure.
+There are three ways to validate incoming requests in RudderJS. All three use Zod schemas and throw a `ValidationError` on failure.
 
 ### 1. validate(schema, req)
 
 Validate a request inline inside a route handler. Merges `body`, `query`, and `params` before validating.
 
 ```ts
-import { validate, z } from '@boostkit/validation'
-import { router } from '@boostkit/router'
+import { validate, z } from '@rudderjs/validation'
+import { router } from '@rudderjs/router'
 
 router.post('/api/users', async (req, res) => {
   const data = await validate(
@@ -41,8 +41,8 @@ router.post('/api/users', async (req, res) => {
 Returns a `MiddlewareHandler` that validates the request and attaches the parsed data to `req.body`. Use this when you want validation as a reusable middleware step.
 
 ```ts
-import { validateWith, z } from '@boostkit/validation'
-import { router } from '@boostkit/router'
+import { validateWith, z } from '@rudderjs/validation'
+import { router } from '@rudderjs/router'
 
 const validateCreateUser = validateWith(
   z.object({
@@ -59,8 +59,8 @@ router.post('/api/users', handler, [validateCreateUser])
 `FormRequest` encapsulates validation logic and optional authorisation in a class. This is the recommended approach for complex input with reuse across controllers.
 
 ```ts
-import { FormRequest, z } from '@boostkit/validation'
-import type { AppRequest } from '@boostkit/contracts'
+import { FormRequest, z } from '@rudderjs/validation'
+import type { AppRequest } from '@rudderjs/contracts'
 
 export class CreateUserRequest extends FormRequest {
   rules() {
@@ -80,7 +80,7 @@ export class CreateUserRequest extends FormRequest {
 ```
 
 ```ts
-import { router } from '@boostkit/router'
+import { router } from '@rudderjs/router'
 import { CreateUserRequest } from '../Requests/CreateUserRequest.js'
 
 router.post('/api/users', async (req, res) => {
@@ -111,7 +111,7 @@ router.post('/api/users', async (req, res) => {
 `ValidationError` is thrown by `validate()`, `validateWith()`, and `FormRequest.validate()` when the input does not satisfy the schema. It extends `Error`.
 
 ```ts
-import { ValidationError } from '@boostkit/validation'
+import { ValidationError } from '@rudderjs/validation'
 
 try {
   const data = await validate(schema, req)

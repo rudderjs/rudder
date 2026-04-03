@@ -1,19 +1,19 @@
-# @boostkit/notification
+# @rudderjs/notification
 
 Multi-channel notification system — send notifications via mail, database, or custom channels using the Notifiable pattern.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/notification
+pnpm add @rudderjs/notification
 ```
 
 ## Setup
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@boostkit/mail'
-import { notifications } from '@boostkit/notification'
+import { mail } from '@rudderjs/mail'
+import { notifications } from '@rudderjs/notification'
 import configs from '../config/index.js'
 
 export default [
@@ -28,8 +28,8 @@ Extend `Notification` and implement `via()` to declare which channels to use, th
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification, type Notifiable } from '@boostkit/notification'
-import { Mailable } from '@boostkit/mail'
+import { Notification, type Notifiable } from '@rudderjs/notification'
+import { Mailable } from '@rudderjs/mail'
 
 class WelcomeMail extends Mailable {
   build() {
@@ -57,7 +57,7 @@ export class WelcomeNotification extends Notification {
 Use the `notify()` helper or `Notifier.send()` directly:
 
 ```ts
-import { notify } from '@boostkit/notification'
+import { notify } from '@rudderjs/notification'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
 const user = { id: '1', email: 'alice@example.com', name: 'Alice' }
@@ -93,14 +93,14 @@ interface Notifiable {
 
 ### `mail`
 
-Delegates to `@boostkit/mail`. Requires:
+Delegates to `@rudderjs/mail`. Requires:
 - `mail()` provider registered before `notifications()`
 - Notifiable has an `email` field
 - Notification implements `toMail()`
 
 ### `database`
 
-Writes a row to the `notifications` table via `@boostkit/orm`. Requires:
+Writes a row to the `notifications` table via `@rudderjs/orm`. Requires:
 - A database provider registered (e.g. `orm-prisma` or `orm-drizzle`)
 - Notification implements `toDatabase()`
 
@@ -126,7 +126,7 @@ import {
   type NotificationChannel,
   type Notifiable,
   type Notification,
-} from '@boostkit/notification'
+} from '@rudderjs/notification'
 
 class SmsChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
@@ -175,8 +175,8 @@ model Notification {
 | `Notification` | Abstract base class — implement `via()`, optionally `toMail()`, `toDatabase()`. |
 | `NotificationChannel` | Interface for custom channels — implement `send(notifiable, notification)`. |
 | `ChannelRegistry` | Static registry — `register(name, channel)`, `get(name)`, `has(name)`, `reset()`. |
-| `MailChannel` | Built-in — delegates to `@boostkit/mail` adapter. |
-| `DatabaseChannel` | Built-in — writes rows via `@boostkit/orm` to the `notifications` table. |
+| `MailChannel` | Built-in — delegates to `@rudderjs/mail` adapter. |
+| `DatabaseChannel` | Built-in — writes rows via `@rudderjs/orm` to the `notifications` table. |
 | `Notifier` | Static facade — `Notifier.send(notifiables, notification)`. |
 | `notify(notifiables, notification)` | Shorthand helper — delegates to `Notifier.send()`. |
 | `notifications()` | Service provider factory — registers `mail` and `database` channels. |

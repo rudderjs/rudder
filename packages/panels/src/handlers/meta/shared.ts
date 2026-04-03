@@ -1,4 +1,4 @@
-import type { AppRequest } from '@boostkit/core'
+import type { AppRequest } from '@rudderjs/core'
 import type { Panel } from '../../Panel.js'
 import { buildContext } from '../utils.js'
 import { debugWarn } from '../../debug.js'
@@ -41,11 +41,11 @@ export async function warmUpRegistries(panel: Panel, req: AppRequest): Promise<v
 }
 
 /**
- * Lazy-load @boostkit/image (optional peer — not a dependency of panels)
+ * Lazy-load @rudderjs/image (optional peer — not a dependency of panels)
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function importImage(): Promise<{ image: (input: Buffer) => any }> {
-  const pkg = '@boostkit/image'
+  const pkg = '@rudderjs/image'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return import(/* @vite-ignore */ pkg) as any
 }

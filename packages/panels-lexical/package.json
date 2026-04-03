@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/panels-lexical",
+  "name": "@rudderjs/panels-lexical",
   "version": "0.0.1",
-  "description": "Lexical rich-text editor adapter for @boostkit/panels",
+  "description": "Lexical rich-text editor adapter for @rudderjs/panels",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/panels-lexical"
   },
   "type": "module",
@@ -35,8 +35,8 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/panels": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/panels": "workspace:*",
     "react": ">=18",
     "react-dom": ">=18",
     "lexical": ">=0.20",
@@ -63,8 +63,8 @@
     }
   },
   "devDependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/panels": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/panels": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "lexical": "^0.41.0",

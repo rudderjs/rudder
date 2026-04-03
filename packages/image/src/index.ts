@@ -6,7 +6,7 @@ import type { ImageInput } from './types.js'
  *
  * @example
  * ```ts
- * import { image } from '@boostkit/image'
+ * import { image } from '@rudderjs/image'
  *
  * // Resize and convert
  * const buffer = await image(file)

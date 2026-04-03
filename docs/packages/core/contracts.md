@@ -1,12 +1,12 @@
-# @boostkit/contracts
+# @rudderjs/contracts
 
 Framework-level TypeScript contracts for HTTP, routing, middleware, and server adapters.
 
 ```bash
-pnpm add @boostkit/contracts
+pnpm add @rudderjs/contracts
 ```
 
-This package is **type-only** — it contains no runtime code. All `@boostkit/*` packages depend on it as the shared type language for HTTP primitives. Prefer `import type` in application code.
+This package is **type-only** — it contains no runtime code. All `@rudderjs/*` packages depend on it as the shared type language for HTTP primitives. Prefer `import type` in application code.
 
 ---
 
@@ -79,7 +79,7 @@ res.status(422).header('X-Custom', 'value').json({ error: 'Invalid' })
 ## `RouteHandler` and `MiddlewareHandler`
 
 ```ts
-import type { RouteHandler, MiddlewareHandler } from '@boostkit/contracts'
+import type { RouteHandler, MiddlewareHandler } from '@rudderjs/contracts'
 
 const handler: RouteHandler = async (req, res) => {
   res.json({ id: req.params['id'] })
@@ -103,13 +103,13 @@ const auth: MiddlewareHandler = async (req, res, next) => {
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
 ```
 
-`'ALL'` is a BoostKit-specific wildcard used by the router to match any HTTP method.
+`'ALL'` is a RudderJS-specific wildcard used by the router to match any HTTP method.
 
 ---
 
 ## `ServerAdapter`
 
-Implemented by server adapter packages (e.g. `@boostkit/server-hono`). Not implemented directly in application code.
+Implemented by server adapter packages (e.g. `@rudderjs/server-hono`). Not implemented directly in application code.
 
 ```ts
 interface ServerAdapter {
@@ -140,6 +140,6 @@ interface ServerAdapterProvider {
 ## Notes
 
 - No runtime code — `sideEffects: false`, fully tree-shakable.
-- All types are re-exported from `@boostkit/core` — install `@boostkit/contracts` directly only when building adapters or packages that must not depend on `@boostkit/core`.
+- All types are re-exported from `@rudderjs/core` — install `@rudderjs/contracts` directly only when building adapters or packages that must not depend on `@rudderjs/core`.
 - The `raw` field on both `AppRequest` and `AppResponse` provides escape-hatch access to adapter-specific APIs when needed.
 - Module augmentation on `AppRequest` (e.g. adding `session`) is supported — declare it in your package or app alongside the import.

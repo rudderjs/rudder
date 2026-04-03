@@ -1,4 +1,4 @@
-import { resolve } from '@boostkit/core'
+import { resolve } from '@rudderjs/core'
 import { TodoService } from '../../app/Modules/Todo/TodoService.js'
 import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
 

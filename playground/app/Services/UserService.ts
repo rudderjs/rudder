@@ -1,4 +1,4 @@
-import { Injectable } from '@boostkit/core'
+import { Injectable } from '@rudderjs/core'
 import { User } from '../Models/User.js'
 
 @Injectable()

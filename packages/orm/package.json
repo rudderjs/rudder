@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/orm",
+  "name": "@rudderjs/orm",
   "version": "0.0.6",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/orm"
   },
   "type": "module",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/contracts": "workspace:*"
+    "@rudderjs/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

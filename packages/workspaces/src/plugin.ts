@@ -1,5 +1,5 @@
-import type { MiddlewareHandler } from '@boostkit/core'
-import type { PanelPlugin } from '@boostkit/panels'
+import type { MiddlewareHandler } from '@rudderjs/core'
+import type { PanelPlugin } from '@rudderjs/panels'
 import { WorkspaceResource } from './resources/WorkspaceResource.js'
 
 const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
@@ -17,7 +17,7 @@ export interface WorkspacesConfig {
  * Workspaces panel plugin — collaborative AI workspace canvas + orchestrator chat.
  *
  * @example
- * import { workspaces } from '@boostkit/workspaces'
+ * import { workspaces } from '@rudderjs/workspaces'
  *
  * Panel.make('admin')
  *   .use(workspaces())
@@ -39,13 +39,13 @@ export function workspaces(_config?: WorkspacesConfig): PanelPlugin {
     async boot(panel) {
       // Mount chat API routes
       try {
-        type AppReq = import('@boostkit/core').AppRequest
-        type AppRes = import('@boostkit/core').AppResponse
+        type AppReq = import('@rudderjs/core').AppRequest
+        type AppRes = import('@rudderjs/core').AppResponse
         interface RouterShape {
           post(path: string, handler: (req: AppReq, res: AppRes) => unknown, mw?: MiddlewareHandler[]): void
           get(path: string, handler: (req: AppReq, res: AppRes) => unknown, mw?: MiddlewareHandler[]): void
         }
-        const { router } = await import(/* @vite-ignore */ '@boostkit/router') as { router: RouterShape }
+        const { router } = await import(/* @vite-ignore */ '@rudderjs/router') as { router: RouterShape }
         const { mountChatRoutes } = await import('./chat/chatRoutes.js')
 
         const mw: MiddlewareHandler[] = []
@@ -55,7 +55,7 @@ export function workspaces(_config?: WorkspacesConfig): PanelPlugin {
         // Prisma getter — lazily resolve from DI or global
         const getPrisma = async () => {
           try {
-            const { app } = await import(/* @vite-ignore */ '@boostkit/core')
+            const { app } = await import(/* @vite-ignore */ '@rudderjs/core')
             return app().make('prisma')
           } catch {
             return null

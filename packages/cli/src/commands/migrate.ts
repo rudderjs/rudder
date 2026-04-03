@@ -15,8 +15,8 @@ export function detectORM(cwd: string = process.cwd()): ORM | null {
   try {
     const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'))
     const deps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies }
-    if ('@boostkit/orm-prisma' in deps) return 'prisma'
-    if ('@boostkit/orm-drizzle' in deps) return 'drizzle'
+    if ('@rudderjs/orm-prisma' in deps) return 'prisma'
+    if ('@rudderjs/orm-drizzle' in deps) return 'drizzle'
     return null
   } catch {
     return null
@@ -84,7 +84,7 @@ export function migrateCommands(program: Command): void {
   function requireORM(): ORM {
     const orm = detectORM(cwd)
     if (!orm) {
-      log.error('No ORM detected. Install @boostkit/orm-prisma or @boostkit/orm-drizzle.')
+      log.error('No ORM detected. Install @rudderjs/orm-prisma or @rudderjs/orm-drizzle.')
       process.exit(1)
     }
     return orm

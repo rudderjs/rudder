@@ -1,11 +1,11 @@
-# @boostkit/mail
+# @rudderjs/mail
 
 Mail facade, Mailable abstraction, and provider factory.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/mail
+pnpm add @rudderjs/mail
 ```
 
 ## Setup
@@ -14,14 +14,14 @@ pnpm add @boostkit/mail
 
 ```ts
 // config/mail.ts
-import type { MailConfig } from '@boostkit/mail'
-import { Env } from '@boostkit/support'
+import type { MailConfig } from '@rudderjs/mail'
+import { Env } from '@rudderjs/support'
 
 export default {
   default: Env.get('MAIL_MAILER', 'log'),
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
-    name:    Env.get('MAIL_FROM_NAME', 'BoostKit App'),
+    name:    Env.get('MAIL_FROM_NAME', 'RudderJS App'),
   },
   mailers: {
     log: {
@@ -35,7 +35,7 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@boostkit/mail'
+import { mail } from '@rudderjs/mail'
 import configs from '../config/index.js'
 
 export default [
@@ -52,7 +52,7 @@ export default [
 Extend `Mailable` and implement the `build()` method. Use the protected `subject()`, `html()`, and `text()` helpers inside `build()`.
 
 ```ts
-import { Mailable } from '@boostkit/mail'
+import { Mailable } from '@rudderjs/mail'
 
 export class WelcomeEmail extends Mailable {
   constructor(private readonly userName: string) {
@@ -71,7 +71,7 @@ export class WelcomeEmail extends Mailable {
 ### Using the Mail Facade
 
 ```ts
-import { Mail } from '@boostkit/mail'
+import { Mail } from '@rudderjs/mail'
 import { WelcomeEmail } from '../app/Mail/WelcomeEmail.js'
 
 // Send to a single recipient
@@ -134,7 +134,7 @@ Each mailer entry requires a `driver` field plus any driver-specific options.
 
 ## `mail(config)`
 
-`mail(config)` returns a BoostKit `ServiceProvider` class that registers the configured mailers and binds the `Mail` facade during `boot()`.
+`mail(config)` returns a RudderJS `ServiceProvider` class that registers the configured mailers and binds the `Mail` facade during `boot()`.
 
 ## Built-in Drivers
 
@@ -149,12 +149,12 @@ The `log` driver prints all outgoing email to the console. It is the recommended
 Output format:
 
 ```
-[BoostKit Mail] ──────────────────────────────────────────────────
-[BoostKit Mail]  To:      user@example.com
-[BoostKit Mail]  From:    BoostKit App <hello@example.com>
-[BoostKit Mail]  Subject: Welcome, Alice!
-[BoostKit Mail]  Text:    Hello, Alice! Thanks for joining us.
-[BoostKit Mail] ──────────────────────────────────────────────────
+[RudderJS Mail] ──────────────────────────────────────────────────
+[RudderJS Mail]  To:      user@example.com
+[RudderJS Mail]  From:    RudderJS App <hello@example.com>
+[RudderJS Mail]  Subject: Welcome, Alice!
+[RudderJS Mail]  Text:    Hello, Alice! Thanks for joining us.
+[RudderJS Mail] ──────────────────────────────────────────────────
 ```
 
 ### `smtp`

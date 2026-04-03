@@ -106,7 +106,7 @@ export default function Page() {
             className="flex-1 w-full px-4 py-3 rounded-xl border bg-background text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 font-mono"
           />
           <p className="text-xs text-muted-foreground text-right">
-            {text.length} characters · powered by <span className="font-medium">@boostkit/live</span> + Yjs
+            {text.length} characters · powered by <span className="font-medium">@rudderjs/live</span> + Yjs
           </p>
         </div>
 

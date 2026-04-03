@@ -1,13 +1,13 @@
 # Middleware
 
-Middleware intercepts HTTP requests and responses. BoostKit supports plain functions (recommended), class-based middleware, and a pipeline runner.
+Middleware intercepts HTTP requests and responses. RudderJS supports plain functions (recommended), class-based middleware, and a pipeline runner.
 
 ## Writing Middleware
 
 The simplest middleware is a plain async function:
 
 ```ts
-import type { MiddlewareHandler } from '@boostkit/contracts'
+import type { MiddlewareHandler } from '@rudderjs/contracts'
 
 export const requestIdMiddleware: MiddlewareHandler = async (req, res, next) => {
   const id = req.headers['x-request-id'] ?? crypto.randomUUID()
@@ -26,8 +26,8 @@ Key points:
 For more complex cases, extend `Middleware` and use `fromClass()`:
 
 ```ts
-import { Middleware, fromClass } from '@boostkit/middleware'
-import type { AppRequest, AppResponse } from '@boostkit/contracts'
+import { Middleware, fromClass } from '@rudderjs/middleware'
+import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 
 export class AuthMiddleware extends Middleware {
   async handle(req: AppRequest, res: AppResponse, next: () => Promise<void>) {
@@ -54,7 +54,7 @@ const authHandler = new AuthMiddleware().toHandler()
 Register middleware that runs on every request in `bootstrap/app.ts`:
 
 ```ts
-import { RateLimit, fromClass, LoggerMiddleware } from '@boostkit/middleware'
+import { RateLimit, fromClass, LoggerMiddleware } from '@rudderjs/middleware'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.js'
 
 Application.configure({ ... })
@@ -73,9 +73,9 @@ Application.configure({ ... })
 Pass middleware as the third argument to any route:
 
 ```ts
-import { Route } from '@boostkit/router'
-import { CsrfMiddleware } from '@boostkit/middleware'
-import { SessionMiddleware } from '@boostkit/session'
+import { Route } from '@rudderjs/router'
+import { CsrfMiddleware } from '@rudderjs/middleware'
+import { SessionMiddleware } from '@rudderjs/session'
 
 const webMw = [
   SessionMiddleware(),
@@ -95,7 +95,7 @@ Route.post('/contact',  handler, webMw)
 Double-submit cookie CSRF protection. Apply to web routes only — not API routes.
 
 ```ts
-import { CsrfMiddleware, getCsrfToken } from '@boostkit/middleware'
+import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
 
 Route.post('/contact', handler, [CsrfMiddleware()])
 
@@ -117,7 +117,7 @@ fetch('/contact', {
 Cache-backed rate limiter. Returns a `MiddlewareHandler` directly — no `.toHandler()` needed.
 
 ```ts
-import { RateLimit } from '@boostkit/middleware'
+import { RateLimit } from '@rudderjs/middleware'
 
 // Global
 m.use(RateLimit.perMinute(60))
@@ -128,12 +128,12 @@ Route.post('/api/auth/sign-in', handler, [
 ])
 ```
 
-Requires `@boostkit/cache` to be registered. Fails open if no cache adapter is configured.
+Requires `@rudderjs/cache` to be registered. Fails open if no cache adapter is configured.
 
 ### `CorsMiddleware`
 
 ```ts
-import { CorsMiddleware, fromClass } from '@boostkit/middleware'
+import { CorsMiddleware, fromClass } from '@rudderjs/middleware'
 
 m.use(new CorsMiddleware({
   origin:  ['https://app.example.com'],
@@ -149,10 +149,10 @@ Defaults: `origin: '*'`, standard HTTP methods, `Content-Type` + `Authorization`
 Logs `METHOD path — Nms` to the console after each request.
 
 ```ts
-import { LoggerMiddleware, fromClass } from '@boostkit/middleware'
+import { LoggerMiddleware, fromClass } from '@rudderjs/middleware'
 
 m.use(fromClass(LoggerMiddleware))
-// → [BoostKit] GET /api/users — 12ms
+// → [RudderJS] GET /api/users — 12ms
 ```
 
 ### `ThrottleMiddleware`
@@ -160,7 +160,7 @@ m.use(fromClass(LoggerMiddleware))
 In-memory rate limiter. Automatically skips static assets and Vite internals. For multi-process deployments use `RateLimit` with a Redis cache adapter instead.
 
 ```ts
-import { ThrottleMiddleware, fromClass } from '@boostkit/middleware'
+import { ThrottleMiddleware, fromClass } from '@rudderjs/middleware'
 
 // defaults: 60 requests per minute
 m.use(fromClass(ThrottleMiddleware))
@@ -176,7 +176,7 @@ m.use(new ThrottleMiddleware(100, 60_000).toHandler())
 `Pipeline` composes middleware outside of the router:
 
 ```ts
-import { Pipeline, fromClass, LoggerMiddleware } from '@boostkit/middleware'
+import { Pipeline, fromClass, LoggerMiddleware } from '@rudderjs/middleware'
 
 await new Pipeline([
   fromClass(LoggerMiddleware),
@@ -226,6 +226,6 @@ async handle(req, res, next) {
 ## Generating Middleware
 
 ```bash
-pnpm artisan make:middleware Auth
+pnpm rudder make:middleware Auth
 # → app/Http/Middleware/AuthMiddleware.ts
 ```

@@ -1,11 +1,11 @@
 {
-  "name": "@boostkit/panels",
+  "name": "@rudderjs/panels",
   "version": "0.0.3",
-  "description": "Multi-panel admin and user-facing dashboard builder for BoostKit",
+  "description": "Multi-panel admin and user-facing dashboard builder for RudderJS",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/panels"
   },
   "type": "module",
@@ -31,34 +31,34 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*",
-    "@boostkit/router": "workspace:*",
-    "@boostkit/support": "workspace:*",
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/support": "workspace:*",
     "dnd-kit-sortable-tree": "^0.1.73",
     "quill-delta": "^5.1.0"
   },
   "peerDependencies": {
-    "@boostkit/ai": "workspace:*",
-    "@boostkit/broadcast": "workspace:*",
-    "@boostkit/image": "workspace:*",
-    "@boostkit/live": "workspace:*",
-    "@boostkit/storage": "workspace:*",
+    "@rudderjs/ai": "workspace:*",
+    "@rudderjs/broadcast": "workspace:*",
+    "@rudderjs/image": "workspace:*",
+    "@rudderjs/live": "workspace:*",
+    "@rudderjs/storage": "workspace:*",
     "recharts": ">=2.0.0"
   },
   "peerDependenciesMeta": {
-    "@boostkit/ai": {
+    "@rudderjs/ai": {
       "optional": true
     },
-    "@boostkit/storage": {
+    "@rudderjs/storage": {
       "optional": true
     },
-    "@boostkit/image": {
+    "@rudderjs/image": {
       "optional": true
     },
-    "@boostkit/broadcast": {
+    "@rudderjs/broadcast": {
       "optional": true
     },
-    "@boostkit/live": {
+    "@rudderjs/live": {
       "optional": true
     },
     "recharts": {
@@ -67,10 +67,10 @@
   },
   "devDependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
-    "@boostkit/ai": "workspace:*",
-    "@boostkit/broadcast": "workspace:*",
-    "@boostkit/live": "workspace:*",
-    "@boostkit/storage": "workspace:*",
+    "@rudderjs/ai": "workspace:*",
+    "@rudderjs/broadcast": "workspace:*",
+    "@rudderjs/live": "workspace:*",
+    "@rudderjs/storage": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

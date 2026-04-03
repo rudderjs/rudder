@@ -1,4 +1,4 @@
-import { Resource, TextField, EmailField, SelectField, DateField, SelectFilter, Table, Form, Column } from '@boostkit/panels'
+import { Resource, TextField, EmailField, SelectField, DateField, SelectFilter, Table, Form, Column } from '@rudderjs/panels'
 import { User } from '../../../Models/User.js'
 
 export class UserResource extends Resource {

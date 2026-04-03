@@ -1,4 +1,4 @@
-import type { MiddlewareHandler, AppRequest, AppResponse } from '@boostkit/core'
+import type { MiddlewareHandler, AppRequest, AppResponse } from '@rudderjs/core'
 import type { MediaRecord, ConversionInfo, MediaConversion } from '../types.js'
 
 interface RouterLike {
@@ -18,12 +18,12 @@ type PrismaModel = {
 }
 
 async function getPrisma(): Promise<{ media: PrismaModel }> {
-  const { resolve } = await import(/* @vite-ignore */ '@boostkit/core')
+  const { resolve } = await import(/* @vite-ignore */ '@rudderjs/core')
   return resolve<{ media: PrismaModel }>('prisma')
 }
 
 async function getStorage(): Promise<{ disk(name: string): { put(path: string, contents: Buffer | string): Promise<void>; delete(path: string): Promise<void>; url(path: string): string } }> {
-  const { Storage } = await import(/* @vite-ignore */ '@boostkit/storage')
+  const { Storage } = await import(/* @vite-ignore */ '@rudderjs/storage')
   return Storage as unknown as { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void>; delete(path: string): Promise<void>; url(path: string): string } }
 }
 
@@ -222,7 +222,7 @@ export function mountMediaRoutes(
 
       if (file.type.startsWith('image/') && !file.type.includes('svg')) {
         try {
-          const { image } = await import(/* @vite-ignore */ '@boostkit/image')
+          const { image } = await import(/* @vite-ignore */ '@rudderjs/image')
           const meta = await image(buffer).metadata()
           width = meta.width ?? null
           height = meta.height ?? null
@@ -252,7 +252,7 @@ export function mountMediaRoutes(
             }))
           }
         } catch {
-          // @boostkit/image not installed or processing failed — skip
+          // @rudderjs/image not installed or processing failed — skip
         }
       }
 

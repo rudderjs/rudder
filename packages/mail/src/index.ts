@@ -1,5 +1,5 @@
-import { ServiceProvider, type Application } from '@boostkit/core'
-import { resolveOptionalPeer } from '@boostkit/core'
+import { ServiceProvider, type Application } from '@rudderjs/core'
+import { resolveOptionalPeer } from '@rudderjs/core'
 
 // ─── Mail Message ──────────────────────────────────────────
 
@@ -86,7 +86,7 @@ export class MailPendingSend {
 
   async send(mailable: Mailable): Promise<void> {
     const adapter = MailRegistry.get()
-    if (!adapter) throw new Error('[BoostKit Mail] No mail adapter registered. Add mail() to providers.')
+    if (!adapter) throw new Error('[RudderJS Mail] No mail adapter registered. Add mail() to providers.')
     const from = MailRegistry.getFrom()
     await adapter.send(mailable, { to: this._to, from, cc: this._cc, bcc: this._bcc })
   }
@@ -160,13 +160,13 @@ export class LogAdapter implements MailAdapter {
   async send(mailable: Mailable, options: SendOptions): Promise<void> {
     const msg  = await mailable.compile()
     const line = '─'.repeat(50)
-    console.log(`\n[BoostKit Mail] ${line}`)
-    console.log(`[BoostKit Mail]  To:      ${options.to.join(', ')}`)
-    console.log(`[BoostKit Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
-    console.log(`[BoostKit Mail]  Subject: ${msg.subject}`)
-    if (msg.html) console.log(`[BoostKit Mail]  HTML:    ${msg.html.replace(/<[^>]+>/g, '').trim().slice(0, 120)}`)
-    if (msg.text) console.log(`[BoostKit Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
-    console.log(`[BoostKit Mail] ${line}\n`)
+    console.log(`\n[RudderJS Mail] ${line}`)
+    console.log(`[RudderJS Mail]  To:      ${options.to.join(', ')}`)
+    console.log(`[RudderJS Mail]  From:    ${options.from.name ? `${options.from.name} <${options.from.address}>` : options.from.address}`)
+    console.log(`[RudderJS Mail]  Subject: ${msg.subject}`)
+    if (msg.html) console.log(`[RudderJS Mail]  HTML:    ${msg.html.replace(/<[^>]+>/g, '').trim().slice(0, 120)}`)
+    if (msg.text) console.log(`[RudderJS Mail]  Text:    ${msg.text.trim().slice(0, 120)}`)
+    console.log(`[RudderJS Mail] ${line}\n`)
   }
 }
 
@@ -185,7 +185,7 @@ class NodemailerAdapter implements MailAdapter {
         try {
           nodemailer = await resolveOptionalPeer<NodemailerModule>('nodemailer')
         } catch {
-          throw new Error('[BoostKit Mail] SMTP driver requires "nodemailer". Install it with: pnpm add nodemailer')
+          throw new Error('[RudderJS Mail] SMTP driver requires "nodemailer". Install it with: pnpm add nodemailer')
         }
 
         const secure = this.config.encryption === 'ssl'
@@ -260,7 +260,7 @@ export function nodemailer(
  * Built-in drivers:  log (prints to console — great for dev), smtp (Nodemailer)
  *
  * Usage in bootstrap/providers.ts:
- *   import { mail } from '@boostkit/mail'
+ *   import { mail } from '@rudderjs/mail'
  *   import configs from '../config/index.js'
  *   export default [..., mail(configs.mail), ...]
  */
@@ -281,11 +281,11 @@ export function mail(config: MailConfig): new (app: Application) => ServiceProvi
         adapter = new LogAdapter()
       } else if (driver === 'smtp') {
         if (!isNodemailerConfig(mailerConfig)) {
-          throw new Error('[BoostKit Mail] Invalid SMTP config. Expected fields: host (string), port (number).')
+          throw new Error('[RudderJS Mail] Invalid SMTP config. Expected fields: host (string), port (number).')
         }
         adapter = nodemailer(mailerConfig, config.from).create()
       } else {
-        throw new Error(`[BoostKit Mail] Unknown driver "${driver}". Available: log, smtp`)
+        throw new Error(`[RudderJS Mail] Unknown driver "${driver}". Available: log, smtp`)
       }
 
       MailRegistry.set(adapter)

@@ -1,5 +1,5 @@
 import { Queue, Worker } from 'bullmq'
-import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@boostkit/queue'
+import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@rudderjs/queue'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ export interface BullMQConfig {
   /** Redis port — default: 6379 */
   port?:     number
   password?: string
-  /** Redis key prefix — default: 'boostkit' */
+  /** Redis key prefix — default: 'rudderjs' */
   prefix?:   string
   /** Worker concurrency per queue. Default: 1 */
   concurrency?: number
@@ -72,7 +72,7 @@ class BullMQAdapter implements QueueAdapter {
 
   constructor(config: BullMQConfig) {
     this.connection        = redisOpts(config)
-    this.prefix            = config.prefix          ?? 'boostkit'
+    this.prefix            = config.prefix          ?? 'rudderjs'
     this.concurrency       = config.concurrency      ?? 1
     this.removeOnComplete  = config.removeOnComplete ?? 100
     this.removeOnFail      = config.removeOnFail     ?? 500

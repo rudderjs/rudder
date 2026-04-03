@@ -1,6 +1,6 @@
 # Directory Structure
 
-A scaffolded BoostKit application has the following layout:
+A scaffolded RudderJS application has the following layout:
 
 ```
 my-app/
@@ -34,7 +34,7 @@ my-app/
 ├── routes/
 │   ├── api.ts              # router.get/post/all() — side-effect file, no exports
 │   ├── web.ts              # Non-API server routes (redirects, guards) — side-effect file
-│   └── console.ts          # artisan.command() — side-effect file, no exports
+│   └── console.ts          # rudder.command() — side-effect file, no exports
 ├── pages/                  # Vike file-based SSR pages
 │   ├── +config.ts          # Root vike-photon config (points to bootstrap/app.ts)
 │   ├── index/
@@ -71,7 +71,7 @@ Named, typed configuration objects that read values from `.env` via `Env`. Think
 
 ```ts
 // config/server.ts
-import { Env } from '@boostkit/core/support'
+import { Env } from '@rudderjs/core/support'
 
 export default {
   port: Env.getNumber('PORT', 3000),
@@ -98,9 +98,9 @@ Side-effect files — they run for their side effects (registering routes/comman
 
 - `api.ts` — HTTP routes via `router.get/post/all()`
 - `web.ts` — Non-API server routes: redirects, server-side auth guards, download endpoints, sitemaps
-- `console.ts` — Artisan commands via `artisan.command()`
+- `console.ts` — Rudder commands via `rudder.command()`
 
-These are loaded lazily by BoostKit via the `withRouting()` configuration.
+These are loaded lazily by RudderJS via the `withRouting()` configuration.
 
 ### `pages/`
 
@@ -114,7 +114,7 @@ Contains `schema.prisma`. Run `pnpm exec prisma generate` after any schema chang
 
 ### `bootstrap/app.ts` — The Entry Point
 
-`bootstrap/app.ts` is both the bootstrap and the HTTP entry point. It must have `import 'reflect-metadata'` at the top, and it `export default`s the `BoostKit` instance returned by `.create()`.
+`bootstrap/app.ts` is both the bootstrap and the HTTP entry point. It must have `import 'reflect-metadata'` at the top, and it `export default`s the `RudderJS` instance returned by `.create()`.
 
 `pages/+config.ts` wires Vike to use it via `vike-photon`:
 
@@ -129,7 +129,7 @@ export default {
 } as unknown as Config
 ```
 
-No separate `src/index.ts` is needed — `vike-photon` consumes the `BoostKit` instance directly.
+No separate `src/index.ts` is needed — `vike-photon` consumes the `RudderJS` instance directly.
 
 ## Module Structure (optional)
 
@@ -145,4 +145,4 @@ app/
         └── BlogServiceProvider.ts
 ```
 
-Use `pnpm artisan make:module Blog` to scaffold a module, then `pnpm artisan module:publish` to merge Prisma shards.
+Use `pnpm rudder make:module Blog` to scaffold a module, then `pnpm rudder module:publish` to merge Prisma shards.

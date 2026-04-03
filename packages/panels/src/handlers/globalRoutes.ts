@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from '@boostkit/core'
+import type { MiddlewareHandler } from '@rudderjs/core'
 import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { Global } from '../Global.js'
@@ -38,7 +38,7 @@ export function mountGlobalRoutes(
     if (!await global.policy('view', ctx)) return res.status(403).json({ message: 'Forbidden.' })
 
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): AppContainer }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): AppContainer }
       const prisma = app().make('prisma') as PrismaGlobalClient
       const row    = await prisma.panelGlobal.findUnique({ where: { slug } })
       const data   = row?.data ? (typeof row.data === 'string' ? JSON.parse(row.data as string) : row.data) : {}
@@ -60,7 +60,7 @@ export function mountGlobalRoutes(
     if (errors) return res.status(422).json({ message: 'Validation failed.', errors })
 
     try {
-      const { app } = await import(/* @vite-ignore */ '@boostkit/core') as { app(): AppContainer }
+      const { app } = await import(/* @vite-ignore */ '@rudderjs/core') as { app(): AppContainer }
       const prisma = app().make('prisma') as PrismaGlobalClient
       const serialized = JSON.stringify(body)
       await prisma.panelGlobal.upsert({

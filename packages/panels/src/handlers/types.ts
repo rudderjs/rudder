@@ -1,4 +1,4 @@
-import type { AppRequest, AppResponse, MiddlewareHandler } from '@boostkit/core'
+import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/core'
 
 export type RouteHandler = (req: AppRequest, res: AppResponse) => unknown | Promise<unknown>
 

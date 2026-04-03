@@ -1,11 +1,11 @@
-# @boostkit/queue-inngest
+# @rudderjs/queue-inngest
 
-Inngest serverless queue adapter for BoostKit.
+Inngest serverless queue adapter for RudderJS.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/queue-inngest inngest
+pnpm add @rudderjs/queue-inngest inngest
 ```
 
 ## Configuration
@@ -13,7 +13,7 @@ pnpm add @boostkit/queue-inngest inngest
 Define the Inngest connection in `config/queue.ts`:
 
 ```ts
-import { Env } from '@boostkit/core'
+import { Env } from '@rudderjs/core'
 import { SendEmailJob } from '../app/Jobs/SendEmailJob.js'
 import { ProcessImageJob } from '../app/Jobs/ProcessImageJob.js'
 
@@ -22,7 +22,7 @@ export default {
   connections: {
     inngest: {
       driver:     'inngest',
-      appId:      Env.get('INNGEST_APP_ID', 'my-boostkit-app'),
+      appId:      Env.get('INNGEST_APP_ID', 'my-rudderjs-app'),
       signingKey: Env.get('INNGEST_SIGNING_KEY', ''),
       eventKey:   Env.get('INNGEST_EVENT_KEY', ''),
       jobs: [
@@ -39,7 +39,7 @@ export default {
 Extend `Job` and optionally set `static retries`:
 
 ```ts
-import { Job } from '@boostkit/queue'
+import { Job } from '@rudderjs/queue'
 
 export class SendEmailJob extends Job {
   static retries = 3   // Inngest will retry failed executions up to 3 times
@@ -57,7 +57,7 @@ export class SendEmailJob extends Job {
 }
 ```
 
-Dispatching works the same as any BoostKit queue adapter:
+Dispatching works the same as any RudderJS queue adapter:
 
 ```ts
 await SendEmailJob.dispatch('alice@example.com', 'Welcome!')
@@ -67,13 +67,13 @@ await SendEmailJob.dispatch('alice@example.com', 'Welcome!')
 
 ## Event Naming Convention
 
-BoostKit maps each job class to an Inngest event using the pattern:
+RudderJS maps each job class to an Inngest event using the pattern:
 
 ```
-boostkit/job.<ClassName>
+rudderjs/job.<ClassName>
 ```
 
-For example, `SendEmailJob` → `boostkit/job.SendEmailJob`. This is handled automatically — you do not need to define event names manually.
+For example, `SendEmailJob` → `rudderjs/job.SendEmailJob`. This is handled automatically — you do not need to define event names manually.
 
 ## Serve Handler
 
@@ -104,10 +104,10 @@ This happens during `boot()` as part of `queue(configs.queue)`. Ensure the queue
 Returns a `QueueAdapterProvider` that integrates with the `queue()` factory:
 
 ```ts
-import { inngest } from '@boostkit/queue-inngest'
+import { inngest } from '@rudderjs/queue-inngest'
 
 const provider = inngest({
-  appId: 'my-boostkit-app',
+  appId: 'my-rudderjs-app',
   jobs:  [SendEmailJob, ProcessImageJob],
 })
 ```
@@ -117,7 +117,7 @@ Normally you do not call `inngest()` directly — pass the connection config to 
 ## Bootstrap Integration
 
 ```ts
-import { queue } from '@boostkit/queue'
+import { queue } from '@rudderjs/queue'
 import configs from '../config/index.js'
 
 export default [
@@ -144,7 +144,7 @@ The Inngest Dev Server runs at `http://localhost:8288` by default. It automatica
 In production, set the following environment variables:
 
 ```bash
-INNGEST_APP_ID=my-boostkit-app
+INNGEST_APP_ID=my-rudderjs-app
 INNGEST_SIGNING_KEY=signkey-prod-xxxxxxxxxxxx
 INNGEST_EVENT_KEY=xxxxxxxxxxxxxxxxxx
 ```

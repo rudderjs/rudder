@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@boostkit/panels'
+import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@rudderjs/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'

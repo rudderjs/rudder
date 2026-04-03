@@ -1,10 +1,10 @@
 {
-  "name": "@boostkit/storage",
+  "name": "@rudderjs/storage",
   "version": "0.0.6",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/boostkitjs/boostkit",
+    "url": "https://github.com/rudderjs/rudderjs",
     "directory": "packages/storage"
   },
   "type": "module",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@boostkit/core": "workspace:*"
+    "@rudderjs/core": "workspace:*"
   },
   "optionalDependencies": {
     "@aws-sdk/client-s3": "^3.0.0"

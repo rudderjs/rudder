@@ -8,7 +8,7 @@ let _ai: { agent: any; toolDefinition: any; z: any } | undefined
 
 async function loadAi() {
   if (!_ai) {
-    const ai  = await import(/* @vite-ignore */ '@boostkit/ai') as any
+    const ai  = await import(/* @vite-ignore */ '@rudderjs/ai') as any
     const zod = await import(/* @vite-ignore */ 'zod') as any
     _ai = { agent: ai.agent, toolDefinition: ai.toolDefinition, z: zod.z }
   }
@@ -16,7 +16,7 @@ async function loadAi() {
 }
 
 async function loadLive() {
-  const mod = await import(/* @vite-ignore */ '@boostkit/live') as any
+  const mod = await import(/* @vite-ignore */ '@rudderjs/live') as any
   return mod.Live as {
     updateMap(docName: string, mapName: string, field: string, value: unknown): Promise<void>
   }

@@ -1,6 +1,6 @@
 # Editor
 
-`@boostkit/panels` uses a pluggable editor registry for rich-text fields. By default, rich content fields render as plain `<textarea>` elements. Install `@boostkit/panels-lexical` to upgrade them to a full Lexical rich-text editor.
+`@rudderjs/panels` uses a pluggable editor registry for rich-text fields. By default, rich content fields render as plain `<textarea>` elements. Install `@rudderjs/panels-lexical` to upgrade them to a full Lexical rich-text editor.
 
 ---
 
@@ -9,7 +9,7 @@
 `RichContentField` is a full rich-text editor field powered by [Lexical](https://lexical.dev/).
 
 ```ts
-import { RichContentField, Block, TextField, SelectField } from '@boostkit/panels'
+import { RichContentField, Block, TextField, SelectField } from '@rudderjs/panels'
 
 RichContentField.make('content')
   .label('Content')
@@ -58,7 +58,7 @@ The field value is stored as **Lexical JSON** (the serialized editor state).
 `Block` defines a custom block type for use with `RichContentField`. Custom blocks appear in the slash command menu alongside built-in node types.
 
 ```ts
-import { Block, TextField, NumberField } from '@boostkit/panels'
+import { Block, TextField, NumberField } from '@rudderjs/panels'
 
 Block.make('pricing')
   .label('Pricing Card')
@@ -83,7 +83,7 @@ Each block renders as an inline card in the editor with its fields displayed in 
 
 ## Built-in Editor Features
 
-When `@boostkit/panels-lexical` is installed, the editor includes:
+When `@rudderjs/panels-lexical` is installed, the editor includes:
 
 ### Slash Commands
 
@@ -124,10 +124,10 @@ The editor registry (`editorRegistry`) is a global registry that maps editor key
 
 ---
 
-## Installing `@boostkit/panels-lexical`
+## Installing `@rudderjs/panels-lexical`
 
 ```bash
-pnpm add @boostkit/panels-lexical
+pnpm add @rudderjs/panels-lexical
 ```
 
 ### Setup
@@ -135,7 +135,7 @@ pnpm add @boostkit/panels-lexical
 Register the Lexical editor in your app's panel entry point (typically in `pages/(panels)/_components/` or a shared setup file):
 
 ```ts
-import { registerLexical } from '@boostkit/panels-lexical'
+import { registerLexical } from '@rudderjs/panels-lexical'
 
 registerLexical()
 ```
@@ -146,11 +146,11 @@ This registers the Lexical rich-text editor for all `RichContentField` and colla
 
 ## Tailwind Class Scanning
 
-`@boostkit/panels-lexical` ships its own styled components. To ensure Tailwind picks up the classes used by the editor, add a `@source` directive to your CSS:
+`@rudderjs/panels-lexical` ships its own styled components. To ensure Tailwind picks up the classes used by the editor, add a `@source` directive to your CSS:
 
 ```css
 /* src/index.css */
-@source "../node_modules/@boostkit/panels-lexical/dist";
+@source "../node_modules/@rudderjs/panels-lexical/dist";
 ```
 
 This tells Tailwind v4 to scan the editor package's dist files for class names during the build.
@@ -159,13 +159,13 @@ This tells Tailwind v4 to scan the editor package's dist files for class names d
 
 ## Fallback Behavior
 
-Without `@boostkit/panels-lexical`:
+Without `@rudderjs/panels-lexical`:
 
 - `RichContentField` renders as a `<textarea>` with raw text/HTML
 - Collaborative text fields still sync via Yjs but use plain text editing
 - All other panel features work normally
 
-This keeps `@boostkit/panels` lightweight -- the Lexical dependency (~200KB) is only pulled in when you need rich-text editing.
+This keeps `@rudderjs/panels` lightweight -- the Lexical dependency (~200KB) is only pulled in when you need rich-text editing.
 
 ---
 
@@ -174,7 +174,7 @@ This keeps `@boostkit/panels` lightweight -- the Lexical dependency (~200KB) is 
 If you need to customize the editor's Prisma schema (e.g., for editor-specific models), publish it:
 
 ```bash
-pnpm artisan vendor:publish --tag=panels-schema
+pnpm rudder vendor:publish --tag=panels-schema
 ```
 
 This copies the panel schema definitions into your project for customization.

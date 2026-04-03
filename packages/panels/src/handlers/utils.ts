@@ -1,4 +1,4 @@
-import type { AppRequest } from '@boostkit/core'
+import type { AppRequest } from '@rudderjs/core'
 import type { Field } from '../schema/Field.js'
 import type { Resource, FieldOrGrouping } from '../Resource.js'
 import type { Global } from '../Global.js'
@@ -273,7 +273,7 @@ export function applyTransforms(resource: Resource, records: unknown[]): unknown
 }
 
 export function liveBroadcast(slug: string, event: string, data: unknown): void {
-  void import('@boostkit/broadcast').then(({ broadcast }) => {
+  void import('@rudderjs/broadcast').then(({ broadcast }) => {
     broadcast(`panel:${slug}`, event, data)
-  }).catch(() => { /* @boostkit/broadcast not registered */ })
+  }).catch(() => { /* @rudderjs/broadcast not registered */ })
 }

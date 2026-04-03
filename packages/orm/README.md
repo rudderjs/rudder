@@ -1,15 +1,15 @@
-# @boostkit/orm
+# @rudderjs/orm
 
-ORM contract, `Model` base class, and `ModelRegistry` for BoostKit applications.
+ORM contract, `Model` base class, and `ModelRegistry` for RudderJS applications.
 
 ```bash
-pnpm add @boostkit/orm
+pnpm add @rudderjs/orm
 ```
 
 This package provides the shared abstractions. For a working database connection use an adapter:
 
-- `@boostkit/orm-prisma` — Prisma adapter (SQLite, PostgreSQL, MySQL)
-- `@boostkit/orm-drizzle` — Drizzle adapter (SQLite, PostgreSQL, LibSQL)
+- `@rudderjs/orm-prisma` — Prisma adapter (SQLite, PostgreSQL, MySQL)
+- `@rudderjs/orm-drizzle` — Drizzle adapter (SQLite, PostgreSQL, LibSQL)
 
 ---
 
@@ -18,7 +18,7 @@ This package provides the shared abstractions. For a working database connection
 Register a database provider in `bootstrap/providers.ts`:
 
 ```ts
-import { database } from '@boostkit/orm-prisma'
+import { database } from '@rudderjs/orm-prisma'
 import configs from '../config/index.js'
 
 export default [
@@ -34,7 +34,7 @@ The provider calls `ModelRegistry.set(adapter)` during boot — no manual wiring
 ## Defining a Model
 
 ```ts
-import { Model } from '@boostkit/orm'
+import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
   static override table    = 'users'   // optional — defaults to lowercase class name + 's'
@@ -262,7 +262,7 @@ Article.clearObservers()
 Low-level registry used by adapters and the ORM itself.
 
 ```ts
-import { ModelRegistry } from '@boostkit/orm'
+import { ModelRegistry } from '@rudderjs/orm'
 
 // Set an adapter (called by provider packages — rarely needed directly)
 ModelRegistry.set(adapter)

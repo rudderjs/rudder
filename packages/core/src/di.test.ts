@@ -54,7 +54,7 @@ describe('Container.singleton()', () => {
 describe('Container.instance()', () => {
   it('always returns the exact registered value', () => {
     const c = new Container()
-    const obj = { name: 'boostkit' }
+    const obj = { name: 'rudderjs' }
     c.instance('obj', obj)
     assert.strictEqual(c.make('obj'), obj)
     assert.strictEqual(c.make('obj'), obj)
@@ -280,10 +280,10 @@ describe('@Inject token override', () => {
     Reflect.defineMetadata('design:paramtypes', [String], Consumer)
 
     const c = new Container()
-    c.instance('app.name', 'BoostKit')
+    c.instance('app.name', 'RudderJS')
 
     const inst = c.make(Consumer)
-    assert.strictEqual(inst.name, 'BoostKit')
+    assert.strictEqual(inst.name, 'RudderJS')
   })
 
   it('resolves the parameter by a symbol token', () => {

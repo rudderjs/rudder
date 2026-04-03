@@ -1,4 +1,4 @@
-import { ServiceProvider, artisan, type Application } from '@boostkit/core'
+import { ServiceProvider, rudder, type Application } from '@rudderjs/core'
 import {
   initWsServer,
   getUpgradeHandler,
@@ -16,7 +16,7 @@ export interface BroadcastConfig {
 
 // ─── globalThis key for the upgrade handler ─────────────────
 
-export const UPGRADE_KEY = '__boostkit_ws_upgrade__'
+export const UPGRADE_KEY = '__rudderjs_ws_upgrade__'
 
 // ─── Broadcast facade ────────────────────────────────────────
 
@@ -25,7 +25,7 @@ export const UPGRADE_KEY = '__boostkit_ws_upgrade__'
  *
  * @example
  * // routes/channels.ts
- * import { Broadcast } from '@boostkit/broadcast'
+ * import { Broadcast } from '@rudderjs/broadcast'
  *
  * Broadcast.channel('private-orders.*', async (req, channel) => {
  *   return req.token === 'valid'
@@ -59,13 +59,13 @@ export function broadcasting(config: BroadcastConfig = {}): new (app: Applicatio
     async boot(): Promise<void> {
       initWsServer()
 
-      // Register upgrade handler on globalThis so @boostkit/vite and
-      // @boostkit/server-hono can attach it to the http.Server without
-      // a hard dependency on @boostkit/broadcast.
+      // Register upgrade handler on globalThis so @rudderjs/vite and
+      // @rudderjs/server-hono can attach it to the http.Server without
+      // a hard dependency on @rudderjs/broadcast.
       // Store both the broadcast-specific handler AND the combined handler
-      // so that @boostkit/live can chain without circular references on HMR.
+      // so that @rudderjs/live can chain without circular references on HMR.
       const handler = getUpgradeHandler(path)
-      ;(globalThis as Record<string, unknown>)['__boostkit_ws_broadcast_upgrade__'] = handler
+      ;(globalThis as Record<string, unknown>)['__rudderjs_ws_broadcast_upgrade__'] = handler
       ;(globalThis as Record<string, unknown>)[UPGRADE_KEY] = handler
 
       this.publishes({
@@ -74,7 +74,7 @@ export function broadcasting(config: BroadcastConfig = {}): new (app: Applicatio
         tag:  'broadcast-client',
       })
 
-      artisan.command('broadcast:connections', () => {
+      rudder.command('broadcast:connections', () => {
         const { connections, channels } = broadcastStats()
         console.log(`\n  Active connections : ${connections}`)
         console.log(`  Active channels    : ${channels}\n`)

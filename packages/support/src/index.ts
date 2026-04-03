@@ -225,15 +225,15 @@ export class ConfigRepository {
 
 let _repo: ConfigRepository | null = null
 
-/** @internal — called by @boostkit/core Application */
+/** @internal — called by @rudderjs/core Application */
 export function setConfigRepository(repo: ConfigRepository): void {
   _repo = repo
-  ;(globalThis as Record<string, unknown>)['__boostkit_config__'] = repo
+  ;(globalThis as Record<string, unknown>)['__rudderjs_config__'] = repo
 }
 
 export function config<T = unknown>(key: string, fallback?: T): T {
   const repo = _repo
-    ?? (globalThis as Record<string, unknown>)['__boostkit_config__'] as ConfigRepository | undefined
+    ?? (globalThis as Record<string, unknown>)['__rudderjs_config__'] as ConfigRepository | undefined
   return (repo?.get(key, fallback) ?? fallback) as T
 }
 
@@ -241,10 +241,10 @@ export function config<T = unknown>(key: string, fallback?: T): T {
 
 /**
  * Dynamically import an optional peer package installed in the user's app
- * (process.cwd()), not inside node_modules/@boostkit/*.
+ * (process.cwd()), not inside node_modules/@rudderjs/*.
  *
  * Uses createRequire anchored to the app root so optional peers installed
- * in the user's project are resolvable regardless of where @boostkit/* lives.
+ * in the user's project are resolvable regardless of where @rudderjs/* lives.
  *
  * All optional peer packages must include `"default": "./dist/index.js"`
  * in their exports field so the CJS resolver can find them.
@@ -269,9 +269,9 @@ const isDev = typeof process !== 'undefined' && process.env?.['NODE_ENV'] !== 'p
  *
  * @param data  - The object tree to validate
  * @param label - A label for the error message (e.g. 'resolveSchema')
- * @param tag   - Optional prefix tag for the log (defaults to 'boostkit')
+ * @param tag   - Optional prefix tag for the log (defaults to 'rudderjs')
  */
-export function validateSerializable(data: unknown, label: string, tag = 'boostkit'): void {
+export function validateSerializable(data: unknown, label: string, tag = 'rudderjs'): void {
   if (!isDev) return
 
   const problems: string[] = []
@@ -336,7 +336,7 @@ export function defineEnv<T extends z.ZodRawShape>(
     const lines = parsed.error.issues
       .map(i => `  ${i.path.join('.')}: ${i.message}`)
       .join('\n')
-    throw new Error(`[BoostKit] Invalid environment configuration:\n${lines}`)
+    throw new Error(`[RudderJS] Invalid environment configuration:\n${lines}`)
   }
   return parsed.data
 }

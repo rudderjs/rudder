@@ -1,9 +1,9 @@
 # Tables
 
-`Table` is a standalone schema element for `@boostkit/panels`. Use it on panel landing pages (`Panel.schema()`), resource show pages (`Resource.widgets()`), or anywhere a schema element is accepted. It is distinct from the Resource CRUD list — `Table` is for display-only or lightweight editing scenarios where you want full control over the data source and columns.
+`Table` is a standalone schema element for `@rudderjs/panels`. Use it on panel landing pages (`Panel.schema()`), resource show pages (`Resource.widgets()`), or anywhere a schema element is accepted. It is distinct from the Resource CRUD list — `Table` is for display-only or lightweight editing scenarios where you want full control over the data source and columns.
 
 ```ts
-import { Table, Column } from '@boostkit/panels'
+import { Table, Column } from '@rudderjs/panels'
 ```
 
 ---
@@ -116,7 +116,7 @@ type DataSource<T> = T[] | ((ctx: PanelContext) => T[] | Promise<T[]>)
 `Column` is a display-only building block for tables. It is distinct from `Field` — columns do not handle form input, validation, or persistence on their own.
 
 ```ts
-import { Column } from '@boostkit/panels'
+import { Column } from '@rudderjs/panels'
 ```
 
 ### `Column.make(name)`
@@ -306,7 +306,7 @@ Column.make('createdAt').label('Date').date().sortable()
 `.filters([...])` attaches dropdown filter controls to the table header. Two filter types are available: `SelectFilter` and `SearchFilter`.
 
 ```ts
-import { SelectFilter, SearchFilter } from '@boostkit/panels'
+import { SelectFilter, SearchFilter } from '@rudderjs/panels'
 ```
 
 ### `SelectFilter`
@@ -381,7 +381,7 @@ Table.make('Users')
 `.actions([...])` attaches action buttons to the table. Actions can operate on selected rows (bulk) or appear as per-row buttons.
 
 ```ts
-import { Action } from '@boostkit/panels'
+import { Action } from '@rudderjs/panels'
 ```
 
 ### Bulk actions
@@ -495,7 +495,7 @@ Column.make('body').editable('modal')
 Pass a `Field` instance to control the editor input type.
 
 ```ts
-import { SelectField, ToggleField, TextareaField, ColorField, TagsField } from '@boostkit/panels'
+import { SelectField, ToggleField, TextareaField, ColorField, TagsField } from '@rudderjs/panels'
 
 Column.make('status').badge().editable(
   SelectField.make('status').options([
@@ -649,7 +649,7 @@ Table.make('Live Orders')
 
 ### `.live()`
 
-Pushes updates to the client via WebSocket when server data changes. The table refreshes automatically across all open browser tabs — no polling needed. Requires `@boostkit/broadcast` to be registered.
+Pushes updates to the client via WebSocket when server data changes. The table refreshes automatically across all open browser tabs — no polling needed. Requires `@rudderjs/broadcast` to be registered.
 
 ```ts
 Table.make('Live Articles')
@@ -772,7 +772,7 @@ Table.make('Articles')
 | `.onSave(fn)` | Table-level save handler for inline editing |
 | `.lazy()` | Defer data loading to client-side |
 | `.poll(ms)` | Re-fetch every N milliseconds |
-| `.live()` | Push updates via WebSocket (requires `@boostkit/broadcast`) |
+| `.live()` | Push updates via WebSocket (requires `@rudderjs/broadcast`) |
 | `.remember(mode?)` | Persist state: `'localStorage'` \| `'url'` \| `'session'` \| `false` |
 | `.description(text)` | Subtitle below the table title |
 | `.emptyMessage(text)` | Custom no-records message |
@@ -842,7 +842,7 @@ import {
   SelectFilter,
   Action,
   SelectField, ToggleField, TextareaField,
-} from '@boostkit/panels'
+} from '@rudderjs/panels'
 import { Article } from 'App/Models/Article.js'
 
 Table.make('Articles')

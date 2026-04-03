@@ -1,1 +1,1 @@
-# @boostkit/schedule
+# @rudderjs/schedule

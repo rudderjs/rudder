@@ -4,7 +4,7 @@ import { navigate } from 'vike/client/router'
 /**
  * Subscribe to live table updates for a resource.
  * On any CRUD broadcast, triggers a Vike re-navigation to refetch SSR data.
- * Uses BKSocket from @boostkit/broadcast (published to src/).
+ * Uses BKSocket from @rudderjs/broadcast (published to src/).
  */
 export function useLiveTable(options: {
   enabled:     boolean

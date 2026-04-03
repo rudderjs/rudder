@@ -1,11 +1,11 @@
-# @boostkit/notification
+# @rudderjs/notification
 
 Multi-channel notification system — send notifications via mail, database, or custom channels.
 
 ## Installation
 
 ```bash
-pnpm add @boostkit/notification
+pnpm add @rudderjs/notification
 ```
 
 ## Setup
@@ -14,8 +14,8 @@ The `notifications()` provider must be registered after the `mail()` provider in
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@boostkit/mail'
-import { notifications } from '@boostkit/notification'
+import { mail } from '@rudderjs/mail'
+import { notifications } from '@rudderjs/notification'
 import configs from '../config/index.js'
 
 export default [
@@ -57,9 +57,9 @@ Extend the `Notification` abstract base class and implement `via()`. Add `toMail
 
 ```ts
 // app/Notifications/WelcomeNotification.ts
-import { Notification } from '@boostkit/notification'
-import { Mailable } from '@boostkit/mail'
-import type { Notifiable } from '@boostkit/notification'
+import { Notification } from '@rudderjs/notification'
+import { Mailable } from '@rudderjs/mail'
+import type { Notifiable } from '@rudderjs/notification'
 
 class WelcomeMail extends Mailable {
   constructor(private readonly name: string, private readonly token: string) {
@@ -68,7 +68,7 @@ class WelcomeMail extends Mailable {
 
   build() {
     return this
-      .subject('Welcome to BoostKit')
+      .subject('Welcome to RudderJS')
       .html(`<p>Hi ${this.name},</p><p><a href="/verify?token=${this.token}">Verify your email</a></p>`)
       .text(`Hi ${this.name}, verify here: /verify?token=${this.token}`)
   }
@@ -99,8 +99,8 @@ Use the `notify()` helper to send a notification to one or more notifiables:
 
 ```ts
 // routes/api.ts
-import { router } from '@boostkit/router'
-import { notify } from '@boostkit/notification'
+import { router } from '@rudderjs/router'
+import { notify } from '@rudderjs/notification'
 import { User } from '../app/Models/User.js'
 import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js'
 
@@ -127,8 +127,8 @@ router.post('/api/notify/all', async (req, res) => {
 
 | Channel | Key | Requires |
 |---|---|---|
-| Mail | `'mail'` | `@boostkit/mail` registered + `notifiable.email` present |
-| Database | `'database'` | `@boostkit/orm` adapter + `notifications` table in your schema |
+| Mail | `'mail'` | `@rudderjs/mail` registered + `notifiable.email` present |
+| Database | `'database'` | `@rudderjs/orm` adapter + `notifications` table in your schema |
 
 ### Database Channel — Prisma Schema
 
@@ -176,7 +176,7 @@ Implement the `NotificationChannel` interface and register your channel with `Ch
 
 ```ts
 // app/Channels/SmsChannel.ts
-import type { NotificationChannel, Notifiable, Notification } from '@boostkit/notification'
+import type { NotificationChannel, Notifiable, Notification } from '@rudderjs/notification'
 
 export class SmsChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
@@ -196,8 +196,8 @@ Register the custom channel in a service provider's `boot()` method:
 
 ```ts
 // app/Providers/AppServiceProvider.ts
-import { ServiceProvider } from '@boostkit/core'
-import { ChannelRegistry } from '@boostkit/notification'
+import { ServiceProvider } from '@rudderjs/core'
+import { ChannelRegistry } from '@rudderjs/notification'
 import { SmsChannel } from '../Channels/SmsChannel.js'
 
 export class AppServiceProvider extends ServiceProvider {
@@ -223,8 +223,8 @@ via(notifiable: Notifiable): string[] {
 | `Notification` | Abstract base class — implement `via()`, optionally `toMail()`, `toDatabase()` |
 | `NotificationChannel` | Interface — `send(notifiable, notification): Promise<void>` — implement for custom channels |
 | `ChannelRegistry` | Global registry — `register(name, channel)`, `get(name)`, `has(name)`, `reset()` |
-| `MailChannel` | Built-in mail channel — delegates to `@boostkit/mail` adapter |
-| `DatabaseChannel` | Built-in database channel — inserts via `@boostkit/orm` into the `notifications` table |
+| `MailChannel` | Built-in mail channel — delegates to `@rudderjs/mail` adapter |
+| `DatabaseChannel` | Built-in database channel — inserts via `@rudderjs/orm` into the `notifications` table |
 | `Notifier` | Facade — `Notifier.send(notifiables, notification)` — fans out to all channels |
 | `notify(notifiables, notification)` | Convenience helper wrapping `Notifier.send()` |
 | `notifications()` | Provider factory — registers `MailChannel` and `DatabaseChannel` |
