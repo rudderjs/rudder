@@ -662,7 +662,22 @@ export class ArticleResource extends Resource {
 }
 ```
 
-Agents appear in the form's action bar as an "AI Agents" dropdown. When triggered, output streams into a global AI chat panel (toggle from the header). Updated fields show a typing animation.
+Agents appear in the form's action bar as an "AI Agents" dropdown. When triggered, output streams into the AI chat sidebar.
+
+### AI Chat Sidebar
+
+A collapsible right sidebar (toggled from the header) provides a unified chat experience:
+
+- **Free-form chat** — ask questions about your data, get AI assistance
+- **Agent runs inline** — when you trigger an agent (from dropdown or by asking in chat), tool calls, text, and completion appear as structured message parts in the conversation
+- **Resource-aware** — on resource edit pages, the AI knows the current record and available agents. Ask "write me an excerpt" and the AI will invoke the Write Excerpt agent automatically
+- **Field animation** — agent `update_field` tool calls animate into the form in real-time via Yjs
+
+The chat endpoint (`POST /{panel}/api/_chat`) supports:
+- `message` — user's text
+- `history` — conversation context
+- `resourceContext` — current resource slug + record ID
+- `forceAgent` — bypass AI intent detection, run a specific agent directly
 
 ### Class-Based Agents
 
