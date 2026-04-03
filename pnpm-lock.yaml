@@ -64,8 +64,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       zod:
-        specifier: ^3.23.0
-        version: 3.25.76
+        specifier: ^4.0.0
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -76,13 +76,13 @@ importers:
     optionalDependencies:
       '@anthropic-ai/sdk':
         specifier: '>=0.30.0'
-        version: 0.80.0(zod@3.25.76)
+        version: 0.80.0(zod@4.3.6)
       '@google/genai':
         specifier: '>=1.0.0'
-        version: 1.47.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        version: 1.47.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
       openai:
         specifier: '>=4.70.0'
-        version: 6.33.0(ws@8.19.0)(zod@3.25.76)
+        version: 6.33.0(ws@8.19.0)(zod@4.3.6)
 
   packages/artisan:
     dependencies:
@@ -523,6 +523,9 @@ importers:
       '@base-ui-components/react':
         specifier: 1.0.0-rc.0
         version: 1.0.0-rc.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@boostkit/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@boostkit/broadcast':
         specifier: workspace:*
         version: link:../broadcast
@@ -562,6 +565,9 @@ importers:
       vike-react:
         specifier: ^0.6.20
         version: 0.6.20(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
 
   packages/panels-lexical:
     dependencies:
@@ -836,8 +842,8 @@ importers:
         specifier: '>=13'
         version: 13.6.29
       zod:
-        specifier: ^3.23.0
-        version: 3.25.76
+        specifier: ^4.0.0
+        version: 4.3.6
     devDependencies:
       '@boostkit/broadcast':
         specifier: workspace:*
@@ -1096,7 +1102,7 @@ importers:
         version: 0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vike-photon:
         specifier: ^0.1.24
-        version: 0.1.24(@photonjs/core@0.1.21(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(@photonjs/runtime@0.1.16(hono@4.11.4)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(hono@4.11.4)(rollup@4.59.0)(srvx@0.9.8)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+        version: 0.1.24(@photonjs/core@0.1.21(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(@photonjs/runtime@0.1.16(hono@4.12.3)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(hono@4.12.3)(rollup@4.59.0)(srvx@0.9.8)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
       vike-react:
         specifier: ^0.6.20
         version: 0.6.20(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
@@ -9401,13 +9407,6 @@ snapshots:
       package-manager-detector: 1.6.0
       tinyexec: 1.0.2
 
-  '@anthropic-ai/sdk@0.80.0(zod@3.25.76)':
-    dependencies:
-      json-schema-to-ts: 3.1.1
-    optionalDependencies:
-      zod: 3.25.76
-    optional: true
-
   '@anthropic-ai/sdk@0.80.0(zod@4.3.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
@@ -10693,14 +10692,14 @@ snapshots:
 
   '@formkit/auto-animate@0.9.0': {}
 
-  '@google/genai@1.47.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))':
+  '@google/genai@1.47.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.5.4
       ws: 8.19.0
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.27.1(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.27.1(zod@4.3.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -11227,6 +11226,29 @@ snapshots:
       zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
+
+  '@modelcontextprotocol/sdk@1.27.1(zod@4.3.6)':
+    dependencies:
+      '@hono/node-server': 1.19.9(hono@4.12.3)
+      ajv: 8.18.0
+      ajv-formats: 3.0.1(ajv@8.18.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.6
+      express: 5.2.1
+      express-rate-limit: 8.2.1(express@5.2.1)
+      hono: 4.12.3
+      jose: 6.1.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.3.6
+      zod-to-json-schema: 3.25.1(zod@4.3.6)
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
 
   '@mongodb-js/saslprep@1.4.6':
     dependencies:
@@ -12059,30 +12081,6 @@ snapshots:
 
   '@oxc-project/types@0.98.0': {}
 
-  '@photonjs/core@0.1.21(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
-    dependencies:
-      '@brillout/vite-plugin-server-entry': 0.7.18
-      '@universal-middleware/cloudflare': 0.4.12(hono@4.11.4)(srvx@0.9.8)
-      '@universal-middleware/compress': 0.2.35
-      '@universal-middleware/core': 0.4.17(hono@4.11.4)(srvx@0.9.8)
-      '@universal-middleware/express': 0.4.25(hono@4.11.4)(srvx@0.9.8)
-      '@universal-middleware/sirv': 0.1.25
-      estree-walker: 3.0.3
-      ts-deepmerge: 7.0.3
-      zod: 4.3.6
-    optionalDependencies:
-      vite: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - fastify
-      - h3
-      - hono
-      - srvx
-
   '@photonjs/core@0.1.21(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@brillout/vite-plugin-server-entry': 0.7.18
@@ -12125,29 +12123,6 @@ snapshots:
       - hono
       - srvx
 
-  '@photonjs/runtime@0.1.16(hono@4.11.4)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
-    dependencies:
-      '@photonjs/core': 0.1.21(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@photonjs/srvx': 0.1.12(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@universal-middleware/core': 0.4.17(hono@4.11.4)(srvx@0.9.8)
-      '@universal-middleware/sirv': 0.1.25
-      srvx: 0.9.8
-      standaloner: 0.1.11(rollup@4.59.0)
-    optionalDependencies:
-      vite: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - rollup
-      - supports-color
-
   '@photonjs/runtime@0.1.16(hono@4.12.3)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@photonjs/core': 0.1.21(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -12170,23 +12145,6 @@ snapshots:
       - hono
       - rollup
       - supports-color
-
-  '@photonjs/srvx@0.1.12(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
-    dependencies:
-      '@photonjs/core': 0.1.21(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@universal-middleware/srvx': 0.1.3(hono@4.11.4)(srvx@0.9.8)
-    optionalDependencies:
-      vite: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - fastify
-      - h3
-      - hono
-      - srvx
 
   '@photonjs/srvx@0.1.12(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -14185,20 +14143,6 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@universal-middleware/cloudflare@0.4.12(hono@4.11.4)(srvx@0.9.8)':
-    dependencies:
-      '@universal-middleware/core': 0.4.17(hono@4.11.4)(srvx@0.9.8)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - fastify
-      - h3
-      - hono
-      - srvx
-
   '@universal-middleware/cloudflare@0.4.12(hono@4.12.3)(srvx@0.9.8)':
     dependencies:
       '@universal-middleware/core': 0.4.17(hono@4.12.3)(srvx@0.9.8)
@@ -14215,14 +14159,6 @@ snapshots:
 
   '@universal-middleware/compress@0.2.35': {}
 
-  '@universal-middleware/core@0.4.17(hono@4.11.4)(srvx@0.9.8)':
-    dependencies:
-      regexparam: 3.0.0
-      tough-cookie: 6.0.0
-    optionalDependencies:
-      hono: 4.11.4
-      srvx: 0.9.8
-
   '@universal-middleware/core@0.4.17(hono@4.12.3)(srvx@0.9.8)':
     dependencies:
       regexparam: 3.0.0
@@ -14230,20 +14166,6 @@ snapshots:
     optionalDependencies:
       hono: 4.12.3
       srvx: 0.9.8
-
-  '@universal-middleware/express@0.4.25(hono@4.11.4)(srvx@0.9.8)':
-    dependencies:
-      '@universal-middleware/core': 0.4.17(hono@4.11.4)(srvx@0.9.8)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - fastify
-      - h3
-      - hono
-      - srvx
 
   '@universal-middleware/express@0.4.25(hono@4.12.3)(srvx@0.9.8)':
     dependencies:
@@ -14277,20 +14199,6 @@ snapshots:
     dependencies:
       mrmime: 2.0.1
       totalist: 3.0.1
-
-  '@universal-middleware/srvx@0.1.3(hono@4.11.4)(srvx@0.9.8)':
-    dependencies:
-      '@universal-middleware/core': 0.4.17(hono@4.11.4)(srvx@0.9.8)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - fastify
-      - h3
-      - hono
-      - srvx
 
   '@universal-middleware/srvx@0.1.3(hono@4.12.3)(srvx@0.9.8)':
     dependencies:
@@ -16551,12 +16459,6 @@ snapshots:
       powershell-utils: 0.1.0
       wsl-utils: 0.3.1
 
-  openai@6.33.0(ws@8.19.0)(zod@3.25.76):
-    optionalDependencies:
-      ws: 8.19.0
-      zod: 3.25.76
-    optional: true
-
   openai@6.33.0(ws@8.19.0)(zod@4.3.6):
     optionalDependencies:
       ws: 8.19.0
@@ -17984,34 +17886,6 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vike-photon@0.1.24(@photonjs/core@0.1.21(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(@photonjs/runtime@0.1.16(hono@4.11.4)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(hono@4.11.4)(rollup@4.59.0)(srvx@0.9.8)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)):
-    dependencies:
-      '@brillout/picocolors': 1.0.30
-      '@brillout/vite-plugin-server-entry': 0.7.18
-      '@photonjs/core': 0.1.21(hono@4.11.4)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@photonjs/runtime': 0.1.16(hono@4.11.4)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@universal-middleware/compress': 0.2.35
-      '@universal-middleware/core': 0.4.17(hono@4.11.4)(srvx@0.9.8)
-      '@universal-middleware/sirv': 0.1.25
-      pkg-types: 2.3.0
-      standaloner: 0.1.11(rollup@4.59.0)
-      vike: 0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-    optionalDependencies:
-      vite: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - '@cloudflare/workers-types'
-      - '@hattip/core'
-      - '@types/express'
-      - '@webroute/route'
-      - elysia
-      - encoding
-      - fastify
-      - h3
-      - hono
-      - rollup
-      - srvx
-      - supports-color
-
   vike-photon@0.1.24(@photonjs/core@0.1.21(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(@photonjs/runtime@0.1.16(hono@4.12.3)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(hono@4.12.3)(rollup@4.59.0)(srvx@0.9.8)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)):
     dependencies:
       '@brillout/picocolors': 1.0.30
@@ -18322,6 +18196,11 @@ snapshots:
   zod-to-json-schema@3.25.1(zod@3.25.76):
     dependencies:
       zod: 3.25.76
+
+  zod-to-json-schema@3.25.1(zod@4.3.6):
+    dependencies:
+      zod: 4.3.6
+    optional: true
 
   zod-validation-error@4.0.2(zod@4.3.6):
     dependencies:

@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@boostkit/core": "workspace:*",
-    "zod": "^3.23.0"
+    "zod": "^4.0.0"
   },
   "optionalDependencies": {
     "@anthropic-ai/sdk": ">=0.30.0",

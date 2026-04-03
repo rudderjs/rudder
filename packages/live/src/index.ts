@@ -564,4 +564,42 @@ export const Live = {
     const rooms = g[KEY] as Map<string, Room> | undefined
     return rooms?.get(docName)?.clients.size ?? 0
   },
+
+  /**
+   * Update a single field in a Y.Map. Creates room if needed.
+   * Connected WebSocket clients receive the update in real-time.
+   *
+   * @example
+   * await Live.updateMap('panel:articles:42', 'fields', 'title', 'New Title')
+   */
+  async updateMap(docName: string, mapName: string, field: string, value: unknown): Promise<void> {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    await room.ready
+    room.doc.transact(() => {
+      room.doc.getMap(mapName).set(field, value)
+    })
+  },
+
+  /**
+   * Update multiple fields in a Y.Map in a single transaction.
+   * Connected WebSocket clients receive the update in real-time.
+   *
+   * @example
+   * await Live.updateMapBatch('panel:articles:42', 'fields', {
+   *   title: 'Better Title',
+   *   slug: 'better-title',
+   * })
+   */
+  async updateMapBatch(docName: string, mapName: string, fields: Record<string, unknown>): Promise<void> {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    await room.ready
+    room.doc.transact(() => {
+      const map = room.doc.getMap(mapName)
+      for (const [key, val] of Object.entries(fields)) {
+        map.set(key, val)
+      }
+    })
+  },
 }

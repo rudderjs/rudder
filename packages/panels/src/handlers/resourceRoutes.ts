@@ -10,6 +10,7 @@ import {
 } from './utils.js'
 import { applySearch, applyFilters, parseUrlFilters, applyColumnTransforms } from '../utils/queryHelpers.js'
 import { mountVersionRoutes } from './versionRoutes.js'
+import { handleAgentRun } from './agentRun.js'
 
 /** Extract a named route parameter — always returns a string (empty if somehow absent). */
 function param(req: AppRequest, name: string): string {
@@ -442,6 +443,13 @@ export function mountResourceRoutes(
 
       if (isLive) liveBroadcast(slug, 'records.forceDeleted', { ids, deleted })
       return res.json({ message: `${deleted} records permanently deleted.`, deleted })
+    }, mw)
+  }
+
+  // ── Agent routes (resources with AI agents) ─────────────────
+  if (mountResource.agents().length > 0) {
+    router.post(`${base}/:id/_agents/:agentSlug`, async (req, res) => {
+      return handleAgentRun(req, res, ResourceClass, panel.getName())
     }, mw)
   }
 

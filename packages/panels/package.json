@@ -38,6 +38,7 @@
     "quill-delta": "^5.1.0"
   },
   "peerDependencies": {
+    "@boostkit/ai": "workspace:*",
     "@boostkit/broadcast": "workspace:*",
     "@boostkit/image": "workspace:*",
     "@boostkit/live": "workspace:*",
@@ -45,6 +46,9 @@
     "recharts": ">=2.0.0"
   },
   "peerDependenciesMeta": {
+    "@boostkit/ai": {
+      "optional": true
+    },
     "@boostkit/storage": {
       "optional": true
     },
@@ -63,6 +67,7 @@
   },
   "devDependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
+    "@boostkit/ai": "workspace:*",
     "@boostkit/broadcast": "workspace:*",
     "@boostkit/live": "workspace:*",
     "@boostkit/storage": "workspace:*",
@@ -75,7 +80,8 @@
     "sonner": "^2.0.7",
     "typescript": "^5.4.0",
     "vike": "^0.4.239",
-    "vike-react": "^0.6.20"
+    "vike-react": "^0.6.20",
+    "zod": "^4.0.0"
   },
   "author": "Suleiman Shahbari"
 }

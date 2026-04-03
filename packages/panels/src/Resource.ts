@@ -2,6 +2,8 @@ import type { Field, FieldMeta } from './schema/Field.js'
 import type { Section, SectionMeta } from './schema/Section.js'
 import type { Tabs, TabsMeta } from './schema/Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
+import type { ResourceAgent } from './agents/ResourceAgent.js'
+import type { ResourceAgentMeta } from './agents/types.js'
 import { Table } from './schema/Table.js'
 import { Form } from './schema/Form.js'
 
@@ -24,9 +26,10 @@ export interface ResourceMeta {
   versioned:         boolean
   draftable:         boolean
   softDeletes:       boolean
-  emptyStateIcon?: string
-  emptyStateHeading?: string
-  emptyStateDescription?: string
+  emptyStateIcon?: string | undefined
+  emptyStateHeading?: string | undefined
+  emptyStateDescription?: string | undefined
+  agents?: ResourceAgentMeta[] | undefined
 }
 
 // ─── Resource base class ───────────────────────────────────
@@ -106,6 +109,23 @@ export class Resource {
    * }
    */
   detail(_record?: Record<string, unknown>): { getType(): string; toMeta(): unknown }[] {
+    return []
+  }
+
+  /**
+   * Define AI agents that can operate on this resource's records.
+   *
+   * @example
+   * agents() {
+   *   return [
+   *     ResourceAgent.make('seo')
+   *       .label('Improve SEO')
+   *       .instructions('Analyse and improve SEO...')
+   *       .fields(['title', 'slug', 'metaDescription']),
+   *   ]
+   * }
+   */
+  agents(): ResourceAgent[] {
     return []
   }
 
@@ -189,6 +209,11 @@ export class Resource {
     if (emptyState?.icon)        meta.emptyStateIcon        = emptyState.icon
     if (emptyState?.heading)     meta.emptyStateHeading     = emptyState.heading
     if (emptyState?.description) meta.emptyStateDescription = emptyState.description
+
+    const agentDefs = this.agents()
+    if (agentDefs.length > 0) {
+      meta.agents = agentDefs.map(a => a.toMeta())
+    }
 
     return meta
   }

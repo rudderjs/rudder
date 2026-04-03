@@ -204,6 +204,12 @@ export type {
   SchemaElementLike,
 } from './types.js'
 
+// ─── Agents ────────────────────────────────────────────────
+
+export { ResourceAgent } from './agents/ResourceAgent.js'
+export type { ResourceAgentContext } from './agents/ResourceAgent.js'
+export type { ResourceAgentMeta } from './agents/types.js'
+
 // ─── Data helpers ───────────────────────────────────────────
 
 export { resourceData } from './resourceData.js'

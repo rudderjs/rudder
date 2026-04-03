@@ -41,9 +41,9 @@ function zodTypeToJson(schema: any): Record<string, unknown> {
   if (t === 'ZodBoolean' || t === 'boolean') return { type: 'boolean' }
   if (t === 'ZodNull'    || t === 'null')    return { type: 'null' }
 
-  // Array — Zod v3: def.type, Zod v4: def.element
+  // Array — Zod v3: def.type (inner schema), Zod v4: def.element
   if (t === 'ZodArray' || t === 'array') {
-    const inner = def.type ?? def.element
+    const inner = def.element ?? def.type
     return { type: 'array', items: zodTypeToJson(inner) }
   }
 
