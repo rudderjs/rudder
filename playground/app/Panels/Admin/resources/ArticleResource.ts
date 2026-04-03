@@ -1,5 +1,6 @@
 import {
   Resource,
+  ResourceAgent,
   Section,
   TextField,
   TextareaField,
@@ -302,6 +303,22 @@ export class ArticleResource extends Resource {
         ),
 
     ])
+  }
+
+  agents() {
+    return [
+      ResourceAgent.make('seo')
+        .label('Improve SEO')
+        .icon('Search')
+        .instructions('You are an SEO expert. Analyse the current article and improve the meta title and meta description for better search engine visibility. Keep the meta title under 60 characters and meta description under 160 characters. Use the title and excerpt for context.')
+        .fields(['metaTitle', 'metaDescription']),
+
+      ResourceAgent.make('summarize')
+        .label('Write Excerpt')
+        .icon('Sparkles')
+        .instructions('Write a concise, engaging excerpt (2-3 sentences) for this article based on its title and content. The excerpt should hook readers and summarize the key points.')
+        .fields(['excerpt']),
+    ]
   }
 
   detail(record?: Record<string, unknown>) {

@@ -252,6 +252,9 @@ const g       = globalThis as Record<string, unknown>
 const KEY     = '__boostkit_live__'
 const PERSIST_KEY = '__boostkit_live_persistence__'
 
+/** Transaction origin used by server-side mutations (Live.updateMap, etc.) */
+const SERVER_ORIGIN = 'boostkit:server'
+
 function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
   const rooms = g[KEY] as Map<string, Room> ?? new Map<string, Room>()
   g[KEY] = rooms
@@ -262,7 +265,23 @@ function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
       const update = Y.encodeStateAsUpdate(persisted, sv)
       if (update.length > 2) Y.applyUpdate(doc, update)
     }).catch(() => {})
-    rooms.set(docName, { doc, clients: new Set(), ready, awarenessMap: new Map() })
+    const room: Room = { doc, clients: new Set(), ready, awarenessMap: new Map() }
+    rooms.set(docName, room)
+
+    // Observe server-side mutations and broadcast to all connected WebSocket clients.
+    // Client-originated updates are already forwarded by the message handler,
+    // so we only broadcast updates with the SERVER_ORIGIN transaction origin.
+    doc.on('update', (update: Uint8Array, origin: unknown) => {
+      if (origin === SERVER_ORIGIN) {
+        const fwd = encodeSyncMsg(syncUpdate, update)
+        for (const client of room.clients) {
+          if (client.readyState === 1 /* OPEN */) {
+            client.send(fwd)
+          }
+        }
+        void persistence.storeUpdate(docName, update)
+      }
+    })
   }
   // rooms.get() is guaranteed non-null: key was inserted above if missing
   return rooms.get(docName) as Room
@@ -578,7 +597,7 @@ export const Live = {
     await room.ready
     room.doc.transact(() => {
       room.doc.getMap(mapName).set(field, value)
-    })
+    }, SERVER_ORIGIN)
   },
 
   /**
@@ -600,6 +619,6 @@ export const Live = {
       for (const [key, val] of Object.entries(fields)) {
         map.set(key, val)
       }
-    })
+    }, SERVER_ORIGIN)
   },
 }
