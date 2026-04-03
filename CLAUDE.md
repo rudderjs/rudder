@@ -12,7 +12,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@boostkit/*`
 - **GitHub**: https://github.com/boostkitjs/boostkit
-- **Status**: Early development — 28 packages published to npm
+- **Status**: Early development — 31 packages published to npm
 
 ---
 
@@ -78,7 +78,7 @@ npm requires browser passkey auth — press Enter when prompted to open the brow
 
 ```
 boostkit/
-├── packages/           # 27 published packages (@boostkit/*)
+├── packages/           # 31 published packages (@boostkit/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
@@ -119,9 +119,14 @@ boostkit/
 │   │                   #   useYjsCollab hook (WebSocket + IndexedDB providers), imperative editor refs for version restore
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
 │   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
+│   ├── ai/             # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system,
+│   │                   #   streaming, middleware, structured output, conversation memory, AI facade, AiFake
+│   ├── workspaces/     # AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator
+│   │                   #   Panel plugin: workspaces(). Uses @boostkit/ai for LLM, Prisma for persistence.
+│   ├── localization/   # i18n — trans(), setLocale(), locale-aware middleware, JSON translation files
 │   └── cli/            # make:*, module:*, module:publish, artisan user commands
 ├── create-boostkit-app/   # Interactive scaffolder CLI (pnpm/npm/yarn/bun create boostkit-app)
-│                          #   Prompts: name · DB · Todo · frameworks · primary · Tailwind · shadcn
+│                          #   Prompts: name · DB · Todo · AI · frameworks · primary · Tailwind · shadcn
 ├── docs/               # VitePress documentation site
 └── playground/         # Demo app — primary integration reference
 ```
@@ -159,6 +164,9 @@ boostkit/
 | `@boostkit/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
 | `@boostkit/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@boostkit/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
+| `@boostkit/ai` | 0.0.1 | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware, Output, conversation memory, AI facade, AiFake |
+| `@boostkit/workspaces` | 0.0.1 | AI workspace canvas — Isoflow-style 3D nodes, departments, connections. Panel plugin: `workspaces()` |
+| `@boostkit/localization` | 0.0.1 | i18n — `trans()`, `setLocale()`, `getLocale()`, locale middleware, JSON translation files |
 
 **Merged/removed packages** (code absorbed, originals deleted):
 - `@boostkit/auth-better-auth` → merged into `@boostkit/auth`
@@ -194,7 +202,18 @@ boostkit/
        │
 @boostkit/auth                      @boostkit/mail   @boostkit/schedule
        │
-@boostkit/notification
+@boostkit/notification              @boostkit/localization
+
+@boostkit/ai          (4 providers, Agent, tools, streaming, middleware)
+       │
+@boostkit/broadcast   @boostkit/live     @boostkit/panels
+       │              (Yjs CRDT)          (admin panel, resources, plugins)
+       │                                        │
+       │                               @boostkit/panels-lexical
+       │                               @boostkit/media  (Panel.use plugin)
+       │                               @boostkit/workspaces (Panel.use plugin, uses @boostkit/ai)
+       │
+@boostkit/image       (standalone, used by media for conversions)
 ```
 
 > **Cycle resolution**: `@boostkit/core` loads `@boostkit/router` at runtime via `resolveOptionalPeer('@boostkit/router')`. Never add `@boostkit/core` to router's `dependencies` or `devDependencies`.
@@ -414,13 +433,19 @@ Each collaborative field gets its own Y.Doc + WebSocket room. The form has a sep
 
 ### Prompts (in order)
 1. Project name
-2. Database driver — SQLite · PostgreSQL · MySQL
-3. Include Todo module? — yes/no
-4. Frontend frameworks — **multiselect**: React · Vue · Solid (default: React)
-5. Primary framework — single select, only shown when >1 framework selected
-6. Add Tailwind CSS? — yes/no (default: yes)
-7. Add shadcn/ui? — yes/no (default: yes), **only shown when React + Tailwind are both selected**
-8. Install dependencies? — yes/no
+2. Database ORM — Prisma · Drizzle · None
+3. Database driver — SQLite · PostgreSQL · MySQL (if ORM selected)
+4. Select packages — **multiselect**: auth, cache, queue, storage, mail, notifications, scheduler, broadcast, live, **ai**, panels (defaults: auth + cache)
+5. Add media library plugin? — yes/no (only shown when panels + storage selected)
+6. Add AI workspaces plugin? — yes/no (only shown when panels + ai selected)
+7. Include Todo module? — yes/no (only if ORM selected)
+8. Frontend frameworks — **multiselect**: React · Vue · Solid (default: React)
+9. Primary framework — single select, only shown when >1 framework selected
+10. Add Tailwind CSS? — yes/no (default: yes)
+11. Add shadcn/ui? — yes/no (default: yes), **only shown when React + Tailwind are both selected**
+12. Install dependencies? — yes/no
+
+When `panels` is selected, scaffolds `app/Panels/AdminPanel.ts` with `Panel.make()`, wires `panels()` provider, and generates `UserResource` (if auth+orm) and `TodoResource` (if todo). Media and workspaces are wired via `Panel.use()`. When `ai` is selected, generates `config/ai.ts`, `ai()` provider, AI chat demo page at `/ai-chat`, and `POST /api/ai/chat` route.
 
 ### Package Manager Support
 PM is auto-detected from `npm_config_user_agent` (set by pnpm/npm/yarn/bun when invoking the installer).
