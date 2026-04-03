@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon } from 'lucide-react'
-import { AgentOutput, useAgentRun } from './AgentOutput.js'
-import { useAiChat, type ChatMessage } from './AiChatContext.js'
+import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon } from 'lucide-react'
+import { useAiChat, type ChatMessage, type ChatMessagePart } from './AiChatContext.js'
 import { useIsMobile } from '@/hooks/use-mobile.js'
 import { Button } from '@/components/ui/button.js'
 import {
@@ -27,7 +26,6 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
     if (!trimmed || disabled) return
     onSend(trimmed)
     setValue('')
-    // Reset height
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
@@ -71,9 +69,55 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
   )
 }
 
+// ─── Message part renderer ──────────────────────────────────
+
+function MessagePartView({ part }: { part: ChatMessagePart }) {
+  switch (part.type) {
+    case 'text':
+      return (
+        <div className="text-sm text-foreground whitespace-pre-wrap break-words">
+          {part.text}
+        </div>
+      )
+
+    case 'tool_call':
+      return (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-0.5">
+          <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span>
+            Updated <span className="font-medium text-foreground">{part.input?.field as string ?? part.tool.replace('update_', '')}</span>
+          </span>
+        </div>
+      )
+
+    case 'agent_start':
+      return (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+          <SparklesIcon className="h-3 w-3 shrink-0" />
+          <span className="font-medium">Running: {part.agentLabel}</span>
+        </div>
+      )
+
+    case 'complete':
+      if (part.steps === 0 && part.tokens === 0) return null
+      return (
+        <div className="text-xs text-muted-foreground pt-1 border-t mt-1">
+          Done — {part.steps} step{part.steps !== 1 ? 's' : ''}{part.tokens > 0 ? `, ${part.tokens} tokens` : ''}
+        </div>
+      )
+
+    case 'error':
+      return (
+        <div className="text-xs text-red-600 dark:text-red-400">
+          Error: {part.message}
+        </div>
+      )
+  }
+}
+
 // ─── Message bubble ─────────────────────────────────────────
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message, isLast, isGenerating }: { message: ChatMessage; isLast: boolean; isGenerating: boolean }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -84,16 +128,34 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     )
   }
 
+  // Assistant message
+  const parts = message.parts ?? []
+  const hasContent = parts.length > 0 && (parts.length > 1 || (parts[0]?.type === 'text' && parts[0].text !== ''))
+  const isStreaming = isLast && isGenerating
+
   return (
     <div className="flex gap-2">
       <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
         <SparklesIcon className="h-3 w-3 text-primary" />
       </div>
-      <div className="min-w-0 text-sm text-foreground whitespace-pre-wrap break-words">
-        {message.text || (
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+      <div className="min-w-0 flex-1 space-y-1">
+        {hasContent ? (
+          parts.map((part, i) => <MessagePartView key={i} part={part} />)
+        ) : isStreaming ? (
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
             Thinking...
+          </span>
+        ) : (
+          // Fallback: plain text
+          message.text ? (
+            <div className="text-sm text-foreground whitespace-pre-wrap break-words">{message.text}</div>
+          ) : null
+        )}
+        {/* Show streaming indicator after parts if still generating */}
+        {isStreaming && hasContent && (
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
           </span>
         )}
       </div>
@@ -116,71 +178,19 @@ function EmptyState() {
   )
 }
 
-// ─── Agent run banner ───────────────────────────────────────
-
-function AgentRunSection() {
-  const { currentRun, runKey, onFieldUpdate } = useAiChat()
-  const { entries, status, run, reset } = useAgentRun(
-    currentRun?.apiBase ?? '',
-    currentRun?.resourceSlug ?? '',
-    onFieldUpdate,
-  )
-
-  useEffect(() => {
-    if (!currentRun || runKey === 0) return
-    reset()
-    const t = setTimeout(() => {
-      run(currentRun.agentSlug, currentRun.recordId, currentRun.input)
-    }, 50)
-    return () => clearTimeout(t)
-  }, [runKey]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!currentRun) return null
-
-  const isRunning = status === 'running'
-
-  return (
-    <div className="border-b">
-      {/* Agent context bar */}
-      <div className="px-4 py-2 text-xs text-muted-foreground bg-muted/30 flex items-center gap-2">
-        {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />}
-        <SparklesIcon className="h-3 w-3 shrink-0" />
-        <span className="truncate font-medium">{currentRun.agentLabel}</span>
-      </div>
-      {/* Output */}
-      {entries.length > 0 && (
-        <div className="px-4 py-3">
-          <AgentOutput entries={entries} status={status} />
-        </div>
-      )}
-      {(status === 'complete' || status === 'error') && (
-        <div className="px-4 pb-2">
-          <button
-            type="button"
-            onClick={() => reset()}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Inner content (shared between desktop & mobile) ────────
 
 function AiChatContent() {
-  const { setOpen, messages, sendMessage, isGenerating, clearMessages, currentRun } = useAiChat()
+  const { setOpen, messages, sendMessage, isGenerating, clearMessages } = useAiChat()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll on new messages
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages.length, messages[messages.length - 1]?.text])
+  }, [messages.length, messages[messages.length - 1]?.text, messages[messages.length - 1]?.parts?.length])
 
-  const hasContent = messages.length > 0 || currentRun
+  const hasContent = messages.length > 0
 
   return (
     <div className="flex h-full flex-col">
@@ -208,22 +218,24 @@ function AiChatContent() {
         </Button>
       </div>
 
-      {/* Agent run section (if active) */}
-      <AgentRunSection />
-
       {/* Messages area */}
-      {messages.length === 0 && !currentRun ? (
+      {messages.length === 0 ? (
         <EmptyState />
       ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-3">
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+          {messages.map((msg, i) => (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              isLast={i === messages.length - 1}
+              isGenerating={isGenerating}
+            />
           ))}
         </div>
       )}
 
       {/* Chat input */}
-      <ChatInput onSend={sendMessage} disabled={isGenerating} />
+      <ChatInput onSend={(text) => sendMessage(text)} disabled={isGenerating} />
     </div>
   )
 }

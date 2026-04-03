@@ -18,9 +18,26 @@ export default function EditPage() {
 
   const agents = resourceMeta.agents ?? []
 
-  // Field updates from global AI chat panel
+  // AI chat — field updates + resource context
   let fieldUpdates: Array<{ field: string; value: string }> = []
-  try { fieldUpdates = useAiChat().fieldUpdates } catch { /* no provider */ }
+  let setResourceContext: ((ctx: import('../../../../../_components/agents/AiChatContext.js').ResourceContext | null) => void) | null = null
+  try {
+    const aiChat = useAiChat()
+    fieldUpdates = aiChat.fieldUpdates
+    setResourceContext = aiChat.setResourceContext
+  } catch { /* no provider */ }
+
+  // Set resource context for AI chat when on edit page
+  useEffect(() => {
+    if (!setResourceContext || agents.length === 0) return
+    setResourceContext({
+      resourceSlug: slug,
+      recordId: id,
+      apiBase: `/${pathSegment}/api`,
+      agents,
+    })
+    return () => setResourceContext!(null)
+  }, [slug, id, pathSegment, agents.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Back navigation
   const defaultBack = `/${pathSegment}/resources/${slug}`

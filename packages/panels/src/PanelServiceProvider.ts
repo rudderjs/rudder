@@ -10,6 +10,7 @@ import {
   mountResourceRoutes,
   mountGlobalRoutes,
   mountDashboardRoutes,
+  mountPanelChat,
 } from './handlers/index.js'
 
 // Re-export for public API
@@ -59,6 +60,7 @@ export class PanelServiceProvider extends ServiceProvider {
       ]
 
       mountMetaRoutes(router, panel, mw)
+      mountPanelChat(router, panel, mw)
 
       for (const ResourceClass of panel.getResources()) {
         mountResourceRoutes(router, panel, ResourceClass, mw)
