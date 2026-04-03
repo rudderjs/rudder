@@ -17,7 +17,7 @@ All four package managers are fully supported — generated files, install comma
 
 ## Prompts
 
-The installer walks you through up to 10 prompts (several are conditional):
+The installer walks you through up to 12 prompts (several are conditional):
 
 | # | Prompt | Options | Default | Condition |
 |---|--------|---------|---------|-----------|
@@ -25,12 +25,14 @@ The installer walks you through up to 10 prompts (several are conditional):
 | 2 | Database ORM | Prisma · Drizzle · None | Prisma | always |
 | 3 | Database driver | SQLite · PostgreSQL · MySQL | SQLite | only if ORM selected |
 | 4 | Package checklist | multiselect (see below) | Auth + Cache | always |
-| 5 | Include Todo module? | yes / no | yes | only if database selected |
-| 6 | Frontend frameworks | React · Vue · Solid (multiselect) | React | always |
-| 7 | Primary framework | single select from chosen frameworks | — | only if >1 framework selected |
-| 8 | Add Tailwind CSS? | yes / no | yes | always |
-| 9 | Add shadcn/ui? | yes / no | yes | only if React + Tailwind |
-| 10 | Install dependencies? | yes / no | yes | always |
+| 5 | Add media library plugin? | yes / no | yes | only if panels + storage selected |
+| 6 | Add AI workspaces plugin? | yes / no | no | only if panels + ai selected |
+| 7 | Include Todo module? | yes / no | yes | only if database selected |
+| 8 | Frontend frameworks | React · Vue · Solid (multiselect) | React | always |
+| 9 | Primary framework | single select from chosen frameworks | — | only if >1 framework selected |
+| 10 | Add Tailwind CSS? | yes / no | yes | always |
+| 11 | Add shadcn/ui? | yes / no | yes | only if React + Tailwind |
+| 12 | Install dependencies? | yes / no | yes | always |
 
 ### Package checklist (prompt 4)
 
@@ -45,7 +47,16 @@ The installer walks you through up to 10 prompts (several are conditional):
 | Scheduler | Cron-like task scheduling | `@boostkit/schedule` |
 | WebSocket | Real-time channels | `@boostkit/broadcast` |
 | Real-time Collab | Yjs CRDT sync | `@boostkit/live` |
+| AI | LLM providers (Anthropic, OpenAI, Google, Ollama) | `@boostkit/ai` |
 | Admin Panel | Auto-generated CRUD admin | `@boostkit/panels` |
+
+**Panel plugin sub-prompts** (shown after main checklist when dependencies are met):
+- **Media library** — shown when panels + storage selected. Adds `@boostkit/media` + `@boostkit/image`, `config/media.ts`, wires `Panel.use(media())`
+- **AI workspaces** — shown when panels + ai selected. Adds `@boostkit/workspaces`, wires `Panel.use(workspaces())`
+
+When **panels** is selected, scaffolds `app/Panels/AdminPanel.ts` with `Panel.make()`, `UserResource` (if auth+orm), `TodoResource` (if todo), and wires `panels()` provider.
+
+When **ai** is selected, generates `config/ai.ts`, `ai()` provider, an AI chat demo page at `/ai-chat`, and `POST /api/ai/chat` route.
 
 Only selected packages get their dependencies, providers, config files, and schema files added to the generated project. Base packages (`core`, `router`, `server-hono`, `middleware`, `vite`, `artisan`, `cli`) are always included.
 

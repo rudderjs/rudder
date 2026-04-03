@@ -41,7 +41,8 @@ BoostKit is the middle ground: a **batteries-included architecture that stays en
 ## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Artisan CLI, FormRequest validation
-- **Pay-as-you-go** — 30+ optional `@boostkit/*` packages; use only what you need
+- **Pay-as-you-go** — 31 optional `@boostkit/*` packages; use only what you need
+- **AI-native** — multi-provider AI engine (Anthropic, OpenAI, Google, Ollama), Agent class with tool system, streaming
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
 - **TypeScript-first** — strict types, generics, and decorator support throughout
@@ -519,6 +520,13 @@ const svc = resolve<UserService>(UserService)
 | `@boostkit/media` | Media library — file browser, uploads, folders, preview, image conversions |
 | `@boostkit/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
+### AI & Workspaces
+| Package | Description |
+|---|---|
+| `@boostkit/ai` | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware |
+| `@boostkit/workspaces` | AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator |
+| `@boostkit/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
+
 ---
 
 ## Default Stack
@@ -539,8 +547,8 @@ const svc = resolve<UserService>(UserService)
 
 BoostKit is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 30+ packages published to npm under `@boostkit/*`
-- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, and a full media library — all end-to-end
+- 31 packages published to npm under `@boostkit/*`
+- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, media library, AI engine with multi-provider support, and AI workspace canvas — all end-to-end
 
 ---
 
