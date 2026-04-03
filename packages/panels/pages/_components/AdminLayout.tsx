@@ -8,8 +8,7 @@ import { useI18n } from '../_hooks/useI18n.js'
 import { ResourceIcon } from './ResourceIcon.js'
 import { ThemeProvider } from './ThemeProvider.js'
 import { ThemeToggle } from './ThemeToggle.js'
-import { AiChatPanel } from './agents/AiChatPanel.js'
-import { useAiChat } from './agents/AiChatContext.js'
+import { AiChatPanel, AiChatTrigger } from './agents/AiChatPanel.js'
 import {
   Sidebar,
   SidebarContent,
@@ -593,26 +592,24 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
       </Sidebar>
 
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 bg-background">
+          <div className="flex flex-1 items-center gap-2 px-3">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
             <HeaderBreadcrumb panelMeta={panelMeta} items={items} currentSlug={currentSlug} i18n={i18n} />
           </div>
-          <div className="ms-auto flex items-center gap-2 px-4">
+          <div className="flex items-center gap-1 px-3">
             <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
-            <AiChatToggle />
             <ThemeToggle />
+            <AiChatTrigger />
           </div>
         </header>
-        <div className="flex flex-1 overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-y-auto">
-            {children}
-          </div>
-          <AiChatPanel />
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {children}
         </div>
       </SidebarInset>
 
+      <AiChatPanel />
       <Toaster richColors position="bottom-right" />
     </SidebarProvider>
   )
@@ -698,8 +695,8 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
           ))}
         </nav>
         <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
-        <AiChatToggle />
         <ThemeToggle />
+        <AiChatTrigger />
         <UserDropdown />
       </header>
       <div className="flex flex-1 overflow-hidden">
@@ -730,26 +727,3 @@ export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: P
   )
 }
 
-// ─── AI Chat Toggle ──────────────────────────────────────────
-
-function AiChatToggle() {
-  let ctx: ReturnType<typeof useAiChat> | null = null
-  try { ctx = useAiChat() } catch { /* AiChatProvider not mounted */ }
-  if (!ctx) return null
-
-  const { open, setOpen } = ctx
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(!open)}
-      className={`p-2 rounded-md transition-colors ${
-        open ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
-      }`}
-      aria-label="AI Chat"
-    >
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-      </svg>
-    </button>
-  )
-}

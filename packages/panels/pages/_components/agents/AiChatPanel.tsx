@@ -1,8 +1,24 @@
 import { useEffect } from 'react'
+import { PanelLeftIcon, XIcon } from 'lucide-react'
 import { AgentOutput, useAgentRun } from './AgentOutput.js'
 import { useAiChat } from './AiChatContext.js'
+import { useIsMobile } from '@/hooks/use-mobile.js'
+import { Button } from '@/components/ui/button.js'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet.js'
 
-export function AiChatPanel() {
+// ─── Sidebar width (matches shadcn sidebar) ─────────────────
+
+const AI_SIDEBAR_WIDTH = '20rem'
+
+// ─── Inner content (shared between desktop & mobile) ────────
+
+function AiChatContent() {
   const { open, setOpen, currentRun, runKey, onFieldUpdate } = useAiChat()
   const { entries, status, run, reset } = useAgentRun(
     currentRun?.apiBase ?? '',
@@ -14,32 +30,27 @@ export function AiChatPanel() {
   useEffect(() => {
     if (!currentRun || runKey === 0) return
     reset()
-    // Small delay to let reset clear state before starting new run
     const t = setTimeout(() => {
       run(currentRun.agentSlug, currentRun.recordId, currentRun.input)
     }, 50)
     return () => clearTimeout(t)
   }, [runKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!open) return null
-
   const isRunning = status === 'running'
 
   return (
-    <div className="w-80 border-l bg-background flex flex-col shrink-0 h-full">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b shrink-0">
-        <h3 className="text-sm font-semibold">AI Chat</h3>
-        <button
-          type="button"
+      <div className="flex h-14 items-center justify-between border-b px-4 shrink-0">
+        <h3 className="text-sm font-semibold">AI Assistant</h3>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => setOpen(false)}
-          className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-          aria-label="Close"
+          aria-label="Close AI sidebar"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+          <XIcon />
+        </Button>
       </div>
 
       {/* Current agent context */}
@@ -74,5 +85,80 @@ export function AiChatPanel() {
         </div>
       )}
     </div>
+  )
+}
+
+// ─── AI Sidebar ─────────────────────────────────────────────
+
+export function AiChatPanel() {
+  const { open, setOpen } = useAiChat()
+  const isMobile = useIsMobile()
+
+  // Mobile → Sheet
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          className="w-[--ai-sidebar-width] p-0 [&>button]:hidden"
+          style={{ '--ai-sidebar-width': AI_SIDEBAR_WIDTH } as React.CSSProperties}
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>AI Assistant</SheetTitle>
+            <SheetDescription>AI chat sidebar.</SheetDescription>
+          </SheetHeader>
+          <AiChatContent />
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  // Desktop → sidebar with slide transition
+  return (
+    <div
+      data-slot="ai-sidebar"
+      className="hidden text-sidebar-foreground md:block"
+      style={{ '--ai-sidebar-width': AI_SIDEBAR_WIDTH } as React.CSSProperties}
+    >
+      {/* Gap — pushes content left when open */}
+      <div
+        className="relative bg-transparent transition-[width] duration-200 ease-linear"
+        style={{ width: open ? 'var(--ai-sidebar-width)' : '0px' }}
+      />
+      {/* Fixed panel */}
+      <div
+        className="fixed inset-y-0 z-10 hidden h-svh border-l bg-sidebar transition-[right] duration-200 ease-linear md:flex"
+        style={{
+          width: 'var(--ai-sidebar-width)',
+          right: open ? '0px' : 'calc(var(--ai-sidebar-width) * -1)',
+        }}
+      >
+        <div className="flex size-full flex-col">
+          <AiChatContent />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── AI Sidebar Trigger ─────────────────────────────────────
+
+export function AiChatTrigger() {
+  let ctx: ReturnType<typeof useAiChat> | null = null
+  try { ctx = useAiChat() } catch { /* AiChatProvider not mounted */ }
+  if (!ctx) return null
+
+  const { open, setOpen } = ctx
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => setOpen(!open)}
+      aria-label="Toggle AI sidebar"
+      className={open ? 'text-primary' : ''}
+    >
+      <PanelLeftIcon className="rotate-180" />
+      <span className="sr-only">Toggle AI Sidebar</span>
+    </Button>
   )
 }
