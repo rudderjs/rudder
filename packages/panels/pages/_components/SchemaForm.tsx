@@ -132,28 +132,29 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
     const needsIndexeddb = formYjs.liveProviders?.includes('indexeddb') ?? false
     if (!needsWebsocket && !needsIndexeddb) return
 
-    // Flatten Section/Tabs to find all collaborative non-text fields
+    // Flatten Section/Tabs to find all collaborative fields
     const mapFields: string[] = []
-    function collectMapFields(items: unknown[]) {
+    const textFieldNames: string[] = []
+    function collectCollabFields(items: unknown[]) {
       for (const item of items) {
         const f = item as FieldMeta & { type: string; fields?: unknown[] }
         if (f.type === 'section' || f.type === 'tabs') {
-          // Section: recurse into fields
-          if (f.fields) collectMapFields(f.fields)
-          // Tabs: recurse into each tab's fields
+          if (f.fields) collectCollabFields(f.fields)
           if (f.type === 'tabs' && (f as any).tabs) {
             for (const tab of (f as any).tabs) {
-              if (tab.fields) collectMapFields(tab.fields)
+              if (tab.fields) collectCollabFields(tab.fields)
             }
           }
         } else if (f.name && f.yjs && !TEXT_TYPES.has(f.type)) {
           mapFields.push(f.name)
+        } else if (f.name && f.yjs && TEXT_TYPES.has(f.type)) {
+          textFieldNames.push(f.name)
         }
       }
     }
-    collectMapFields(form.fields)
+    collectCollabFields(form.fields)
     // Even if no map fields, still set up WebSocket for connection status tracking
-    if (mapFields.length === 0 && !needsWebsocket) return
+    if (mapFields.length === 0 && textFieldNames.length === 0 && !needsWebsocket) return
 
     let destroyed = false
 
@@ -166,12 +167,21 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       const suppress = new Set<string>()
 
       const mapFieldSet = new Set(mapFields)
+      const textFieldSet = new Set(textFieldNames)
       fieldsMap.observe((event: unknown) => {
         const mapEvent = event as { keysChanged: Set<string> }
         mapEvent.keysChanged.forEach((key: string) => {
-          // Only apply changes for fields that are actually collaborative
-          if (!suppress.has(key) && mapFieldSet.has(key)) {
+          if (suppress.has(key)) return
+          if (mapFieldSet.has(key)) {
+            // Non-text collaborative field — update React state directly
             setValues(prev => ({ ...prev, [key]: fieldsMap.get(key) }))
+          } else if (textFieldSet.has(key)) {
+            // Text-type collaborative field — updated by AI agent via Y.Map.
+            // Push through the imperative editor ref so the Lexical/collab binding picks it up.
+            const val = fieldsMap.get(key)
+            setValues(prev => ({ ...prev, [key]: val }))
+            // Also update the collaborative editor if mounted
+            void updateTextFieldRef(key, val)
           }
         })
       })
@@ -399,6 +409,34 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
     }
   }
 
+  // ── Update collaborative text field via imperative ref ────
+  /** Push a value into a collaborative text/richcontent editor.
+   * Works for AI agent updates (via Y.Map observer) and version restore. */
+  async function updateTextFieldRef(name: string, value: unknown) {
+    const field = form.fields.find(f => (f as FieldMeta).name === name) as FieldMeta | undefined
+    if (!field?.yjs || !TEXT_TYPES.has(field.type)) return
+
+    if (field.type === 'richcontent' || field.type === 'content') {
+      import('./fields/RichContentInput.js').then(({ getRichContentRef }) => {
+        const ref = getRichContentRef(name)
+        if (ref) ref.setContent(value)
+      }).catch(() => {})
+    } else {
+      // text, textarea, email — use collab text ref
+      import('./fields/TextInput.js').then(({ getCollabTextRef }) => {
+        const ref = getCollabTextRef(name)
+        if (ref) {
+          ref.setContent(String(value ?? ''))
+        } else {
+          import('./fields/TextareaInput.js').then(({ getCollabTextareaRef }) => {
+            const ref2 = getCollabTextareaRef(name)
+            if (ref2) ref2.setContent(String(value ?? ''))
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    }
+  }
+
   // ── Version restore ──────────────────────────────────────
   /** Restore a single field from a version — updates the live form value.
    * For richcontent fields, writes directly to the editor via imperative ref,
@@ -413,32 +451,7 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       setTimeout(() => collabRef.current?.suppress.delete(name), 50)
     }
 
-    // For collaborative text/richcontent fields: use the editor's imperative ref
-    // to set content. This writes to the Lexical editor, which syncs to Y.Doc
-    // via CollaborationPlugin and propagates to all connected users.
-    const field = form.fields.find(f => (f as FieldMeta).name === name) as FieldMeta | undefined
-    if (field?.yjs && TEXT_TYPES.has(field.type)) {
-      if (field.type === 'richcontent' || field.type === 'content') {
-        import('./fields/RichContentInput.js').then(({ getRichContentRef }) => {
-          const ref = getRichContentRef(name)
-          if (ref) ref.setContent(value)
-        }).catch(() => {})
-      } else {
-        // text, textarea, email — use collab text ref
-        import('./fields/TextInput.js').then(({ getCollabTextRef }) => {
-          const ref = getCollabTextRef(name)
-          if (ref) {
-            ref.setContent(String(value ?? ''))
-          } else {
-            // Try textarea registry
-            import('./fields/TextareaInput.js').then(({ getCollabTextareaRef }) => {
-              const ref2 = getCollabTextareaRef(name)
-              if (ref2) ref2.setContent(String(value ?? ''))
-            }).catch(() => {})
-          }
-        }).catch(() => {})
-      }
-    }
+    void updateTextFieldRef(name, value)
   }
 
   /** Restore all changed fields from a version */
