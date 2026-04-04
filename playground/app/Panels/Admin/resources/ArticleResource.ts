@@ -316,7 +316,10 @@ export class ArticleResource extends Resource {
       ResourceAgent.make('summarize')
         .label('Write Excerpt')
         .icon('Sparkles')
-        .instructions('Write a concise, engaging excerpt (2-3 sentences) for this article based on its title and content. The excerpt should hook readers and summarize the key points.')
+        .instructions([
+          'Write a concise, engaging excerpt (2-3 sentences) for this article based on its title and content. The excerpt should hook readers and summarize the key points.',
+          'NEVER use update_field — it would overwrite the entire rich text.',
+        ].join('\n'))
         .fields(['excerpt']),
 
       ResourceAgent.make('editor')
