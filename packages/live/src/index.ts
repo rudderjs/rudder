@@ -860,11 +860,28 @@ export const Live = {
       if (!(entry.insert instanceof Y.XmlText)) continue
       const child = entry.insert as Y.XmlText
       const innerDelta = child.toDelta() as Array<{ insert: unknown }>
-      const textParts: string[] = []
+      const lineParts: string[] = []
+
       for (const item of innerDelta) {
-        if (typeof item.insert === 'string') textParts.push(item.insert)
+        if (typeof item.insert === 'string') {
+          lineParts.push(item.insert)
+        } else if (item.insert instanceof Y.XmlElement) {
+          // Block (DecoratorNode) — include as inline marker so AI can see it
+          const elem = item.insert as Y.XmlElement
+          const blockType = elem.getAttribute('__blockType')
+          if (blockType) {
+            const blockData = elem.getAttribute('__blockData')
+            const fields = blockData && typeof blockData === 'object'
+              ? Object.entries(blockData as Record<string, unknown>)
+                  .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+                  .join(', ')
+              : ''
+            lineParts.push(`[BLOCK: ${blockType}${fields ? ` | ${fields}` : ''}]`)
+          }
+        }
       }
-      if (textParts.length > 0) parts.push(textParts.join(''))
+
+      if (lineParts.length > 0) parts.push(lineParts.join(''))
     }
 
     return parts.join('\n')

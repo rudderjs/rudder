@@ -129,7 +129,14 @@ async function handleAiChat(
     '',
     'If the user\'s request maps to one of the available agents, call the `run_agent` tool with the agent slug.',
     'If the user asks to edit, replace, insert, or delete specific text in a field, use the `edit_text` tool directly.',
-    'Otherwise, respond conversationally.',
+    '',
+    '## Block editing',
+    'Rich text fields may contain embedded blocks shown as `[BLOCK: type | field: "value", ...]` in the record.',
+    'To update a block field, use `edit_text` with an `update_block` operation:',
+    '  `{ type: "update_block", blockType: "callToAction", blockIndex: 0, field: "buttonText", value: "New Text" }`',
+    'Do NOT use `replace` to edit block fields — block data is not searchable text.',
+    'Do NOT use `update_field` on rich text fields — it would overwrite the entire content.',
+    '',
     'Be concise and helpful.',
   ].join('\n')
 
@@ -178,7 +185,9 @@ async function handleAiChat(
   const editTextTool = allFields.length > 0 ? toolDefinition({
     name: 'edit_text',
     description: [
-      'Surgically edit text in a field. Use for replacing specific words, inserting text, or deleting text.',
+      'Surgically edit text or blocks in a field without replacing all content.',
+      'For embedded blocks (callToAction, video, etc.) shown as [BLOCK: ...] in the record, use update_block operations.',
+      'For regular text, use replace/insert_after/delete operations.',
       'Available fields: ' + allFields.join(', '),
     ].join(' '),
     inputSchema: z.object({
@@ -198,6 +207,13 @@ async function handleAiChat(
           type: z.literal('delete'),
           search: z.string().describe('Exact text to delete'),
         }),
+        z.object({
+          type: z.literal('update_block'),
+          blockType: z.string().describe('The block type (e.g. "callToAction", "video")'),
+          blockIndex: z.number().describe('0-based index if multiple blocks of the same type'),
+          field: z.string().describe('The block field to update (e.g. "title", "buttonText")'),
+          value: z.string().describe('The new value'),
+        }),
       ])),
     }),
   }).server(async (input: { field: string; operations: Array<Record<string, unknown>> }) => {
@@ -212,7 +228,11 @@ async function handleAiChat(
 
       let applied = 0
       for (const op of input.operations) {
-        if (Live.editText(fieldDocName, op as any, aiCursor)) applied++
+        if (op.type === 'update_block') {
+          if (Live.editBlock(fieldDocName, op.blockType as string, (op.blockIndex as number) ?? 0, op.field as string, op.value)) applied++
+        } else {
+          if (Live.editText(fieldDocName, op as any, aiCursor)) applied++
+        }
       }
       setTimeout(() => Live.clearAiAwareness(fieldDocName), 2000)
       return `Applied ${applied}/${input.operations.length} edit(s) to "${input.field}"`
@@ -224,6 +244,7 @@ async function handleAiChat(
       } catch { /* */ }
 
       for (const op of input.operations) {
+        if (op.type === 'update_block') continue
         const search = op.search as string
         if (op.type === 'replace' && search) current = current.replace(search, op.replace as string)
         else if (op.type === 'insert_after' && search) {

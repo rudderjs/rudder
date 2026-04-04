@@ -318,6 +318,28 @@ export class ArticleResource extends Resource {
         .icon('Sparkles')
         .instructions('Write a concise, engaging excerpt (2-3 sentences) for this article based on its title and content. The excerpt should hook readers and summarize the key points.')
         .fields(['excerpt']),
+
+      ResourceAgent.make('editor')
+        .label('Edit Content')
+        .icon('Pencil')
+        .instructions([
+          'You are a content editor. You can edit the article body and content fields.',
+          '',
+          'IMPORTANT: Always call read_record first to see the current content.',
+          '',
+          'The body/content fields contain rich text with embedded blocks shown as:',
+          '  [BLOCK: callToAction | title: "...", buttonText: "...", url: "...", style: "..."]',
+          '  [BLOCK: video | url: "...", caption: "..."]',
+          '',
+          'To edit BLOCK fields (title, buttonText, url, caption, etc.), use edit_text with update_block operations:',
+          '  { type: "update_block", blockType: "callToAction", blockIndex: 0, field: "buttonText", value: "New Text" }',
+          '',
+          'To edit regular TEXT in the body, use edit_text with replace/insert_after/delete operations:',
+          '  { type: "replace", search: "old text", replace: "new text" }',
+          '',
+          'NEVER use update_field for body/content — it would overwrite the entire rich text.',
+        ].join('\n'))
+        .fields(['body', 'content', 'excerpt', 'title']),
     ]
   }
 
