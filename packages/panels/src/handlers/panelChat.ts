@@ -5,7 +5,7 @@ import type { ResourceAgent, ResourceAgentContext } from '../agents/ResourceAgen
 import type { ModelClass, RecordRow } from '../types.js'
 import { buildContext } from './utils.js'
 
-// ─── Lazy AI import ─────────────────────────────────────────
+// ─── Lazy imports ──────────────────────────────────────────
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let _ai: { agent: any; toolDefinition: any; z: any } | undefined
@@ -17,6 +17,13 @@ async function loadAi() {
     _ai = { agent: ai.agent, toolDefinition: ai.toolDefinition, z: zod.z }
   }
   return _ai!
+}
+
+async function loadLive() {
+  const mod = await import(/* @vite-ignore */ '@rudderjs/live') as any
+  return mod.Live as {
+    readMap(docName: string, mapName: string): Record<string, unknown>
+  }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -238,6 +245,18 @@ async function handlePanelChat(
         record = typeof (raw as any).toJSON === 'function' ? (raw as any).toJSON() : raw as Record<string, unknown>
       }
     }
+
+    // Overlay unsaved Yjs fields on top of the DB record so agents see latest edits
+    try {
+      const Live = await loadLive()
+      const docName = `panel:${resourceContext.resourceSlug}:${resourceContext.recordId}`
+      const yjsFields = Live.readMap(docName, 'fields')
+      for (const [key, value] of Object.entries(yjsFields)) {
+        if (!key.startsWith('__agent:') && value != null) {
+          record[key] = value
+        }
+      }
+    } catch { /* Live not available — use DB record only */ }
 
     agents = resource.agents()
     agentCtx = {

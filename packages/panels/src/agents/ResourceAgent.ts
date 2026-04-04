@@ -19,6 +19,7 @@ async function loadLive() {
   const mod = await import(/* @vite-ignore */ '@rudderjs/live') as any
   return mod.Live as {
     updateMap(docName: string, mapName: string, field: string, value: unknown): Promise<void>
+    readMap(docName: string, mapName: string): Record<string, unknown>
   }
 }
 
@@ -154,10 +155,20 @@ export class ResourceAgent {
 
     const readRecord = toolDefinition({
       name: 'read_record',
-      description: 'Read the current record data',
+      description: 'Read the current record data (includes unsaved edits)',
       inputSchema: z.object({}),
     }).server(async () => {
-      return JSON.stringify(this.context.record, null, 2)
+      // Merge Yjs fields on top of DB record to include unsaved edits
+      const merged = { ...this.context.record }
+      try {
+        const yjsFields = Live.readMap(docName, 'fields')
+        for (const [key, value] of Object.entries(yjsFields)) {
+          if (!key.startsWith('__agent:') && value != null) {
+            merged[key] = value
+          }
+        }
+      } catch { /* Live room may not exist yet */ }
+      return JSON.stringify(merged, null, 2)
     })
 
     return [updateField, readRecord, ...this._tools, ...this.extraTools()]
