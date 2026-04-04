@@ -295,5 +295,161 @@ Route.all('/api/auth/*', (req) => {
   return auth.handler(honoCtx.req.raw)
 }, [authLimit])
 
+// ── DEBUG: Live Y.Doc tree inspector (temporary) ────────────
+// GET /api/debug/live-inspect?doc=panel:articles:id:richcontent:content
+import { Live } from '@rudderjs/live'
+import * as Y from 'yjs'
+
+Route.get('/api/debug/live-inspect', (req, res) => {
+  const docName = req.query['doc'] as string
+  if (!docName) return res.status(400).json({ error: 'Missing ?doc= parameter' })
+
+  const fields = Live.readMap(docName, 'fields')
+  const root = (() => {
+    // Access room doc directly via snapshot approach
+    const persistence = Live.persistence()
+    const rooms = (globalThis as any)['__rudderjs_live__'] as Map<string, { doc: Y.Doc }> | undefined
+    const room = rooms?.get(docName)
+    if (!room) return null
+    return room.doc.get('root', Y.XmlText)
+  })()
+
+  const result: Record<string, unknown> = {
+    docName,
+    fieldsCount: Object.keys(fields).length,
+    fields,
+    rootLength: root?.length ?? 0,
+    tree: [] as unknown[],
+  }
+
+  if (root && root.length > 0) {
+    const delta = root.toDelta() as Array<{ insert: unknown; attributes?: Record<string, unknown> }>
+    const tree: unknown[] = []
+
+    for (let i = 0; i < delta.length; i++) {
+      const entry = delta[i]
+      const inserted = entry.insert
+      const className = inserted?.constructor?.name ?? typeof inserted
+
+      if (typeof inserted === 'string') {
+        tree.push({ index: i, type: 'text', content: inserted.slice(0, 200) })
+
+      } else if (inserted instanceof Y.XmlText) {
+        // Lexical paragraphs/headings are Y.XmlText (CollabElementNode)
+        const xmlText = inserted
+        const text = xmlText.toString()
+        const attrs = xmlText.getAttributes()
+        const node: Record<string, unknown> = {
+          index: i,
+          type: 'XmlText',
+          attributes: attrs,
+          text: text.slice(0, 300),
+          length: xmlText.length,
+          hasDeleteMethod: typeof xmlText.delete === 'function',
+          hasInsertMethod: typeof xmlText.insert === 'function',
+        }
+        // Inner delta — shows text runs
+        try {
+          const innerDelta = xmlText.toDelta() as Array<{ insert: unknown; attributes?: Record<string, unknown> }>
+          node.innerDelta = innerDelta.map((inner, j) => {
+            if (typeof inner.insert === 'string') {
+              return { index: j, type: 'text', content: inner.insert.slice(0, 200), attributes: inner.attributes }
+            }
+            const innerName = inner.insert?.constructor?.name ?? typeof inner.insert
+            if (inner.insert instanceof Y.XmlElement) {
+              return { index: j, type: 'XmlElement', nodeName: (inner.insert as Y.XmlElement).nodeName, attributes: (inner.insert as Y.XmlElement).getAttributes() }
+            }
+            if (inner.insert instanceof Y.Map) {
+              const m = inner.insert as Y.Map<unknown>
+              const mapData: Record<string, unknown> = {}
+              m.forEach((v, k) => { mapData[k] = v })
+              return { index: j, type: 'Map', data: mapData, attributes: inner.attributes }
+            }
+            return { index: j, type: innerName }
+          })
+        } catch { /* */ }
+        tree.push(node)
+
+      } else if (inserted instanceof Y.XmlElement) {
+        // Lexical blocks/decorators are Y.XmlElement (CollabDecoratorNode)
+        const elem = inserted
+        const attrs = elem.getAttributes()
+        tree.push({
+          index: i,
+          type: 'XmlElement',
+          nodeName: elem.nodeName,
+          attributes: attrs,
+          text: elem.toString().slice(0, 200),
+          childCount: elem.length,
+        })
+
+      } else {
+        tree.push({ index: i, type: className })
+      }
+    }
+    result.tree = tree
+  }
+
+  return res.json(result)
+})
+
+// ── DEBUG: Test Live.editText / editBlock (temporary) ───────
+Route.post('/api/debug/live-edit-text', async (req, res) => {
+  const { doc, operation } = req.body as { doc: string; operation: { type: string; search: string; replace?: string; text?: string } }
+  if (!doc || !operation) return res.status(400).json({ error: 'Missing doc or operation' })
+  const result = Live.editText(doc, operation as any, { name: 'AI: Test Agent', color: '#8b5cf6' })
+  // Clear cursor after 3 seconds
+  setTimeout(() => Live.clearAiAwareness(doc), 3000)
+  return res.json({ applied: result })
+})
+
+Route.post('/api/debug/live-edit-block', async (req, res) => {
+  const { doc, blockType, blockIndex, field, value } = req.body as { doc: string; blockType: string; blockIndex: number; field: string; value: unknown }
+  if (!doc || !blockType) return res.status(400).json({ error: 'Missing params' })
+  const result = Live.editBlock(doc, blockType, blockIndex ?? 0, field, value)
+  return res.json({ applied: result })
+})
+
+Route.post('/api/debug/live-awareness', async (req, res) => {
+  const { doc, action, search } = req.body as { doc: string; action: 'set' | 'clear'; search?: string }
+  if (!doc) return res.status(400).json({ error: 'Missing doc' })
+  if (action === 'clear') {
+    Live.clearAiAwareness(doc)
+    return res.json({ ok: true })
+  }
+  // If search is provided, place cursor at that text location
+  if (search) {
+    const rooms = (globalThis as any)['__rudderjs_live__'] as Map<string, { doc: Y.Doc }> | undefined
+    const room = rooms?.get(doc)
+    if (room) {
+      const root = room.doc.get('root', Y.XmlText)
+      const { findTextInXmlTree } = await import('@rudderjs/live') as any
+      // Use the internal helper — or just inline the logic
+      const delta = root.toDelta() as Array<{ insert: unknown }>
+      let cursorTarget: { target: Y.XmlText; offset: number } | undefined
+      for (const entry of delta) {
+        if (!(entry.insert instanceof Y.XmlText)) continue
+        const child = entry.insert as Y.XmlText
+        const innerDelta = child.toDelta() as Array<{ insert: unknown }>
+        let offset = 0
+        for (const item of innerDelta) {
+          if (typeof item.insert === 'string') {
+            const idx = (item.insert as string).indexOf(search)
+            if (idx !== -1) { cursorTarget = { target: child, offset: offset + idx }; break }
+            offset += (item.insert as string).length
+          } else { offset += 1 }
+        }
+        if (cursorTarget) break
+      }
+      if (cursorTarget) {
+        Live.setAiAwareness(doc, { name: 'AI: Test Agent', color: '#8b5cf6' }, cursorTarget)
+        return res.json({ ok: true, cursorAt: search })
+      }
+    }
+  }
+  Live.setAiAwareness(doc, { name: 'AI: Test Agent', color: '#8b5cf6' })
+  return res.json({ ok: true })
+})
+
 // Catch-all: any unmatched /api/* route returns 404 instead of falling through to Vike
 Route.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))

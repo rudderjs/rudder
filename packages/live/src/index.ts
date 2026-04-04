@@ -246,6 +246,8 @@ interface Room {
   ready:   Promise<void>
   /** Latest awareness message per client — sent to newly connected clients. */
   awarenessMap: Map<import('ws').WebSocket, Uint8Array>
+  /** Stored AI awareness message — sent to newly connecting clients. */
+  aiAwarenessMsg?: Uint8Array
 }
 
 const g       = globalThis as Record<string, unknown>
@@ -352,6 +354,10 @@ async function handleConnection(
     if (client !== ws && client.readyState === 1 /* OPEN */) {
       ws.send(buf)
     }
+  }
+  // Send stored AI awareness (if an AI agent is currently editing)
+  if (room.aiAwarenessMsg) {
+    ws.send(room.aiAwarenessMsg)
   }
 
   // ── Message handler ───────────────────────────────────────
@@ -485,8 +491,218 @@ export function live(config: LiveConfig = {}): new (app: Application) => Service
         rooms?.delete(docName)
         console.log(`\n  Cleared document: ${docName}\n`)
       }).description('Clear a Live document from persistence')
+
+      rudder.command('live:inspect <doc>', async (args) => {
+        const docName = (args as unknown as Record<string, unknown>)['doc'] as string
+        const room = getOrCreateRoom(docName, persistence)
+        await room.ready
+
+        const root = room.doc.get('root', Y.XmlText)
+        console.log(`\n  Document: ${docName}`)
+        console.log(`  Clients:  ${room.clients.size}`)
+        console.log(`  Root type: ${root.constructor.name}  length: ${root.length}\n`)
+
+        // Dump the Y.Map fields (form data)
+        const fields = room.doc.getMap('fields')
+        if (fields.size > 0) {
+          console.log('  ── Y.Map "fields" ──')
+          fields.forEach((val, key) => {
+            const display = typeof val === 'string' && val.length > 80 ? val.slice(0, 80) + '…' : val
+            console.log(`    ${key}: ${JSON.stringify(display)}`)
+          })
+          console.log()
+        }
+
+        // Dump the Y.XmlText tree structure
+        if (root.length > 0) {
+          console.log('  ── Y.XmlText "root" tree ──')
+          const delta = root.toDelta()
+          for (let i = 0; i < delta.length; i++) {
+            const entry = delta[i] as { insert: unknown; attributes?: Record<string, unknown> }
+            if (typeof entry.insert === 'string') {
+              console.log(`    [${i}] text: ${JSON.stringify(entry.insert.slice(0, 100))}`)
+            } else if (entry.insert instanceof Y.XmlElement) {
+              const elem = entry.insert
+              const attrs = elem.getAttributes()
+              const text = elem.toString()
+              console.log(`    [${i}] XmlElement <${elem.nodeName}>`)
+              if (Object.keys(attrs).length > 0) {
+                for (const [k, v] of Object.entries(attrs)) {
+                  const display = typeof v === 'string' && v.length > 80 ? v.slice(0, 80) + '…' : v
+                  console.log(`          attr ${k} = ${JSON.stringify(display)}`)
+                }
+              }
+              if (text) console.log(`          text: ${JSON.stringify(text.slice(0, 100))}`)
+              // Dump inner delta for text elements
+              if (elem.length > 0) {
+                try {
+                  const innerDelta = (elem as unknown as Y.XmlText).toDelta()
+                  for (let j = 0; j < innerDelta.length; j++) {
+                    const inner = innerDelta[j] as { insert: unknown; attributes?: Record<string, unknown> }
+                    if (typeof inner.insert === 'string') {
+                      console.log(`          [${j}] inner text: ${JSON.stringify(inner.insert.slice(0, 80))}${inner.attributes ? ` attrs=${JSON.stringify(inner.attributes)}` : ''}`)
+                    } else {
+                      console.log(`          [${j}] inner ${inner.insert?.constructor?.name ?? typeof inner.insert}`)
+                    }
+                  }
+                } catch { /* not a text-like element */ }
+              }
+            } else {
+              console.log(`    [${i}] ${entry.insert?.constructor?.name ?? typeof entry.insert}`)
+            }
+          }
+          console.log()
+        } else {
+          console.log('  (root is empty)\n')
+        }
+      }).description('Inspect the Y.Doc tree structure of a Live document')
     }
   }
+}
+
+// ─── Y.XmlText tree helpers ─────────────────────────────────
+//
+// Lexical-Yjs tree structure (verified via live:inspect):
+//
+//   root (Y.XmlText)
+//     ├── Y.XmlText (__type="heading", __tag="h1")
+//     │     ├── Y.Map  (__type="text", __format=0)   ← offset += 1
+//     │     └── "hello world"                         ← offset += 11
+//     ├── Y.XmlText (__type="paragraph")
+//     │     ├── Y.XmlElement (custom-block)           ← block! offset += 1
+//     │     ├── Y.Map  (__type="text")                ← offset += 1
+//     │     └── "some text"                           ← offset += 9
+//     ├── Y.XmlText (__type="list")
+//     │     ├── Y.XmlText (list item)                 ← offset += 1
+//     │     └── Y.XmlText (list item)                 ← offset += 1
+//     └── Y.XmlText (__type="quote") ...
+//
+// - Root children are Y.XmlText (NOT Y.XmlElement) — paragraphs, headings, quotes, lists, code
+// - Text content is in string items within each child's inner delta
+// - Y.Map items are TextNode metadata (format, style) — count as offset 1
+// - Y.XmlElement items inside paragraphs are blocks (DecoratorNode) — count as offset 1
+// - Blocks store data as raw objects in __blockData attribute (NOT JSON strings)
+// - Y.XmlText.delete(offset, len) / insert(offset, text) use the flattened offset
+
+type InnerDeltaItem = { insert: unknown; attributes?: Record<string, unknown> }
+
+/**
+ * Walk the root Y.XmlText's children to find a text match.
+ *
+ * Searches per text run (matching client-side `applyTextOp` behavior).
+ * Returns the target Y.XmlText element and the flattened character offset
+ * for use with `target.delete(offset, len)` / `target.insert(offset, text)`.
+ */
+function findTextInXmlTree(
+  root: Y.XmlText,
+  search: string,
+): { target: Y.XmlText; offset: number } | null {
+  const rootDelta = root.toDelta() as InnerDeltaItem[]
+
+  for (const entry of rootDelta) {
+    // Root children are Y.XmlText (paragraphs, headings, quotes, code, lists)
+    if (!(entry.insert instanceof Y.XmlText)) continue
+    const child = entry.insert as Y.XmlText
+
+    const innerDelta = child.toDelta() as InnerDeltaItem[]
+    let offset = 0
+
+    for (const item of innerDelta) {
+      if (typeof item.insert === 'string') {
+        const idx = item.insert.indexOf(search)
+        if (idx !== -1) {
+          return { target: child, offset: offset + idx }
+        }
+        offset += item.insert.length
+      } else {
+        // Y.Map, Y.XmlElement, Y.XmlText — all count as 1
+        offset += 1
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Find a block (DecoratorNode) by type and index in a Lexical Y.Doc.
+ *
+ * Blocks are Y.XmlElement items embedded INSIDE paragraph Y.XmlText children
+ * (not at the root level). They have attributes:
+ *   __type = "custom-block"
+ *   __blockType = "callToAction" | "video" | etc.
+ *   __blockData = { title: "...", ... }  (raw object, NOT JSON string)
+ */
+function findBlockInXmlTree(
+  root: Y.XmlText,
+  blockType: string,
+  blockIndex: number,
+): Y.XmlElement | null {
+  const rootDelta = root.toDelta() as InnerDeltaItem[]
+  let matchIdx = 0
+
+  for (const entry of rootDelta) {
+    if (!(entry.insert instanceof Y.XmlText)) continue
+    const child = entry.insert as Y.XmlText
+    const innerDelta = child.toDelta() as InnerDeltaItem[]
+
+    for (const item of innerDelta) {
+      if (!(item.insert instanceof Y.XmlElement)) continue
+      const elem = item.insert as Y.XmlElement
+
+      if (elem.getAttribute('__blockType') === blockType) {
+        if (matchIdx === blockIndex) return elem
+        matchIdx++
+      }
+    }
+  }
+  return null
+}
+
+// ─── Awareness encoding ─────────────────────────────────────
+
+/**
+ * Synthetic client ID for AI awareness — won't collide with real
+ * Yjs client IDs (random 30-bit integers).
+ */
+const AI_CLIENT_ID = 999_999_999
+let aiAwarenessClock = 0
+
+/**
+ * Encode an awareness update message for the AI cursor.
+ *
+ * Wire format (matches y-websocket client → server → client):
+ *   [messageAwareness=1 (varint)]
+ *   [payloadLength (varint)]       ← VarUint8Array wrapper
+ *     [numberOfClients (varint)]
+ *     [clientID (varint)]
+ *     [clock (varint)]
+ *     [stateJSON (varString = len + utf8)]
+ */
+function encodeAiAwareness(state: Record<string, unknown> | null): Uint8Array {
+  const json = state ? JSON.stringify(state) : 'null'
+  const jsonBytes = new TextEncoder().encode(json)
+
+  // Build the inner awareness payload
+  const innerParts: Uint8Array[] = [
+    writeVarUint(1),                 // numberOfClients = 1
+    writeVarUint(AI_CLIENT_ID),      // clientID
+    writeVarUint(++aiAwarenessClock), // clock (incrementing)
+    writeVarUint(jsonBytes.length),  // stateJSON length (varString encoding)
+    jsonBytes,                       // stateJSON utf8 bytes
+  ]
+
+  let innerLen = 0
+  for (const p of innerParts) innerLen += p.length
+
+  // Wrap: [messageAwareness] [innerLen (VarUint8Array)] [inner bytes]
+  const innerLenBytes = writeVarUint(innerLen)
+  const msg = new Uint8Array(1 + innerLenBytes.length + innerLen)
+  msg[0] = messageAwareness
+  msg.set(innerLenBytes, 1)
+  let pos = 1 + innerLenBytes.length
+  for (const p of innerParts) { msg.set(p, pos); pos += p.length }
+  return msg
 }
 
 // ─── Live facade ──────────────────────────────────────────
@@ -620,5 +836,208 @@ export const Live = {
         map.set(key, val)
       }
     }, SERVER_ORIGIN)
+  },
+
+  // ── Surgical text editing (Lexical Y.XmlText) ─────────────
+
+  /**
+   * Surgically edit text in a Lexical Y.Doc room.
+   *
+   * Walks the root Y.XmlText → Y.XmlElement children (paragraphs, headings, etc.)
+   * → finds the search string → applies delete/insert at the character level.
+   *
+   * Changes broadcast to all connected WebSocket clients via SERVER_ORIGIN.
+   * The Lexical-Yjs binding observes the Y.Doc changes and updates editors automatically.
+   *
+   * @returns true if the edit was applied, false if search text not found.
+   *
+   * @example
+   * Live.editText('panel:articles:42:richcontent:body', {
+   *   type: 'replace', search: 'hello', replace: 'world',
+   * })
+   */
+  editText(
+    docName: string,
+    operation: { type: 'replace'; search: string; replace: string }
+             | { type: 'insert_after'; search: string; text: string }
+             | { type: 'delete'; search: string },
+    /** Optional AI identity — when provided, sets a visible cursor at the edit location. */
+    aiCursor?: { name: string; color: string },
+  ): boolean {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    const root = room.doc.get('root', Y.XmlText)
+
+    const match = findTextInXmlTree(root, operation.search)
+    if (!match) return false
+
+    // Set AI cursor at the edit location before editing
+    if (aiCursor) {
+      this.setAiAwareness(docName, aiCursor, match)
+    }
+
+    room.doc.transact(() => {
+      const { target, offset } = match
+      switch (operation.type) {
+        case 'replace':
+          target.delete(offset, operation.search.length)
+          target.insert(offset, operation.replace)
+          break
+        case 'insert_after':
+          target.insert(offset + operation.search.length, operation.text)
+          break
+        case 'delete':
+          target.delete(offset, operation.search.length)
+          break
+      }
+    }, SERVER_ORIGIN)
+
+    return true
+  },
+
+  /**
+   * Apply multiple text edit operations in a single Yjs transaction.
+   *
+   * @returns number of successfully applied operations.
+   */
+  editTextBatch(
+    docName: string,
+    operations: Array<
+      | { type: 'replace'; search: string; replace: string }
+      | { type: 'insert_after'; search: string; text: string }
+      | { type: 'delete'; search: string }
+    >,
+  ): number {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    const root = room.doc.get('root', Y.XmlText)
+    let applied = 0
+
+    room.doc.transact(() => {
+      for (const op of operations) {
+        const match = findTextInXmlTree(root, op.search)
+        if (!match) continue
+        const { target, offset } = match
+        switch (op.type) {
+          case 'replace':
+            target.delete(offset, op.search.length)
+            target.insert(offset, op.replace)
+            break
+          case 'insert_after':
+            target.insert(offset + op.search.length, op.text)
+            break
+          case 'delete':
+            target.delete(offset, op.search.length)
+            break
+        }
+        applied++
+      }
+    }, SERVER_ORIGIN)
+
+    return applied
+  },
+
+  // ── Block editing (Lexical DecoratorNode / Y.XmlElement) ───
+
+  /**
+   * Update a block's data field in a Lexical Y.Doc room.
+   *
+   * Blocks are `Y.XmlElement` nodes with `nodeName='custom-block'` embedded in the
+   * root `Y.XmlText`. Their data is stored as XML attributes:
+   * - `__blockType` — e.g. `'callToAction'`, `'video'`
+   * - `__blockData` — JSON string of the block's field values
+   *
+   * The Lexical-Yjs binding (`CollabDecoratorNode.syncPropertiesFromYjs`) watches
+   * for attribute changes and updates `BlockNode.__blockData`, triggering a re-render.
+   *
+   * @returns true if the block was found and updated.
+   *
+   * @example
+   * Live.editBlock('panel:articles:42:richcontent:body', 'callToAction', 0, 'buttonText', 'Learn More')
+   */
+  editBlock(
+    docName: string,
+    blockType: string,
+    blockIndex: number,
+    field: string,
+    value: unknown,
+  ): boolean {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    const root = room.doc.get('root', Y.XmlText)
+
+    const elem = findBlockInXmlTree(root, blockType, blockIndex)
+    if (!elem) return false
+
+    room.doc.transact(() => {
+      // __blockData is stored as a raw object by the Lexical-Yjs binding
+      // (via CollabDecoratorNode.syncPropertiesFromLexical → setAttribute)
+      const existing = elem.getAttribute('__blockData')
+      const data: Record<string, unknown> = existing && typeof existing === 'object'
+        ? { ...(existing as Record<string, unknown>) }
+        : {}
+      data[field] = value
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Lexical-Yjs stores __blockData as raw object, Yjs types expect string
+      ;(elem.setAttribute as (k: string, v: unknown) => void)('__blockData', data)
+    }, SERVER_ORIGIN)
+
+    return true
+  },
+
+  // ── AI awareness (cursor presence) ─────��───────────────────
+
+  /**
+   * Set AI awareness state on a room — shows an AI cursor/presence to all connected clients.
+   * Uses a synthetic client ID (999999999) that won't collide with real Yjs clients.
+   *
+   * If `cursorTarget` is provided, the cursor is placed at that Y.XmlText offset
+   * (visible as a colored cursor line in the Lexical editor).
+   *
+   * @example
+   * Live.setAiAwareness('panel:articles:42:richcontent:body', {
+   *   name: 'AI: SEO Agent', color: '#8b5cf6',
+   * })
+   */
+  setAiAwareness(
+    docName: string,
+    state: { name: string; color: string },
+    cursorTarget?: { target: Y.XmlText; offset: number },
+  ): void {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+
+    // Build awareness state matching Lexical CollaborationPlugin format:
+    // { name, color, focusing, anchorPos, focusPos }
+    const awarenessState: Record<string, unknown> = {
+      name: state.name,
+      color: state.color,
+      focusing: true,
+    }
+
+    if (cursorTarget) {
+      const relPos = Y.createRelativePositionFromTypeIndex(cursorTarget.target, cursorTarget.offset)
+      awarenessState.anchorPos = relPos
+      awarenessState.focusPos = relPos
+    }
+
+    const msg = encodeAiAwareness(awarenessState)
+    for (const client of room.clients) {
+      if (client.readyState === 1 /* OPEN */) client.send(msg)
+    }
+    room.aiAwarenessMsg = msg
+  },
+
+  /**
+   * Clear AI awareness state — removes the AI cursor from all connected clients.
+   */
+  clearAiAwareness(docName: string): void {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    const msg = encodeAiAwareness(null)
+
+    for (const client of room.clients) {
+      if (client.readyState === 1 /* OPEN */) client.send(msg)
+    }
+    delete room.aiAwarenessMsg
   },
 }
