@@ -360,7 +360,7 @@ async function handlePanelChat(
       // Read text from collaborative richcontent/text fields (separate Y.Doc rooms)
       for (const [fieldName, meta] of Object.entries(fieldMeta)) {
         if (!meta.yjs) continue
-        if (meta.type !== 'richcontent' && meta.type !== 'textarea') continue
+        if (meta.type !== 'richcontent' && meta.type !== 'textarea' && meta.type !== 'text') continue
         try {
           const fragment = meta.type === 'richcontent' ? 'richcontent' : 'text'
           const text = Live.readText(`${docName}:${fragment}:${fieldName}`)
