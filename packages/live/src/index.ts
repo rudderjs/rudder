@@ -838,6 +838,38 @@ export const Live = {
     }, SERVER_ORIGIN)
   },
 
+  /**
+   * Read the plain text content of a Lexical Y.Doc room.
+   * Walks the root Y.XmlText tree and concatenates all text runs.
+   *
+   * Returns empty string if the room doesn't exist or has no content.
+   *
+   * @example
+   * const bodyText = Live.readText('panel:articles:42:richcontent:body')
+   */
+  readText(docName: string): string {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    const root = room.doc.get('root', Y.XmlText)
+    if (root.length === 0) return ''
+
+    const parts: string[] = []
+    const rootDelta = root.toDelta() as Array<{ insert: unknown }>
+
+    for (const entry of rootDelta) {
+      if (!(entry.insert instanceof Y.XmlText)) continue
+      const child = entry.insert as Y.XmlText
+      const innerDelta = child.toDelta() as Array<{ insert: unknown }>
+      const textParts: string[] = []
+      for (const item of innerDelta) {
+        if (typeof item.insert === 'string') textParts.push(item.insert)
+      }
+      if (textParts.length > 0) parts.push(textParts.join(''))
+    }
+
+    return parts.join('\n')
+  },
+
   // ── Surgical text editing (Lexical Y.XmlText) ─────────────
 
   /**
@@ -871,9 +903,12 @@ export const Live = {
     const match = findTextInXmlTree(root, operation.search)
     if (!match) return false
 
-    // Set AI cursor at the edit location before editing
+    // Set AI selection highlighting the text being edited
     if (aiCursor) {
-      this.setAiAwareness(docName, aiCursor, match)
+      this.setAiAwareness(docName, aiCursor, {
+        ...match,
+        length: operation.search.length,
+      })
     }
 
     room.doc.transact(() => {
@@ -1001,7 +1036,7 @@ export const Live = {
   setAiAwareness(
     docName: string,
     state: { name: string; color: string },
-    cursorTarget?: { target: Y.XmlText; offset: number },
+    cursorTarget?: { target: Y.XmlText; offset: number; length?: number },
   ): void {
     const persistence = this.persistence()
     const room = getOrCreateRoom(docName, persistence)
@@ -1015,9 +1050,13 @@ export const Live = {
     }
 
     if (cursorTarget) {
-      const relPos = Y.createRelativePositionFromTypeIndex(cursorTarget.target, cursorTarget.offset)
-      awarenessState.anchorPos = relPos
-      awarenessState.focusPos = relPos
+      const anchorPos = Y.createRelativePositionFromTypeIndex(cursorTarget.target, cursorTarget.offset)
+      // If length is provided, set focusPos at end of selection (shows as highlight)
+      // Otherwise, anchor === focus (shows as cursor line)
+      const focusOffset = cursorTarget.offset + (cursorTarget.length ?? 0)
+      const focusPos = Y.createRelativePositionFromTypeIndex(cursorTarget.target, focusOffset)
+      awarenessState.anchorPos = anchorPos
+      awarenessState.focusPos = focusPos
     }
 
     const msg = encodeAiAwareness(awarenessState)

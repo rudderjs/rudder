@@ -134,6 +134,38 @@ export class Resource {
     return true
   }
 
+  /**
+   * Get field type metadata: `{ fieldName: { type, yjs } }`.
+   * Used by ResourceAgent to route edit_text between server-side Yjs editing
+   * (for collaborative fields) and Y.Map string replacement (for non-collaborative fields).
+   */
+  getFieldMeta(): Record<string, { type: string; yjs: boolean }> {
+    const form = this._resolveForm()
+    const meta: Record<string, { type: string; yjs: boolean }> = {}
+
+    function extract(items: FieldOrGrouping[]) {
+      for (const item of items) {
+        // Field — has getName, getType, isYjs
+        if ('getName' in item && 'getType' in item && 'isYjs' in item) {
+          const field = item as Field
+          meta[field.getName()] = { type: field.getType(), yjs: field.isYjs() }
+        }
+        // Section or Tab — has getFields()
+        if ('getFields' in item) {
+          extract((item as Section).getFields() as unknown as FieldOrGrouping[])
+        }
+        // Tabs — has getTabs() with nested fields
+        if ('getTabs' in item) {
+          for (const tab of (item as Tabs).getTabs()) {
+            extract(tab.getFields() as unknown as FieldOrGrouping[])
+          }
+        }
+      }
+    }
+    extract(form.getFields())
+    return meta
+  }
+
   // ── Internal resolvers ────────────────────────────────
 
   /** @internal — Constructs Table with resource wired, calls this.table(). */

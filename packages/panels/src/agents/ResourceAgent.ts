@@ -20,6 +20,11 @@ async function loadLive() {
   return mod.Live as {
     updateMap(docName: string, mapName: string, field: string, value: unknown): Promise<void>
     readMap(docName: string, mapName: string): Record<string, unknown>
+    readText(docName: string): string
+    editText(docName: string, operation: unknown, aiCursor?: { name: string; color: string }): boolean
+    editBlock(docName: string, blockType: string, blockIndex: number, field: string, value: unknown): boolean
+    setAiAwareness(docName: string, state: { name: string; color: string }): void
+    clearAiAwareness(docName: string): void
   }
 }
 
@@ -32,6 +37,8 @@ export interface ResourceAgentContext {
   resourceSlug: string
   recordId:     string
   panelSlug:    string
+  /** Field type metadata — keyed by field name. Used to route edit_text between Yjs and Y.Map. */
+  fieldMeta?:   Record<string, { type: string; yjs: boolean }>
 }
 
 // ─── ResourceAgent ─────────────────────────────────────────
@@ -168,6 +175,22 @@ export class ResourceAgent {
           }
         }
       } catch { /* Live room may not exist yet */ }
+
+      // Read text content from collaborative text/richcontent fields
+      // (their content lives in separate Y.Doc rooms, not the form Y.Map)
+      if (this.context.fieldMeta) {
+        for (const [fieldName, meta] of Object.entries(this.context.fieldMeta)) {
+          if (!meta.yjs) continue
+          if (meta.type !== 'richcontent' && meta.type !== 'textarea') continue
+          try {
+            const fragment = meta.type === 'richcontent' ? 'richcontent' : 'text'
+            const fieldDocName = `${docName}:${fragment}:${fieldName}`
+            const text = Live.readText(fieldDocName)
+            if (text) merged[fieldName] = text
+          } catch { /* room may not exist */ }
+        }
+      }
+
       return JSON.stringify(merged, null, 2)
     })
 
@@ -206,7 +229,60 @@ export class ResourceAgent {
           }),
         ])),
       }),
-    }).client(async () => 'Edits applied on client')
+    }).server(async (input: { field: string; operations: Array<Record<string, unknown>> }) => {
+      const fieldInfo = this.context.fieldMeta?.[input.field]
+      const isCollab = fieldInfo?.yjs === true
+
+      if (isCollab) {
+        // ── Collaborative field: edit Y.XmlText / Y.XmlElement directly ──
+        const fragment = fieldInfo.type === 'richcontent' ? 'richcontent' : 'text'
+        const fieldDocName = `${docName}:${fragment}:${input.field}`
+        const aiCursor = { name: `AI: ${this._label}`, color: '#8b5cf6' }
+
+        let applied = 0
+        for (const op of input.operations) {
+          if (op.type === 'update_block') {
+            if (Live.editBlock(fieldDocName, op.blockType as string, (op.blockIndex as number) ?? 0, op.field as string, op.value)) {
+              applied++
+            }
+          } else {
+            if (Live.editText(fieldDocName, op as any, aiCursor)) {
+              applied++
+            }
+          }
+        }
+
+        // Clear AI cursor after a delay so users see it
+        setTimeout(() => Live.clearAiAwareness(fieldDocName), 2000)
+        return `Applied ${applied}/${input.operations.length} edit(s) to "${input.field}"`
+
+      } else {
+        // ── Non-collaborative field: apply string ops and write to Y.Map ──
+        let current = String(this.context.record[input.field] ?? '')
+
+        // Read latest from Yjs if available
+        try {
+          const yjsFields = Live.readMap(docName, 'fields')
+          if (yjsFields[input.field] != null) current = String(yjsFields[input.field])
+        } catch { /* Live not available */ }
+
+        for (const op of input.operations) {
+          if (op.type === 'update_block') continue // Blocks only exist in collab fields
+          const search = op.search as string
+          if (op.type === 'replace' && search) {
+            current = current.replace(search, op.replace as string)
+          } else if (op.type === 'insert_after' && search) {
+            const idx = current.indexOf(search)
+            if (idx !== -1) current = current.slice(0, idx + search.length) + (op.text as string) + current.slice(idx + search.length)
+          } else if (op.type === 'delete' && search) {
+            current = current.replace(search, '')
+          }
+        }
+
+        await Live.updateMap(docName, 'fields', input.field, current)
+        return `Updated "${input.field}" successfully`
+      }
+    })
 
     return [updateField, editText, readRecord, ...this._tools, ...this.extraTools()]
   }

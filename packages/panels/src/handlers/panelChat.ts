@@ -23,6 +23,11 @@ async function loadLive() {
   const mod = await import(/* @vite-ignore */ '@rudderjs/live') as any
   return mod.Live as {
     readMap(docName: string, mapName: string): Record<string, unknown>
+    readText(docName: string): string
+    updateMap(docName: string, mapName: string, field: string, value: unknown): Promise<void>
+    editText(docName: string, operation: unknown, aiCursor?: { name: string; color: string }): boolean
+    editBlock(docName: string, blockType: string, blockIndex: number, field: string, value: unknown): boolean
+    clearAiAwareness(docName: string): void
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -81,11 +86,7 @@ async function handleForceAgent(
           if (chunk.text) send('text', { text: chunk.text })
           break
         case 'tool-call':
-          if (chunk.toolCall?.name === 'edit_text') {
-            send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
-          } else {
-            send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
-          }
+          send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
           break
       }
     }
@@ -155,11 +156,7 @@ async function handleAiChat(
             // Don't relay inner agent text as outer text — it would confuse the conversation
             break
           case 'tool-call':
-            if (chunk.toolCall?.name === 'edit_text') {
-            send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
-          } else {
             send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
-          }
             break
         }
       }
@@ -177,6 +174,7 @@ async function handleAiChat(
   const allFields = [...new Set(agents.flatMap(a => (a as any)._fields as string[]))]
 
   // Build edit_text tool — allows direct surgical edits without going through a named agent
+  const Live = await loadLive()
   const editTextTool = allFields.length > 0 ? toolDefinition({
     name: 'edit_text',
     description: [
@@ -202,7 +200,42 @@ async function handleAiChat(
         }),
       ])),
     }),
-  }).client(async () => 'Edits applied on client') : null
+  }).server(async (input: { field: string; operations: Array<Record<string, unknown>> }) => {
+    const fieldInfo = agentCtx!.fieldMeta?.[input.field]
+    const isCollab = fieldInfo?.yjs === true
+    const docName = `panel:${agentCtx!.resourceSlug}:${agentCtx!.recordId}`
+
+    if (isCollab) {
+      const fragment = fieldInfo.type === 'richcontent' ? 'richcontent' : 'text'
+      const fieldDocName = `${docName}:${fragment}:${input.field}`
+      const aiCursor = { name: 'AI Assistant', color: '#8b5cf6' }
+
+      let applied = 0
+      for (const op of input.operations) {
+        if (Live.editText(fieldDocName, op as any, aiCursor)) applied++
+      }
+      setTimeout(() => Live.clearAiAwareness(fieldDocName), 2000)
+      return `Applied ${applied}/${input.operations.length} edit(s) to "${input.field}"`
+    } else {
+      let current = String(record[input.field] ?? '')
+      try {
+        const yjsFields = Live.readMap(docName, 'fields')
+        if (yjsFields[input.field] != null) current = String(yjsFields[input.field])
+      } catch { /* */ }
+
+      for (const op of input.operations) {
+        const search = op.search as string
+        if (op.type === 'replace' && search) current = current.replace(search, op.replace as string)
+        else if (op.type === 'insert_after' && search) {
+          const idx = current.indexOf(search)
+          if (idx !== -1) current = current.slice(0, idx + search.length) + (op.text as string) + current.slice(idx + search.length)
+        }
+        else if (op.type === 'delete' && search) current = current.replace(search, '')
+      }
+      await Live.updateMap(docName, 'fields', input.field, current)
+      return `Updated "${input.field}" successfully`
+    }
+  }) : null
 
   // Build conversation messages for the AI
   const messages = history.map(h => ({
@@ -226,11 +259,8 @@ async function handleAiChat(
           if (chunk.text) send('text', { text: chunk.text })
           break
         case 'tool-call':
-          // Client tools (edit_text) need to be forwarded to the browser
-          if (chunk.toolCall?.name === 'edit_text') {
-            send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
-          }
-          // run_agent tool calls are handled by the tool server fn above
+          // All tools are server-side now (edit_text, run_agent)
+          send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
           break
       }
     }
@@ -293,6 +323,7 @@ async function handlePanelChat(
     }
 
     // Overlay unsaved Yjs fields on top of the DB record so agents see latest edits
+    const fieldMeta = resource.getFieldMeta()
     try {
       const Live = await loadLive()
       const docName = `panel:${resourceContext.resourceSlug}:${resourceContext.recordId}`
@@ -302,6 +333,16 @@ async function handlePanelChat(
           record[key] = value
         }
       }
+      // Read text from collaborative richcontent/text fields (separate Y.Doc rooms)
+      for (const [fieldName, meta] of Object.entries(fieldMeta)) {
+        if (!meta.yjs) continue
+        if (meta.type !== 'richcontent' && meta.type !== 'textarea') continue
+        try {
+          const fragment = meta.type === 'richcontent' ? 'richcontent' : 'text'
+          const text = Live.readText(`${docName}:${fragment}:${fieldName}`)
+          if (text) record[fieldName] = text
+        } catch { /* room may not exist */ }
+      }
     } catch { /* Live not available — use DB record only */ }
 
     agents = resource.agents()
@@ -310,6 +351,7 @@ async function handlePanelChat(
       resourceSlug: resourceContext.resourceSlug,
       recordId: resourceContext.recordId,
       panelSlug: panel.getName(),
+      fieldMeta: resource.getFieldMeta(),
     }
   }
 
