@@ -211,7 +211,7 @@ function parseSSELines(
 
 // ─── Provider ───────────────────────────────────────────────
 
-export function AiChatProvider({ children }: { children: React.ReactNode }) {
+export function AiChatProvider({ children, panelPath }: { children: React.ReactNode; panelPath?: string }) {
   const [open, setOpen] = useState(false)
   const [fieldUpdates, setFieldUpdates] = useState<Array<{ field: string; value: string }>>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -222,7 +222,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
   const [showConversations, setShowConversations] = useState(false)
   const resourceContextRef = useRef<ResourceContext | null>(null)
   const conversationIdRef = useRef<string | null>(null)
-  const apiBaseRef = useRef<string>('')
+  const panelApiBase = panelPath ? `${panelPath}/api` : ''
   const restoredRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const onFieldUpdateRef = useRef<OnFieldUpdate | undefined>(undefined)
@@ -234,25 +234,19 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
   const setResourceContext = useCallback((ctx: ResourceContext | null) => {
     resourceContextRef.current = ctx
     setResourceContextState(ctx)
-
-    // Store the apiBase so we can use it for conversation restore
-    if (ctx?.apiBase) apiBaseRef.current = ctx.apiBase
   }, [])
 
-  // Restore most recent conversation on first open
+  // Restore most recent conversation on mount
   useEffect(() => {
-    if (!open || restoredRef.current || conversationIdRef.current) return
+    if (restoredRef.current || !panelApiBase) return
     restoredRef.current = true
 
-    const apiBase = apiBaseRef.current
-    if (!apiBase) return
-
-    fetch(`${apiBase}/_chat/conversations`)
+    fetch(`${panelApiBase}/_chat/conversations`)
       .then(r => r.ok ? r.json() : null)
       .then((data: { conversations: ConversationItem[] } | null) => {
         const latest = data?.conversations?.[0]
         if (!latest || conversationIdRef.current) return
-        fetch(`${apiBase}/_chat/conversations/${latest.id}`)
+        fetch(`${panelApiBase}/_chat/conversations/${latest.id}`)
           .then(r => r.ok ? r.json() : null)
           .then((convData: { messages: Array<{ role: string; content: string }> } | null) => {
             if (!convData?.messages?.length || conversationIdRef.current) return
@@ -271,7 +265,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
           .catch(() => {})
       })
       .catch(() => {})
-  }, [open])
+  }, [panelApiBase])
 
   const onFieldUpdate: OnFieldUpdate = useCallback((field, value) => {
     setFieldUpdates(prev => [...prev, { field, value }])
@@ -299,21 +293,24 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
 
     // Read from refs for latest state
     const rc = resourceContextRef.current
-    const hasResourceContext = !!rc
-    const url = hasResourceContext
-      ? `${rc!.apiBase}/_chat`
+    const usePanelChat = !!panelApiBase
+    const url = usePanelChat
+      ? `${panelApiBase}/_chat`
       : '/api/ai/stream'
 
     const body: Record<string, unknown> = { message: text }
 
-    if (hasResourceContext) {
+    if (usePanelChat) {
       // Send conversationId (server manages history)
       if (conversationIdRef.current) {
         body.conversationId = conversationIdRef.current
       }
-      body.resourceContext = {
-        resourceSlug: rc!.resourceSlug,
-        recordId: rc!.recordId,
+      // Include resource context if on a resource edit page
+      if (rc) {
+        body.resourceContext = {
+          resourceSlug: rc.resourceSlug,
+          recordId: rc.recordId,
+        }
       }
       if (opts?.forceAgent) {
         body.forceAgent = opts.forceAgent
@@ -354,7 +351,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
 
-        if (hasResourceContext) {
+        if (usePanelChat) {
           // Panel chat endpoint — named SSE events
           parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef, onConversation)
         } else {
@@ -426,9 +423,8 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const getApiBase = useCallback(() => {
-    const rc = resourceContextRef.current
-    return rc?.apiBase ?? ''
-  }, [])
+    return panelApiBase
+  }, [panelApiBase])
 
   const loadConversations = useCallback(async () => {
     const apiBase = getApiBase()

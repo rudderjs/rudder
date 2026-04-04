@@ -106,7 +106,7 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
 
   return (
     <PanelErrorBoundary>
-      <AiChatProvider>
+      <AiChatProvider panelPath={data.panelMeta.path}>
         <I18nProvider locale={data.panelMeta.locale}>
           <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
             {children}

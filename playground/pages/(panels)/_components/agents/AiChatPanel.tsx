@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon } from 'lucide-react'
-import { useAiChat, type ChatMessage, type ChatMessagePart } from './AiChatContext.js'
+import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ClockIcon, TrashIcon } from 'lucide-react'
+import { useAiChat, type ChatMessage, type ChatMessagePart, type ConversationItem } from './AiChatContext.js'
 import { useIsMobile } from '@/hooks/use-mobile.js'
 import { Button } from '@/components/ui/button.js'
 import {
@@ -178,10 +178,112 @@ function EmptyState() {
   )
 }
 
+// ─── Relative time helper ──────────────────────────────────
+
+function relativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = Date.now()
+  const diff = now - date.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return date.toLocaleDateString()
+}
+
+// ─── Conversation list overlay ──────────────────────────────
+
+function ConversationList({
+  conversations,
+  activeId,
+  onSelect,
+  onDelete,
+  onNew,
+}: {
+  conversations: ConversationItem[]
+  activeId: string | null
+  onSelect: (id: string) => void
+  onDelete: (id: string) => void
+  onNew: () => void
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-3 py-2 border-b">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start gap-2 text-xs"
+          onClick={onNew}
+        >
+          <PlusIcon className="h-3.5 w-3.5" />
+          New chat
+        </Button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {conversations.length === 0 ? (
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+            No conversations yet
+          </div>
+        ) : (
+          conversations.map(conv => (
+            <div
+              key={conv.id}
+              className={`group flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer ${
+                conv.id === activeId ? 'bg-muted' : ''
+              }`}
+              onClick={() => onSelect(conv.id)}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium truncate">{conv.title}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {relativeTime(conv.updatedAt ?? conv.createdAt)}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="h-5 w-5 opacity-0 group-hover:opacity-100 shrink-0"
+                onClick={(e) => { e.stopPropagation(); onDelete(conv.id) }}
+              >
+                <TrashIcon className="h-3 w-3" />
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Resource context pill ──────────────────────────────────
+
+function ResourceContextPill() {
+  const { resourceContext } = useAiChat()
+  if (!resourceContext) return null
+
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1.5 border-b text-xs text-muted-foreground">
+      <span className="truncate">
+        <span className="font-medium text-foreground">{resourceContext.resourceSlug}</span>
+        {' › '}
+        <span>{resourceContext.recordId}</span>
+      </span>
+    </div>
+  )
+}
+
 // ─── Inner content (shared between desktop & mobile) ────────
 
 function AiChatContent() {
-  const { setOpen, messages, sendMessage, isGenerating, clearMessages } = useAiChat()
+  const {
+    setOpen, messages, sendMessage, isGenerating,
+    newConversation, conversationId,
+    conversations, showConversations, setShowConversations,
+    loadConversation, loadConversations, deleteConversation,
+  } = useAiChat()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll on new messages
@@ -190,18 +292,33 @@ function AiChatContent() {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages.length, messages[messages.length - 1]?.text, messages[messages.length - 1]?.parts?.length])
 
+  // Load conversations when list is opened
+  useEffect(() => {
+    if (showConversations) loadConversations()
+  }, [showConversations, loadConversations])
+
   const hasContent = messages.length > 0
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex h-12 items-center gap-2 border-b px-3 shrink-0">
-        <h3 className="flex-1 text-sm font-semibold">AI Assistant</h3>
+        <h3 className="flex-1 text-sm font-semibold truncate">AI Assistant</h3>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setShowConversations(!showConversations)}
+          aria-label="Conversation history"
+          title="History"
+          className={showConversations ? 'text-primary' : ''}
+        >
+          <ClockIcon className="h-4 w-4" />
+        </Button>
         {hasContent && (
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={clearMessages}
+            onClick={newConversation}
             aria-label="New chat"
             title="New chat"
           >
@@ -218,8 +335,19 @@ function AiChatContent() {
         </Button>
       </div>
 
-      {/* Messages area */}
-      {messages.length === 0 ? (
+      {/* Resource context pill */}
+      <ResourceContextPill />
+
+      {/* Conversation list overlay OR messages */}
+      {showConversations ? (
+        <ConversationList
+          conversations={conversations}
+          activeId={conversationId}
+          onSelect={loadConversation}
+          onDelete={deleteConversation}
+          onNew={() => { newConversation(); setShowConversations(false) }}
+        />
+      ) : messages.length === 0 ? (
         <EmptyState />
       ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-3">
@@ -234,8 +362,10 @@ function AiChatContent() {
         </div>
       )}
 
-      {/* Chat input */}
-      <ChatInput onSend={(text) => sendMessage(text)} disabled={isGenerating} />
+      {/* Chat input (hidden when conversation list is showing) */}
+      {!showConversations && (
+        <ChatInput onSend={(text) => sendMessage(text)} disabled={isGenerating} />
+      )}
     </div>
   )
 }

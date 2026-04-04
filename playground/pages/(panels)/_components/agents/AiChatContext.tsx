@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import type { ResourceAgentMeta } from '@rudderjs/panels'
 
 // ─── Chat message parts (structured content) ───────────────
@@ -39,13 +39,18 @@ export interface ResourceContext {
   agents:       ResourceAgentMeta[]
 }
 
+// ─── Conversation list item ─────────────────────────────────
+
+export interface ConversationItem {
+  id:        string
+  title:     string
+  createdAt: string
+  updatedAt?: string
+}
+
 // ─── Field update callback ──────────────────────────────────
 
 export type OnFieldUpdate = (field: string, value: string) => void
-
-// ─── Client tool call callback ──────────────────────────────
-
-export type OnClientToolCall = (tool: string, input: Record<string, unknown>) => void
 
 // ─── Context shape ──────────────────────────────────────────
 
@@ -62,9 +67,6 @@ interface AiChatContextValue {
 
   /** Called when agent updates a field via SSE tool_call. */
   onFieldUpdate: OnFieldUpdate
-
-  /** Set the handler for client-side tool calls (e.g. edit_text). Called by SchemaForm. */
-  setOnClientToolCall: (fn: OnClientToolCall) => void
 
   /** Clear field updates (e.g. on navigation). */
   clearFieldUpdates: () => void
@@ -84,6 +86,28 @@ interface AiChatContextValue {
   /** Resource context — set by edit page, null on other pages. */
   resourceContext: ResourceContext | null
   setResourceContext: (ctx: ResourceContext | null) => void
+
+  /** Current conversation ID (null = no conversation yet). */
+  conversationId: string | null
+
+  /** Recent conversations list. */
+  conversations: ConversationItem[]
+
+  /** Whether the conversation list overlay is visible. */
+  showConversations: boolean
+  setShowConversations: (v: boolean) => void
+
+  /** Load a specific conversation's messages. */
+  loadConversation: (id: string) => Promise<void>
+
+  /** Fetch the conversations list. */
+  loadConversations: () => Promise<void>
+
+  /** Start a new conversation (clears current). */
+  newConversation: () => void
+
+  /** Delete a conversation. */
+  deleteConversation: (id: string) => Promise<void>
 }
 
 const AiChatContext = createContext<AiChatContextValue | null>(null)
@@ -95,19 +119,24 @@ function parseSSELines(
   assistantId: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   onFieldUpdateRef: React.RefObject<OnFieldUpdate | undefined>,
-  onClientToolCallRef: React.RefObject<OnClientToolCall | undefined>,
+  onConversation?: (convId: string, isNew: boolean) => void,
 ) {
   let currentEvent = ''
 
   for (const line of lines) {
     if (line.startsWith('event: ')) {
       currentEvent = line.slice(7)
-      console.log('[SSE] event:', currentEvent)
     } else if (line.startsWith('data: ') && currentEvent) {
       try {
         const data = JSON.parse(line.slice(6))
 
         switch (currentEvent) {
+          case 'conversation': {
+            const convData = data as { conversationId: string; isNew: boolean }
+            onConversation?.(convData.conversationId, convData.isNew)
+            break
+          }
+
           case 'text': {
             const text = (data as { text: string }).text
             setMessages(prev => prev.map(m => {
@@ -135,23 +164,6 @@ function parseSSELines(
             // Trigger field animation for update_field
             if (toolData.tool === 'update_field' && toolData.input?.field && toolData.input?.value != null) {
               onFieldUpdateRef.current?.(toolData.input.field as string, toolData.input.value as string)
-            }
-            break
-          }
-
-          case 'client_tool_call': {
-            const toolData = data as { tool: string; input?: Record<string, unknown> }
-            console.log('[client_tool_call] received:', toolData.tool, toolData.input)
-            console.log('[client_tool_call] ref set?', !!onClientToolCallRef.current)
-            // Show in chat as a tool_call part
-            setMessages(prev => prev.map(m => {
-              if (m.id !== assistantId) return m
-              const parts = [...(m.parts ?? []), { type: 'tool_call' as const, tool: toolData.tool, input: toolData.input }]
-              return { ...m, parts }
-            }))
-            // Execute client-side
-            if (toolData.input) {
-              onClientToolCallRef.current?.(toolData.tool, toolData.input)
             }
             break
           }
@@ -199,26 +211,61 @@ function parseSSELines(
 
 // ─── Provider ───────────────────────────────────────────────
 
-export function AiChatProvider({ children }: { children: React.ReactNode }) {
+export function AiChatProvider({ children, panelPath }: { children: React.ReactNode; panelPath?: string }) {
   const [open, setOpen] = useState(false)
   const [fieldUpdates, setFieldUpdates] = useState<Array<{ field: string; value: string }>>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [resourceContext, setResourceContextState] = useState<ResourceContext | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<ConversationItem[]>([])
+  const [showConversations, setShowConversations] = useState(false)
   const resourceContextRef = useRef<ResourceContext | null>(null)
-  const messagesRef = useRef<ChatMessage[]>([])
+  const conversationIdRef = useRef<string | null>(null)
+  const panelApiBase = panelPath ? `${panelPath}/api` : ''
+  const restoredRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const onFieldUpdateRef = useRef<OnFieldUpdate | undefined>(undefined)
-  const onClientToolCallRef = useRef<OnClientToolCall | undefined>(undefined)
 
   // Keep refs in sync with state
   resourceContextRef.current = resourceContext
-  messagesRef.current = messages
+  conversationIdRef.current = conversationId
 
   const setResourceContext = useCallback((ctx: ResourceContext | null) => {
     resourceContextRef.current = ctx
     setResourceContextState(ctx)
   }, [])
+
+  // Restore most recent conversation on mount
+  useEffect(() => {
+    if (restoredRef.current || !panelApiBase) return
+    restoredRef.current = true
+
+    fetch(`${panelApiBase}/_chat/conversations`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { conversations: ConversationItem[] } | null) => {
+        const latest = data?.conversations?.[0]
+        if (!latest || conversationIdRef.current) return
+        fetch(`${panelApiBase}/_chat/conversations/${latest.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then((convData: { messages: Array<{ role: string; content: string }> } | null) => {
+            if (!convData?.messages?.length || conversationIdRef.current) return
+            const loaded: ChatMessage[] = convData.messages
+              .filter(m => m.role === 'user' || m.role === 'assistant')
+              .map(m => ({
+                id: crypto.randomUUID(),
+                role: m.role as 'user' | 'assistant',
+                text: m.content,
+                parts: [{ type: 'text' as const, text: m.content }],
+              }))
+            setMessages(loaded)
+            setConversationId(latest.id)
+            conversationIdRef.current = latest.id
+          })
+          .catch(() => {})
+      })
+      .catch(() => {})
+  }, [panelApiBase])
 
   const onFieldUpdate: OnFieldUpdate = useCallback((field, value) => {
     setFieldUpdates(prev => [...prev, { field, value }])
@@ -246,23 +293,34 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
 
     // Read from refs for latest state
     const rc = resourceContextRef.current
-    const hasResourceContext = !!rc
-    const url = hasResourceContext
-      ? `${rc!.apiBase}/_chat`
+    const usePanelChat = !!panelApiBase
+    const url = usePanelChat
+      ? `${panelApiBase}/_chat`
       : '/api/ai/stream'
 
     const body: Record<string, unknown> = { message: text }
 
-    if (hasResourceContext) {
-      // Include conversation history (last 20 messages)
-      body.history = messagesRef.current.slice(-20).map(m => ({ role: m.role, content: m.text }))
-      body.resourceContext = {
-        resourceSlug: rc!.resourceSlug,
-        recordId: rc!.recordId,
+    if (usePanelChat) {
+      // Send conversationId (server manages history)
+      if (conversationIdRef.current) {
+        body.conversationId = conversationIdRef.current
+      }
+      // Include resource context if on a resource edit page
+      if (rc) {
+        body.resourceContext = {
+          resourceSlug: rc.resourceSlug,
+          recordId: rc.recordId,
+        }
       }
       if (opts?.forceAgent) {
         body.forceAgent = opts.forceAgent
       }
+    }
+
+    // Handle conversation ID from SSE
+    const onConversation = (convId: string, _isNew: boolean) => {
+      setConversationId(convId)
+      conversationIdRef.current = convId
     }
 
     fetch(url, {
@@ -293,9 +351,9 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
 
-        if (hasResourceContext) {
+        if (usePanelChat) {
           // Panel chat endpoint — named SSE events
-          parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef, onClientToolCallRef)
+          parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef, onConversation)
         } else {
           // Fallback /api/ai/stream — simple data-only SSE
           for (const line of lines) {
@@ -350,16 +408,86 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
   const clearMessages = useCallback(() => {
     abortRef.current?.abort()
     setMessages([])
+    setConversationId(null)
+    conversationIdRef.current = null
     setIsGenerating(false)
   }, [])
+
+  const newConversation = useCallback(() => {
+    abortRef.current?.abort()
+    setMessages([])
+    setConversationId(null)
+    conversationIdRef.current = null
+    setIsGenerating(false)
+    setShowConversations(false)
+  }, [])
+
+  const getApiBase = useCallback(() => {
+    return panelApiBase
+  }, [panelApiBase])
+
+  const loadConversations = useCallback(async () => {
+    const apiBase = getApiBase()
+    if (!apiBase) return
+    try {
+      const rc = resourceContextRef.current
+      const params = new URLSearchParams()
+      if (rc?.resourceSlug) params.set('resourceSlug', rc.resourceSlug)
+      if (rc?.recordId) params.set('recordId', rc.recordId)
+      const url = `${apiBase}/_chat/conversations${params.toString() ? `?${params}` : ''}`
+      const resp = await fetch(url)
+      if (resp.ok) {
+        const data = await resp.json() as { conversations: ConversationItem[] }
+        setConversations(data.conversations ?? [])
+      }
+    } catch { /* failed to load conversations */ }
+  }, [getApiBase])
+
+  const loadConversation = useCallback(async (id: string) => {
+    const apiBase = getApiBase()
+    if (!apiBase) return
+    try {
+      const resp = await fetch(`${apiBase}/_chat/conversations/${id}`)
+      if (resp.ok) {
+        const data = await resp.json() as { messages: Array<{ role: string; content: string }> }
+        const loaded: ChatMessage[] = (data.messages ?? [])
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({
+            id: crypto.randomUUID(),
+            role: m.role as 'user' | 'assistant',
+            text: m.content,
+            parts: [{ type: 'text' as const, text: m.content }],
+          }))
+        setMessages(loaded)
+        setConversationId(id)
+        conversationIdRef.current = id
+        setShowConversations(false)
+      }
+    } catch { /* failed to load conversation */ }
+  }, [getApiBase])
+
+  const deleteConversation = useCallback(async (id: string) => {
+    const apiBase = getApiBase()
+    if (!apiBase) return
+    try {
+      await fetch(`${apiBase}/_chat/conversations/${id}`, { method: 'DELETE' })
+      setConversations(prev => prev.filter(c => c.id !== id))
+      // If deleting the active conversation, clear it
+      if (conversationIdRef.current === id) {
+        newConversation()
+      }
+    } catch { /* failed to delete */ }
+  }, [getApiBase, newConversation])
 
   return (
     <AiChatContext.Provider value={{
       open, setOpen,
       triggerRun,
-      fieldUpdates, onFieldUpdate, setOnClientToolCall: (fn: OnClientToolCall) => { onClientToolCallRef.current = fn }, clearFieldUpdates,
+      fieldUpdates, onFieldUpdate, clearFieldUpdates,
       messages, sendMessage, isGenerating, clearMessages,
       resourceContext, setResourceContext,
+      conversationId, conversations, showConversations, setShowConversations,
+      loadConversation, loadConversations, newConversation, deleteConversation,
     }}>
       {children}
     </AiChatContext.Provider>
