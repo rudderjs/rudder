@@ -47,30 +47,37 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
     }
   }, [field.name, field.yjs])
 
-  // Collaborative text — only render after client mount to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  // Collaborative text — poll until the Lexical component registers (same pattern as RichContentInput).
+  // Avoids rendering the plain <input> fallback with a stale DB value when Yjs has the real content.
+  const [CollabText, setCollabText] = useState<ReturnType<typeof getField>>(null)
+  useEffect(() => {
+    if (!(field.type === 'text' || field.type === 'email') || !field.yjs || !wsPath || !docName) return
+    const existing = getField('_lexical:collaborativePlainText')
+    if (existing) { setCollabText(() => existing); return }
+    const interval = setInterval(() => {
+      const comp = getField('_lexical:collaborativePlainText')
+      if (comp) { setCollabText(() => comp); clearInterval(interval) }
+    }, 50)
+    return () => clearInterval(interval)
+  }, [field.type, field.yjs, wsPath, docName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (mounted && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
-    const CollabText = getField('_lexical:collaborativePlainText')
-    if (CollabText) {
-      return (
-        <CollabText
-          value={(value as string) ?? ''}
-          onChange={(v: unknown) => onChange(v)}
-          wsPath={wsPath}
-          docName={docName}
-          fieldName={field.name}
-          className={INPUT_CLS}
-          placeholder={(field.extra?.placeholder as string) ?? ''}
-          disabled={isDisabled}
-          required={field.required}
-          {...(userName !== undefined ? { userName } : {})}
-          {...(userColor !== undefined ? { userColor } : {})}
-          editorRef={editorRef}
-        />
-      )
-    }
+  if (CollabText && field.yjs && wsPath && docName) {
+    return (
+      <CollabText
+        value={(value as string) ?? ''}
+        onChange={(v: unknown) => onChange(v)}
+        wsPath={wsPath}
+        docName={docName}
+        fieldName={field.name}
+        className={INPUT_CLS}
+        placeholder={(field.extra?.placeholder as string) ?? ''}
+        disabled={isDisabled}
+        required={field.required}
+        {...(userName !== undefined ? { userName } : {})}
+        {...(userColor !== undefined ? { userColor } : {})}
+        editorRef={editorRef}
+      />
+    )
   }
 
   return (

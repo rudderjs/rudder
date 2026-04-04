@@ -79,9 +79,8 @@ export function useYjsCollab(opts: UseYjsCollabOptions): UseYjsCollabReturn {
       const roomName = `${docName}:${fragmentName}`
 
       // Add IndexedDB persistence FIRST (before WebSocket connects).
-      // IndexedDB loads synchronously-ish into the doc. WebSocket is created
-      // with { connect: false } — it won't connect until CollaborationPlugin
-      // calls connect(), by which time IndexedDB content is already in the doc.
+      // Fire-and-forget import — persistence starts listening to doc updates
+      // as soon as the constructor runs (doc.on('update')).
       ;(import('y-indexeddb') as Promise<any>).then(idb => { // eslint-disable-line @typescript-eslint/no-explicit-any
         if (!destroyed) idbProvider = new idb.IndexeddbPersistence(roomName, doc)
       }).catch(() => {})
