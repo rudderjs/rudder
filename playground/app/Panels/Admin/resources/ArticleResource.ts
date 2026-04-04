@@ -337,7 +337,7 @@ export class ArticleResource extends Resource {
           'To edit regular TEXT in the body, use edit_text with replace/insert_after/delete operations:',
           '  { type: "replace", search: "old text", replace: "new text" }',
           '',
-          'NEVER use update_field for body/content — it would overwrite the entire rich text.',
+          'NEVER use update_field for body/content/excerpt/title — it would overwrite the entire rich text.',
         ].join('\n'))
         .fields(['body', 'content', 'excerpt', 'title']),
     ]
