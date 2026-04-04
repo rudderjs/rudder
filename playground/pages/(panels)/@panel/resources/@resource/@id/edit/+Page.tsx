@@ -18,13 +18,15 @@ export default function EditPage() {
 
   const agents = resourceMeta.agents ?? []
 
-  // AI chat — field updates + resource context
+  // AI chat — field updates + resource context + client tool calls
   let fieldUpdates: Array<{ field: string; value: string }> = []
   let setResourceContext: ((ctx: import('../../../../../_components/agents/AiChatContext.js').ResourceContext | null) => void) | null = null
+  let setOnClientToolCall: ((fn: import('../../../../../_components/agents/AiChatContext.js').OnClientToolCall) => void) | null = null
   try {
     const aiChat = useAiChat()
     fieldUpdates = aiChat.fieldUpdates
     setResourceContext = aiChat.setResourceContext
+    setOnClientToolCall = aiChat.setOnClientToolCall
   } catch { /* no provider */ }
 
   // Set resource context for AI chat when on edit page
@@ -64,6 +66,7 @@ export default function EditPage() {
           backUrl={backHref}
           agentFieldUpdates={fieldUpdates}
           agents={agents}
+          setOnClientToolCall={setOnClientToolCall ?? undefined}
         />
       </div>
     </div>

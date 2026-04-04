@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { getField } from '@rudderjs/panels'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { getField, subscribeFields } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -47,30 +47,30 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
     }
   }, [field.name, field.yjs])
 
-  // Collaborative text — only render after client mount to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  // Collaborative text — reactively wait for the Lexical component to register.
+  const CollabText = useSyncExternalStore(
+    subscribeFields,
+    () => getField('_lexical:collaborativePlainText') ?? null,
+    () => null, // SSR snapshot — never render collab on server
+  )
 
-  if (mounted && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
-    const CollabText = getField('_lexical:collaborativePlainText')
-    if (CollabText) {
-      return (
-        <CollabText
-          value={(value as string) ?? ''}
-          onChange={(v: unknown) => onChange(v)}
-          wsPath={wsPath}
-          docName={docName}
-          fieldName={field.name}
-          className={INPUT_CLS}
-          placeholder={(field.extra?.placeholder as string) ?? ''}
-          disabled={isDisabled}
-          required={field.required}
-          {...(userName !== undefined ? { userName } : {})}
-          {...(userColor !== undefined ? { userColor } : {})}
-          editorRef={editorRef}
-        />
-      )
-    }
+  if (CollabText && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
+    return (
+      <CollabText
+        value={(value as string) ?? ''}
+        onChange={(v: unknown) => onChange(v)}
+        wsPath={wsPath}
+        docName={docName}
+        fieldName={field.name}
+        className={INPUT_CLS}
+        placeholder={(field.extra?.placeholder as string) ?? ''}
+        disabled={isDisabled}
+        required={field.required}
+        {...(userName !== undefined ? { userName } : {})}
+        {...(userColor !== undefined ? { userColor } : {})}
+        editorRef={editorRef}
+      />
+    )
   }
 
   return (

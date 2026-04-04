@@ -468,14 +468,14 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       const operations = input.operations as Array<Record<string, unknown>>
       if (!fieldName || !operations) return
 
-      // Try plain text editor ref
+      // Try plain text collaborative editor ref
       const plainRef = await resolveCollabRef(fieldName)
       if (plainRef && 'applyEdits' in plainRef) {
         ;(plainRef as { applyEdits(ops: unknown[]): void }).applyEdits(operations)
         return
       }
 
-      // Try rich text editor ref
+      // Try rich text collaborative editor ref
       try {
         const { getRichContentRef } = await import('./fields/RichContentInput.js')
         const richRef = getRichContentRef(fieldName)
@@ -484,6 +484,21 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
           return
         }
       } catch { /* not a rich content field */ }
+
+      // Fallback: apply text operations to the plain form value (non-Lexical fields)
+      let current = String(valuesRef.current[fieldName] ?? '')
+      for (const op of operations) {
+        const o = op as { type: string; search?: string; replace?: string; text?: string }
+        if (o.type === 'replace' && o.search && o.replace !== undefined) {
+          current = current.replace(o.search, o.replace)
+        } else if (o.type === 'insert_after' && o.search && o.text) {
+          const idx = current.indexOf(o.search)
+          if (idx !== -1) current = current.slice(0, idx + o.search.length) + o.text + current.slice(idx + o.search.length)
+        } else if (o.type === 'delete' && o.search) {
+          current = current.replace(o.search, '')
+        }
+      }
+      handleChange(fieldName, current)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setOnClientToolCall])

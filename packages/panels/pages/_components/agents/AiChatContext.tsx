@@ -221,12 +221,8 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
     setFieldUpdates(prev => [...prev, { field, value }])
   }, [])
 
-  // Default no-op — SchemaForm overrides via setOnClientToolCall
-  const [onClientToolCallFn, setOnClientToolCallFn] = useState<OnClientToolCall>(() => () => {})
-
   // Keep refs in sync
   onFieldUpdateRef.current = onFieldUpdate
-  onClientToolCallRef.current = onClientToolCallFn
 
   const clearFieldUpdates = useCallback(() => {
     setFieldUpdates([])
@@ -358,7 +354,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
     <AiChatContext.Provider value={{
       open, setOpen,
       triggerRun,
-      fieldUpdates, onFieldUpdate, setOnClientToolCall: (fn: OnClientToolCall) => setOnClientToolCallFn(() => fn), clearFieldUpdates,
+      fieldUpdates, onFieldUpdate, setOnClientToolCall: (fn: OnClientToolCall) => { onClientToolCallRef.current = fn }, clearFieldUpdates,
       messages, sendMessage, isGenerating, clearMessages,
       resourceContext, setResourceContext,
     }}>

@@ -127,6 +127,7 @@ async function handleAiChat(
     agentList,
     '',
     'If the user\'s request maps to one of the available agents, call the `run_agent` tool with the agent slug.',
+    'If the user asks to edit, replace, insert, or delete specific text in a field, use the `edit_text` tool directly.',
     'Otherwise, respond conversationally.',
     'Be concise and helpful.',
   ].join('\n')
@@ -172,16 +173,49 @@ async function handleAiChat(
     }
   })
 
+  // Collect all unique field names from agents for the edit_text tool
+  const allFields = [...new Set(agents.flatMap(a => (a as any)._fields as string[]))]
+
+  // Build edit_text tool — allows direct surgical edits without going through a named agent
+  const editTextTool = allFields.length > 0 ? toolDefinition({
+    name: 'edit_text',
+    description: [
+      'Surgically edit text in a field. Use for replacing specific words, inserting text, or deleting text.',
+      'Available fields: ' + allFields.join(', '),
+    ].join(' '),
+    inputSchema: z.object({
+      field: z.enum(allFields as [string, ...string[]]),
+      operations: z.array(z.union([
+        z.object({
+          type: z.literal('replace'),
+          search: z.string().describe('Exact text to find'),
+          replace: z.string().describe('Replacement text'),
+        }),
+        z.object({
+          type: z.literal('insert_after'),
+          search: z.string().describe('Text to find — new text inserted after it'),
+          text: z.string().describe('Text to insert'),
+        }),
+        z.object({
+          type: z.literal('delete'),
+          search: z.string().describe('Exact text to delete'),
+        }),
+      ])),
+    }),
+  }).client(async () => 'Edits applied on client') : null
+
   // Build conversation messages for the AI
   const messages = history.map(h => ({
     role: h.role as 'user' | 'assistant',
     content: h.content,
   }))
 
+  const tools = [runAgentTool, ...(editTextTool ? [editTextTool] : [])]
+
   try {
     const a = agentFn({
       instructions: systemPrompt,
-      tools: [runAgentTool],
+      tools,
     })
 
     const { stream, response } = a.stream(message)
@@ -192,6 +226,10 @@ async function handleAiChat(
           if (chunk.text) send('text', { text: chunk.text })
           break
         case 'tool-call':
+          // Client tools (edit_text) need to be forwarded to the browser
+          if (chunk.toolCall?.name === 'edit_text') {
+            send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
+          }
           // run_agent tool calls are handled by the tool server fn above
           break
       }

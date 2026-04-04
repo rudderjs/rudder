@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { getField } from '@rudderjs/panels'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { getField, subscribeFields } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 /** Global registry for textarea collab refs */
@@ -21,31 +21,31 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
     }
   }, [field.name, field.yjs])
 
-  // Collaborative textarea — only render after client mount to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  // Collaborative textarea — reactively wait for the Lexical component to register.
+  const CollabText = useSyncExternalStore(
+    subscribeFields,
+    () => getField('_lexical:collaborativePlainText') ?? null,
+    () => null,
+  )
 
-  if (mounted && field.yjs && wsPath && docName) {
-    const CollabText = getField('_lexical:collaborativePlainText')
-    if (CollabText) {
-      return (
-        <CollabText
-          value={(value as string) ?? ''}
-          onChange={(v: string) => onChange(v)}
-          wsPath={wsPath}
-          docName={docName}
-          fieldName={field.name}
-          multiline
-          className={INPUT_CLS}
-          placeholder={(field.extra?.placeholder as string) ?? ''}
-          disabled={isDisabled}
-          required={field.required}
-          {...(userName !== undefined ? { userName } : {})}
-          {...(userColor !== undefined ? { userColor } : {})}
-          editorRef={editorRef}
-        />
-      )
-    }
+  if (CollabText && field.yjs && wsPath && docName) {
+    return (
+      <CollabText
+        value={(value as string) ?? ''}
+        onChange={(v: string) => onChange(v)}
+        wsPath={wsPath}
+        docName={docName}
+        fieldName={field.name}
+        multiline
+        className={INPUT_CLS}
+        placeholder={(field.extra?.placeholder as string) ?? ''}
+        disabled={isDisabled}
+        required={field.required}
+        {...(userName !== undefined ? { userName } : {})}
+        {...(userColor !== undefined ? { userColor } : {})}
+        editorRef={editorRef}
+      />
+    )
   }
   return (
     <textarea
