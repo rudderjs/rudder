@@ -22,8 +22,9 @@ import { FloatingLinkEditorPlugin } from './lexical/FloatingLinkEditorPlugin.js'
 import { resolveToolbar, type ToolbarProfile, type ToolbarTool, type ToolbarConfig } from './toolbar.js'
 import { DraggableBlockPlugin_EXPERIMENTAL } from '@lexical/react/LexicalDraggableBlockPlugin'
 import { InsertParagraphAtEndPlugin } from './lexical/InsertParagraphAtEndPlugin.js'
-import { $getRoot, $getSelection, $isRangeSelection, $isDecoratorNode, $createParagraphNode, $parseSerializedNode, type LexicalEditor as LexicalEditorType, type SerializedLexicalNode } from 'lexical'
-import { BlockNode, $createBlockNode } from './lexical/BlockNode.js'
+import { $getRoot, $getSelection, $isRangeSelection, $isDecoratorNode, $createParagraphNode, $createTextNode, $parseSerializedNode, type LexicalEditor as LexicalEditorType, type SerializedLexicalNode } from 'lexical'
+import { BlockNode, $createBlockNode, $isBlockNode } from './lexical/BlockNode.js'
+import { applyTextOp, type EditOperation } from './CollaborativePlainText.js'
 import { BlockRegistryContext } from './lexical/BlockNodeComponent.js'
 import { SlashMenuOption } from './lexical/SlashCommandPlugin.js'
 import type { BlockMeta } from '@rudderjs/panels'
@@ -33,6 +34,10 @@ import { useYjsCollab } from './hooks/useYjsCollab.js'
 export interface LexicalEditorHandle {
   /** Replace editor content with the given Lexical JSON state. Works in collab mode — propagates to Y.Doc. */
   setContent: (json: unknown) => void
+  /** Surgically edit text/blocks without replacing all content. Changes propagate via Yjs. */
+  applyEdits: (operations: EditOperation[]) => void
+  /** Read the current plain text content. */
+  getTextContent: () => string
 }
 
 export interface Props {
@@ -389,6 +394,32 @@ function EditorRefPlugin({ editorRef }: { editorRef: React.MutableRefObject<Lexi
         } catch (e) {
           console.error('[EditorRefPlugin] setContent failed:', e)
         }
+      },
+
+      applyEdits(operations: EditOperation[]) {
+        editor.update(() => {
+          for (const op of operations) {
+            if (op.type === 'update_block') {
+              // Find block by type + index
+              let matchIndex = 0
+              for (const child of $getRoot().getChildren()) {
+                if ($isBlockNode(child) && child.__blockType === op.blockType) {
+                  if (matchIndex === op.blockIndex) {
+                    child.setBlockData({ ...child.__blockData, [op.field]: op.value })
+                    break
+                  }
+                  matchIndex++
+                }
+              }
+              continue
+            }
+            applyTextOp(op, editor)
+          }
+        })
+      },
+
+      getTextContent(): string {
+        return editor.getEditorState().read(() => $getRoot().getTextContent())
       },
     }
     return () => { editorRef.current = null }

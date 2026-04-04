@@ -171,7 +171,44 @@ export class ResourceAgent {
       return JSON.stringify(merged, null, 2)
     })
 
-    return [updateField, readRecord, ...this._tools, ...this.extraTools()]
+    const editText = toolDefinition({
+      name: 'edit_text',
+      description: [
+        'Surgically edit text or blocks in a field without replacing all content.',
+        'Use for rich text or long text fields where you want to change specific words, sentences, or block fields.',
+        'For short fields like titles or slugs, use update_field instead.',
+        'For embedded blocks (callToAction, video, etc.), use the update_block operation type.',
+        'Available fields: ' + allFields.join(', '),
+      ].join(' '),
+      inputSchema: z.object({
+        field: z.enum(allFields as [string, ...string[]]),
+        operations: z.array(z.union([
+          z.object({
+            type: z.literal('replace'),
+            search: z.string().describe('The exact text to find (must match exactly)'),
+            replace: z.string().describe('The replacement text'),
+          }),
+          z.object({
+            type: z.literal('insert_after'),
+            search: z.string().describe('The text to find — new text will be inserted after it'),
+            text: z.string().describe('The text to insert'),
+          }),
+          z.object({
+            type: z.literal('delete'),
+            search: z.string().describe('The exact text to delete'),
+          }),
+          z.object({
+            type: z.literal('update_block'),
+            blockType: z.string().describe('The block type (e.g. "callToAction", "video")'),
+            blockIndex: z.number().describe('0-based index if multiple blocks of the same type'),
+            field: z.string().describe('The block field to update (e.g. "title", "buttonText")'),
+            value: z.string().describe('The new value'),
+          }),
+        ])),
+      }),
+    }).client(async () => 'Edits applied on client')
+
+    return [updateField, editText, readRecord, ...this._tools, ...this.extraTools()]
   }
 
   // ── Run ────────────────────────────────────────────────

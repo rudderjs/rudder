@@ -17,6 +17,7 @@ function getType(def: any): string {
 function zodTypeToJson(schema: any): Record<string, unknown> {
   const def = schema._def
   const t = getType(def)
+  const desc = def.description as string | undefined
 
   // Object
   if (t === 'ZodObject' || t === 'object') {
@@ -36,9 +37,9 @@ function zodTypeToJson(schema: any): Record<string, unknown> {
     }
   }
 
-  if (t === 'ZodString'  || t === 'string')  return { type: 'string' }
-  if (t === 'ZodNumber'  || t === 'number')  return { type: 'number' }
-  if (t === 'ZodBoolean' || t === 'boolean') return { type: 'boolean' }
+  if (t === 'ZodString'  || t === 'string')  return { type: 'string',  ...(desc ? { description: desc } : {}) }
+  if (t === 'ZodNumber'  || t === 'number')  return { type: 'number',  ...(desc ? { description: desc } : {}) }
+  if (t === 'ZodBoolean' || t === 'boolean') return { type: 'boolean', ...(desc ? { description: desc } : {}) }
   if (t === 'ZodNull'    || t === 'null')    return { type: 'null' }
 
   // Array — Zod v3: def.type (inner schema), Zod v4: def.element
@@ -70,9 +71,10 @@ function zodTypeToJson(schema: any): Record<string, unknown> {
     return { ...inner, default: typeof def.defaultValue === 'function' ? def.defaultValue() : def.defaultValue }
   }
 
-  // Literal
+  // Literal — Zod v3: def.value, Zod v4: def.values (array)
   if (t === 'ZodLiteral' || t === 'literal') {
-    return { type: typeof def.value, const: def.value }
+    const val = def.value ?? def.values?.[0]
+    return { type: typeof val, enum: [val] }
   }
 
   // Union

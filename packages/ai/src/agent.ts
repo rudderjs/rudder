@@ -348,10 +348,16 @@ function runAgentLoopStreaming(a: Agent, input: string): AgentStreamResponse {
 
         for (const tc of currentToolCalls) {
           const tool = toolMap.get(tc.name)
-          if (!tool || tool.type === 'client') {
-            const result = !tool ? `Error: Unknown tool "${tc.name}"` : '[client tool — execute on client]'
-            toolResults.push({ toolCallId: tc.id, result })
-            messages.push({ role: 'tool', content: result, toolCallId: tc.id })
+          if (!tool) {
+            toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
+            messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
+            continue
+          }
+          if (tool.type === 'client') {
+            toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
+            messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
+            // Yield so SSE consumers can forward the call to the client
+            yield { type: 'tool-call' as const, toolCall: tc }
             continue
           }
 

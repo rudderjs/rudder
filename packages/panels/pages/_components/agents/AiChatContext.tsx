@@ -43,6 +43,10 @@ export interface ResourceContext {
 
 export type OnFieldUpdate = (field: string, value: string) => void
 
+// ─── Client tool call callback ──────────────────────────────
+
+export type OnClientToolCall = (tool: string, input: Record<string, unknown>) => void
+
 // ─── Context shape ──────────────────────────────────────────
 
 interface AiChatContextValue {
@@ -58,6 +62,9 @@ interface AiChatContextValue {
 
   /** Called when agent updates a field via SSE tool_call. */
   onFieldUpdate: OnFieldUpdate
+
+  /** Set the handler for client-side tool calls (e.g. edit_text). Called by SchemaForm. */
+  setOnClientToolCall: (fn: OnClientToolCall) => void
 
   /** Clear field updates (e.g. on navigation). */
   clearFieldUpdates: () => void
@@ -88,6 +95,7 @@ function parseSSELines(
   assistantId: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   onFieldUpdateRef: React.RefObject<OnFieldUpdate | undefined>,
+  onClientToolCallRef: React.RefObject<OnClientToolCall | undefined>,
 ) {
   let currentEvent = ''
 
@@ -126,6 +134,21 @@ function parseSSELines(
             // Trigger field animation for update_field
             if (toolData.tool === 'update_field' && toolData.input?.field && toolData.input?.value != null) {
               onFieldUpdateRef.current?.(toolData.input.field as string, toolData.input.value as string)
+            }
+            break
+          }
+
+          case 'client_tool_call': {
+            const toolData = data as { tool: string; input?: Record<string, unknown> }
+            // Show in chat as a tool_call part
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              const parts = [...(m.parts ?? []), { type: 'tool_call' as const, tool: toolData.tool, input: toolData.input }]
+              return { ...m, parts }
+            }))
+            // Execute client-side
+            if (toolData.input) {
+              onClientToolCallRef.current?.(toolData.tool, toolData.input)
             }
             break
           }
@@ -183,6 +206,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
   const messagesRef = useRef<ChatMessage[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const onFieldUpdateRef = useRef<OnFieldUpdate | undefined>(undefined)
+  const onClientToolCallRef = useRef<OnClientToolCall | undefined>(undefined)
 
   // Keep refs in sync with state
   resourceContextRef.current = resourceContext
@@ -197,8 +221,12 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
     setFieldUpdates(prev => [...prev, { field, value }])
   }, [])
 
-  // Keep ref in sync
+  // Default no-op — SchemaForm overrides via setOnClientToolCall
+  const [onClientToolCallFn, setOnClientToolCallFn] = useState<OnClientToolCall>(() => () => {})
+
+  // Keep refs in sync
   onFieldUpdateRef.current = onFieldUpdate
+  onClientToolCallRef.current = onClientToolCallFn
 
   const clearFieldUpdates = useCallback(() => {
     setFieldUpdates([])
@@ -268,7 +296,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
 
         if (hasResourceContext) {
           // Panel chat endpoint — named SSE events
-          parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef)
+          parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef, onClientToolCallRef)
         } else {
           // Fallback /api/ai/stream — simple data-only SSE
           for (const line of lines) {
@@ -330,7 +358,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
     <AiChatContext.Provider value={{
       open, setOpen,
       triggerRun,
-      fieldUpdates, onFieldUpdate, clearFieldUpdates,
+      fieldUpdates, onFieldUpdate, setOnClientToolCall: (fn: OnClientToolCall) => setOnClientToolCallFn(() => fn), clearFieldUpdates,
       messages, sendMessage, isGenerating, clearMessages,
       resourceContext, setResourceContext,
     }}>
