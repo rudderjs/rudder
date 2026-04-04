@@ -81,7 +81,11 @@ async function handleForceAgent(
           if (chunk.text) send('text', { text: chunk.text })
           break
         case 'tool-call':
-          send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
+          if (chunk.toolCall?.name === 'edit_text') {
+            send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
+          } else {
+            send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
+          }
           break
       }
     }
@@ -150,7 +154,11 @@ async function handleAiChat(
             // Don't relay inner agent text as outer text — it would confuse the conversation
             break
           case 'tool-call':
+            if (chunk.toolCall?.name === 'edit_text') {
+            send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
+          } else {
             send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
+          }
             break
         }
       }

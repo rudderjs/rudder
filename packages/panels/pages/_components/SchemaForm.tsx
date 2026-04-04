@@ -39,12 +39,14 @@ interface SchemaFormProps {
   agentFieldUpdates?: Array<{ field: string; value: string }>
   /** Resource agent definitions (for form action dropdown). */
   agents?: Array<{ slug: string; label: string; icon?: string; fields: string[] }>
+  /** Register a handler for client-side tool calls (e.g. edit_text). */
+  setOnClientToolCall?: (fn: (tool: string, input: Record<string, unknown>) => void) => void
 }
 
 // Text-based field types that get per-field Y.Doc (not shared Y.Map)
 const TEXT_TYPES = new Set(['text', 'textarea', 'email', 'richcontent', 'content'])
 
-export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submitMethod, prefill, mode = 'create', cancelUrl, recordId, resourceSlug, backUrl, agentFieldUpdates, agents }: SchemaFormProps) {
+export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submitMethod, prefill, mode = 'create', cancelUrl, recordId, resourceSlug, backUrl, agentFieldUpdates, agents, setOnClientToolCall }: SchemaFormProps) {
   const pathSegment = panelPath.replace(/^\//, '')
   const isStandalone = (form as SchemaFormMeta & { standalone?: boolean }).standalone === true
   const rawFormYjs = form as SchemaFormMeta & { yjs?: boolean; wsLivePath?: string | null; docName?: string | null; liveProviders?: string[] }
@@ -456,6 +458,35 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
 
     return null
   }
+
+  // ── Client-side tool call handler (edit_text) ────────────
+  useEffect(() => {
+    if (!setOnClientToolCall) return
+    setOnClientToolCall(async (tool: string, input: Record<string, unknown>) => {
+      if (tool !== 'edit_text') return
+      const fieldName = input.field as string
+      const operations = input.operations as Array<Record<string, unknown>>
+      if (!fieldName || !operations) return
+
+      // Try plain text editor ref
+      const plainRef = await resolveCollabRef(fieldName)
+      if (plainRef && 'applyEdits' in plainRef) {
+        ;(plainRef as { applyEdits(ops: unknown[]): void }).applyEdits(operations)
+        return
+      }
+
+      // Try rich text editor ref
+      try {
+        const { getRichContentRef } = await import('./fields/RichContentInput.js')
+        const richRef = getRichContentRef(fieldName)
+        if (richRef && 'applyEdits' in richRef) {
+          ;(richRef as { applyEdits(ops: unknown[]): void }).applyEdits(operations)
+          return
+        }
+      } catch { /* not a rich content field */ }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setOnClientToolCall])
 
   useEffect(() => {
     if (!agentFieldUpdates) return

@@ -86,10 +86,11 @@ export async function handleAgentRun(
                 if (chunk.text) send('text', { text: chunk.text })
                 break
               case 'tool-call':
-                send('tool_call', {
-                  tool: chunk.toolCall?.name,
-                  input: chunk.toolCall?.arguments,
-                })
+                if (chunk.toolCall?.name === 'edit_text') {
+                  send('client_tool_call', { tool: chunk.toolCall.name, input: chunk.toolCall.arguments })
+                } else {
+                  send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
+                }
                 break
               case 'tool-call-delta':
                 // Skip partial tool call deltas — we emit the final tool-call

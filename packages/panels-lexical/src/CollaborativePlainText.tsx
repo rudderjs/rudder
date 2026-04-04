@@ -6,8 +6,78 @@ import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin'
 import { LexicalCollaboration } from '@lexical/react/LexicalCollaborationContext'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { $getRoot, $createParagraphNode, $createTextNode, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH } from 'lexical'
+import { $getRoot, $createParagraphNode, $createTextNode, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH, type TextNode } from 'lexical'
 import { useYjsCollab } from './hooks/useYjsCollab.js'
+
+// ─── Edit operations for surgical AI edits ──────────────────
+
+export type EditOperation =
+  | { type: 'replace'; search: string; replace: string }
+  | { type: 'insert_after'; search: string; text: string }
+  | { type: 'delete'; search: string }
+  | { type: 'update_block'; blockType: string; blockIndex: number; field: string; value: unknown }
+
+/** Shared editor handle exposed via ref. */
+export interface EditorHandle {
+  setContent(text: string): void
+  applyEdits(operations: EditOperation[]): void
+  getTextContent(): string
+}
+
+/**
+ * Apply a single text operation (replace/insert_after/delete) to the first matching TextNode.
+ * Must be called inside `editor.update()`. Shared by plain text and rich text editor ref plugins.
+ *
+ * @param editor — the Lexical editor instance (for scheduling highlight cleanup)
+ */
+export function applyTextOp(
+  op: Extract<EditOperation, { type: 'replace' | 'insert_after' | 'delete' }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  editor: any,
+  highlightMs = 1500,
+) {
+  const textNodes = $getRoot().getAllTextNodes()
+  for (const node of textNodes) {
+    const text = node.getTextContent()
+    const idx = text.indexOf(op.search)
+    if (idx === -1) continue
+
+    switch (op.type) {
+      case 'replace': {
+        const parts = node.splitText(idx, idx + op.search.length)
+        const target = idx === 0 ? parts[0]! : parts[1]!
+        target.setTextContent(op.replace)
+        target.setStyle('background-color: rgba(59, 130, 246, 0.15); transition: background-color 1.5s;')
+        setTimeout(() => {
+          editor.update(() => { try { target.setStyle('') } catch { /* node may have changed */ } })
+        }, highlightMs)
+        break
+      }
+      case 'insert_after': {
+        const endIdx = idx + op.search.length
+        const insertNode = $createTextNode(op.text)
+        insertNode.setStyle('background-color: rgba(59, 130, 246, 0.15); transition: background-color 1.5s;')
+        if (endIdx < text.length) {
+          const parts = node.splitText(endIdx)
+          parts[1]!.insertBefore(insertNode)
+        } else {
+          node.insertAfter(insertNode)
+        }
+        setTimeout(() => {
+          editor.update(() => { try { insertNode.setStyle('') } catch { /* */ } })
+        }, highlightMs)
+        break
+      }
+      case 'delete': {
+        const parts = node.splitText(idx, idx + op.search.length)
+        const target = idx === 0 ? parts[0]! : parts[1]!
+        target.remove()
+        break
+      }
+    }
+    break // Only first match per operation
+  }
+}
 
 interface Props {
   value:       string
@@ -23,8 +93,8 @@ interface Props {
   className?:  string
   /** If true, renders as a multi-line textarea. If false (default), single-line input. */
   multiline?:  boolean
-  /** Ref for imperative control (e.g. version restore) */
-  editorRef?:  React.MutableRefObject<{ setContent(text: string): void } | null>
+  /** Ref for imperative control (e.g. version restore, AI edits) */
+  editorRef?:  React.MutableRefObject<EditorHandle | null>
 }
 
 const THEME = {
@@ -193,9 +263,9 @@ function SeedPlugin({ value, yjsRef }: { value: string; yjsRef: React.RefObject<
 }
 
 // ── PlainTextEditorRefPlugin ──────────────────────────────
-// Exposes imperative setContent for version restore.
+// Exposes imperative handle for version restore and surgical AI edits.
 
-function PlainTextEditorRefPlugin({ editorRef }: { editorRef: React.MutableRefObject<{ setContent(text: string): void } | null> }) {
+function PlainTextEditorRefPlugin({ editorRef }: { editorRef: React.MutableRefObject<EditorHandle | null> }) {
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
@@ -208,6 +278,19 @@ function PlainTextEditorRefPlugin({ editorRef }: { editorRef: React.MutableRefOb
           p.append($createTextNode(text))
           root.append(p)
         })
+      },
+
+      applyEdits(operations: EditOperation[]) {
+        editor.update(() => {
+          for (const op of operations) {
+            if (op.type === 'update_block') continue // Plain text has no blocks
+            applyTextOp(op, editor)
+          }
+        })
+      },
+
+      getTextContent(): string {
+        return editor.getEditorState().read(() => $getRoot().getTextContent())
       },
     }
     return () => { editorRef.current = null }
