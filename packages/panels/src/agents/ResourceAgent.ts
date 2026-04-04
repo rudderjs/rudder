@@ -181,7 +181,7 @@ export class ResourceAgent {
       if (this.context.fieldMeta) {
         for (const [fieldName, meta] of Object.entries(this.context.fieldMeta)) {
           if (!meta.yjs) continue
-          if (meta.type !== 'richcontent' && meta.type !== 'textarea') continue
+          if (meta.type !== 'richcontent' && meta.type !== 'textarea' && meta.type !== 'text') continue
           try {
             const fragment = meta.type === 'richcontent' ? 'richcontent' : 'text'
             const fieldDocName = `${docName}:${fragment}:${fieldName}`
