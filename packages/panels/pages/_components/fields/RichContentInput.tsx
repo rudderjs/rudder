@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, type ComponentType } from 'react'
-import { getField } from '@rudderjs/panels'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { getField, subscribeFields } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 
 /** Global registry of editor refs for version restore. Keyed by field name. */
@@ -24,22 +24,12 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
     return () => { editorRefs.delete(field.name) }
   }, [field.name])
 
-  // Always start null to avoid SSR/client hydration mismatch — editor registers async on client
-  const [RichEditor, setRichEditor] = useState<ComponentType<Record<string, unknown>> | null>(null)
-  useEffect(() => {
-    if (getField('_lexical:richcontent')) {
-      setRichEditor(() => getField('_lexical:richcontent')!)
-      return
-    }
-    const interval = setInterval(() => {
-      const comp = getField('_lexical:richcontent')
-      if (comp) {
-        setRichEditor(() => comp)
-        clearInterval(interval)
-      }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [])
+  // Reactively wait for the Lexical rich-text component to register.
+  const RichEditor = useSyncExternalStore(
+    subscribeFields,
+    () => getField('_lexical:richcontent') ?? null,
+    () => null, // SSR snapshot — never render editor on server
+  )
 
   if (RichEditor) {
     return (

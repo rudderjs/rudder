@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { getField } from '@rudderjs/panels'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { getField, subscribeFields } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 /** Global registry for textarea collab refs */
@@ -21,18 +21,12 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
     }
   }, [field.name, field.yjs])
 
-  // Collaborative textarea — poll until the Lexical component registers (same pattern as RichContentInput).
-  const [CollabText, setCollabText] = useState<ReturnType<typeof getField>>(null)
-  useEffect(() => {
-    if (!field.yjs || !wsPath || !docName) return
-    const existing = getField('_lexical:collaborativePlainText')
-    if (existing) { setCollabText(() => existing); return }
-    const interval = setInterval(() => {
-      const comp = getField('_lexical:collaborativePlainText')
-      if (comp) { setCollabText(() => comp); clearInterval(interval) }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [field.yjs, wsPath, docName]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Collaborative textarea — reactively wait for the Lexical component to register.
+  const CollabText = useSyncExternalStore(
+    subscribeFields,
+    () => getField('_lexical:collaborativePlainText') ?? null,
+    () => null,
+  )
 
   if (CollabText && field.yjs && wsPath && docName) {
     return (

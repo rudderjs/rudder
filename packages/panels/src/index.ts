@@ -75,7 +75,7 @@ export type { NodeData, NodeMap } from './NodeMap.js'
 
 // ─── Component Registry ─────────────────────────────────────
 
-export { registerField, getField, registerElement, getElement, registerLazyElement, getLazyElement } from './registries/ComponentRegistry.js'
+export { registerField, getField, subscribeFields, registerElement, getElement, registerLazyElement, getLazyElement } from './registries/ComponentRegistry.js'
 
 // ─── Resolver Registry ──────────────────────────────────────
 

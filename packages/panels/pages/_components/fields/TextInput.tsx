@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { getField } from '@rudderjs/panels'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { getField, subscribeFields } from '@rudderjs/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -47,21 +47,14 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
     }
   }, [field.name, field.yjs])
 
-  // Collaborative text — poll until the Lexical component registers (same pattern as RichContentInput).
-  // Avoids rendering the plain <input> fallback with a stale DB value when Yjs has the real content.
-  const [CollabText, setCollabText] = useState<ReturnType<typeof getField>>(null)
-  useEffect(() => {
-    if (!(field.type === 'text' || field.type === 'email') || !field.yjs || !wsPath || !docName) return
-    const existing = getField('_lexical:collaborativePlainText')
-    if (existing) { setCollabText(() => existing); return }
-    const interval = setInterval(() => {
-      const comp = getField('_lexical:collaborativePlainText')
-      if (comp) { setCollabText(() => comp); clearInterval(interval) }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [field.type, field.yjs, wsPath, docName]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Collaborative text — reactively wait for the Lexical component to register.
+  const CollabText = useSyncExternalStore(
+    subscribeFields,
+    () => getField('_lexical:collaborativePlainText') ?? null,
+    () => null, // SSR snapshot — never render collab on server
+  )
 
-  if (CollabText && field.yjs && wsPath && docName) {
+  if (CollabText && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
     return (
       <CollabText
         value={(value as string) ?? ''}

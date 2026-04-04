@@ -84,17 +84,33 @@ export function createSingletonRegistry<T>(
 }
 
 /**
- * Simple key → value registry.
+ * Simple key → value registry with subscription support.
  * Uses globalThis to survive Vite SSR module duplication.
  * Used by ComponentRegistry (fields, elements) and ResolverRegistry.
+ *
+ * `subscribe(listener)` is compatible with React's `useSyncExternalStore` —
+ * components can reactively wait for a key to be registered without polling.
  */
 export function createMapRegistry<T>(namespace: string) {
   const g = globalThis as Record<string, unknown>
   const key = `__rudderjs_${namespace}`
   if (!g[key]) g[key] = new Map<string, T>()
   const map = g[key] as Map<string, T>
+
+  const listenersKey = `__rudderjs_${namespace}_listeners`
+  if (!g[listenersKey]) g[listenersKey] = new Set<() => void>()
+  const listeners = g[listenersKey] as Set<() => void>
+
   return {
-    register(key: string, value: T): void { map.set(key, value) },
+    register(key: string, value: T): void {
+      map.set(key, value)
+      for (const fn of listeners) fn()
+    },
     get(key: string): T | undefined { return map.get(key) },
+    /** Subscribe to registration changes. Returns an unsubscribe function. */
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
   }
 }

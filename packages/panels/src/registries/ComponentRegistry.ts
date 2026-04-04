@@ -11,9 +11,11 @@ type LazyFactory = () => Promise<{ default: ComponentType<any> }>
 const lazyFactories = createMapRegistry<LazyFactory>('lazy_elements')
 
 /** Register a custom field input component. */
-export const registerField = fields.register
+export const registerField    = fields.register
 /** Look up a registered field component by key. @internal */
-export const getField      = fields.get
+export const getField         = fields.get
+/** Subscribe to field registration changes. @internal */
+export const subscribeFields  = fields.subscribe
 
 /** Register a custom schema element renderer. */
 export const registerElement = elements.register
