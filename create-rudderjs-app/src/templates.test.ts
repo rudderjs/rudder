@@ -7,25 +7,25 @@ import { getTemplates, pmExec, pmRun, pmInstall, type TemplateContext } from './
 const defaultPkgs: TemplateContext['packages'] = {
   auth: true, cache: true, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
-  broadcast: false, live: false, panels: false,
+  broadcast: false, live: false, ai: false, panels: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
   auth: false, cache: false, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
-  broadcast: false, live: false, panels: false,
+  broadcast: false, live: false, ai: false, panels: false,
 }
 
 const noAuth: TemplateContext['packages'] = {
   auth: false, cache: true, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
-  broadcast: false, live: false, panels: false,
+  broadcast: false, live: false, ai: false, panels: false,
 }
 
 const allPkgs: TemplateContext['packages'] = {
   auth: true, cache: true, queue: true, storage: true,
   mail: true, notifications: true, scheduler: true,
-  broadcast: true, live: true, panels: true,
+  broadcast: true, live: true, ai: true, panels: true,
 }
 
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
@@ -40,6 +40,8 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     tailwind:   true,
     shadcn:     false,
     pm:         'pnpm' as const,
+    withMedia:      false,
+    withWorkspaces: false,
     packages:   defaultPkgs,
     ...overrides,
   }

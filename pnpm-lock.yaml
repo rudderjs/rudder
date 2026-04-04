@@ -589,6 +589,9 @@ importers:
       '@rudderjs/panels':
         specifier: workspace:*
         version: link:../panels
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14

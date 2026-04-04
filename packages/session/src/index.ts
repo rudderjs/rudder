@@ -359,7 +359,7 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
 
     // Store on the underlying server context (req.raw = Hono's c) so that any
     // normalizeRequest(c) call — including the one in registerRoute — sees it.
-    ;(req.raw as Record<string, unknown>)['__bk_session'] = session
+    ;(req.raw as Record<string, unknown>)['__rjs_session'] = session
 
     await _als.run(session, next)
     await session.save(res)

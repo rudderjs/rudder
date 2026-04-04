@@ -1,4 +1,4 @@
-// <boostkit:modules:start>
+// <rudderjs:modules:start>
 // module: Todo (Todo.prisma)
 model Todo {
   id        String   @id @default(cuid())
@@ -7,7 +7,7 @@ model Todo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-// <boostkit:modules:end>
+// <rudderjs:modules:end>
 
 model Article {
   id              String     @id @default(cuid())

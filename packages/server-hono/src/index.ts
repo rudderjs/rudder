@@ -48,12 +48,12 @@ function normalizeRequest(c: Context): AppRequest {
   // Hono context, so getters ensure the route handler always sees what was set.
   const ctx = c as unknown as Record<string, unknown>
   Object.defineProperty(req, 'session', {
-    get: () => ctx['__bk_session'],
+    get: () => ctx['__rjs_session'],
     enumerable: true,
     configurable: true,
   })
   Object.defineProperty(req, 'user', {
-    get: () => ctx['__bk_user'],
+    get: () => ctx['__rjs_user'],
     enumerable: true,
     configurable: true,
   })

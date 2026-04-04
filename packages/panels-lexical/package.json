@@ -65,6 +65,7 @@
   "devDependencies": {
     "@rudderjs/core": "workspace:*",
     "@rudderjs/panels": "workspace:*",
+    "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "lexical": "^0.41.0",

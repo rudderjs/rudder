@@ -70,5 +70,5 @@ model Notification {
   @@index([notifiable_type, notifiable_id])
 }
 
-// <boostkit:modules:start>
-// <boostkit:modules:end>
+// <rudderjs:modules:start>
+// <rudderjs:modules:end>

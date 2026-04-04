@@ -10,7 +10,7 @@ const config: SessionConfig = {
   lifetime: 120,
   secret:   'test-secret-32-chars-exactly!!xx',
   cookie: {
-    name:     'bk_sess',
+    name:     'rjs_sess',
     secure:   false,
     httpOnly: true,
     sameSite: 'lax',
@@ -45,7 +45,7 @@ async function runRequest(
   const { req, res, setCookies } = makeReqRes(cookieHeader)
   let captured!: SessionInstance
   await mw(req, res, async () => {
-    captured = (req.raw as Record<string, unknown>)['__bk_session'] as SessionInstance
+    captured = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
     await fn(captured)
   })
   return { session: captured, setCookie: setCookies[0] }
@@ -53,7 +53,7 @@ async function runRequest(
 
 /** Extract the raw cookie value from a Set-Cookie header string */
 function extractCookieValue(setCookieHeader: string): string {
-  const match = setCookieHeader.match(/^bk_sess=([^;]+)/)
+  const match = setCookieHeader.match(/^rjs_sess=([^;]+)/)
   return match![1]!
 }
 
@@ -65,7 +65,7 @@ async function twoRequests(
   const { session: first, setCookie } = await runRequest('', firstFn)
   assert.ok(setCookie, 'first request must set a cookie')
   const cookieValue = extractCookieValue(setCookie)
-  const { session: second } = await runRequest(`bk_sess=${cookieValue}`, secondFn)
+  const { session: second } = await runRequest(`rjs_sess=${cookieValue}`, secondFn)
   return { first, second }
 }
 
@@ -159,10 +159,10 @@ describe('SessionInstance — flash', () => {
   it('flash value is gone after the request that reads it', async () => {
     const { session: _r1, setCookie: c1 } = await runRequest('', s => s.flash('msg', 'hello'))
     const cv1 = extractCookieValue(c1!)
-    const { session: r2, setCookie: c2 } = await runRequest(`bk_sess=${cv1}`)
+    const { session: r2, setCookie: c2 } = await runRequest(`rjs_sess=${cv1}`)
     assert.strictEqual(r2.getFlash('msg'), 'hello')
     const cv2 = extractCookieValue(c2!)
-    const { session: r3 } = await runRequest(`bk_sess=${cv2}`)
+    const { session: r3 } = await runRequest(`rjs_sess=${cv2}`)
     assert.strictEqual(r3.getFlash('msg'), undefined)
   })
 
@@ -203,17 +203,17 @@ describe('SessionInstance — regenerate()', () => {
 // ─── sessionMiddleware ─────────────────────────────────────────────────────────
 
 describe('sessionMiddleware', () => {
-  it('attaches session to req.raw.__bk_session', async () => {
+  it('attaches session to req.raw.__rjs_session', async () => {
     const mw = sessionMiddleware(config)
     const { req, res } = makeReqRes()
     await mw(req, res, async () => {
-      assert.ok((req.raw as Record<string, unknown>)['__bk_session'] instanceof SessionInstance)
+      assert.ok((req.raw as Record<string, unknown>)['__rjs_session'] instanceof SessionInstance)
     })
   })
 
   it('writes Set-Cookie header after next() resolves', async () => {
     const { setCookie } = await runRequest()
-    assert.ok(setCookie?.startsWith('bk_sess='))
+    assert.ok(setCookie?.startsWith('rjs_sess='))
   })
 
   it('Set-Cookie header contains HttpOnly', async () => {
@@ -238,10 +238,10 @@ describe('sessionMiddleware', () => {
 
   it('tampered cookie starts a fresh session', async () => {
     const mw = sessionMiddleware(config)
-    const { req, res } = makeReqRes('bk_sess=tampered.invalidsig')
+    const { req, res } = makeReqRes('rjs_sess=tampered.invalidsig')
     let sessionId!: string
     await mw(req, res, async () => {
-      const s = (req.raw as Record<string, unknown>)['__bk_session'] as SessionInstance
+      const s = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
       sessionId = s.id()
     })
     assert.ok(sessionId.length > 0) // fresh session created
@@ -304,7 +304,7 @@ describe('Session facade', () => {
     const { session: _r1, setCookie } = await runRequest('', () => Session.flash('notice', 'ok'))
     assert.ok(setCookie)
     const cookieValue = extractCookieValue(setCookie)
-    const { session: r2 } = await runRequest(`bk_sess=${cookieValue}`)
+    const { session: r2 } = await runRequest(`rjs_sess=${cookieValue}`)
     assert.strictEqual(r2.getFlash('notice'), 'ok')
   })
 

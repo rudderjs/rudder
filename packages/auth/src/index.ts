@@ -271,7 +271,7 @@ export function AuthMiddleware(): MiddlewareHandler {
       return
     }
 
-    ;(req.raw as Record<string, unknown>)['__bk_user'] = session.user
+    ;(req.raw as Record<string, unknown>)['__rjs_user'] = session.user
     await next()
   }
 }

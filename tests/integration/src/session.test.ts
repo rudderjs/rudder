@@ -16,7 +16,7 @@ const config: SessionConfig = {
   driver:   'cookie',
   lifetime: 120,
   secret:   'integration-test-secret-32-chars!!',
-  cookie: { name: 'bk_session', httpOnly: true, sameSite: 'lax', secure: false, path: '/' },
+  cookie: { name: 'rjs_session', httpOnly: true, sameSite: 'lax', secure: false, path: '/' },
 }
 
 function makeReqRes(cookieHeader = '') {
@@ -44,7 +44,7 @@ async function runRequest(
   let capturedSession!: SessionInstance
 
   await mw(req, res, async () => {
-    capturedSession = (req.raw as Record<string, unknown>)['__bk_session'] as SessionInstance
+    capturedSession = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
     await fn(capturedSession)
   })
 
@@ -53,7 +53,7 @@ async function runRequest(
 
 function extractCookieValue(setCookieHeader: string | null): string {
   if (!setCookieHeader) return ''
-  const match = setCookieHeader.match(/bk_session=([^;]+)/)
+  const match = setCookieHeader.match(/rjs_session=([^;]+)/)
   return match?.[1] ?? ''
 }
 
@@ -110,7 +110,7 @@ describe('session — cookie driver integration', () => {
         s.put('userId', 'user-123')
       })
 
-      const cookieHeader = `bk_session=${extractCookieValue(setCookie)}`
+      const cookieHeader = `rjs_session=${extractCookieValue(setCookie)}`
 
       await runRequest(cookieHeader, async (s) => {
         assert.equal(s.get('userId'), 'user-123')
@@ -125,7 +125,7 @@ describe('session — cookie driver integration', () => {
       const cookieVal = extractCookieValue(setCookie)
       const tampered  = cookieVal.slice(0, -1) + (cookieVal.slice(-1) === 'a' ? 'b' : 'a')
 
-      await runRequest(`bk_session=${tampered}`, async (s) => {
+      await runRequest(`rjs_session=${tampered}`, async (s) => {
         assert.strictEqual(s.get('secret'), undefined)
       })
     })
@@ -135,7 +135,7 @@ describe('session — cookie driver integration', () => {
         s.put('k', 'v')
       })
       assert.ok(setCookie !== null, 'Set-Cookie header should be set')
-      assert.ok(setCookie!.includes('bk_session='), 'should contain session cookie name')
+      assert.ok(setCookie!.includes('rjs_session='), 'should contain session cookie name')
     })
   })
 
@@ -145,11 +145,11 @@ describe('session — cookie driver integration', () => {
         s.flash('notice', 'Saved!')
       })
 
-      const { setCookie: c2 } = await runRequest(`bk_session=${extractCookieValue(c1)}`, async (s) => {
+      const { setCookie: c2 } = await runRequest(`rjs_session=${extractCookieValue(c1)}`, async (s) => {
         assert.equal(s.getFlash('notice'), 'Saved!')
       })
 
-      await runRequest(`bk_session=${extractCookieValue(c2)}`, async (s) => {
+      await runRequest(`rjs_session=${extractCookieValue(c2)}`, async (s) => {
         assert.strictEqual(s.getFlash('notice'), undefined)
       })
     })
