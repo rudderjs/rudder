@@ -258,13 +258,16 @@ async function handleAiChat(
     }
   }) : null
 
-  // Build conversation messages for the AI
-  const messages = history.map(h => ({
-    role: h.role as 'user' | 'assistant',
-    content: h.content,
-  }))
-
   const tools = [runAgentTool, ...(editTextTool ? [editTextTool] : [])]
+
+  // Include conversation history in the prompt so the AI has context
+  let fullInput = message
+  if (history.length > 0) {
+    const historyText = history
+      .map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.content}`)
+      .join('\n')
+    fullInput = `## Conversation History\n${historyText}\n\n## Current Message\n${message}`
+  }
 
   try {
     const a = agentFn({
@@ -272,7 +275,7 @@ async function handleAiChat(
       tools,
     })
 
-    const { stream, response } = a.stream(message)
+    const { stream, response } = a.stream(fullInput)
 
     for await (const chunk of stream) {
       switch (chunk.type) {
