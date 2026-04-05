@@ -672,12 +672,58 @@ A collapsible right sidebar (toggled from the header) provides a unified chat ex
 - **Agent runs inline** — when you trigger an agent (from dropdown or by asking in chat), tool calls, text, and completion appear as structured message parts in the conversation
 - **Resource-aware** — on resource edit pages, the AI knows the current record and available agents. Ask "write me an excerpt" and the AI will invoke the Write Excerpt agent automatically
 - **Field animation** — agent `update_field` tool calls animate into the form in real-time via Yjs
+- **Conversation persistence** — conversations are stored in the database (Prisma), auto-titled, and restorable across sessions via a conversation switcher dropdown
+- **Model selection** — users choose which AI model to use from a dropdown in the chat input area. Models are configured in `config/ai.ts`
 
 The chat endpoint (`POST /{panel}/api/_chat`) supports:
 - `message` — user's text
-- `history` — conversation context
+- `conversationId` — for persistent conversation history
+- `model` — user-selected AI model
 - `resourceContext` — current resource slug + record ID
+- `selection` — selected text context (field name + text)
 - `forceAgent` — bypass AI intent detection, run a specific agent directly
+
+### Selected Text Context
+
+Select text in any collaborative field (title, textarea, or rich content) and click the **✦** button that appears. This opens the AI chat with the selection pre-filled — the AI knows exactly which field and text to edit.
+
+```
+1. Select text in editor → ✦ button appears
+2. Click ✦ → chat opens with selection context
+3. Type "make this shorter" → AI edits that exact text in that exact field
+```
+
+The selection context locks the AI to the correct field — it cannot accidentally edit a different field. After editing, the AI confirms what it changed.
+
+### AI Quick Actions (`.ai()`)
+
+Add predefined AI actions to any field with `.ai()`:
+
+```ts
+TextField.make('title')
+  .ai(['rewrite', 'shorten', 'expand', 'fix-grammar'])
+
+RichContentField.make('content')
+  .ai(['rewrite', 'expand', 'shorten', 'fix-grammar', 'translate', 'simplify'])
+
+TextareaField.make('excerpt')
+  .ai()  // default actions: rewrite, expand, shorten, fix-grammar
+```
+
+A **✦** sparkle button appears next to the field label. Click it to see a dropdown of actions — each sends a one-click prompt to the AI chat that edits the field directly.
+
+**Available built-in actions:**
+
+| Action | Prompt |
+|---|---|
+| `rewrite` | Rewrite while keeping the same meaning |
+| `expand` | Expand with more detail |
+| `shorten` | Shorten while keeping key points |
+| `fix-grammar` | Fix grammar and spelling |
+| `translate` | Translate to English |
+| `summarize` | Summarize concisely |
+| `make-formal` | Rewrite in a more formal tone |
+| `simplify` | Simplify for easier understanding |
 
 ### Class-Based Agents
 

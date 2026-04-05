@@ -126,6 +126,41 @@ for await (const chunk of stream) {
 const final = await response // full AgentResponse when stream completes
 ```
 
+### Conversation History
+
+Pass message history to maintain context across turns:
+
+```ts
+const response = await agent('You are helpful.').prompt('Follow up question', {
+  history: [
+    { role: 'user', content: 'What is TypeScript?' },
+    { role: 'assistant', content: 'TypeScript is a typed superset of JavaScript...' },
+  ],
+})
+```
+
+Works with both `.prompt()` and `.stream()`. History messages are prepended after the system prompt, before the current user message.
+
+### Model Selection
+
+Configure available models for user selection (used by `@rudderjs/panels` chat UI):
+
+```ts
+// config/ai.ts
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: { ... },
+  models: [
+    { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5', default: true },
+    { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5' },
+    { id: 'openai/gpt-4o', label: 'GPT-4o' },
+    { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+  ],
+}
+```
+
+The model registry is available via `AiRegistry.getModels()` / `AiRegistry.getDefault()`.
+
 ### Middleware
 
 ```ts

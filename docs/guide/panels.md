@@ -780,3 +780,84 @@ The published pages at `pages/(panels)/` are yours to edit. The UI is built with
 - **Vike** — SSR file-based routing
 
 All panel data is driven by the `/_meta` API endpoint — adding a new resource or field requires no UI changes.
+
+---
+
+## AI Features
+
+Panels has built-in AI capabilities powered by `@rudderjs/ai`. Requires the AI package to be installed and configured.
+
+### AI Agents
+
+Define agents on resources to automate field editing:
+
+```ts
+import { ResourceAgent } from '@rudderjs/panels'
+
+agents() {
+  return [
+    ResourceAgent.make('seo')
+      .label('Improve SEO')
+      .icon('Search')
+      .instructions('Improve meta title and description for SEO.')
+      .fields(['metaTitle', 'metaDescription']),
+  ]
+}
+```
+
+Agents appear as a dropdown in the form toolbar and can also be invoked from the chat sidebar.
+
+### AI Chat Sidebar
+
+A collapsible right sidebar provides unified AI chat:
+
+- Free-form questions about your data
+- Agent runs with streaming tool calls
+- Resource-aware — knows the current record and fields
+- Conversation persistence with auto-titles
+- Model selection dropdown
+
+### Selected Text Editing
+
+Select text in any collaborative field → click **✦** → ask AI to edit it:
+
+```
+Select "Introduction to Bitcoin" in title → click ✦ → type "shorten this"
+→ AI calls edit_text on the title field → title updates in real-time
+```
+
+Works with TextField, TextareaField, and RichContentField.
+
+### Quick Actions (`.ai()`)
+
+Add one-click AI actions to any field:
+
+```ts
+TextField.make('title').ai(['rewrite', 'shorten', 'expand', 'fix-grammar'])
+RichContentField.make('content').ai(['rewrite', 'expand', 'shorten', 'translate', 'simplify'])
+TextareaField.make('excerpt').ai()  // default set of actions
+```
+
+A **✦** button appears next to the field label with a dropdown of predefined actions.
+
+Available actions: `rewrite`, `expand`, `shorten`, `fix-grammar`, `translate`, `summarize`, `make-formal`, `simplify`.
+
+### Setup
+
+```ts
+// config/ai.ts
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: {
+    anthropic: { driver: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! },
+  },
+  models: [
+    { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5', default: true },
+    { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5' },
+  ],
+}
+
+// bootstrap/providers.ts
+import { ai } from '@rudderjs/ai'
+export default [ai(configs.ai), ...]
+```
