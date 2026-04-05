@@ -16,9 +16,11 @@ interface FloatingToolbarProps {
   config?: ToolbarConfig | undefined
   /** Callback to enter link edit mode (shared with FloatingLinkEditorPlugin) */
   onInsertLink?: () => void
+  /** Callback when user clicks "Ask AI" — receives the selected text. */
+  onAskAi?: ((text: string) => void) | undefined
 }
 
-export function FloatingToolbarPlugin({ config, onInsertLink }: FloatingToolbarProps = {}) {
+export function FloatingToolbarPlugin({ config, onInsertLink, onAskAi }: FloatingToolbarProps = {}) {
   const [editor] = useLexicalComposerContext()
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
@@ -28,6 +30,7 @@ export function FloatingToolbarPlugin({ config, onInsertLink }: FloatingToolbarP
   const [isStrikethrough, setIsStrikethrough] = useState(false)
   const [isCode, setIsCode] = useState(false)
   const [isLink, setIsLink] = useState(false)
+  const selectedTextRef = useRef('')
 
   const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -69,6 +72,7 @@ export function FloatingToolbarPlugin({ config, onInsertLink }: FloatingToolbarP
     const parent = node.getParent()
     setIsLink($isLinkNode(parent) || $isLinkNode(node))
 
+    selectedTextRef.current = selection.getTextContent()
     setIsVisible(true)
 
     requestAnimationFrame(() => positionToolbar())
@@ -131,6 +135,14 @@ export function FloatingToolbarPlugin({ config, onInsertLink }: FloatingToolbarP
     }
   }, [editor, isLink, onInsertLink])
 
+  const handleAskAi = useCallback(() => {
+    const text = selectedTextRef.current
+    if (text && onAskAi) {
+      onAskAi(text)
+      setIsVisible(false)
+    }
+  }, [onAskAi])
+
   if (!isVisible) return null
 
   const has = (tool: string) => !config || hasTool(config, tool as import('../toolbar.js').ToolbarTool)
@@ -147,6 +159,8 @@ export function FloatingToolbarPlugin({ config, onInsertLink }: FloatingToolbarP
     has('link') && <ToolbarBtn key="link" active={isLink} onClick={handleInsertLink} label="🔗" title="Link" />,
   ].filter(Boolean)
 
+  const showAiBtn = !!onAskAi
+
   return createPortal(
     <div
       ref={toolbarRef}
@@ -155,6 +169,10 @@ export function FloatingToolbarPlugin({ config, onInsertLink }: FloatingToolbarP
       {formatBtns}
       {formatBtns.length > 0 && extraBtns.length > 0 && <div className="w-px h-5 bg-border mx-0.5" />}
       {extraBtns}
+      {showAiBtn && (formatBtns.length > 0 || extraBtns.length > 0) && <div className="w-px h-5 bg-border mx-0.5" />}
+      {showAiBtn && (
+        <ToolbarBtn key="ai" active={false} onClick={handleAskAi} label="✦" title="Ask AI" className="text-primary" />
+      )}
     </div>,
     document.body,
   )

@@ -41,6 +41,7 @@ interface ChatRequestBody {
   history?:         Array<{ role: 'user' | 'assistant'; content: string }>
   resourceContext?: { resourceSlug: string; recordId: string }
   forceAgent?:      string
+  selection?:       { field: string; text: string }
 }
 
 interface ConversationStoreLike {
@@ -132,6 +133,7 @@ async function handleAiChat(
   record: Record<string, unknown>,
   conversationId?: string | undefined,
   model?: string | undefined,
+  selection?: { field: string; text: string } | undefined,
 ) {
   const { agent: agentFn, toolDefinition, z } = await loadAi()
 
@@ -159,6 +161,15 @@ async function handleAiChat(
     'Do NOT use `update_field` on rich text fields — it would overwrite the entire content.',
     '',
     'Be concise and helpful.',
+    ...(selection ? [
+      '',
+      '## Selected Text',
+      `The user has selected the following text in the "${selection.field}" field:`,
+      '"""',
+      selection.text,
+      '"""',
+      'Use edit_text with replace/insert_after/delete operations targeting this specific text.',
+    ] : []),
   ].join('\n')
 
   // Build the run_agent tool
@@ -373,7 +384,7 @@ async function handlePanelChat(
     return res.status(400).json({ message: 'Invalid request body.' })
   }
 
-  const { message, conversationId: reqConvId, model: requestedModel, history = [], resourceContext, forceAgent } = body
+  const { message, conversationId: reqConvId, model: requestedModel, history = [], resourceContext, forceAgent, selection } = body
 
   // Create SSE stream
   const { readable, send, close } = createSSEStream()
@@ -475,7 +486,7 @@ async function handlePanelChat(
     // Don't await — stream runs asynchronously
     handleForceAgent(send, close, targetAgent, agentCtx, message)
   } else if (agents.length > 0 && agentCtx) {
-    handleAiChat(send, close, message, loadedHistory, agents, agentCtx, record, conversationId, requestedModel)
+    handleAiChat(send, close, message, loadedHistory, agents, agentCtx, record, conversationId, requestedModel, selection)
   } else {
     // No resource context — simple AI chat (no tools)
     const { agent: agentFn } = await loadAi()

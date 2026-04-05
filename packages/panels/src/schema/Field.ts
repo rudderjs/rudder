@@ -39,6 +39,7 @@ export interface FieldMeta {
   defaultValue?:       unknown
   from?:               string[]
   debounce?:           number
+  ai?:                 boolean | string[]
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -65,6 +66,7 @@ export abstract class Field {
   protected _from?: string[]
   protected _reactiveComputeFn?: (values: Record<string, unknown>) => unknown
   protected _debounce?: number
+  protected _ai: boolean | string[] = false
 
   constructor(name: string) {
     this._name = name
@@ -429,6 +431,29 @@ export abstract class Field {
     return this
   }
 
+  /**
+   * Enable AI-powered quick actions for this field.
+   * When enabled, the field shows an AI button in the floating toolbar (richcontent)
+   * and the selection is sent as context to the AI chat.
+   *
+   * Pass an array of action names to enable specific quick actions,
+   * or `true` to enable AI without predefined actions.
+   *
+   * @example
+   * TextField.make('title').ai()
+   * RichContentField.make('content').ai(['rewrite', 'expand', 'shorten', 'fix-grammar', 'translate'])
+   */
+  ai(actions?: boolean | string[]): this {
+    if (actions === undefined || actions === true) {
+      this._ai = true
+    } else if (Array.isArray(actions)) {
+      this._ai = actions.length > 0 ? actions : true
+    } else {
+      this._ai = false
+    }
+    return this
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName():       string  { return this._name }
@@ -477,6 +502,9 @@ export abstract class Field {
     if (this._from && this._from.length > 0) {
       meta.from = this._from
       if (this._debounce !== undefined) meta.debounce = this._debounce
+    }
+    if (this._ai !== false) {
+      meta.ai = this._ai
     }
     return meta
   }

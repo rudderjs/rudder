@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { getField, subscribeFields } from '@rudderjs/panels'
+import { useAiChatSafe } from '../agents/AiChatContext.js'
 import type { FieldInputProps } from './types.js'
 
 /** Global registry of editor refs for version restore. Keyed by field name. */
@@ -12,8 +13,21 @@ export function getRichContentRef(fieldName: string) {
   return editorRefs.get(fieldName)?.current ?? null
 }
 
-export function RichContentInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
+export function RichContentInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName, onAskAi: onAskAiProp }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
+  const aiChat = useAiChatSafe()
+  const fieldName = field.name
+
+  const onAskAi = useCallback((text: string) => {
+    if (onAskAiProp) {
+      onAskAiProp(text)
+    } else if (aiChat) {
+      aiChat.setSelection({ field: fieldName, text })
+      aiChat.setOpen(true)
+    }
+  }, [onAskAiProp, aiChat, fieldName])
+
+  const hasAskAi = !!(onAskAiProp || aiChat)
 
   // Editor ref for imperative control (version restore)
   const editorRef = useRef<{ setContent(json: unknown): void } | null>(null)
@@ -47,6 +61,7 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
         {...(userName !== undefined ? { userName } : {})}
         {...(userColor !== undefined ? { userColor } : {})}
         editorRef={editorRef}
+        {...(hasAskAi ? { onAskAi } : {})}
       />
     )
   }

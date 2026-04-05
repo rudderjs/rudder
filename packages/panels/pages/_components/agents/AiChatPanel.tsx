@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ChevronDownIcon, TrashIcon, MessageSquareIcon } from 'lucide-react'
+import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ChevronDownIcon, TrashIcon, MessageSquareIcon, TypeIcon } from 'lucide-react'
 import { useAiChat, type ChatMessage, type ChatMessagePart, type ConversationItem } from './AiChatContext.js'
 import { useIsMobile } from '@/hooks/use-mobile.js'
 import { Button } from '@/components/ui/button.js'
@@ -170,8 +170,22 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
 
 function MessageBubble({ message, isLast, isGenerating }: { message: ChatMessage; isLast: boolean; isGenerating: boolean }) {
   if (message.role === 'user') {
+    const sel = message.selection
+    const selTruncated = sel && sel.text.length > 80
+      ? sel.text.slice(0, 77) + '…'
+      : sel?.text
+
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
+        {sel && (
+          <div className="max-w-[85%] flex items-start gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <TypeIcon className="h-3 w-3 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <span className="font-medium text-foreground">{sel.field}</span>
+              <span className="block italic truncate">"{selTruncated}"</span>
+            </div>
+          </div>
+        )}
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm text-primary-foreground">
           {message.text}
         </div>
@@ -354,6 +368,31 @@ function ResourceContextPill() {
   )
 }
 
+// ─── Selection pill ─────────────────────────────────────────
+
+function SelectionPill() {
+  const { selection, setSelection } = useAiChat()
+  if (!selection) return null
+
+  const truncated = selection.text.length > 60
+    ? selection.text.slice(0, 57) + '…'
+    : selection.text
+
+  return (
+    <div className="flex items-center gap-1.5 mx-3 mb-1 px-2 py-1 rounded-md bg-primary/10 text-xs">
+      <TypeIcon className="h-3 w-3 text-primary shrink-0" />
+      <span className="font-medium text-primary">{selection.field}</span>
+      <span className="text-muted-foreground truncate flex-1">"{truncated}"</span>
+      <button
+        className="text-muted-foreground hover:text-foreground shrink-0"
+        onClick={() => setSelection(null)}
+      >
+        <XIcon className="h-3 w-3" />
+      </button>
+    </div>
+  )
+}
+
 // ─── Inner content (shared between desktop & mobile) ────────
 
 function AiChatContent() {
@@ -412,7 +451,8 @@ function AiChatContent() {
         </div>
       )}
 
-      {/* Chat input */}
+      {/* Selection pill + Chat input */}
+      <SelectionPill />
       <ChatInput onSend={(text) => sendMessage(text)} disabled={isGenerating} />
     </div>
   )

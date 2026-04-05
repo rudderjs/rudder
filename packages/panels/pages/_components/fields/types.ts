@@ -17,6 +17,8 @@ export interface FieldInputProps {
   wsPath?:   string | null
   /** Base document name for live collaboration — used by LexicalEditor */
   docName?:  string | null
+  /** Callback when user clicks "Ask AI" on selected text — receives selected text. */
+  onAskAi?:  (text: string) => void
 }
 
 export const INPUT_CLS = 'w-full rounded-md border border-input px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:bg-muted disabled:text-muted-foreground'

@@ -60,6 +60,8 @@ export interface Props {
   userColor?:    string
   /** Ref for imperative editor control (e.g. version restore) */
   editorRef?:    React.MutableRefObject<LexicalEditorHandle | null>
+  /** Callback when user clicks "Ask AI" on selected text in the floating toolbar. */
+  onAskAi?:      (text: string) => void
 }
 
 const EDITOR_NODES = [
@@ -98,7 +100,7 @@ export function LexicalEditor({
   value, onChange, placeholder, disabled,
   wsPath, docName, fragmentName = 'richcontent',
   blocks, toolbar: toolbarInput, slashCommand,
-  userName, userColor, editorRef,
+  userName, userColor, editorRef, onAskAi,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
@@ -219,7 +221,7 @@ export function LexicalEditor({
         )}
         {/* Floating toolbar — only when not using fixed toolbar and profile has tools */}
         {!toolbarConfig.fixed && toolbarConfig.tools.length > 0 && (
-          <FloatingToolbarPlugin config={toolbarConfig} onInsertLink={() => setIsLinkEditMode(true)} />
+          <FloatingToolbarPlugin config={toolbarConfig} onInsertLink={() => setIsLinkEditMode(true)} onAskAi={onAskAi} />
         )}
         <FloatingLinkEditorPlugin isEditMode={isLinkEditMode} setIsEditMode={setIsLinkEditMode} />
 

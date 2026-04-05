@@ -17,6 +17,8 @@ export interface ChatMessage {
   role:   'user' | 'assistant'
   text:   string              // concatenated text (backward compat + plain chat)
   parts?: ChatMessagePart[]   // structured content for rich rendering
+  /** Text selection that was active when this message was sent (user messages only). */
+  selection?: TextSelection | undefined
 }
 
 // ─── Agent run request (from FormActions dropdown) ──────────
@@ -46,6 +48,13 @@ export interface ConversationItem {
   title:     string
   createdAt: string
   updatedAt?: string
+}
+
+// ─── Text selection (from editor) ───────────────────────────
+
+export interface TextSelection {
+  field: string
+  text:  string
 }
 
 // ─── Field update callback ──────────────────────────────────
@@ -115,6 +124,10 @@ interface AiChatContextValue {
   /** Currently selected model (null = default). */
   selectedModel: string | null
   setSelectedModel: (model: string | null) => void
+
+  /** Text selection from an editor field — sent as context to AI. */
+  selection: TextSelection | null
+  setSelection: (sel: TextSelection | null) => void
 }
 
 const AiChatContext = createContext<AiChatContextValue | null>(null)
@@ -230,6 +243,8 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   const [selectedModel, setSelectedModelState] = useState<string | null>(null)
   const selectedModelRef = useRef<string | null>(null)
   const [showConversations, setShowConversations] = useState(false)
+  const [selection, setSelectionState] = useState<TextSelection | null>(null)
+  const selectionRef = useRef<TextSelection | null>(null)
   const resourceContextRef = useRef<ResourceContext | null>(null)
   const conversationIdRef = useRef<string | null>(null)
   const panelApiBase = panelPath ? `${panelPath}/api` : ''
@@ -241,6 +256,7 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   resourceContextRef.current = resourceContext
   conversationIdRef.current = conversationId
   selectedModelRef.current = selectedModel
+  selectionRef.current = selection
 
   const setSelectedModel = useCallback((model: string | null) => {
     selectedModelRef.current = model
@@ -250,6 +266,11 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   const setResourceContext = useCallback((ctx: ResourceContext | null) => {
     resourceContextRef.current = ctx
     setResourceContextState(ctx)
+  }, [])
+
+  const setSelection = useCallback((sel: TextSelection | null) => {
+    selectionRef.current = sel
+    setSelectionState(sel)
   }, [])
 
   // Fetch available models on mount
@@ -306,12 +327,17 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   }, [])
 
   const sendMessage = useCallback((text: string, opts?: { forceAgent?: string }) => {
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text }
+    // Snapshot selection before clearing — attach to user message for display
+    const msgSelection = selectionRef.current ?? undefined
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text, selection: msgSelection }
     const assistantId = crypto.randomUUID()
 
     setMessages(prev => [...prev, userMsg, { id: assistantId, role: 'assistant', text: '', parts: [] }])
     setIsGenerating(true)
     setFieldUpdates([])
+    // Clear selection after sending (it's been captured in the request body + user message)
+    setSelectionState(null)
+    selectionRef.current = null
 
     // Abort any in-flight request
     abortRef.current?.abort()
@@ -345,6 +371,10 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       }
       if (opts?.forceAgent) {
         body.forceAgent = opts.forceAgent
+      }
+      // Include text selection context if present
+      if (selectionRef.current) {
+        body.selection = selectionRef.current
       }
     }
 
@@ -520,6 +550,7 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       conversationId, conversations, showConversations, setShowConversations,
       loadConversation, loadConversations, newConversation, deleteConversation,
       models, selectedModel, setSelectedModel,
+      selection, setSelection,
     }}>
       {children}
     </AiChatContext.Provider>
@@ -532,4 +563,9 @@ export function useAiChat(): AiChatContextValue {
   const ctx = useContext(AiChatContext)
   if (!ctx) throw new Error('useAiChat must be used within AiChatProvider')
   return ctx
+}
+
+/** Safe variant — returns null when AiChatProvider is not mounted. */
+export function useAiChatSafe(): AiChatContextValue | null {
+  return useContext(AiChatContext)
 }

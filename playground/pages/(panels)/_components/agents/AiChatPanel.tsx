@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ChevronDownIcon, TrashIcon, MessageSquareIcon } from 'lucide-react'
+import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ChevronDownIcon, TrashIcon, MessageSquareIcon, TypeIcon } from 'lucide-react'
 import { useAiChat, type ChatMessage, type ChatMessagePart, type ConversationItem } from './AiChatContext.js'
 import { useIsMobile } from '@/hooks/use-mobile.js'
 import { Button } from '@/components/ui/button.js'
@@ -354,6 +354,31 @@ function ResourceContextPill() {
   )
 }
 
+// ─── Selection pill ─────────────────────────────────────────
+
+function SelectionPill() {
+  const { selection, setSelection } = useAiChat()
+  if (!selection) return null
+
+  const truncated = selection.text.length > 60
+    ? selection.text.slice(0, 57) + '…'
+    : selection.text
+
+  return (
+    <div className="flex items-center gap-1.5 mx-3 mb-1 px-2 py-1 rounded-md bg-primary/10 text-xs">
+      <TypeIcon className="h-3 w-3 text-primary shrink-0" />
+      <span className="font-medium text-primary">{selection.field}</span>
+      <span className="text-muted-foreground truncate flex-1">"{truncated}"</span>
+      <button
+        className="text-muted-foreground hover:text-foreground shrink-0"
+        onClick={() => setSelection(null)}
+      >
+        <XIcon className="h-3 w-3" />
+      </button>
+    </div>
+  )
+}
+
 // ─── Inner content (shared between desktop & mobile) ────────
 
 function AiChatContent() {
@@ -412,7 +437,8 @@ function AiChatContent() {
         </div>
       )}
 
-      {/* Chat input */}
+      {/* Selection pill + Chat input */}
+      <SelectionPill />
       <ChatInput onSend={(text) => sendMessage(text)} disabled={isGenerating} />
     </div>
   )
