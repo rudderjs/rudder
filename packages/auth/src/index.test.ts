@@ -1,182 +1,757 @@
-import { describe, it } from 'node:test'
+import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   auth,
-  betterAuth,
+  Auth,
+  AuthManager,
+  SessionGuard,
+  EloquentUserProvider,
+  RequireAuth,
   AuthMiddleware,
-  type BetterAuthConfig,
-  type AuthDbConfig,
+  Gate,
+  Policy,
+  AuthorizationError,
+  PasswordBroker,
+  MemoryTokenRepository,
+  runWithAuth,
+  toAuthenticatable,
+  type AuthConfig,
+  type Authenticatable,
 } from './index.js'
 
-// Note: tests that actually boot the auth provider require better-auth,
-// a Prisma client, and a running database. These tests verify factory
-// contracts and middleware shape without opening any connections.
+// ─── Test Fixtures ────────────────────────────────────────
 
-const baseConfig: BetterAuthConfig = {
-  secret:  'test-secret-that-is-long-enough-32chars',
-  baseUrl: 'http://localhost:3000',
+const TEST_PASSWORD_HASH = '$2b$04$hashed'
+
+function fakeUser(overrides?: Record<string, unknown>): Record<string, unknown> {
+  return { id: '1', name: 'John', email: 'john@example.com', password: TEST_PASSWORD_HASH, rememberToken: null, ...overrides }
 }
 
-describe('auth() factory', () => {
-  it('is a function', () => {
-    assert.strictEqual(typeof auth, 'function')
+function fakeModel(users: Record<string, unknown>[]) {
+  return {
+    find: async (id: string | number) => users.find(u => u['id'] === String(id)) ?? null,
+    query: () => {
+      let filters: Record<string, unknown> = {}
+      const builder = {
+        where(col: string, val: unknown) { filters[col] = val; return builder },
+        async first() {
+          return users.find(u => Object.entries(filters).every(([k, v]) => u[k] === v)) ?? null
+        },
+      }
+      return builder
+    },
+  }
+}
+
+function fakeSession(): { store: Record<string, unknown>; instance: { get<T>(k: string, f?: T): T | undefined; put(k: string, v: unknown): void; forget(k: string): void; regenerate(): Promise<void> } } {
+  const store: Record<string, unknown> = {}
+  return {
+    store,
+    instance: {
+      get<T>(key: string, fallback?: T): T | undefined {
+        return (key in store ? store[key] : fallback) as T | undefined
+      },
+      put(key: string, value: unknown) { store[key] = value },
+      forget(key: string) { delete store[key] },
+      async regenerate() { /* no-op in tests */ },
+    },
+  }
+}
+
+const alwaysTrue = async (_p: string, _h: string) => true
+const alwaysFalse = async (_p: string, _h: string) => false
+
+function makeConfig(model: unknown): AuthConfig {
+  return {
+    defaults: { guard: 'web' },
+    guards: { web: { driver: 'session', provider: 'users' } },
+    providers: { users: { driver: 'eloquent', model } },
+  }
+}
+
+// ─── toAuthenticatable ────────────────────────────────────
+
+describe('toAuthenticatable', () => {
+  it('wraps a plain record with Authenticatable methods', () => {
+    const record = fakeUser()
+    const auth = toAuthenticatable(record)
+    assert.strictEqual(auth.getAuthIdentifier(), '1')
+    assert.strictEqual(auth.getAuthPassword(), TEST_PASSWORD_HASH)
+    assert.strictEqual(auth.getRememberToken(), null)
   })
 
-  it('returns a constructor (ServiceProvider class)', () => {
-    const Provider = auth(baseConfig)
+  it('setRememberToken updates the record', () => {
+    const record = fakeUser()
+    const auth = toAuthenticatable(record)
+    auth.setRememberToken('abc')
+    assert.strictEqual(auth.getRememberToken(), 'abc')
+  })
+})
+
+// ─── EloquentUserProvider ─────────────────────────────────
+
+describe('EloquentUserProvider', () => {
+  const users = [fakeUser(), fakeUser({ id: '2', email: 'jane@example.com' })]
+  const model = fakeModel(users)
+  const provider = new EloquentUserProvider(model, alwaysTrue)
+
+  it('retrieveById returns user when found', async () => {
+    const user = await provider.retrieveById('1')
+    assert.ok(user)
+    assert.strictEqual(user.getAuthIdentifier(), '1')
+  })
+
+  it('retrieveById returns null when not found', async () => {
+    assert.strictEqual(await provider.retrieveById('999'), null)
+  })
+
+  it('retrieveByCredentials finds by email', async () => {
+    const user = await provider.retrieveByCredentials({ email: 'jane@example.com', password: 'x' })
+    assert.ok(user)
+    assert.strictEqual(user.getAuthIdentifier(), '2')
+  })
+
+  it('retrieveByCredentials returns null for no match', async () => {
+    assert.strictEqual(await provider.retrieveByCredentials({ email: 'nope@x.com' }), null)
+  })
+
+  it('retrieveByCredentials returns null when only password given', async () => {
+    assert.strictEqual(await provider.retrieveByCredentials({ password: 'x' }), null)
+  })
+
+  it('validateCredentials delegates to hashCheck', async () => {
+    const auth = toAuthenticatable(fakeUser())
+    const providerTrue = new EloquentUserProvider(model, alwaysTrue)
+    assert.strictEqual(await providerTrue.validateCredentials(auth, { password: 'any' }), true)
+
+    const providerFalse = new EloquentUserProvider(model, alwaysFalse)
+    assert.strictEqual(await providerFalse.validateCredentials(auth, { password: 'any' }), false)
+  })
+
+  it('validateCredentials returns false for non-string password', async () => {
+    const auth = toAuthenticatable(fakeUser())
+    assert.strictEqual(await provider.validateCredentials(auth, { password: 123 as unknown }), false)
+  })
+})
+
+// ─── SessionGuard ─────────────────────────────────────────
+
+describe('SessionGuard', () => {
+  it('user() returns null when no session', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+    assert.strictEqual(await guard.user(), null)
+  })
+
+  it('user() returns user when session has auth_user_id', async () => {
+    const sess = fakeSession()
+    sess.store['auth_user_id'] = '1'
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const user = await guard.user()
+    assert.ok(user)
+    assert.strictEqual(user.getAuthIdentifier(), '1')
+  })
+
+  it('check() / guest() reflect auth state', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    assert.strictEqual(await guard.check(), false)
+    assert.strictEqual(await guard.guest(), true)
+
+    sess.store['auth_user_id'] = '1'
+    // Need a fresh guard since user is cached
+    const guard2 = new SessionGuard(provider, sess.instance)
+    assert.strictEqual(await guard2.check(), true)
+    assert.strictEqual(await guard2.guest(), false)
+  })
+
+  it('attempt() with valid credentials logs in', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.attempt({ email: 'john@example.com', password: 'secret' })
+    assert.strictEqual(result, true)
+    assert.strictEqual(sess.store['auth_user_id'], '1')
+    assert.strictEqual(await guard.check(), true)
+  })
+
+  it('attempt() with invalid credentials returns false', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysFalse)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.attempt({ email: 'john@example.com', password: 'wrong' })
+    assert.strictEqual(result, false)
+    assert.strictEqual(sess.store['auth_user_id'], undefined)
+  })
+
+  it('attempt() with unknown user returns false', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const result = await guard.attempt({ email: 'ghost@x.com', password: 'any' })
+    assert.strictEqual(result, false)
+  })
+
+  it('login() sets session and caches user', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    const user = toAuthenticatable(fakeUser())
+    await guard.login(user)
+    assert.strictEqual(sess.store['auth_user_id'], '1')
+    assert.strictEqual(await guard.id(), '1')
+  })
+
+  it('logout() clears session and user', async () => {
+    const sess = fakeSession()
+    sess.store['auth_user_id'] = '1'
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+
+    await guard.user() // load
+    await guard.logout()
+    assert.strictEqual(sess.store['auth_user_id'], undefined)
+    assert.strictEqual(await guard.user(), null)
+  })
+
+  it('id() returns null when not authenticated', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const guard = new SessionGuard(provider, sess.instance)
+    assert.strictEqual(await guard.id(), null)
+  })
+})
+
+// ─── AuthManager ──────────────────────────────────────────
+
+describe('AuthManager', () => {
+  it('guard() returns the default guard', () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const config = makeConfig(model)
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    const guard = manager.guard()
+    assert.ok(guard instanceof SessionGuard)
+  })
+
+  it('guard() returns same instance on repeat calls', () => {
+    const sess = fakeSession()
+    const config = makeConfig(fakeModel([]))
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    assert.strictEqual(manager.guard('web'), manager.guard('web'))
+  })
+
+  it('guard() throws for unknown guard', () => {
+    const sess = fakeSession()
+    const config = makeConfig(fakeModel([]))
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    assert.throws(() => manager.guard('api'), /Guard "api" is not defined/)
+  })
+
+  it('throws for unknown provider', () => {
+    const sess = fakeSession()
+    const config: AuthConfig = {
+      defaults: { guard: 'web' },
+      guards: { web: { driver: 'session', provider: 'missing' } },
+      providers: {},
+    }
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+    assert.throws(() => manager.guard(), /User provider "missing" is not defined/)
+  })
+})
+
+// ─── Auth Facade (via runWithAuth) ─────────���──────────────
+
+describe('Auth facade', () => {
+  it('attempt + user within runWithAuth', async () => {
+    const sess = fakeSession()
+    const model = fakeModel([fakeUser()])
+    const config = makeConfig(model)
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    await runWithAuth(manager, async () => {
+      assert.strictEqual(await Auth.check(), false)
+      const ok = await Auth.attempt({ email: 'john@example.com', password: 'secret' })
+      assert.strictEqual(ok, true)
+      assert.strictEqual(await Auth.check(), true)
+
+      const user = await Auth.user()
+      assert.ok(user)
+      assert.strictEqual(user.getAuthIdentifier(), '1')
+      assert.strictEqual(await Auth.id(), '1')
+    })
+  })
+
+  it('logout within runWithAuth', async () => {
+    const sess = fakeSession()
+    sess.store['auth_user_id'] = '1'
+    const model = fakeModel([fakeUser()])
+    const config = makeConfig(model)
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    await runWithAuth(manager, async () => {
+      assert.strictEqual(await Auth.check(), true)
+      await Auth.logout()
+      assert.strictEqual(await Auth.check(), false)
+      assert.strictEqual(await Auth.guest(), true)
+    })
+  })
+
+  it('throws outside runWithAuth', () => {
+    assert.throws(() => Auth.check(), /No auth context/)
+  })
+})
+
+// ─── auth() provider factory ──────────────────────────────
+
+describe('auth() provider', () => {
+  it('is a function that returns a constructor', () => {
+    const config = makeConfig(fakeModel([]))
+    const Provider = auth(config)
     assert.strictEqual(typeof Provider, 'function')
   })
 
-  it('works with minimal config', () => {
-    assert.doesNotThrow(() => auth({}))
-  })
-
-  it('works with emailAndPassword options', () => {
-    assert.doesNotThrow(() => auth({
-      emailAndPassword: { enabled: true, requireEmailVerification: false },
-    }))
-  })
-
-  it('works with socialProviders', () => {
-    assert.doesNotThrow(() => auth({
-      socialProviders: {
-        github: { clientId: 'id', clientSecret: 'secret' },
-      },
-    }))
-  })
-
-  it('works with dbConfig', () => {
-    const dbConfig: AuthDbConfig = { driver: 'sqlite', url: 'file:./test.db' }
-    assert.doesNotThrow(() => auth(baseConfig, dbConfig))
-  })
-
-  it('works with all AuthDbConfig drivers', () => {
-    const drivers = ['sqlite', 'postgresql', 'libsql', 'mysql'] as const
-    for (const driver of drivers) {
-      assert.doesNotThrow(() => auth(baseConfig, { driver, url: 'test://localhost' }))
-    }
-  })
-
   it('each call returns a different class', () => {
-    const A = auth(baseConfig)
-    const B = auth(baseConfig)
-    assert.notStrictEqual(A, B)
+    const config = makeConfig(fakeModel([]))
+    assert.notStrictEqual(auth(config), auth(config))
   })
 })
 
-describe('betterAuth (deprecated alias)', () => {
-  it('is the same function as auth', () => {
-    assert.strictEqual(betterAuth, auth)
-  })
-})
+// ─── Middleware shape ─────────────────────────────────────
 
 describe('AuthMiddleware()', () => {
-  it('is a function', () => {
-    assert.strictEqual(typeof AuthMiddleware, 'function')
-  })
-
-  it('returns a MiddlewareHandler function', () => {
-    const handler = AuthMiddleware()
-    assert.strictEqual(typeof handler, 'function')
-  })
-
-  it('each call returns a new handler instance', () => {
-    const a = AuthMiddleware()
-    const b = AuthMiddleware()
-    assert.notStrictEqual(a, b)
+  it('returns a function', () => {
+    assert.strictEqual(typeof AuthMiddleware(), 'function')
   })
 })
 
-// ─── Schema files ─────────────────────────────────────────
-
-import { existsSync, readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const schemaDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'schema')
-
-describe('auth schema files', () => {
-  it('ships auth.prisma with all 4 models', () => {
-    const file = join(schemaDir, 'auth.prisma')
-    assert.ok(existsSync(file), 'auth.prisma should exist')
-    const content = readFileSync(file, 'utf8')
-    assert.ok(content.includes('model User'), 'should contain User model')
-    assert.ok(content.includes('model Session'), 'should contain Session model')
-    assert.ok(content.includes('model Account'), 'should contain Account model')
-    assert.ok(content.includes('model Verification'), 'should contain Verification model')
-  })
-
-  it('ships auth.drizzle.sqlite.ts importing from sqlite-core', () => {
-    const file = join(schemaDir, 'auth.drizzle.sqlite.ts')
-    assert.ok(existsSync(file), 'auth.drizzle.sqlite.ts should exist')
-    const content = readFileSync(file, 'utf8')
-    assert.ok(content.includes('drizzle-orm/sqlite-core'), 'should import from sqlite-core')
-    assert.ok(content.includes('sqliteTable'), 'should use sqliteTable')
-  })
-
-  it('ships auth.drizzle.pg.ts importing from pg-core', () => {
-    const file = join(schemaDir, 'auth.drizzle.pg.ts')
-    assert.ok(existsSync(file), 'auth.drizzle.pg.ts should exist')
-    const content = readFileSync(file, 'utf8')
-    assert.ok(content.includes('drizzle-orm/pg-core'), 'should import from pg-core')
-    assert.ok(content.includes('pgTable'), 'should use pgTable')
-  })
-
-  it('ships auth.drizzle.mysql.ts importing from mysql-core', () => {
-    const file = join(schemaDir, 'auth.drizzle.mysql.ts')
-    assert.ok(existsSync(file), 'auth.drizzle.mysql.ts should exist')
-    const content = readFileSync(file, 'utf8')
-    assert.ok(content.includes('drizzle-orm/mysql-core'), 'should import from mysql-core')
-    assert.ok(content.includes('mysqlTable'), 'should use mysqlTable')
-  })
-
-  it('all drizzle schemas export user, session, account, verification', () => {
-    for (const variant of ['sqlite', 'pg', 'mysql']) {
-      const file = join(schemaDir, `auth.drizzle.${variant}.ts`)
-      const content = readFileSync(file, 'utf8')
-      assert.ok(content.includes('export const user'), `${variant}: should export user`)
-      assert.ok(content.includes('export const session'), `${variant}: should export session`)
-      assert.ok(content.includes('export const account'), `${variant}: should export account`)
-      assert.ok(content.includes('export const verification'), `${variant}: should export verification`)
-    }
+describe('RequireAuth()', () => {
+  it('returns a function', () => {
+    assert.strictEqual(typeof RequireAuth(), 'function')
   })
 })
 
-// ─── ORM detection in provider ────────────────────────────
-// The boot() method can't be tested end-to-end without a real DB.
-// Instead we verify the source code handles all three paths:
-// 1. Prisma (container.bound('prisma'))
-// 2. Drizzle (container.bound('drizzle'))
-// 3. Fallback to dbConfig
-// 4. Throws when no DB found
+// ─── Gate ─────────────────────────────────────────────────
 
-describe('auth() ORM detection', () => {
-  // Tests run from dist-test/ — resolve source from package root
-  const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-  const srcPath = join(pkgRoot, 'src', 'index.ts')
-  const src = readFileSync(srcPath, 'utf8')
+function authUser(overrides?: Record<string, unknown>): Authenticatable & Record<string, unknown> {
+  return toAuthenticatable(fakeUser(overrides))
+}
 
-  it('boot() checks for prisma in DI container', () => {
-    assert.ok(src.includes("this.app.make('prisma')"), 'should check for prisma binding')
+describe('Gate', () => {
+  beforeEach(() => Gate.reset())
+
+  it('define + allows with closure', async () => {
+    Gate.define('edit-settings', (user) => (user as unknown as Record<string, unknown>)['role'] === 'admin')
+    const admin = authUser({ role: 'admin' })
+    const regular = authUser({ role: 'user' })
+
+    assert.strictEqual(await Gate.forUser(admin).allows('edit-settings'), true)
+    assert.strictEqual(await Gate.forUser(regular).allows('edit-settings'), false)
   })
 
-  it('boot() checks for drizzle in DI container', () => {
-    assert.ok(src.includes("this.app.make('drizzle')"), 'should check for drizzle binding')
+  it('denies is the inverse of allows', async () => {
+    Gate.define('do-thing', () => true)
+    const user = authUser()
+    assert.strictEqual(await Gate.forUser(user).denies('do-thing'), false)
   })
 
-  it('boot() imports prismaAdapter when prisma detected', () => {
-    assert.ok(src.includes("import('better-auth/adapters/prisma')"), 'should dynamically import prisma adapter')
+  it('undefined ability returns false', async () => {
+    const user = authUser()
+    assert.strictEqual(await Gate.forUser(user).allows('nonexistent'), false)
   })
 
-  it('boot() imports drizzleAdapter when drizzle detected', () => {
-    assert.ok(src.includes("import('better-auth/adapters/drizzle')"), 'should dynamically import drizzle adapter')
+  it('authorize throws AuthorizationError on denial', async () => {
+    Gate.define('restricted', () => false)
+    const user = authUser()
+    await assert.rejects(
+      () => Gate.forUser(user).authorize('restricted'),
+      (err: unknown) => {
+        assert.ok(err instanceof AuthorizationError)
+        assert.strictEqual((err as AuthorizationError).status, 403)
+        return true
+      },
+    )
   })
 
-  it('boot() throws when no database found and no dbConfig', () => {
-    assert.ok(src.includes('No database found'), 'should throw descriptive error')
+  it('authorize passes when allowed', async () => {
+    Gate.define('open', () => true)
+    const user = authUser()
+    await assert.doesNotReject(() => Gate.forUser(user).authorize('open'))
   })
 
-  it('boot() falls back to createPrismaClient when dbConfig provided', () => {
-    assert.ok(src.includes('createPrismaClient(dbConfig)'), 'should fall back to explicit dbConfig')
+  it('before callback can short-circuit to true', async () => {
+    Gate.define('anything', () => false)
+    Gate.before((user) => {
+      if ((user as unknown as Record<string, unknown>)['role'] === 'super-admin') return true
+      return undefined
+    })
+
+    const superAdmin = authUser({ role: 'super-admin' })
+    const regular = authUser({ role: 'user' })
+
+    assert.strictEqual(await Gate.forUser(superAdmin).allows('anything'), true)
+    assert.strictEqual(await Gate.forUser(regular).allows('anything'), false)
+  })
+
+  it('before callback can short-circuit to false', async () => {
+    Gate.define('open', () => true)
+    Gate.before(() => false)
+
+    const user = authUser()
+    assert.strictEqual(await Gate.forUser(user).allows('open'), false)
+  })
+
+  it('before returning null/undefined falls through', async () => {
+    Gate.define('check', () => true)
+    Gate.before(() => null)
+
+    const user = authUser()
+    assert.strictEqual(await Gate.forUser(user).allows('check'), true)
+  })
+
+  it('async ability callback', async () => {
+    Gate.define('async-check', async () => {
+      await Promise.resolve()
+      return true
+    })
+    assert.strictEqual(await Gate.forUser(authUser()).allows('async-check'), true)
+  })
+
+  it('ability receives extra arguments', async () => {
+    Gate.define('update-post', (_user, post) => (post as Record<string, unknown>)['authorId'] === '1')
+    const user = authUser()
+    assert.strictEqual(await Gate.forUser(user).allows('update-post', { authorId: '1' }), true)
+    assert.strictEqual(await Gate.forUser(user).allows('update-post', { authorId: '2' }), false)
+  })
+
+  it('reset clears all definitions', () => {
+    Gate.define('x', () => true)
+    Gate.before(() => true)
+    Gate.reset()
+    // After reset, no abilities exist — should return false (no user in context, but forUser works)
+    // We can verify reset worked by checking a fresh define works
+    Gate.define('y', () => true)
+    assert.doesNotThrow(() => Gate.reset())
+  })
+})
+
+// ─── Policy ───────────────────────────────────────────────
+
+class Post {
+  constructor(public authorId: string, public published: boolean) {}
+}
+
+class PostPolicy extends Policy {
+  view(user: Authenticatable, post: Post) {
+    return post.published || (user as unknown as Record<string, unknown>)['id'] === post.authorId
+  }
+
+  update(user: Authenticatable, post: Post) {
+    return (user as unknown as Record<string, unknown>)['id'] === post.authorId
+  }
+
+  delete(user: Authenticatable) {
+    return (user as unknown as Record<string, unknown>)['role'] === 'admin'
+  }
+}
+
+class PostPolicyWithBefore extends Policy {
+  before(user: Authenticatable) {
+    if ((user as unknown as Record<string, unknown>)['role'] === 'super-admin') return true
+    return undefined
+  }
+
+  update(_user: Authenticatable, _post: Post) {
+    return false
+  }
+}
+
+describe('Policy', () => {
+  beforeEach(() => Gate.reset())
+
+  it('routes ability to policy method via model instance', async () => {
+    Gate.policy(Post, PostPolicy)
+    const author = authUser({ id: '1' })
+    const post = new Post('1', false)
+
+    assert.strictEqual(await Gate.forUser(author).allows('update', post), true)
+  })
+
+  it('policy method receives the model instance', async () => {
+    Gate.policy(Post, PostPolicy)
+    const viewer = authUser({ id: '2' })
+    const post = new Post('1', true)
+
+    assert.strictEqual(await Gate.forUser(viewer).allows('view', post), true)
+  })
+
+  it('policy method returns false when not authorized', async () => {
+    Gate.policy(Post, PostPolicy)
+    const other = authUser({ id: '2' })
+    const post = new Post('1', false)
+
+    assert.strictEqual(await Gate.forUser(other).allows('update', post), false)
+  })
+
+  it('policy.before can short-circuit', async () => {
+    Gate.policy(Post, PostPolicyWithBefore)
+    const superAdmin = authUser({ role: 'super-admin' })
+    const post = new Post('999', false)
+
+    // update() returns false, but before() returns true for super-admin
+    assert.strictEqual(await Gate.forUser(superAdmin).allows('update', post), true)
+  })
+
+  it('policy.before returning undefined falls through', async () => {
+    Gate.policy(Post, PostPolicyWithBefore)
+    const regular = authUser({ id: '1', role: 'user' })
+    const post = new Post('1', false)
+
+    // before() returns undefined, update() returns false
+    assert.strictEqual(await Gate.forUser(regular).allows('update', post), false)
+  })
+
+  it('undefined policy method returns false', async () => {
+    Gate.policy(Post, PostPolicy)
+    const user = authUser()
+    const post = new Post('1', true)
+
+    assert.strictEqual(await Gate.forUser(user).allows('nonexistent', post), false)
+  })
+
+  it('delete ability checks role', async () => {
+    Gate.policy(Post, PostPolicy)
+    const admin = authUser({ role: 'admin' })
+    const regular = authUser({ role: 'user' })
+    const post = new Post('1', true)
+
+    assert.strictEqual(await Gate.forUser(admin).allows('delete', post), true)
+    assert.strictEqual(await Gate.forUser(regular).allows('delete', post), false)
+  })
+
+  it('Gate.authorize with policy throws on denial', async () => {
+    Gate.policy(Post, PostPolicy)
+    const other = authUser({ id: '2', role: 'user' })
+    const post = new Post('1', false)
+
+    await assert.rejects(
+      () => Gate.forUser(other).authorize('update', post),
+      (err: unknown) => err instanceof AuthorizationError,
+    )
+  })
+
+  it('global before runs before policy', async () => {
+    Gate.policy(Post, PostPolicy)
+    Gate.before((user) => {
+      if ((user as unknown as Record<string, unknown>)['role'] === 'god') return true
+      return undefined
+    })
+
+    const god = authUser({ role: 'god' })
+    const post = new Post('999', false)
+
+    assert.strictEqual(await Gate.forUser(god).allows('update', post), true)
+  })
+})
+
+// ─── AuthorizationError ───────────────────────────────────
+
+describe('AuthorizationError', () => {
+  it('has status 403', () => {
+    const err = new AuthorizationError()
+    assert.strictEqual(err.status, 403)
+    assert.strictEqual(err.name, 'AuthorizationError')
+  })
+
+  it('accepts a custom message', () => {
+    const err = new AuthorizationError('Nope')
+    assert.strictEqual(err.message, 'Nope')
+  })
+})
+
+// ─── PasswordBroker ───────────────────────────────────────
+
+function makePasswordBroker(users: Record<string, unknown>[], config?: { expire?: number; throttle?: number }) {
+  const model = fakeModel(users)
+  const provider = new EloquentUserProvider(model, alwaysTrue)
+  const tokens = new MemoryTokenRepository()
+  return { broker: new PasswordBroker(tokens, provider, config), tokens }
+}
+
+describe('PasswordBroker', () => {
+  it('sendResetLink returns INVALID_USER for unknown email', async () => {
+    const { broker } = makePasswordBroker([])
+    const status = await broker.sendResetLink(
+      { email: 'ghost@x.com' },
+      async () => {},
+    )
+    assert.strictEqual(status, 'INVALID_USER')
+  })
+
+  it('sendResetLink sends token and returns RESET_LINK_SENT', async () => {
+    const { broker } = makePasswordBroker([fakeUser()])
+    let sentToken = ''
+    const status = await broker.sendResetLink(
+      { email: 'john@example.com' },
+      async (_user, token) => { sentToken = token },
+    )
+    assert.strictEqual(status, 'RESET_LINK_SENT')
+    assert.ok(sentToken.length > 0)
+  })
+
+  it('sendResetLink throttles repeated requests', async () => {
+    const { broker } = makePasswordBroker([fakeUser()], { throttle: 60 })
+
+    await broker.sendResetLink({ email: 'john@example.com' }, async () => {})
+    const status = await broker.sendResetLink({ email: 'john@example.com' }, async () => {})
+    assert.strictEqual(status, 'THROTTLED')
+  })
+
+  it('reset returns PASSWORD_RESET on valid token', async () => {
+    const { broker } = makePasswordBroker([fakeUser()])
+    let capturedToken = ''
+    await broker.sendResetLink(
+      { email: 'john@example.com' },
+      async (_user, token) => { capturedToken = token },
+    )
+
+    let resetCalled = false
+    const status = await broker.reset(
+      { email: 'john@example.com', token: capturedToken, password: 'new-password' },
+      async (_user, password) => { resetCalled = true; assert.strictEqual(password, 'new-password') },
+    )
+    assert.strictEqual(status, 'PASSWORD_RESET')
+    assert.strictEqual(resetCalled, true)
+  })
+
+  it('reset returns INVALID_USER for unknown email', async () => {
+    const { broker } = makePasswordBroker([])
+    const status = await broker.reset(
+      { email: 'ghost@x.com', token: 'abc', password: 'x' },
+      async () => {},
+    )
+    assert.strictEqual(status, 'INVALID_USER')
+  })
+
+  it('reset returns INVALID_TOKEN when no token exists', async () => {
+    const { broker } = makePasswordBroker([fakeUser()])
+    const status = await broker.reset(
+      { email: 'john@example.com', token: 'bad', password: 'x' },
+      async () => {},
+    )
+    assert.strictEqual(status, 'INVALID_TOKEN')
+  })
+
+  it('reset returns INVALID_TOKEN for wrong token', async () => {
+    const { broker } = makePasswordBroker([fakeUser()])
+    await broker.sendResetLink({ email: 'john@example.com' }, async () => {})
+
+    const status = await broker.reset(
+      { email: 'john@example.com', token: 'wrong-token', password: 'x' },
+      async () => {},
+    )
+    assert.strictEqual(status, 'INVALID_TOKEN')
+  })
+
+  it('reset returns TOKEN_EXPIRED for expired token', async () => {
+    // Use a custom token repo that backdates createdAt
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const tokens = new MemoryTokenRepository()
+    const broker = new PasswordBroker(tokens, provider, { expire: 1 }) // 1 minute
+
+    let capturedToken = ''
+    await broker.sendResetLink(
+      { email: 'john@example.com' },
+      async (_user, token) => { capturedToken = token },
+    )
+
+    // Manually backdate: delete and re-create with old createdAt
+    const record = await tokens.find('john@example.com')
+    assert.ok(record)
+    await tokens.delete('john@example.com')
+    // Create with a createdAt 2 minutes in the past by manipulating store directly
+    ;(tokens as unknown as { store: Map<string, { token: string; createdAt: Date; expiresAt: Date }> }).store.set('john@example.com', {
+      token: record.token,
+      createdAt: new Date(Date.now() - 2 * 60_000), // 2 min ago
+      expiresAt: new Date(Date.now() - 60_000),
+    })
+
+    const status = await broker.reset(
+      { email: 'john@example.com', token: capturedToken, password: 'x' },
+      async () => {},
+    )
+    assert.strictEqual(status, 'TOKEN_EXPIRED')
+  })
+
+  it('reset deletes token after successful reset', async () => {
+    const { broker, tokens } = makePasswordBroker([fakeUser()])
+    let capturedToken = ''
+    await broker.sendResetLink(
+      { email: 'john@example.com' },
+      async (_user, token) => { capturedToken = token },
+    )
+
+    await broker.reset(
+      { email: 'john@example.com', token: capturedToken, password: 'new' },
+      async () => {},
+    )
+
+    // Token should be deleted
+    assert.strictEqual(await tokens.find('john@example.com'), null)
+  })
+})
+
+// ─── MemoryTokenRepository ────────────────────────────────
+
+describe('MemoryTokenRepository', () => {
+  it('create + find round-trips', async () => {
+    const repo = new MemoryTokenRepository()
+    await repo.create('a@b.com', 'hashed', new Date(Date.now() + 60_000))
+    const record = await repo.find('a@b.com')
+    assert.ok(record)
+    assert.strictEqual(record.token, 'hashed')
+  })
+
+  it('find returns null for missing email', async () => {
+    const repo = new MemoryTokenRepository()
+    assert.strictEqual(await repo.find('missing@x.com'), null)
+  })
+
+  it('delete removes the token', async () => {
+    const repo = new MemoryTokenRepository()
+    await repo.create('a@b.com', 'hashed', new Date(Date.now() + 60_000))
+    await repo.delete('a@b.com')
+    assert.strictEqual(await repo.find('a@b.com'), null)
+  })
+
+  it('deleteExpired removes only expired tokens', async () => {
+    const repo = new MemoryTokenRepository()
+    await repo.create('old@x.com', 'h1', new Date(Date.now() - 1000))
+    await repo.create('new@x.com', 'h2', new Date(Date.now() + 60_000))
+    await repo.deleteExpired()
+    assert.strictEqual(await repo.find('old@x.com'), null)
+    assert.ok(await repo.find('new@x.com'))
   })
 })

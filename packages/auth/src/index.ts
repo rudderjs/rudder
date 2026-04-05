@@ -1,6 +1,8 @@
 import { ServiceProvider, type Application, app } from '@rudderjs/core'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
-import type { BetterAuthOptions } from 'better-auth'
+import { AuthManager, Auth, runWithAuth, type AuthConfig } from './auth-manager.js'
+import type { AuthUser } from './contracts.js'
+import type { SessionStore } from './session-guard.js'
 
 // ─── Module Augmentation ───────────────────────────────────
 
@@ -10,145 +12,103 @@ declare module '@rudderjs/contracts' {
   }
 }
 
-// ─── Shared Auth Types ─────────────────────────────────────
+// ─── Re-exports ───────────────────────────────────────────
 
-export interface AuthUser {
-  id: string
-  name: string
-  email: string
-  emailVerified: boolean
-  image?: string
-  createdAt: Date
-  updatedAt: Date
-}
+export { Auth } from './auth-manager.js'
+export { AuthManager, runWithAuth } from './auth-manager.js'
+export { SessionGuard } from './session-guard.js'
+export { EloquentUserProvider, toAuthenticatable } from './providers.js'
+export { Gate, Policy, AuthorizationError } from './gate.js'
+export { PasswordBroker, MemoryTokenRepository } from './password-reset.js'
 
-export interface AuthSession {
-  id: string
-  userId: string
-  token: string
-  expiresAt: Date
-  ipAddress?: string
-  userAgent?: string
-  createdAt: Date
-  updatedAt: Date
-}
+export type { Authenticatable, AuthUser, Guard, UserProvider } from './contracts.js'
+export type { TokenRepository, PasswordResetStatus, PasswordResetConfig } from './password-reset.js'
+export type { AuthConfig, AuthGuardConfig, AuthProviderConfig } from './auth-manager.js'
+export type { SessionStore } from './session-guard.js'
 
-export interface AuthResult {
-  user: AuthUser
-  session: AuthSession
-}
+// ─── Helpers ──────────────────────────────────────────────
 
-// ─── Config ────────────────────────────────────────────────
-
-export interface BetterAuthAdditionalField {
-  type: 'string' | 'number' | 'boolean' | 'date'
-  required?: boolean
-  defaultValue?: string | number | boolean | null
-  /** Prevent users from setting this field on sign-up/update (e.g. role) */
-  input?: boolean
-}
-
-export interface BetterAuthConfig {
-  /** 32+ character secret. Falls back to process.env.AUTH_SECRET */
-  secret?: string
-  /** App base URL. Falls back to process.env.APP_URL */
-  baseUrl?: string
-  emailAndPassword?: {
-    enabled?: boolean
-    requireEmailVerification?: boolean
-    /** Send a password reset email. Required for forgot-password flow. */
-    sendResetPassword?: (data: { user: { email: string }; url: string; token: string }, request?: Request) => Promise<void>
-    /** Called after a password has been successfully reset */
-    onPasswordReset?: (data: { user: { id: string; email: string } }) => void | Promise<void>
-    /** Reset token expiry in seconds (default: 3600 = 1 hour) */
-    resetPasswordTokenExpiresIn?: number
+function userToPlain(user: unknown): AuthUser {
+  const u = user as Record<string, unknown>
+  const plain: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(u)) {
+    if (typeof v === 'function') continue
+    if (k === 'password') continue
+    plain[k] = v
   }
-  socialProviders?: Record<string, { clientId: string; clientSecret: string }>
-  trustedOrigins?: string[]
-  /**
-   * Additional fields to include on the user object in sessions.
-   * Fields must exist in the database (Prisma schema) and be declared here
-   * to be returned by `auth.api.getSession()`.
-   *
-   * Example:
-   * ```ts
-   * user: {
-   *   additionalFields: {
-   *     role: { type: 'string', defaultValue: 'user', input: false },
-   *   }
-   * }
-   * ```
-   */
-  user?: {
-    additionalFields?: Record<string, BetterAuthAdditionalField>
+  return {
+    id:    String(plain['id'] ?? ''),
+    name:  String(plain['name'] ?? ''),
+    email: String(plain['email'] ?? ''),
+    ...plain,
   }
-  /** Called after a new user is successfully created — ideal for dispatching jobs or events */
-  onUserCreated?: (user: { id: string; name: string; email: string }) => void | Promise<void>
 }
 
-export interface AuthDbConfig {
-  driver?: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'
-  url?: string
-}
-
-// ─── Internal helpers ──────────────────────────────────────
-
-type AnyConstructor = new (opts: Record<string, unknown>) => unknown
-
-async function createPrismaClient(config: AuthDbConfig): Promise<unknown> {
-  const opts: Record<string, unknown> = {}
-
-  if (config.driver === 'postgresql' && config.url) {
-    const { Pool }     = await import('pg') as typeof import('pg')
-    const { PrismaPg } = await import('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg')
-    opts['adapter'] = new PrismaPg(new Pool({ connectionString: config.url }))
-  } else if (config.driver === 'libsql' && config.url) {
-    const { PrismaLibSql } = await import('@prisma/adapter-libsql') as typeof import('@prisma/adapter-libsql')
-    opts['adapter'] = new PrismaLibSql({ url: config.url })
-  } else {
-    const dbUrl = config.url ?? process.env['DATABASE_URL'] ?? 'file:./dev.db'
-    const { PrismaBetterSqlite3 } = await import('@prisma/adapter-better-sqlite3') as typeof import('@prisma/adapter-better-sqlite3')
-    opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
-  }
-
-  const mod = await import('@prisma/client') as unknown as { PrismaClient?: AnyConstructor; default?: AnyConstructor | { PrismaClient?: AnyConstructor } }
-  const rawDefault = mod.default
-  const PC = (mod.PrismaClient
-    ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
-  ) as AnyConstructor
-  return new PC(opts)
-}
-
-function mapDriver(driver?: string): 'sqlite' | 'postgresql' | 'mysql' {
-  if (driver === 'postgresql') return 'postgresql'
-  if (driver === 'mysql') return 'mysql'
-  return 'sqlite'
-}
-
-// ─── betterAuth() Factory ──────────────────────────────────
+// ─── Auth Middleware ──────────────────────────────────────
 
 /**
- * Returns a ServiceProvider constructor that configures better-auth and
- * binds the auth instance to the DI container in boot().
+ * Middleware that sets up the Auth context for the current request.
+ * Attaches `req.user` if authenticated (does not block unauthenticated requests).
+ */
+export function AuthMiddleware(guardName?: string): MiddlewareHandler {
+  return async function AuthMiddleware(req, res, next) {
+    const manager = app().make<AuthManager>('auth.manager')
+
+    await runWithAuth(manager, async () => {
+      const guard = Auth.guard(guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard)
+      const user = await guard.user()
+
+      if (user) {
+        const plain = userToPlain(user)
+        ;(req as unknown as Record<string, unknown>)['user'] = plain
+        ;(req.raw as Record<string, unknown>)['__rjs_user'] = plain
+      }
+
+      await next()
+    })
+  }
+}
+
+/**
+ * Middleware that requires authentication — returns 401 if not authenticated.
+ */
+export function RequireAuth(guardName?: string): MiddlewareHandler {
+  return async function RequireAuth(req, res, next) {
+    const manager = app().make<AuthManager>('auth.manager')
+
+    await runWithAuth(manager, async () => {
+      const guard = Auth.guard(guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard)
+      const user = await guard.user()
+
+      if (!user) {
+        res.status(401).json({ message: 'Unauthorized.' })
+        return
+      }
+
+      const plain = userToPlain(user)
+      ;(req as unknown as Record<string, unknown>)['user'] = plain
+      ;(req.raw as Record<string, unknown>)['__rjs_user'] = plain
+
+      await next()
+    })
+  }
+}
+
+// ─── Service Provider Factory ─────────────────────────────
+
+/**
+ * Returns an AuthServiceProvider configured with guards + providers.
  *
- * Pass the database connection config as the second argument — betterAuth
- * creates its own PrismaClient internally (separate from the ORM's client).
+ * Requires: @rudderjs/session (session middleware), @rudderjs/hash
  *
  * Usage in bootstrap/providers.ts:
- *   import { betterAuth } from '@rudderjs/auth'
- *   import configs from '../config/index.ts'
- *   export default [
- *     betterAuth(configs.auth, configs.database.connections[configs.database.default]),
- *     ...
- *   ]
+ *   import { auth } from '@rudderjs/auth'
+ *   export default [session(configs.session), hash(configs.hash), auth(configs.auth), ...]
  */
-export function auth(
-  config: BetterAuthConfig,
-  dbConfig?: AuthDbConfig,
-): new (app: Application) => ServiceProvider {
-  class BetterAuthProvider extends ServiceProvider {
+export function auth(config: AuthConfig): new (app: Application) => ServiceProvider {
+  class AuthServiceProvider extends ServiceProvider {
     register(): void {
-      // Auth pages (framework-specific) — published to pages/(auth)/ route group
+      // Auth pages (framework-specific)
       this.publishes({ from: new URL(/* @vite-ignore */ '../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages' })
       this.publishes({ from: new URL(/* @vite-ignore */ '../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-react' })
       this.publishes({ from: new URL(/* @vite-ignore */ '../pages/vue',   import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-vue' })
@@ -165,113 +125,31 @@ export function auth(
     }
 
     async boot(): Promise<void> {
-      const { betterAuth: createAuth } = await import('better-auth')
-
-      // Detect ORM: Prisma → Drizzle → fallback to creating own PrismaClient
-      let database: BetterAuthOptions['database']
-
-      let hasPrisma = false
-      try { this.app.make('prisma'); hasPrisma = true } catch { /* not bound */ }
-
-      let hasDrizzle = false
-      try { this.app.make('drizzle'); hasDrizzle = true } catch { /* not bound */ }
-
-      if (hasPrisma) {
-        const { prismaAdapter } = await import('better-auth/adapters/prisma')
-        const prisma = this.app.make('prisma')
-        database = prismaAdapter(prisma as Parameters<typeof prismaAdapter>[0], { provider: mapDriver(dbConfig?.driver) })
-      } else if (hasDrizzle) {
-        type DrizzleAdapterModule = { drizzleAdapter: (db: unknown, opts?: unknown) => unknown }
-        const { drizzleAdapter } = await import('better-auth/adapters/drizzle') as DrizzleAdapterModule
-        const drizzle = this.app.make('drizzle')
-        database = drizzleAdapter(drizzle)
-      } else if (dbConfig) {
-        // Fallback: create a dedicated PrismaClient from explicit dbConfig
-        const { prismaAdapter } = await import('better-auth/adapters/prisma')
-        const prisma = await createPrismaClient(dbConfig)
-        database = prismaAdapter(prisma as Parameters<typeof prismaAdapter>[0], { provider: mapDriver(dbConfig.driver) })
-      } else {
+      // Resolve Hash.check from DI
+      let hashCheck: (plain: string, hashed: string) => Promise<boolean>
+      try {
+        const hashDriver = this.app.make<{ check(v: string, h: string): Promise<boolean> }>('hash')
+        hashCheck = (plain, hashed) => hashDriver.check(plain, hashed)
+      } catch {
         throw new Error(
-          '[@rudderjs/auth] No database found. Register @rudderjs/orm-prisma or @rudderjs/orm-drizzle before auth, ' +
-          'or pass a dbConfig as the second argument to auth().'
+          '[RudderJS Auth] No hash driver found. Register hash() provider before auth().',
         )
       }
 
-      const auth = createAuth({
-        secret:   config.secret  ?? process.env['AUTH_SECRET'] ?? '',
-        baseURL:  config.baseUrl ?? process.env['APP_URL'] ?? 'http://localhost:3000',
-        database,
-        emailAndPassword: {
-          enabled: config.emailAndPassword?.enabled ?? true,
-          ...(config.emailAndPassword?.requireEmailVerification !== undefined
-            ? { requireEmailVerification: config.emailAndPassword.requireEmailVerification }
-            : {}),
-          ...(config.emailAndPassword?.sendResetPassword
-            ? { sendResetPassword: config.emailAndPassword.sendResetPassword as NonNullable<NonNullable<BetterAuthOptions['emailAndPassword']>['sendResetPassword']> }
-            : {}),
-          ...(config.emailAndPassword?.onPasswordReset
-            ? { onPasswordReset: config.emailAndPassword.onPasswordReset as NonNullable<NonNullable<BetterAuthOptions['emailAndPassword']>['onPasswordReset']> }
-            : {}),
-          ...(config.emailAndPassword?.resetPasswordTokenExpiresIn !== undefined
-            ? { resetPasswordTokenExpiresIn: config.emailAndPassword.resetPasswordTokenExpiresIn }
-            : {}),
-        },
-        ...(config.socialProviders && { socialProviders: config.socialProviders }),
-        ...(config.trustedOrigins  && { trustedOrigins:  config.trustedOrigins  }),
-        ...(config.user?.additionalFields && {
-          user: { additionalFields: config.user.additionalFields },
-        }),
-        ...(config.onUserCreated && {
-          databaseHooks: {
-            user: {
-              create: {
-                after: async (user: { id: string; name: string; email: string }) => {
-                  await config.onUserCreated?.(user)
-                },
-              },
-            },
-          },
-        }),
-      })
+      // Resolve session accessor
+      const getSession = (): SessionStore => {
+        try {
+          return this.app.make<SessionStore>('session.instance')
+        } catch {
+          return this.app.make<SessionStore>('session.facade')
+        }
+      }
 
-      this.app.instance('auth', auth)
+      const manager = new AuthManager(config, hashCheck, getSession)
+      this.app.instance('auth.manager', manager)
+      this.app.instance('auth', Auth)
     }
   }
 
-  return BetterAuthProvider
-}
-
-/** @deprecated use `auth()` instead */
-export const betterAuth = auth
-
-export type BetterAuthInstance = Awaited<ReturnType<typeof import('better-auth').betterAuth>>
-
-// ─── Auth Middleware ───────────────────────────────────────
-
-/**
- * Verifies the session via better-auth and attaches the authenticated user
- * to the request as `req.user`. Returns 401 if no valid session exists.
- *
- * Requires betterAuth() provider to be registered in bootstrap/providers.ts.
- *
- * Usage in routes:
- *   import { AuthMiddleware } from '@rudderjs/auth'
- *   const authMw = AuthMiddleware()
- *   Route.post('/api/posts', handler, [authMw])
- */
-export function AuthMiddleware(): MiddlewareHandler {
-  return async function AuthMiddleware(req, res, next) {
-    const auth    = app().make<BetterAuthInstance>('auth')
-    const session = await auth.api.getSession({
-      headers: new Headers(req.headers as Record<string, string>),
-    })
-
-    if (!session?.user) {
-      res.status(401).json({ message: 'Unauthorized.' })
-      return
-    }
-
-    ;(req.raw as Record<string, unknown>)['__rjs_user'] = session.user
-    await next()
-  }
+  return AuthServiceProvider
 }
