@@ -235,6 +235,7 @@ ${fontTags}
 
 function PreviewIframe({ config, mode }: { config: Partial<PanelThemeConfig>; mode: 'light' | 'dark' }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     const iframe = iframeRef.current
@@ -246,14 +247,25 @@ function PreviewIframe({ config, mode }: { config: Partial<PanelThemeConfig>; mo
       doc.write(html)
       doc.close()
     }
-  }, [config, mode])
+    if (!ready) {
+      const timer = setTimeout(() => setReady(true), 200)
+      return () => clearTimeout(timer)
+    }
+  }, [config, mode, ready])
 
   return (
-    <iframe
-      ref={iframeRef}
-      className="w-full h-full border-0 rounded-lg bg-background"
-      title="Theme Preview"
-    />
+    <div className="relative w-full h-full">
+      {!ready && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-lg border border-border bg-background z-10">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        className={`w-full h-full rounded-lg border border-border bg-background transition-opacity duration-150 ${ready ? 'opacity-100' : 'opacity-0'}`}
+        title="Theme Preview"
+      />
+    </div>
   )
 }
 
@@ -330,7 +342,7 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
   return (
     <div className="flex h-full">
       {/* Controls Sidebar */}
-      <div className="w-72 shrink-0 border-r overflow-y-auto p-5 space-y-6">
+      <div className="w-72 shrink-0 overflow-y-auto p-5 space-y-6">
         <div>
           <h2 className="text-lg font-semibold mb-4">Theme</h2>
         </div>
@@ -348,18 +360,13 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
 
         {/* Base Color */}
         <ControlGroup label="Base Color">
-          <div className="flex flex-wrap gap-2">
-            {BASE_COLORS.map(c => (
-              <button
-                key={c}
-                onClick={() => update('baseColor', c)}
-                className={`w-8 h-8 rounded-full border-2 transition-all ${config.baseColor === c ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
-                style={{ backgroundColor: `oklch(0.5 0.01 ${c === 'neutral' ? 0 : c === 'stone' ? 75 : c === 'zinc' ? 286 : c === 'slate' ? 264 : c === 'olive' ? 120 : 50})` }}
-                title={c.charAt(0).toUpperCase() + c.slice(1)}
-              />
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground mt-1">{(config.baseColor ?? 'neutral').charAt(0).toUpperCase() + (config.baseColor ?? 'neutral').slice(1)}</span>
+          <select
+            value={config.baseColor ?? 'neutral'}
+            onChange={e => update('baseColor', e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {BASE_COLORS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+          </select>
         </ControlGroup>
 
         {/* Accent Color */}
@@ -393,30 +400,26 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
 
         {/* Heading Font */}
         <ControlGroup label="Heading">
-          <input
-            list="heading-fonts"
+          <select
             value={config.fonts?.heading ?? ''}
             onChange={e => updateFont('heading', e.target.value)}
-            placeholder="Default"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          />
-          <datalist id="heading-fonts">
-            {POPULAR_FONTS.map(f => <option key={f} value={f} />)}
-          </datalist>
+          >
+            <option value="">Default</option>
+            {POPULAR_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
         </ControlGroup>
 
         {/* Body Font */}
         <ControlGroup label="Font">
-          <input
-            list="body-fonts"
+          <select
             value={config.fonts?.body ?? ''}
             onChange={e => updateFont('body', e.target.value)}
-            placeholder="Default"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          />
-          <datalist id="body-fonts">
-            {POPULAR_FONTS.map(f => <option key={f} value={f} />)}
-          </datalist>
+          >
+            <option value="">Default</option>
+            {POPULAR_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
         </ControlGroup>
 
         {/* Icon Library */}
