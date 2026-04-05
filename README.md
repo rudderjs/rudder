@@ -41,8 +41,9 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 ## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Rudder CLI, FormRequest validation
-- **Pay-as-you-go** — 31 optional `@rudderjs/*` packages; use only what you need
+- **Pay-as-you-go** — 35 optional `@rudderjs/*` packages; use only what you need
 - **AI-native** — multi-provider AI engine (Anthropic, OpenAI, Google, Ollama), Agent class with tool system, streaming
+- **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
 - **TypeScript-first** — strict types, generics, and decorator support throughout
@@ -496,7 +497,11 @@ const svc = resolve<UserService>(UserService)
 ### Auth
 | Package | Description |
 |---|---|
-| `@rudderjs/auth` | better-auth service provider + `AuthMiddleware()` |
+| `@rudderjs/hash` | Password hashing (bcrypt, argon2) |
+| `@rudderjs/crypt` | Symmetric encryption (AES-256-CBC) |
+| `@rudderjs/auth` | Authentication (guards, providers), Authorization (gates, policies), Password resets |
+| `@rudderjs/sanctum` | API token authentication with abilities |
+| `@rudderjs/socialite` | OAuth providers (GitHub, Google, Facebook, Apple) |
 
 ### Infrastructure
 | Package | Description |
@@ -535,7 +540,7 @@ const svc = resolve<UserService>(UserService)
 |-------|---------|-----------|
 | HTTP server | Hono | Express, Fastify, H3 |
 | ORM | Prisma | Drizzle |
-| Auth | better-auth | — |
+| Auth | Native (session-based) | Sanctum (API tokens), Socialite (OAuth) |
 | Queue | BullMQ | Inngest |
 | Cache | In-memory | Redis |
 | Storage | Local filesystem | S3, R2, MinIO |
@@ -547,7 +552,7 @@ const svc = resolve<UserService>(UserService)
 
 RudderJS is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 31 packages published to npm under `@rudderjs/*`
+- 35 packages published to npm under `@rudderjs/*`
 - Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, media library, AI engine with multi-provider support, and AI workspace canvas — all end-to-end
 
 ---

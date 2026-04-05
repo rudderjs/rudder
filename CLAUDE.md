@@ -12,7 +12,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@rudderjs/*`
 - **GitHub**: https://github.com/rudderjs/rudder
-- **Status**: Early development — 31 packages published to npm
+- **Status**: Early development — 35 packages published to npm
 
 ---
 
@@ -78,7 +78,7 @@ npm requires browser passkey auth — press Enter when prompted to open the brow
 
 ```
 rudderjs/
-├── packages/           # 31 published packages (@rudderjs/*)
+├── packages/           # 35 published packages (@rudderjs/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
@@ -96,8 +96,15 @@ rudderjs/
 │   ├── queue-inngest/  # Inngest adapter — events named rudderjs/job.<ClassName>
 │   ├── queue-bullmq/   # BullMQ adapter — default prefix 'rudderjs'
 │   ├── server-hono/    # Hono adapter (HonoConfig, logger [rudderjs] tag, CORS)
-│   ├── auth/           # Auth types (AuthUser, AuthSession, AuthResult) + betterAuth() factory
-│   │                   #   (merged from auth-better-auth — single package)
+│   ├── hash/           # Password hashing — Hash facade, BcryptDriver, Argon2Driver, hash() factory
+│   ├── crypt/          # Symmetric encryption — Crypt facade, AES-256-CBC, parseKey(), crypt() factory
+│   ├── auth/           # Native auth: Guards (SessionGuard), Providers (EloquentUserProvider), Auth facade,
+│   │                   #   Gate/Policy authorization, PasswordBroker, AuthMiddleware(), RequireAuth()
+│   │                   #   Depends on @rudderjs/hash + @rudderjs/session
+│   ├── sanctum/        # API tokens — Sanctum class, TokenGuard, SanctumMiddleware(), RequireToken(),
+│   │                   #   SHA-256 hashed tokens with abilities
+│   ├── socialite/      # OAuth — Socialite facade, SocialUser, 4 built-in providers (GitHub, Google,
+│   │                   #   Facebook, Apple), extensible
 │   ├── storage/        # Storage facade, LocalAdapter + S3Adapter (built-in)
 │   │                   #   S3 driver requires optional dep: @aws-sdk/client-s3
 │   ├── schedule/       # Task scheduler — schedule singleton, scheduler() factory
@@ -165,7 +172,11 @@ rudderjs/
 | `@rudderjs/orm-prisma` | 0.0.1 | Prisma adapter, multi-driver |
 | `@rudderjs/orm-drizzle` | 0.0.1 | Drizzle adapter — multi-driver (sqlite, postgresql, libsql) |
 | `@rudderjs/cli` | 0.0.2 | make:*, module:*, module:publish — markers: `<rudderjs:modules:start/end>` |
-| `@rudderjs/auth` | 0.0.1 | AuthUser/Session/Result types + betterAuth() factory (merged from auth-better-auth) |
+| `@rudderjs/hash` | 0.0.1 | Password hashing — Hash facade, BcryptDriver, Argon2Driver, hash() factory |
+| `@rudderjs/crypt` | 0.0.1 | Symmetric encryption — Crypt facade, AES-256-CBC, parseKey(), crypt() factory |
+| `@rudderjs/auth` | 0.2.0 | Native auth: Guards (SessionGuard), Providers (EloquentUserProvider), Auth facade, Gate/Policy, PasswordBroker, AuthMiddleware(), RequireAuth(). Depends on hash + session |
+| `@rudderjs/sanctum` | 0.0.1 | API tokens — Sanctum class, TokenGuard, SanctumMiddleware(), RequireToken(), SHA-256 hashed tokens with abilities |
+| `@rudderjs/socialite` | 0.0.1 | OAuth — Socialite facade, SocialUser, 4 built-in providers (GitHub, Google, Facebook, Apple), extensible |
 | `@rudderjs/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
 | `@rudderjs/schedule` | 0.0.1 | Task scheduler, schedule:run/work/list |
 | `@rudderjs/cache` | 0.0.2 | Cache facade, MemoryAdapter + RedisAdapter built-in (needs `ioredis`) |
@@ -182,7 +193,6 @@ rudderjs/
 | `@rudderjs/localization` | 0.0.1 | i18n — `trans()`, `setLocale()`, `getLocale()`, locale middleware, JSON translation files |
 
 **Merged/removed packages** (code absorbed, originals deleted):
-- `@rudderjs/auth-better-auth` → merged into `@rudderjs/auth`
 - `@rudderjs/di` → merged into `@rudderjs/core`
 - `@rudderjs/rate-limit` → merged into `@rudderjs/middleware`
 - `@rudderjs/storage-s3` → merged into `@rudderjs/storage`
@@ -213,9 +223,17 @@ rudderjs/
  orm-prisma      queue-bullmq
  orm-drizzle     queue-inngest
        │
-@rudderjs/auth                      @rudderjs/mail   @rudderjs/schedule
+@rudderjs/hash        (bcrypt/argon2 password hashing)
+@rudderjs/crypt       (AES-256-CBC symmetric encryption)
        │
-@rudderjs/notification              @rudderjs/localization
+@rudderjs/auth        (native auth: guards, providers, gates/policies, password broker)
+       │              (depends on hash + session)
+@rudderjs/sanctum     (API tokens, TokenGuard — depends on auth)
+@rudderjs/socialite   (OAuth — GitHub, Google, Facebook, Apple)
+       │
+@rudderjs/notification              @rudderjs/mail   @rudderjs/schedule
+       │
+@rudderjs/localization
 
 @rudderjs/ai          (4 providers, Agent, tools, streaming, middleware)
        │
@@ -297,21 +315,60 @@ export default Application.configure({
   .create()
 ```
 
-#### `@rudderjs/auth` — Auth (better-auth)
+#### `@rudderjs/auth` — Native Auth
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@rudderjs/auth'
-export default [betterAuth(configs.auth), ...]
+import { auth } from '@rudderjs/auth'
+import { hash } from '@rudderjs/hash'
+export default [hash(configs.hash), auth(configs.auth), ...]
 
-// Usage
-import type { BetterAuthInstance } from '@rudderjs/auth'
-const auth = app().make<BetterAuthInstance>('auth')
+// Middleware
+import { AuthMiddleware, RequireAuth } from '@rudderjs/auth'
+m.use(AuthMiddleware())   // sets req.user (nullable)
+router.get('/dashboard', RequireAuth(), handler)  // 401 if not authenticated
+
+// Usage (Auth facade via AsyncLocalStorage)
+import { Auth } from '@rudderjs/auth'
+const user = Auth.user()       // current authenticated user
+const check = Auth.check()     // boolean
+Auth.login(user)
+Auth.logout()
+
+// Authorization (Gates & Policies)
+import { Gate } from '@rudderjs/auth'
+Gate.define('edit-post', (user, post) => user.id === post.authorId)
+Gate.authorize('edit-post', post)  // throws 403 if denied
 ```
 
-- Wraps PrismaClient with `prismaAdapter` (duck-typed via `$connect`)
-- Mounts `/api/auth/*` — must register before the `/api/*` catch-all
-- Auth bound to DI as `'auth'`
+- Native session-based auth — `SessionGuard` + `EloquentUserProvider`
+- Depends on `@rudderjs/hash` (password verification) + `@rudderjs/session` (session storage)
+- `PasswordBroker` for password reset flows
+- Gate/Policy authorization system (Laravel-style)
+
+#### `@rudderjs/sanctum` — API Tokens
+
+```ts
+import { SanctumMiddleware, RequireToken } from '@rudderjs/sanctum'
+m.use(SanctumMiddleware())
+router.get('/api/data', RequireToken('read'), handler)
+```
+
+- SHA-256 hashed tokens with abilities (permissions)
+- `TokenGuard` for stateless API authentication
+
+#### `@rudderjs/socialite` — OAuth
+
+```ts
+import { Socialite } from '@rudderjs/socialite'
+// Redirect to provider
+const url = Socialite.driver('github').redirect()
+// Handle callback
+const socialUser = await Socialite.driver('github').user(code)
+```
+
+- 4 built-in providers: GitHub, Google, Facebook, Apple
+- Extensible — add custom OAuth providers
 
 #### `@rudderjs/middleware` — Rate Limiting
 
@@ -358,7 +415,7 @@ Module scaffold markers in providers.ts: `// <rudderjs:modules:start>` / `// <ru
 playground/
 ├── bootstrap/
 │   ├── app.ts          # Application.configure()...create()
-│   └── providers.ts    # [betterAuth, events, queue, mail, notifications, cache, storage, scheduler, DatabaseServiceProvider, AppServiceProvider]
+│   └── providers.ts    # [hash, auth, events, queue, mail, notifications, cache, storage, scheduler, DatabaseServiceProvider, AppServiceProvider]
 ├── config/             # app, server, database, auth, queue, mail, cache, storage, index
 ├── app/
 │   ├── Models/User.ts

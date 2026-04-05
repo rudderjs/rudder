@@ -26,7 +26,7 @@
 | Runtime | Node.js 20+ / Bun |
 | HTTP server | Hono (default) / Express / Fastify / H3 (via adapter) |
 | ORM | Prisma adapter / Drizzle adapter (swappable via `@rudderjs/orm-prisma`) |
-| Auth | better-auth (via `@rudderjs/auth`) |
+| Auth | Native (guards, providers, gates, policies) via `@rudderjs/auth` |
 | Queues | BullMQ (default) / Inngest adapter |
 | Validation | Zod with a Laravel-style Form Request wrapper |
 | DI Container | Custom (inspired by tsyringe / InversifyJS — lighter) |
@@ -37,7 +37,7 @@
 
 ```
 rudderjs/
-├── packages/               # 31 published packages (@rudderjs/*)
+├── packages/               # 35 published packages (@rudderjs/*)
 │   ├── contracts/          # Pure TypeScript types — no runtime code (erased at build)
 │   │                       #   ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/            # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer
@@ -56,8 +56,12 @@ rudderjs/
 │   ├── queue/              # Queue contract + Job base class + queue:work rudder command
 │   ├── queue-inngest/      # Inngest adapter — events: rudderjs/job.<ClassName>
 │   ├── queue-bullmq/       # BullMQ adapter — default prefix: 'rudderjs'
-│   ├── auth/               # AuthUser/Session/Result types + betterAuth() factory + AuthMiddleware()
-│   │                       #   (merged from auth-better-auth — single package)
+│   ├── hash/               # Hashing facade — bcrypt + argon2 drivers, Hash.make/check/needsRehash
+│   ├── crypt/              # Encryption/decryption — AES-256-GCM, Crypt.encrypt/decrypt
+│   ├── auth/               # Native auth — guards (session, token), providers (eloquent, database),
+│   │                       #   gates, policies, Auth facade, AuthMiddleware(), RequireAuth()
+│   ├── sanctum/            # API token auth — PersonalAccessToken model, token creation/validation
+│   ├── socialite/          # OAuth provider — Google, GitHub, Facebook, Twitter, custom drivers
 │   ├── session/            # HTTP session: SessionInstance, Session facade (AsyncLocalStorage)
 │   │                       #   CookieDriver (HMAC-SHA256) + RedisDriver, SessionMiddleware() factory
 │   ├── storage/            # Storage facade, LocalAdapter + S3Adapter (built-in)
@@ -137,7 +141,7 @@ my-app/
 │   ├── app.ts                  # APP_NAME, APP_ENV, APP_DEBUG
 │   ├── server.ts               # PORT, CORS_ORIGIN, TRUST_PROXY
 │   ├── database.ts             # DB_CONNECTION, DATABASE_URL
-│   ├── auth.ts                 # AUTH_SECRET, APP_URL, betterAuth config
+│   ├── auth.ts                 # Guards, providers, gates/policies config
 │   ├── session.ts              # SESSION_DRIVER, SESSION_SECRET, cookie/redis options
 │   ├── queue.ts                # Queue driver config
 │   ├── mail.ts                 # Mailer config
@@ -181,8 +185,11 @@ Level 1 (parallel — no framework deps):
            ┌─────────────────┼──────────────────┐
            ▼                 ▼                  ▼
     @rudderjs/queue       @rudderjs/cache       @rudderjs/orm
-    @rudderjs/mail        @rudderjs/storage
-    @rudderjs/schedule    @rudderjs/auth        @rudderjs/validation
+    @rudderjs/mail        @rudderjs/storage     @rudderjs/hash
+    @rudderjs/schedule    @rudderjs/crypt       @rudderjs/validation
+    @rudderjs/auth (hash, session, orm)
+    @rudderjs/sanctum (auth, orm)
+    @rudderjs/socialite (auth, session)
            │
     orm-prisma   queue-bullmq   queue-inngest
     mail-nodemailer
@@ -253,12 +260,16 @@ export default Application.configure({
 
 `bootstrap/providers.ts`:
 ```ts
-import { betterAuth } from '@rudderjs/auth'
+import { hash } from '@rudderjs/hash'
+import { session } from '@rudderjs/session'
+import { auth } from '@rudderjs/auth'
 import configs from '../config/index.ts'
 
 export default [
-  DatabaseServiceProvider,   // first — sets ModelRegistry for all models
-  betterAuth(configs.auth),  // mounts /api/auth/* before routes/api.ts loads
+  DatabaseServiceProvider,     // first — sets ModelRegistry for all models
+  hash(configs.hash),          // bcrypt/argon2 hashing
+  session(configs.session),    // session driver (cookie/redis)
+  auth(configs.auth),          // guards, providers, gates, policies
   AppServiceProvider,
 ] satisfies (new (app: Application) => ServiceProvider)[]
 ```
@@ -385,40 +396,117 @@ const paged   = await User.query().paginate(1, 15)
 
 ---
 
-### Auth — better-auth
+### Auth — Native (Guards, Providers, Gates, Policies)
 
-`@rudderjs/auth` wraps [better-auth](https://better-auth.com) as a `ServiceProvider`:
+`@rudderjs/auth` is a full native authentication and authorization system inspired by Laravel:
 
 ```ts
 // config/auth.ts
 export default {
-  secret:           Env.get('AUTH_SECRET'),
-  baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
-  database:         prismaClient,     // auto-wrapped with prismaAdapter
-  databaseProvider: 'sqlite',
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthConfig
+  defaults: { guard: 'web' },
+  guards: {
+    web:  { driver: 'session', provider: 'users' },
+    api:  { driver: 'token',   provider: 'users' },
+  },
+  providers: {
+    users: { driver: 'eloquent', model: User },
+  },
+} satisfies AuthConfig
 ```
 
 ```ts
 // bootstrap/providers.ts
-import { betterAuth } from '@rudderjs/auth'
-betterAuth(configs.auth)  // returns a ServiceProvider class
+import { hash } from '@rudderjs/hash'
+import { session } from '@rudderjs/session'
+import { auth } from '@rudderjs/auth'
+
+export default [
+  DatabaseServiceProvider,
+  hash(configs.hash),       // bcrypt/argon2 hashing
+  session(configs.session), // session driver (cookie/redis)
+  auth(configs.auth),       // guards, providers, gates, policies
+  AppServiceProvider,
+]
 ```
 
-Mounts `/api/auth/*` — sign-up, sign-in, sign-out, session, etc. Auth is bound to DI as `'auth'`:
+**Authentication** — session-based (web) and token-based (API):
 ```ts
-const auth = app().make<BetterAuthInstance>('auth')
-const session = await auth.api.getSession({ headers: new Headers(req.headers) })
+import { Auth } from '@rudderjs/auth'
+
+// Attempt login (hashes & verifies password via @rudderjs/hash)
+const result = await Auth.attempt({ email, password })
+
+// Login a user directly
+await Auth.login(user)
+
+// Access the authenticated user
+const user = Auth.user()       // AuthUser | undefined
+const loggedIn = Auth.check()  // boolean
+
+// Logout
+await Auth.logout()
 ```
 
-The provider must boot **before** `routes/api.ts` loads (place it before `AppServiceProvider` in `providers.ts`) so `/api/auth/*` routes are registered first and match before any `/api/*` catch-all.
-
-`AuthMiddleware()` from `@rudderjs/auth` is a zero-config factory — it reads the `auth` binding from the DI container and uses `auth.api.getSession()` for real session verification:
+**Middleware** — `AuthMiddleware()` reads the session guard and sets `req.user`. `RequireAuth()` returns 401 if unauthenticated:
 ```ts
-import { AuthMiddleware } from '@rudderjs/auth'
-const authMw = AuthMiddleware()
-Route.get('/api/me', handler, [authMw])  // req.user: AuthUser | undefined
+import { AuthMiddleware, RequireAuth } from '@rudderjs/auth'
+
+// Sets req.user (undefined if not logged in)
+Route.get('/api/me', handler, [AuthMiddleware()])
+
+// Returns 401 if no authenticated user
+Route.get('/api/profile', handler, [RequireAuth()])
+```
+
+**Gates & Policies** — fine-grained authorization:
+```ts
+import { Gate } from '@rudderjs/auth'
+
+// Inline gate
+Gate.define('edit-post', (user, post) => {
+  return user.id === post.authorId
+})
+
+// Policy class
+class PostPolicy extends Policy {
+  update(user: AuthUser, post: Post) { return user.id === post.authorId }
+  delete(user: AuthUser, post: Post) { return user.role === 'admin' }
+}
+Gate.policy(Post, PostPolicy)
+
+// Check authorization
+if (await Gate.allows('edit-post', post)) { /* ... */ }
+await Gate.authorize('edit-post', post) // throws 403 if denied
+```
+
+**Sanctum — API Tokens** (`@rudderjs/sanctum`):
+```ts
+import { Sanctum } from '@rudderjs/sanctum'
+
+// Create a token for the user
+const { token, accessToken } = await Sanctum.createToken(user, 'api-token', ['read', 'write'])
+
+// Validate via the 'api' guard (reads Bearer token from Authorization header)
+Route.get('/api/data', handler, [AuthMiddleware('api')])
+```
+
+**Socialite — OAuth** (`@rudderjs/socialite`):
+```ts
+import { Socialite } from '@rudderjs/socialite'
+
+// Redirect to provider
+router.get('/auth/github/redirect', (req, res) => {
+  return Socialite.driver('github').redirect(req, res)
+})
+
+// Handle callback
+router.get('/auth/github/callback', async (req, res) => {
+  const socialUser = await Socialite.driver('github').user(req)
+  // socialUser.id, socialUser.email, socialUser.name, socialUser.avatar
+  const user = await User.firstOrCreate({ githubId: socialUser.id }, { ... })
+  await Auth.login(user)
+  return res.redirect('/dashboard')
+})
 ```
 
 ---
@@ -609,7 +697,7 @@ Route.post('/api/login', handler, [authLimit])
 
 **`CsrfMiddleware()`** validates the `X-CSRF-Token` header on mutating requests (`POST/PUT/PATCH/DELETE`). Token is stored in the session.
 
-**`AuthMiddleware()`** calls `auth.api.getSession()` via better-auth and sets `req.user: AuthUser | undefined`. Returns `401` if no valid session exists.
+**`AuthMiddleware()`** uses the configured session guard to resolve the authenticated user and sets `req.user: AuthUser | undefined`. Accepts an optional guard name (`AuthMiddleware('api')` for token-based). **`RequireAuth()`** extends this with a hard `401` if no user is found.
 
 ### Session
 
@@ -685,4 +773,5 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | **v0.6** | ✅ Rename Forge → RudderJS, npm publish (25 packages), package merges, docs site, README |
 | **v0.7** | ✅ Session package, AuthMiddleware, callable middleware (no .toHandler()), rudder test suite |
 | **v0.8** | ✅ create-rudderjs-app multi-framework scaffolder (React/Vue/Solid, Tailwind, shadcn/ui) |
+| **v0.9** | Native auth system — hash, crypt, auth (guards/providers/gates/policies), sanctum (API tokens), socialite (OAuth) |
 | **v1.0** | Deploy docs, GitHub Actions CI, stable API |
