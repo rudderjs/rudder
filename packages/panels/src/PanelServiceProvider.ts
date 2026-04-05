@@ -12,6 +12,7 @@ import {
   mountDashboardRoutes,
   mountPanelChat,
 } from './handlers/index.js'
+import { mountThemeRoutes, loadThemeOverrides } from './handlers/themeRoutes.js'
 
 // Re-export for public API
 export { buildDefaultLayout } from './handlers/index.js'
@@ -70,6 +71,15 @@ export class PanelServiceProvider extends ServiceProvider {
 
       mountMetaRoutes(router, panel, mw)
       mountPanelChat(router, panel, mw)
+
+      // Theme: load saved overrides from DB and mount editor routes
+      if (panel.getTheme()) {
+        const overrides = await loadThemeOverrides(panel)
+        if (overrides) panel.setThemeOverrides(overrides)
+        if (panel.hasThemeEditor()) {
+          mountThemeRoutes(router, panel, mw)
+        }
+      }
 
       for (const ResourceClass of panel.getResources()) {
         mountResourceRoutes(router, panel, ResourceClass, mw)

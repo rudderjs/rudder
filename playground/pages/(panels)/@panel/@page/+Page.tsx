@@ -4,6 +4,7 @@ import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { useI18n } from '../../_hooks/useI18n.js'
 import { SchemaPageContent } from '../../_components/SchemaPageContent.js'
+import { ThemeSettingsPage } from '../../_components/ThemeSettingsPage.js'
 import type { SchemaElement, I18nExtended } from '../../_components/schema-types.js'
 import type { Data } from './+data.js'
 
@@ -13,6 +14,17 @@ export default function SchemaPage() {
   const panelName = panelMeta.branding?.title ?? panelMeta.name
   const i18n = useI18n() as I18nExtended
   config({ title: `${pageMeta.label} — ${panelName}` })
+
+  // Built-in theme editor page
+  if (pageMeta.slug === 'theme') {
+    const themeData = (useData<Data & { themeConfig?: Record<string, unknown> }>())
+    return (
+      <ThemeSettingsPage
+        panelPath={panelMeta.path}
+        initialConfig={themeData.themeConfig}
+      />
+    )
+  }
 
   if (!schemaData || schemaData.length === 0) {
     return (

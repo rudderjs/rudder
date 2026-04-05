@@ -35,10 +35,23 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
   const PageClass = panel.getAllPages().find((P) => P.getSlug() === pageSlug)
   if (!PageClass) throw render(404)
 
-  if (!PageClass.hasSchema()) throw render(404)
-
   const panelMeta = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext, pageParams)
+
+  // Built-in theme editor — no schema, pass config directly from panel
+  if (pageSlug === 'theme') {
+    return {
+      panelMeta,
+      pageMeta: PageClass.toMeta(),
+      schemaData: [],
+      sessionUser,
+      pathSegment,
+      slug: pageSlug,
+      themeConfig: panel.getTheme() ?? {},
+    }
+  }
+
+  if (!PageClass.hasSchema()) throw render(404)
 
   const elements = await PageClass.schema(ctx)
   const pagePanel = Object.create(panel, {

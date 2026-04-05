@@ -31,7 +31,8 @@ export const route: RouteSync = (pageContext) => {
   if (!panel) return false
 
   for (const PageClass of panel.getAllPages()) {
-    if (!PageClass.hasSchema()) continue
+    // Allow schema-less built-in pages (e.g. theme editor) if slug matches exactly
+    if (!PageClass.hasSchema() && PageClass.getSlug() !== urlPath) continue
     const params = PageClass.matchPath(urlPath)
     if (params !== null) {
       // Strip undefined values — Vike routeParams must be strings

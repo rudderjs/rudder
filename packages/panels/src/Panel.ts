@@ -6,6 +6,7 @@ import { getPanelI18n, getPanelDir, getActiveLocale } from './i18n/index.js'
 import type { PanelI18n } from './i18n/index.js'
 import type { PanelThemeConfig, PanelThemeMeta } from './theme/types.js'
 import { resolveTheme } from './theme/resolve.js'
+import { ThemeSettingsPage } from './ThemeSettingsPage.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PanelMiddlewareHandler = (...args: any[]) => any
@@ -119,6 +120,8 @@ export class Panel {
   protected _middleware: PanelMiddlewareHandler[] = []
   protected _plugins:   PanelPlugin[] = []
   protected _theme?:    PanelThemeConfig
+  protected _themeOverrides?: Partial<PanelThemeConfig>
+  protected _themeEditor = false
 
   protected constructor(name: string) {
     this._name = name
@@ -257,6 +260,33 @@ export class Panel {
     return this
   }
 
+  /**
+   * Enable the built-in theme editor page.
+   * Adds a "Theme" page to the panel sidebar under Settings.
+   *
+   * @example
+   * Panel.make('admin').theme({ preset: 'nova' }).themeEditor()
+   */
+  themeEditor(enabled = true): this {
+    this._themeEditor = enabled
+    return this
+  }
+
+  /**
+   * Set runtime theme overrides (loaded from DB by PanelServiceProvider).
+   * @internal
+   */
+  setThemeOverrides(overrides: Partial<PanelThemeConfig> | null | undefined): void {
+    if (overrides) {
+      this._themeOverrides = overrides
+    } else {
+      delete this._themeOverrides
+    }
+  }
+
+  /** @internal */
+  hasThemeEditor(): boolean { return this._themeEditor }
+
   // ── Getters ─────────────────────────────────────────────
 
   getName(): string { return this._name }
@@ -268,7 +298,7 @@ export class Panel {
   getGlobals(): (typeof Global)[] { return this._globals }
   getPages(): (typeof Page)[] { return this._pages }
 
-  /** Get all pages including nested sub-pages (flat list). Sub-page slugs are prefixed with parent slug. */
+  /** Get all pages including nested sub-pages and built-in pages (flat list). Sub-page slugs are prefixed with parent slug. */
   getAllPages(): (typeof Page)[] {
     const result: (typeof Page)[] = []
     function collect(pages: (typeof Page)[], parentSlug?: string) {
@@ -289,12 +319,30 @@ export class Panel {
         }
       }
     }
-    collect(this._pages)
+    collect(this._allPagesWithBuiltins())
     return result
   }
   getPlugins(): PanelPlugin[] { return this._plugins }
   getTheme(): PanelThemeConfig | undefined { return this._theme }
   getLayout(): PanelLayout { return this._layout }
+
+  /** Pages + built-in pages (e.g. ThemeSettingsPage when themeEditor is enabled). */
+  private _allPagesWithBuiltins(): (typeof Page)[] {
+    const pages = [...this._pages]
+    if (this._themeEditor) pages.push(ThemeSettingsPage)
+    return pages
+  }
+
+  /** Merge code defaults + DB overrides into a single config for resolution. */
+  private _mergedTheme(): PanelThemeConfig | undefined {
+    if (!this._theme) return undefined
+    if (!this._themeOverrides) return this._theme
+    return {
+      ...this._theme,
+      ...this._themeOverrides,
+      fonts: { ...this._theme.fonts, ...this._themeOverrides.fonts },
+    }
+  }
   getSchema(): PanelSchemaDefinition | undefined { return this._schema }
   hasSchema(): boolean { return this._schema !== undefined }
 
@@ -328,11 +376,11 @@ export class Panel {
         if (G.icon) meta.icon = G.icon
         return meta
       }),
-      pages:     this._pages.map((P) => P.toMeta()),
+      pages:     this._allPagesWithBuiltins().map((P) => P.toMeta()),
       layout:    this._layout,
       locale,
       dir:       getPanelDir(locale),
-      ...(this._theme ? { theme: resolveTheme(this._theme) } : {}),
+      ...(this._theme ? { theme: resolveTheme(this._mergedTheme()!) } : {}),
     }
   }
 
@@ -345,12 +393,12 @@ export class Panel {
       branding:  this._branding,
       resources: this._resources.map((R) => new R().toMeta()),
       globals:   this._globals.map((G) => new G().toMeta()),
-      pages:     this._pages.map((P) => P.toMeta()),
+      pages:     this._allPagesWithBuiltins().map((P) => P.toMeta()),
       layout:    this._layout,
       locale,
       dir:       getPanelDir(locale),
       i18n:      getPanelI18n(locale),
-      ...(this._theme ? { theme: resolveTheme(this._theme) } : {}),
+      ...(this._theme ? { theme: resolveTheme(this._mergedTheme()!) } : {}),
     }
   }
 

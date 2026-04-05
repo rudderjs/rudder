@@ -41,12 +41,13 @@ export const adminPanel = Panel.make('admin')
     baseColor: 'zinc',
     accentColor: 'orange',
     chartPalette: 'ocean',
-    radius: 'none',
+    // radius: 'none',
     fonts: {
       heading: 'Space Grotesk',
       body: 'Inter',
     },
   })
+  .themeEditor()
   .layout('sidebar')
   .locale('en')
   // .guard(async (ctx) => ctx.user?.role === 'admin')
