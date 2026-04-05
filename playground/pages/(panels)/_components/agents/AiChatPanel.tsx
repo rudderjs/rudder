@@ -170,8 +170,22 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
 
 function MessageBubble({ message, isLast, isGenerating }: { message: ChatMessage; isLast: boolean; isGenerating: boolean }) {
   if (message.role === 'user') {
+    const sel = message.selection
+    const selTruncated = sel && sel.text.length > 80
+      ? sel.text.slice(0, 77) + '…'
+      : sel?.text
+
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
+        {sel && (
+          <div className="max-w-[85%] flex items-start gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <TypeIcon className="h-3 w-3 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <span className="font-medium text-foreground">{sel.field}</span>
+              <span className="block italic truncate">"{selTruncated}"</span>
+            </div>
+          </div>
+        )}
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-sm text-primary-foreground">
           {message.text}
         </div>

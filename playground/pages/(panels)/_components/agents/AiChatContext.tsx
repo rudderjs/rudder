@@ -17,6 +17,8 @@ export interface ChatMessage {
   role:   'user' | 'assistant'
   text:   string              // concatenated text (backward compat + plain chat)
   parts?: ChatMessagePart[]   // structured content for rich rendering
+  /** Text selection that was active when this message was sent (user messages only). */
+  selection?: TextSelection | undefined
 }
 
 // ─── Agent run request (from FormActions dropdown) ──────────
@@ -325,13 +327,15 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   }, [])
 
   const sendMessage = useCallback((text: string, opts?: { forceAgent?: string }) => {
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text }
+    // Snapshot selection before clearing — attach to user message for display
+    const msgSelection = selectionRef.current ?? undefined
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text, selection: msgSelection }
     const assistantId = crypto.randomUUID()
 
     setMessages(prev => [...prev, userMsg, { id: assistantId, role: 'assistant', text: '', parts: [] }])
     setIsGenerating(true)
     setFieldUpdates([])
-    // Clear selection after sending (it's been captured in the request body)
+    // Clear selection after sending (it's been captured in the request body + user message)
     setSelectionState(null)
     selectionRef.current = null
 

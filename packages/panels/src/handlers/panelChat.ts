@@ -138,43 +138,54 @@ async function handleAiChat(
   const { agent: agentFn, toolDefinition, z } = await loadAi()
 
   // Build system prompt with resource context
+  const hasAgents = agents.length > 0
   const agentList = agents.map(a => `- "${(a as any)._label}" (slug: ${a.getSlug()}) — fields: ${(a as any)._fields.join(', ')}`).join('\n')
-  const systemPrompt = [
-    'You are a helpful AI assistant for an admin panel.',
-    '',
-    '## Current Record',
-    '```json',
-    JSON.stringify(record, null, 2),
-    '```',
-    '',
-    '## Available Agents',
-    agentList,
-    '',
-    'If the user\'s request maps to one of the available agents, call the `run_agent` tool with the agent slug.',
-    'If the user asks to edit, replace, insert, or delete specific text in a field, use the `edit_text` tool directly.',
-    '',
-    '## Block editing',
-    'Rich text fields may contain embedded blocks shown as `[BLOCK: type | field: "value", ...]` in the record.',
-    'To update a block field, use `edit_text` with an `update_block` operation:',
-    '  `{ type: "update_block", blockType: "callToAction", blockIndex: 0, field: "buttonText", value: "New Text" }`',
-    'Do NOT use `replace` to edit block fields — block data is not searchable text.',
-    'Do NOT use `update_field` on rich text fields — it would overwrite the entire content.',
-    '',
-    'Be concise and helpful.',
-    ...(selection ? [
+  const systemPrompt = selection
+    // ── Selection-focused prompt: only show the selected text, lock to that field ──
+    ? [
+      'You are a helpful AI assistant for an admin panel.',
       '',
-      '## Selected Text',
-      `The user has selected the following text in the "${selection.field}" field:`,
+      `## ACTIVE SELECTION — "${selection.field}" field`,
+      'The user selected this text:',
       '"""',
       selection.text,
       '"""',
-      'Use edit_text with replace/insert_after/delete operations targeting this specific text.',
-    ] : []),
-  ].join('\n')
+      '',
+      `Apply the user\'s request to the selected text using the \`edit_text\` tool.`,
+      `The field is "${selection.field}" — do NOT touch any other field.`,
+      'Use replace operations with the selected text (or a substring of it) as the search string.',
+      'Be concise.',
+    ].join('\n')
+    // ── Normal prompt: full record context ──
+    : [
+      'You are a helpful AI assistant for an admin panel.',
+      '',
+      '## Current Record',
+      '```json',
+      JSON.stringify(record, null, 2),
+      '```',
+      '',
+      ...(hasAgents ? [
+        '## Available Agents',
+        agentList,
+        '',
+        'If the user\'s request maps to one of the available agents, call the `run_agent` tool with the agent slug.',
+      ] : []),
+      'If the user asks to edit, replace, insert, or delete specific text in a field, use the `edit_text` tool directly.',
+      '',
+      '## Block editing',
+      'Rich text fields may contain embedded blocks shown as `[BLOCK: type | field: "value", ...]` in the record.',
+      'To update a block field, use `edit_text` with an `update_block` operation:',
+      '  `{ type: "update_block", blockType: "callToAction", blockIndex: 0, field: "buttonText", value: "New Text" }`',
+      'Do NOT use `replace` to edit block fields — block data is not searchable text.',
+      'Do NOT use `update_field` on rich text fields — it would overwrite the entire content.',
+      '',
+      'Be concise and helpful.',
+    ].join('\n')
 
-  // Build the run_agent tool
+  // Build the run_agent tool (only when named agents exist)
   const slugs = agents.map(a => a.getSlug())
-  const runAgentTool = toolDefinition({
+  const runAgentTool = slugs.length > 0 ? toolDefinition({
     name: 'run_agent',
     description: 'Run a resource agent. Available agents: ' + slugs.join(', '),
     inputSchema: z.object({
@@ -207,23 +218,38 @@ async function handleAiChat(
       send('error', { message: err instanceof Error ? err.message : 'Agent run failed.' })
       return `Agent failed: ${err instanceof Error ? err.message : 'Unknown error'}`
     }
-  })
+  }) : null
 
-  // Collect all unique field names from agents for the edit_text tool
-  const allFields = [...new Set(agents.flatMap(a => (a as any)._fields as string[]))]
+  // Collect all editable field names from the resource's field metadata.
+  // This covers ALL form fields, not just those assigned to named agents.
+  const agentFieldNames = new Set(agents.flatMap(a => (a as any)._fields as string[]))
+  const metaFieldNames = agentCtx.fieldMeta ? Object.keys(agentCtx.fieldMeta) : []
+  const allFields = [...new Set([...agentFieldNames, ...metaFieldNames])]
 
   // Build edit_text tool — allows direct surgical edits without going through a named agent
   const Live = await loadLive()
+  const selectionField = selection?.field
+
+  // When selection is active, lock the tool to only the selected field.
+  // This prevents the LLM from editing unrelated fields.
+  const editFieldSchema = selectionField && allFields.includes(selectionField)
+    ? z.literal(selectionField)
+    : z.enum(allFields as [string, ...string[]])
+
+  const editTextDescription = selectionField
+    ? `Edit text in the "${selectionField}" field. The user selected specific text — your operations MUST target that text within "${selectionField}". Do NOT edit other fields.`
+    : [
+        'Surgically edit text or blocks in a field without replacing all content.',
+        'For embedded blocks (callToAction, video, etc.) shown as [BLOCK: ...] in the record, use update_block operations.',
+        'For regular text, use replace/insert_after/delete operations.',
+        'Available fields: ' + allFields.join(', '),
+      ].join(' ')
+
   const editTextTool = allFields.length > 0 ? toolDefinition({
     name: 'edit_text',
-    description: [
-      'Surgically edit text or blocks in a field without replacing all content.',
-      'For embedded blocks (callToAction, video, etc.) shown as [BLOCK: ...] in the record, use update_block operations.',
-      'For regular text, use replace/insert_after/delete operations.',
-      'Available fields: ' + allFields.join(', '),
-    ].join(' '),
+    description: editTextDescription,
     inputSchema: z.object({
-      field: z.enum(allFields as [string, ...string[]]),
+      field: editFieldSchema,
       operations: z.array(z.union([
         z.object({
           type: z.literal('replace'),
@@ -249,13 +275,16 @@ async function handleAiChat(
       ])),
     }),
   }).server(async (input: { field: string; operations: Array<Record<string, unknown>> }) => {
-    const fieldInfo = agentCtx!.fieldMeta?.[input.field]
+    // When user has an active selection, force the field to the selected field
+    // as a hard guarantee (in case schema validation didn't catch it).
+    const targetField = selectionField && allFields.includes(selectionField) ? selectionField : input.field
+    const fieldInfo = agentCtx!.fieldMeta?.[targetField]
     const isCollab = fieldInfo?.yjs === true
     const docName = `panel:${agentCtx!.resourceSlug}:${agentCtx!.recordId}`
 
     if (isCollab) {
       const fragment = fieldInfo.type === 'richcontent' ? 'richcontent' : 'text'
-      const fieldDocName = `${docName}:${fragment}:${input.field}`
+      const fieldDocName = `${docName}:${fragment}:${targetField}`
       const aiCursor = { name: 'AI Assistant', color: '#8b5cf6' }
 
       let applied = 0
@@ -267,12 +296,12 @@ async function handleAiChat(
         }
       }
       setTimeout(() => Live.clearAiAwareness(fieldDocName), 2000)
-      return `Applied ${applied}/${input.operations.length} edit(s) to "${input.field}"`
+      return `Applied ${applied}/${input.operations.length} edit(s) to "${targetField}"`
     } else {
-      let current = String(record[input.field] ?? '')
+      let current = String(record[targetField] ?? '')
       try {
         const yjsFields = Live.readMap(docName, 'fields')
-        if (yjsFields[input.field] != null) current = String(yjsFields[input.field])
+        if (yjsFields[targetField] != null) current = String(yjsFields[targetField])
       } catch { /* */ }
 
       for (const op of input.operations) {
@@ -285,12 +314,12 @@ async function handleAiChat(
         }
         else if (op.type === 'delete' && search) current = current.replace(search, '')
       }
-      await Live.updateMap(docName, 'fields', input.field, current)
-      return `Updated "${input.field}" successfully`
+      await Live.updateMap(docName, 'fields', targetField, current)
+      return `Updated "${targetField}" successfully`
     }
   }) : null
 
-  const tools = [runAgentTool, ...(editTextTool ? [editTextTool] : [])]
+  const tools = [...(runAgentTool ? [runAgentTool] : []), ...(editTextTool ? [editTextTool] : [])]
 
   // Build structured history for the agent
   const aiHistory = history.map(h => ({
@@ -485,7 +514,8 @@ async function handlePanelChat(
     }
     // Don't await — stream runs asynchronously
     handleForceAgent(send, close, targetAgent, agentCtx, message)
-  } else if (agents.length > 0 && agentCtx) {
+  } else if (agentCtx) {
+    // Resource context available — use AI chat with edit tools (agents optional)
     handleAiChat(send, close, message, loadedHistory, agents, agentCtx, record, conversationId, requestedModel, selection)
   } else {
     // No resource context — simple AI chat (no tools)
