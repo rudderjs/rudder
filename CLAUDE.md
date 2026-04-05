@@ -120,9 +120,14 @@ rudderjs/
 │   │                   #     auto-restore on mount, conversation switcher dropdown, auto-title, CRUD routes
 │   │                   #   + Model selection: AiModelConfig in ai config, GET /_chat/models, selector in chat input
 │   │                   #   + AiChatProvider takes panelPath prop — chat is panel-wide, not resource-tied
+│   │                   #   + Selected text context: select text in any field → ✦ Ask AI button → chat opens with
+│   │                   #     selection locked to that field. edit_text tool constrained via z.literal(field).
+│   │                   #   + Field.ai(actions?) — quick action sparkle menu next to field labels (rewrite, expand,
+│   │                   #     shorten, fix-grammar, translate, summarize, make-formal, simplify)
 │   ├── panels-lexical/ # Lexical rich-text editor adapter — RichContentField, CollaborativePlainText, block editor,
 │   │                   #   toolbar profiles (document/default/simple/minimal/none), slash commands, floating link editor,
-│   │                   #   useYjsCollab hook (WebSocket + IndexedDB providers), imperative editor refs for version restore
+│   │                   #   useYjsCollab hook (WebSocket + IndexedDB providers), imperative editor refs for version restore,
+│   │                   #   FloatingToolbarPlugin ✦ Ask AI button, CollaborativePlainText SelectionAiPlugin
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
 │   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
 │   ├── ai/             # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system,
@@ -168,8 +173,8 @@ rudderjs/
 | `@rudderjs/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@rudderjs/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@rudderjs/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@rudderjs/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` tool, resource context, field typing animation), conversation persistence (AiConversation/AiChatMessage Prisma, PrismaConversationStore, conversation switcher, auto-title, auto-restore), model selection (GET `/_chat/models`, selector UI), resource context pill, `registerLazyElement`/`registerResolver` for plugins |
-| `@rudderjs/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
+| `@rudderjs/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` + `edit_text` tools, resource context, field typing animation), conversation persistence (AiConversation/AiChatMessage Prisma, PrismaConversationStore, conversation switcher, auto-title, auto-restore), model selection (GET `/_chat/models`, selector UI), resource context pill, selected text context (✦ Ask AI on selection, field-locked edit_text, SelectionPill), Field.ai() quick actions (sparkle menu: rewrite/expand/shorten/fix-grammar/translate/summarize/make-formal/simplify), `registerLazyElement`/`registerResolver` for plugins |
+| `@rudderjs/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar with ✦ Ask AI button, SelectionAiPlugin for plain text fields |
 | `@rudderjs/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@rudderjs/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
 | `@rudderjs/ai` | 0.0.1 | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware, Output, conversation memory, AI facade, AiFake. Agent.prompt/stream accept `{ history }`. AiModelConfig + model registry for user selection. |

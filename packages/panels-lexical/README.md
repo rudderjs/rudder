@@ -29,11 +29,11 @@ For Tailwind CSS to scan the component classes, add to your CSS:
 
 ## Components
 
-- **LexicalEditor** — Rich text editor with collaboration support, slash commands, toolbar profiles, drag handles
-- **CollaborativePlainText** — Lexical-based collaborative plain text field (single-line or multi-line)
+- **LexicalEditor** — Rich text editor with collaboration support, slash commands, toolbar profiles, drag handles, Ask AI on selection
+- **CollaborativePlainText** — Lexical-based collaborative plain text field (single-line or multi-line) with Ask AI on selection
 - **BlockNode** — Custom decorator node for embedding typed blocks in rich text
 - **SlashCommandPlugin** — "/" slash command menu (headings, lists, quotes, code, divider, custom blocks)
-- **FloatingToolbarPlugin** — Floating formatting toolbar on text selection
+- **FloatingToolbarPlugin** — Floating formatting toolbar on text selection (includes ✦ Ask AI button)
 - **FixedToolbarPlugin** — Google Docs-style persistent toolbar pinned to editor top
 - **FloatingLinkEditorPlugin** — Inline link URL editor (view + edit modes)
 
@@ -260,6 +260,35 @@ Version history uses a **comparison view** — not a preview mode:
 4. For text/richcontent: uses imperative `setContent()` ref → writes to editor → propagates via Yjs to all users
 5. For simple fields: writes to Y.Map directly
 6. Collab stays active throughout — no disconnection, no re-mounting
+
+## AI Integration
+
+Both `LexicalEditor` and `CollaborativePlainText` support an **Ask AI** button that appears when text is selected.
+
+### How it works
+
+1. User selects text in any collaborative field (title, textarea, rich content)
+2. A **✦** button appears — in the floating toolbar (rich text) or beside the selection (plain text)
+3. Clicking ✦ opens the AI chat sidebar with the selected text and field name pre-filled
+4. The user types a request (e.g. "make this shorter") and the AI edits that exact text in that exact field
+
+### Props
+
+Both components accept an optional `onAskAi` callback:
+
+```ts
+// LexicalEditor
+<LexicalEditor onAskAi={(text) => { /* handle selected text */ }} />
+
+// CollaborativePlainText
+<CollaborativePlainText onAskAi={(text) => { /* handle selected text */ }} />
+```
+
+When used inside `@rudderjs/panels`, the callback is auto-wired to the AI chat context — no manual setup needed.
+
+### Server-side editing
+
+When the AI edits collaborative fields, changes are applied via `Live.editText()` / `Live.editBlock()` on the server. These edits propagate through Yjs to all connected clients in real-time, with an AI cursor highlight showing where changes are being made.
 
 ## Without this package
 
