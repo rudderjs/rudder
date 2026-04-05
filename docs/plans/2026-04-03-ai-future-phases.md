@@ -1,7 +1,7 @@
 # Future: AI Enhancements, Field Assist, Suggestions & Block Tools
 
 **Date:** 2026-04-03 (extracted from resource agents plan)
-**Status:** Future — implement after ResourceAgent Phase 1-4 ships
+**Status:** Partial — Phase A (failover + embeddings) done 2026-04-05. Phases B-D remain.
 **Dependencies:** `@rudderjs/ai`, `@rudderjs/panels`, `@rudderjs/panels-lexical`
 
 ---
