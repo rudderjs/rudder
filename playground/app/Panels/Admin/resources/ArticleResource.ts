@@ -326,7 +326,7 @@ export class ArticleResource extends Resource {
         .label('Edit Content')
         .icon('Pencil')
         .instructions([
-          'You are a content editor. You can edit the article body and content fields.',
+          'You are a content editor. You can edit the article title, excerpt, body and content fields.',
           '',
           'IMPORTANT: Always call read_record first to see the current content.',
           '',
@@ -340,9 +340,9 @@ export class ArticleResource extends Resource {
           'To edit regular TEXT in the body, use edit_text with replace/insert_after/delete operations:',
           '  { type: "replace", search: "old text", replace: "new text" }',
           '',
-          'NEVER use update_field for body/content/excerpt/title — it would overwrite the entire rich text.',
+          'NEVER use update_field — it would overwrite the entire rich text.',
         ].join('\n'))
-        .fields(['body', 'content', 'excerpt', 'title']),
+        .fields(['title', 'body', 'content', 'excerpt']),
     ]
   }
 
