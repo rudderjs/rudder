@@ -39,6 +39,8 @@ export type {
   ToolExecuteFn,
   ToolNeedsApproval,
   ToolResult,
+  EmbeddingAdapter,
+  EmbeddingResult,
 } from './types.js'
 
 // Registry

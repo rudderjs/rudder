@@ -85,10 +85,23 @@ export interface ProviderAdapter {
   stream(options: ProviderRequestOptions): AsyncIterable<StreamChunk>
 }
 
+/** Embedding response */
+export interface EmbeddingResult {
+  embeddings: number[][]
+  usage: { promptTokens: number; totalTokens: number }
+}
+
+/** Provider adapter that supports embeddings */
+export interface EmbeddingAdapter {
+  embed(input: string | string[], model: string): Promise<EmbeddingResult>
+}
+
 /** Provider factory — creates a ProviderAdapter from a model string */
 export interface ProviderFactory {
   readonly name: string
   create(model: string): ProviderAdapter
+  /** Create an embedding adapter (optional — not all providers support embeddings) */
+  createEmbedding?(model: string): EmbeddingAdapter
 }
 
 // ─── Tool ─────────────────────────────────────────────────

@@ -183,18 +183,29 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
       if (prep.system) messages[0] = { role: 'system', content: prep.system }
     }
 
-    const adapter = AiRegistry.resolve(currentModel)
-    const [, modelId] = AiRegistry.parseModelString(currentModel)
+    const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
+    let response: import('./types.js').ProviderResponse | undefined
+    let lastError: Error | undefined
 
-    const options: ProviderRequestOptions = {
-      model: modelId,
-      messages,
-      tools: currentToolSchemas.length > 0 ? currentToolSchemas : undefined,
-      temperature: a.temperature(),
-      maxTokens: a.maxTokens(),
+    for (const tryModel of failoverModels) {
+      try {
+        const adapter = AiRegistry.resolve(tryModel)
+        const [, modelId] = AiRegistry.parseModelString(tryModel)
+        const options: ProviderRequestOptions = {
+          model: modelId,
+          messages,
+          tools: currentToolSchemas.length > 0 ? currentToolSchemas : undefined,
+          temperature: a.temperature(),
+          maxTokens: a.maxTokens(),
+        }
+        response = await adapter.generate(options)
+        break
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err))
+        if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
+      }
     }
-
-    const response = await adapter.generate(options)
+    if (!response) throw lastError ?? new Error('No provider available')
     addUsage(totalUsage, response.usage)
 
     const toolCalls = response.message.toolCalls ?? []
@@ -288,16 +299,29 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         if (prep.system) messages[0] = { role: 'system', content: prep.system }
       }
 
-      const adapter = AiRegistry.resolve(currentModel)
-      const [, modelId] = AiRegistry.parseModelString(currentModel)
+      const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
+      let streamSource: AsyncIterable<StreamChunk> | undefined
+      let lastError: Error | undefined
 
-      const options: ProviderRequestOptions = {
-        model: modelId,
-        messages,
-        tools: toolSchemas.length > 0 ? toolSchemas : undefined,
-        temperature: a.temperature(),
-        maxTokens: a.maxTokens(),
+      for (const tryModel of failoverModels) {
+        try {
+          const adapter = AiRegistry.resolve(tryModel)
+          const [, modelId] = AiRegistry.parseModelString(tryModel)
+          const opts: ProviderRequestOptions = {
+            model: modelId,
+            messages,
+            tools: toolSchemas.length > 0 ? toolSchemas : undefined,
+            temperature: a.temperature(),
+            maxTokens: a.maxTokens(),
+          }
+          streamSource = adapter.stream(opts)
+          break
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err))
+          if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
+        }
       }
+      if (!streamSource) throw lastError ?? new Error('No provider available')
 
       let text = ''
       let currentToolCalls: ToolCall[] = []
@@ -305,7 +329,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
       let finishReason: AgentStep['finishReason'] = 'stop'
       const partialToolCalls = new Map<string, { id: string; name: string; argChunks: string[] }>()
 
-      for await (const chunk of adapter.stream(options)) {
+      for await (const chunk of streamSource) {
         yield chunk
 
         if (chunk.type === 'text-delta' && chunk.text) {

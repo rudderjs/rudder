@@ -594,6 +594,106 @@ describe('AI facade', () => {
     const response = await a.prompt('Hi')
     assert.strictEqual(response.text, 'mock response')
   })
+
+  it('AI.embed() calls the embedding adapter', async () => {
+    AiRegistry.reset()
+    AiRegistry.register({
+      name: 'embmock',
+      create: () => createMockAdapter(),
+      createEmbedding: () => ({
+        async embed(input: string | string[]) {
+          const inputs = Array.isArray(input) ? input : [input]
+          return {
+            embeddings: inputs.map(() => [0.1, 0.2, 0.3]),
+            usage: { promptTokens: 5, totalTokens: 5 },
+          }
+        },
+      }),
+    })
+    AiRegistry.setDefault('embmock/test')
+
+    const result = await AI.embed('hello')
+    assert.strictEqual(result.embeddings.length, 1)
+    assert.deepStrictEqual(result.embeddings[0], [0.1, 0.2, 0.3])
+  })
+
+  it('AI.embed() with array input', async () => {
+    AiRegistry.reset()
+    AiRegistry.register({
+      name: 'embmock',
+      create: () => createMockAdapter(),
+      createEmbedding: () => ({
+        async embed(input: string | string[]) {
+          const inputs = Array.isArray(input) ? input : [input]
+          return {
+            embeddings: inputs.map((_, i) => [i * 0.1]),
+            usage: { promptTokens: 10, totalTokens: 10 },
+          }
+        },
+      }),
+    })
+    AiRegistry.setDefault('embmock/test')
+
+    const result = await AI.embed(['a', 'b', 'c'])
+    assert.strictEqual(result.embeddings.length, 3)
+  })
+
+  it('AI.embed() throws when provider lacks embedding support', async () => {
+    AiRegistry.reset()
+    AiRegistry.register({ name: 'noemb', create: () => createMockAdapter() })
+    AiRegistry.setDefault('noemb/test')
+
+    await assert.rejects(() => AI.embed('hello'), /does not support embeddings/)
+  })
+})
+
+// ─── Failover ─────────────────────────────────────────────
+
+describe('Agent failover', () => {
+  it('falls back to next model on error', async () => {
+    AiRegistry.reset()
+
+    let failCount = 0
+    const failAdapter: import('./types.js').ProviderAdapter = {
+      async generate() { failCount++; throw new Error('Provider down') },
+      async *stream() { throw new Error('Provider down') },
+    }
+
+    AiRegistry.register({ name: 'fail', create: () => failAdapter })
+    AiRegistry.register(mockFactory)
+    AiRegistry.setDefault('fail/v1')
+
+    class FailoverAgent extends Agent {
+      instructions() { return 'Test' }
+      model() { return 'fail/v1' }
+      failover() { return ['mock/test'] }
+    }
+
+    const response = await new FailoverAgent().prompt('Hello')
+    assert.strictEqual(response.text, 'mock response')
+    assert.strictEqual(failCount, 1)
+  })
+
+  it('throws when all failover models fail', async () => {
+    AiRegistry.reset()
+
+    const failAdapter: import('./types.js').ProviderAdapter = {
+      async generate() { throw new Error('Down') },
+      async *stream() { throw new Error('Down') },
+    }
+
+    AiRegistry.register({ name: 'fail1', create: () => failAdapter })
+    AiRegistry.register({ name: 'fail2', create: () => failAdapter })
+    AiRegistry.setDefault('fail1/v1')
+
+    class AllFailAgent extends Agent {
+      instructions() { return 'Test' }
+      model() { return 'fail1/v1' }
+      failover() { return ['fail2/v1'] }
+    }
+
+    await assert.rejects(() => new AllFailAgent().prompt('Hello'), /Down/)
+  })
 })
 
 // ─── AiFake ───────────────────────────────────────────────
