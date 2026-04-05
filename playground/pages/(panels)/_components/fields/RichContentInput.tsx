@@ -5,10 +5,10 @@ import { getField, subscribeFields } from '@rudderjs/panels'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
 import type { FieldInputProps } from './types.js'
 
-/** Global registry of editor refs for version restore. Keyed by field name. */
-const editorRefs = new Map<string, { current: { setContent(json: unknown): void } | null }>()
+/** Global registry of editor refs for version restore + AI text extraction. Keyed by field name. */
+const editorRefs = new Map<string, { current: { setContent(json: unknown): void; getTextContent?(): string } | null }>()
 
-/** Get the editor ref for a richcontent field (used by version restore). */
+/** Get the editor ref for a richcontent field (used by version restore + AI). */
 export function getRichContentRef(fieldName: string) {
   return editorRefs.get(fieldName)?.current ?? null
 }

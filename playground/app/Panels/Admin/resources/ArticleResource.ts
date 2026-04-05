@@ -158,7 +158,8 @@ export class ArticleResource extends Resource {
         .required()
         .searchable()
         .sortable()
-        .persist(['websocket', 'indexeddb']),
+        .persist(['websocket', 'indexeddb'])
+        .ai(['rewrite', 'shorten', 'expand', 'fix-grammar']),
 
       SlugField.make('slug')
         .label('Slug')
@@ -175,7 +176,8 @@ export class ArticleResource extends Resource {
         .label('Excerpt')
         .rows(3)
         .hideFromTable()
-        .collaborative(),
+        .collaborative()
+        .ai(['rewrite', 'shorten', 'expand', 'fix-grammar', 'summarize']),
 
       FileField.make('coverImage')
         .label('Cover Image')
@@ -197,6 +199,7 @@ export class ArticleResource extends Resource {
       RichContentField.make('content')
         .label('Content (Lexical)')
         .placeholder('Start writing your article…')
+        .ai(['rewrite', 'expand', 'shorten', 'fix-grammar', 'translate', 'simplify'])
         .blocks([
           Block.make('callToAction')
             .label('Call to Action')
@@ -223,6 +226,7 @@ export class ArticleResource extends Resource {
       RichContentField.make('body')
         .label('Body (Lexical)')
         .placeholder('Start writing your article…')
+        .ai(['rewrite', 'expand', 'shorten', 'fix-grammar', 'translate', 'simplify'])
         .blocks([
           Block.make('callToAction')
             .label('Call to Action')
@@ -291,11 +295,13 @@ export class ArticleResource extends Resource {
         .collapsed()
         .schema(
           TextField.make('metaTitle')
-            .label('Meta Title').hideFromTable(),
+            .label('Meta Title').hideFromTable()
+            .ai(['rewrite', 'shorten']),
 
           TextareaField.make('metaDescription')
             .label('Meta Description')
-            .rows(2).hideFromTable(),
+            .rows(2).hideFromTable()
+            .ai(['rewrite', 'shorten', 'expand']),
 
           JsonField.make('metadata')
             .label('Extra Metadata')

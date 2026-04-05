@@ -3,6 +3,7 @@ import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@rudderjs/pane
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
+import { getRichContentRef } from '../fields/RichContentInput.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'
 import type { SchemaItem } from '../../_lib/formHelpers.js'
 
@@ -54,16 +55,30 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
 
   const handleAction = useCallback((prompt: string) => {
     if (!aiChat) return
-    const text = String(value ?? '')
-    if (!text) return
-    aiChat.setSelection({ field: field.name, text })
-    aiChat.setOpen(true)
-    // Small delay so selection is set before sendMessage reads it
-    setTimeout(() => {
-      aiChat.sendMessage(prompt)
-    }, 0)
+
+    const isRichContent = field.type === 'richcontent' || field.type === 'content'
+
+    // Start fresh conversation for quick actions — avoids old history confusing the AI
+    aiChat.newConversation()
+
+    if (isRichContent) {
+      // Rich text: use normal mode (no selection lock) — the server reads
+      // the latest content from Y.Doc rooms. The AI uses edit_text with
+      // targeted replace operations on individual paragraphs.
+      aiChat.setOpen(true)
+      const fullPrompt = `${prompt} in the "${field.name}" field`
+      setTimeout(() => aiChat.sendMessage(fullPrompt), 0)
+    } else {
+      // Plain text: use selection-locked mode for precise editing
+      const text = String(value ?? '')
+      if (!text) return
+      aiChat.setSelection({ field: field.name, text })
+      aiChat.setOpen(true)
+      const fullPrompt = `${prompt}:\n"${text}"`
+      setTimeout(() => aiChat.sendMessage(fullPrompt), 0)
+    }
     setOpen(false)
-  }, [aiChat, field.name, value])
+  }, [aiChat, field.name, field.type, value])
 
   if (!aiChat || !field.ai) return null
 

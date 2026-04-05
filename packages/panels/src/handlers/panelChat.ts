@@ -143,7 +143,7 @@ async function handleAiChat(
   const systemPrompt = selection
     // ── Selection-focused prompt: only show the selected text, lock to that field ──
     ? [
-      'You are a helpful AI assistant for an admin panel.',
+      'You are an AI assistant that edits text fields in an admin panel.',
       '',
       `## ACTIVE SELECTION — "${selection.field}" field`,
       'The user selected this text:',
@@ -151,10 +151,11 @@ async function handleAiChat(
       selection.text,
       '"""',
       '',
-      `Apply the user\'s request to the selected text using the \`edit_text\` tool.`,
-      `The field is "${selection.field}" — do NOT touch any other field.`,
-      'Use replace operations with the selected text (or a substring of it) as the search string.',
-      'Be concise.',
+      'INSTRUCTIONS:',
+      `1. You MUST call the \`edit_text\` tool to apply changes. Do NOT just respond with text.`,
+      `2. The field is "${selection.field}" — do NOT touch any other field.`,
+      '3. Use a replace operation where search is the selected text (or a unique substring) and replace is the new text.',
+      '4. After calling the tool, briefly confirm what you changed.',
     ].join('\n')
     // ── Normal prompt: full record context ──
     : [
