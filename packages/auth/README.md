@@ -1,148 +1,109 @@
 # @rudderjs/auth
 
-Authentication for RudderJS, powered by [better-auth](https://www.better-auth.com/). Provides email/password login, session management, password reset, and an auth middleware -- with auto-detection of your ORM (Prisma or Drizzle) and database driver.
+Native authentication for RudderJS. Laravel-style guards, user providers, and Auth facade.
 
 ## Installation
 
 ```bash
-pnpm add @rudderjs/auth
+pnpm add @rudderjs/auth @rudderjs/hash @rudderjs/session
 ```
 
 ## Setup
 
-### 1. Register the provider
-
 ```ts
+// config/auth.ts
+import { User } from '../app/Models/User.js'
+
+export default {
+  defaults: {
+    guard: 'web',
+  },
+  guards: {
+    web: { driver: 'session', provider: 'users' },
+  },
+  providers: {
+    users: { driver: 'eloquent', model: User },
+  },
+}
+
 // bootstrap/providers.ts
+import { session } from '@rudderjs/session'
+import { hash } from '@rudderjs/hash'
 import { auth } from '@rudderjs/auth'
-import configs from '../config/index.ts'
 
 export default [
-  database(configs.database),   // must come before auth
+  session(configs.session),
+  hash(configs.hash),
   auth(configs.auth),
-  // ...
 ]
 ```
 
-`auth()` auto-discovers the database client from the DI container. It checks for a Prisma client first (`'prisma'` key), then Drizzle (`'drizzle'` key). If neither is bound, you can pass an explicit `AuthDbConfig` as the second argument:
+## Usage
+
+### Auth Facade
 
 ```ts
-auth(configs.auth, { driver: 'postgresql', url: process.env['DATABASE_URL'] })
+import { Auth } from '@rudderjs/auth'
+
+// Attempt login
+const success = await Auth.attempt({ email, password })
+
+// Manual login/logout
+Auth.login(user)
+Auth.logout()
+
+// Current user
+const user = await Auth.user()    // Authenticatable | null
+const id = await Auth.id()        // string | null
+const ok = await Auth.check()     // boolean
+const no = await Auth.guest()     // boolean
+
+// Switch guard
+Auth.guard('api').user()
 ```
 
-### 2. Publish the database schema
-
-Auth ships its own schema files for every supported ORM and database driver. Publish the correct one with:
-
-```bash
-pnpm rudder vendor:publish --tag=auth-schema
-```
-
-The command auto-detects your ORM (Prisma or Drizzle) and DB driver (SQLite, PostgreSQL, or MySQL), then publishes the appropriate file:
-
-- **Prisma** -- publishes `auth.prisma` to `prisma/schema/`
-- **Drizzle** -- publishes the driver-specific schema (e.g. `auth.drizzle.pg.ts`) to `database/schema/`
-
-After publishing, run your ORM's migration or push command to apply the schema.
-
-### 3. Configuration
+### Middleware
 
 ```ts
-// config/auth.ts
-import type { BetterAuthConfig } from '@rudderjs/auth'
+import { AuthMiddleware, RequireAuth } from '@rudderjs/auth'
 
-export default {
-  secret: process.env['AUTH_SECRET'],
-  baseUrl: process.env['APP_URL'],
-  emailAndPassword: {
-    enabled: true,
-  },
-  trustedOrigins: ['http://localhost:3000'],
-} satisfies BetterAuthConfig
+// Attach user to request (non-blocking)
+Route.get('/profile', handler, [AuthMiddleware()])
+
+// Require authentication (returns 401 if not logged in)
+Route.post('/posts', handler, [RequireAuth()])
 ```
 
-## Auth Pages
+### Authenticatable Contract
 
-Auth ships pre-built login, register, forgot-password, and reset-password pages for React, Vue, and Solid. Publish them with:
-
-```bash
-pnpm rudder vendor:publish --tag=auth-pages          # React (default)
-pnpm rudder vendor:publish --tag=auth-pages-react
-pnpm rudder vendor:publish --tag=auth-pages-vue
-pnpm rudder vendor:publish --tag=auth-pages-solid
-```
-
-Pages are published to the `pages/(auth)/` route group. They use Vike's `navigate()` for smooth client-side transitions between auth pages and after successful login/register.
-
-### Redirect support
-
-The login page reads a `?redirect=/path` query parameter. After a successful login, the user is navigated to that path instead of the default redirect. This makes it easy to send unauthenticated users to login and return them to where they were going:
+Your User model must implement:
 
 ```ts
-navigate(`/login?redirect=${encodeURIComponent(currentPath)}`)
+interface Authenticatable {
+  getAuthIdentifier(): string
+  getAuthPassword(): string
+  getRememberToken(): string | null
+  setRememberToken(token: string): void
+}
 ```
 
-## Password Reset
+The `EloquentUserProvider` auto-wraps ORM model records with these methods (mapping `id`, `password`, `rememberToken` fields).
 
-To enable the forgot-password / reset-password flow, provide a `sendResetPassword` callback in your auth config:
+## Architecture
 
-```ts
-// config/auth.ts
-export default {
-  emailAndPassword: {
-    enabled: true,
-    sendResetPassword: async ({ user, url }) => {
-      // Send email with the reset URL
-      console.log(`Reset for ${user.email}: ${url}`)
-    },
-  },
-} satisfies BetterAuthConfig
-```
+- **Guards** determine *how* users are authenticated (session cookies, API tokens)
+- **User Providers** determine *where* users are retrieved from (Eloquent model, raw DB)
+- **Auth facade** delegates to the current guard via `AsyncLocalStorage`
+- **AuthManager** creates guards + providers from config, one per request
 
-The published auth pages include forgot-password and reset-password forms that work with this callback out of the box.
+### Built-in Guards
 
-## Auth Middleware
+| Guard | Driver | Description |
+|-------|--------|-------------|
+| Session | `session` | Cookie-based auth via `@rudderjs/session` |
 
-`AuthMiddleware()` verifies the session via better-auth and attaches the authenticated user to `req.user`. Returns 401 if no valid session exists.
+### Built-in Providers
 
-```ts
-import { AuthMiddleware } from '@rudderjs/auth'
-import { Route } from '@rudderjs/router'
-
-Route.post('/api/posts', handler, [AuthMiddleware()])
-```
-
-`req.user` is typed as `AuthUser | undefined` via module augmentation on `AppRequest`.
-
-## ORM Support
-
-Auth works with both Prisma and Drizzle. At boot, it auto-detects which ORM is bound in the DI container:
-
-1. **Prisma** -- if a `'prisma'` key is bound, uses `prismaAdapter` from better-auth
-2. **Drizzle** -- if a `'drizzle'` key is bound, uses `drizzleAdapter` from better-auth
-3. **Fallback** -- if neither is bound, creates a standalone PrismaClient from the `dbConfig` argument
-
-Make sure your ORM provider is registered before `auth()` in the providers array.
-
-## API Reference
-
-### Types
-
-- `AuthUser` -- authenticated user object (`id`, `name`, `email`, `emailVerified`, `image?`, `createdAt`, `updatedAt`)
-- `AuthSession` -- session object (`id`, `userId`, `token`, `expiresAt`, `ipAddress?`, `userAgent?`, `createdAt`, `updatedAt`)
-- `AuthResult` -- `{ user: AuthUser; session: AuthSession }`
-- `BetterAuthConfig` -- configuration options for the auth provider
-- `BetterAuthInstance` -- the type of the better-auth instance bound to DI as `'auth'`
-- `AuthDbConfig` -- `{ driver?: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'; url?: string }`
-
-### Functions
-
-- `auth(config, dbConfig?)` -- returns a ServiceProvider class that configures better-auth
-- `betterAuth(config, dbConfig?)` -- deprecated alias for `auth()`
-- `AuthMiddleware()` -- returns a middleware handler that enforces authentication
-
-## Notes
-
-- The auth instance is bound to the DI container as `'auth'` -- retrieve it with `app().make<BetterAuthInstance>('auth')`
-- Auth mounts routes at `/api/auth/*` -- register the auth provider before any catch-all API route handler
-- `AUTH_SECRET` must be at least 32 characters in production
+| Provider | Driver | Description |
+|----------|--------|-------------|
+| Eloquent | `eloquent` | Uses `@rudderjs/orm` Model class |

@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/auth",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -32,21 +32,20 @@
   },
   "dependencies": {
     "@rudderjs/contracts": "workspace:*",
-    "@rudderjs/core": "workspace:*",
-    "better-auth": "^1.0.0"
+    "@rudderjs/core": "workspace:*"
   },
-  "optionalDependencies": {
-    "@libsql/client": "^0.15.0",
-    "@prisma/adapter-better-sqlite3": "^7.0.0",
-    "@prisma/adapter-libsql": "^7.0.0",
-    "@prisma/adapter-pg": "^7.0.0",
-    "@prisma/client": "^7.0.0",
-    "pg": "^8.0.0"
+  "peerDependencies": {
+    "@rudderjs/hash": "workspace:*",
+    "@rudderjs/session": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/hash": { "optional": false },
+    "@rudderjs/session": { "optional": false }
   },
   "devDependencies": {
+    "@rudderjs/hash": "workspace:*",
+    "@rudderjs/session": "workspace:*",
     "@types/node": "^20.0.0",
-    "@types/pg": "^8.0.0",
-    "better-sqlite3": "^12.0.0",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"
