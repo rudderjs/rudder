@@ -395,8 +395,9 @@ async function handlePanelChat(
         conversationId = await store.create(undefined, meta)
       }
       send('conversation', { conversationId, isNew: !reqConvId })
-    } catch {
+    } catch (err) {
       // DB table might not exist yet — continue without persistence
+      console.error('[panels] conversation store error:', err instanceof Error ? err.message : err)
       store = null
     }
   }
@@ -549,20 +550,14 @@ export function mountPanelChat(
   }, mw)
 
   // GET — list conversations
-  router.get(`${base}/api/_chat/conversations`, async (req, res) => {
+  router.get(`${base}/api/_chat/conversations`, async (_req, res) => {
     const store = await resolveConversationStore()
-    if (!store) return res.status(404).json({ message: 'Conversation store not available.' })
-
-    const query = (req as any).query ?? {}
-    const resourceSlug = query.resourceSlug as string | undefined
-    const recordId = query.recordId as string | undefined
-
-    let conversations
-    if (resourceSlug && store.listForResource) {
-      conversations = await store.listForResource(resourceSlug, recordId)
-    } else {
-      conversations = await store.list()
+    if (!store) {
+      console.error('[panels] conversation store not available for list')
+      return res.status(404).json({ message: 'Conversation store not available.' })
     }
+
+    const conversations = await store.list()
 
     return res.json({ conversations })
   }, mw)
