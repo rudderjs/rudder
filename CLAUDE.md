@@ -116,6 +116,10 @@ rudderjs/
 │   │                   #   + Panel.use() plugin system — PanelPlugin with schemas/pages/register/boot hooks
 │   │                   #   + AI chat sidebar: unified chat + resource agents, POST /{panel}/api/_chat,
 │   │                   #     run_agent tool, forceAgent bypass, resource context, field animation via SSE
+│   │                   #   + Conversation persistence: AiConversation/AiChatMessage Prisma models, PrismaConversationStore,
+│   │                   #     auto-restore on mount, conversation switcher dropdown, auto-title, CRUD routes
+│   │                   #   + Model selection: AiModelConfig in ai config, GET /_chat/models, selector in chat input
+│   │                   #   + AiChatProvider takes panelPath prop — chat is panel-wide, not resource-tied
 │   ├── panels-lexical/ # Lexical rich-text editor adapter — RichContentField, CollaborativePlainText, block editor,
 │   │                   #   toolbar profiles (document/default/simple/minimal/none), slash commands, floating link editor,
 │   │                   #   useYjsCollab hook (WebSocket + IndexedDB providers), imperative editor refs for version restore
@@ -123,6 +127,8 @@ rudderjs/
 │   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
 │   ├── ai/             # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system,
 │   │                   #   streaming, middleware, structured output, conversation memory, AI facade, AiFake
+│   │                   #   Agent.prompt/stream accept { history } for conversation continuity
+│   │                   #   AiModelConfig + AiRegistry.setModels/getModels for user model selection
 │   ├── workspaces/     # AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator
 │   │                   #   Panel plugin: workspaces(). Uses @rudderjs/ai for LLM, Prisma for persistence.
 │   ├── localization/   # i18n — trans(), setLocale(), locale-aware middleware, JSON translation files
@@ -162,11 +168,11 @@ rudderjs/
 | `@rudderjs/notification` | 0.0.1 | Notifiable, Notification, ChannelRegistry, notify() |
 | `@rudderjs/broadcast` | 0.0.1 | WebSocket channels — broadcasting(), broadcast(), broadcasting.auth(), BKSocket client |
 | `@rudderjs/live` | 0.0.1 | Yjs CRDT real-time sync — live(), MemoryPersistence, livePrisma(), liveRedis() |
-| `@rudderjs/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` tool, resource context, field typing animation), `registerLazyElement`/`registerResolver` for plugins |
+| `@rudderjs/panels` | 0.0.3 | Admin panel: Resource `table()`/`form()`/`detail()`/`agents()` API, 25+ field types, schema elements (Table, Form, Column, Section, Tabs, Stats, Chart, List, Heading, Text, Code, Snippet, Example, Card, Alert, Divider, Each, View, Dialog, Dashboard, Widget), Panel.use() plugin system, persist(url/session/localStorage), lazy, poll, DataSource, versioning, collaboration (Yjs), inline editing, autosave, draftable, AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar, `POST /{panel}/api/_chat` with `run_agent` tool, resource context, field typing animation), conversation persistence (AiConversation/AiChatMessage Prisma, PrismaConversationStore, conversation switcher, auto-title, auto-restore), model selection (GET `/_chat/models`, selector UI), resource context pill, `registerLazyElement`/`registerResolver` for plugins |
 | `@rudderjs/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — `RichContentField`, `CollaborativePlainText`, block editor, slash commands, floating toolbar |
 | `@rudderjs/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@rudderjs/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
-| `@rudderjs/ai` | 0.0.1 | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware, Output, conversation memory, AI facade, AiFake |
+| `@rudderjs/ai` | 0.0.1 | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware, Output, conversation memory, AI facade, AiFake. Agent.prompt/stream accept `{ history }`. AiModelConfig + model registry for user selection. |
 | `@rudderjs/workspaces` | 0.0.1 | AI workspace canvas — Isoflow-style 3D nodes, departments, connections. Panel plugin: `workspaces()` |
 | `@rudderjs/localization` | 0.0.1 | i18n — `trans()`, `setLocale()`, `getLocale()`, locale middleware, JSON translation files |
 
