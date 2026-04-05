@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@rudderjs/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
+import { useAiChatSafe } from '../agents/AiChatContext.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'
 import type { SchemaItem } from '../../_lib/formHelpers.js'
 
@@ -22,6 +23,84 @@ interface Props {
   docName?:    string | null
 }
 
+// ─── Predefined quick action labels ─────────────────────────
+
+const QUICK_ACTION_LABELS: Record<string, { label: string; prompt: string }> = {
+  rewrite:       { label: 'Rewrite',      prompt: 'Rewrite the following text while keeping the same meaning' },
+  expand:        { label: 'Expand',        prompt: 'Expand the following text with more detail' },
+  shorten:       { label: 'Shorten',       prompt: 'Shorten the following text while keeping the key points' },
+  'fix-grammar': { label: 'Fix grammar',   prompt: 'Fix any grammar and spelling mistakes in the following text' },
+  translate:     { label: 'Translate',      prompt: 'Translate the following text to English' },
+  summarize:     { label: 'Summarize',      prompt: 'Summarize the following text concisely' },
+  'make-formal': { label: 'Make formal',    prompt: 'Rewrite the following text in a more formal tone' },
+  simplify:      { label: 'Simplify',       prompt: 'Simplify the following text so it is easier to understand' },
+}
+
+// ─── AI quick actions button ────────────────────────────────
+
+function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) {
+  const aiChat = useAiChatSafe()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  const handleAction = useCallback((prompt: string) => {
+    if (!aiChat) return
+    const text = String(value ?? '')
+    if (!text) return
+    aiChat.setSelection({ field: field.name, text })
+    aiChat.setOpen(true)
+    // Small delay so selection is set before sendMessage reads it
+    setTimeout(() => {
+      aiChat.sendMessage(prompt)
+    }, 0)
+    setOpen(false)
+  }, [aiChat, field.name, value])
+
+  if (!aiChat || !field.ai) return null
+
+  const actions = Array.isArray(field.ai)
+    ? field.ai.map(id => QUICK_ACTION_LABELS[id] ?? { label: id, prompt: id }).filter(Boolean)
+    : Object.values(QUICK_ACTION_LABELS).slice(0, 4) // default set when .ai(true)
+
+  return (
+    <div ref={ref} className="relative inline-flex ml-1.5">
+      <button
+        type="button"
+        className="inline-flex items-center justify-center h-4 w-4 rounded text-primary/60 hover:text-primary hover:bg-primary/10 transition-colors"
+        title="AI actions"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="text-xs leading-none">✦</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 min-w-[140px] rounded-md border bg-popover shadow-md z-30 py-1">
+          {actions.map(a => (
+            <button
+              key={a.label}
+              type="button"
+              className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
+              onClick={() => handleAction(a.prompt)}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Schema renderer ────────────────────────────────────────
+
 export function SchemaRenderer({
   schema, values, errors, setValue, uploadBase, i18n, mode,
   userName, userColor, wsPath, docName,
@@ -34,9 +113,10 @@ export function SchemaRenderer({
     return (
       <div key={field.name}>
         {field.type !== 'boolean' && field.type !== 'toggle' && field.type !== 'hidden' && (
-          <label className="block text-sm font-medium mb-1.5">
+          <label className="flex items-center text-sm font-medium mb-1.5">
             {field.label}
             {field.required && <span className="text-destructive ml-0.5">*</span>}
+            <AiQuickActions field={field} value={values[field.name]} />
           </label>
         )}
         <FieldInput
