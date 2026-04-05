@@ -33,7 +33,7 @@ export const adminPanel = Panel.make('admin')
   .use(media(configs.media))
   .use(workspaces())
   .branding({
-    title: 'RudderJS',
+    title: 'Pilotiq',
     logo: '/logo.svg',
   })
   .theme({
