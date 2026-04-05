@@ -38,8 +38,8 @@ function randomPick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
 }
 
-/** Build the preview iframe HTML with inline CSS variables + Tailwind classes. */
-function buildPreviewHTML(config: Partial<PanelThemeConfig>): string {
+/** Build the preview iframe HTML with inline CSS variables. */
+function buildPreviewHTML(config: Partial<PanelThemeConfig>, mode: 'light' | 'dark' = 'light'): string {
   const merged: PanelThemeConfig = { preset: 'default', ...config }
   const resolved = resolveTheme(merged)
   const themeCSS = generateThemeCSS(resolved)
@@ -56,7 +56,7 @@ function buildPreviewHTML(config: Partial<PanelThemeConfig>): string {
   const headingFont = resolved.fontFamily?.heading ?? bodyFont
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="${mode}">
 <head>
 <meta charset="UTF-8">
 ${fontTags}
@@ -210,20 +210,20 @@ ${fontTags}
 
 // ─── Preview Iframe ─────────────────────────────────────────
 
-function PreviewIframe({ config }: { config: Partial<PanelThemeConfig> }) {
+function PreviewIframe({ config, mode }: { config: Partial<PanelThemeConfig>; mode: 'light' | 'dark' }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const iframe = iframeRef.current
     if (!iframe) return
-    const html = buildPreviewHTML(config)
+    const html = buildPreviewHTML(config, mode)
     const doc = iframe.contentDocument
     if (doc) {
       doc.open()
       doc.write(html)
       doc.close()
     }
-  }, [config])
+  }, [config, mode])
 
   return (
     <iframe
@@ -246,6 +246,7 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
   const [config, setConfig] = useState<Partial<PanelThemeConfig>>({ ...codeDefaults })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
 
   const update = useCallback((key: string, value: unknown) => {
     setConfig(prev => ({ ...prev, [key]: value }))
@@ -263,21 +264,23 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
   const handleSave = async () => {
     setSaving(true)
     try {
-      await fetch(`${panelPath}/api/_theme`, {
+      const resp = await fetch(`${panelPath}/api/_theme`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       })
-      setSaved(true)
-    } finally {
+      if (!resp.ok) console.warn('[theme-editor] save failed:', resp.status)
+      // Reload the page so the server re-resolves the theme with saved overrides
+      window.location.reload()
+    } catch (e) {
+      console.warn('[theme-editor] save error:', e)
       setSaving(false)
     }
   }
 
   const handleReset = async () => {
     await fetch(`${panelPath}/api/_theme`, { method: 'DELETE' })
-    setConfig({ ...codeDefaults })
-    setSaved(false)
+    window.location.reload()
   }
 
   const handleShuffle = () => {
@@ -436,8 +439,27 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
       </div>
 
       {/* Preview Area — isolated iframe */}
-      <div className="flex-1 overflow-hidden p-4">
-        <PreviewIframe config={config} />
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
+          <span className="text-xs text-muted-foreground">Preview</span>
+          <div className="flex gap-1 rounded-md border border-input p-0.5">
+            <button
+              onClick={() => setPreviewMode('light')}
+              className={`px-2.5 py-1 text-xs rounded transition-all ${previewMode === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Light
+            </button>
+            <button
+              onClick={() => setPreviewMode('dark')}
+              className={`px-2.5 py-1 text-xs rounded transition-all ${previewMode === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Dark
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 p-4 overflow-hidden">
+          <PreviewIframe config={config} mode={previewMode} />
+        </div>
       </div>
     </div>
   )
