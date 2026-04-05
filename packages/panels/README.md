@@ -761,16 +761,78 @@ Requires `@rudderjs/ai` as a peer dependency.
 
 ---
 
-## Dark Mode
+## Theming
+
+Configure your panel's visual theme — colors, fonts, radius, and more. Theme CSS variables are injected at runtime, overriding the app's defaults. Supports light and dark mode.
+
+```ts
+Panel.make('admin')
+  .theme({
+    preset: 'nova',              // 'default' | 'nova' | 'maia' | 'lyra'
+    baseColor: 'zinc',           // 'neutral' | 'stone' | 'zinc' | 'slate' | 'olive' | 'taupe'
+    accentColor: 'blue',         // 16 accent colors (blue, red, green, amber, violet, etc.)
+    chartPalette: 'ocean',       // 'default' | 'ocean' | 'sunset' | 'forest' | 'berry'
+    radius: 'medium',            // 'none' | 'small' | 'default' | 'medium' | 'large'
+    fonts: {
+      heading: 'Space Grotesk',  // Google Fonts name
+      body: 'Inter',
+    },
+    iconLibrary: 'lucide',       // 'lucide' | 'tabler' | 'phosphor' | 'remix'
+  })
+  .themeEditor()                 // enable the visual theme editor page
+```
+
+### Theme Layering
+
+Themes are resolved by merging layers (each overrides the previous):
+
+1. **Preset** — full set of CSS variables (all 31 light + dark values)
+2. **Base color** — overrides the gray/neutral scale
+3. **Accent color** — overrides primary, ring, sidebar-primary
+4. **Chart palette** — overrides chart-1 through chart-5
+5. **CSS variables** — escape hatch for raw OKLCH overrides
+
+```ts
+.theme({
+  preset: 'nova',
+  accentColor: 'violet',
+  cssVariables: {
+    light: { '--destructive': 'oklch(0.6 0.25 30)' },
+    dark:  { '--destructive': 'oklch(0.7 0.2 25)' },
+  },
+})
+```
+
+### Theme Editor
+
+Enable `.themeEditor()` to add a visual theme settings page at `/{panel}/theme`. Features:
+
+- **Live iframe preview** — changes apply instantly in an isolated preview
+- **Dark/light preview** — syncs with the panel's dark mode toggle
+- **Save to database** — persists theme overrides to the `panelGlobal` table
+- **Shuffle** — randomize all theme settings
+- **Reset** — clear saved overrides, return to code defaults
+
+Saved overrides merge with code defaults at runtime — code defines the base, admins customize via the UI.
+
+### Fonts
+
+Fonts are loaded from Google Fonts via `<link>` tags. The theme system overrides `--default-font-family` (Tailwind v4's runtime variable) and auto-applies heading fonts to `h1`-`h6`.
+
+### Icon Library
+
+The panel's icon system supports multiple icon libraries via an adapter pattern:
+
+- **lucide** (default) — included, no extra install needed
+- **tabler** — `pnpm add @tabler/icons-react`
+- **phosphor** — `pnpm add @phosphor-icons/react`
+- **remix** — `pnpm add @remixicon/react`
+
+Internal panel icons (sidebar, buttons) use a canonical name mapping. Resource icons resolve through the active adapter with PascalCase fallback.
+
+### Dark Mode
 
 Built-in light/dark/system theme toggle. Persists to `localStorage`.
-
-Customize via CSS variables:
-
-```css
-:root { --primary: oklch(0.5 0.2 250); }
-.dark { --primary: oklch(0.7 0.15 250); }
-```
 
 ---
 
