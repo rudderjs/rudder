@@ -41,7 +41,7 @@ export const adminPanel = Panel.make('admin')
     baseColor: 'zinc',
     accentColor: 'orange',
     chartPalette: 'ocean',
-    radius: 'medium',
+    radius: 'none',
     fonts: {
       heading: 'Space Grotesk',
       body: 'Inter',
