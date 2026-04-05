@@ -140,7 +140,7 @@ function useSessionUser(initial?: SessionUser): SessionUser | null {
   const [user, setUser] = useState<SessionUser | null>(initial ?? null)
   useEffect(() => {
     if (initial !== undefined) return
-    fetch('/api/auth/get-session')
+    fetch('/api/me')
       .then(r => r.ok ? r.json() : null)
       .then((data: { user?: SessionUser } | null) => { if (data?.user) setUser(data.user) })
       .catch(() => {})
