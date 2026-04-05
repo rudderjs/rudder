@@ -405,6 +405,7 @@ export function session(config: SessionConfig): new (app: Application) => Servic
     boot(): void {
       this.app.instance('session.config', config)
       this.app.instance('session.middleware', sessionMiddleware(config))
+      this.app.instance('session.facade', Session)
     }
   }
 

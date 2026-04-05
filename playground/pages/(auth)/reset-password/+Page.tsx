@@ -8,11 +8,13 @@ export default function ResetPasswordPage() {
   const [success, setSuccess]         = useState('')
   const [loading, setLoading]         = useState(false)
   const [token, setToken]             = useState<string | null>(null)
+  const [email, setEmail]             = useState<string | null>(null)
   const [mounted, setMounted]         = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setToken(params.get('token'))
+    setEmail(params.get('email'))
     setMounted(true)
   }, [])
 
@@ -31,7 +33,7 @@ export default function ResetPasswordPage() {
       const res = await fetch('/api/auth/reset-password', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ token, newPassword: password }),
+        body:    JSON.stringify({ token, email, newPassword: password }),
       })
       if (res.ok) {
         setSuccess('Your password has been reset successfully.')

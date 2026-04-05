@@ -1,6 +1,7 @@
 import type { Application, ServiceProvider } from '@rudderjs/core'
 import { events } from '@rudderjs/core'
 import { auth } from '@rudderjs/auth'
+import { hash } from '@rudderjs/hash'
 import { queue } from '@rudderjs/queue'
 import { mail } from '@rudderjs/mail'
 import { cache } from '@rudderjs/cache'
@@ -21,9 +22,10 @@ import configs from '../config/index.js'
 export default [
   // ── Infrastructure (order matters) ──────────────────────
   database(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
-  auth(configs.auth),         // auto-discovers 'prisma' from DI
   session(configs.session),
+  hash(configs.hash),
   cache(configs.cache),
+  auth(configs.auth),         // requires session + hash
 
   // ── Features ────────────────────────────────────────────
   queue(configs.queue),

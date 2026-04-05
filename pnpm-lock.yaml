@@ -988,6 +988,9 @@ importers:
       '@rudderjs/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@rudderjs/hash':
+        specifier: workspace:*
+        version: link:../packages/hash
       '@rudderjs/image':
         specifier: workspace:*
         version: link:../packages/image

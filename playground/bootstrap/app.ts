@@ -3,6 +3,7 @@ import 'dotenv/config'
 import { Application } from '@rudderjs/core'
 import { hono } from '@rudderjs/server-hono'
 import { RateLimit } from '@rudderjs/middleware'
+import { sessionMiddleware } from '@rudderjs/session'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import { AppError } from '../app/Exceptions/AppError.ts'
 import configs from '../config/index.ts'
@@ -22,6 +23,7 @@ export default Application.configure({
   .withMiddleware((m) => {
     // Global middlewares
     // m.use(RateLimit.perMinute(60))
+    m.use(sessionMiddleware(configs.session))
     m.use(requestIdMiddleware)
   })
   .withExceptions((e) => {

@@ -60,8 +60,8 @@ export function AuthMiddleware(guardName?: string): MiddlewareHandler {
 
       if (user) {
         const plain = userToPlain(user)
-        ;(req as unknown as Record<string, unknown>)['user'] = plain
         ;(req.raw as Record<string, unknown>)['__rjs_user'] = plain
+        try { (req as unknown as Record<string, unknown>)['user'] = plain } catch { /* read-only */ }
       }
 
       await next()
@@ -86,8 +86,8 @@ export function RequireAuth(guardName?: string): MiddlewareHandler {
       }
 
       const plain = userToPlain(user)
-      ;(req as unknown as Record<string, unknown>)['user'] = plain
       ;(req.raw as Record<string, unknown>)['__rjs_user'] = plain
+      try { (req as unknown as Record<string, unknown>)['user'] = plain } catch { /* read-only */ }
 
       await next()
     })
@@ -136,13 +136,9 @@ export function auth(config: AuthConfig): new (app: Application) => ServiceProvi
         )
       }
 
-      // Resolve session accessor
+      // Resolve session facade — bound by @rudderjs/session as 'session.facade'
       const getSession = (): SessionStore => {
-        try {
-          return this.app.make<SessionStore>('session.instance')
-        } catch {
-          return this.app.make<SessionStore>('session.facade')
-        }
+        return this.app.make<SessionStore>('session.facade')
       }
 
       const manager = new AuthManager(config, hashCheck, getSession)

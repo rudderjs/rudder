@@ -1,13 +1,15 @@
 import { Model } from '@rudderjs/orm'
 
 export class User extends Model {
-  // Prisma accessor is the model name lowercased
   static table = 'user'
+  static hidden = ['password', 'rememberToken']
 
-  id!:        string
-  name!:      string
-  email!:     string
-  role!:      string
-  createdAt!: Date
-  updatedAt!: Date
+  id!:            string
+  name!:          string
+  email!:         string
+  password!:      string | null
+  role!:          string
+  rememberToken!: string | null
+  createdAt!:     Date
+  updatedAt!:     Date
 }

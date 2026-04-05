@@ -1,27 +1,14 @@
-import { Env } from '@rudderjs/core'
-import { dispatch } from '@rudderjs/core'
-import type { BetterAuthConfig } from '@rudderjs/auth'
-import { UserRegistered } from '../app/Events/UserRegistered.js'
+import type { AuthConfig } from '@rudderjs/auth'
+import { User } from '../app/Models/User.js'
 
 export default {
-  secret:           Env.get('AUTH_SECRET', 'please-set-AUTH_SECRET-min-32-chars!!'),
-  baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
-  emailAndPassword: {
-    enabled: true,
-    sendResetPassword: async ({ user, url }) => {
-      // In production, send a real email via @rudderjs/mail
-      // For development, just log the reset URL
-      console.log(`[Auth] Password reset for ${user.email}: ${url}`)
-    },
+  defaults: {
+    guard: 'web',
   },
-
-  user: {
-    additionalFields: {
-      role: { type: 'string', defaultValue: 'user', input: false },
-    },
+  guards: {
+    web: { driver: 'session', provider: 'users' },
   },
-
-  onUserCreated: async (user) => {
-    await dispatch(new UserRegistered(user.id, user.name, user.email))
+  providers: {
+    users: { driver: 'eloquent', model: User },
   },
-} satisfies BetterAuthConfig
+} satisfies AuthConfig

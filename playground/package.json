@@ -21,6 +21,7 @@
     "@rudderjs/ai": "workspace:*",
     "@rudderjs/rudder": "workspace:*",
     "@rudderjs/auth": "workspace:*",
+    "@rudderjs/hash": "workspace:*",
     "@rudderjs/broadcast": "workspace:*",
     "@rudderjs/cache": "workspace:*",
     "@rudderjs/contracts": "workspace:*",

@@ -2,8 +2,8 @@ import { Route } from '@rudderjs/router'
 import { resolve, app, dd, dump, config, validate } from '@rudderjs/core'
 import { broadcast, broadcastStats } from '@rudderjs/broadcast'
 import { getLocale, runWithLocale, setLocale, trans } from '@rudderjs/localization'
-import type { BetterAuthInstance } from '@rudderjs/auth'
-import { AuthMiddleware } from '@rudderjs/auth'
+import { Auth, AuthMiddleware, RequireAuth, PasswordBroker, MemoryTokenRepository, EloquentUserProvider, runWithAuth, type AuthConfig } from '@rudderjs/auth'
+import { Hash } from '@rudderjs/hash'
 import { Cache } from '@rudderjs/cache'
 import { Storage } from '@rudderjs/storage'
 import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
@@ -114,14 +114,11 @@ Route.post('/api/debug/validate', async (req) => {
   return Response.json({ valid: true, data })
 })
 
-// GET /api/me — returns current session (null if not logged in)
+// GET /api/me — returns current user (null if not logged in)
 Route.get('/api/me', async (req) => {
-  const auth = app().make<BetterAuthInstance>('auth')
-  const session = await auth.api.getSession({
-    headers: new Headers(req.headers as Record<string, string>),
-  })
-  return Response.json(session ?? { user: null, session: null })
-})
+  const user = (req.raw as Record<string, unknown>)['__rjs_user'] ?? null
+  return Response.json({ user })
+}, [AuthMiddleware()])
 
 // Route.get('/id', (_req, res) => res.json({ id: res.header('X-Request-Id') }), [requestIdMiddleware])  // example of using requestIdMiddleware on a specific route
 
@@ -288,11 +285,102 @@ Route.post('/api/ai/stream', async (req) => {
   })
 })
 
-// Auth routes — delegate all /api/auth/* requests to better-auth, with a stricter rate limit
-Route.all('/api/auth/*', (req) => {
-  const auth = app().make<BetterAuthInstance>('auth')
-  const honoCtx = req.raw as { req: { raw: Request } }
-  return auth.handler(honoCtx.req.raw)
+// ── Native Auth Routes ───────────────────────────────────
+
+import { User } from '../app/Models/User.js'
+import { dispatch } from '@rudderjs/core'
+import { UserRegistered } from '../app/Events/UserRegistered.js'
+import { AuthManager } from '@rudderjs/auth'
+
+// POST /api/auth/sign-up/email — register
+Route.post('/api/auth/sign-up/email', async (req, res) => {
+  const { name, email, password } = req.body as { name: string; email: string; password: string }
+  if (!name || !email || !password) return res.status(422).json({ message: 'Name, email, and password are required.' })
+  if (password.length < 8) return res.status(422).json({ message: 'Password must be at least 8 characters.' })
+
+  // Check if user exists
+  const existing = await User.query().where('email', email).first()
+  if (existing) return res.status(409).json({ message: 'An account with that email already exists.' })
+
+  const hashed = await Hash.make(password)
+  const user = await User.create({ name, email, password: hashed })
+
+  // Log in immediately
+  const manager = app().make<AuthManager>('auth.manager')
+  await runWithAuth(manager, async () => {
+    const authenticatable = { getAuthIdentifier: () => String(user.id), getAuthPassword: () => hashed, getRememberToken: () => null, setRememberToken: () => {} }
+    await Auth.login(authenticatable)
+  })
+
+  await dispatch(new UserRegistered(user.id as string, user.name as string, user.email as string))
+  return res.json({ user: { id: user.id, name: user.name, email: user.email } })
+}, [authLimit])
+
+// POST /api/auth/sign-in/email — login
+Route.post('/api/auth/sign-in/email', async (req, res) => {
+  const { email, password } = req.body as { email: string; password: string }
+  if (!email || !password) return res.status(422).json({ message: 'Email and password are required.' })
+
+  const manager = app().make<AuthManager>('auth.manager')
+  let success = false
+  await runWithAuth(manager, async () => {
+    success = await Auth.attempt({ email, password })
+  })
+
+  if (!success) return res.status(401).json({ message: 'Invalid email or password.' })
+  return res.json({ ok: true })
+}, [authLimit])
+
+// POST /api/auth/sign-out — logout
+Route.post('/api/auth/sign-out', async (req, res) => {
+  const manager = app().make<AuthManager>('auth.manager')
+  await runWithAuth(manager, async () => {
+    await Auth.logout()
+  })
+  return res.json({ ok: true })
+})
+
+// POST /api/auth/request-password-reset — forgot password
+const tokenRepo = new MemoryTokenRepository() // swap for PrismaTokenRepository in production
+const passwordBroker = new PasswordBroker(
+  tokenRepo,
+  new EloquentUserProvider(User as any, (plain, hashed) => Hash.check(plain, hashed)),
+  { expire: 60, throttle: 60 },
+)
+
+Route.post('/api/auth/request-password-reset', async (req, res) => {
+  const { email } = req.body as { email: string }
+  if (!email) return res.status(422).json({ message: 'Email is required.' })
+
+  const status = await passwordBroker.sendResetLink({ email }, async (_user, token) => {
+    const resetUrl = `${process.env['APP_URL'] ?? 'http://localhost:3000'}/reset-password?token=${token}&email=${email}`
+    console.log(`[Auth] Password reset for ${email}: ${resetUrl}`)
+  })
+
+  // Always return success to prevent email enumeration
+  return res.json({ status: status === 'RESET_LINK_SENT' ? 'sent' : 'sent' })
+}, [authLimit])
+
+// POST /api/auth/reset-password — reset password with token
+Route.post('/api/auth/reset-password', async (req, res) => {
+  const { token, email, newPassword } = req.body as { token: string; email?: string; newPassword: string }
+  if (!token || !newPassword) return res.status(422).json({ message: 'Token and new password are required.' })
+
+  // email comes from the URL params on the reset page
+  const userEmail = email ?? ''
+  if (!userEmail) return res.status(422).json({ message: 'Email is required.' })
+
+  const status = await passwordBroker.reset(
+    { email: userEmail, token, password: newPassword },
+    async (user, password) => {
+      const hashed = await Hash.make(password)
+      await User.query().where('id', user.getAuthIdentifier()).update({ password: hashed })
+    },
+  )
+
+  if (status === 'PASSWORD_RESET') return res.json({ ok: true })
+  if (status === 'TOKEN_EXPIRED') return res.status(400).json({ message: 'Reset token has expired.' })
+  return res.status(400).json({ message: 'Invalid or expired token.' })
 }, [authLimit])
 
 // Catch-all: any unmatched /api/* route returns 404 instead of falling through to Vike

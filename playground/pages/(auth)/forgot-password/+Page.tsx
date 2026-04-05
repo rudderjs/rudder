@@ -16,7 +16,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch('/api/auth/request-password-reset', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email, redirectTo: '/reset-password' }),
+        body:    JSON.stringify({ email }),
       })
       if (res.ok) {
         setSuccess('If an account exists with that email, a password reset link has been sent.')
