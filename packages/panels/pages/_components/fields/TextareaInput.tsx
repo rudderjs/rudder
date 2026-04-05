@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { getField, subscribeFields } from '@rudderjs/panels'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
+import { useNativeSelectionAi } from '../../_hooks/useNativeSelectionAi.js'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 /** Global registry for textarea collab refs */
@@ -27,6 +28,10 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
   const hasAskAi = !!(onAskAiProp || aiChat)
 
   const editorRef = useRef<{ setContent(text: string): void } | null>(null)
+  // Ref + hook for native textarea Ask AI (must be before any early return)
+  const nativeTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const isCollabPath = !!(field.yjs && wsPath && docName)
+  const nativeAiBtn = useNativeSelectionAi(nativeTextareaRef, !isCollabPath && hasAskAi ? onAskAi : undefined)
 
   useEffect(() => {
     if (field.yjs) {
@@ -42,7 +47,7 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
     () => null,
   )
 
-  if (CollabText && field.yjs && wsPath && docName) {
+  if (CollabText && isCollabPath) {
     return (
       <CollabText
         value={(value as string) ?? ''}
@@ -62,17 +67,22 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
       />
     )
   }
+
   return (
-    <textarea
-      name={field.name}
-      value={(value as string) ?? ''}
-      onChange={(e) => onChange(e.target.value)}
-      rows={(field.extra?.rows as number) ?? 4}
-      required={field.required}
-      readOnly={field.readonly}
-      disabled={isDisabled}
-      className={INPUT_CLS}
-      placeholder={(field.extra?.placeholder as string) ?? ''}
-    />
+    <>
+      <textarea
+        ref={nativeTextareaRef}
+        name={field.name}
+        value={(value as string) ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        rows={(field.extra?.rows as number) ?? 4}
+        required={field.required}
+        readOnly={field.readonly}
+        disabled={isDisabled}
+        className={INPUT_CLS}
+        placeholder={(field.extra?.placeholder as string) ?? ''}
+      />
+      {nativeAiBtn}
+    </>
   )
 }

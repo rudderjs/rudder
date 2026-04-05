@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { getField, subscribeFields } from '@rudderjs/panels'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
+import { useNativeSelectionAi } from '../../_hooks/useNativeSelectionAi.js'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -53,6 +54,10 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
 
   // Editor ref for imperative control (version restore)
   const editorRef = useRef<{ setContent(text: string): void } | null>(null)
+  // Ref + hook for native input Ask AI (must be before any early return)
+  const nativeInputRef = useRef<HTMLInputElement>(null)
+  const isCollabPath = !!(field.yjs && wsPath && docName && (field.type === 'text' || field.type === 'email'))
+  const nativeAiBtn = useNativeSelectionAi(nativeInputRef, !isCollabPath && hasAskAi ? onAskAi : undefined)
 
   useEffect(() => {
     if (field.yjs) {
@@ -68,7 +73,7 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
     () => null, // SSR snapshot — never render collab on server
   )
 
-  if (CollabText && (field.type === 'text' || field.type === 'email') && field.yjs && wsPath && docName) {
+  if (CollabText && isCollabPath) {
     return (
       <CollabText
         value={(value as string) ?? ''}
@@ -89,16 +94,20 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
   }
 
   return (
-    <input
-      type={inputType}
-      name={field.name}
-      value={inputValue}
-      onChange={(e) => onChange(field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
-      required={field.required}
-      readOnly={field.readonly}
-      disabled={isDisabled}
-      placeholder={(field.extra?.placeholder as string) ?? ''}
-      className={INPUT_CLS}
-    />
+    <>
+      <input
+        ref={nativeInputRef}
+        type={inputType}
+        name={field.name}
+        value={inputValue}
+        onChange={(e) => onChange(field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
+        required={field.required}
+        readOnly={field.readonly}
+        disabled={isDisabled}
+        placeholder={(field.extra?.placeholder as string) ?? ''}
+        className={INPUT_CLS}
+      />
+      {nativeAiBtn}
+    </>
   )
 }

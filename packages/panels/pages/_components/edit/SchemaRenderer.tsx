@@ -26,16 +26,38 @@ interface Props {
 
 // ─── Predefined quick action labels ─────────────────────────
 
-const QUICK_ACTION_LABELS: Record<string, { label: string; prompt: string }> = {
+interface QuickAction {
+  label:      string
+  prompt:     string
+  /** If set, this action has a submenu of language choices. */
+  languages?: boolean
+}
+
+const QUICK_ACTION_LABELS: Record<string, QuickAction> = {
   rewrite:       { label: 'Rewrite',      prompt: 'Rewrite the following text while keeping the same meaning' },
   expand:        { label: 'Expand',        prompt: 'Expand the following text with more detail' },
   shorten:       { label: 'Shorten',       prompt: 'Shorten the following text while keeping the key points' },
   'fix-grammar': { label: 'Fix grammar',   prompt: 'Fix any grammar and spelling mistakes in the following text' },
-  translate:     { label: 'Translate',      prompt: 'Translate the following text to English' },
+  translate:     { label: 'Translate',      prompt: 'Translate the following text to', languages: true },
   summarize:     { label: 'Summarize',      prompt: 'Summarize the following text concisely' },
   'make-formal': { label: 'Make formal',    prompt: 'Rewrite the following text in a more formal tone' },
   simplify:      { label: 'Simplify',       prompt: 'Simplify the following text so it is easier to understand' },
 }
+
+const TRANSLATE_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'hi', label: 'Hindi' },
+]
 
 // ─── AI quick actions button ────────────────────────────────
 
@@ -80,6 +102,8 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
     setOpen(false)
   }, [aiChat, field.name, field.type, value])
 
+  const [translateOpen, setTranslateOpen] = useState(false)
+
   if (!aiChat || !field.ai) return null
 
   const actions = Array.isArray(field.ai)
@@ -92,21 +116,48 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
         type="button"
         className="inline-flex items-center justify-center h-4 w-4 rounded text-primary/60 hover:text-primary hover:bg-primary/10 transition-colors"
         title="AI actions"
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(!open); setTranslateOpen(false) }}
       >
         <span className="text-xs leading-none">✦</span>
       </button>
       {open && (
         <div className="absolute left-0 top-full mt-1 min-w-[140px] rounded-md border bg-popover shadow-md z-30 py-1">
           {actions.map(a => (
-            <button
-              key={a.label}
-              type="button"
-              className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-              onClick={() => handleAction(a.prompt)}
-            >
-              {a.label}
-            </button>
+            a.languages ? (
+              <div key={a.label} className="relative">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
+                  onClick={() => setTranslateOpen(!translateOpen)}
+                >
+                  {a.label}
+                  <span className="text-[10px] text-muted-foreground ml-2">{'>'}</span>
+                </button>
+                {translateOpen && (
+                  <div className="absolute left-full top-0 ml-1 min-w-[120px] rounded-md border bg-popover shadow-md z-30 py-1 max-h-64 overflow-y-auto">
+                    {TRANSLATE_LANGUAGES.map(lang => (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
+                        onClick={() => handleAction(`${a.prompt} ${lang.label}`)}
+                      >
+                        {lang.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                key={a.label}
+                type="button"
+                className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
+                onClick={() => handleAction(a.prompt)}
+              >
+                {a.label}
+              </button>
+            )
           ))}
         </div>
       )}
