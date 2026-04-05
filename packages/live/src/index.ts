@@ -963,10 +963,6 @@ export const Live = {
     const room = getOrCreateRoom(docName, persistence)
     const root = room.doc.get('root', Y.XmlText)
 
-    if (aiCursor) {
-      this.setAiAwareness(docName, aiCursor, { target: root, offset: 0, length: 0 })
-    }
-
     const newParagraphs = newText.split('\n').filter(p => p.trim())
 
     room.doc.transact(() => {
@@ -1040,6 +1036,25 @@ export const Live = {
         }
       }
     }, SERVER_ORIGIN)
+
+    // Set AI awareness AFTER the rewrite — highlight the new first paragraph text
+    if (aiCursor) {
+      const postDelta = root.toDelta() as InnerDeltaItem[]
+      for (const entry of postDelta) {
+        if (entry.insert instanceof Y.XmlText) {
+          const node = entry.insert as Y.XmlText
+          const innerDelta = node.toDelta() as InnerDeltaItem[]
+          let textLen = 0
+          for (const item of innerDelta) {
+            if (typeof item.insert === 'string') textLen += item.insert.length
+          }
+          if (textLen > 0) {
+            this.setAiAwareness(docName, aiCursor, { target: node, offset: 0, length: textLen })
+            break
+          }
+        }
+      }
+    }
 
     return true
   },
