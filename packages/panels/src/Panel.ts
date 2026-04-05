@@ -324,6 +324,8 @@ export class Panel {
   }
   getPlugins(): PanelPlugin[] { return this._plugins }
   getTheme(): PanelThemeConfig | undefined { return this._theme }
+  /** Get the merged theme config (code defaults + DB overrides). */
+  getMergedTheme(): PanelThemeConfig | undefined { return this._mergedTheme() }
   getLayout(): PanelLayout { return this._layout }
 
   /** Pages + built-in pages (e.g. ThemeSettingsPage when themeEditor is enabled). */
