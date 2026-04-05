@@ -37,7 +37,7 @@
 
 ```
 rudderjs/
-├── packages/               # 25 published packages (@rudderjs/*)
+├── packages/               # 31 published packages (@rudderjs/*)
 │   ├── contracts/          # Pure TypeScript types — no runtime code (erased at build)
 │   │                       #   ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/            # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer
@@ -70,6 +70,17 @@ rudderjs/
 │   ├── schedule/           # Task scheduler — schedule singleton, schedule:run/work/list
 │   ├── notification/       # Multi-channel notifications (mail, database)
 │   ├── panels/             # Admin panel builder — CRUD resources, schema elements, widgets, dashboard builder
+│   │                       #   AI chat sidebar: conversation persistence (Prisma), model selection,
+│   │                       #   resource agents, conversation switcher, auto-title, resource context pill
+│   ├── panels-lexical/     # Lexical rich-text editor adapter — RichContentField, block editor, collab
+│   ├── ai/                 # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class,
+│   │                       #   tool system, streaming, middleware, structured output, model registry
+│   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
+│   ├── live/               # Real-time collaborative sync via Yjs CRDT — /ws-live endpoint
+│   ├── image/              # Fluent image processing — resize, crop, convert, optimize (wraps sharp)
+│   ├── media/              # Media library — file browser, uploads, preview, image conversions
+│   ├── workspaces/         # AI workspace canvas — 3D nodes, departments, connections, orchestrator
+│   ├── localization/       # i18n — trans(), setLocale(), locale middleware, JSON translation files
 │   └── cli/                # Rudder-style CLI (make:*, module:*, user commands)
 ├── create-rudderjs-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
 │                           #   Prompts: name · DB · Todo · frameworks (React/Vue/Solid)
@@ -176,11 +187,19 @@ Level 1 (parallel — no framework deps):
     orm-prisma   queue-bullmq   queue-inngest
     mail-nodemailer
            │
-    @rudderjs/panels
-    (orm, auth, storage, dnd-kit)
+    @rudderjs/panels      @rudderjs/ai
+    (orm, auth, storage)  (4 providers, Agent, tools, streaming)
+           │                     │
+    @rudderjs/panels-lexical     @rudderjs/workspaces (Panel.use plugin, uses ai)
+    @rudderjs/media (Panel.use plugin)
+
+    @rudderjs/broadcast   @rudderjs/live (Yjs CRDT)
+    @rudderjs/image       @rudderjs/localization
 ```
 
 **Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@rudderjs/core` lists `@rudderjs/router` as a regular dependency and imports it with a plain `await import('@rudderjs/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
+
+**AI separation**: `@rudderjs/ai` is a generic backend engine (no UI, no Prisma). All AI chat UI, conversation Prisma models, and panel-specific features live in `@rudderjs/panels`. Never add `@rudderjs/panels` as a dependency of `@rudderjs/ai`.
 
 ### Package Merge Policy (Tight-Coupling Only)
 
