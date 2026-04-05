@@ -27,6 +27,7 @@ async function loadLive() {
     updateMap(docName: string, mapName: string, field: string, value: unknown): Promise<void>
     editText(docName: string, operation: unknown, aiCursor?: { name: string; color: string }): boolean
     editBlock(docName: string, blockType: string, blockIndex: number, field: string, value: unknown): boolean
+    rewriteText(docName: string, newText: string, aiCursor?: { name: string; color: string }): boolean
     clearAiAwareness(docName: string): void
   }
 }
@@ -240,9 +241,10 @@ async function handleAiChat(
   const editTextDescription = selectionField
     ? `Edit text in the "${selectionField}" field. The user selected specific text — your operations MUST target that text within "${selectionField}". Do NOT edit other fields.`
     : [
-        'Surgically edit text or blocks in a field without replacing all content.',
-        'For embedded blocks (callToAction, video, etc.) shown as [BLOCK: ...] in the record, use update_block operations.',
-        'For regular text, use replace/insert_after/delete operations.',
+        'Edit text or blocks in a field.',
+        'Use "rewrite" to replace the entire field content with new text (for full rewrites, translations, shortening).',
+        'Use "replace"/"insert_after"/"delete" for surgical edits to specific text.',
+        'Use "update_block" for embedded blocks shown as [BLOCK: ...] in the record.',
         'Available fields: ' + allFields.join(', '),
       ].join(' ')
 
@@ -252,6 +254,10 @@ async function handleAiChat(
     inputSchema: z.object({
       field: editFieldSchema,
       operations: z.array(z.union([
+        z.object({
+          type: z.literal('rewrite'),
+          content: z.string().describe('The complete new text content — replaces everything in the field'),
+        }),
         z.object({
           type: z.literal('replace'),
           search: z.string().describe('Exact text to find'),
@@ -290,7 +296,9 @@ async function handleAiChat(
 
       let applied = 0
       for (const op of input.operations) {
-        if (op.type === 'update_block') {
+        if (op.type === 'rewrite') {
+          if (Live.rewriteText(fieldDocName, op.content as string, aiCursor)) applied++
+        } else if (op.type === 'update_block') {
           if (Live.editBlock(fieldDocName, op.blockType as string, (op.blockIndex as number) ?? 0, op.field as string, op.value)) applied++
         } else {
           if (Live.editText(fieldDocName, op as any, aiCursor)) applied++
@@ -306,6 +314,7 @@ async function handleAiChat(
       } catch { /* */ }
 
       for (const op of input.operations) {
+        if (op.type === 'rewrite') { current = op.content as string; continue }
         if (op.type === 'update_block') continue
         const search = op.search as string
         if (op.type === 'replace' && search) current = current.replace(search, op.replace as string)

@@ -83,22 +83,20 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
     // Start fresh conversation for quick actions — avoids old history confusing the AI
     aiChat.newConversation()
 
+    // Extract plain text — richcontent stores Lexical JSON, not strings
+    let text: string
     if (isRichContent) {
-      // Rich text: use normal mode (no selection lock) — the server reads
-      // the latest content from Y.Doc rooms. The AI uses edit_text with
-      // targeted replace operations on individual paragraphs.
-      aiChat.setOpen(true)
-      const fullPrompt = `${prompt} in the "${field.name}" field`
-      setTimeout(() => aiChat.sendMessage(fullPrompt), 0)
+      const editorRef = getRichContentRef(field.name)
+      text = editorRef?.getTextContent?.() ?? ''
     } else {
-      // Plain text: use selection-locked mode for precise editing
-      const text = String(value ?? '')
-      if (!text) return
-      aiChat.setSelection({ field: field.name, text })
-      aiChat.setOpen(true)
-      const fullPrompt = `${prompt}:\n"${text}"`
-      setTimeout(() => aiChat.sendMessage(fullPrompt), 0)
+      text = String(value ?? '')
     }
+    if (!text) return
+
+    aiChat.setSelection({ field: field.name, text })
+    aiChat.setOpen(true)
+    const fullPrompt = `${prompt}:\n"${text}"`
+    setTimeout(() => aiChat.sendMessage(fullPrompt), 0)
     setOpen(false)
   }, [aiChat, field.name, field.type, value])
 

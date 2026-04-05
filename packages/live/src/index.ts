@@ -948,6 +948,103 @@ export const Live = {
   },
 
   /**
+   * Replace the entire text content of a Y.Doc room.
+   * Reads existing paragraphs, replaces their text, removes extras or adds new ones.
+   *
+   * @example
+   * Live.rewriteText('panel:articles:42:richcontent:body', 'New paragraph one.\n\nSecond paragraph.')
+   */
+  rewriteText(
+    docName: string,
+    newText: string,
+    aiCursor?: { name: string; color: string },
+  ): boolean {
+    const persistence = this.persistence()
+    const room = getOrCreateRoom(docName, persistence)
+    const root = room.doc.get('root', Y.XmlText)
+
+    if (aiCursor) {
+      this.setAiAwareness(docName, aiCursor, { target: root, offset: 0, length: 0 })
+    }
+
+    const newParagraphs = newText.split('\n').filter(p => p.trim())
+
+    room.doc.transact(() => {
+      // Collect existing paragraph nodes from root delta
+      const rootDelta = root.toDelta() as InnerDeltaItem[]
+      const existingNodes: Y.XmlText[] = []
+      for (const entry of rootDelta) {
+        if (entry.insert instanceof Y.XmlText) {
+          existingNodes.push(entry.insert as Y.XmlText)
+        }
+      }
+
+      // Helper: replace ONLY the text content of a paragraph node,
+      // preserving Y.Map metadata entries (Lexical TextNode attrs).
+      function replaceNodeText(node: Y.XmlText, newContent: string) {
+        const delta = node.toDelta() as InnerDeltaItem[]
+        // Find all text runs and their offsets (skip Y.Map/Y.XmlElement entries)
+        let offset = 0
+        let textStart = -1
+        let textLen = 0
+        for (const item of delta) {
+          if (typeof item.insert === 'string') {
+            if (textStart === -1) textStart = offset
+            textLen += item.insert.length
+            offset += item.insert.length
+          } else {
+            // Y.Map (TextNode metadata) or Y.XmlElement (block) — skip, count as 1
+            offset += 1
+          }
+        }
+        if (textStart >= 0 && textLen > 0) {
+          node.delete(textStart, textLen)
+          node.insert(textStart, newContent)
+        } else {
+          // No existing text — insert at position 0 (after any Y.Map metadata)
+          let insertAt = 0
+          for (const item of delta) {
+            if (typeof item.insert !== 'string') insertAt += 1
+            else break
+          }
+          node.insert(insertAt, newContent)
+        }
+      }
+
+      // Rewrite existing paragraphs with new text
+      const reusable = Math.min(existingNodes.length, newParagraphs.length)
+      for (let i = 0; i < reusable; i++) {
+        replaceNodeText(existingNodes[i]!, newParagraphs[i]!)
+      }
+
+      // Remove extra old paragraphs (from the end to avoid offset shifts)
+      if (existingNodes.length > newParagraphs.length) {
+        let offset = 0
+        const offsets: number[] = []
+        for (const entry of rootDelta) {
+          if (entry.insert instanceof Y.XmlText) offsets.push(offset)
+          offset += 1
+        }
+        for (let i = existingNodes.length - 1; i >= newParagraphs.length; i--) {
+          root.delete(offsets[i]!, 1)
+        }
+      }
+
+      // Add new paragraphs if we have more than existed
+      if (newParagraphs.length > existingNodes.length) {
+        for (let i = existingNodes.length; i < newParagraphs.length; i++) {
+          const pNode = new Y.XmlText()
+          pNode.setAttribute('__type', 'paragraph')
+          pNode.insert(0, newParagraphs[i]!)
+          root.insertEmbed(root.length, pNode)
+        }
+      }
+    }, SERVER_ORIGIN)
+
+    return true
+  },
+
+  /**
    * Apply multiple text edit operations in a single Yjs transaction.
    *
    * @returns number of successfully applied operations.
