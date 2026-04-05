@@ -1,8 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { generateThemeCSS } from '@rudderjs/panels'
 import type { PanelThemeMeta } from '@rudderjs/panels'
-import { generateThemeCSS } from '../../src/theme/generate-css.js'
 
 type Theme = 'light' | 'dark' | 'system'
 

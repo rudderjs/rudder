@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { generateThemeCSS } from '@rudderjs/panels'
+import type { PanelThemeMeta } from '@rudderjs/panels'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -8,6 +10,8 @@ interface ThemeProviderProps {
   children: React.ReactNode
   defaultTheme?: Theme
   storageKey?: string
+  /** Resolved panel theme — injects CSS variables when provided. */
+  panelTheme?: PanelThemeMeta
 }
 
 interface ThemeContextValue {
@@ -27,7 +31,7 @@ function getSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-export function ThemeProvider({ children, defaultTheme = 'system', storageKey = 'panels-theme' }: ThemeProviderProps) {
+export function ThemeProvider({ children, defaultTheme = 'system', storageKey = 'panels-theme', panelTheme }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(defaultTheme)
   const [mounted, setMounted] = useState(false)
 
@@ -58,6 +62,20 @@ export function ThemeProvider({ children, defaultTheme = 'system', storageKey = 
       return () => mq.removeEventListener('change', handler)
     }
   }, [theme])
+
+  // Inject panel theme CSS variables
+  useEffect(() => {
+    if (!panelTheme) return
+    const id = 'rudderjs-panel-theme'
+    let style = document.getElementById(id) as HTMLStyleElement | null
+    if (!style) {
+      style = document.createElement('style')
+      style.id = id
+      document.head.appendChild(style)
+    }
+    style.textContent = generateThemeCSS(panelTheme)
+    return () => { style?.remove() }
+  }, [panelTheme])
 
   function setTheme(t: Theme) {
     setThemeState(t)

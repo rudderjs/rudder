@@ -21,18 +21,25 @@ export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => 
   const panelGuard = panel.getGuard()
   if (panelGuard) {
     const { app } = await import('@rudderjs/core')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const auth    = app().make<any>('auth')
-    const session = await auth.api.getSession({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      headers: new Headers((pageContext as any).headers ?? {}),
-    })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const user = session?.user as any
+    let user: Record<string, unknown> | undefined
+    try {
+      const manager = app().make<{
+        guard(name?: string): { user(): Promise<{ getAuthIdentifier(): string; [k: string]: unknown } | null> }
+      }>('auth.manager')
+      const authUser = await manager.guard().user()
+      if (authUser) {
+        const record = authUser as unknown as Record<string, unknown>
+        user = {
+          id:    authUser.getAuthIdentifier(),
+          ...Object.fromEntries(
+            Object.entries(record).filter(([_k, v]) => typeof v !== 'function' && _k !== 'password'),
+          ),
+        }
+      }
+    } catch { /* auth not configured */ }
 
     const allowed = await panelGuard({
-      user,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      user: user as any,
       headers: (pageContext as any).headers ?? {},
       path:    pageContext.urlPathname,
       params:  {},

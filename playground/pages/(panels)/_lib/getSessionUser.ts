@@ -10,6 +10,7 @@ export interface SessionUser {
 export async function getSessionUser(pageContext: any): Promise<SessionUser | undefined> {
   try {
     const { app } = await import('@rudderjs/core')
+    // Try native auth (auth.manager) first
     try {
       const manager = app().make<{
         guard(name?: string): { user(): Promise<{ getAuthIdentifier(): string; [k: string]: unknown } | null> }

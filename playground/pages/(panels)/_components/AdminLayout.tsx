@@ -720,7 +720,7 @@ export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: P
 
   return (
     <TooltipProvider>
-      <ThemeProvider>
+      <ThemeProvider panelTheme={panelMeta.theme}>
         {content}
       </ThemeProvider>
     </TooltipProvider>

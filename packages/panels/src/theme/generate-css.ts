@@ -15,7 +15,9 @@ export function generateThemeCSS(theme: PanelThemeMeta): string {
     .map(([k, v]) => `  ${k}: ${v};`)
     .join('\n')
 
-  let css = `:root {\n${lightVars}\n  --radius: ${theme.radius};\n`
+  // Use :root:root for higher specificity — ensures theme overrides
+  // the app's index.css :root variables (Vite may inject those after our <style>).
+  let css = `:root:root {\n${lightVars}\n  --radius: ${theme.radius};\n`
 
   if (theme.fontFamily?.body) {
     css += `  --font-sans: ${theme.fontFamily.body};\n`
@@ -25,7 +27,7 @@ export function generateThemeCSS(theme: PanelThemeMeta): string {
   }
 
   css += '}\n'
-  css += `.dark {\n${darkVars}\n}\n`
+  css += `:root:root.dark {\n${darkVars}\n}\n`
 
   // Auto-apply heading font to h1-h6
   if (theme.fontFamily?.heading) {

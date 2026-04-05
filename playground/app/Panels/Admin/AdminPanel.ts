@@ -39,9 +39,9 @@ export const adminPanel = Panel.make('admin')
   .theme({
     preset: 'nova',
     baseColor: 'zinc',
-    accentColor: 'blue',
+    accentColor: 'orange',
     chartPalette: 'ocean',
-    radius: 'none',
+    radius: 'medium',
     fonts: {
       heading: 'Space Grotesk',
       body: 'Inter',
