@@ -227,7 +227,8 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [models, setModels] = useState<Array<{ id: string; label: string }>>([])
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [selectedModel, setSelectedModelState] = useState<string | null>(null)
+  const selectedModelRef = useRef<string | null>(null)
   const [showConversations, setShowConversations] = useState(false)
   const resourceContextRef = useRef<ResourceContext | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -239,6 +240,12 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   // Keep refs in sync with state
   resourceContextRef.current = resourceContext
   conversationIdRef.current = conversationId
+  selectedModelRef.current = selectedModel
+
+  const setSelectedModel = useCallback((model: string | null) => {
+    selectedModelRef.current = model
+    setSelectedModelState(model)
+  }, [])
 
   const setResourceContext = useCallback((ctx: ResourceContext | null) => {
     resourceContextRef.current = ctx
@@ -326,8 +333,8 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
         body.conversationId = conversationIdRef.current
       }
       // Send selected model
-      if (selectedModel) {
-        body.model = selectedModel
+      if (selectedModelRef.current) {
+        body.model = selectedModelRef.current
       }
       // Include resource context if on a resource edit page
       if (rc) {
