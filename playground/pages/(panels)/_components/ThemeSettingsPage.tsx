@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { navigate } from 'vike/client/router'
 import { resolveTheme, generateThemeCSS } from '@rudderjs/panels'
 import type { PanelThemeConfig } from '@rudderjs/panels'
+import { useTheme } from './ThemeProvider.js'
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -36,6 +38,27 @@ const ACCENT_SWATCHES: Record<string, string> = {
 
 function randomPick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
+}
+
+/** Apply theme to parent page via inline styles on <html> — immediate visual update. */
+function applyToParent(config: Partial<PanelThemeConfig>) {
+  const merged: PanelThemeConfig = { preset: 'default', ...config }
+  const resolved = resolveTheme(merged)
+  const root = document.documentElement
+  const isDark = root.classList.contains('dark')
+  const vars = isDark ? resolved.dark : resolved.light
+
+  for (const [key, value] of Object.entries(vars)) {
+    root.style.setProperty(key, value)
+  }
+  root.style.setProperty('--radius', resolved.radius)
+  if (resolved.fontFamily?.body) {
+    root.style.setProperty('--font-sans', resolved.fontFamily.body)
+    root.style.setProperty('--default-font-family', resolved.fontFamily.body)
+  }
+  if (resolved.fontFamily?.heading) {
+    root.style.setProperty('--font-heading', resolved.fontFamily.heading)
+  }
 }
 
 /** Build the preview iframe HTML with inline CSS variables. */
@@ -246,7 +269,7 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
   const [config, setConfig] = useState<Partial<PanelThemeConfig>>({ ...codeDefaults })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
+  const { resolved: previewMode } = useTheme()
 
   const update = useCallback((key: string, value: unknown) => {
     setConfig(prev => ({ ...prev, [key]: value }))
@@ -263,24 +286,32 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
 
   const handleSave = async () => {
     setSaving(true)
+    applyToParent(config)
     try {
-      const resp = await fetch(`${panelPath}/api/_theme`, {
+      await fetch(`${panelPath}/api/_theme`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       })
-      if (!resp.ok) console.warn('[theme-editor] save failed:', resp.status)
-      // Reload the page so the server re-resolves the theme with saved overrides
-      window.location.reload()
-    } catch (e) {
-      console.warn('[theme-editor] save error:', e)
-      setSaving(false)
-    }
+      // Re-navigate to force Vike to re-fetch server data with saved theme.
+      const scrollY = window.scrollY
+      await navigate(`${panelPath}/theme`, { overwriteLastHistoryEntry: true, scrollToTop: false } as Parameters<typeof navigate>[1])
+      requestAnimationFrame(() => window.scrollTo(0, scrollY))
+    } catch { /* visual update already applied */ }
+    setSaved(true)
+    setSaving(false)
   }
 
   const handleReset = async () => {
-    await fetch(`${panelPath}/api/_theme`, { method: 'DELETE' })
-    window.location.reload()
+    applyToParent(codeDefaults)
+    try {
+      await fetch(`${panelPath}/api/_theme`, { method: 'DELETE' })
+      const scrollY = window.scrollY
+      await navigate(`${panelPath}/theme`, { overwriteLastHistoryEntry: true, scrollToTop: false } as Parameters<typeof navigate>[1])
+      requestAnimationFrame(() => window.scrollTo(0, scrollY))
+    } catch { /* visual update already applied */ }
+    setConfig({ ...codeDefaults })
+    setSaved(false)
   }
 
   const handleShuffle = () => {
@@ -438,28 +469,9 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
         </div>
       </div>
 
-      {/* Preview Area — isolated iframe */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
-          <span className="text-xs text-muted-foreground">Preview</span>
-          <div className="flex gap-1 rounded-md border border-input p-0.5">
-            <button
-              onClick={() => setPreviewMode('light')}
-              className={`px-2.5 py-1 text-xs rounded transition-all ${previewMode === 'light' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Light
-            </button>
-            <button
-              onClick={() => setPreviewMode('dark')}
-              className={`px-2.5 py-1 text-xs rounded transition-all ${previewMode === 'dark' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Dark
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 p-4 overflow-hidden">
-          <PreviewIframe config={config} mode={previewMode} />
-        </div>
+      {/* Preview Area — isolated iframe, syncs with panel dark/light toggle */}
+      <div className="flex-1 overflow-hidden p-4">
+        <PreviewIframe config={config} mode={previewMode} />
       </div>
     </div>
   )
