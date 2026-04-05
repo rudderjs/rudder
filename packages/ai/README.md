@@ -114,6 +114,42 @@ const output = Output.object({
 // Use with agent (append output instructions to system prompt)
 ```
 
+### Failover
+
+Try multiple providers in order — if the primary fails, fall through to the next:
+
+```ts
+class ResilientAgent extends Agent {
+  instructions() { return 'You are helpful.' }
+  model() { return 'anthropic/claude-sonnet-4-5' }
+  failover() { return ['openai/gpt-4o', 'google/gemini-2.5-pro'] }
+}
+
+// If Anthropic is down, tries OpenAI, then Google
+const response = await new ResilientAgent().prompt('Hello')
+```
+
+Works with both `prompt()` and `stream()`.
+
+### Embeddings
+
+Generate vector embeddings for text (requires a provider that supports embeddings, e.g. OpenAI):
+
+```ts
+import { AI } from '@rudderjs/ai'
+
+// Single text
+const result = await AI.embed('Hello world')
+// result.embeddings → [[0.012, -0.034, ...]]
+
+// Batch
+const result = await AI.embed(['text one', 'text two'])
+// result.embeddings → [[...], [...]]
+
+// Specific model
+const result = await AI.embed('text', { model: 'openai/text-embedding-3-small' })
+```
+
 ### Streaming
 
 ```ts
