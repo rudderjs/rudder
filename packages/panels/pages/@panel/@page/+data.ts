@@ -38,8 +38,10 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
   const panelMeta = panel.toNavigationMeta()
   const { ctx, sessionUser } = await buildPanelContext(pageContext, pageParams)
 
-  // Built-in theme editor — no schema, pass config directly from panel
+  // Built-in theme editor — no schema, pass merged config so editor
+  // initializes with correct state (no flash on refresh).
   if (pageSlug === 'theme') {
+    const mergedConfig = panel.getMergedTheme() ?? panel.getTheme() ?? {}
     return {
       panelMeta,
       pageMeta: PageClass.toMeta(),
@@ -47,7 +49,7 @@ export async function data(pageContext: PageContextServer): Promise<Data> {
       sessionUser,
       pathSegment,
       slug: pageSlug,
-      themeConfig: panel.getTheme() ?? {},
+      themeConfig: mergedConfig,
     }
   }
 

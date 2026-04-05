@@ -79,25 +79,6 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
   const [config, setConfig] = useState<Partial<PanelThemeConfig>>({ ...codeDefaults })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-
-  // Load saved overrides from API on mount
-  useEffect(() => {
-    fetch(`${panelPath}/api/_theme`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.overrides && Object.keys(data.overrides).length > 0) {
-          setConfig(prev => ({
-            ...prev,
-            ...data.overrides,
-            fonts: { ...prev.fonts, ...data.overrides.fonts },
-          }))
-        }
-        setLoaded(true)
-      })
-      .catch(() => setLoaded(true))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelPath])
 
   // Apply live preview on every change
   useEffect(() => {
