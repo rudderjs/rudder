@@ -108,6 +108,13 @@ interface AiChatContextValue {
 
   /** Delete a conversation. */
   deleteConversation: (id: string) => Promise<void>
+
+  /** Available AI models. */
+  models: Array<{ id: string; label: string }>
+
+  /** Currently selected model (null = default). */
+  selectedModel: string | null
+  setSelectedModel: (model: string | null) => void
 }
 
 const AiChatContext = createContext<AiChatContextValue | null>(null)
@@ -219,6 +226,8 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   const [resourceContext, setResourceContextState] = useState<ResourceContext | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<ConversationItem[]>([])
+  const [models, setModels] = useState<Array<{ id: string; label: string }>>([])
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
   const [showConversations, setShowConversations] = useState(false)
   const resourceContextRef = useRef<ResourceContext | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -235,6 +244,17 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
     resourceContextRef.current = ctx
     setResourceContextState(ctx)
   }, [])
+
+  // Fetch available models on mount
+  useEffect(() => {
+    if (!panelApiBase) return
+    fetch(`${panelApiBase}/_chat/models`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { models: Array<{ id: string; label: string }>; default: string } | null) => {
+        if (data?.models?.length) setModels(data.models)
+      })
+      .catch(() => {})
+  }, [panelApiBase])
 
   // Restore most recent conversation on mount
   useEffect(() => {
@@ -304,6 +324,10 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       // Send conversationId (server manages history)
       if (conversationIdRef.current) {
         body.conversationId = conversationIdRef.current
+      }
+      // Send selected model
+      if (selectedModel) {
+        body.model = selectedModel
       }
       // Include resource context if on a resource edit page
       if (rc) {
@@ -488,6 +512,7 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       resourceContext, setResourceContext,
       conversationId, conversations, showConversations, setShowConversations,
       loadConversation, loadConversations, newConversation, deleteConversation,
+      models, selectedModel, setSelectedModel,
     }}>
       {children}
     </AiChatContext.Provider>
