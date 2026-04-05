@@ -169,7 +169,8 @@ async function handleAiChat(
     : [
       'You are a helpful AI assistant for an admin panel.',
       '',
-      '## Current Record',
+      '## Current Record (LIVE — always trust this over conversation history)',
+      'This data is freshly loaded and reflects the latest state, including edits made by the user or other agents since your last response.',
       '```json',
       JSON.stringify(record, null, 2),
       '```',
@@ -350,6 +351,13 @@ async function handleAiChat(
     content: h.content,
   }))
 
+  // When continuing a conversation, append a fresh record snapshot to the user's
+  // message so the AI sees current field values right next to the question —
+  // this prevents the AI from answering based on stale conversation history.
+  const effectiveMessage = (aiHistory.length > 0 && !selection && Object.keys(record).length > 0)
+    ? `${message}\n\n[Current record state: ${JSON.stringify(record)}]`
+    : message
+
   try {
     const a = agentFn({
       instructions: systemPrompt,
@@ -357,7 +365,7 @@ async function handleAiChat(
       model,
     })
 
-    const { stream, response } = a.stream(message, {
+    const { stream, response } = a.stream(effectiveMessage, {
       history: aiHistory.length > 0 ? aiHistory : undefined,
     })
 
