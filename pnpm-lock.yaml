@@ -720,6 +720,25 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/sanctum:
+    dependencies:
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@rudderjs/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/schedule:
     dependencies:
       '@rudderjs/core':
