@@ -10,19 +10,21 @@ export interface SessionUser {
 export async function getSessionUser(pageContext: any): Promise<SessionUser | undefined> {
   try {
     const { app } = await import('@rudderjs/core')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const auth    = app().make<any>('auth')
-    const session = await auth.api.getSession({
-      headers: new Headers(pageContext.headers ?? {}),
-    })
-    const u = session?.user
-    if (!u) return undefined
-    // Return only the fields the panel UI needs — strip emailVerified, createdAt, updatedAt, etc.
-    const slim: SessionUser = {}
-    if (u.name)  slim.name  = u.name
-    if (u.email) slim.email = u.email
-    if (u.image) slim.image = u.image
-    return slim
+    // Try native auth (auth.manager) first
+    try {
+      const manager = app().make<{
+        guard(name?: string): { user(): Promise<{ getAuthIdentifier(): string; [k: string]: unknown } | null> }
+      }>('auth.manager')
+      const authUser = await manager.guard().user()
+      if (!authUser) return undefined
+      const record = authUser as unknown as Record<string, unknown>
+      const slim: SessionUser = {}
+      if (record['name'] && typeof record['name'] === 'string')   slim.name  = record['name']
+      if (record['email'] && typeof record['email'] === 'string') slim.email = record['email']
+      if (record['image'] && typeof record['image'] === 'string') slim.image = record['image']
+      return slim
+    } catch { /* auth.manager not bound */ }
+    return undefined
   } catch {
     return undefined
   }
