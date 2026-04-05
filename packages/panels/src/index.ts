@@ -7,7 +7,7 @@ export { getPanelI18n, getPanelDir } from './i18n/index.js'
 
 // ─── Theme ────────────────────────────────────────────────
 
-export { resolveTheme, generateThemeCSS } from './theme/index.js'
+export { resolveTheme, generateThemeCSS, iconMap, resolveIconName } from './theme/index.js'
 export type {
   PanelThemeConfig, PanelThemeMeta,
   StylePreset, BaseColor, AccentColor, RadiusPreset, ChartPalette,

@@ -55,7 +55,8 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb.js'
 import { TooltipProvider } from '@/components/ui/tooltip.js'
-import { ChevronRightIcon, ChevronsUpDownIcon, LogOutIcon, BadgeCheckIcon, BellIcon } from 'lucide-react'
+import { PanelIcon } from './icons/PanelIcon.js'
+import { IconAdapterProvider } from './icons/IconAdapterContext.js'
 import { usePageContext } from 'vike-react/usePageContext'
 
 // ─── Types ──────────────────────────────────────────────────
@@ -249,7 +250,7 @@ function NavUser({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigati
               {user.name && <span className="truncate font-medium">{user.name}</span>}
               {user.email && <span className="truncate text-xs">{user.email}</span>}
             </div>
-            <ChevronsUpDownIcon className="ms-auto size-4" />
+            <PanelIcon name="chevrons-up-down" className="ms-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="min-w-56 rounded-lg"
@@ -274,17 +275,17 @@ function NavUser({ user, i18n }: { user: SessionUser | null; i18n: PanelNavigati
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <BadgeCheckIcon />
+                <PanelIcon name="badge-check" />
                 Account
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <BellIcon />
+                <PanelIcon name="bell" />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
-              <LogOutIcon />
+              <PanelIcon name="log-out" />
               {i18n.signOut}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -333,7 +334,7 @@ function NavMain({ items, currentSlug, badges }: {
                 )}
               </SidebarMenuButton>
               <CollapsibleTrigger render={<SidebarMenuAction />}>
-                <ChevronRightIcon className="transition-transform duration-200 group-data-open/collapsible:rotate-90" />
+                <PanelIcon name="chevron-right" className="transition-transform duration-200 group-data-open/collapsible:rotate-90 size-4" />
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <SidebarMenuSub>
@@ -653,7 +654,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
-            <LogOutIcon />
+            <PanelIcon name="log-out" />
             {i18n.signOut}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -720,9 +721,11 @@ export function AdminLayout({ panelMeta, currentSlug, initialUser, children }: P
 
   return (
     <TooltipProvider>
-      <ThemeProvider panelTheme={panelMeta.theme}>
-        {content}
-      </ThemeProvider>
+      <IconAdapterProvider library={panelMeta.theme?.iconLibrary ?? 'lucide'}>
+        <ThemeProvider panelTheme={panelMeta.theme}>
+          {content}
+        </ThemeProvider>
+      </IconAdapterProvider>
     </TooltipProvider>
   )
 }

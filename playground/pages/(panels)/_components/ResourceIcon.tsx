@@ -1,15 +1,4 @@
-import { icons } from 'lucide-react'
-
-type IconComponent = React.ComponentType<{ className?: string }>
-
-const iconsMap = icons as unknown as Record<string, IconComponent>
-
-function toPascalCase(name: string): string {
-  return name
-    .split('-')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join('')
-}
+import { useIconAdapter } from './icons/IconAdapterContext.js'
 
 interface ResourceIconProps {
   icon: string | undefined
@@ -17,14 +6,15 @@ interface ResourceIconProps {
 }
 
 /**
- * Renders a resource icon. SSR-safe — icons resolve synchronously.
+ * Renders a resource icon. SSR-safe — defaults to lucide.
  *
  * Supports three formats:
- * - Lucide icon name: `"users"`, `"file-text"`, `"ShoppingCart"`
+ * - Icon name: `"users"`, `"file-text"`, `"ShoppingCart"` (resolved via active icon adapter)
  * - Inline SVG: `"<svg ...>...</svg>"`
  * - Emoji / plain text: `"📦"`, `"✨"`
  */
 export function ResourceIcon({ icon: rawIcon, className = 'size-4' }: ResourceIconProps) {
+  const { adapter } = useIconAdapter()
   const icon = rawIcon?.trim()
   if (!icon) return null
 
@@ -37,9 +27,9 @@ export function ResourceIcon({ icon: rawIcon, className = 'size-4' }: ResourceIc
     return <span className={className}>{icon}</span>
   }
 
-  const LucideIcon = iconsMap[toPascalCase(icon)]
-  if (LucideIcon) {
-    return <LucideIcon className={className} />
+  const Icon = adapter.resolveUser(icon)
+  if (Icon) {
+    return <Icon className={className} />
   }
 
   return <span className={className} />

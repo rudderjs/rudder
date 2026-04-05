@@ -43,7 +43,10 @@
     "@rudderjs/image": "workspace:*",
     "@rudderjs/live": "workspace:*",
     "@rudderjs/storage": "workspace:*",
-    "recharts": ">=2.0.0"
+    "recharts": ">=2.0.0",
+    "@tabler/icons-react": ">=3.0.0",
+    "@phosphor-icons/react": ">=2.0.0",
+    "@remixicon/react": ">=4.0.0"
   },
   "peerDependenciesMeta": {
     "@rudderjs/ai": {
@@ -62,6 +65,15 @@
       "optional": true
     },
     "recharts": {
+      "optional": true
+    },
+    "@tabler/icons-react": {
+      "optional": true
+    },
+    "@phosphor-icons/react": {
+      "optional": true
+    },
+    "@remixicon/react": {
       "optional": true
     }
   },

@@ -5,6 +5,7 @@ export { baseColors } from './base-colors.js'
 export { accentColors } from './accent-colors.js'
 export { chartPalettes } from './chart-palettes.js'
 export { radiusMap } from './radius.js'
+export { iconMap, resolveIconName } from './icon-map.js'
 
 export type {
   StylePreset,

@@ -49,7 +49,7 @@ export const adminPanel = Panel.make('admin')
   })
   .layout('sidebar')
   .locale('en')
-  .guard(async (ctx) => ctx.user?.role === 'admin')
+  // .guard(async (ctx) => ctx.user?.role === 'admin')
   .resources([
     ArticleResource,
     CategoryResource,
