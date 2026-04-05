@@ -1027,6 +1027,9 @@ importers:
       '@rudderjs/auth':
         specifier: workspace:*
         version: link:../packages/auth
+      '@rudderjs/boost':
+        specifier: workspace:*
+        version: link:../packages/boost
       '@rudderjs/broadcast':
         specifier: workspace:*
         version: link:../packages/broadcast

@@ -14,6 +14,7 @@ import { database } from '@rudderjs/orm-prisma'
 import { broadcasting } from '@rudderjs/broadcast'
 import { live }   from '@rudderjs/live'
 import { ai }     from '@rudderjs/ai'
+import { boost }  from '@rudderjs/boost'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
@@ -38,6 +39,7 @@ export default [
   broadcasting(),
   live(configs.live),
   ai(configs.ai),
+  boost(),
 
   // ── Application ─────────────────────────────────────────
   AppServiceProvider,
