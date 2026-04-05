@@ -74,7 +74,6 @@ export function ThemeProvider({ children, defaultTheme = 'system', storageKey = 
       document.head.appendChild(style)
     }
     style.textContent = generateThemeCSS(panelTheme)
-    return () => { style?.remove() }
   }, [panelTheme])
 
   function setTheme(t: Theme) {

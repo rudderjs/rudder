@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { resolveTheme, generateThemeCSS } from '@rudderjs/panels'
-import type { PanelThemeConfig, PanelThemeMeta } from '@rudderjs/panels'
+import type { PanelThemeConfig } from '@rudderjs/panels'
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -23,7 +23,6 @@ const POPULAR_FONTS = [
   'Nunito', 'Raleway', 'Open Sans', 'Lato', 'Roboto',
 ]
 
-// Accent color preview swatches (light mode primary OKLCH values)
 const ACCENT_SWATCHES: Record<string, string> = {
   blue: 'oklch(0.488 0.243 264)', red: 'oklch(0.505 0.213 27)', green: 'oklch(0.517 0.174 149)',
   amber: 'oklch(0.666 0.179 58)', orange: 'oklch(0.601 0.206 50)', cyan: 'oklch(0.55 0.135 200)',
@@ -35,36 +34,204 @@ const ACCENT_SWATCHES: Record<string, string> = {
 
 // ─── Helpers ────────────────────────────────────────────────
 
-function loadGoogleFont(family: string) {
-  if (!family || typeof document === 'undefined') return
-  const id = `gfont-${family.replace(/\s+/g, '-').toLowerCase()}`
-  if (document.getElementById(id)) return
-  const link = document.createElement('link')
-  link.id = id
-  link.rel = 'stylesheet'
-  link.href = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, '+')}:wght@400;500;600;700&display=swap`
-  document.head.appendChild(link)
-}
-
-function applyThemeCSS(theme: PanelThemeMeta) {
-  // Set CSS variables directly on documentElement for immediate effect.
-  // This bypasses any specificity issues with <style> tag ordering.
-  const root = document.documentElement
-  for (const [key, value] of Object.entries(theme.light)) {
-    root.style.setProperty(key, value)
-  }
-  root.style.setProperty('--radius', theme.radius)
-  if (theme.fontFamily?.body) {
-    root.style.setProperty('--font-sans', theme.fontFamily.body)
-    root.style.setProperty('--default-font-family', theme.fontFamily.body)
-  }
-  if (theme.fontFamily?.heading) {
-    root.style.setProperty('--font-heading', theme.fontFamily.heading)
-  }
-}
-
 function randomPick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
+}
+
+/** Build the preview iframe HTML with inline CSS variables + Tailwind classes. */
+function buildPreviewHTML(config: Partial<PanelThemeConfig>): string {
+  const merged: PanelThemeConfig = { preset: 'default', ...config }
+  const resolved = resolveTheme(merged)
+  const themeCSS = generateThemeCSS(resolved)
+
+  // Google Fonts links
+  const fontLinks: string[] = []
+  if (config.fonts?.body) fontLinks.push(config.fonts.body)
+  if (config.fonts?.heading && config.fonts.heading !== config.fonts.body) fontLinks.push(config.fonts.heading)
+  const fontTags = fontLinks.map(f =>
+    `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${f.replace(/ /g, '+')}:wght@400;500;600;700&display=swap">`
+  ).join('\n')
+
+  const bodyFont = resolved.fontFamily?.body ?? "'Geist Variable', sans-serif"
+  const headingFont = resolved.fontFamily?.heading ?? bodyFont
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+${fontTags}
+<style>
+  ${themeCSS}
+  * { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }
+  body {
+    font-family: ${bodyFont};
+    background: var(--background);
+    color: var(--foreground);
+    padding: 2rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: ${headingFont}; }
+  .space-y > * + * { margin-top: 1.5rem; }
+  .space-y-sm > * + * { margin-top: 0.75rem; }
+  .flex { display: flex; }
+  .flex-wrap { flex-wrap: wrap; }
+  .gap-2 { gap: 0.5rem; }
+  .gap-3 { gap: 0.75rem; }
+  .gap-6 { gap: 1.5rem; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .text-xs { font-size: 0.75rem; }
+  .text-sm { font-size: 0.875rem; }
+  .text-lg { font-size: 1.125rem; }
+  .text-3xl { font-size: 1.875rem; }
+  .font-medium { font-weight: 500; }
+  .font-semibold { font-weight: 600; }
+  .font-bold { font-weight: 700; }
+  .tracking-tight { letter-spacing: -0.025em; }
+  .uppercase { text-transform: uppercase; }
+  .tracking-wider { letter-spacing: 0.05em; }
+  .rounded-md { border-radius: calc(var(--radius) - 2px); }
+  .rounded-lg { border-radius: var(--radius); }
+  .rounded-full { border-radius: 9999px; }
+  .border { border-width: 1px; border-style: solid; border-color: var(--border); }
+  .border-b { border-bottom: 1px solid var(--border); }
+  .swatch { width: 3rem; height: 3rem; border-radius: var(--radius); }
+  .swatch-sm { width: 2.5rem; height: 2.5rem; border-radius: var(--radius); }
+  .label { font-size: 0.625rem; color: var(--muted-foreground); margin-top: 0.25rem; text-align: center; }
+  .btn { padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; border-radius: calc(var(--radius) - 2px); cursor: pointer; display: inline-flex; align-items: center; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--card-foreground); padding: 1.5rem; }
+  .input { width: 100%; border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px); background: var(--background); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: var(--foreground); outline: none; }
+  .badge { padding: 0.125rem 0.625rem; font-size: 0.75rem; font-weight: 500; border-radius: 9999px; display: inline-block; }
+  table { width: 100%; font-size: 0.875rem; border-collapse: collapse; }
+  th { text-align: left; padding: 0.75rem 1rem; font-weight: 500; color: var(--muted-foreground); }
+  td { padding: 0.75rem 1rem; }
+  thead tr { border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 50%, transparent); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  .section-label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+</style>
+</head>
+<body>
+<div class="space-y">
+
+  <!-- Typography -->
+  <div>
+    <p class="section-label">${(config.preset ?? 'default').toUpperCase()} &mdash; ${config.fonts?.heading ?? 'System'}</p>
+    <h1 class="text-3xl font-bold tracking-tight" style="margin-top:0.5rem">Designing with rhythm and hierarchy.</h1>
+    <p style="color:var(--muted-foreground);margin-top:0.75rem;line-height:1.625">
+      A strong body font keeps long-form content readable and balances the visual weight of headings.
+      Thoughtful spacing and cadence help paragraphs scan quickly without feeling dense.
+    </p>
+  </div>
+
+  <!-- Color Swatches -->
+  <div>
+    <p class="section-label">Colors</p>
+    <div class="flex flex-wrap gap-2">
+      <div style="text-align:center"><div class="swatch border" style="background:var(--background)"></div><div class="label">--bg</div></div>
+      <div style="text-align:center"><div class="swatch" style="background:var(--foreground)"></div><div class="label">--fg</div></div>
+      <div style="text-align:center"><div class="swatch" style="background:var(--primary)"></div><div class="label">--pri</div></div>
+      <div style="text-align:center"><div class="swatch border" style="background:var(--secondary)"></div><div class="label">--sec</div></div>
+      <div style="text-align:center"><div class="swatch border" style="background:var(--muted)"></div><div class="label">--mut</div></div>
+      <div style="text-align:center"><div class="swatch border" style="background:var(--accent)"></div><div class="label">--acc</div></div>
+      <div style="text-align:center"><div class="swatch" style="background:var(--destructive)"></div><div class="label">--des</div></div>
+    </div>
+    <div class="flex flex-wrap gap-2" style="margin-top:0.5rem">
+      <div style="text-align:center"><div class="swatch-sm" style="background:var(--chart-1)"></div><div class="label">--cha1</div></div>
+      <div style="text-align:center"><div class="swatch-sm" style="background:var(--chart-2)"></div><div class="label">--cha2</div></div>
+      <div style="text-align:center"><div class="swatch-sm" style="background:var(--chart-3)"></div><div class="label">--cha3</div></div>
+      <div style="text-align:center"><div class="swatch-sm" style="background:var(--chart-4)"></div><div class="label">--cha4</div></div>
+      <div style="text-align:center"><div class="swatch-sm" style="background:var(--chart-5)"></div><div class="label">--cha5</div></div>
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div>
+    <p class="section-label">Buttons</p>
+    <div class="flex flex-wrap gap-3">
+      <button class="btn" style="background:var(--primary);color:var(--primary-foreground)">Button</button>
+      <button class="btn" style="background:var(--secondary);color:var(--secondary-foreground)">Secondary</button>
+      <button class="btn border" style="background:var(--background);color:var(--foreground)">Outline</button>
+      <button class="btn" style="background:transparent;color:var(--muted-foreground)">Ghost</button>
+      <button class="btn" style="background:var(--destructive);color:#fff">Destructive</button>
+    </div>
+  </div>
+
+  <!-- Cards -->
+  <div class="grid-2">
+    <div class="card space-y-sm">
+      <h3 class="font-semibold">Card Title</h3>
+      <p class="text-sm" style="color:var(--muted-foreground)">Card description with muted text and standard spacing.</p>
+      <div class="space-y-sm">
+        <input class="input" placeholder="Name">
+        <input class="input" placeholder="Email">
+        <button class="btn" style="background:var(--primary);color:var(--primary-foreground);width:100%;justify-content:center">Submit</button>
+      </div>
+    </div>
+    <div class="card space-y-sm">
+      <h3 class="font-semibold">Badges &amp; States</h3>
+      <div class="flex flex-wrap gap-2">
+        <span class="badge" style="background:color-mix(in oklch, var(--primary) 10%, transparent);color:var(--primary)">Primary</span>
+        <span class="badge" style="background:var(--secondary);color:var(--secondary-foreground)">Secondary</span>
+        <span class="badge" style="background:color-mix(in oklch, var(--destructive) 10%, transparent);color:var(--destructive)">Destructive</span>
+        <span class="badge" style="background:oklch(0.962 0.044 156.743);color:oklch(0.527 0.154 150.069)">Success</span>
+        <span class="badge" style="background:oklch(0.962 0.059 95.617);color:oklch(0.555 0.163 48.998)">Warning</span>
+      </div>
+      <div style="margin-top:1rem">
+        <div class="flex border-b" style="justify-content:space-between;padding:0.5rem 0;font-size:0.875rem;align-items:center">
+          <span>Two-factor authentication</span><span style="color:var(--muted-foreground)">Enable</span>
+        </div>
+        <div class="flex border-b" style="justify-content:space-between;padding:0.5rem 0;font-size:0.875rem;align-items:center">
+          <span>Email notifications</span><span style="color:var(--muted-foreground)">Enabled</span>
+        </div>
+        <div class="flex" style="justify-content:space-between;padding:0.5rem 0;font-size:0.875rem;align-items:center">
+          <span>API access</span><span style="color:var(--muted-foreground)">Restricted</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="border rounded-lg" style="overflow:hidden">
+    <table>
+      <thead><tr><th>Name</th><th>Status</th><th>Role</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody>
+        <tr><td class="font-medium">Alice Johnson</td><td><span class="badge" style="background:oklch(0.962 0.044 156.743);color:oklch(0.527 0.154 150.069)">Active</span></td><td style="color:var(--muted-foreground)">Admin</td><td style="text-align:right"><a style="color:var(--primary);font-size:0.75rem;cursor:pointer">Edit</a></td></tr>
+        <tr><td class="font-medium">Bob Smith</td><td><span class="badge" style="background:var(--muted);color:var(--muted-foreground)">Inactive</span></td><td style="color:var(--muted-foreground)">Editor</td><td style="text-align:right"><a style="color:var(--primary);font-size:0.75rem;cursor:pointer">Edit</a></td></tr>
+        <tr><td class="font-medium">Carol Williams</td><td><span class="badge" style="background:oklch(0.962 0.044 156.743);color:oklch(0.527 0.154 150.069)">Active</span></td><td style="color:var(--muted-foreground)">Viewer</td><td style="text-align:right"><a style="color:var(--primary);font-size:0.75rem;cursor:pointer">Edit</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>`
+}
+
+// ─── Preview Iframe ─────────────────────────────────────────
+
+function PreviewIframe({ config }: { config: Partial<PanelThemeConfig> }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+    const html = buildPreviewHTML(config)
+    const doc = iframe.contentDocument
+    if (doc) {
+      doc.open()
+      doc.write(html)
+      doc.close()
+    }
+  }, [config])
+
+  return (
+    <iframe
+      ref={iframeRef}
+      className="w-full h-full border-0 rounded-lg bg-background"
+      title="Theme Preview"
+    />
+  )
 }
 
 // ─── Component ──────────────────────────────────────────────
@@ -79,24 +246,6 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
   const [config, setConfig] = useState<Partial<PanelThemeConfig>>({ ...codeDefaults })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-
-  // Apply live preview on every change
-  useEffect(() => {
-    try {
-      const merged: PanelThemeConfig = { preset: 'default', ...config }
-      console.log('[theme-editor] applying:', merged.preset, merged.baseColor, merged.accentColor)
-      const resolved = resolveTheme(merged)
-      applyThemeCSS(resolved)
-    } catch (e) {
-      console.error('[theme-editor] resolveTheme error:', e)
-    }
-  }, [config])
-
-  // Load fonts when they change
-  useEffect(() => {
-    if (config.fonts?.body) loadGoogleFont(config.fonts.body)
-    if (config.fonts?.heading) loadGoogleFont(config.fonts.heading)
-  }, [config.fonts?.body, config.fonts?.heading])
 
   const update = useCallback((key: string, value: unknown) => {
     setConfig(prev => ({ ...prev, [key]: value }))
@@ -286,9 +435,9 @@ export function ThemeSettingsPage({ panelPath, initialConfig }: ThemeSettingsPag
         </div>
       </div>
 
-      {/* Preview Area */}
-      <div className="flex-1 overflow-y-auto p-8">
-        <ThemePreview config={config} />
+      {/* Preview Area — isolated iframe */}
+      <div className="flex-1 overflow-hidden p-4">
+        <PreviewIframe config={config} />
       </div>
     </div>
   )
@@ -301,137 +450,6 @@ function ControlGroup({ label, children }: { label: string; children: React.Reac
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
       {children}
-    </div>
-  )
-}
-
-function ThemePreview({ config }: { config: Partial<PanelThemeConfig> }) {
-  return (
-    <div className="space-y-8 max-w-4xl">
-      {/* Typography */}
-      <div className="space-y-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          {config.preset?.toUpperCase() ?? 'DEFAULT'} — {config.fonts?.heading ?? 'System'}
-        </p>
-        <h1 className="text-3xl font-bold tracking-tight">Designing with rhythm and hierarchy.</h1>
-        <p className="text-muted-foreground leading-relaxed">
-          A strong body font keeps long-form content readable and balances the visual weight of headings.
-          Thoughtful spacing and cadence help paragraphs scan quickly without feeling dense.
-        </p>
-      </div>
-
-      {/* Color Swatches */}
-      <div className="space-y-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Colors</p>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { label: 'bg', cls: 'bg-background border' },
-            { label: 'fg', cls: 'bg-foreground' },
-            { label: 'primary', cls: 'bg-primary' },
-            { label: 'secondary', cls: 'bg-secondary border' },
-            { label: 'muted', cls: 'bg-muted border' },
-            { label: 'accent', cls: 'bg-accent border' },
-            { label: 'destructive', cls: 'bg-destructive' },
-          ].map(s => (
-            <div key={s.label} className="text-center">
-              <div className={`w-12 h-12 rounded-lg ${s.cls}`} />
-              <span className="text-[10px] text-muted-foreground mt-1 block">--{s.label.slice(0, 3)}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2 mt-2">
-          {['chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5'].map(c => (
-            <div key={c} className="text-center">
-              <div className="w-10 h-10 rounded-lg" style={{ backgroundColor: `var(--${c})` }} />
-              <span className="text-[10px] text-muted-foreground mt-1 block">--{c.slice(0, 5)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Buttons */}
-      <div className="space-y-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Buttons</p>
-        <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground font-medium">Button</button>
-          <button className="px-4 py-2 text-sm rounded-md bg-secondary text-secondary-foreground font-medium">Secondary</button>
-          <button className="px-4 py-2 text-sm rounded-md border border-input bg-background hover:bg-accent font-medium">Outline</button>
-          <button className="px-4 py-2 text-sm rounded-md hover:bg-accent font-medium text-muted-foreground">Ghost</button>
-          <button className="px-4 py-2 text-sm rounded-md bg-destructive text-white font-medium">Destructive</button>
-        </div>
-      </div>
-
-      {/* Card + Form */}
-      <div className="grid grid-cols-2 gap-6">
-        <div className="rounded-lg border bg-card p-6 space-y-4">
-          <h3 className="font-semibold">Card Title</h3>
-          <p className="text-sm text-muted-foreground">Card description with muted text and standard spacing.</p>
-          <div className="space-y-3">
-            <input placeholder="Name" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            <input placeholder="Email" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            <button className="w-full px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground font-medium">Submit</button>
-          </div>
-        </div>
-
-        <div className="rounded-lg border bg-card p-6 space-y-4">
-          <h3 className="font-semibold">Badges & States</h3>
-          <div className="flex flex-wrap gap-2">
-            <span className="px-2.5 py-0.5 text-xs rounded-full bg-primary/10 text-primary font-medium">Primary</span>
-            <span className="px-2.5 py-0.5 text-xs rounded-full bg-secondary text-secondary-foreground font-medium">Secondary</span>
-            <span className="px-2.5 py-0.5 text-xs rounded-full bg-destructive/10 text-destructive font-medium">Destructive</span>
-            <span className="px-2.5 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">Success</span>
-            <span className="px-2.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-medium">Warning</span>
-          </div>
-          <div className="space-y-2 mt-4">
-            <div className="flex items-center justify-between py-2 border-b text-sm">
-              <span>Two-factor authentication</span>
-              <span className="text-muted-foreground">Enable</span>
-            </div>
-            <div className="flex items-center justify-between py-2 border-b text-sm">
-              <span>Email notifications</span>
-              <span className="text-muted-foreground">Enabled</span>
-            </div>
-            <div className="flex items-center justify-between py-2 text-sm">
-              <span>API access</span>
-              <span className="text-muted-foreground">Restricted</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Table Preview */}
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Role</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { name: 'Alice Johnson', status: 'Active', role: 'Admin' },
-              { name: 'Bob Smith', status: 'Inactive', role: 'Editor' },
-              { name: 'Carol Williams', status: 'Active', role: 'Viewer' },
-            ].map((row, i) => (
-              <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                <td className="px-4 py-3 font-medium">{row.name}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${row.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'}`}>
-                    {row.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{row.role}</td>
-                <td className="px-4 py-3 text-right">
-                  <button className="text-xs text-primary hover:underline">Edit</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }
