@@ -56,13 +56,19 @@ export { AnthropicProvider, type AnthropicConfig } from './providers/anthropic.j
 export { OpenAIProvider, OpenAIAdapter, type OpenAIConfig } from './providers/openai.js'
 export { GoogleProvider, type GoogleConfig } from './providers/google.js'
 export { OllamaProvider, type OllamaConfig } from './providers/ollama.js'
+export { DeepSeekProvider, type DeepSeekConfig } from './providers/deepseek.js'
+export { XaiProvider, type XaiConfig } from './providers/xai.js'
+export { GroqProvider, type GroqConfig } from './providers/groq.js'
+export { MistralProvider, type MistralConfig } from './providers/mistral.js'
+export { AzureOpenAIProvider, type AzureOpenAIConfig } from './providers/azure.js'
 
 // Tools
 export { toolDefinition, ToolBuilder, toolToSchema } from './tool.js'
 export { zodToJsonSchema } from './zod-to-json-schema.js'
 
 // Agent
-export { Agent, agent, stepCountIs, hasToolCall } from './agent.js'
+export { Agent, ConversableAgent, agent, stepCountIs, hasToolCall, setConversationStore } from './agent.js'
+export { QueuedPromptBuilder } from './queue-job.js'
 
 // Middleware
 export { runOnConfig, runOnChunk, runOnBeforeToolCall, runOnAfterToolCall, runSequential, runOnUsage, runOnAbort, runOnError } from './middleware.js'
