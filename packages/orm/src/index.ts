@@ -1,6 +1,13 @@
 import type { QueryBuilder, OrmAdapter } from '@rudderjs/contracts'
+import { castGet, castSet, type CastDefinition } from './cast.js'
+import { type Attribute } from './attribute.js'
 
 export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState } from '@rudderjs/contracts'
+export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
+export { Attribute }                               from './attribute.js'
+export { JsonResource, ResourceCollection }        from './resource.js'
+export { ModelCollection }                         from './collection.js'
+export { ModelFactory, sequence }                  from './factory.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
@@ -45,6 +52,86 @@ export interface ModelObserver {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ScopeFn = (query: QueryBuilder<any>, ...args: any[]) => QueryBuilder<any>
 
+// ─── Decorators ────────────────────────────────────────────
+
+/**
+ * Mark an instance property as hidden from JSON output.
+ * Equivalent to adding the field name to `static hidden`.
+ *
+ * @example
+ * class User extends Model {
+ *   @Hidden password = ''
+ * }
+ */
+export function Hidden(target: object, key: string | symbol): void {
+  const ctor = target.constructor as typeof Model
+  if (!Object.prototype.hasOwnProperty.call(ctor, 'hidden')) {
+    ctor.hidden = [...ctor.hidden]
+  }
+  ctor.hidden.push(String(key))
+}
+
+/**
+ * Restrict JSON output to only visible properties.
+ * Equivalent to setting `static visible`.
+ * Applied per-field — all `@Visible` fields form the allowlist.
+ *
+ * @example
+ * class User extends Model {
+ *   @Visible id = 0
+ *   @Visible name = ''
+ *   password = ''   // hidden because visible list is set
+ * }
+ */
+export function Visible(target: object, key: string | symbol): void {
+  const ctor = target.constructor as typeof Model
+  if (!Object.prototype.hasOwnProperty.call(ctor, 'visible')) {
+    ctor.visible = []
+  }
+  ctor.visible.push(String(key))
+}
+
+/**
+ * Always include the named accessor in JSON output.
+ * The property must also be defined in `static attributes` with a getter.
+ *
+ * @example
+ * class User extends Model {
+ *   @Appends fullName = ''
+ *   static attributes = {
+ *     fullName: Attribute.make({ get: (_, a) => `${a['firstName']} ${a['lastName']}` }),
+ *   }
+ * }
+ */
+export function Appends(target: object, key: string | symbol): void {
+  const ctor = target.constructor as typeof Model
+  if (!Object.prototype.hasOwnProperty.call(ctor, 'appends')) {
+    ctor.appends = [...(ctor.appends ?? [])]
+  }
+  ctor.appends.push(String(key))
+}
+
+/**
+ * Apply a cast to an instance property.
+ * Equivalent to adding the field to `static casts`.
+ *
+ * @example
+ * class User extends Model {
+ *   @Cast('boolean') isAdmin = false
+ *   @Cast('date')    createdAt = new Date()
+ *   @Cast(MoneyCast) balance = 0
+ * }
+ */
+export function Cast(type: CastDefinition) {
+  return (target: object, key: string | symbol): void => {
+    const ctor = target.constructor as typeof Model
+    if (!Object.prototype.hasOwnProperty.call(ctor, 'casts')) {
+      ctor.casts = { ...(ctor.casts ?? {}) }
+    }
+    ctor.casts[String(key)] = type
+  }
+}
+
 // ─── Model Base Class ──────────────────────────────────────
 
 export abstract class Model {
@@ -56,6 +143,45 @@ export abstract class Model {
 
   /** Columns to hide from JSON output */
   static hidden: string[] = []
+
+  /**
+   * Columns to exclusively include in JSON output.
+   * When set, only these columns (plus appends) appear in toJSON().
+   * Takes precedence over `hidden`.
+   */
+  static visible: string[] = []
+
+  /**
+   * Accessor names (defined in `attributes`) to always append to JSON output.
+   * The accessor must have a `get` function.
+   */
+  static appends: string[] = []
+
+  /**
+   * Attribute casts — map column names to their cast types.
+   * Applied both when reading (toJSON) and writing (create/update).
+   *
+   * @example
+   * static casts = {
+   *   isAdmin:   'boolean',
+   *   createdAt: 'date',
+   *   settings:  'json',
+   *   balance:   MoneyCast,  // custom cast class
+   * } as const satisfies Record<string, CastDefinition>
+   */
+  static casts: Record<string, CastDefinition> = {}
+
+  /**
+   * Accessors and mutators using `Attribute.make({ get, set })`.
+   *
+   * @example
+   * static attributes = {
+   *   firstName: Attribute.make({ get: v => String(v).charAt(0).toUpperCase() + String(v).slice(1) }),
+   *   fullName:  Attribute.make({ get: (_, attrs) => `${attrs['firstName']} ${attrs['lastName']}` }),
+   *   password:  Attribute.make({ set: async v => await bcrypt.hash(String(v), 10) }),
+   * }
+   */
+  static attributes: Record<string, Attribute> = {}
 
   /** Columns that are mass-assignable */
   static fillable: string[] = []
@@ -71,71 +197,34 @@ export abstract class Model {
    */
   static softDeletes = false
 
+  // ── Instance-level serialization overrides ─────────────
+
+  /** @internal */
+  private _instanceHidden?: string[]
+  /** @internal */
+  private _instanceVisible?: string[]
+
   // ── Scopes ─────────────────────────────────────────────
 
-  /**
-   * Global scopes — automatically applied to every query on this model.
-   * Override in subclass. Use `withoutGlobalScope('name')` to bypass.
-   *
-   * @example
-   * static globalScopes = {
-   *   ordered: (q) => q.orderBy('createdAt', 'DESC'),
-   *   active: (q) => q.where('active', true),
-   * }
-   */
   static globalScopes: Record<string, ScopeFn> = {}
-
-  /**
-   * Local scopes — reusable query fragments applied via `.scope('name')`.
-   * Override in subclass.
-   *
-   * @example
-   * static scopes = {
-   *   published: (q) => q.where('draftStatus', 'published'),
-   *   recent: (q) => q.where('createdAt', '>', new Date(Date.now() - 30 * 86400000).toISOString()),
-   *   byAuthor: (q, authorId: string) => q.where('authorId', authorId),
-   * }
-   *
-   * // Usage:
-   * Article.query().scope('published').scope('recent').get()
-   * Article.query().scope('byAuthor', userId).get()
-   */
   static scopes: Record<string, ScopeFn> = {}
 
   // ── Observers ──────────────────────────────────────────
 
-  /** @internal — registered observer instances */
+  /** @internal */
   private static _observers: ModelObserver[] = []
 
-  /** @internal — registered inline event listeners */
+  /** @internal */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static _listeners: Map<ModelEvent, Array<(...args: any[]) => any>> = new Map()
 
-  /**
-   * Register an observer class. All matching lifecycle methods will be called.
-   *
-   * @example
-   * class ArticleObserver {
-   *   creating(data) { data.slug = slugify(data.title); return data }
-   *   created(record) { console.log('Created:', record.id) }
-   * }
-   * Article.observe(ArticleObserver)
-   */
   static observe(ObserverClass: new () => ModelObserver): void {
-    // Each subclass needs its own observer array
     if (!Object.prototype.hasOwnProperty.call(this, '_observers')) {
       this._observers = []
     }
     this._observers.push(new ObserverClass())
   }
 
-  /**
-   * Register an inline event listener.
-   *
-   * @example
-   * Article.on('creating', (data) => { data.slug = slugify(data.title); return data })
-   * Article.on('deleting', (id) => { if (id === protectedId) return false })
-   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static on(event: ModelEvent, handler: (...args: any[]) => any): void {
     if (!Object.prototype.hasOwnProperty.call(this, '_listeners')) {
@@ -146,12 +235,11 @@ export abstract class Model {
     this._listeners.set(event, list)
   }
 
-  /** @internal — fire an event on all observers and inline listeners. Returns transformed data or false to cancel. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static async _fireEvent(event: ModelEvent, ...args: any[]): Promise<any> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     let result = args[0]
 
-    // Observer methods
     const observers = Object.prototype.hasOwnProperty.call(this, '_observers') ? this._observers : []
     for (const obs of observers) {
       const method = obs[event as keyof ModelObserver] as ((...a: unknown[]) => unknown) | undefined
@@ -162,11 +250,11 @@ export abstract class Model {
       }
     }
 
-    // Inline listeners
     const listeners = Object.prototype.hasOwnProperty.call(this, '_listeners')
       ? (this._listeners.get(event) ?? [])
       : []
     for (const fn of listeners) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const ret = await fn(...args)
       if (ret === false) return false
       if (ret !== undefined && ret !== null && typeof ret === 'object') result = ret
@@ -175,7 +263,6 @@ export abstract class Model {
     return result
   }
 
-  /** Remove all observers and listeners (for testing). */
   static clearObservers(): void {
     this._observers = []
     this._listeners = new Map()
@@ -183,12 +270,10 @@ export abstract class Model {
 
   // ── Query Methods ──────────────────────────────────────
 
-  /** Get the table name, auto-pluralizing if not set */
   static getTable(this: typeof Model): string {
     return this.table ?? `${this.name.toLowerCase()}s`
   }
 
-  /** Return a query builder for this model (auto-filters soft deletes, applies global scopes) */
   static query<T extends typeof Model>(this: T): QueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): QueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): QueryBuilder<InstanceType<T>> } {
     let q = ModelRegistry.getAdapter().query<InstanceType<T>>(
       (this as typeof Model).getTable()
@@ -198,7 +283,6 @@ export abstract class Model {
       (q as any)._enableSoftDeletes?.()
     }
 
-    // Apply global scopes
     const globalScopes = (this as typeof Model).globalScopes
     const excludedScopes = new Set<string>()
 
@@ -206,7 +290,6 @@ export abstract class Model {
       q = scopeFn(q) as QueryBuilder<InstanceType<T>>
     }
 
-    // Attach .scope() and .withoutGlobalScope() to the query builder
     const modelClass = this as typeof Model
     const localScopes = modelClass.scopes
 
@@ -219,7 +302,6 @@ export abstract class Model {
     }
     enhanced.withoutGlobalScope = (name: string) => {
       excludedScopes.add(name)
-      // Re-build query without the excluded scope
       let rebuilt = ModelRegistry.getAdapter().query<InstanceType<T>>(modelClass.getTable())
       if (modelClass.softDeletes) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -246,7 +328,6 @@ export abstract class Model {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (q as any)._enableSoftDeletes?.()
     }
-    // Apply global scopes
     let result = q
     for (const [, scopeFn] of Object.entries((self as typeof Model).globalScopes)) {
       result = scopeFn(result) as QueryBuilder<InstanceType<T>>
@@ -267,18 +348,15 @@ export abstract class Model {
   }
 
   static async create<T extends typeof Model>(this: T, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
-    // Fire 'creating' event — can transform data or cancel
     const self = this as typeof Model
-    let payload = data as Record<string, unknown>
+    let payload = self._applyMutators(data as Record<string, unknown>)
     const result = await self._fireEvent('creating', payload)
     if (result === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
-    if (result && typeof result === 'object') payload = result
+    if (result && typeof result === 'object') payload = result as Record<string, unknown>
 
     const record = await Model._q(this).create(payload as Partial<InstanceType<T>>)
 
-    // Fire 'created' event
     await self._fireEvent('created', record as Record<string, unknown>)
-
     return record
   }
 
@@ -286,13 +364,12 @@ export abstract class Model {
     return Model._q(this).with(...relations)
   }
 
-  /** Update a record by ID. Fires 'updating' and 'updated' observer events. */
   static async update<T extends typeof Model>(this: T, id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
-    let payload = data as Record<string, unknown>
+    let payload = self._applyMutators(data as Record<string, unknown>)
     const result = await self._fireEvent('updating', id, payload)
     if (result === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
-    if (result && typeof result === 'object') payload = result
+    if (result && typeof result === 'object') payload = result as Record<string, unknown>
 
     const record = await Model._q(this).update(id, payload as Partial<InstanceType<T>>)
 
@@ -300,44 +377,169 @@ export abstract class Model {
     return record
   }
 
-  /** Delete a record by ID. Fires 'deleting' and 'deleted' observer events. */
   static async delete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
     const self = this as typeof Model
     const result = await self._fireEvent('deleting', id)
     if (result === false) throw new Error(`[RudderJS ORM] Delete cancelled by observer on ${self.name}.`)
 
     await Model._q(this).delete(id)
-
     await self._fireEvent('deleted', id)
   }
 
-  /** Restore a soft-deleted record by ID. */
   static async restore<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T>> {
     const self = this as typeof Model
     const result = await self._fireEvent('restoring', id)
     if (result === false) throw new Error(`[RudderJS ORM] Restore cancelled by observer on ${self.name}.`)
 
     const record = await Model._q(this).restore(id)
-
     await self._fireEvent('restored', record as Record<string, unknown>)
     return record
   }
 
-  /** Permanently delete a record by ID, bypassing soft deletes. */
   static async forceDelete<T extends typeof Model>(this: T, id: number | string): Promise<void> {
     const self = this as typeof Model
     const result = await self._fireEvent('deleting', id)
     if (result === false) throw new Error(`[RudderJS ORM] Delete cancelled by observer on ${self.name}.`)
 
     await Model._q(this).forceDelete(id)
-
     await self._fireEvent('deleted', id)
   }
 
+  // ── Cast / Mutator helpers ─────────────────────────────
+
+  /** @internal — apply cast setters and attribute mutators to an incoming data payload */
+  private static _applyMutators(data: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {}
+
+    for (const [key, value] of Object.entries(data)) {
+      let val = value
+
+      // Attribute mutator (set side) takes priority
+      const attrDef = this.attributes[key]
+      if (attrDef?.setter) {
+        val = attrDef.setter(val, data)
+      } else if (this.casts[key] !== undefined) {
+        val = castSet(this.casts[key] as string, key, val, data)
+      }
+
+      result[key] = val
+    }
+
+    return result
+  }
+
+  // ── Instance serialization controls ───────────────────
+
+  /**
+   * Make the given keys visible for this instance's JSON output.
+   * Removes them from the instance's hidden list and adds to the visible override.
+   * Returns `this` for chaining.
+   */
+  makeVisible(keys: string | string[]): this {
+    const k = Array.isArray(keys) ? keys : [keys]
+    this._instanceHidden = (this._instanceHidden ?? (this.constructor as typeof Model).hidden)
+      .filter(h => !k.includes(h))
+    return this
+  }
+
+  /**
+   * Hide the given keys from this instance's JSON output.
+   * Returns `this` for chaining.
+   */
+  makeHidden(keys: string | string[]): this {
+    const k = Array.isArray(keys) ? keys : [keys]
+    this._instanceHidden = [...(this._instanceHidden ?? (this.constructor as typeof Model).hidden), ...k]
+    return this
+  }
+
+  /**
+   * Override the visible list for this instance only.
+   * Returns `this` for chaining.
+   */
+  setVisible(keys: string[]): this {
+    this._instanceVisible = keys
+    return this
+  }
+
+  /**
+   * Override the hidden list for this instance only.
+   * Returns `this` for chaining.
+   */
+  setHidden(keys: string[]): this {
+    this._instanceHidden = keys
+    return this
+  }
+
+  /**
+   * Add keys to the visible list for this instance.
+   * Returns `this` for chaining.
+   */
+  mergeVisible(keys: string[]): this {
+    const base = this._instanceVisible ?? (this.constructor as typeof Model).visible
+    this._instanceVisible = [...base, ...keys]
+    return this
+  }
+
+  /**
+   * Add keys to the hidden list for this instance.
+   * Returns `this` for chaining.
+   */
+  mergeHidden(keys: string[]): this {
+    const base = this._instanceHidden ?? (this.constructor as typeof Model).hidden
+    this._instanceHidden = [...base, ...keys]
+    return this
+  }
+
+  // ── toJSON ─────────────────────────────────────────────
+
   toJSON(): Record<string, unknown> {
-    const hidden = (this.constructor as typeof Model).hidden
+    const ctor        = this.constructor as typeof Model
+    const rawEntries  = Object.entries(this).filter(([k]) => !k.startsWith('_instance'))
+
+    const raw: Record<string, unknown> = {}
+    for (const [k, v] of rawEntries) {
+      raw[k] = v
+    }
+
+    const result: Record<string, unknown> = {}
+
+    // Apply casts (get side) and accessor getters
+    for (const [k, v] of Object.entries(raw)) {
+      const attrDef = ctor.attributes[k]
+      if (attrDef?.getter) {
+        result[k] = attrDef.getter(v, raw)
+      } else if (ctor.casts[k] !== undefined) {
+        result[k] = castGet(ctor.casts[k] as string, k, v, raw)
+      } else {
+        result[k] = v
+      }
+    }
+
+    // Appends — add computed accessor values that aren't raw properties
+    for (const appendKey of ctor.appends) {
+      if (!(appendKey in result)) {
+        const attrDef = ctor.attributes[appendKey]
+        if (attrDef?.getter) {
+          result[appendKey] = attrDef.getter(undefined, raw)
+        }
+      }
+    }
+
+    // Determine effective visible / hidden lists
+    const effectiveVisible = this._instanceVisible ?? ctor.visible
+    const effectiveHidden  = this._instanceHidden  ?? ctor.hidden
+
+    // Apply visible (allowlist) — takes precedence
+    if (effectiveVisible.length > 0) {
+      const appendKeys = new Set(ctor.appends)
+      return Object.fromEntries(
+        Object.entries(result).filter(([k]) => effectiveVisible.includes(k) || appendKeys.has(k))
+      )
+    }
+
+    // Apply hidden (denylist)
     return Object.fromEntries(
-      Object.entries(this).filter(([k]) => !hidden.includes(k))
+      Object.entries(result).filter(([k]) => !effectiveHidden.includes(k))
     )
   }
 }
