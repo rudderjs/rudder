@@ -67,6 +67,12 @@ export default defineConfig({
             { text: 'Panels', link: '/guide/panels' },
           ],
         },
+        {
+          text: 'Production',
+          items: [
+            { text: 'Deployment', link: '/guide/deployment' },
+          ],
+        },
       ],
 
       '/packages/': [
