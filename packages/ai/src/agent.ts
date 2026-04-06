@@ -1,6 +1,7 @@
 import { AiRegistry } from './registry.js'
 import { toolToSchema } from './tool.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
+import { QueuedPromptBuilder } from './queue-job.js'
 import {
   runOnConfig,
   runOnChunk,
@@ -21,6 +22,7 @@ import type {
   AgentStreamResponse,
   AnyTool,
   ContentPart,
+  ConversationStore,
   HasMiddleware,
   HasTools,
   MiddlewareContext,
@@ -87,6 +89,135 @@ export abstract class Agent {
   stream(input: string, options?: AgentPromptOptions): AgentStreamResponse {
     return runAgentLoopStreaming(this, input, options)
   }
+
+  /** Queue the prompt for background execution */
+  queue(input: string, options?: AgentPromptOptions): QueuedPromptBuilder {
+    return new QueuedPromptBuilder(this, input, options)
+  }
+
+  /** Set the user scope for conversation persistence */
+  forUser(userId: string): ConversableAgent {
+    return new ConversableAgent(this).forUser(userId)
+  }
+
+  /** Continue an existing conversation */
+  continue(conversationId: string): ConversableAgent {
+    return new ConversableAgent(this).continue(conversationId)
+  }
+}
+
+// ─── Conversable Agent (conversation persistence) ───────
+
+/**
+ * Wraps an Agent to add conversation memory.
+ * Created via `agent.forUser(id)` or `agent.continue(id)`.
+ */
+export class ConversableAgent {
+  private _userId: string | undefined
+  private _conversationId: string | undefined
+
+  constructor(private readonly agent: Agent) {}
+
+  forUser(userId: string): this {
+    this._userId = userId
+    return this
+  }
+
+  continue(conversationId: string): this {
+    this._conversationId = conversationId
+    return this
+  }
+
+  async prompt(input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+    const store = resolveConversationStore()
+    if (!store) throw new Error('[RudderJS AI] No ConversationStore registered. Register one via the DI container with key "ai.conversations".')
+
+    // Load or create conversation
+    let history: AiMessage[] = options?.history ?? []
+    if (this._conversationId) {
+      history = [...(await store.load(this._conversationId)), ...history]
+    } else {
+      const meta = this._userId ? { userId: this._userId } : undefined
+      this._conversationId = await store.create(undefined, meta)
+    }
+
+    const response = await runAgentLoop(this.agent, input, { ...options, history })
+
+    // Persist messages
+    const newMessages: AiMessage[] = [
+      { role: 'user', content: input },
+      ...response.steps.flatMap(s => {
+        const msgs: AiMessage[] = [s.message]
+        for (const tr of s.toolResults) {
+          const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
+          msgs.push({ role: 'tool', content: resultStr, toolCallId: tr.toolCallId })
+        }
+        return msgs
+      }),
+    ]
+    await store.append(this._conversationId, newMessages)
+
+    return { text: response.text, steps: response.steps, usage: response.usage, conversationId: this._conversationId! }
+  }
+
+  stream(input: string, options?: AgentPromptOptions): AgentStreamResponse {
+    const store = resolveConversationStore()
+    if (!store) throw new Error('[RudderJS AI] No ConversationStore registered. Register one via the DI container with key "ai.conversations".')
+
+    // We need to handle async setup, so wrap the streaming
+    let resolveReady: () => void
+    const ready = new Promise<void>(r => { resolveReady = r })
+    let loadedHistory: AiMessage[] = []
+    let convId = this._conversationId
+
+    // Kick off async setup
+    const setupPromise = (async () => {
+      if (convId) {
+        loadedHistory = await store.load(convId)
+      } else {
+        const meta = this._userId ? { userId: this._userId } : undefined
+        convId = await store.create(undefined, meta)
+        this._conversationId = convId
+      }
+      resolveReady!()
+    })()
+
+    let resolveResponse: (r: AgentResponse) => void
+    const responsePromise = new Promise<AgentResponse>(r => { resolveResponse = r })
+
+    const self = this
+    const storeRef = store
+    async function* generateStream(): AsyncIterable<StreamChunk> {
+      await setupPromise
+      const history = [...loadedHistory, ...(options?.history ?? [])]
+      const inner = runAgentLoopStreaming(self.agent, input, { ...options, history })
+
+      for await (const chunk of inner.stream) {
+        yield chunk
+      }
+
+      const response = await inner.response
+
+      // Persist messages
+      const newMessages: AiMessage[] = [
+        { role: 'user', content: input },
+        ...response.steps.flatMap(s => {
+          const msgs: AiMessage[] = [s.message]
+          for (const tr of s.toolResults) {
+            const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
+            msgs.push({ role: 'tool', content: resultStr, toolCallId: tr.toolCallId })
+          }
+          return msgs
+        }),
+      ]
+      await storeRef.append(convId!, newMessages)
+
+      const result: AgentResponse = { text: response.text, steps: response.steps, usage: response.usage, conversationId: convId! }
+      resolveResponse!(result)
+    }
+
+    return { stream: generateStream(), response: responsePromise }
+  }
 }
 
 // ─── Anonymous Agent ─────────────────────────────────────
@@ -141,6 +272,21 @@ export function agent(
     ? { instructions: instructionsOrOptions }
     : instructionsOrOptions
   return new AnonymousAgent(options) as Agent & HasTools & HasMiddleware
+}
+
+// ─── Helpers ─────────────────────────────────────────────
+
+// ─── Conversation Store Registry ────────────────────────
+
+let _conversationStore: ConversationStore | undefined
+
+/** Set the global conversation store (called by service provider or manually) */
+export function setConversationStore(store: ConversationStore): void {
+  _conversationStore = store
+}
+
+function resolveConversationStore(): ConversationStore | undefined {
+  return _conversationStore
 }
 
 // ─── Helpers ─────────────────────────────────────────────

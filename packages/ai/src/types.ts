@@ -262,6 +262,8 @@ export interface AiConfig {
   providers: Record<string, AiProviderConfig>
   failover?: string[]
   models?: AiModelConfig[]
+  /** Conversation store for persisting agent conversations */
+  conversations?: ConversationStore
 }
 
 // ─── Agent Options ─────────────���──────────────────────────
