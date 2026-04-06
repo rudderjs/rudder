@@ -1,4 +1,4 @@
-import { ServiceProvider, type Application } from '@rudderjs/core'
+import { ServiceProvider, type Application, setExceptionReporter } from '@rudderjs/core'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { EOL } from 'node:os'
@@ -649,6 +649,14 @@ export function log(config: LogConfig): new (app: Application) => ServiceProvide
 
       LogRegistry.setDefault(config.default)
       this.app.instance('log', Log)
+
+      // Wire unhandled exceptions through the log channel
+      setExceptionReporter((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        const context: Record<string, unknown> = {}
+        if (err instanceof Error && err.stack) context['stack'] = err.stack
+        void Log.error(message, context)
+      })
     }
   }
 

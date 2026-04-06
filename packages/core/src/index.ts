@@ -53,6 +53,18 @@ export {
   dd,
 } from '@rudderjs/support'
 
+// ─── Exceptions ────────────────────────────────────────────
+
+export {
+  HttpException,
+  abort,
+  abort_if,
+  abort_unless,
+  report,
+  report_if,
+  setExceptionReporter,
+} from './exceptions.js'
+
 // ─── Typed config ──────────────────────────────────────────
 // Overrides the untyped config() from @rudderjs/support with a version
 // that infers return types from the augmented AppConfig interface.

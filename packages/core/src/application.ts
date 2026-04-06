@@ -4,6 +4,13 @@ import { Env, ConfigRepository, setConfigRepository } from '@rudderjs/support'
 import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler, AppRequest } from '@rudderjs/contracts'
 import { rudder } from '@rudderjs/rudder'
 import { ValidationError } from './validation.js'
+import {
+  HttpException,
+  renderHttpException,
+  renderServerError,
+  report,
+  setExceptionReporter,
+} from './exceptions.js'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -252,7 +259,6 @@ export class ExceptionConfigurator {
 
   /**
    * Register a custom renderer for a specific error type.
-   * Return a `Response` to short-circuit the default handling.
    *
    * @example
    * e.render(PaymentError, (err, req) =>
@@ -269,12 +275,23 @@ export class ExceptionConfigurator {
   }
 
   /**
-   * Ignore an error type — re-throws it so the server's fallback handler sees it.
-   * In development this surfaces the HTML error page; in production it becomes a 500.
+   * Ignore an error type — re-throws it so the server's native handler sees it.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ignore(type: new (...args: any[]) => unknown): this {
     this._ignored.add(type)
+    return this
+  }
+
+  /**
+   * Override the global exception reporter for unhandled errors.
+   * By default, `@rudderjs/log` wires this automatically when installed.
+   *
+   * @example
+   * e.reportUsing((err) => Sentry.captureException(err))
+   */
+  reportUsing(fn: (err: unknown) => void): this {
+    setExceptionReporter(fn)
     return this
   }
 
@@ -284,17 +301,17 @@ export class ExceptionConfigurator {
     const ignored = new Set(this._ignored)
 
     return async (err: unknown, req: AppRequest): Promise<Response> => {
-      // Explicitly ignored — re-throw to surface in dev error page / server fallback
+      // 1. Explicitly ignored — re-throw
       for (const type of ignored) {
         if (err instanceof type) throw err
       }
 
-      // User-registered renderers take priority (including ValidationError subclasses)
+      // 2. User-registered renderers (take priority)
       for (const { type, fn } of renders) {
         if (err instanceof type) return fn(err, req)
       }
 
-      // ValidationError — built-in 422 JSON (no manual try/catch needed in routes)
+      // 3. ValidationError — 422 JSON
       if (err instanceof ValidationError) {
         return new Response(JSON.stringify(err.toJSON()), {
           status: 422,
@@ -302,8 +319,16 @@ export class ExceptionConfigurator {
         })
       }
 
-      // Unhandled — re-throw so the server fallback can handle it
-      throw err
+      // 4. HttpException — render with its status code (JSON or HTML)
+      if (err instanceof HttpException) {
+        return renderHttpException(err, req)
+      }
+
+      // 5. Unhandled — report + render 500
+      report(err)
+      let debug = false
+      try { debug = Application.getInstance().debug } catch { /* app not ready */ }
+      return renderServerError(req, debug, err)
     }
   }
 }
