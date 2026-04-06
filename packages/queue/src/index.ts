@@ -56,7 +56,27 @@ export class DispatchBuilder<T extends Job> {
   async send(): Promise<void> {
     const adapter = QueueRegistry.get()
     if (!adapter) throw new Error('[RudderJS Queue] No queue adapter registered')
-    await adapter.dispatch(this.job, { delay: this._delay, queue: this._queue })
+
+    // Propagate request context to the job if @rudderjs/context is installed
+    let contextPayload: Record<string, unknown> | undefined
+    try {
+      const specifier = '@rudderjs/context'
+      const mod = await import(/* @vite-ignore */ specifier) as {
+        Context: { dehydrate(): Record<string, unknown> }
+        hasContext(): boolean
+      }
+      if (mod.hasContext()) {
+        contextPayload = mod.Context.dehydrate()
+      }
+    } catch {
+      // @rudderjs/context not installed — skip
+    }
+
+    await adapter.dispatch(this.job, {
+      delay: this._delay,
+      queue: this._queue,
+      ...(contextPayload ? { __context: contextPayload } : undefined),
+    })
   }
 }
 
@@ -65,6 +85,8 @@ export class DispatchBuilder<T extends Job> {
 export interface DispatchOptions {
   delay?: number
   queue?: string
+  /** @internal — serialized context from @rudderjs/context */
+  __context?: Record<string, unknown>
 }
 
 export interface QueueStats {

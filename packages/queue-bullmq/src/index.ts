@@ -101,7 +101,29 @@ class BullMQAdapter implements QueueAdapter {
         `Add it to the jobs[] array in config/queue.ts.`,
       )
     }
-    const instance = Object.assign(new (JobClass as new () => Job)(), bullJob.data)
+
+    // Separate __context from job data
+    const { __context, ...jobData } = bullJob.data
+    const instance = Object.assign(new (JobClass as new () => Job)(), jobData)
+
+    // Hydrate request context if @rudderjs/context is available
+    if (__context && typeof __context === 'object') {
+      try {
+        const specifier = '@rudderjs/context'
+        const mod = await import(/* @vite-ignore */ specifier) as {
+          runWithContext<T>(fn: () => T): T
+          Context: { hydrate(payload: { data: Record<string, unknown>; stacks: Record<string, unknown[]> }): void }
+        }
+        await mod.runWithContext(async () => {
+          mod.Context.hydrate(__context as { data: Record<string, unknown>; stacks: Record<string, unknown[]> })
+          await instance.handle()
+        })
+        return
+      } catch {
+        // @rudderjs/context not installed — run without context
+      }
+    }
+
     await instance.handle()
   }
 
@@ -111,9 +133,16 @@ class BullMQAdapter implements QueueAdapter {
     const delay     = options.delay ?? Cls.delay  ?? 0
     const attempts  = Cls.retries ?? 3
 
+    const data = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+
+    // Attach serialized context if provided by DispatchBuilder
+    if (options.__context) {
+      data['__context'] = options.__context
+    }
+
     await this.getQueue(queueName).add(
       job.constructor.name,
-      JSON.parse(JSON.stringify(job)) as Record<string, unknown>,
+      data,
       {
         ...(delay ? { delay } : {}),
         attempts,
