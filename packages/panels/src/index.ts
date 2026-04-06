@@ -124,12 +124,6 @@ export { Wizard, Step } from './schema/Wizard.js'
 export type { WizardMeta, StepMeta } from './schema/Wizard.js'
 export { RelationManager } from './schema/RelationManager.js'
 export type { RelationManagerMeta } from './schema/RelationManager.js'
-
-// ─── Plugins ──────────────────────────────────────────────
-
-export { activityLog, logActivity } from './plugins/ActivityLogPlugin.js'
-export type { ActivityRecord, ActivityStoreLike, ActivityLogConfig } from './plugins/ActivityLogPlugin.js'
-
 // ─── Schema elements ───────────────────────────────────────
 
 export { Text }    from './schema/Text.js'

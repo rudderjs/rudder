@@ -187,33 +187,6 @@ Requires `@rudderjs/notification` to be registered in providers.
 
 ---
 
-## Activity Log Plugin
-
-Track all CRUD changes made through the panel with the `activityLog()` plugin:
-
-```ts
-import { Panel } from '@rudderjs/panels'
-import { activityLog } from '@rudderjs/panels'
-
-Panel.make('admin')
-  .path('/admin')
-  .resources([UserResource, PostResource])
-  .use(activityLog())
-```
-
-When enabled, every create, update, and delete action is recorded with:
-
-- **Who** — the authenticated user
-- **What** — the action performed (created, updated, deleted)
-- **When** — timestamp
-- **Changes** — a diff of old vs. new values (for updates)
-
-Activity logs appear on the detail page of each record and can be browsed globally via the panel sidebar.
-
-Requires an `ActivityLog` table in your database schema.
-
----
-
 ## Fields
 
 All fields share a fluent base API:

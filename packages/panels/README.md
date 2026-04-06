@@ -42,18 +42,6 @@ export const adminPanel = Panel.make('admin')
   .resources([UserResource])
 ```
 
-#### Activity Log
-
-Track record changes with the built-in activity log plugin:
-
-```ts
-import { activityLog } from '@rudderjs/panels'
-
-Panel.make('admin')
-  .use(activityLog())
-  .use(activityLog({ trackChanges: true }))
-```
-
 ```ts
 // bootstrap/providers.ts
 import { panels } from '@rudderjs/panels'
