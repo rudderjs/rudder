@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 import type { FieldMeta } from '../Field.js'
 
 /** Conversion spec for auto-generating image sizes on upload. */
@@ -23,7 +24,7 @@ export class FileField extends Field {
 
   static make(name: string): FileField { return new FileField(name) }
 
-  getType(): string { return this._image ? 'image' : 'file' }
+  getType(): string { return this._image ? FieldType.Image : FieldType.File }
 
   accept(mime: string): this      { this._accept    = mime; return this }
   maxSize(mb: number): this       { this._maxSize   = mb;   return this }

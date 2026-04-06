@@ -13,6 +13,7 @@ import {
   mountPanelChat,
 } from './handlers/index.js'
 import { mountThemeRoutes, loadThemeOverrides } from './handlers/themeRoutes.js'
+import { mountNotificationRoutes } from './handlers/notificationRoutes.js'
 
 // Re-export for public API
 export { buildDefaultLayout } from './handlers/index.js'
@@ -79,6 +80,11 @@ export class PanelServiceProvider extends ServiceProvider {
         if (panel.hasThemeEditor()) {
           mountThemeRoutes(router, panel, mw)
         }
+      }
+
+      // Notifications
+      if (panel.hasNotifications()) {
+        mountNotificationRoutes(router, panel, mw)
       }
 
       for (const ResourceClass of panel.getResources()) {

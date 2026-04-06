@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 /**
  * ComputedField — a virtual column with no database backing.
@@ -47,5 +48,5 @@ export class ComputedField extends Field {
     return this._computeFn(record)
   }
 
-  getType(): string { return 'computed' }
+  getType(): string { return FieldType.Computed }
 }

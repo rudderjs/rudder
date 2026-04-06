@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class HiddenField extends Field {
   constructor(name: string) {
@@ -16,5 +17,5 @@ export class HiddenField extends Field {
     return this
   }
 
-  getType(): string { return 'hidden' }
+  getType(): string { return FieldType.Hidden }
 }

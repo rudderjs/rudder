@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export interface SelectOption {
   label: string
@@ -13,7 +14,7 @@ export class SelectField extends Field {
     return new SelectField(name)
   }
 
-  getType(): string { return this._multiple ? 'multiselect' : 'select' }
+  getType(): string { return this._multiple ? FieldType.MultiSelect : FieldType.Select }
 
   /** Pass an array of strings, or label/value pairs. */
   options(opts: string[] | SelectOption[]): this {

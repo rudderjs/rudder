@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class DateField extends Field {
   protected _withTime = false
@@ -7,7 +8,7 @@ export class DateField extends Field {
     return new DateField(name)
   }
 
-  getType(): string { return this._withTime ? 'datetime' : 'date' }
+  getType(): string { return this._withTime ? FieldType.DateTime : FieldType.Date }
 
   /** Include time picker alongside the date picker. */
   withTime(value = true): this {

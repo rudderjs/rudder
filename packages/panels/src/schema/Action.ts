@@ -12,12 +12,17 @@ export interface ActionMeta {
   bulk:            boolean
   row:             boolean
   url?:            string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  formFields?:     any[]
 }
 
 // ─── Action handler type ───────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ActionHandler = (records: any[]) => Promise<void> | void
+export type ActionHandler = (records: any[], formData?: Record<string, unknown>) => Promise<void> | void
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type FieldLike = { getName(): string; toMeta(): any }
 
 // ─── Action class ──────────────────────────────────────────
 
@@ -31,6 +36,7 @@ export class Action {
   protected _row             = false
   protected _handler?:       ActionHandler
   protected _url?:           string
+  protected _formFields:     FieldLike[] = []
 
   constructor(name: string) {
     this._name = name
@@ -86,6 +92,27 @@ export class Action {
     return this
   }
 
+  /**
+   * Define form fields shown in a modal dialog before executing the action.
+   * Handler receives the form data as the second argument.
+   *
+   * @example
+   * Action.make('change-status')
+   *   .form([
+   *     SelectField.make('status').options(['active', 'inactive']).required(),
+   *     TextareaField.make('reason').label('Reason for change'),
+   *   ])
+   *   .handler(async (records, formData) => {
+   *     for (const record of records) {
+   *       await record.update({ status: formData.status })
+   *     }
+   *   })
+   */
+  form(fields: FieldLike[]): this {
+    this._formFields = fields
+    return this
+  }
+
   // ── Getters ────────────────────────────────────────────
 
   getName(): string  { return this._name }
@@ -97,9 +124,11 @@ export class Action {
     return toTitleCase(this._name)
   }
 
-  async execute(records: unknown[]): Promise<void> {
+  hasForm(): boolean { return this._formFields.length > 0 }
+
+  async execute(records: unknown[], formData?: Record<string, unknown>): Promise<void> {
     if (!this._handler) throw new Error(`[RudderJS Panels] Action "${this._name}" has no handler defined.`)
-    await this._handler(records)
+    await this._handler(records, formData)
   }
 
   toMeta(): ActionMeta {
@@ -113,6 +142,7 @@ export class Action {
       bulk:            this._bulk,
       row:             this._row,
       ...(this._url !== undefined ? { url: this._url } : {}),
+      ...(this._formFields.length > 0 ? { formFields: this._formFields.map(f => f.toMeta()) } : {}),
     }
   }
 }

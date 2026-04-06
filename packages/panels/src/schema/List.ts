@@ -1,5 +1,6 @@
 import type { Filter } from './Filter.js'
 import type { Action } from './Action.js'
+import type { Import, ImportMeta } from './Import.js'
 import type { DataSource } from '../datasource.js'
 import type { PersistMode } from '../persist.js'
 import type { PanelContext } from '../types.js'
@@ -85,6 +86,8 @@ export interface ListConfig {
   onSave?:           ((record: Record<string, unknown>, field: string, value: unknown, ctx: any) => Promise<void> | void) | undefined
   autoAnimate?:      boolean | { duration?: number }
   animateScopes?:    boolean | { highlight?: boolean; content?: boolean }
+  headerActions:     Action[]
+  importConfig?:     Import | undefined
 }
 
 // ─── Legacy ListElementMeta (kept for backward compat) ──
@@ -129,6 +132,8 @@ export class List {
   protected _remember:         PersistMode = false
   protected _filters:          Filter[] = []
   protected _actions:          Action[] = []
+  protected _headerActions:    Action[] = []
+  protected _importConfig?:    Import
   protected _softDeletes       = false
   protected _titleField?:      string
   protected _descriptionField?: string
@@ -348,6 +353,15 @@ export class List {
   }
 
   /**
+   * Attach header actions — shown above the table, not bound to records.
+   * Useful for global operations like "Import", "Generate Report", etc.
+   */
+  headerActions(actions: Action[]): this {
+    this._headerActions = actions
+    return this
+  }
+
+  /**
    * Configure what happens when clicking a record.
    * `'view'` → navigate to /{id}, `'edit'` → /{id}/edit, function → custom URL.
    */
@@ -389,6 +403,18 @@ export class List {
   /** Add export button to toolbar. Downloads filtered/searched dataset. */
   exportable(formats: ('csv' | 'json')[] | boolean = true): this {
     this._exportable = formats
+    return this
+  }
+
+  /**
+   * Enable CSV/JSON import for this data view.
+   * Pass an `Import.make()` config for column mapping, validation, and transforms.
+   *
+   * @example
+   * table.importable(Import.make().columns([...]).chunkSize(50))
+   */
+  importable(config: Import): this {
+    this._importConfig = config
     return this
   }
 
@@ -565,6 +591,8 @@ export class List {
       onSave:          this._onSaveFn,
       autoAnimate:     this._autoAnimate,
       animateScopes:   this._animateScopes,
+      headerActions:   this._headerActions,
+      importConfig:    this._importConfig,
     }
   }
 

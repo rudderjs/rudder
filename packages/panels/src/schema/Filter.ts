@@ -7,6 +7,7 @@ export interface FilterMeta {
   type:  string
   label: string
   extra: Record<string, unknown>
+  indicator?: string | ((value: unknown) => string)
 }
 
 // ─── Filter base class ─────────────────────────────────────
@@ -15,6 +16,7 @@ export abstract class Filter {
   protected _name:  string
   protected _label: string | undefined
   protected _extra: Record<string, unknown> = {}
+  protected _indicator?: string | ((value: unknown) => string)
 
   constructor(name: string) {
     this._name = name
@@ -32,6 +34,12 @@ export abstract class Filter {
   getLabel(): string {
     if (this._label) return this._label
     return toTitleCase(this._name)
+  }
+
+  /** Custom indicator label shown when filter is active (e.g. badge text). */
+  indicator(label: string | ((value: unknown) => string)): this {
+    this._indicator = label
+    return this
   }
 
   abstract getType(): string
@@ -76,12 +84,14 @@ export abstract class Filter {
   }
 
   toMeta(): FilterMeta {
-    return {
+    const meta: FilterMeta = {
       name:  this._name,
       type:  this.getType(),
       label: this.getLabel(),
       extra: this._extra,
     }
+    if (this._indicator) meta.indicator = this._indicator
+    return meta
   }
 }
 

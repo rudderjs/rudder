@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class JsonField extends Field {
   constructor(name: string) {
@@ -15,5 +16,5 @@ export class JsonField extends Field {
     return this
   }
 
-  getType(): string { return 'json' }
+  getType(): string { return FieldType.Json }
 }

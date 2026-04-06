@@ -4,6 +4,8 @@ import type { Tabs, TabsMeta } from './schema/Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
 import type { ResourceAgent } from './agents/ResourceAgent.js'
 import type { ResourceAgentMeta } from './agents/types.js'
+import type { RelationManager } from './schema/RelationManager.js'
+import type { RelationManagerMeta } from './schema/RelationManager.js'
 import { Table } from './schema/Table.js'
 import { Form } from './schema/Form.js'
 
@@ -30,6 +32,7 @@ export interface ResourceMeta {
   emptyStateHeading?: string | undefined
   emptyStateDescription?: string | undefined
   agents?: ResourceAgentMeta[] | undefined
+  relations?: RelationManagerMeta[] | undefined
 }
 
 // ─── Resource base class ───────────────────────────────────
@@ -109,6 +112,24 @@ export class Resource {
    * }
    */
   detail(_record?: Record<string, unknown>): { getType(): string; toMeta(): unknown }[] {
+    return []
+  }
+
+  /**
+   * Define relation managers for inline hasMany/belongsToMany CRUD.
+   *
+   * @example
+   * relations() {
+   *   return [
+   *     RelationManager.make('comments')
+   *       .columns([Column.make('body'), Column.make('author')])
+   *       .form([TextField.make('body').required()])
+   *       .creatable()
+   *       .deletable(),
+   *   ]
+   * }
+   */
+  relations(): RelationManager[] {
     return []
   }
 
@@ -252,6 +273,11 @@ export class Resource {
     const agentDefs = this.agents()
     if (agentDefs.length > 0) {
       meta.agents = agentDefs.map(a => a.toMeta())
+    }
+
+    const relationDefs = this.relations()
+    if (relationDefs.length > 0) {
+      meta.relations = relationDefs.map(r => r.toMeta())
     }
 
     return meta

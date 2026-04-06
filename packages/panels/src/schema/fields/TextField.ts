@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class TextField extends Field {
   protected _minLength?: number
@@ -9,7 +10,7 @@ export class TextField extends Field {
     return new TextField(name)
   }
 
-  getType(): string { return 'text' }
+  getType(): string { return FieldType.Text }
 
   minLength(n: number): this {
     this._minLength = n

@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 import type { Block } from '../Block.js'
 
 export class BuilderField extends Field {
@@ -37,5 +38,5 @@ export class BuilderField extends Field {
     return this
   }
 
-  getType(): string { return 'builder' }
+  getType(): string { return FieldType.Builder }
 }
