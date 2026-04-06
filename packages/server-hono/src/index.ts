@@ -11,6 +11,7 @@ import type {
   AppRequest,
   AppResponse,
 } from '@rudderjs/contracts'
+import { attachInputAccessors } from '@rudderjs/contracts'
 
 // ─── Hono Adapter Config ───────────────────────────────────
 
@@ -57,6 +58,7 @@ function normalizeRequest(c: Context): AppRequest {
     enumerable: true,
     configurable: true,
   })
+  attachInputAccessors(req)
   return req as unknown as AppRequest
 }
 

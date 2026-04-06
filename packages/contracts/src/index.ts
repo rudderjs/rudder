@@ -71,6 +71,19 @@ export interface OrmAdapterProvider {
 
 // ─── Request & Response ────────────────────────────────────
 
+/**
+ * Thrown by typed request accessors when the value cannot be coerced.
+ */
+export class InputTypeError extends Error {
+  constructor(key: string, expected: string, received: unknown) {
+    const type = received === null ? 'null'
+      : Array.isArray(received) ? 'array'
+      : typeof received
+    super(`Input "${key}" expected ${expected}, got ${type}.`)
+    this.name = 'InputTypeError'
+  }
+}
+
 export interface AppRequest {
   method:  string
   url:     string
@@ -80,6 +93,126 @@ export interface AppRequest {
   headers: Record<string, string>
   body:    unknown
   raw:     unknown  // the original server-specific request object
+
+  // ── Typed input accessors ─────────────────────────────────
+  // Merge order: params > body > query (params take priority)
+
+  /** Raw merged input value for `key`. */
+  input<T = unknown>(key: string, fallback?: T): T
+  /** Input as a string. Throws `InputTypeError` if the value is an object or array. */
+  string(key: string, fallback?: string): string
+  /** Input as an integer. Throws `InputTypeError` if not parseable. */
+  integer(key: string, fallback?: number): number
+  /** Input as a float. Throws `InputTypeError` if not parseable. */
+  float(key: string, fallback?: number): number
+  /** Input as a boolean. Truthy: `'true'`,`'1'`,`'yes'`,`'on'`. Falsy: `'false'`,`'0'`,`'no'`,`'off'`. */
+  boolean(key: string, fallback?: boolean): boolean
+  /** Input parsed as a `Date`. Throws `InputTypeError` if not parseable. */
+  date(key: string, fallback?: Date): Date
+  /** Input as an array. Accepts arrays, comma-separated strings, or JSON array strings. */
+  array(key: string, fallback?: unknown[]): unknown[]
+  /** True if the key exists in any input source. */
+  has(key: string): boolean
+  /** True if the key is absent from all input sources. */
+  missing(key: string): boolean
+  /** True if key exists and value is non-empty (not null/undefined/''). */
+  filled(key: string): boolean
+}
+
+// ─── Input accessor factory ───────────────────────────────
+
+/**
+ * Attach typed input accessor methods to a plain `AppRequest`-shaped object.
+ * Called by server adapters in their request normalizer.
+ * Merge priority: params > body > query.
+ */
+export function attachInputAccessors(req: Record<string, unknown>): void {
+  function merged(): Record<string, unknown> {
+    const body = typeof req['body'] === 'object' && req['body'] !== null
+      ? req['body'] as Record<string, unknown>
+      : {}
+    return {
+      ...(req['query'] as Record<string, unknown>),
+      ...body,
+      ...(req['params'] as Record<string, unknown>),
+    }
+  }
+
+  req['input'] = function <T = unknown>(key: string, fallback?: T): T {
+    const val = merged()[key]
+    return (val !== undefined ? val : fallback) as T
+  }
+
+  req['has'] = function (key: string): boolean {
+    return merged()[key] !== undefined
+  }
+
+  req['missing'] = function (key: string): boolean {
+    return merged()[key] === undefined
+  }
+
+  req['filled'] = function (key: string): boolean {
+    const val = merged()[key]
+    return val !== undefined && val !== null && val !== ''
+  }
+
+  req['string'] = function (key: string, fallback?: string): string {
+    const val = merged()[key]
+    if (val === undefined || val === null) return fallback ?? ''
+    if (typeof val === 'object') throw new InputTypeError(key, 'string', val)
+    return String(val)
+  }
+
+  req['integer'] = function (key: string, fallback?: number): number {
+    const val = merged()[key]
+    if (val === undefined || val === null) return fallback ?? 0
+    const n = parseInt(String(val), 10)
+    if (isNaN(n)) throw new InputTypeError(key, 'integer', val)
+    return n
+  }
+
+  req['float'] = function (key: string, fallback?: number): number {
+    const val = merged()[key]
+    if (val === undefined || val === null) return fallback ?? 0
+    const n = parseFloat(String(val))
+    if (isNaN(n)) throw new InputTypeError(key, 'float', val)
+    return n
+  }
+
+  req['boolean'] = function (key: string, fallback?: boolean): boolean {
+    const val = merged()[key]
+    if (val === undefined || val === null) return fallback ?? false
+    if (typeof val === 'boolean') return val
+    const str = String(val).toLowerCase().trim()
+    if (['true', '1', 'yes', 'on'].includes(str))   return true
+    if (['false', '0', 'no', 'off'].includes(str))  return false
+    throw new InputTypeError(key, 'boolean', val)
+  }
+
+  req['date'] = function (key: string, fallback?: Date): Date {
+    const val = merged()[key]
+    if (val === undefined || val === null) {
+      if (fallback !== undefined) return fallback
+      throw new InputTypeError(key, 'date', undefined)
+    }
+    if (val instanceof Date) return val
+    const d = new Date(String(val))
+    if (isNaN(d.getTime())) throw new InputTypeError(key, 'date', val)
+    return d
+  }
+
+  req['array'] = function (key: string, fallback?: unknown[]): unknown[] {
+    const val = merged()[key]
+    if (val === undefined || val === null) return fallback ?? []
+    if (Array.isArray(val)) return val
+    if (typeof val === 'string') {
+      if (val.startsWith('[')) {
+        try { return JSON.parse(val) as unknown[] } catch { /* fall through to CSV */ }
+      }
+      return val.split(',').map(v => v.trim())
+    }
+    return [val]
+  }
 }
 
 export interface AppResponse {

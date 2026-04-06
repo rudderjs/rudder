@@ -1,12 +1,13 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
+import { attachInputAccessors } from '@rudderjs/contracts'
 import { z, validate, validateWith, FormRequest, ValidationError } from './validation.js'
 
 // ─── Test helpers ──────────────────────────────────────────
 
 function makeReq(overrides: Partial<AppRequest> = {}): AppRequest {
-  return {
+  const req: Record<string, unknown> = {
     method:  'POST',
     url:     '/test',
     path:    '/test',
@@ -17,6 +18,8 @@ function makeReq(overrides: Partial<AppRequest> = {}): AppRequest {
     raw:     null,
     ...overrides,
   }
+  attachInputAccessors(req)
+  return req as unknown as AppRequest
 }
 
 const res: AppResponse = {
