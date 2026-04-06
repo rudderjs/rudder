@@ -29,13 +29,17 @@ export default Application.configure({
     m.use(RateLimit.perMinute(60))
   })
   .withExceptions((e) => {
+    // Custom error type → custom response
     e.render(PaymentError, (err) =>
       new Response(JSON.stringify({ code: err.code }), {
         status: 402,
         headers: { 'Content-Type': 'application/json' },
       })
     )
-    // ValidationError → 422 JSON is handled automatically — no need to register it
+    // Override the reporter (default: @rudderjs/log when installed, otherwise console.error)
+    e.reportUsing((err) => Sentry.captureException(err))
+    // Re-throw to the server's native fallback
+    e.ignore(DebugOnlyError)
   })
   .create()
 ```
@@ -52,6 +56,13 @@ export default Application.configure({
 - `AppBuilder`, `RudderJS`
 - `app()`, `resolve()`
 - `defineConfig()`
+- `HttpException` — HTTP error with `statusCode`, `message`, `headers`
+- `abort(status, message?, headers?)` — throws `HttpException`
+- `abort_if(condition, status, message?)` — conditional abort
+- `abort_unless(condition, status, message?)` — inverse conditional abort
+- `report(err)` — report an error to the configured reporter
+- `report_if(condition, err)` — conditional report
+- `setExceptionReporter(fn)` — override the global reporter (wired automatically by `@rudderjs/log`)
 - Re-exports from `@rudderjs/rudder`, `@rudderjs/support`, and `@rudderjs/contracts` types plus built-in DI and Events primitives
 
 ## Configuration
@@ -170,25 +181,65 @@ await dispatch(new UserCreated(42))
 
 ## Exception Handling
 
+### `abort()` helpers
+
+Throw an `HttpException` from anywhere — routes, services, middleware:
+
+```ts
+import { abort, abort_if, abort_unless } from '@rudderjs/core'
+
+abort(404)                            // throws HttpException(404, 'Not Found')
+abort(403, 'Insufficient permissions')
+abort(402, 'Payment required', { 'X-Upgrade-URL': '/billing' })
+
+abort_if(!user, 401)                  // abort if condition is true
+abort_unless(user.isAdmin, 403)       // abort if condition is false
+```
+
+`HttpException` is caught automatically and rendered as JSON or HTML based on the request's `Accept` header — no `try/catch` needed.
+
+### `report()` helpers
+
+Manually report an error without aborting the request:
+
+```ts
+import { report, report_if } from '@rudderjs/core'
+
+report(new Error('Stripe webhook failed'))
+report_if(payment.failed, payment.error)
+```
+
+When `@rudderjs/log` is installed, `report()` routes through the log channel automatically. Otherwise it falls back to `console.error`.
+
+### `withExceptions` configurator
+
 ```ts
 .withExceptions((e) => {
-  // Custom error type → custom response
-  e.render(PaymentError, (err) =>
-    new Response(JSON.stringify({ code: err.code }), {
-      status: 402,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  // Custom error type → custom Response
+  e.render(PaymentError, (err, req) =>
+    Response.json({ code: err.code }, { status: 402 })
   )
 
-  // Re-throw to surface in dev error page / 500 in prod
-  e.ignore(InternalDebugError)
+  // Override the reporter (default: @rudderjs/log or console.error)
+  e.reportUsing((err) => Sentry.captureException(err))
 
-  // ValidationError → 422 JSON is handled automatically
+  // Re-throw to the server's native fallback handler
+  e.ignore(DebugOnlyError)
 })
 ```
+
+### Built-in handling (no configuration needed)
+
+| Error type | Response |
+|---|---|
+| `ValidationError` | `422` JSON `{ message, errors }` |
+| `HttpException` | Status from `statusCode`, JSON or HTML based on `Accept` |
+| Unhandled error | Reported via reporter, then `500` (with stack in debug mode) |
 
 ## Notes
 
 - `Application.create()` is singleton-based and can recreate in development/local mode when config is passed.
 - `RudderJS.boot()` boots providers; `RudderJS.handleRequest()` lazily creates the HTTP handler.
-- `ValidationError` is always caught by the exception handler and returned as 422 JSON — no try/catch needed in routes.
+- `ValidationError` is always caught and returned as 422 JSON — no try/catch needed in routes.
+- `HttpException` is always caught and rendered with its status code — no try/catch needed in routes.
+- Unhandled errors are auto-reported and render as 500. In `debug` mode the response includes the exception message and stack trace.
