@@ -193,7 +193,7 @@ export { resolveListQuery } from './resolvers/resolveListQuery.js'
 export { resolveTabs }  from './resolvers/resolveTabs.js'
 export { resolveActiveTabIndex } from './resolvers/helpers.js'
 export { resolveForm }  from './resolvers/resolveForm.js'
-export { flattenFields } from './handlers/utils.js'
+export { flattenFields } from './handlers/shared/fields.js'
 
 // ─── Registries ─────────────────────────────────────────────
 

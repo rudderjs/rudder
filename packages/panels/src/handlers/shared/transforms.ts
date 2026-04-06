@@ -1,5 +1,5 @@
-import type { Resource, FieldOrGrouping } from '../Resource.js'
-import { ComputedField } from '../schema/fields/ComputedField.js'
+import type { Resource, FieldOrGrouping } from '../../Resource.js'
+import { ComputedField } from '../../schema/fields/ComputedField.js'
 import { flattenFields } from './fields.js'
 
 export function applyTransforms(resource: Resource, records: unknown[]): unknown[] {

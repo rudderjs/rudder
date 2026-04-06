@@ -5,10 +5,13 @@ import type { Plugin } from 'vite'
 // ─── SSR / build externals ─────────────────────────────────
 
 const SSR_EXTERNALS = [
+  // CLI-only — uses node:process stdin/readline
   '@clack/core',
   '@clack/prompts',
+  // Queue adapters — server-only
   '@rudderjs/queue-inngest',
   '@rudderjs/queue-bullmq',
+  // ORM adapters — server-only
   '@rudderjs/orm-drizzle',
   // Database drivers — Node.js-only, must not be bundled into the client
   'pg',
@@ -25,6 +28,10 @@ const SSR_EXTERNALS = [
   '@rudderjs/storage',
   // Image — uses sharp (native binary)
   '@rudderjs/image',
+  // Optional icon adapters — may not be installed
+  '@tabler/icons-react',
+  '@phosphor-icons/react',
+  '@remixicon/react',
 ]
 
 // ─── SSR no-externals ──────────────────────────────────────
@@ -136,8 +143,13 @@ export function rudderjs(): Promise<Plugin[]> {
             },
             build: {
               rollupOptions: {
-                external: (id: string) =>
-                  SSR_EXTERNALS.some(e => id === e || id.startsWith(e + '/')),
+                external: (id: string, importer: string | undefined, isResolved: boolean) => {
+                  // Externalize known server-only packages
+                  if (SSR_EXTERNALS.some(e => id === e || id.startsWith(e + '/'))) return true
+                  // Externalize node: built-ins that leak through @rudderjs/* packages
+                  if (id.startsWith('node:')) return true
+                  return false
+                },
                 onwarn(warning, warn) {
                   // Suppress "externalized for browser compatibility" for server-only
                   // packages — node:crypto (middleware), node:module (support), ioredis.

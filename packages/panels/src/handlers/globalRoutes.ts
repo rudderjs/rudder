@@ -3,7 +3,9 @@ import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { Global } from '../Global.js'
 import type { Resource } from '../Resource.js'
-import { buildContext, coerceGlobalPayload, validatePayload } from './utils.js'
+import { buildContext } from './shared/context.js'
+import { coerceGlobalPayload } from './shared/coercion.js'
+import { validatePayload } from './shared/validation.js'
 
 // ── Minimal structural types for dynamically-resolved dependencies ──
 

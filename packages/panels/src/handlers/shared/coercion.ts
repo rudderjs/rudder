@@ -1,6 +1,6 @@
-import type { Field } from '../schema/Field.js'
-import type { Resource, FieldOrGrouping } from '../Resource.js'
-import type { Global } from '../Global.js'
+import type { Field } from '../../schema/Field.js'
+import type { Resource, FieldOrGrouping } from '../../Resource.js'
+import type { Global } from '../../Global.js'
 import { flattenFields } from './fields.js'
 
 // ─── Shared field coercion core ──────────────────────────────

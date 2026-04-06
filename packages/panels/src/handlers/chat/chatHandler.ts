@@ -8,7 +8,7 @@ import { loadAi, loadLive } from './lazyImports.js'
 import { buildRunAgentTool } from './tools/runAgentTool.js'
 import { buildEditTextTool } from './tools/editTextTool.js'
 import { generateConversationTitle } from './conversationManager.js'
-import { buildContext } from '../utils.js'
+import { buildContext } from '../shared/context.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

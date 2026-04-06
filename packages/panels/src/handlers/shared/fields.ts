@@ -1,5 +1,5 @@
-import type { Field } from '../schema/Field.js'
-import type { FieldOrGrouping } from '../Resource.js'
+import type { Field } from '../../schema/Field.js'
+import type { FieldOrGrouping } from '../../Resource.js'
 
 /** Derive the Prisma relation name from a RelationField. */
 export function relationName(field: Field): string {

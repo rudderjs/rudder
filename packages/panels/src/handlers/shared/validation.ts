@@ -1,5 +1,5 @@
-import type { Field } from '../schema/Field.js'
-import type { Resource, FieldOrGrouping } from '../Resource.js'
+import type { Field } from '../../schema/Field.js'
+import type { Resource, FieldOrGrouping } from '../../Resource.js'
 import { flattenFields } from './fields.js'
 
 // ─── Shared field validation core ────────────────────────────
