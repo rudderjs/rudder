@@ -112,6 +112,7 @@ rudderjs/
 │   │                       #   Pool.concurrency(), request/response interceptors,
 │   │                       #   Http.fake() with URL pattern matching + assertions
 │   ├── localization/       # i18n — trans(), setLocale(), locale middleware, JSON translation files
+│   ├── testing/            # TestCase, TestResponse, RefreshDatabase, WithFaker, database assertions
 │   ├── boost/              # AI developer tools — MCP server exposing project internals
 │   └── cli/                # Rudder-style CLI (make:*, module:*, module:publish, user commands)
 ├── create-rudderjs-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
@@ -208,61 +209,86 @@ my-app/
 ## Dependency Flow
 
 ```
-Level 0 — No framework deps:
-  @rudderjs/contracts    (pure types + runtime helpers)
-  @rudderjs/support      (Env, Collection, Str, Num, ConfigRepository)
-
-Level 1 — Depends on contracts/support only:
-  @rudderjs/middleware   (Pipeline, CORS, Logger, Throttle, RateLimit)
-  @rudderjs/validation   (FormRequest, z)
-  @rudderjs/router       (fluent + decorator routing, named routes, route(), Url, signed URLs)
-  @rudderjs/server-hono  (Hono adapter)
-  @rudderjs/rudder       (CommandRegistry, Command base)
-
-Level 2 — Core framework:
-  @rudderjs/core         (Application, DI container, ServiceProvider, ExceptionHandler,
-                          abort(), report(), EventDispatcher)
-                          re-exports: contracts, support, rudder
-
-Level 3 — Infrastructure:
-  @rudderjs/orm          (Model, casts, accessors, JsonResource, ModelCollection, ModelFactory)
-  @rudderjs/queue        (Job, Chain, Batch, unique, job middleware, closures)
-  @rudderjs/cache        (Memory + Redis)
-  @rudderjs/storage      (Local + S3)
-  @rudderjs/hash         (bcrypt + argon2)
-  @rudderjs/crypt        (AES-256-CBC)
-  @rudderjs/session      (cookie + redis)
-  @rudderjs/log          (channels, formatters, context, LogFake)
-  @rudderjs/http         (fluent fetch, retries, pools, Http.fake())
-
-Level 4 — Adapter packages:
-  @rudderjs/orm-prisma   (Prisma adapter)
-  @rudderjs/orm-drizzle  (Drizzle adapter)
-  @rudderjs/queue-bullmq (BullMQ adapter)
-  @rudderjs/queue-inngest(Inngest adapter)
-
-Level 5 — Auth & communication:
-  @rudderjs/auth         (guards, providers, gates, email verification — depends on hash + session)
-  @rudderjs/sanctum      (API tokens — depends on auth)
-  @rudderjs/socialite    (OAuth — GitHub, Google, Facebook, Apple)
-  @rudderjs/mail         (Mailable, SMTP, failover, markdown, queued, preview)
-  @rudderjs/notification (mail + database + broadcast channels, queued, on-demand)
-  @rudderjs/schedule     (cron, sub-minute, hooks, onOneServer)
-  @rudderjs/broadcast    (WebSocket channels)
-  @rudderjs/live         (Yjs CRDT real-time sync)
-  @rudderjs/localization (i18n)
-
-Level 6 — UI & AI:
-  @rudderjs/ai           (4 providers, Agent, tools, streaming, middleware)
-  @rudderjs/panels       (admin panel, resources, plugins, AI chat, theming)
-  @rudderjs/panels-lexical (Lexical rich-text editor)
-  @rudderjs/media        (media library — Panel.use plugin)
-  @rudderjs/workspaces   (AI workspace canvas — Panel.use plugin)
-  @rudderjs/image        (image processing — wraps sharp)
-
-Level 7 — Dev tools:
-  @rudderjs/boost        (MCP server for AI coding assistants)
-  @rudderjs/cli          (make:*, module:*, module:publish)
+RudderJS Framework
+│
+├─── Foundation Layer (zero deps)
+│    ├── @rudderjs/contracts          Pure TypeScript types + runtime helpers
+│    └── @rudderjs/support            Env, Collection, Str, Num, ConfigRepository
+│
+├─── Core Layer
+│    ├── @rudderjs/middleware          Pipeline, CORS, Logger, Throttle, RateLimit
+│    ├── @rudderjs/validation         FormRequest, validate(), Zod re-export
+│    ├── @rudderjs/router             Decorator routing, route(), signed URLs
+│    ├── @rudderjs/server-hono        Hono HTTP adapter, production WS upgrade
+│    ├── @rudderjs/rudder             Command registry, base class
+│    └── @rudderjs/core               Application, Container, ServiceProvider, Events
+│         ├── DI: @Injectable, @Inject
+│         ├── Errors: abort(), HttpException
+│         └── Event.fake()
+│
+├─── Data Layer
+│    ├── @rudderjs/orm                Model, QueryBuilder, casts, resources, factories
+│    │    ├── @rudderjs/orm-prisma    Prisma adapter
+│    │    └── @rudderjs/orm-drizzle   Drizzle adapter (sqlite, pg, libsql)
+│    ├── @rudderjs/cache              Cache facade, Memory + Redis, Cache.fake()
+│    ├── @rudderjs/session            Cookie + Redis session drivers
+│    └── @rudderjs/queue              Job, dispatch, chains, batches, Queue.fake()
+│         ├── @rudderjs/queue-bullmq  BullMQ adapter
+│         └── @rudderjs/queue-inngest Inngest adapter
+│
+├─── Auth & Security
+│    ├── @rudderjs/hash               Bcrypt, Argon2
+│    ├── @rudderjs/crypt              AES-256-CBC encryption
+│    ├── @rudderjs/auth               Guards, Providers, Gates, PasswordBroker
+│    ├── @rudderjs/sanctum            API tokens, TokenGuard
+│    └── @rudderjs/socialite          OAuth (GitHub, Google, Facebook, Apple)
+│
+├─── Communication
+│    ├── @rudderjs/mail               Mailable, SMTP, Failover, Markdown, Mail.fake()
+│    ├── @rudderjs/notification       Multi-channel, queued, Notification.fake()
+│    ├── @rudderjs/broadcast          WebSocket channels (public, private, presence)
+│    └── @rudderjs/live               Yjs CRDT real-time sync
+│
+├─── Utilities
+│    ├── @rudderjs/log                Structured logging, channels, LogFake
+│    ├── @rudderjs/http               Fluent fetch, retries, pools, Http.fake()
+│    ├── @rudderjs/schedule           Cron tasks, sub-minute, hooks, onOneServer
+│    ├── @rudderjs/localization       i18n, trans(), locale middleware
+│    ├── @rudderjs/image              Image processing (sharp wrapper)
+│    └── @rudderjs/storage            Local + S3 file storage
+│
+├─── AI
+│    ├── @rudderjs/ai                 4 providers, Agent, tools, streaming, AiFake
+│    └── @rudderjs/boost              MCP server for AI coding assistants
+│
+├─── Admin Panels
+│    └── @rudderjs/panels             Panel builder, Resources, schema elements
+│         ├── Schema: Field (20 types), Column, Section, Tabs, Form,
+│         │           Table/List, Stats, Chart, Dashboard, Widget,
+│         │           Wizard, Step, RelationManager, Import
+│         ├── Filters: Select, Search, Date, Boolean, Number, Query
+│         ├── Actions: Action (.form()), ActionGroup, headerActions
+│         ├── AI: ResourceAgent, chat sidebar, edit_text, run_agent
+│         ├── Themes: 4 presets, colors, fonts, icons, themeEditor
+│         ├── Real-time: Yjs collaboration, live tables, version history
+│         ├── Notifications: Panel.notifications() widget
+│         └── Plugins (via Panel.use())
+│              ├── @rudderjs/panels-lexical    Rich text editor (Lexical)
+│              ├── @rudderjs/media             Media library, file browser
+│              └── @rudderjs/workspaces        AI workspace canvas
+│
+├─── Testing
+│    └── @rudderjs/testing            TestCase, TestResponse, RefreshDatabase, WithFaker
+│
+├─── CLI
+│    ├── @rudderjs/rudder             Command registry, base class
+│    └── @rudderjs/cli                make:*, module:*, vendor:publish
+│
+├─── Scaffolding
+│    └── create-rudderjs-app          Interactive project scaffolder
+│
+└─── Build
+     └── @rudderjs/vite               Vike integration, SSR externals, WS patch
 ```
 
 **Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types. `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core. `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer`. Never add `@rudderjs/core` to router's dependencies.
@@ -813,6 +839,8 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | Phase 2 | Plan 2: ORM & Data Layer (casts, accessors, resources, factories, serialization) | ✅ Complete |
 | Phase 2 | Plan 3: Queue & Scheduling (chains, batches, unique, middleware, sub-minute, hooks) | ✅ Complete |
 | Phase 3 | Plan 4: Auth & Mail (email verification, queued mail, markdown, failover, queued notifications) | ✅ Complete |
-| Phase 4 | Plan 5: Advanced Features (context, pennant, scoped/deferred/contextual bindings, process, concurrency) | Planned |
-| Phase 4 | Plan 6: Testing Infrastructure (TestCase, Queue.fake, Mail.fake, Notification.fake, Event.fake, Cache.fake) | Planned |
-| Phase 5 | Plan 7: Monitoring & Observability (Pulse, Telescope, Horizon, Nightwatch) | Planned |
+| Phase 4 | Plan 5: Advanced Features (context, pennant, scoped/deferred/contextual bindings, process, concurrency) | ⬜ Next |
+| Phase 4 | Plan 6: Testing Infrastructure (TestCase, Queue.fake, Mail.fake, Notification.fake, Event.fake, Cache.fake) | ✅ Complete |
+| Phase 5 | Plan 7: Monitoring & Observability (Pulse, Telescope, Horizon, Nightwatch) | ⬜ Later |
+| — | Panels Improvements (filters, actions, import, wizard, relations, notifications, handler refactoring) | ✅ Complete |
+| — | Production Build Fixes (node:crypto, WS upgrade, vite externals) | ✅ Complete |

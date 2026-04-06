@@ -229,51 +229,84 @@ rudderjs/
 ### Dependency Flow
 
 ```
-@rudderjs/contracts   (pure types, no runtime)
-       │
-@rudderjs/support     (Env, Collection, helpers)
-@rudderjs/middleware  (Pipeline, built-ins, RateLimit)
-@rudderjs/validation  (FormRequest, z)
-       │
-@rudderjs/router      @rudderjs/server-hono
-       │
-@rudderjs/core        (Application, Container, ServiceProvider, bootstrap)
-       │
-@rudderjs/orm    @rudderjs/queue    @rudderjs/cache    @rudderjs/storage
-       │              │              (redis built-in)   (s3 built-in)
- orm-prisma      queue-bullmq
- orm-drizzle     queue-inngest
-       │
-@rudderjs/hash        (bcrypt/argon2 password hashing)
-@rudderjs/crypt       (AES-256-CBC symmetric encryption)
-       │
-@rudderjs/auth        (native auth: guards, providers, gates/policies, password broker)
-       │              (depends on hash + session)
-@rudderjs/sanctum     (API tokens, TokenGuard — depends on auth)
-@rudderjs/socialite   (OAuth — GitHub, Google, Facebook, Apple)
-       │
-@rudderjs/notification              @rudderjs/mail   @rudderjs/schedule
-       │
-@rudderjs/localization
-
-@rudderjs/ai          (4 providers, Agent, tools, streaming, middleware)
-       │
-@rudderjs/broadcast   @rudderjs/live     @rudderjs/panels
-       │              (Yjs CRDT)          (admin panel, resources, plugins)
-       │                                        │
-       │                               @rudderjs/panels-lexical
-       │                               @rudderjs/media  (Panel.use plugin)
-       │                               @rudderjs/workspaces (Panel.use plugin, uses @rudderjs/ai)
-       │
-@rudderjs/image       (standalone, used by media for conversions)
-
-@rudderjs/log         (structured logging — no runtime deps beyond core)
-
-@rudderjs/http        (HTTP client — no deps, uses native fetch)
-
-@rudderjs/boost       (MCP server, depends on core)
-
-@rudderjs/testing     (TestCase, TestResponse, RefreshDatabase, WithFaker, actingAs — depends on core + orm)
+RudderJS Framework
+│
+├─── Foundation Layer (zero deps)
+│    ├── @rudderjs/contracts          Pure TypeScript types
+│    └── @rudderjs/support            Env, Collection, Str, Num, helpers
+│
+├─── Core Layer
+│    ├── @rudderjs/middleware          Pipeline, CORS, Logger, Throttle, RateLimit
+│    ├── @rudderjs/validation         FormRequest, validate(), Zod re-export
+│    ├── @rudderjs/router             Decorator routing, route(), signed URLs
+│    ├── @rudderjs/server-hono        Hono HTTP adapter, production WS upgrade
+│    └── @rudderjs/core               Application, Container, ServiceProvider, Events
+│         ├── DI: @Injectable, @Inject
+│         ├── Errors: abort(), HttpException
+│         └── Event.fake()
+│
+├─── Data Layer
+│    ├── @rudderjs/orm                Model, QueryBuilder, casts, resources, factories
+│    │    ├── @rudderjs/orm-prisma    Prisma adapter
+│    │    └── @rudderjs/orm-drizzle   Drizzle adapter (sqlite, pg, libsql)
+│    ├── @rudderjs/cache              Cache facade, Memory + Redis, Cache.fake()
+│    └── @rudderjs/queue              Job, dispatch, chains, batches, Queue.fake()
+│         ├── @rudderjs/queue-bullmq  BullMQ adapter
+│         └── @rudderjs/queue-inngest Inngest adapter
+│
+├─── Auth & Security
+│    ├── @rudderjs/hash               Bcrypt, Argon2
+│    ├── @rudderjs/crypt              AES-256-CBC encryption
+│    ├── @rudderjs/auth               Guards, Providers, Gates, PasswordBroker
+│    ├── @rudderjs/sanctum            API tokens, TokenGuard
+│    └── @rudderjs/socialite          OAuth (GitHub, Google, Facebook, Apple)
+│
+├─── Communication
+│    ├── @rudderjs/mail               Mailable, SMTP, Failover, Markdown, Mail.fake()
+│    ├── @rudderjs/notification       Multi-channel, queued, Notification.fake()
+│    ├── @rudderjs/broadcast          WebSocket channels (public, private, presence)
+│    └── @rudderjs/live               Yjs CRDT real-time sync
+│
+├─── Utilities
+│    ├── @rudderjs/log                Structured logging, channels, LogFake
+│    ├── @rudderjs/http               Fluent fetch, retries, pools, Http.fake()
+│    ├── @rudderjs/schedule           Cron tasks, sub-minute, hooks, onOneServer
+│    ├── @rudderjs/localization       i18n, trans(), locale middleware
+│    ├── @rudderjs/image              Image processing (sharp wrapper)
+│    └── @rudderjs/storage            Local + S3 file storage
+│
+├─── AI
+│    ├── @rudderjs/ai                 4 providers, Agent, tools, streaming, AiFake
+│    └── @rudderjs/boost              MCP server for AI coding assistants
+│
+├─── Admin Panels
+│    └── @rudderjs/panels             Panel builder, Resources, schema elements
+│         ├── Schema: Field (20 types), Column, Section, Tabs, Form,
+│         │           Table/List, Stats, Chart, Dashboard, Widget,
+│         │           Wizard, Step, RelationManager, Import
+│         ├── Filters: Select, Search, Date, Boolean, Number, Query
+│         ├── Actions: Action (.form()), ActionGroup, headerActions
+│         ├── AI: ResourceAgent, chat sidebar, edit_text, run_agent
+│         ├── Themes: 4 presets, colors, fonts, icons, themeEditor
+│         ├── Real-time: Yjs collaboration, live tables, version history
+│         ├── Notifications: Panel.notifications() widget
+│         └── Plugins (via Panel.use())
+│              ├── @rudderjs/panels-lexical    Rich text editor (Lexical)
+│              ├── @rudderjs/media             Media library, file browser
+│              └── @rudderjs/workspaces        AI workspace canvas
+│
+├─── Testing
+│    └── @rudderjs/testing            TestCase, TestResponse, RefreshDatabase, WithFaker
+│
+├─── CLI
+│    ├── @rudderjs/rudder             Command registry, base class
+│    └── @rudderjs/cli                make:*, module:*, vendor:publish
+│
+├─── Scaffolding
+│    └── create-rudderjs-app          Interactive project scaffolder
+│
+└─── Build
+     └── @rudderjs/vite               Vike integration, SSR externals, WS patch
 ```
 
 > **Cycle resolution**: `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer('@rudderjs/router')`. Never add `@rudderjs/core` to router's `dependencies` or `devDependencies`.
