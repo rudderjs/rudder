@@ -105,28 +105,28 @@
 
 ---
 
-## Plan 6: Testing Infrastructure
+## Plan 6: Testing Infrastructure ✅
 
 *Makes the framework properly testable.*
 
-**Priority**: Medium-High — testing unlocks confidence for everything else.
+**Status**: Complete
 
-| # | Package | Feature | Effort | Depends On |
-|---|---|---|---|---|
-| 6.1 | `@rudderjs/testing` (new) | Testing base — `TestCase` class with app bootstrapping, `RefreshDatabase` trait (truncate/migrate), `WithFaker` (data generation), request helpers (`get`, `post`, `put`, `delete`), response assertions (`assertOk`, `assertRedirect`, `assertJson`) | M | core |
-| 6.2 | `@rudderjs/queue` | `Queue.fake()` — in-memory fake driver, `assertPushed()`, `assertNotPushed()`, `assertPushedOn()`, `assertCount()`, chain/batch assertions | S | — |
-| 6.3 | `@rudderjs/mail` | `Mail.fake()` — `assertSent()`, `assertQueued()`, `assertNotSent()`, `assertSentCount()`, content assertions | S | — |
-| 6.4 | `@rudderjs/notification` | `Notification.fake()` — `assertSentTo()`, `assertNotSentTo()`, `assertCount()`, channel assertions | S | — |
-| 6.5 | `@rudderjs/http` | `Http.fake()` — ~~URL pattern matching, response sequences, assertions~~ **Already implemented in Plan 1** | — | ✅ |
-| 6.6 | `@rudderjs/core` | `Event.fake()` — `assertDispatched()`, `assertNotDispatched()`, `assertDispatchedTimes()` | S | — |
-| 6.7 | `@rudderjs/cache` | `Cache.fake()` — in-memory test driver with assertions | S | — |
+| # | Package | Feature | Effort | Depends On | Status |
+|---|---|---|---|---|---|
+| 6.1 | `@rudderjs/testing` (new) | Testing base — `TestCase` class with app bootstrapping, `RefreshDatabase` trait (truncate/migrate), `WithFaker` (data generation), request helpers (`get`, `post`, `put`, `delete`), response assertions (`assertOk`, `assertRedirect`, `assertJson`) | M | core | ✅ |
+| 6.2 | `@rudderjs/queue` | `Queue.fake()` — in-memory fake driver, `assertPushed()`, `assertNotPushed()`, `assertPushedOn()`, `assertCount()`, chain/batch assertions | S | — | ✅ |
+| 6.3 | `@rudderjs/mail` | `Mail.fake()` — `assertSent()`, `assertQueued()`, `assertNotSent()`, `assertSentCount()`, content assertions | S | — | ✅ |
+| 6.4 | `@rudderjs/notification` | `Notification.fake()` — `assertSentTo()`, `assertNotSentTo()`, `assertCount()`, channel assertions | S | — | ✅ |
+| 6.5 | `@rudderjs/http` | `Http.fake()` — ~~URL pattern matching, response sequences, assertions~~ **Already implemented in Plan 1** | — | ✅ | ✅ |
+| 6.6 | `@rudderjs/core` | `Event.fake()` — `assertDispatched()`, `assertNotDispatched()`, `assertDispatchedTimes()` | S | — | ✅ |
+| 6.7 | `@rudderjs/cache` | `Cache.fake()` — in-memory test driver with assertions | S | — | ✅ |
 
 ### Deliverables
-- [ ] `@rudderjs/testing` package with TestCase + request helpers + response assertions
-- [ ] `RefreshDatabase` trait for test isolation
+- [x] `@rudderjs/testing` package with TestCase + request helpers + response assertions
+- [x] `RefreshDatabase` trait for test isolation
 - [x] `Http.fake()` — done (Plan 1.2)
-- [ ] Fake drivers for: Queue, Mail, Notification, Event, Cache
-- [ ] Full assertion APIs on all fakes
+- [x] Fake drivers for: Queue, Mail, Notification, Event, Cache
+- [x] Full assertion APIs on all fakes
 
 ---
 
@@ -327,7 +327,7 @@ Phase 2 ──── Plan 2 (ORM) + Plan 3 (Queue/Schedule)  ← parallel  ✅ D
 Phase 3 ──── Plan 4 (Auth/Mail)                                   ✅ DONE
               ├── email verification, queued mail, markdown, failover
               │
-Phase 4 ──── Plan 5 (Advanced) + Plan 6 (Testing)  ← parallel    ⬜ NEXT
+Phase 4 ──── Plan 5 (Advanced) + Plan 6 (Testing)  ← parallel    ✅/⬜ (Plan 6 DONE)
               ├── context, pennant, process, concurrency, fakes
               │
 Phase 5 ──── Plan 7 (Monitoring & Observability)                  ⬜ LATER
@@ -346,7 +346,7 @@ Phase 5 ──── Plan 7 (Monitoring & Observability)                  ⬜ LA
 | `@rudderjs/pennant` | 5 | Core framework | ⬜ |
 | `@rudderjs/process` | 5 | Core framework | ⬜ |
 | `@rudderjs/concurrency` | 5 | Core framework | ⬜ |
-| `@rudderjs/testing` | 6 | Core framework | ⬜ |
+| `@rudderjs/testing` | 6 | Core framework | ✅ |
 | `@pilotiq/pulse` | 7 | Panel plugin | ⬜ |
 | `@pilotiq/telescope` | 7 | Panel plugin | ⬜ |
 | `@pilotiq/horizon` | 7 | Panel plugin | ⬜ |
@@ -358,12 +358,12 @@ Phase 5 ──── Plan 7 (Monitoring & Observability)                  ⬜ LA
 |---|---|---|---|
 | `@rudderjs/support` | 1 | +Str, +Num, +15 Collection methods | ✅ |
 | `@rudderjs/contracts` | 1 | +typed request input | ✅ |
-| `@rudderjs/core` | 1, 5 | +ExceptionHandler ✅ / +scoped/deferred/contextual bindings ⬜ | partial |
+| `@rudderjs/core` | 1, 5, 6 | +ExceptionHandler ✅ / +scoped/deferred/contextual bindings ⬜ / +Event.fake() ✅ | partial |
 | `@rudderjs/router` | 1 | +URL generation, +signed URLs | ✅ |
 | `@rudderjs/orm` | 2 | +casts, +accessors, +resources, +factories, +serialization | ✅ |
-| `@rudderjs/queue` | 3, 6 | +chains, +batches, +unique, +middleware, +closures ✅ / +fake ⬜ | partial |
+| `@rudderjs/queue` | 3, 6 | +chains, +batches, +unique, +middleware, +closures ✅ / +fake ✅ | ✅ |
 | `@rudderjs/schedule` | 3 | +sub-minute, +hooks, +onOneServer | ✅ |
 | `@rudderjs/auth` | 4 | +email verification | ✅ |
-| `@rudderjs/mail` | 4, 6 | +queued, +markdown, +failover, +preview ✅ / +fake ⬜ | partial |
-| `@rudderjs/notification` | 4, 6 | +queued, +broadcast channel, +on-demand ✅ / +fake ⬜ | partial |
-| `@rudderjs/cache` | 6 | +fake | ⬜ |
+| `@rudderjs/mail` | 4, 6 | +queued, +markdown, +failover, +preview ✅ / +fake ✅ | ✅ |
+| `@rudderjs/notification` | 4, 6 | +queued, +broadcast channel, +on-demand ✅ / +fake ✅ | ✅ |
+| `@rudderjs/cache` | 6 | +fake | ✅ |

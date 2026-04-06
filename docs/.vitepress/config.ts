@@ -70,6 +70,7 @@ export default defineConfig({
         {
           text: 'Production',
           items: [
+            { text: 'Testing', link: '/guide/testing' },
             { text: 'Deployment', link: '/guide/deployment' },
           ],
         },
