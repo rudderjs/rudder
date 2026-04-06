@@ -2,7 +2,7 @@ import type { AppRequest, AppResponse } from '@rudderjs/core'
 import type { Resource } from '../Resource.js'
 import type { ResourceAgent, ResourceAgentContext } from '../agents/ResourceAgent.js'
 import type { ModelClass, RecordRow } from '../types.js'
-import { buildContext } from './utils.js'
+import { buildContext } from './shared/context.js'
 
 /**
  * SSE streaming handler for running a ResourceAgent against a record.

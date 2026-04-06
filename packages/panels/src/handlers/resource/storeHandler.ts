@@ -1,7 +1,9 @@
 import type { AppRequest, AppResponse } from '@rudderjs/core'
 import type { Resource } from '../../Resource.js'
 import type { ModelClass, RecordRow } from '../../types.js'
-import { buildContext, coercePayload, validatePayload, liveBroadcast } from '../utils.js'
+import { buildContext, liveBroadcast } from '../shared/context.js'
+import { coercePayload } from '../shared/coercion.js'
+import { validatePayload } from '../shared/validation.js'
 
 export function handleStore(
   ResourceClass: typeof Resource,

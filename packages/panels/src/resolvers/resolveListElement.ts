@@ -141,7 +141,7 @@ export async function resolveDataView(
   // 2. Form-level ComputedField + display transforms (for resource tables)
   if (config.resourceClass) {
     try {
-      const { applyTransforms } = await import('../handlers/utils.js')
+      const { applyTransforms } = await import('../handlers/shared/transforms.js')
       const resource = new (config.resourceClass as { new(): { _resolveForm(): unknown } })()
       // applyTransforms returns new array (doesn't mutate) — must capture return value
       const transformed = applyTransforms(resource as any, result.records)

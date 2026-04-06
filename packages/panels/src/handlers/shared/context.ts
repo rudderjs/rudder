@@ -1,5 +1,5 @@
 import type { AppRequest } from '@rudderjs/core'
-import type { PanelContext } from '../types.js'
+import type { PanelContext } from '../../types.js'
 
 export function buildContext(req: AppRequest): PanelContext {
   return {

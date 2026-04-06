@@ -1,7 +1,9 @@
 import type { AppRequest, AppResponse } from '@rudderjs/core'
 import type { Resource, FieldOrGrouping } from '../../Resource.js'
 import type { ModelClass, QueryBuilderLike, RecordRow } from '../../types.js'
-import { flattenFields, buildContext, applyTransforms } from '../utils.js'
+import { flattenFields } from '../shared/fields.js'
+import { buildContext } from '../shared/context.js'
+import { applyTransforms } from '../shared/transforms.js'
 
 export function handleShow(
   ResourceClass: typeof Resource,

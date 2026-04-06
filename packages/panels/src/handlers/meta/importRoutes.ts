@@ -4,7 +4,7 @@ import type { Panel } from '../../Panel.js'
 import type { Resource } from '../../Resource.js'
 import type { ModelClass, RecordRow } from '../../types.js'
 import type { Import } from '../../schema/Import.js'
-import { buildContext } from '../context.js'
+import { buildContext } from '../shared/context.js'
 
 /**
  * Parse CSV text into an array of records.

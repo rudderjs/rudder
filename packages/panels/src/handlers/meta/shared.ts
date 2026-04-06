@@ -1,6 +1,6 @@
 import type { AppRequest } from '@rudderjs/core'
 import type { Panel } from '../../Panel.js'
-import { buildContext } from '../utils.js'
+import { buildContext } from '../shared/context.js'
 import { debugWarn } from '../../debug.js'
 
 /**

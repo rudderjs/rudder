@@ -3,7 +3,9 @@ import type { RouterLike } from './types.js'
 import type { Panel } from '../Panel.js'
 import type { Resource } from '../Resource.js'
 import type { ModelClass, RecordRow } from '../types.js'
-import { flattenFields, buildContext, coercePayload, liveBroadcast } from './utils.js'
+import { flattenFields } from './shared/fields.js'
+import { buildContext, liveBroadcast } from './shared/context.js'
+import { coercePayload } from './shared/coercion.js'
 
 /** Extract a named route parameter — always returns a string (empty if somehow absent). */
 function param(req: AppRequest, name: string): string {

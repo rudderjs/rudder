@@ -4,7 +4,9 @@ import type { Panel } from '../../Panel.js'
 import { FormRegistry } from '../../registries/FormRegistry.js'
 import { ComputeRegistry } from '../../registries/ComputeRegistry.js'
 import { warmUpRegistries, debugWarn, buildContext } from './shared.js'
-import { flattenFields, coerceFormPayload, validateFormPayload } from '../utils.js'
+import { flattenFields } from '../shared/fields.js'
+import { coerceFormPayload } from '../shared/coercion.js'
+import { validateFormPayload } from '../shared/validation.js'
 
 export function mountFormRoutes(
   router: RouterLike,

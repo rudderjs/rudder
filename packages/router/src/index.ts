@@ -1,5 +1,13 @@
 import 'reflect-metadata'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+
+// Lazy-load node:crypto to avoid bundling it into the client.
+// Only used by Url (signed URLs) and ValidateSignature — server-only features.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _crypto: { createHmac: any; timingSafeEqual: any } | undefined
+// Fire-and-forget: preload on server, no-op in browser
+if (typeof globalThis.process !== 'undefined') {
+  import(/* @vite-ignore */ 'node:crypto').then(m => { _crypto = m }).catch(() => {})
+}
 import type {
   ServerAdapter,
   RouteDefinition,
@@ -268,7 +276,8 @@ function _computeSignature(pathname: string, params: URLSearchParams): string {
       .sort(([a], [b]) => a.localeCompare(b))
   )
   const toSign = sorted.size > 0 ? `${pathname}?${sorted.toString()}` : pathname
-  return createHmac('sha256', _getSigningKey()).update(toSign).digest('hex')
+  if (!_crypto) throw new Error('[RudderJS Router] node:crypto not available — Url signing requires a server environment.')
+  return _crypto.createHmac('sha256', _getSigningKey()).update(toSign).digest('hex')
 }
 
 export class Url {
@@ -358,7 +367,8 @@ export class Url {
     const expected = _computeSignature(pathname, params)
 
     try {
-      return timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+      if (!_crypto) return signature === expected
+      return _crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
     } catch {
       return false
     }
