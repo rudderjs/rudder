@@ -8,6 +8,17 @@ export class ScheduledTask {
   private _description = ''
   private _timezone?:  string
 
+  // ── Hooks (3.7) ───────────────────────────────────────
+  private _beforeFn?:    () => void | Promise<void>
+  private _afterFn?:     () => void | Promise<void>
+  private _onSuccessFn?: () => void | Promise<void>
+  private _onFailureFn?: (error: unknown) => void | Promise<void>
+  private _withoutOverlapping   = false
+  private _overlapExpiresAt     = 1440 // minutes (24h default)
+  private _overlapKey?:         string
+  private _evenInMaintenance    = false
+  private _oneServer            = false
+
   constructor(private readonly callback: () => void | Promise<void>) {}
 
   // ── Cron ───────────────────────────────────────────────
@@ -19,7 +30,12 @@ export class ScheduledTask {
   timezone(tz: string): this { this._timezone = tz; return this }
 
   // ── Sub-minute ─────────────────────────────────────────
-  everySecond(): this { return this.cron('* * * * * *') }
+  everySecond(): this          { return this.cron('* * * * * *') }
+  everyFiveSeconds(): this     { return this.cron('*/5 * * * * *') }
+  everyTenSeconds(): this      { return this.cron('*/10 * * * * *') }
+  everyFifteenSeconds(): this  { return this.cron('*/15 * * * * *') }
+  everyTwentySeconds(): this   { return this.cron('*/20 * * * * *') }
+  everyThirtySeconds(): this   { return this.cron('*/30 * * * * *') }
 
   // ── Minute helpers ─────────────────────────────────────
   everyMinute(): this         { return this.cron('* * * * *') }
@@ -70,11 +86,56 @@ export class ScheduledTask {
 
   description(desc: string): this { this._description = desc; return this }
 
+  // ── Hooks ──────────────────────────────────────────────
+
+  /** Run a callback before the task executes. */
+  before(fn: () => void | Promise<void>): this { this._beforeFn = fn; return this }
+
+  /** Run a callback after the task executes (success or failure). */
+  after(fn: () => void | Promise<void>): this { this._afterFn = fn; return this }
+
+  /** Run a callback only when the task succeeds. */
+  onSuccess(fn: () => void | Promise<void>): this { this._onSuccessFn = fn; return this }
+
+  /** Run a callback only when the task fails. Receives the error. */
+  onFailure(fn: (error: unknown) => void | Promise<void>): this { this._onFailureFn = fn; return this }
+
+  /**
+   * Prevent overlapping executions. If the task is already running,
+   * skip this invocation. Uses a cache lock with the given expiry.
+   *
+   * @param expiresAt — lock expiry in minutes (default 24 hours)
+   */
+  withoutOverlapping(expiresAt = 1440): this {
+    this._withoutOverlapping = true
+    this._overlapExpiresAt   = expiresAt
+    this._overlapKey         = `rudderjs:schedule:overlap:${this._description || this._cron}`
+    return this
+  }
+
+  /** Run this task even when the application is in maintenance mode. */
+  evenInMaintenanceMode(): this { this._evenInMaintenance = true; return this }
+
+  /**
+   * Only run this task on a single server in a multi-server deployment.
+   * Uses a cache-backed distributed lock. Requires `@rudderjs/cache`.
+   */
+  onOneServer(): this { this._oneServer = true; return this }
+
   // ── Accessors ──────────────────────────────────────────
   getCron(): string              { return this._cron }
   getTimezone(): string | undefined { return this._timezone }
   getDescription(): string       { return this._description }
   getCallback(): () => void | Promise<void> { return this.callback }
+  getBeforeFn(): (() => void | Promise<void>) | undefined { return this._beforeFn }
+  getAfterFn(): (() => void | Promise<void>) | undefined { return this._afterFn }
+  getOnSuccessFn(): (() => void | Promise<void>) | undefined { return this._onSuccessFn }
+  getOnFailureFn(): ((error: unknown) => void | Promise<void>) | undefined { return this._onFailureFn }
+  isWithoutOverlapping(): boolean { return this._withoutOverlapping }
+  getOverlapExpiresAt(): number   { return this._overlapExpiresAt }
+  getOverlapKey(): string         { return this._overlapKey ?? `rudderjs:schedule:overlap:${this._cron}` }
+  isEvenInMaintenanceMode(): boolean { return this._evenInMaintenance }
+  isOnOneServer(): boolean        { return this._oneServer }
 
   /** Returns the next scheduled run time, or null if the cron is invalid. */
   nextRun(): Date | null {
@@ -124,6 +185,83 @@ export const Schedule = schedule
 
 // ─── Helpers ───────────────────────────────────────────────
 
+// ─── Task execution with hooks/overlap/oneServer ──────────
+
+interface CacheLike {
+  get(key: string): Promise<unknown>
+  put(key: string, value: unknown, ttl?: number): Promise<void>
+  forget(key: string): Promise<void>
+}
+
+function _getCache(): CacheLike | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@rudderjs/cache') as { CacheRegistry?: { get(): CacheLike | null } }
+    return mod.CacheRegistry?.get() ?? null
+  } catch {
+    return null
+  }
+}
+
+async function _executeTask(task: ScheduledTask): Promise<void> {
+  const label = task.getDescription() || task.getCron()
+  const cache = _getCache()
+
+  // ── onOneServer: acquire distributed lock ──────────
+  if (task.isOnOneServer()) {
+    if (!cache) {
+      console.log(`[Schedule] Skipping "${label}" — onOneServer() requires @rudderjs/cache`)
+      return
+    }
+    const lockKey = `rudderjs:schedule:server:${label}`
+    const existing = await cache.get(lockKey)
+    if (existing) return // another server is handling it
+    await cache.put(lockKey, '1', 60) // 60s lock
+  }
+
+  // ── withoutOverlapping: acquire overlap lock ───────
+  if (task.isWithoutOverlapping()) {
+    const overlapKey = task.getOverlapKey()
+    if (cache) {
+      const locked = await cache.get(overlapKey)
+      if (locked) {
+        console.log(`[Schedule] Skipping "${label}" — already running (overlap lock)`)
+        return
+      }
+      await cache.put(overlapKey, '1', task.getOverlapExpiresAt() * 60)
+    }
+  }
+
+  // ── before hook ────────────────────────────────────
+  if (task.getBeforeFn()) await task.getBeforeFn()!()
+
+  process.stdout.write(`[Schedule] Running "${label}" ... `)
+
+  try {
+    await task.getCallback()()
+    console.log('✔')
+
+    // ── onSuccess hook ───────────────────────────────
+    if (task.getOnSuccessFn()) await task.getOnSuccessFn()!()
+  } catch (err) {
+    console.log('✗')
+    console.error(err)
+
+    // ── onFailure hook ───────────────────────────────
+    if (task.getOnFailureFn()) await task.getOnFailureFn()!(err)
+  } finally {
+    // ── after hook ───────────────────────────────────
+    if (task.getAfterFn()) await task.getAfterFn()!()
+
+    // ── release overlap lock ─────────────────────────
+    if (task.isWithoutOverlapping() && cache) {
+      await cache.forget(task.getOverlapKey())
+    }
+  }
+}
+
+// ─── Helpers ───────────────────────────────────────────────
+
 function formatNextRun(date: Date | null): string {
   if (!date) return '—'
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -148,15 +286,7 @@ export function scheduler(): new (app: Application) => ServiceProvider {
         let ran = 0
         for (const task of tasks) {
           if (!task.isDue()) continue
-          const label = task.getDescription() || task.getCron()
-          process.stdout.write(`[Schedule] Running "${label}" ... `)
-          try {
-            await task.getCallback()()
-            console.log('✔')
-          } catch (err) {
-            console.log('✗')
-            console.error(err)
-          }
+          await _executeTask(task)
           ran++
         }
 
@@ -172,18 +302,10 @@ export function scheduler(): new (app: Application) => ServiceProvider {
         const jobs: Cron[] = []
 
         for (const task of tasks) {
-          const label = task.getDescription() || task.getCron()
           const tz    = task.getTimezone()
           const opts  = tz ? { timezone: tz } : {}
           jobs.push(new Cron(task.getCron(), opts, async () => {
-            process.stdout.write(`[Schedule] Running "${label}" ... `)
-            try {
-              await task.getCallback()()
-              console.log('✔')
-            } catch (err) {
-              console.log('✗')
-              console.error(err)
-            }
+            await _executeTask(task)
           }))
         }
 

@@ -16,6 +16,9 @@ export abstract class Job {
   /** The job's main logic */
   abstract handle(): void | Promise<void>
 
+  /** Job middleware — override to return middleware instances. */
+  middleware?(): import('./job-middleware.js').JobMiddleware[]
+
   /** Called when all retries are exhausted */
   failed?(error: unknown): void | Promise<void>
 
@@ -282,3 +285,13 @@ export function queue(config: QueueConfig): new (app: Application) => ServicePro
 
   return QueueServiceProvider
 }
+
+// ─── Re-exports ────────────────────────────────────────────
+
+export { Chain, getChainState }                        from './chain.js'
+export { Bus, Batch, PendingBatch }                    from './batch.js'
+export { dispatch }                                    from './closure.js'
+export type { ShouldBeUnique, ShouldBeUniqueUntilProcessing }  from './unique.js'
+export { isUniqueJob, isUniqueUntilProcessing, acquireUniqueLock, releaseUniqueLock }  from './unique.js'
+export type { JobMiddleware }                          from './job-middleware.js'
+export { runJobMiddleware, RateLimited, WithoutOverlapping, ThrottlesExceptions, Skip }  from './job-middleware.js'
