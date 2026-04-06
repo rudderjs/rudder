@@ -129,34 +129,165 @@ import { Collection } from '@rudderjs/support'
 const users = Collection.of([
   { id: 1, name: 'Alice', role: 'admin' },
   { id: 2, name: 'Bob',   role: 'user' },
+  { id: 3, name: 'Carol', role: 'admin' },
 ])
 
-users.filter(u => u.role === 'admin').pluck('name').toArray()
-// → ['Alice']
+users.filter(u => u.role === 'admin').pluck('name').toArray()  // ['Alice', 'Carol']
+users.groupBy('role')   // { admin: [...], user: [...] }
+users.chunk(2).toArray()  // [[...], [...]]
+users.partition(u => u.role === 'admin')  // [Collection<admin>, Collection<user>]
+```
 
-users.groupBy('role')   // → { admin: [...], user: [...] }
-users.first()           // { id: 1, name: 'Alice', role: 'admin' }
-users.count()           // 2
+**Core**
 
-JSON.stringify(users)   // '[{"id":1,...},{"id":2,...}]'  — no double-encoding
+| Method | Description |
+|---|---|
+| `all()` | Underlying array. |
+| `count()` | Number of items. |
+| `first(fn?)` | First item (or first matching if `fn` given). |
+| `last(fn?)` | Last item (or last matching if `fn` given). |
+| `isEmpty()` | `true` when empty. |
+| `isNotEmpty()` | `true` when not empty. |
+| `each(fn)` | Iterate; returns `this`. |
+| `toArray()` | Shallow copy. |
+| `toJSON()` | Returns `T[]` — `JSON.stringify` works correctly. |
+
+**Transform**
+
+| Method | Description |
+|---|---|
+| `map<U>(fn)` | Transform each item; returns `Collection<U>`. |
+| `flatMap<U>(fn)` | Map then flatten one level. |
+| `filter(fn)` | Keep matching items. |
+| `reject(fn)` | Remove matching items (inverse of `filter`). |
+| `pluck(key)` | Extract a single field from each item. |
+| `mapSpread<U>(fn)` | Spread each item as args to `fn` (useful for tuples). |
+
+**Search**
+
+| Method | Description |
+|---|---|
+| `find(fn)` | First matching item or `undefined`. |
+| `contains(fn\|value)` | `true` if predicate matches or value is present. |
+| `sole(fn?)` | Single matching item — throws if 0 or >1 found. |
+
+**Grouping**
+
+| Method | Description |
+|---|---|
+| `groupBy(key\|fn)` | Groups into `Record<string, T[]>`. |
+| `keyBy(key\|fn)` | Index by key — returns `Record<string, T>`. Last write wins. |
+| `mapWithKeys(fn)` | Transform to `Record<string, V>` via `fn` returning `[key, value]`. |
+
+**Splitting**
+
+| Method | Description |
+|---|---|
+| `chunk(size)` | Split into `Collection<T[]>` of fixed size. |
+| `splitIn(n)` | Split into exactly `n` roughly-equal groups. |
+| `partition(fn)` | Split into `[passing, failing]` tuple of collections. |
+| `sliding(size, step?)` | Overlapping windows of `size`. |
+
+**Combination**
+
+| Method | Description |
+|---|---|
+| `zip(other)` | Pair items with another array/collection (shortest wins). |
+| `crossJoin(other)` | Cartesian product with another array/collection. |
+| `combine(values)` | Use this collection as keys, `values` as values → `Record<string, V>`. |
+
+**Conditional / Pipe**
+
+| Method | Description |
+|---|---|
+| `when(cond, fn, otherwise?)` | Apply `fn` if condition is truthy. |
+| `unless(cond, fn, otherwise?)` | Apply `fn` if condition is falsy. |
+| `pipe(fn)` | Pass collection through `fn`, return result (break the chain). |
+| `tap(fn)` | Side-effect — calls `fn(this)` then returns `this`. |
+
+---
+
+---
+
+## `Str`
+
+30+ static string helpers — case conversion, truncation, search, extraction, masking, pluralisation, and generation.
+
+```ts
+import { Str } from '@rudderjs/support'
+
+Str.camel('hello_world')       // 'helloWorld'
+Str.snake('helloWorld')        // 'hello_world'
+Str.kebab('helloWorld')        // 'hello-world'
+Str.studly('hello_world')      // 'HelloWorld'
+Str.headline('user_profile')   // 'User Profile'
+Str.slug('Hello World!')       // 'hello-world'
+
+Str.limit('The quick brown fox', 10)          // 'The quick...'
+Str.excerpt('The quick brown fox', 'quick')   // 'The quick brown fox'
+Str.mask('4111111111111111', '*', 0, 12)      // '************1111'
+
+Str.before('user@example.com', '@')    // 'user'
+Str.after('user@example.com', '@')     // 'example.com'
+Str.between('<tag>content</tag>', '<tag>', '</tag>')  // 'content'
+
+Str.plural('post')       // 'posts'
+Str.plural('post', 1)    // 'post'
+Str.singular('posts')    // 'post'
+
+Str.uuid()               // 'f47ac10b-...'
+Str.random(16)           // 'aB3xK9mZ...'
+Str.password(32)         // cryptographically random password
+```
+
+| Category | Methods |
+|---|---|
+| Case | `camel`, `snake`, `kebab`, `studly`, `title`, `headline` |
+| Truncation | `limit`, `words`, `excerpt` |
+| Search | `contains`, `containsAll`, `startsWith`, `endsWith` |
+| Extraction | `before`, `beforeLast`, `after`, `afterLast`, `between` |
+| Replacement | `replaceFirst`, `replaceLast` |
+| Padding | `padLeft`, `padRight`, `padBoth` |
+| Whitespace | `squish`, `trim` |
+| Masking | `mask` |
+| Normalisation | `ascii`, `slug` |
+| Identification | `uuid`, `isUuid`, `isUlid` |
+| Generation | `random`, `password` |
+| Pluralisation | `plural`, `singular` |
+
+---
+
+## `Num`
+
+Static numeric helpers — formatting, abbreviation, ordinals, and more.
+
+```ts
+import { Num } from '@rudderjs/support'
+
+Num.format(1234567.89, 2)          // '1,234,567.89'
+Num.currency(9.99)                 // '$9.99'
+Num.currency(9.99, 'EUR', 'de-DE') // '9,99 €'
+Num.percentage(73.5, 1)            // '73.5%'
+Num.fileSize(1536)                 // '1.50 KB'
+Num.abbreviate(1_500_000)          // '1.5M'
+Num.ordinal(22)                    // '22nd'
+Num.clamp(150, 0, 100)             // 100
+Num.trim(1.5000)                   // '1.5'
+Num.spell(42)                      // 'forty-two'
+Num.spell(1_001)                   // 'one thousand one'
 ```
 
 | Method | Description |
 |---|---|
-| `map<U>(fn)` | Transforms each item; returns a new `Collection<U>`. |
-| `filter(fn)` | Keeps items matching the predicate. |
-| `find(fn)` | First matching item, or `undefined`. |
-| `first()` | First item, or `undefined`. |
-| `last()` | Last item, or `undefined`. |
-| `pluck(key)` | Extracts a single field from each item. |
-| `groupBy(key)` | Groups into `Record<string, T[]>`. |
-| `each(fn)` | Iterates; returns `this` for chaining. |
-| `contains(fn)` | `true` if any item matches the predicate. |
-| `isEmpty()` | `true` when the collection has no items. |
-| `count()` | Number of items. |
-| `all()` | The underlying array. |
-| `toArray()` | Shallow copy of the underlying array. |
-| `toJSON()` | Returns `T[]` — makes `JSON.stringify(collection)` produce correct output. |
+| `format(n, decimals?, locale?)` | Locale-aware number with separators. |
+| `currency(n, currency?, locale?)` | Currency string via `Intl.NumberFormat`. |
+| `percentage(n, decimals?, locale?)` | `n` as a percentage (`50` → `'50%'`). |
+| `fileSize(bytes, precision?)` | Human-readable file size (`1536` → `'1.50 KB'`). |
+| `abbreviate(n, precision?)` | Short form (`1_500_000` → `'1.5M'`). |
+| `ordinal(n)` | Ordinal suffix (`1` → `'1st'`, `22` → `'22nd'`). |
+| `clamp(n, min, max)` | Clamp to range. |
+| `trim(n, decimals?)` | Remove trailing zeros (`1.500` → `'1.5'`). |
+| `spell(n)` | Integer to English words (`42` → `'forty-two'`). |
 
 ---
 
