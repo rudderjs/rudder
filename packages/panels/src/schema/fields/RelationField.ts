@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class RelationField extends Field {
   protected _resourceSlug?: string
@@ -9,7 +10,7 @@ export class RelationField extends Field {
     return new RelationField(name)
   }
 
-  getType(): string { return this._multiple ? 'belongsToMany' : 'belongsTo' }
+  getType(): string { return this._multiple ? FieldType.BelongsToMany : FieldType.BelongsTo }
 
   /** Slug of the target resource (e.g. 'categories'). */
   resource(resourceSlug: string): this {

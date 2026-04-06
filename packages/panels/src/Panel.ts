@@ -122,6 +122,7 @@ export class Panel {
   protected _theme?:    PanelThemeConfig
   protected _themeOverrides?: Partial<PanelThemeConfig>
   protected _themeEditor = false
+  protected _notifications: { enabled: boolean; pollInterval: number } = { enabled: false, pollInterval: 30000 }
 
   protected constructor(name: string) {
     this._name = name
@@ -286,6 +287,28 @@ export class Panel {
 
   /** @internal */
   hasThemeEditor(): boolean { return this._themeEditor }
+
+  /**
+   * Enable in-app notifications widget (bell icon with dropdown).
+   * Requires `@rudderjs/notification` with a database store.
+   *
+   * @example
+   * Panel.make('admin').notifications()
+   * Panel.make('admin').notifications({ pollInterval: 15000 })
+   */
+  notifications(config: { pollInterval?: number } | boolean = true): this {
+    if (typeof config === 'boolean') {
+      this._notifications = { enabled: config, pollInterval: 30000 }
+    } else {
+      this._notifications = { enabled: true, pollInterval: config.pollInterval ?? 30000 }
+    }
+    return this
+  }
+
+  /** @internal */
+  hasNotifications(): boolean { return this._notifications.enabled }
+  /** @internal */
+  getNotificationsConfig(): { enabled: boolean; pollInterval: number } { return this._notifications }
 
   // ── Getters ─────────────────────────────────────────────
 

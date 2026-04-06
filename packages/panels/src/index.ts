@@ -46,6 +46,8 @@ export { resolveDataSource } from './datasource.js'
 
 export { Field } from './schema/Field.js'
 export type { FieldMeta, FieldVisibility, Condition, ConditionOp } from './schema/Field.js'
+export { FieldType } from './schema/FieldType.js'
+export type { FieldTypeValue } from './schema/FieldType.js'
 
 // ─── Fields ────────────────────────────────────────────────
 
@@ -105,11 +107,28 @@ export type { ListTabMeta } from './schema/Tab.js'
 
 export { Filter, SelectFilter, SearchFilter } from './schema/Filter.js'
 export type { FilterMeta, FilterOption } from './schema/Filter.js'
+export { DateFilter }    from './schema/filters/DateFilter.js'
+export { BooleanFilter } from './schema/filters/BooleanFilter.js'
+export { NumberFilter }  from './schema/filters/NumberFilter.js'
+export { QueryFilter }   from './schema/filters/QueryFilter.js'
 
 // ─── Actions ───────────────────────────────────────────────
 
 export { Action } from './schema/Action.js'
 export type { ActionMeta, ActionHandler } from './schema/Action.js'
+export { ActionGroup } from './schema/ActionGroup.js'
+export type { ActionGroupMeta } from './schema/ActionGroup.js'
+export { Import } from './schema/Import.js'
+export type { ImportMeta, ImportColumnMapping } from './schema/Import.js'
+export { Wizard, Step } from './schema/Wizard.js'
+export type { WizardMeta, StepMeta } from './schema/Wizard.js'
+export { RelationManager } from './schema/RelationManager.js'
+export type { RelationManagerMeta } from './schema/RelationManager.js'
+
+// ─── Plugins ──────────────────────────────────────────────
+
+export { activityLog, logActivity } from './plugins/ActivityLogPlugin.js'
+export type { ActivityRecord, ActivityStoreLike, ActivityLogConfig } from './plugins/ActivityLogPlugin.js'
 
 // ─── Schema elements ───────────────────────────────────────
 

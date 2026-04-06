@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class BooleanField extends Field {
   protected _trueLabel  = 'Yes'
@@ -8,7 +9,7 @@ export class BooleanField extends Field {
     return new BooleanField(name)
   }
 
-  getType(): string { return 'boolean' }
+  getType(): string { return FieldType.Boolean }
 
   trueLabel(label: string): this {
     this._trueLabel = label

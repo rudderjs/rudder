@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 /**
  * Renders a table of related records on the show page.
@@ -26,7 +27,7 @@ export class HasMany extends Field {
     return f
   }
 
-  getType(): string { return 'hasMany' }
+  getType(): string { return FieldType.HasMany }
 
   /** Slug of the related resource (e.g. 'categories', 'articles'). */
   resource(slug: string): this {

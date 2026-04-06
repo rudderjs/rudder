@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class TagsField extends Field {
   static make(name: string): TagsField {
@@ -10,5 +11,5 @@ export class TagsField extends Field {
     return this
   }
 
-  getType(): string { return 'tags' }
+  getType(): string { return FieldType.Tags }
 }

@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class ToggleField extends Field {
   constructor(name: string) {
@@ -14,5 +15,5 @@ export class ToggleField extends Field {
   onLabel(label: string): this  { this._extra['onLabel']  = label; return this }
   offLabel(label: string): this { this._extra['offLabel'] = label; return this }
 
-  getType(): string { return 'toggle' }
+  getType(): string { return FieldType.Toggle }
 }

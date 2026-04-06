@@ -1,4 +1,5 @@
 import { Field } from '../Field.js'
+import { FieldType } from '../FieldType.js'
 
 export class RepeaterField extends Field {
   constructor(name: string) {
@@ -36,5 +37,5 @@ export class RepeaterField extends Field {
     return this
   }
 
-  getType(): string { return 'repeater' }
+  getType(): string { return FieldType.Repeater }
 }
