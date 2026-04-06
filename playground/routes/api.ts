@@ -221,12 +221,42 @@ Route.post('/api/contact', async (req, res) => {
 
 // ── AI test routes ───────────────────────────────────────────────────────────
 
-import { AI, agent, toolDefinition } from '@rudderjs/ai'
+import { AI, agent, toolDefinition, type AiMiddleware } from '@rudderjs/ai'
 
 // Simple prompt — uses default provider
 Route.get('/api/ai/prompt', async (_req, res) => {
   const response = await AI.prompt('Say hello in 3 different languages. Keep it short.')
   res.json({ text: response.text, usage: response.usage })
+})
+
+// Middleware demo — logs lifecycle events to console
+Route.get('/api/ai/middleware', async (_req, res) => {
+  const logs: string[] = []
+  const logMw: AiMiddleware = {
+    name: 'logger',
+    onStart(ctx) { logs.push(`[start] model=${ctx.model}`) },
+    onIteration(ctx) { logs.push(`[iteration] step=${ctx.iteration}`) },
+    onBeforeToolCall(_ctx, name, args) { logs.push(`[before-tool] ${name}(${JSON.stringify(args)})`) },
+    onAfterToolCall(_ctx, name, _args, result) { logs.push(`[after-tool] ${name} → ${JSON.stringify(result).slice(0, 100)}`) },
+    onToolPhaseComplete() { logs.push('[tool-phase-complete]') },
+    onUsage(_ctx, usage) { logs.push(`[usage] ${usage.totalTokens} tokens`) },
+    onFinish() { logs.push('[finish]') },
+    onError(_ctx, err) { logs.push(`[error] ${err}`) },
+  }
+
+  const weatherTool = toolDefinition({
+    name: 'get_weather',
+    description: 'Get the current weather for a city',
+    inputSchema: z.object({ city: z.string() }),
+  }).server(async ({ city }) => `The weather in ${city} is 22°C and sunny.`)
+
+  const response = await agent({
+    instructions: 'You help people check the weather. Use the get_weather tool.',
+    tools: [weatherTool],
+    middleware: [logMw],
+  }).prompt('What is the weather in London?')
+
+  res.json({ text: response.text, logs, usage: response.usage })
 })
 
 // Agent with instructions

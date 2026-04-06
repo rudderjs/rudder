@@ -1,5 +1,15 @@
 import { AiRegistry } from './registry.js'
 import { toolToSchema } from './tool.js'
+import {
+  runOnConfig,
+  runOnChunk,
+  runOnBeforeToolCall,
+  runOnAfterToolCall,
+  runSequential,
+  runOnUsage,
+  runOnAbort,
+  runOnError,
+} from './middleware.js'
 import type {
   AgentPromptOptions,
   AiMessage,
@@ -10,6 +20,7 @@ import type {
   AnyTool,
   HasMiddleware,
   HasTools,
+  MiddlewareContext,
   PrepareStepResult,
   ProviderRequestOptions,
   StopCondition,
@@ -137,6 +148,38 @@ function getTools(a: Agent): AnyTool[] {
     : []
 }
 
+function getMiddleware(a: Agent): AiMiddleware[] {
+  return 'middleware' in a && typeof (a as any).middleware === 'function'
+    ? (a as unknown as HasMiddleware).middleware()
+    : []
+}
+
+function createMiddlewareContext(
+  messages: AiMessage[],
+  model: string,
+  tools: AnyTool[],
+  iteration: number,
+): MiddlewareContext {
+  const [provider] = AiRegistry.parseModelString(model)
+  let aborted = false
+  let abortReason = ''
+  return {
+    requestId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}`,
+    iteration,
+    chunkIndex: 0,
+    messages,
+    model,
+    provider,
+    toolNames: tools.map(t => t.definition.name),
+    abort(reason?: string) {
+      aborted = true
+      abortReason = reason ?? 'Aborted by middleware'
+    },
+    get _aborted() { return aborted },
+    get _abortReason() { return abortReason },
+  } as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
+}
+
 function buildToolSchemas(tools: AnyTool[]): ReturnType<typeof toolToSchema>[] {
   return tools.filter(t => !t.definition.lazy).map(toolToSchema)
 }
@@ -153,11 +196,21 @@ function addUsage(total: TokenUsage, step: TokenUsage): void {
   total.totalTokens += step.totalTokens
 }
 
+function buildMiddlewareConfig(messages: AiMessage[], a: Agent): import('./types.js').MiddlewareConfigResult {
+  const config: import('./types.js').MiddlewareConfigResult = { messages }
+  const temp = a.temperature()
+  const maxTok = a.maxTokens()
+  if (temp !== undefined) config.temperature = temp
+  if (maxTok !== undefined) config.maxTokens = maxTok
+  return config
+}
+
 // ─── Agent Loop (non-streaming) ──────────────────────────
 
 async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
   const modelString = a.model() ?? AiRegistry.getDefault()
   const tools = getTools(a)
+  const middlewares = getMiddleware(a)
   const toolSchemas = buildToolSchemas(tools)
   const toolMap = buildToolMap(tools)
 
@@ -171,93 +224,165 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   const stopConditions = normalizeStopConditions(a.stopWhen())
   const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
-  for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
-    let currentModel = modelString
-    let currentToolSchemas = toolSchemas
+  // Create middleware context
+  const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
 
-    // prepareStep hook
-    if (a.prepareStep) {
-      const prep = await a.prepareStep({ stepNumber: iteration, steps, messages })
-      if (prep.model) currentModel = prep.model
-      if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
-      if (prep.system) messages[0] = { role: 'system', content: prep.system }
-    }
-
-    const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
-    let response: import('./types.js').ProviderResponse | undefined
-    let lastError: Error | undefined
-
-    for (const tryModel of failoverModels) {
-      try {
-        const adapter = AiRegistry.resolve(tryModel)
-        const [, modelId] = AiRegistry.parseModelString(tryModel)
-        const options: ProviderRequestOptions = {
-          model: modelId,
-          messages,
-          tools: currentToolSchemas.length > 0 ? currentToolSchemas : undefined,
-          temperature: a.temperature(),
-          maxTokens: a.maxTokens(),
-        }
-        response = await adapter.generate(options)
-        break
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err))
-        if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
-      }
-    }
-    if (!response) throw lastError ?? new Error('No provider available')
-    addUsage(totalUsage, response.usage)
-
-    const toolCalls = response.message.toolCalls ?? []
-    const toolResults: ToolResult[] = []
-
-    if (toolCalls.length > 0) {
-      messages.push(response.message)
-
-      for (const tc of toolCalls) {
-        const tool = toolMap.get(tc.name)
-        if (!tool) {
-          toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
-          messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
-          continue
-        }
-        if (tool.type === 'client') {
-          toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
-          messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
-          continue
-        }
-
-        try {
-          const result = await tool.execute(tc.arguments)
-          const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
-          toolResults.push({ toolCallId: tc.id, result })
-          messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
-          toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
-          messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
-        }
-      }
-    } else {
-      messages.push(response.message)
-    }
-
-    const step: AgentStep = {
-      message: response.message,
-      toolCalls,
-      toolResults,
-      usage: response.usage,
-      finishReason: response.finishReason,
-    }
-    steps.push(step)
-
-    const shouldStop = stopConditions.some(cond =>
-      cond({ steps, iteration, lastMessage: response.message }),
-    )
-    if (shouldStop || response.finishReason !== 'tool_calls') {
-      break
-    }
+  // onConfig — init phase
+  if (middlewares.length > 0) {
+    const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'init')
+    if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
   }
+
+  // onStart
+  if (middlewares.length > 0) await runSequential(middlewares, 'onStart', ctx)
+
+  try {
+    for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
+      ctx.iteration = iteration
+
+      // Check if middleware aborted
+      if (ctx._aborted) {
+        await runOnAbort(middlewares, ctx, ctx._abortReason)
+        break
+      }
+
+      // onIteration
+      if (middlewares.length > 0) await runSequential(middlewares, 'onIteration', ctx)
+
+      let currentModel = modelString
+      let currentToolSchemas = toolSchemas
+
+      // prepareStep hook
+      if (a.prepareStep) {
+        const prep = await a.prepareStep({ stepNumber: iteration, steps, messages })
+        if (prep.model) currentModel = prep.model
+        if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
+        if (prep.system) messages[0] = { role: 'system', content: prep.system }
+      }
+
+      // onConfig — beforeModel phase
+      if (middlewares.length > 0) {
+        const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'beforeModel')
+        if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
+      }
+
+      const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
+      let response: import('./types.js').ProviderResponse | undefined
+      let lastError: Error | undefined
+
+      for (const tryModel of failoverModels) {
+        try {
+          const adapter = AiRegistry.resolve(tryModel)
+          const [, modelId] = AiRegistry.parseModelString(tryModel)
+          const reqOptions: ProviderRequestOptions = {
+            model: modelId,
+            messages,
+            tools: currentToolSchemas.length > 0 ? currentToolSchemas : undefined,
+            temperature: a.temperature(),
+            maxTokens: a.maxTokens(),
+          }
+          response = await adapter.generate(reqOptions)
+          break
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err))
+          if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
+        }
+      }
+      if (!response) throw lastError ?? new Error('No provider available')
+      addUsage(totalUsage, response.usage)
+
+      // onUsage
+      if (middlewares.length > 0) await runOnUsage(middlewares, ctx, response.usage)
+
+      const toolCalls = response.message.toolCalls ?? []
+      const toolResults: ToolResult[] = []
+
+      if (toolCalls.length > 0) {
+        messages.push(response.message)
+
+        for (const tc of toolCalls) {
+          const tool = toolMap.get(tc.name)
+          if (!tool) {
+            toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
+            messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
+            continue
+          }
+          if (tool.type === 'client') {
+            toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
+            messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
+            continue
+          }
+
+          // onBeforeToolCall
+          let toolArgs = tc.arguments
+          if (middlewares.length > 0) {
+            const beforeResult = await runOnBeforeToolCall(middlewares, ctx, tc.name, toolArgs)
+            if (beforeResult) {
+              if (beforeResult.type === 'skip') {
+                const resultStr = typeof beforeResult.result === 'string' ? beforeResult.result : JSON.stringify(beforeResult.result)
+                toolResults.push({ toolCallId: tc.id, result: beforeResult.result })
+                messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+                await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, beforeResult.result)
+                continue
+              }
+              if (beforeResult.type === 'abort') {
+                await runOnAbort(middlewares, ctx, beforeResult.reason)
+                break
+              }
+              if (beforeResult.type === 'transformArgs') {
+                toolArgs = beforeResult.args
+              }
+            }
+          }
+
+          try {
+            const result = await tool.execute(toolArgs)
+            const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
+            toolResults.push({ toolCallId: tc.id, result })
+            messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+
+            // onAfterToolCall
+            if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err)
+            toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
+            messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
+
+            // onAfterToolCall (error case)
+            if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, `Error: ${msg}`)
+          }
+        }
+
+        // onToolPhaseComplete
+        if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
+      } else {
+        messages.push(response.message)
+      }
+
+      const step: AgentStep = {
+        message: response.message,
+        toolCalls,
+        toolResults,
+        usage: response.usage,
+        finishReason: response.finishReason,
+      }
+      steps.push(step)
+
+      const shouldStop = stopConditions.some(cond =>
+        cond({ steps, iteration, lastMessage: response.message }),
+      )
+      if (shouldStop || response.finishReason !== 'tool_calls') {
+        break
+      }
+    }
+  } catch (err) {
+    // onError
+    if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
+    throw err
+  }
+
+  // onFinish
+  if (middlewares.length > 0) await runSequential(middlewares, 'onFinish', ctx)
 
   const lastStep = steps[steps.length - 1]
   return {
@@ -276,6 +401,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
   async function* generateStream(): AsyncIterable<StreamChunk> {
     const modelString = a.model() ?? AiRegistry.getDefault()
     const tools = getTools(a)
+    const middlewares = getMiddleware(a)
     const toolSchemas = buildToolSchemas(tools)
     const toolMap = buildToolMap(tools)
 
@@ -289,140 +415,218 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     const stopConditions = normalizeStopConditions(a.stopWhen())
     const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
-    for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
-      let currentModel = modelString
+    // Create middleware context
+    const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
 
-      if (a.prepareStep) {
-        const prep = await a.prepareStep({ stepNumber: iteration, steps, messages })
-        if (prep.model) currentModel = prep.model
-        if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
-        if (prep.system) messages[0] = { role: 'system', content: prep.system }
-      }
-
-      const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
-      let streamSource: AsyncIterable<StreamChunk> | undefined
-      let lastError: Error | undefined
-
-      for (const tryModel of failoverModels) {
-        try {
-          const adapter = AiRegistry.resolve(tryModel)
-          const [, modelId] = AiRegistry.parseModelString(tryModel)
-          const opts: ProviderRequestOptions = {
-            model: modelId,
-            messages,
-            tools: toolSchemas.length > 0 ? toolSchemas : undefined,
-            temperature: a.temperature(),
-            maxTokens: a.maxTokens(),
-          }
-          streamSource = adapter.stream(opts)
-          break
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err))
-          if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
-        }
-      }
-      if (!streamSource) throw lastError ?? new Error('No provider available')
-
-      let text = ''
-      let currentToolCalls: ToolCall[] = []
-      let stepUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-      let finishReason: AgentStep['finishReason'] = 'stop'
-      const partialToolCalls = new Map<string, { id: string; name: string; argChunks: string[] }>()
-
-      for await (const chunk of streamSource) {
-        yield chunk
-
-        if (chunk.type === 'text-delta' && chunk.text) {
-          text += chunk.text
-        } else if (chunk.type === 'tool-call-delta' && chunk.toolCall?.id) {
-          partialToolCalls.set(chunk.toolCall.id, {
-            id: chunk.toolCall.id,
-            name: chunk.toolCall.name ?? '',
-            argChunks: [],
-          })
-        } else if (chunk.type === 'tool-call-delta' && chunk.text) {
-          // Accumulate argument JSON chunks to the last partial tool call
-          const last = Array.from(partialToolCalls.values()).pop()
-          if (last) last.argChunks.push(chunk.text)
-        } else if (chunk.type === 'tool-call' && chunk.toolCall) {
-          const tc = chunk.toolCall as ToolCall
-          currentToolCalls.push(tc)
-        } else if (chunk.type === 'usage' && chunk.usage) {
-          stepUsage = chunk.usage
-        } else if (chunk.type === 'finish') {
-          if (chunk.usage) stepUsage = chunk.usage
-          finishReason = chunk.finishReason ?? 'stop'
-        }
-      }
-
-      // Finalize partial tool calls
-      for (const [, partial] of partialToolCalls) {
-        try {
-          const args = JSON.parse(partial.argChunks.join(''))
-          currentToolCalls.push({ id: partial.id, name: partial.name, arguments: args })
-        } catch {
-          currentToolCalls.push({ id: partial.id, name: partial.name, arguments: {} })
-        }
-      }
-
-      addUsage(totalUsage, stepUsage)
-
-      const toolResults: ToolResult[] = []
-
-      if (currentToolCalls.length > 0) {
-        const assistantMsg: AiMessage = { role: 'assistant', content: text, toolCalls: currentToolCalls }
-        messages.push(assistantMsg)
-
-        for (const tc of currentToolCalls) {
-          const tool = toolMap.get(tc.name)
-          if (!tool) {
-            toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
-            messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
-            continue
-          }
-          if (tool.type === 'client') {
-            toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
-            messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
-            // Yield so SSE consumers can forward the call to the client
-            yield { type: 'tool-call' as const, toolCall: tc }
-            continue
-          }
-
-          try {
-            const result = await tool.execute(tc.arguments)
-            const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
-            toolResults.push({ toolCallId: tc.id, result })
-            messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-            // Yield the finalized tool call so SSE consumers can react to it
-            yield { type: 'tool-call' as const, toolCall: tc }
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err)
-            toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
-            messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
-          }
-        }
-      } else {
-        messages.push({ role: 'assistant', content: text })
-      }
-
-      const step: AgentStep = {
-        message: { role: 'assistant', content: text, ...(currentToolCalls.length > 0 ? { toolCalls: currentToolCalls } : {}) },
-        toolCalls: currentToolCalls,
-        toolResults,
-        usage: stepUsage,
-        finishReason,
-      }
-      steps.push(step)
-
-      const shouldStop = stopConditions.some(cond =>
-        cond({ steps, iteration, lastMessage: step.message }),
-      )
-      if (shouldStop || finishReason !== 'tool_calls') break
-
-      // Reset for next iteration
-      text = ''
-      currentToolCalls = []
+    // onConfig — init phase
+    if (middlewares.length > 0) {
+      const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'init')
+      if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
     }
+
+    // onStart
+    if (middlewares.length > 0) await runSequential(middlewares, 'onStart', ctx)
+
+    try {
+      for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
+        ctx.iteration = iteration
+        ctx.chunkIndex = 0
+
+        // Check if middleware aborted
+        if (ctx._aborted) {
+          await runOnAbort(middlewares, ctx, ctx._abortReason)
+          break
+        }
+
+        // onIteration
+        if (middlewares.length > 0) await runSequential(middlewares, 'onIteration', ctx)
+
+        let currentModel = modelString
+
+        if (a.prepareStep) {
+          const prep = await a.prepareStep({ stepNumber: iteration, steps, messages })
+          if (prep.model) currentModel = prep.model
+          if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
+          if (prep.system) messages[0] = { role: 'system', content: prep.system }
+        }
+
+        // onConfig — beforeModel phase
+        if (middlewares.length > 0) {
+          const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'beforeModel')
+          if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
+        }
+
+        const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
+        let streamSource: AsyncIterable<StreamChunk> | undefined
+        let lastError: Error | undefined
+
+        for (const tryModel of failoverModels) {
+          try {
+            const adapter = AiRegistry.resolve(tryModel)
+            const [, modelId] = AiRegistry.parseModelString(tryModel)
+            const opts: ProviderRequestOptions = {
+              model: modelId,
+              messages,
+              tools: toolSchemas.length > 0 ? toolSchemas : undefined,
+              temperature: a.temperature(),
+              maxTokens: a.maxTokens(),
+            }
+            streamSource = adapter.stream(opts)
+            break
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err))
+            if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
+          }
+        }
+        if (!streamSource) throw lastError ?? new Error('No provider available')
+
+        let text = ''
+        let currentToolCalls: ToolCall[] = []
+        let stepUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        let finishReason: AgentStep['finishReason'] = 'stop'
+        const partialToolCalls = new Map<string, { id: string; name: string; argChunks: string[] }>()
+
+        for await (const chunk of streamSource) {
+          // onChunk — middleware can transform or drop chunks
+          let processedChunk: StreamChunk | null = chunk
+          if (middlewares.length > 0) {
+            processedChunk = runOnChunk(middlewares, ctx, chunk)
+            ctx.chunkIndex++
+          }
+          if (processedChunk) yield processedChunk
+
+          // Always process the original chunk for state tracking
+          if (chunk.type === 'text-delta' && chunk.text) {
+            text += chunk.text
+          } else if (chunk.type === 'tool-call-delta' && chunk.toolCall?.id) {
+            partialToolCalls.set(chunk.toolCall.id, {
+              id: chunk.toolCall.id,
+              name: chunk.toolCall.name ?? '',
+              argChunks: [],
+            })
+          } else if (chunk.type === 'tool-call-delta' && chunk.text) {
+            // Accumulate argument JSON chunks to the last partial tool call
+            const last = Array.from(partialToolCalls.values()).pop()
+            if (last) last.argChunks.push(chunk.text)
+          } else if (chunk.type === 'tool-call' && chunk.toolCall) {
+            const tc = chunk.toolCall as ToolCall
+            currentToolCalls.push(tc)
+          } else if (chunk.type === 'usage' && chunk.usage) {
+            stepUsage = chunk.usage
+          } else if (chunk.type === 'finish') {
+            if (chunk.usage) stepUsage = chunk.usage
+            finishReason = chunk.finishReason ?? 'stop'
+          }
+        }
+
+        // Finalize partial tool calls
+        for (const [, partial] of partialToolCalls) {
+          try {
+            const args = JSON.parse(partial.argChunks.join(''))
+            currentToolCalls.push({ id: partial.id, name: partial.name, arguments: args })
+          } catch {
+            currentToolCalls.push({ id: partial.id, name: partial.name, arguments: {} })
+          }
+        }
+
+        addUsage(totalUsage, stepUsage)
+
+        // onUsage
+        if (middlewares.length > 0) await runOnUsage(middlewares, ctx, stepUsage)
+
+        const toolResults: ToolResult[] = []
+
+        if (currentToolCalls.length > 0) {
+          const assistantMsg: AiMessage = { role: 'assistant', content: text, toolCalls: currentToolCalls }
+          messages.push(assistantMsg)
+
+          for (const tc of currentToolCalls) {
+            const tool = toolMap.get(tc.name)
+            if (!tool) {
+              toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
+              messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
+              continue
+            }
+            if (tool.type === 'client') {
+              toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
+              messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
+              yield { type: 'tool-call' as const, toolCall: tc }
+              continue
+            }
+
+            // onBeforeToolCall
+            let toolArgs = tc.arguments
+            if (middlewares.length > 0) {
+              const beforeResult = await runOnBeforeToolCall(middlewares, ctx, tc.name, toolArgs)
+              if (beforeResult) {
+                if (beforeResult.type === 'skip') {
+                  const resultStr = typeof beforeResult.result === 'string' ? beforeResult.result : JSON.stringify(beforeResult.result)
+                  toolResults.push({ toolCallId: tc.id, result: beforeResult.result })
+                  messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+                  await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, beforeResult.result)
+                  continue
+                }
+                if (beforeResult.type === 'abort') {
+                  await runOnAbort(middlewares, ctx, beforeResult.reason)
+                  break
+                }
+                if (beforeResult.type === 'transformArgs') {
+                  toolArgs = beforeResult.args
+                }
+              }
+            }
+
+            try {
+              const result = await tool.execute(toolArgs)
+              const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
+              toolResults.push({ toolCallId: tc.id, result })
+              messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+              yield { type: 'tool-call' as const, toolCall: tc }
+
+              // onAfterToolCall
+              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
+              messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
+
+              // onAfterToolCall (error case)
+              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, `Error: ${msg}`)
+            }
+          }
+
+          // onToolPhaseComplete
+          if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
+        } else {
+          messages.push({ role: 'assistant', content: text })
+        }
+
+        const step: AgentStep = {
+          message: { role: 'assistant', content: text, ...(currentToolCalls.length > 0 ? { toolCalls: currentToolCalls } : {}) },
+          toolCalls: currentToolCalls,
+          toolResults,
+          usage: stepUsage,
+          finishReason,
+        }
+        steps.push(step)
+
+        const shouldStop = stopConditions.some(cond =>
+          cond({ steps, iteration, lastMessage: step.message }),
+        )
+        if (shouldStop || finishReason !== 'tool_calls') break
+
+        // Reset for next iteration
+        text = ''
+        currentToolCalls = []
+      }
+    } catch (err) {
+      // onError
+      if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
+      throw err
+    }
+
+    // onFinish
+    if (middlewares.length > 0) await runSequential(middlewares, 'onFinish', ctx)
 
     const lastStep = steps[steps.length - 1]
     resolveResponse!({
