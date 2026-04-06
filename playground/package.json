@@ -29,6 +29,7 @@
     "@rudderjs/core": "workspace:*",
     "@rudderjs/image": "workspace:*",
     "@rudderjs/live": "workspace:*",
+    "@rudderjs/log": "workspace:*",
     "@rudderjs/localization": "workspace:*",
     "@rudderjs/mail": "workspace:*",
     "@rudderjs/media": "workspace:*",
