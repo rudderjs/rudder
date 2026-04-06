@@ -330,7 +330,10 @@ Phase 3 ──── Plan 4 (Auth/Mail)                                   ✅ DO
 Phase 4 ──── Plan 5 (Advanced) + Plan 6 (Testing)  ← parallel    ✅ DONE
               ├── context, pennant, process, concurrency, fakes
               │
-Phase 5 ──── Plan 7 (Monitoring & Observability)                  ⬜ LATER
+Phase 5 ──── Plan 8 (AI, Boost & MCP — Laravel Parity)            ⬜ NEXT
+              ├── ai enhancements, @rudderjs/mcp, boost phases 2-3
+              │
+Phase 6 ──── Plan 7 (Monitoring & Observability)                  ⬜ LATER
               ├── pulse, telescope, horizon, nightwatch
 ```
 
@@ -347,6 +350,7 @@ Phase 5 ──── Plan 7 (Monitoring & Observability)                  ⬜ LA
 | `@rudderjs/process` | 5 | Core framework | ✅ |
 | `@rudderjs/concurrency` | 5 | Core framework | ✅ |
 | `@rudderjs/testing` | 6 | Core framework | ✅ |
+| `@rudderjs/mcp` | 8 | Core framework | ⬜ |
 | `@pilotiq/pulse` | 7 | Panel plugin | ⬜ |
 | `@pilotiq/telescope` | 7 | Panel plugin | ⬜ |
 | `@pilotiq/horizon` | 7 | Panel plugin | ⬜ |
@@ -367,3 +371,5 @@ Phase 5 ──── Plan 7 (Monitoring & Observability)                  ⬜ LA
 | `@rudderjs/mail` | 4, 6 | +queued, +markdown, +failover, +preview ✅ / +fake ✅ | ✅ |
 | `@rudderjs/notification` | 4, 6 | +queued, +broadcast channel, +on-demand ✅ / +fake ✅ | ✅ |
 | `@rudderjs/cache` | 6 | +fake | ✅ |
+| `@rudderjs/ai` | 8 | +middleware wiring, +attachments, +queue, +conversations, +providers, +image gen, +TTS/STT, +Vercel protocol | ⬜ |
+| `@rudderjs/boost` | 8 | +boost:install, +guidelines, +skills, +db_query tool | ⬜ |
