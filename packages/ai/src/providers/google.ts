@@ -123,19 +123,38 @@ class GoogleAdapter implements ProviderAdapter {
 
 // ─── Conversion Helpers ──────────────────────────────────
 
+function contentToString(content: string | import('../types.js').ContentPart[]): string {
+  if (typeof content === 'string') return content
+  return content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
+}
+
+function contentToGeminiParts(content: string | import('../types.js').ContentPart[]): unknown[] {
+  if (typeof content === 'string') return [{ text: content }]
+  return content.map(p => {
+    if (p.type === 'text') return { text: p.text }
+    if (p.type === 'image') return { inlineData: { mimeType: p.mimeType, data: p.data } }
+    // document — inline data for PDFs, text for text-based
+    if (p.mimeType === 'application/pdf') {
+      return { inlineData: { mimeType: p.mimeType, data: p.data } }
+    }
+    return { text: Buffer.from(p.data, 'base64').toString('utf-8') }
+  })
+}
+
 function toGeminiContents(messages: AiMessage[]): { system: string | undefined; contents: unknown[] } {
   const systemMsgs = messages.filter(m => m.role === 'system')
   const rest = messages.filter(m => m.role !== 'system')
   const system = systemMsgs.length > 0
-    ? systemMsgs.map(m => m.content).join('\n\n')
+    ? systemMsgs.map(m => contentToString(m.content)).join('\n\n')
     : undefined
 
   const contents = rest.map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
+      const text = contentToString(m.content)
       return {
         role: 'model',
         parts: [
-          ...(m.content ? [{ text: m.content }] : []),
+          ...(text ? [{ text }] : []),
           ...m.toolCalls.map(tc => ({
             functionCall: { name: tc.name, args: tc.arguments },
           })),
@@ -155,7 +174,7 @@ function toGeminiContents(messages: AiMessage[]): { system: string | undefined; 
     }
     return {
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
+      parts: contentToGeminiParts(m.content),
     }
   })
 

@@ -66,7 +66,9 @@ export class AiFake {
     if (predicate) {
       const match = this.calls.some(c => {
         const userMsg = c.messages.find(m => m.role === 'user')
-        return userMsg ? predicate(userMsg.content) : false
+        if (!userMsg) return false
+        const text = typeof userMsg.content === 'string' ? userMsg.content : userMsg.content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
+        return predicate(text)
       })
       if (!match) throw new Error('[RudderJS AI] No prompt matched the predicate.')
     }

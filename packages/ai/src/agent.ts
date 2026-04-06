@@ -1,5 +1,6 @@
 import { AiRegistry } from './registry.js'
 import { toolToSchema } from './tool.js'
+import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import {
   runOnConfig,
   runOnChunk,
@@ -14,10 +15,12 @@ import type {
   AgentPromptOptions,
   AiMessage,
   AiMiddleware,
+  Attachment,
   AgentResponse,
   AgentStep,
   AgentStreamResponse,
   AnyTool,
+  ContentPart,
   HasMiddleware,
   HasTools,
   MiddlewareContext,
@@ -180,6 +183,15 @@ function createMiddlewareContext(
   } as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
 }
 
+function buildUserMessage(input: string, attachments?: Attachment[]): AiMessage {
+  if (!attachments?.length) return { role: 'user', content: input }
+  const parts: ContentPart[] = [
+    { type: 'text', text: input },
+    ...attachmentsToContentParts(attachments),
+  ]
+  return { role: 'user', content: parts }
+}
+
 function buildToolSchemas(tools: AnyTool[]): ReturnType<typeof toolToSchema>[] {
   return tools.filter(t => !t.definition.lazy).map(toolToSchema)
 }
@@ -217,7 +229,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   const messages: AiMessage[] = [
     { role: 'system', content: a.instructions() },
     ...(options?.history ?? []),
-    { role: 'user', content: input },
+    buildUserMessage(input, options?.attachments),
   ]
 
   const steps: AgentStep[] = []
@@ -386,7 +398,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
 
   const lastStep = steps[steps.length - 1]
   return {
-    text: lastStep?.message.content ?? '',
+    text: lastStep ? getMessageText(lastStep.message.content) : '',
     steps,
     usage: totalUsage,
   }
@@ -408,7 +420,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     const messages: AiMessage[] = [
       { role: 'system', content: a.instructions() },
       ...(options?.history ?? []),
-      { role: 'user', content: input },
+      buildUserMessage(input, options?.attachments),
     ]
 
     const steps: AgentStep[] = []
@@ -630,7 +642,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
 
     const lastStep = steps[steps.length - 1]
     resolveResponse!({
-      text: lastStep?.message.content ?? '',
+      text: lastStep ? getMessageText(lastStep.message.content) : '',
       steps,
       usage: totalUsage,
     })

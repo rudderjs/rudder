@@ -135,13 +135,33 @@ function splitSystemMessages(messages: AiMessage[]): { system: string | undefine
   return { system, messages: rest }
 }
 
+function contentToString(content: string | import('../types.js').ContentPart[]): string {
+  if (typeof content === 'string') return content
+  return content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
+}
+
+function contentToAnthropicParts(content: string | import('../types.js').ContentPart[]): unknown[] | string {
+  if (typeof content === 'string') return content
+  return content.map(p => {
+    if (p.type === 'text') return { type: 'text', text: p.text }
+    if (p.type === 'image') return { type: 'image', source: { type: 'base64', media_type: p.mimeType, data: p.data } }
+    // document — use Anthropic's document block for PDFs, else base64
+    if (p.mimeType === 'application/pdf') {
+      return { type: 'document', source: { type: 'base64', media_type: p.mimeType, data: p.data } }
+    }
+    // For text-based documents, decode and send as text
+    return { type: 'text', text: Buffer.from(p.data, 'base64').toString('utf-8') }
+  })
+}
+
 function toAnthropicMessages(messages: AiMessage[]): unknown[] {
   return messages.map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
+      const text = contentToString(m.content)
       return {
         role: 'assistant',
         content: [
-          ...(m.content ? [{ type: 'text', text: m.content }] : []),
+          ...(text ? [{ type: 'text', text }] : []),
           ...m.toolCalls.map(tc => ({
             type: 'tool_use',
             id: tc.id,
@@ -160,6 +180,10 @@ function toAnthropicMessages(messages: AiMessage[]): unknown[] {
           content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
         }],
       }
+    }
+    // User messages with attachments → content array
+    if (Array.isArray(m.content)) {
+      return { role: m.role, content: contentToAnthropicParts(m.content) }
     }
     return { role: m.role, content: m.content }
   })

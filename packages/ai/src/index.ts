@@ -1,9 +1,14 @@
 // @rudderjs/ai — AI engine
 
+// Attachments
+export { DocumentAttachment as Document, ImageAttachment as Image, getMessageText, attachmentsToContentParts } from './attachment.js'
+
 // Types
 export type {
   AgentPromptOptions,
+  Attachment,
   AiMessage,
+  ContentPart,
   AiConfig,
   AiModelConfig,
   AiProviderConfig,

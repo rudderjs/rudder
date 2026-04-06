@@ -129,12 +129,30 @@ export class OpenAIAdapter implements ProviderAdapter {
 
 // ─── Conversion Helpers ──────────────────────────────────
 
+function contentToString(content: string | import('../types.js').ContentPart[]): string {
+  if (typeof content === 'string') return content
+  return content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
+}
+
+function contentToOpenAIParts(content: string | import('../types.js').ContentPart[]): unknown[] | string {
+  if (typeof content === 'string') return content
+  return content.map(p => {
+    if (p.type === 'text') return { type: 'text', text: p.text }
+    if (p.type === 'image') return { type: 'image_url', image_url: { url: `data:${p.mimeType};base64,${p.data}` } }
+    // document — for text-based docs, decode to text; for PDFs, send as image_url (GPT-4o supports)
+    if (p.mimeType === 'application/pdf') {
+      return { type: 'file', file: { data: p.data, mime_type: p.mimeType } }
+    }
+    return { type: 'text', text: Buffer.from(p.data, 'base64').toString('utf-8') }
+  })
+}
+
 function toOpenAIMessages(messages: AiMessage[]): unknown[] {
   return messages.map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
       return {
         role: 'assistant',
-        content: m.content || null,
+        content: contentToString(m.content) || null,
         tool_calls: m.toolCalls.map(tc => ({
           id: tc.id,
           type: 'function',
@@ -148,6 +166,10 @@ function toOpenAIMessages(messages: AiMessage[]): unknown[] {
         tool_call_id: m.toolCallId,
         content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       }
+    }
+    // User messages with attachments → content array
+    if (Array.isArray(m.content)) {
+      return { role: m.role, content: contentToOpenAIParts(m.content) }
     }
     return { role: m.role, content: m.content }
   })

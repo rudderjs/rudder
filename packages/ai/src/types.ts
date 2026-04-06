@@ -2,10 +2,16 @@ import type { z } from 'zod'
 
 // ─── Provider ─────────────────────────────────────────────
 
+/** A single content part (text, image, or document) */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'document'; data: string; mimeType: string; name?: string }
+
 /** A message in the conversation */
 export interface AiMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
+  content: string | ContentPart[]
   /** Present when role === 'tool' */
   toolCallId?: string
   /** Present when role === 'assistant' and model wants to call tools */
@@ -263,6 +269,16 @@ export interface AiConfig {
 export interface AgentPromptOptions {
   /** Prior conversation messages to prepend (after system prompt, before current user message) */
   history?: AiMessage[]
+  /** File/image attachments to include with the prompt */
+  attachments?: Attachment[]
+}
+
+/** An attachment (file or image) to include with a prompt */
+export interface Attachment {
+  type: 'image' | 'document'
+  data: string
+  mimeType: string
+  name?: string
 }
 
 // ─── Conversation ─────────────────��───────────────────────
