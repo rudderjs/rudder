@@ -15,6 +15,7 @@ import { broadcasting } from '@rudderjs/broadcast'
 import { live }   from '@rudderjs/live'
 import { ai }     from '@rudderjs/ai'
 import { boost }  from '@rudderjs/boost'
+import { log }    from '@rudderjs/log'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
@@ -22,7 +23,8 @@ import configs from '../config/index.js'
 
 export default [
   // ── Infrastructure (order matters) ──────────────────────
-  database(configs.database), // boots first — binds PrismaClient to DI as 'prisma'
+  log(configs.log),           // boots first — available to all other providers
+  database(configs.database), // binds PrismaClient to DI as 'prisma'
   session(configs.session),
   hash(configs.hash),
   cache(configs.cache),
