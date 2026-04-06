@@ -1,77 +1,4 @@
-// ─── Collection ────────────────────────────────────────────
-
-export class Collection<T> {
-  private items: T[]
-
-  constructor(items: T[] = []) {
-    this.items = [...items]
-  }
-
-  static of<T>(items: T[]): Collection<T> {
-    return new Collection(items)
-  }
-
-  all(): T[] {
-    return this.items
-  }
-
-  count(): number {
-    return this.items.length
-  }
-
-  first(): T | undefined {
-    return this.items[0]
-  }
-
-  last(): T | undefined {
-    return this.items[this.items.length - 1]
-  }
-
-  map<U>(fn: (item: T, index: number) => U): Collection<U> {
-    return new Collection(this.items.map(fn))
-  }
-
-  filter(fn: (item: T) => boolean): Collection<T> {
-    return new Collection(this.items.filter(fn))
-  }
-
-  find(fn: (item: T) => boolean): T | undefined {
-    return this.items.find(fn)
-  }
-
-  each(fn: (item: T, index: number) => void): this {
-    this.items.forEach(fn)
-    return this
-  }
-
-  pluck<K extends keyof T>(key: K): Collection<T[K]> {
-    return new Collection(this.items.map(item => item[key]))
-  }
-
-  groupBy<K extends keyof T>(key: K): Record<string, T[]> {
-    return this.items.reduce((acc, item) => {
-      const group = String(item[key])
-      acc[group] = [...(acc[group] ?? []), item]
-      return acc
-    }, {} as Record<string, T[]>)
-  }
-
-  contains(fn: (item: T) => boolean): boolean {
-    return this.items.some(fn)
-  }
-
-  isEmpty(): boolean {
-    return this.items.length === 0
-  }
-
-  toArray(): T[] {
-    return [...this.items]
-  }
-
-  toJSON(): T[] {
-    return this.items
-  }
-}
+export { Collection } from './collection.js'
 
 // ─── Env ───────────────────────────────────────────────────
 
@@ -327,6 +254,9 @@ export function validateSerializable(data: unknown, label: string, tag = 'rudder
 // ─── defineEnv ─────────────────────────────────────────────
 
 import { z } from 'zod'
+
+export { Str } from './str.js'
+export { Num } from './num.js'
 
 export function defineEnv<T extends z.ZodRawShape>(
   schema: z.ZodObject<T>
