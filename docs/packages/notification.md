@@ -229,6 +229,69 @@ via(notifiable: Notifiable): string[] {
 | `notify(notifiables, notification)` | Convenience helper wrapping `Notifier.send()` |
 | `notifications()` | Provider factory — registers `MailChannel` and `DatabaseChannel` |
 
+## Queued Notifications
+
+Implement `ShouldQueue` to dispatch notifications via the queue:
+
+```ts
+import { Notification } from '@rudderjs/notification'
+import type { ShouldQueue } from '@rudderjs/notification'
+
+class InvoiceNotification extends Notification implements ShouldQueue {
+  shouldQueue = true as const
+  queueName   = 'notifications'   // optional
+  queueDelay  = 5000              // optional — delay in ms
+
+  via() { return ['mail', 'database'] }
+  toMail(notifiable) { return new InvoiceMail(this.invoice) }
+  toDatabase() { return { type: 'invoice', invoiceId: this.invoice.id } }
+}
+```
+
+Requires `@rudderjs/queue` to be installed and configured. Queued notifications are dispatched as a single job that sends to all channels.
+
+---
+
+## Broadcast Channel
+
+Send real-time notifications via WebSocket:
+
+```ts
+class NewMessage extends Notification {
+  via() { return ['broadcast', 'database'] }
+  toBroadcast(notifiable) {
+    return { messageId: this.message.id, preview: this.message.text.slice(0, 100) }
+  }
+}
+```
+
+The broadcast channel sends to `user.{notifiable.id}` by default. Requires `@rudderjs/broadcast`.
+
+---
+
+## On-Demand Notifications
+
+Send to anonymous recipients without a stored user:
+
+```ts
+import { notify, Notification } from '@rudderjs/notification'
+
+// Route to a specific channel address
+await notify(
+  Notification.route('mail', 'visitor@example.com'),
+  new OrderConfirmation(order),
+)
+
+// Multiple channels
+const recipient = new AnonymousNotifiable()
+  .route('mail', 'visitor@example.com')
+  .route('broadcast', 'guest-channel-123')
+
+await notify(recipient, new OrderConfirmation(order))
+```
+
+---
+
 ## Notes
 
 - `notifications()` must appear after `mail()` in `bootstrap/providers.ts` — the `MailChannel` resolves the mail adapter at boot time.
@@ -236,3 +299,5 @@ via(notifiable: Notifiable): string[] {
 - `toMail()` returns a `Mailable` instance; `toDatabase()` returns a plain `Record<string, unknown>`. Both can be `async`.
 - If a notifiable has no `email` and `'mail'` is in `via()`, `MailChannel` throws — ensure all mail-targeted notifiables have an `email` field.
 - Custom channels registered via `ChannelRegistry.register()` are available globally to all notifications.
+- Three built-in channels are registered by the provider: `mail`, `database`, `broadcast`.
+- `ShouldQueue` notifications fall back to synchronous sending if `@rudderjs/queue` is not installed.

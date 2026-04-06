@@ -246,9 +246,65 @@ The login page supports a `redirect` query parameter. After successful authentic
 
 ---
 
+## Email Verification
+
+Implement `MustVerifyEmail` on your User model to enable email verification:
+
+```ts
+import type { MustVerifyEmail } from '@rudderjs/auth'
+
+class User extends Model implements MustVerifyEmail {
+  hasVerifiedEmail() { return this.emailVerifiedAt !== null }
+  async markEmailAsVerified() {
+    await User.update(this.id, { emailVerifiedAt: new Date().toISOString() })
+  }
+  getEmailForVerification() { return this.email }
+}
+```
+
+### Verification URL
+
+Generate a signed verification URL (expires in 1 hour):
+
+```ts
+import { verificationUrl } from '@rudderjs/auth'
+
+const url = verificationUrl(user)
+// → '/email/verify/42/abc123?expires=...&signature=...'
+```
+
+### Verification Route
+
+```ts
+import { handleEmailVerification } from '@rudderjs/auth'
+import { ValidateSignature } from '@rudderjs/router'
+
+router.get('/email/verify/:id/:hash', async (req, res) => {
+  const verified = await handleEmailVerification(
+    req.params.id,
+    req.params.hash,
+    async (id) => User.find(id),
+  )
+  if (verified) res.json({ message: 'Email verified.' })
+  else res.status(400).json({ message: 'Invalid verification link.' })
+}, [ValidateSignature()]).name('verification.verify')
+```
+
+### `EnsureEmailIsVerified()` Middleware
+
+Require a verified email — returns 403 if unverified:
+
+```ts
+import { RequireAuth, EnsureEmailIsVerified } from '@rudderjs/auth'
+
+router.get('/dashboard', handler, [RequireAuth(), EnsureEmailIsVerified()])
+```
+
+---
+
 ## Notes
 
-- `@rudderjs/auth` includes `better-auth` as a direct dependency — no separate install needed beyond `@rudderjs/auth`.
-- `AUTH_SECRET` must be at least 32 characters.
-- Auth routes (`/api/auth/*`) are registered during provider `boot()`, before `routes/api.ts` loads — they always resolve before any `/api/*` catch-all.
-- The deprecated alias `betterAuth` still works — prefer `auth`.
+- `@rudderjs/auth` depends on `@rudderjs/hash` (password verification) and `@rudderjs/session` (session storage).
+- `AUTH_SECRET` / `APP_KEY` must be set for signed verification URLs.
+- Auth middleware should be ordered: `AuthMiddleware()` → `RequireAuth()` → `EnsureEmailIsVerified()`.
+- `Gate.authorize()` throws a 403 `AuthorizationError` — catch it in your exception handler or let the default handler render a JSON 403.

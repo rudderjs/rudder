@@ -144,6 +144,134 @@ pnpm rudder queue:retry default
 
 The `sync` driver does not support `queue:work` — it throws an error with a hint to switch to `bullmq`. The `sync` driver executes jobs inline at dispatch time, so no background worker is needed.
 
+## Job Chaining
+
+Execute jobs sequentially — if any job fails, the chain stops:
+
+```ts
+import { Chain } from '@rudderjs/queue'
+
+await Chain.of([
+  new ProcessUpload(fileId),
+  new GenerateThumbnail(fileId),
+  new NotifyUser(userId),
+])
+  .onFailure((err, job) => console.error('Chain failed at', job))
+  .onQueue('media')
+  .dispatch()
+```
+
+Jobs in a chain share state via `getChainState(this)`:
+
+```ts
+import { Job, getChainState } from '@rudderjs/queue'
+
+class Step2 extends Job {
+  async handle() {
+    const state = getChainState(this)
+    console.log(state['resultFromStep1'])
+  }
+}
+```
+
+---
+
+## Job Batching
+
+Dispatch multiple jobs in parallel with progress tracking and callbacks:
+
+```ts
+import { Bus } from '@rudderjs/queue'
+
+const batch = await Bus.batch([
+  new SendEmail(user1),
+  new SendEmail(user2),
+  new SendEmail(user3),
+])
+  .then(batch => console.log('All done!', batch.progress))
+  .catch((err, batch) => console.error('Failed!', batch.failedJobs))
+  .finally(batch => cleanup())
+  .allowFailures()    // don't stop on individual failures
+  .onQueue('mail')
+  .dispatch()
+
+batch.totalJobs      // 3
+batch.processedJobs  // completed count
+batch.failedJobs     // failed count
+batch.pendingJobs    // remaining count
+batch.progress       // 0..100
+batch.finished       // boolean
+batch.cancel()       // stop remaining jobs
+```
+
+---
+
+## Unique Jobs
+
+Prevent duplicate jobs from being dispatched:
+
+```ts
+import { Job } from '@rudderjs/queue'
+import type { ShouldBeUnique } from '@rudderjs/queue'
+
+class SyncInventory extends Job implements ShouldBeUnique {
+  uniqueId() { return `sync-inventory-${this.warehouseId}` }
+  uniqueFor() { return 3600 }  // lock held for 1 hour
+
+  async handle() { /* ... */ }
+}
+```
+
+`ShouldBeUniqueUntilProcessing` releases the lock when the job starts (not when it finishes).
+
+---
+
+## Job Middleware
+
+Wrap job execution with reusable middleware:
+
+```ts
+import { Job, RateLimited, WithoutOverlapping, ThrottlesExceptions, Skip } from '@rudderjs/queue'
+
+class ImportJob extends Job {
+  middleware() {
+    return [
+      new RateLimited('api-calls', 60),        // max 60 per minute
+      new WithoutOverlapping('import-lock'),    // no concurrent runs
+      new ThrottlesExceptions(3, 5),            // back off after 3 errors in 5 min
+      Skip.when(() => isMaintenanceMode()),     // skip conditionally
+    ]
+  }
+
+  async handle() { /* ... */ }
+}
+```
+
+| Middleware | Description |
+|---|---|
+| `RateLimited(key, max, decaySeconds?)` | Rate-limit job execution (cache-backed) |
+| `WithoutOverlapping(key, expiresAfter?)` | Prevent concurrent execution |
+| `ThrottlesExceptions(maxExceptions, decayMinutes?)` | Back off after repeated failures |
+| `Skip.when(fn)` / `Skip.unless(fn)` | Conditionally skip execution |
+
+---
+
+## Queued Closures
+
+Dispatch inline functions without defining a Job class:
+
+```ts
+import { dispatch } from '@rudderjs/queue'
+
+await dispatch(async () => {
+  await sendWelcomeEmail(user.email)
+})
+
+await dispatch(async () => { /* ... */ }, { queue: 'mail', delay: 5000 })
+```
+
+---
+
 ## Notes
 
 - The built-in `sync` driver requires no additional packages and is always available.
@@ -151,3 +279,6 @@ The `sync` driver does not support `queue:work` — it throws an error with a hi
 - For serverless/event-driven queuing, use `@rudderjs/queue-inngest`.
 - Job payloads are passed as constructor arguments — ensure they are serializable if using an external driver.
 - `static queue` sets the default queue name for the job class; `static retries` sets the retry count; `static delay` sets the default dispatch delay in milliseconds (default `0`).
+- `Chain` and `Bus.batch` delegate to the adapter if it supports native chaining/batching; otherwise they wrap jobs for in-process execution.
+- Job middleware and unique locks use `@rudderjs/cache` when available; they fail open (allow execution) without it.
+- `dispatch(fn)` creates a lightweight job-like object — it works with any adapter.

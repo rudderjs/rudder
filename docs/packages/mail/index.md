@@ -161,6 +161,105 @@ Output format:
 
 For production SMTP delivery, install `nodemailer` and configure the `smtp` driver. See the [Nodemailer adapter docs](./nodemailer).
 
+## Queued Mail
+
+Send mail in the background via `@rudderjs/queue`:
+
+```ts
+// Queue for immediate background sending
+await Mail.to('user@example.com').queue(new WelcomeEmail(user))
+
+// Queue with a delay (milliseconds)
+await Mail.to('user@example.com').later(60_000, new WelcomeEmail(user))
+
+// Specify the queue name
+await Mail.to('user@example.com').onQueue('mail').queue(new WelcomeEmail(user))
+```
+
+Requires `@rudderjs/queue` to be installed and configured.
+
+---
+
+## Markdown Mail
+
+`MarkdownMailable` renders markdown content into responsive HTML email with component support:
+
+```ts
+import { MarkdownMailable } from '@rudderjs/mail'
+
+class WelcomeEmail extends MarkdownMailable {
+  constructor(private user: { name: string }) { super() }
+
+  build() {
+    return this.subject('Welcome!').markdown(`
+# Welcome, {{ name }}!
+
+Thanks for signing up.
+
+@component('button', { url: '{{ url }}' })
+Get Started
+@endcomponent
+
+@component('panel')
+If you didn't create this account, no action is needed.
+@endcomponent
+    `).with({ name: this.user.name, url: 'https://example.com/dashboard' })
+  }
+}
+```
+
+### Built-in Components
+
+| Component | Description |
+|---|---|
+| `button` | CTA button with `url` and optional `color` attributes |
+| `panel` | Info panel with left border accent |
+| `table` | Markdown table rendered as HTML email table |
+| `header` | Centered header with bottom border |
+| `footer` | Centered footer with top border and muted text |
+
+### Template Variables
+
+Use `{{ key }}` syntax. Call `.with({ key: 'value' })` to set variables.
+
+---
+
+## Failover Transport
+
+Try multiple mailers in order — if the first fails, automatically fall back to the next:
+
+```ts
+// config/mail.ts
+mailers: {
+  failover: {
+    driver: 'failover',
+    mailers: ['smtp', 'backup-smtp', 'log'],
+    retryAfter: 60,  // seconds before retrying a failed mailer
+  },
+  smtp: { driver: 'smtp', host: 'mail.example.com', port: 587 },
+  'backup-smtp': { driver: 'smtp', host: 'backup.example.com', port: 587 },
+  log: { driver: 'log' },
+}
+```
+
+---
+
+## Mail Preview
+
+Render a mailable as HTML in the browser for development:
+
+```ts
+import { mailPreview } from '@rudderjs/mail'
+
+if (process.env.NODE_ENV !== 'production') {
+  router.get('/mail-preview/welcome', mailPreview(() => new WelcomeEmail(sampleUser)))
+}
+```
+
+Visit `/mail-preview/welcome` in the browser to see the rendered email with a preview bar showing subject and type.
+
+---
+
 ## Notes
 
 - `Mailable.build()` **must return `this`** — all builder methods return `this` for chaining.
@@ -168,3 +267,6 @@ For production SMTP delivery, install `nodemailer` and configure the `smtp` driv
 - `Mail.to()` accepts one or more plain email address strings.
 - The `from` address in config is used as the global sender for all messages.
 - `build()` can be `async` — useful for loading data before building the message.
+- `MarkdownMailable` auto-generates a plain-text version alongside the HTML.
+- The failover adapter tracks failed mailers and skips them within the `retryAfter` window.
+- `mailPreview()` should only be registered in development — never expose in production.

@@ -318,9 +318,264 @@ interface OrmAdapter {
 
 Adapters may extend this interface with driver-specific methods (e.g. raw query access), but the Model class only relies on `query()`.
 
+## Attribute Casts
+
+Casts automatically transform attribute values when reading from and writing to the database.
+
+```ts
+class Post extends Model {
+  static casts = {
+    isPublished: 'boolean',
+    publishedAt: 'date',
+    metadata:    'json',
+    viewCount:   'integer',
+    tags:        'array',
+  } as const
+}
+```
+
+Built-in cast types: `'string'`, `'integer'`, `'float'`, `'boolean'`, `'date'`, `'datetime'`, `'json'`, `'array'`, `'collection'`, `'encrypted'`, `'encrypted:array'`, `'encrypted:object'`.
+
+Encrypted casts require `@rudderjs/crypt`.
+
+### Custom Cast Classes
+
+```ts
+import type { CastUsing } from '@rudderjs/orm'
+
+class MoneyCast implements CastUsing {
+  get(key: string, value: unknown) { return Number(value) / 100 }
+  set(key: string, value: unknown) { return Math.round(Number(value) * 100) }
+}
+
+class Product extends Model {
+  static casts = { price: MoneyCast }
+}
+```
+
+### `@Cast` Decorator
+
+```ts
+import { Model, Cast } from '@rudderjs/orm'
+
+class User extends Model {
+  @Cast('boolean') isAdmin = false
+  @Cast('date')    createdAt = new Date()
+}
+```
+
+---
+
+## Accessors & Mutators
+
+Define computed getters and write transformations using `Attribute.make()`:
+
+```ts
+import { Model, Attribute } from '@rudderjs/orm'
+
+class User extends Model {
+  static attributes = {
+    // Accessor — transform on read
+    firstName: Attribute.make({
+      get: (value) => String(value).charAt(0).toUpperCase() + String(value).slice(1),
+    }),
+
+    // Computed from multiple columns
+    fullName: Attribute.make({
+      get: (_, attrs) => `${attrs['firstName']} ${attrs['lastName']}`,
+    }),
+
+    // Mutator — transform on write (create/update)
+    password: Attribute.make({
+      set: (value) => hashSync(String(value)),
+    }),
+  }
+}
+```
+
+- **Accessors** run in `toJSON()` and transform the raw stored value.
+- **Mutators** run in `Model.create()` and `Model.update()` before data hits the database.
+- Attribute accessors take priority over casts for the same key.
+
+---
+
+## Serialization Controls
+
+### `static hidden` / `static visible`
+
+```ts
+class User extends Model {
+  static hidden  = ['password', 'rememberToken']  // denylist
+}
+
+class PublicUser extends Model {
+  static visible = ['id', 'name', 'avatar']  // allowlist (takes precedence)
+}
+```
+
+### `static appends`
+
+Always include computed accessor values in JSON output:
+
+```ts
+class User extends Model {
+  static appends    = ['fullName']
+  static attributes = {
+    fullName: Attribute.make({
+      get: (_, attrs) => `${attrs['firstName']} ${attrs['lastName']}`,
+    }),
+  }
+}
+```
+
+### Decorators
+
+```ts
+import { Model, Hidden, Visible, Appends } from '@rudderjs/orm'
+
+class User extends Model {
+  @Hidden   password = ''
+  @Visible  id = 0
+  @Visible  name = ''
+  @Appends  fullName = ''
+}
+```
+
+### Instance-level Overrides
+
+```ts
+const user = await User.find(1)
+
+user.makeVisible(['password'])    // show hidden fields
+user.makeHidden(['email'])        // hide fields
+user.setVisible(['id', 'name'])   // replace visible list
+user.setHidden(['password'])      // replace hidden list
+user.mergeVisible(['avatar'])     // add to visible
+user.mergeHidden(['ssn'])         // add to hidden
+
+// All return `this` for chaining
+user.makeVisible(['email']).makeHidden(['phone']).toJSON()
+```
+
+---
+
+## API Resources
+
+Transform model data for API responses with conditional fields:
+
+```ts
+import { JsonResource } from '@rudderjs/orm'
+
+class UserResource extends JsonResource<User> {
+  toArray() {
+    return {
+      id:    this.resource.id,
+      name:  this.resource.name,
+      admin: this.when(this.resource.role === 'admin', true),
+      bio:   this.whenNotNull(this.resource.bio, (b) => b.trim()),
+      posts: this.whenLoaded('posts'),
+      ...this.mergeWhen(this.resource.isAdmin, {
+        permissions: this.resource.permissions,
+      }),
+    }
+  }
+}
+```
+
+### Single Resource
+
+```ts
+const json = new UserResource(user).toArray()
+```
+
+### Collection
+
+```ts
+const collection = UserResource.collection(users, {
+  total: 100, page: 1, perPage: 15,
+})
+const response = await collection.toResponse()
+// → { data: [...], meta: { total: 100, page: 1, perPage: 15 } }
+```
+
+### Conditional Helpers
+
+| Method | Description |
+|---|---|
+| `when(condition, value, fallback?)` | Include `value` only when `condition` is true |
+| `whenNotNull(value, then, fallback?)` | Include when `value` is not null/undefined |
+| `whenLoaded(relation, value?, fallback?)` | Include when relation is loaded on resource |
+| `mergeWhen(condition, attrs)` | Merge attributes into output conditionally |
+
+---
+
+## ModelCollection
+
+Typed array wrapper with ORM-specific operations:
+
+```ts
+import { ModelCollection } from '@rudderjs/orm'
+
+const users = ModelCollection.wrap(await User.all())
+
+users.modelKeys()          // [1, 2, 3]
+users.find(2)              // item with id 2
+users.contains(2)          // true
+users.except([1, 3])       // items not in list
+users.only([1, 2])         // items in list
+users.diff(otherUsers)     // items not in other
+users.unique('email')      // deduplicated by key
+users.makeVisible(['password'])
+users.makeHidden(['email'])
+
+// Async ORM operations
+const fresh  = await users.fresh(User)
+const loaded = await users.load(User, 'posts')
+const query  = users.toQuery(User)
+```
+
+---
+
+## Model Factories
+
+Create model instances for testing:
+
+```ts
+import { ModelFactory, sequence } from '@rudderjs/orm'
+
+class UserFactory extends ModelFactory<{ name: string; email: string; role: string }> {
+  protected modelClass = User
+
+  definition() {
+    return {
+      name:  'Alice',
+      email: sequence(i => `user${i}@example.com`)(),
+      role:  'user',
+    }
+  }
+
+  protected states() {
+    return {
+      admin: () => ({ role: 'admin' }),
+    }
+  }
+}
+
+// Usage
+const user  = await UserFactory.new().create()
+const admin = await UserFactory.new().state('admin').create()
+const users = await UserFactory.new().create(5)
+const dto   = await UserFactory.new().make()  // without saving
+```
+
+---
+
 ## Notes
 
 - For a complete setup walkthrough including migrations and seeding, see the [Database & Models guide](/guide/database).
 - `ModelRegistry.set()` must be called before any `Model.*` static method is invoked. Register the database provider first in `bootstrap/providers.ts`.
 - `Model.getTable()` defaults to the lowercase class name followed by `s`. This is not snake_case and does not match most adapter conventions — always set `static table` explicitly.
 - `@rudderjs/orm` contains no runtime database code. It is safe to list as a direct dependency alongside an adapter package.
+- Casts and accessors apply in `toJSON()` (read side) and `Model.create()`/`Model.update()` (write side).
+- `static visible` takes precedence over `static hidden` — when both are set, only `visible` is used.
+- `@Cast`, `@Hidden`, `@Visible`, `@Appends` decorators require `experimentalDecorators: true`.

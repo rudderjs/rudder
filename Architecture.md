@@ -29,7 +29,7 @@
 | Auth | Native (guards, providers, gates, policies) via `@rudderjs/auth` |
 | Queues | BullMQ (default) / Inngest adapter |
 | Validation | Zod with a Laravel-style Form Request wrapper |
-| DI Container | Custom (inspired by tsyringe / InversifyJS — lighter) |
+| DI Container | Custom (inspired by tsyringe / InversifyJS — lighter, merged into core) |
 
 ---
 
@@ -37,62 +37,97 @@
 
 ```
 rudderjs/
-├── packages/               # 36 published packages (@rudderjs/*)
-│   ├── contracts/          # Pure TypeScript types — no runtime code (erased at build)
-│   │                       #   ForgeRequest, ForgeResponse, ServerAdapter, MiddlewareHandler, etc.
-│   ├── support/            # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer
-│   │                       #   sideEffects: false — fully tree-shakeable
-│   ├── di/                 # DI container: Container, @Injectable, @Inject, reflect-metadata
+├── packages/               # 38 published packages (@rudderjs/*)
+│   ├── contracts/          # Pure TypeScript types + runtime helpers
+│   │                       #   AppRequest (typed input accessors), AppResponse, ServerAdapter,
+│   │                       #   MiddlewareHandler, InputTypeError, attachInputAccessors
+│   ├── support/            # Utilities: Env, Collection (30+ methods), Str (35+ helpers),
+│   │                       #   Num (9 helpers), ConfigRepository, resolveOptionalPeer
 │   ├── middleware/         # Middleware, Pipeline, CorsMiddleware, LoggerMiddleware, ThrottleMiddleware
-│   │                       #   + RateLimit callable handler (cache-backed), CsrfMiddleware() factory
+│   │                       #   + RateLimit / RateLimitBuilder (cache-backed)
 │   ├── validation/         # FormRequest, validate(), validateWith(), ValidationError, z re-export
-│   ├── core/               # Bootstrapper, Application, Forge, ServiceProvider, rudder registry
-│   │                       #   re-exports contracts · support · di · middleware · validation
-│   ├── router/             # Global router singleton + decorator-based routing
-│   ├── orm/                # ORM contract + base Model + ModelRegistry
+│   ├── rudder/             # CommandRegistry, Command base class, parseSignature, rudder singleton
+│   ├── core/               # App bootstrapper, ServiceProvider, Forge, AppBuilder, DI container
+│   │                       #   HttpException, abort(), abort_if(), abort_unless(), report(),
+│   │                       #   ExceptionHandler, EventDispatcher, dispatch()
+│   │                       #   re-exports: di · support · contracts types · rudder
+│   ├── router/             # Decorator + fluent routing, named routes, route() URL generation,
+│   │                       #   Url class (HMAC-SHA256 signed URLs), ValidateSignature() middleware
+│   ├── orm/                # Model base class, QueryBuilder, ModelRegistry
+│   │                       #   Attribute casts (12 built-in + custom CastUsing), Attribute.make()
+│   │                       #   accessors/mutators, @Hidden/@Visible/@Appends/@Cast decorators,
+│   │                       #   JsonResource/ResourceCollection, ModelCollection, ModelFactory, sequence()
 │   ├── orm-prisma/         # Prisma adapter (multi-driver: pg, libsql, default)
 │   ├── orm-drizzle/        # Drizzle adapter (sqlite, postgresql, libsql)
 │   ├── server-hono/        # Hono adapter (HonoConfig, unified logger [rudderjs], CORS)
-│   ├── queue/              # Queue contract + Job base class + queue:work rudder command
+│   ├── queue/              # Job, DispatchBuilder, SyncAdapter, queue:work/status/clear/failed/retry
+│   │                       #   Chain.of() (sequential execution, state sharing), Bus.batch()
+│   │                       #   (then/catch/finally, progress tracking), ShouldBeUnique (cache locks),
+│   │                       #   job middleware (RateLimited, WithoutOverlapping, ThrottlesExceptions, Skip),
+│   │                       #   dispatch(fn) queued closures
 │   ├── queue-inngest/      # Inngest adapter — events: rudderjs/job.<ClassName>
 │   ├── queue-bullmq/       # BullMQ adapter — default prefix: 'rudderjs'
-│   ├── hash/               # Hashing facade — bcrypt + argon2 drivers, Hash.make/check/needsRehash
-│   ├── crypt/              # Encryption/decryption — AES-256-GCM, Crypt.encrypt/decrypt
-│   ├── auth/               # Native auth — guards (session, token), providers (eloquent, database),
-│   │                       #   gates, policies, Auth facade, AuthMiddleware(), RequireAuth()
-│   ├── sanctum/            # API token auth — PersonalAccessToken model, token creation/validation
-│   ├── socialite/          # OAuth provider — Google, GitHub, Facebook, Twitter, custom drivers
+│   ├── hash/               # Password hashing — Hash facade, BcryptDriver, Argon2Driver, hash() factory
+│   ├── crypt/              # Symmetric encryption — Crypt facade, AES-256-CBC, parseKey(), crypt() factory
+│   ├── auth/               # Native auth: Guards (SessionGuard), Providers (EloquentUserProvider),
+│   │                       #   Auth facade, Gate/Policy authorization, PasswordBroker,
+│   │                       #   AuthMiddleware(), RequireAuth(), MustVerifyEmail, EnsureEmailIsVerified(),
+│   │                       #   verificationUrl(), handleEmailVerification()
+│   ├── sanctum/            # API tokens — Sanctum class, TokenGuard, SanctumMiddleware(),
+│   │                       #   RequireToken(), SHA-256 hashed tokens with abilities
+│   ├── socialite/          # OAuth — Socialite facade, SocialUser, 4 built-in providers
+│   │                       #   (GitHub, Google, Facebook, Apple), extensible
 │   ├── session/            # HTTP session: SessionInstance, Session facade (AsyncLocalStorage)
 │   │                       #   CookieDriver (HMAC-SHA256) + RedisDriver, SessionMiddleware() factory
 │   ├── storage/            # Storage facade, LocalAdapter + S3Adapter (built-in)
 │   │                       #   S3 driver needs optional dep: @aws-sdk/client-s3
 │   ├── cache/              # Cache facade, MemoryAdapter + RedisAdapter (built-in)
 │   │                       #   Redis driver needs optional dep: ioredis
-│   ├── events/             # EventDispatcher, Listener interface, dispatch() helper
-│   ├── mail/               # Mailable, Mail facade, LogAdapter, mail() factory
-│   ├── mail-nodemailer/    # Nodemailer SMTP adapter
-│   ├── schedule/           # Task scheduler — schedule singleton, schedule:run/work/list
-│   ├── notification/       # Multi-channel notifications (mail, database)
-│   ├── panels/             # Admin panel builder — CRUD resources, schema elements, widgets, dashboard builder
-│   │                       #   AI chat sidebar: conversation persistence (Prisma), model selection,
-│   │                       #   resource agents, conversation switcher, auto-title, resource context pill
+│   ├── mail/               # Mailable, Mail facade, LogAdapter + SMTP (Nodemailer),
+│   │                       #   FailoverAdapter (ordered mailer fallback), MarkdownMailable
+│   │                       #   (markdown→responsive HTML, components: button/panel/table/header/footer),
+│   │                       #   Mail.to().queue()/later() (queued via @rudderjs/queue),
+│   │                       #   mailPreview() route handler, mail() factory
+│   ├── schedule/           # Task scheduler — schedule singleton, schedule:run/work/list,
+│   │                       #   sub-minute (everyFiveSeconds..everyThirtySeconds),
+│   │                       #   hooks (before/after/onSuccess/onFailure), withoutOverlapping(),
+│   │                       #   evenInMaintenanceMode(), onOneServer() (cache-backed lock)
+│   ├── notification/       # Notifiable, Notification, ChannelRegistry, notify(),
+│   │                       #   ShouldQueue (queued notifications), BroadcastChannel (WebSocket),
+│   │                       #   AnonymousNotifiable, Notification.route() (on-demand)
+│   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
+│   ├── live/               # Real-time collaborative sync via Yjs CRDT — /ws-live endpoint
+│   ├── panels/             # Admin panel builder — CRUD resources, schema elements, widgets,
+│   │                       #   dashboard builder, AI chat sidebar, theming, Panel.use() plugins
 │   ├── panels-lexical/     # Lexical rich-text editor adapter — RichContentField, block editor, collab
 │   ├── ai/                 # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class,
 │   │                       #   tool system, streaming, middleware, structured output, model registry
-│   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
-│   ├── live/               # Real-time collaborative sync via Yjs CRDT — /ws-live endpoint
 │   ├── image/              # Fluent image processing — resize, crop, convert, optimize (wraps sharp)
 │   ├── media/              # Media library — file browser, uploads, preview, image conversions
 │   ├── workspaces/         # AI workspace canvas — 3D nodes, departments, connections, orchestrator
+│   ├── log/                # Structured logging — channels (console, single, daily, stack, null),
+│   │                       #   RFC 5424 levels, LineFormatter/JsonFormatter, context propagation,
+│   │                       #   listeners, LogFake for testing, extendLog() for custom drivers
+│   ├── http/               # Fluent HTTP client — Http facade, retries, timeouts,
+│   │                       #   Pool.concurrency(), request/response interceptors,
+│   │                       #   Http.fake() with URL pattern matching + assertions
 │   ├── localization/       # i18n — trans(), setLocale(), locale middleware, JSON translation files
-│   ├── boost/              # AI developer tools — MCP server exposing project internals to coding assistants
-│   └── cli/                # Rudder-style CLI (make:*, module:*, user commands)
+│   ├── boost/              # AI developer tools — MCP server exposing project internals
+│   └── cli/                # Rudder-style CLI (make:*, module:*, module:publish, user commands)
 ├── create-rudderjs-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
-│                           #   Prompts: name · DB · Todo · frameworks (React/Vue/Solid)
-│                           #           primary framework · Tailwind · shadcn/ui
+│                           #   Prompts: name · DB · packages · Todo · frameworks · Tailwind · shadcn
 ├── docs/                   # VitePress documentation site
 └── playground/             # Canonical demo app — primary integration reference
 ```
+
+**Merged/removed packages** (code absorbed, originals deleted):
+- `@rudderjs/di` → merged into `@rudderjs/core`
+- `@rudderjs/rate-limit` → merged into `@rudderjs/middleware`
+- `@rudderjs/storage-s3` → merged into `@rudderjs/storage`
+- `@rudderjs/cache-redis` → merged into `@rudderjs/cache`
+- `@rudderjs/mail-nodemailer` → merged into `@rudderjs/mail`
+- `@rudderjs/events` → merged into `@rudderjs/core`
+- `@rudderjs/dashboards` → merged into `@rudderjs/panels`
 
 ---
 
@@ -123,7 +158,9 @@ my-app/
 │   │   ├── Controllers/        # Decorator-based controllers
 │   │   ├── Middleware/         # Custom middleware
 │   │   └── Requests/           # Form request / validation classes
-│   └── Jobs/                   # Queue jobs
+│   ├── Jobs/                   # Queue jobs
+│   ├── Mail/                   # Mailable classes
+│   └── Notifications/          # Notification classes
 │
 ├── pages/                      # Vike file-based routing (SSR pages)
 │   ├── index/
@@ -139,13 +176,15 @@ my-app/
 │   └── console.ts              # Rudder commands (rudder.command()) — side-effect file
 │
 ├── config/
-│   ├── app.ts                  # APP_NAME, APP_ENV, APP_DEBUG
+│   ├── app.ts                  # APP_NAME, APP_ENV, APP_DEBUG, APP_KEY
 │   ├── server.ts               # PORT, CORS_ORIGIN, TRUST_PROXY
 │   ├── database.ts             # DB_CONNECTION, DATABASE_URL
 │   ├── auth.ts                 # Guards, providers, gates/policies config
 │   ├── session.ts              # SESSION_DRIVER, SESSION_SECRET, cookie/redis options
 │   ├── queue.ts                # Queue driver config
 │   ├── mail.ts                 # Mailer config
+│   ├── cache.ts                # Cache driver config
+│   ├── storage.ts              # Storage disk config
 │   └── index.ts                # Barrel re-export
 │
 ├── bootstrap/
@@ -169,60 +208,81 @@ my-app/
 ## Dependency Flow
 
 ```
-Level 1 (parallel — no framework deps):
-  @rudderjs/contracts   @rudderjs/support
-          │                │               │
-          └────────────────┴───────────────┘
-                           │
-          ┌────────────────┼──────────────────────────┐
-          ▼                ▼                          ▼
-   @rudderjs/router    @rudderjs/middleware         @rudderjs/server-hono
-   @rudderjs/validation @rudderjs/middleware
-          │
-          └──────────────────┐
-                             ▼
-                      @rudderjs/core (+ support + di + middleware + validation + router)
-                             │
-           ┌─────────────────┼──────────────────┐
-           ▼                 ▼                  ▼
-    @rudderjs/queue       @rudderjs/cache       @rudderjs/orm
-    @rudderjs/mail        @rudderjs/storage     @rudderjs/hash
-    @rudderjs/schedule    @rudderjs/crypt       @rudderjs/validation
-    @rudderjs/auth (hash, session, orm)
-    @rudderjs/sanctum (auth, orm)
-    @rudderjs/socialite (auth, session)
-           │
-    orm-prisma   queue-bullmq   queue-inngest
-    mail-nodemailer
-           │
-    @rudderjs/panels      @rudderjs/ai
-    (orm, auth, storage)  (4 providers, Agent, tools, streaming)
-           │                     │
-    @rudderjs/panels-lexical     @rudderjs/workspaces (Panel.use plugin, uses ai)
-    @rudderjs/media (Panel.use plugin)
+Level 0 — No framework deps:
+  @rudderjs/contracts    (pure types + runtime helpers)
+  @rudderjs/support      (Env, Collection, Str, Num, ConfigRepository)
 
-    @rudderjs/broadcast   @rudderjs/live (Yjs CRDT)
-    @rudderjs/image       @rudderjs/localization
+Level 1 — Depends on contracts/support only:
+  @rudderjs/middleware   (Pipeline, CORS, Logger, Throttle, RateLimit)
+  @rudderjs/validation   (FormRequest, z)
+  @rudderjs/router       (fluent + decorator routing, named routes, route(), Url, signed URLs)
+  @rudderjs/server-hono  (Hono adapter)
+  @rudderjs/rudder       (CommandRegistry, Command base)
+
+Level 2 — Core framework:
+  @rudderjs/core         (Application, DI container, ServiceProvider, ExceptionHandler,
+                          abort(), report(), EventDispatcher)
+                          re-exports: contracts, support, rudder
+
+Level 3 — Infrastructure:
+  @rudderjs/orm          (Model, casts, accessors, JsonResource, ModelCollection, ModelFactory)
+  @rudderjs/queue        (Job, Chain, Batch, unique, job middleware, closures)
+  @rudderjs/cache        (Memory + Redis)
+  @rudderjs/storage      (Local + S3)
+  @rudderjs/hash         (bcrypt + argon2)
+  @rudderjs/crypt        (AES-256-CBC)
+  @rudderjs/session      (cookie + redis)
+  @rudderjs/log          (channels, formatters, context, LogFake)
+  @rudderjs/http         (fluent fetch, retries, pools, Http.fake())
+
+Level 4 — Adapter packages:
+  @rudderjs/orm-prisma   (Prisma adapter)
+  @rudderjs/orm-drizzle  (Drizzle adapter)
+  @rudderjs/queue-bullmq (BullMQ adapter)
+  @rudderjs/queue-inngest(Inngest adapter)
+
+Level 5 — Auth & communication:
+  @rudderjs/auth         (guards, providers, gates, email verification — depends on hash + session)
+  @rudderjs/sanctum      (API tokens — depends on auth)
+  @rudderjs/socialite    (OAuth — GitHub, Google, Facebook, Apple)
+  @rudderjs/mail         (Mailable, SMTP, failover, markdown, queued, preview)
+  @rudderjs/notification (mail + database + broadcast channels, queued, on-demand)
+  @rudderjs/schedule     (cron, sub-minute, hooks, onOneServer)
+  @rudderjs/broadcast    (WebSocket channels)
+  @rudderjs/live         (Yjs CRDT real-time sync)
+  @rudderjs/localization (i18n)
+
+Level 6 — UI & AI:
+  @rudderjs/ai           (4 providers, Agent, tools, streaming, middleware)
+  @rudderjs/panels       (admin panel, resources, plugins, AI chat, theming)
+  @rudderjs/panels-lexical (Lexical rich-text editor)
+  @rudderjs/media        (media library — Panel.use plugin)
+  @rudderjs/workspaces   (AI workspace canvas — Panel.use plugin)
+  @rudderjs/image        (image processing — wraps sharp)
+
+Level 7 — Dev tools:
+  @rudderjs/boost        (MCP server for AI coding assistants)
+  @rudderjs/cli          (make:*, module:*, module:publish)
 ```
 
-**Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types (`ForgeRequest`, `ForgeResponse`, `ServerAdapter`, `MiddlewareHandler`, `RouteDefinition`, `FetchHandler`). `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core — eliminating the former router↔core cycle entirely. `@rudderjs/core` lists `@rudderjs/router` as a regular dependency and imports it with a plain `await import('@rudderjs/router')`. Turbo resolves the build order via the standard DAG: contracts/support/di first, then router + server-hono, then core, then everything else.
+**Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types. `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core. `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer`. Never add `@rudderjs/core` to router's dependencies.
 
-**AI separation**: `@rudderjs/ai` is a generic backend engine (no UI, no Prisma). All AI chat UI, conversation Prisma models, and panel-specific features live in `@rudderjs/panels`. Never add `@rudderjs/panels` as a dependency of `@rudderjs/ai`.
+**AI separation**: `@rudderjs/ai` is a generic backend engine (no UI, no Prisma). All AI chat UI and panel-specific features live in `@rudderjs/panels`. Never add `@rudderjs/panels` as a dependency of `@rudderjs/ai`.
 
 ### Package Merge Policy (Tight-Coupling Only)
 
 Merge packages only when they are effectively one runtime unit.
 
-Use this checklist before any merge:
+Checklist before merging:
 
-1. **Always co-deployed**: both packages are always installed/booted together in real apps.
-2. **Shared lifecycle**: they register/boot together and one has no useful standalone runtime behavior.
-3. **No adapter boundary**: package is not an integration boundary for multiple drivers/backends.
-4. **No portability boundary**: package is not optional due to environment/runtime constraints.
-5. **Same release cadence**: changes almost always land together, with no independent versioning value.
-6. **Low blast radius**: merge will not force most consumers to change imports/dependencies.
+1. **Always co-deployed**: both packages are always installed/booted together.
+2. **Shared lifecycle**: they register/boot together and one has no meaningful standalone behavior.
+3. **No adapter boundary**: package is not a plugin/driver integration surface.
+4. **No portability boundary**: package is not optional due to runtime/environment constraints.
+5. **Same release cadence**: they nearly always change together.
+6. **Low blast radius**: merge does not force widespread import/dependency churn.
 
-If any checklist item fails, keep the package separate.
+If any item fails, keep packages separate.
 
 ---
 
@@ -237,26 +297,25 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
 import { hono } from '@rudderjs/server-hono'
+import { RateLimit } from '@rudderjs/middleware'
 import configs from '../config/index.ts'
 import providers from './providers.ts'
 
 export default Application.configure({
-  server:    hono(configs.server),  // server adapter + runtime config
-  config:    configs,               // all config/ files
-  providers,                        // ordered provider array
+  server:    hono(configs.server),
+  config:    configs,
+  providers,
 })
   .withRouting({
-    web:      () => import('../routes/web.ts'),       // page + web form routes
-    api:      () => import('../routes/api.ts'),       // JSON API routes
-    commands: () => import('../routes/console.ts'),   // rudder commands
+    web:      () => import('../routes/web.ts'),
+    api:      () => import('../routes/api.ts'),
+    commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-    // Truly global middleware — applies to all requests (web + API)
-    m.use(RateLimit.perMinute(60))
-    m.use(requestIdMiddleware)
+    m.use(RateLimit.perMinute(60).toHandler())
   })
   .withExceptions((_e) => {})
-  .create()                         // returns Forge instance
+  .create()
 ```
 
 `bootstrap/providers.ts`:
@@ -264,15 +323,16 @@ export default Application.configure({
 import { hash } from '@rudderjs/hash'
 import { session } from '@rudderjs/session'
 import { auth } from '@rudderjs/auth'
+import { database } from '@rudderjs/orm-prisma'
 import configs from '../config/index.ts'
 
 export default [
-  DatabaseServiceProvider,     // first — sets ModelRegistry for all models
+  database(configs.database),  // first — sets ModelRegistry
   hash(configs.hash),          // bcrypt/argon2 hashing
   session(configs.session),    // session driver (cookie/redis)
   auth(configs.auth),          // guards, providers, gates, policies
   AppServiceProvider,
-] satisfies (new (app: Application) => ServiceProvider)[]
+]
 ```
 
 **Provider lifecycle:**
@@ -283,7 +343,7 @@ export default [
 
 ### Entry Point — WinterCG
 
-`src/index.ts` is a single line — Forge bootstraps lazily on first request:
+`src/index.ts`:
 ```ts
 import forge from '../bootstrap/app.ts'
 
@@ -297,23 +357,25 @@ export default {
 
 ### HTTP Routes — `routes/api.ts`
 
-Side-effect file — just import and register, no exports needed:
 ```ts
-import { router } from '@rudderjs/router'
+import { router, route } from '@rudderjs/router'
 import { resolve } from '@rudderjs/core'
 import { UserService } from '../app/Services/UserService.js'
 
 router.get('/api/users', async (_req, res) => {
   const users = await resolve(UserService).findAll()
   return res.json({ data: users })
-})
+}).name('users.index')
 
-router.post('/api/users', async (req, res) => {
-  const user = await resolve(UserService).create(req.body)
-  return res.status(201).json({ data: user })
-})
+router.get('/api/users/:id', async (req, res) => {
+  const user = await resolve(UserService).find(req.params.id)
+  return res.json({ data: user })
+}).name('users.show')
 
-// Catch-all: prevent unmatched /api/* from falling through to Vike
+// URL generation from named routes
+route('users.show', { id: 42 })  // → '/api/users/42'
+
+// Catch-all
 router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))
 ```
 
@@ -321,7 +383,6 @@ router.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not f
 
 ### Console Routes — `routes/console.ts`
 
-Side-effect file — register rudder commands, no exports needed:
 ```ts
 import { rudder } from '@rudderjs/core'
 import { User } from '../app/Models/User.js'
@@ -331,8 +392,6 @@ rudder.command('db:seed', async () => {
   console.log('Done.')
 }).description('Seed the database with sample data')
 ```
-
-The CLI boots the full app (`bootstrap/app.ts`) before running any command, so providers (DB connections, etc.) are available inside command handlers.
 
 ---
 
@@ -353,36 +412,35 @@ export class UserService {
 }
 ```
 
-Import from `@rudderjs/core` or `@rudderjs/core/di`.
-
 ---
 
-### ORM — Eloquent-style via Prisma
+### ORM — Eloquent-style
 
-`prisma/schema.prisma`:
-```prisma
-model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  role          String    @default("user")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-}
-```
-
-`app/Models/User.ts`:
 ```ts
-import { Model } from '@rudderjs/orm'
+import { Model, Attribute } from '@rudderjs/orm'
 
 export class User extends Model {
-  static table = 'user'   // matches Prisma's accessor (lowercase model name)
-  id!: string; name!: string; email!: string; role!: string
-  createdAt!: Date; updatedAt!: Date
+  static table    = 'users'
+  static fillable = ['name', 'email', 'role']
+  static hidden   = ['password']
+
+  static casts = {
+    isAdmin:   'boolean',
+    createdAt: 'date',
+    settings:  'json',
+  } as const
+
+  static attributes = {
+    fullName: Attribute.make({
+      get: (_, attrs) => `${attrs['firstName']} ${attrs['lastName']}`,
+    }),
+  }
+
+  static appends = ['fullName']
+
+  declare id: number
+  declare name: string
+  declare email: string
 }
 ```
 
@@ -393,237 +451,125 @@ const one     = await User.find(id)
 const admins  = await User.where('role', 'admin').get()
 const created = await User.create({ name: 'Diana', email: 'diana@example.com' })
 const paged   = await User.query().paginate(1, 15)
+
+// Instance serialization overrides
+user.makeVisible(['password']).makeHidden(['email']).toJSON()
+```
+
+API Resources:
+```ts
+import { JsonResource } from '@rudderjs/orm'
+
+class UserResource extends JsonResource<User> {
+  toArray() {
+    return {
+      id:    this.resource.id,
+      name:  this.resource.name,
+      admin: this.when(this.resource.role === 'admin', true),
+      posts: this.whenLoaded('posts'),
+    }
+  }
+}
+
+const response = await UserResource.collection(users).toResponse()
+```
+
+Model Factories:
+```ts
+import { ModelFactory, sequence } from '@rudderjs/orm'
+
+class UserFactory extends ModelFactory<UserAttrs> {
+  protected modelClass = User
+  definition() {
+    return { name: 'Alice', email: sequence(i => `user${i}@test.com`)(), role: 'user' }
+  }
+  protected states() {
+    return { admin: () => ({ role: 'admin' }) }
+  }
+}
+
+const users = await UserFactory.new().state('admin').create(5)
 ```
 
 ---
 
 ### Auth — Native (Guards, Providers, Gates, Policies)
 
-`@rudderjs/auth` is a full native authentication and authorization system inspired by Laravel:
-
 ```ts
-// config/auth.ts
-export default {
-  defaults: { guard: 'web' },
-  guards: {
-    web:  { driver: 'session', provider: 'users' },
-    api:  { driver: 'token',   provider: 'users' },
-  },
-  providers: {
-    users: { driver: 'eloquent', model: User },
-  },
-} satisfies AuthConfig
+import { Auth, Gate } from '@rudderjs/auth'
+
+// Attempt login
+await Auth.attempt({ email, password })
+
+// Access authenticated user
+const user = Auth.user()
+const loggedIn = Auth.check()
+
+// Middleware
+Route.get('/api/me', handler, [AuthMiddleware()])       // sets req.user
+Route.get('/api/profile', handler, [RequireAuth()])     // 401 if not authenticated
+Route.get('/dashboard', handler, [EnsureEmailIsVerified()])  // 403 if unverified
+
+// Gates & Policies
+Gate.define('edit-post', (user, post) => user.id === post.authorId)
+await Gate.authorize('edit-post', post)  // throws 403 if denied
+
+// Email verification (signed URLs)
+import { verificationUrl } from '@rudderjs/auth'
+const url = verificationUrl(user)  // → '/email/verify/42/abc123?expires=...&signature=...'
 ```
-
-```ts
-// bootstrap/providers.ts
-import { hash } from '@rudderjs/hash'
-import { session } from '@rudderjs/session'
-import { auth } from '@rudderjs/auth'
-
-export default [
-  DatabaseServiceProvider,
-  hash(configs.hash),       // bcrypt/argon2 hashing
-  session(configs.session), // session driver (cookie/redis)
-  auth(configs.auth),       // guards, providers, gates, policies
-  AppServiceProvider,
-]
-```
-
-**Authentication** — session-based (web) and token-based (API):
-```ts
-import { Auth } from '@rudderjs/auth'
-
-// Attempt login (hashes & verifies password via @rudderjs/hash)
-const result = await Auth.attempt({ email, password })
-
-// Login a user directly
-await Auth.login(user)
-
-// Access the authenticated user
-const user = Auth.user()       // AuthUser | undefined
-const loggedIn = Auth.check()  // boolean
-
-// Logout
-await Auth.logout()
-```
-
-**Middleware** — `AuthMiddleware()` reads the session guard and sets `req.user`. `RequireAuth()` returns 401 if unauthenticated:
-```ts
-import { AuthMiddleware, RequireAuth } from '@rudderjs/auth'
-
-// Sets req.user (undefined if not logged in)
-Route.get('/api/me', handler, [AuthMiddleware()])
-
-// Returns 401 if no authenticated user
-Route.get('/api/profile', handler, [RequireAuth()])
-```
-
-**Gates & Policies** — fine-grained authorization:
-```ts
-import { Gate } from '@rudderjs/auth'
-
-// Inline gate
-Gate.define('edit-post', (user, post) => {
-  return user.id === post.authorId
-})
-
-// Policy class
-class PostPolicy extends Policy {
-  update(user: AuthUser, post: Post) { return user.id === post.authorId }
-  delete(user: AuthUser, post: Post) { return user.role === 'admin' }
-}
-Gate.policy(Post, PostPolicy)
-
-// Check authorization
-if (await Gate.allows('edit-post', post)) { /* ... */ }
-await Gate.authorize('edit-post', post) // throws 403 if denied
-```
-
-**Sanctum — API Tokens** (`@rudderjs/sanctum`):
-```ts
-import { Sanctum } from '@rudderjs/sanctum'
-
-// Create a token for the user
-const { token, accessToken } = await Sanctum.createToken(user, 'api-token', ['read', 'write'])
-
-// Validate via the 'api' guard (reads Bearer token from Authorization header)
-Route.get('/api/data', handler, [AuthMiddleware('api')])
-```
-
-**Socialite — OAuth** (`@rudderjs/socialite`):
-```ts
-import { Socialite } from '@rudderjs/socialite'
-
-// Redirect to provider
-router.get('/auth/github/redirect', (req, res) => {
-  return Socialite.driver('github').redirect(req, res)
-})
-
-// Handle callback
-router.get('/auth/github/callback', async (req, res) => {
-  const socialUser = await Socialite.driver('github').user(req)
-  // socialUser.id, socialUser.email, socialUser.name, socialUser.avatar
-  const user = await User.firstOrCreate({ githubId: socialUser.id }, { ... })
-  await Auth.login(user)
-  return res.redirect('/dashboard')
-})
-```
-
----
-
-### Server Adapter
-
-Developer picks the server in `bootstrap/app.ts`. Runtime config (port, CORS) lives in `config/server.ts`:
-
-```ts
-export default {
-  port:       Env.getNumber('PORT', 3000),
-  trustProxy: Env.getBool('TRUST_PROXY', false),
-  cors: {
-    origin:  Env.get('CORS_ORIGIN', '*'),
-    methods: Env.get('CORS_METHODS', 'GET,POST,PUT,PATCH,DELETE,OPTIONS'),
-    headers: Env.get('CORS_HEADERS', 'Content-Type,Authorization'),
-  },
-}
-```
-
-Available adapter: `hono()` ✅
-
-The Hono adapter includes:
-- Unified request logger with ANSI colors (`[rudderjs]` tag)
-- Automatic CORS middleware when `cors` config is set
-- Vike's HTTP log suppression (no duplicate lines)
-
----
-
-### Validation / Form Requests
-
-```ts
-export class CreateUserRequest extends FormRequest {
-  rules() {
-    return z.object({
-      name:  z.string().min(2),
-      email: z.string().email(),
-    })
-  }
-}
-
-// Inline validation
-const data = await validate(z.object({ name: z.string() }), req)
-```
-
-Import from `@rudderjs/core` or `@rudderjs/core/validation`.
 
 ---
 
 ### Queue / Jobs
 
 ```ts
-export class SendWelcomeEmail extends Job {
-  constructor(public user: User) { super() }
-  async handle() { /* send email */ }
-}
+import { Job, Chain, Bus, dispatch } from '@rudderjs/queue'
 
+// Basic dispatch
 await SendWelcomeEmail.dispatch(user).send()
 await SendWelcomeEmail.dispatch(user).delay(5000).onQueue('emails').send()
-```
 
-Supported adapters: **BullMQ** (Redis-backed, `queue:work` rudder command) and **Inngest** (serverless).
+// Job chaining — sequential execution with state sharing
+await Chain.of([
+  new ProcessUpload(fileId),
+  new GenerateThumbnail(fileId),
+  new NotifyUser(userId),
+]).onFailure((err, job) => console.error('Failed at', job)).dispatch()
 
-Worker lifecycle with BullMQ:
-```bash
-pnpm rudder queue:work            # start BullMQ worker (graceful shutdown on SIGTERM/SIGINT)
-```
+// Job batching — parallel with progress tracking
+const batch = await Bus.batch([
+  new SendEmail(user1),
+  new SendEmail(user2),
+]).then(b => console.log('Done!', b.progress)).dispatch()
 
----
+// Queued closures
+await dispatch(async () => { await sendWelcomeEmail(user) })
 
-### Cache
-
-```ts
-import { cache } from '@rudderjs/cache'
-
-await cache().put('key', value, 300)   // TTL in seconds
-const hit = await cache().get('key')
-await cache().forget('key')
-await cache().remember('key', 60, () => expensiveQuery())
-```
-
-Drivers: `memory` (built-in, default) and `redis` (built-in — install `ioredis` to use Redis).
-
----
-
-### Storage
-
-```ts
-import { storage } from '@rudderjs/storage'
-
-await storage().put('avatars/user-1.jpg', buffer)
-const url  = await storage().url('avatars/user-1.jpg')
-const file = await storage().get('avatars/user-1.jpg')
-await storage().delete('avatars/user-1.jpg')
-```
-
-Drivers: `local` (built-in, default) and `s3` (built-in — supports AWS S3, Cloudflare R2, MinIO). Install `@aws-sdk/client-s3` to use S3 disks.
-
-```bash
-pnpm rudder storage:link    # creates public/storage symlink → storage/app/public
+// Job middleware
+class MyJob extends Job {
+  middleware() { return [new RateLimited('api', 60), new WithoutOverlapping('import')] }
+  async handle() { ... }
+}
 ```
 
 ---
 
-### Events
+### Signed URLs
 
 ```ts
-import { dispatch, events } from '@rudderjs/core'
+import { Url, ValidateSignature, route } from '@rudderjs/router'
 
-// Register a listener
-events().listen('user.registered', async (payload) => {
-  console.log('New user:', payload.user.email)
-})
+// Named routes
+router.get('/invoice/:id/download', handler, [ValidateSignature()])
+  .name('invoice.download')
 
-// Dispatch
-await dispatch('user.registered', { user })
+// Generate signed URL
+Url.signedRoute('invoice.download', { id: 42 })
+Url.temporarySignedRoute('invoice.download', 3600, { id: 42 })
+
+// Validate
+Url.isValidSignature(req)
 ```
 
 ---
@@ -631,16 +577,59 @@ await dispatch('user.registered', { user })
 ### Mail
 
 ```ts
-import { mail } from '@rudderjs/mail'
+import { Mail, MarkdownMailable } from '@rudderjs/mail'
 
-await mail().send({
-  to:      'user@example.com',
-  subject: 'Welcome!',
-  html:    '<h1>Hello</h1>',
-})
+// Send immediately
+await Mail.to('user@example.com').send(new WelcomeEmail(user))
+
+// Queue for background sending
+await Mail.to('user@example.com').queue(new WelcomeEmail(user))
+await Mail.to('user@example.com').later(60_000, new WelcomeEmail(user))
+
+// Markdown mail with components
+class WelcomeEmail extends MarkdownMailable {
+  build() {
+    return this.subject('Welcome!').markdown(`
+# Welcome, {{ name }}!
+
+@component('button', { url: '{{ url }}' })
+Get Started
+@endcomponent
+    `).with({ name: this.user.name, url: '/dashboard' })
+  }
+}
+
+// Mail preview (dev only)
+router.get('/mail-preview/welcome', mailPreview(() => new WelcomeEmail(sampleUser)))
 ```
 
-Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (built-in adapter; requires optional `nodemailer` dependency).
+Drivers: `log`, `smtp`, `failover` (ordered fallback).
+
+---
+
+### Notifications
+
+```ts
+import { notify, Notification, AnonymousNotifiable } from '@rudderjs/notification'
+
+// Send to a user
+await notify(user, new InvoiceNotification(invoice))
+
+// On-demand (no stored user)
+await notify(
+  Notification.route('mail', 'visitor@example.com'),
+  new OrderConfirmation(order),
+)
+
+// Queued notifications
+class InvoiceNotification extends Notification implements ShouldQueue {
+  shouldQueue = true as const
+  queueDelay = 5000
+  via() { return ['mail', 'database', 'broadcast'] }
+}
+```
+
+Channels: `mail`, `database`, `broadcast`.
 
 ---
 
@@ -649,76 +638,119 @@ Drivers: `log` (built-in, prints to console — great for dev) and `smtp` (built
 ```ts
 import { schedule } from '@rudderjs/schedule'
 
-schedule().call(() => cleanupExpiredSessions())
+schedule.call(() => cleanupExpiredSessions())
   .everyHour()
+  .before(() => console.log('Starting...'))
+  .onSuccess(() => console.log('Done!'))
+  .onFailure((err) => reportError(err))
+  .withoutOverlapping()
+  .onOneServer()
   .description('Cleanup expired sessions')
 
-schedule().command('db:seed')
-  .dailyAt('02:00')
+// Sub-minute scheduling
+schedule.call(() => pollExternalApi())
+  .everyFiveSeconds()
 ```
 
 ```bash
-pnpm rudder schedule:run     # run due tasks once (good for cron)
-pnpm rudder schedule:work    # run loop (process.cwd, 60s interval)
-pnpm rudder schedule:list    # show all scheduled tasks
+pnpm rudder schedule:run     # run due tasks once (cron entry point)
+pnpm rudder schedule:work    # in-process loop
+pnpm rudder schedule:list    # show all tasks
+```
+
+---
+
+### Logging
+
+```ts
+import { Log } from '@rudderjs/log'
+
+Log.info('User registered', { userId: user.id })
+Log.error('Payment failed', { orderId, error: err.message })
+Log.channel('slack').critical('Server down!')
+```
+
+Channels: `console`, `single`, `daily`, `stack`, `null`. LogFake for testing.
+
+---
+
+### HTTP Client
+
+```ts
+import { Http } from '@rudderjs/http'
+
+const res = await Http.withToken(token).timeout(5000).retry(3).get('/api/users')
+const users = res.json<User[]>()
+
+// Concurrent pool
+const results = await Http.pool(p => {
+  p.add(http => http.get('/api/a'))
+  p.add(http => http.get('/api/b'))
+}).concurrency(2).send()
+
+// Testing
+const fake = Http.fake()
+fake.register('api.example.com', { status: 200, body: { ok: true }, headers: {} })
+fake.preventStrayRequests()
+```
+
+---
+
+### Error Handling
+
+```ts
+import { abort, abort_if, abort_unless, report } from '@rudderjs/core'
+
+abort(404, 'Not found')
+abort_if(!user, 401, 'Unauthorized')
+abort_unless(user.isAdmin, 403, 'Forbidden')
+report(new Error('Something went wrong'))  // routes to log channel
+```
+
+---
+
+### Cache / Storage / Session
+
+```ts
+// Cache
+import { cache } from '@rudderjs/cache'
+await cache().put('key', value, 300)
+const hit = await cache().remember('key', 60, () => expensiveQuery())
+
+// Storage
+import { storage } from '@rudderjs/storage'
+await storage().put('avatars/user-1.jpg', buffer)
+const url = await storage().url('avatars/user-1.jpg')
+
+// Session
+import { Session } from '@rudderjs/session'
+Session.put('visits', (Session.get<number>('visits') ?? 0) + 1)
+Session.flash('success', 'Saved!')
 ```
 
 ---
 
 ### Middleware Patterns
 
-All built-in middleware are **callable factory functions** — no `new` keyword, no `.toHandler()`:
+All built-in middleware are **callable factory functions**:
 
 ```ts
-import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
-import { AuthMiddleware } from '@rudderjs/auth'
+import { RateLimit } from '@rudderjs/middleware'
+import { AuthMiddleware, RequireAuth, EnsureEmailIsVerified } from '@rudderjs/auth'
 import { SessionMiddleware } from '@rudderjs/session'
+import { ValidateSignature } from '@rudderjs/router'
 
-// Global (bootstrap/app.ts)
-m.use(RateLimit.perMinute(60))
+// Global
+m.use(RateLimit.perMinute(60).toHandler())
 
-// Web routes (routes/web.ts) — session + CSRF like Laravel's 'web' group
-const webMw = [SessionMiddleware(), CsrfMiddleware()]
-Route.get('/dashboard', handler, webMw)
-
-// Protected API routes
-const authMw = AuthMiddleware()
-Route.get('/api/me', handler, [authMw])
-
-// Per-route rate limit with custom key
-const authLimit = RateLimit.perMinute(10)
-  .by(req => `${req.headers['x-forwarded-for']}:${req.path}`)
-  .message('Too many auth attempts.')
-Route.post('/api/login', handler, [authLimit])
+// Per-route
+router.get('/dashboard', handler, [RequireAuth(), EnsureEmailIsVerified()])
+router.get('/invoice/:id', handler, [ValidateSignature()])
 ```
-
-**`RateLimit`** uses the configured cache driver. Sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` response headers. Global + per-route limits stack independently (each has its own counter).
-
-**`SessionMiddleware()`** reads config from `'session.config'` in the DI container (registered by the `session()` provider). Sets `req.session` and the `Session` facade via `AsyncLocalStorage`.
-
-**`CsrfMiddleware()`** validates the `X-CSRF-Token` header on mutating requests (`POST/PUT/PATCH/DELETE`). Token is stored in the session.
-
-**`AuthMiddleware()`** uses the configured session guard to resolve the authenticated user and sets `req.user: AuthUser | undefined`. Accepts an optional guard name (`AuthMiddleware('api')` for token-based). **`RequireAuth()`** extends this with a hard `401` if no user is found.
-
-### Session
-
-```ts
-import { Session } from '@rudderjs/session'
-
-// Via facade (ALS-based — works anywhere in the call stack)
-Session.put('visits', (Session.get<number>('visits') ?? 0) + 1)
-Session.flash('success', 'Saved!')
-
-// Via req.session (type-safe on AppRequest)
-req.session.get<string>('user_id')
-req.session.put('cart', items)
-```
-
-Drivers: `cookie` (HMAC-SHA256 signed, default) and `redis` (UUID session ID, needs `ioredis`).
 
 ---
 
-### CLI (pnpm rudder — like Rudder)
+### CLI
 
 ```bash
 # Scaffolding
@@ -728,13 +760,14 @@ pnpm rudder make:job SendWelcomeEmail
 pnpm rudder make:request CreateUserRequest
 pnpm rudder make:middleware AuthMiddleware
 pnpm rudder make:provider PaymentServiceProvider
-pnpm rudder make:module Blog         # full module scaffold
-
-# Module Prisma shards
-pnpm rudder module:publish           # merge *.prisma into prisma/schema.prisma
+pnpm rudder make:module Blog
 
 # Queue
-pnpm rudder queue:work
+pnpm rudder queue:work [queues=default]
+pnpm rudder queue:status [queue=default]
+pnpm rudder queue:clear [queue=default]
+pnpm rudder queue:failed [queue=default]
+pnpm rudder queue:retry [queue=default]
 
 # Schedule
 pnpm rudder schedule:run
@@ -744,52 +777,42 @@ pnpm rudder schedule:list
 # Storage
 pnpm rudder storage:link
 
-# User-defined (from routes/console.ts)
-pnpm rudder db:seed
+# Module
+pnpm rudder module:publish
 ```
 
 ---
 
 ### Boost — AI Developer Tools
 
-`@rudderjs/boost` exposes project internals to AI coding assistants via MCP (Model Context Protocol).
+`@rudderjs/boost` exposes project internals to AI coding assistants via MCP.
 
 ```bash
 rudder boost:mcp   # starts stdio MCP server
 ```
 
-Available tools: `app_info`, `db_schema`, `route_list`, `model_list`, `config_get`, `last_error`.
-
-Connect to Claude Code:
-```bash
-claude mcp add -s local -t stdio rudderjs-boost -- npx tsx node_modules/@rudderjs/cli/src/index.ts boost:mcp
-```
+Tools: `app_info`, `db_schema`, `route_list`, `model_list`, `config_get`, `last_error`.
 
 ---
 
 ### Optional Peer Packages
 
-Packages like `@rudderjs/queue-bullmq` are **optional peers** — the user installs only what they need.
+Packages like `@rudderjs/queue-bullmq` are **optional peers** — loaded at runtime via `resolveOptionalPeer(specifier)` from `@rudderjs/core/support`. This helper:
+1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve from the **user's app**
+2. Returns `import(resolvedAbsolutePath)` — opaque to Rollup/Vite static analysis
 
-They are loaded at runtime via `resolveOptionalPeer(specifier)` from `@rudderjs/core/support`. This helper:
-1. Uses `createRequire` anchored to `process.cwd()/package.json` to resolve the package from the **user's app**, not from inside `node_modules/@rudderjs/*`
-2. Returns `import(resolvedAbsolutePath)` — an absolute path import that is opaque to Rollup/Vite static analysis
-
-All optional peer packages **must** include `"default": "./dist/index.js"` in their `exports` field — the CJS resolver used by `createRequire.resolve()` cannot see `"import"`-only entries.
+All optional peer packages **must** include `"default": "./dist/index.js"` in their `exports` field.
 
 ---
 
-## Roadmap
+## Roadmap Status
 
-| Phase | Focus |
-|-------|-------|
-| **v0.1** | ✅ Core, DI, Router, CLI scaffold, Hono adapter, Vike SSR |
-| **v0.2** | ✅ ORM (Prisma), Validation, Middleware, Queue (Inngest) |
-| **v0.3** | ✅ Fluent bootstrap, rudder console routes, DB seeding, multi-provider |
-| **v0.4** | ✅ Auth (better-auth), Storage (S3), Cache (Redis), Events, Mail, Schedule, Rate Limiting, BullMQ |
-| **v0.5** | ✅ Package consolidation — create-rudderjs-app scaffolder, notifications, Drizzle adapter |
-| **v0.6** | ✅ Rename Forge → RudderJS, npm publish (25 packages), package merges, docs site, README |
-| **v0.7** | ✅ Session package, AuthMiddleware, callable middleware (no .toHandler()), rudder test suite |
-| **v0.8** | ✅ create-rudderjs-app multi-framework scaffolder (React/Vue/Solid, Tailwind, shadcn/ui) |
-| **v0.9** | Native auth system — hash, crypt, auth (guards/providers/gates/policies), sanctum (API tokens), socialite (OAuth) |
-| **v1.0** | Deploy docs, GitHub Actions CI, stable API |
+| Phase | Plan | Status |
+|-------|------|--------|
+| Phase 1 | Plan 1: Core DX Foundation (log, http, Str, Num, Collection, typed input, errors, URLs) | ✅ Complete |
+| Phase 2 | Plan 2: ORM & Data Layer (casts, accessors, resources, factories, serialization) | ✅ Complete |
+| Phase 2 | Plan 3: Queue & Scheduling (chains, batches, unique, middleware, sub-minute, hooks) | ✅ Complete |
+| Phase 3 | Plan 4: Auth & Mail (email verification, queued mail, markdown, failover, queued notifications) | ✅ Complete |
+| Phase 4 | Plan 5: Advanced Features (context, pennant, scoped/deferred/contextual bindings, process, concurrency) | Planned |
+| Phase 4 | Plan 6: Testing Infrastructure (TestCase, Queue.fake, Mail.fake, Notification.fake, Event.fake, Cache.fake) | Planned |
+| Phase 5 | Plan 7: Monitoring & Observability (Pulse, Telescope, Horizon, Nightwatch) | Planned |
