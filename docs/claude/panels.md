@@ -11,8 +11,12 @@ Admin panel: Resource `table()`/`form()`/`detail()`/`agents()`/`relations()` API
 
 ### AI Features
 - AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar)
-- `POST /{panel}/api/_chat` with `run_agent` + `edit_text` tools, resource context, field typing animation
-- Conversation persistence: AiConversation/AiChatMessage Prisma models, PrismaConversationStore, conversation switcher, auto-title, auto-restore
+- `POST /{panel}/api/_chat` with `run_agent` + `edit_text` + `read_form_state` (client tool) + `delete_record` (server tool, `needsApproval: true`) tools, resource context, field typing animation
+- **Pluggable ChatContext architecture** (`ResourceChatContext`, `PageChatContext` stub, `GlobalChatContext`) at `src/handlers/chat/contexts/`. One slim dispatcher in `chatHandler.ts` resolves the context, loads/persists conversation, runs the agent loop. New context kinds (page chat, field chat) drop in cleanly.
+- **Client-tool round-trip**: `read_form_state` is a Vercel-style client tool — server stops the loop with `pending_client_tools` SSE event, the browser's `clientTools` registry executes the handler against `SchemaForm`'s `valuesRef`, then re-POSTs with `messages: [...]`. Closes the non-collab field visibility gap.
+- **`needsApproval` enforcement**: `delete_record` pauses the loop with `tool_approval_required` SSE event. The chat panel renders an **inline amber Approve/Reject card** inside the assistant bubble (no modal). On approve, the dispatcher's continuation flow runs the tool server-side via `resumePendingToolCalls` (in `@rudderjs/ai`), which fulfills the orphan `tool_use` block before re-entering the model loop and exposes the result via `result.resumedToolMessages` so persistence stays sound.
+- **Continuation security**: `validateContinuation()` (`src/handlers/chat/continuation.ts`) verifies the prefix of `body.messages` matches the persisted store and that any `approvedToolCallIds`/`rejectedToolCallIds` reference real pending tool calls. Without this, an attacker could rewrite history or bypass approval gates.
+- Conversation persistence: AiConversation/AiChatMessage Prisma models, PrismaConversationStore, conversation switcher, auto-title, auto-restore. `persistConversation` writes the full `AiMessage[]` graph (assistant `toolCalls` + tool result messages); `persistContinuation` writes the diff plus `result.resumedToolMessages`.
 - Model selection: AiModelConfig in ai config, GET `/_chat/models`, selector in chat input
 - AiChatProvider takes panelPath prop — chat is panel-wide, not resource-tied
 - Selected text context: select text in any field -> Ask AI button -> chat opens with selection locked to that field. edit_text tool constrained via z.literal(field).

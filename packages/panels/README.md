@@ -853,12 +853,67 @@ A collapsible right sidebar (toggled from the header) provides a unified chat ex
 - **Model selection** — users choose which AI model to use from a dropdown in the chat input area. Models are configured in `config/ai.ts`
 
 The chat endpoint (`POST /{panel}/api/_chat`) supports:
-- `message` — user's text
+- `message` — user's text (fresh prompt)
+- `messages` — full wire-format conversation (used for client-tool / approval continuations)
 - `conversationId` — for persistent conversation history
 - `model` — user-selected AI model
 - `resourceContext` — current resource slug + record ID
+- `pageContext` — page slug for future page-level chat (stub)
 - `selection` — selected text context (field name + text)
 - `forceAgent` — bypass AI intent detection, run a specific agent directly
+- `approvedToolCallIds` / `rejectedToolCallIds` — user's decision on `needsApproval` tool calls
+
+Internally the endpoint uses a **pluggable `ChatContext` architecture**
+(`ResourceChatContext`, `PageChatContext`, `GlobalChatContext`) — one
+dispatcher in `chatHandler.ts` resolves the right context, loads/persists the
+conversation, runs the agent loop, and emits SSE events. Each context owns
+its own system prompt and tool set.
+
+### Client tools and approval gates
+
+The chat dispatcher supports the **client-tool round-trip** and
+**`needsApproval` enforcement** patterns from `@rudderjs/ai`. Two tools ship
+out of the box for resource chats:
+
+- **`read_form_state`** — *client tool*. The browser registers a handler in
+  `SchemaForm.tsx` that reads the live `valuesRef` (the latest form state,
+  including unsaved edits to non-collaborative fields). The model calls it
+  when the snapshot in the system prompt looks stale.
+- **`delete_record`** — *server tool* with `needsApproval: true`. Calls
+  `Model.delete(recordId)` after user approval. The browser shows an inline
+  amber **Approve / Reject** card inside the assistant bubble — no modal.
+
+**SSE wire events** (in addition to `text`, `tool_call`, `complete`):
+
+| Event | When |
+|---|---|
+| `pending_client_tools` | Server stopped because the model called a client tool. Client should execute it locally and re-POST with the result in `messages`. |
+| `tool_approval_required` | Server stopped because a tool needs approval. Client renders an inline approval card; on click, re-POSTs with `approvedToolCallIds` or `rejectedToolCallIds`. |
+
+### Registering your own client tools
+
+Define the tool definition (no `.server()`) on the server, register the
+browser handler in any React component:
+
+```ts
+// server: packages/panels/src/handlers/chat/tools/myClientTool.ts
+import { toolDefinition, z } from '@rudderjs/ai'
+export const myClientTool = toolDefinition({
+  name: 'navigate_to',
+  description: 'Navigate the user to a different page',
+  inputSchema: z.object({ url: z.string() }),
+})
+
+// browser: any React component
+import { registerClientTool } from '@/components/agents/clientTools'
+useEffect(() =>
+  registerClientTool('navigate_to', ({ url }) => { window.location.href = url }),
+  []
+)
+```
+
+Add the definition to the right `ChatContext`'s `buildTools()` and the model
+will start using it.
 
 ### Selected Text Context
 

@@ -77,8 +77,13 @@ const response = await AI.prompt('Hello world')
 
 ### Tools (Server + Client)
 
+A `Tool` is just `{ definition, execute? }`. The presence or absence of
+`execute` is the only discriminator: with it, the tool runs server-side;
+without it, it's a client tool that the browser executes via
+`@rudderjs/panels`'s `clientTools` registry.
+
 ```ts
-import { toolDefinition } from '@rudderjs/ai'
+import { toolDefinition, dynamicTool } from '@rudderjs/ai'
 import { z } from 'zod'
 
 // Server tool — executes on backend
@@ -86,17 +91,65 @@ const weatherTool = toolDefinition({
   name: 'get_weather',
   description: 'Get weather for a location',
   inputSchema: z.object({ location: z.string() }),
-  needsApproval: true,  // requires user approval
+  needsApproval: true,  // pauses the agent loop until the user approves
   lazy: true,           // not sent to LLM upfront
 }).server(async ({ location }) => ({ temp: 72, unit: 'F' }))
 
-// Client tool — executes in browser
-const themeTool = toolDefinition({
-  name: 'apply_theme',
-  description: 'Apply a UI theme',
-  inputSchema: z.object({ theme: z.enum(['light', 'dark']) }),
-}).client(async ({ theme }) => { document.body.className = theme })
+// Client tool — no `.server()`, so the browser executes it
+const readFormState = toolDefinition({
+  name: 'read_form_state',
+  description: 'Read the user\'s current local form values',
+  inputSchema: z.object({ fields: z.array(z.string()).optional() }),
+})
+
+// Dynamic tool — schemas built at runtime from user data
+const customTool = dynamicTool({
+  name: 'custom_op',
+  description: 'Built at runtime',
+  inputSchema: z.object({ q: z.string() }),
+}).server(async (input) => JSON.stringify(input))
 ```
+
+### Client tool round-trip and approval gates
+
+When the model calls a client tool (no `execute`) or a tool with
+`needsApproval: true`, the agent loop **stops** instead of failing — and
+exposes the pending state on `AgentResponse`:
+
+```ts
+const result = await agent({ tools: [readFormState, weatherTool] })
+  .prompt('what is in the form?', {
+    toolCallStreamingMode: 'stop-on-client-tool',
+  })
+
+if (result.finishReason === 'client_tool_calls') {
+  // result.pendingClientToolCalls — execute these in the browser, then
+  // re-POST with `messages: [...history, assistantMsg, ...toolResultMsgs]`
+}
+if (result.finishReason === 'tool_approval_required') {
+  // result.pendingApprovalToolCall — show approval UI, then re-POST with
+  // `approvedToolCallIds: [id]` or `rejectedToolCallIds: [id]`
+}
+```
+
+The **continuation** uses `options.messages` instead of `history` + `input`:
+
+```ts
+await agent({ tools: [...] }).prompt('', {
+  messages: [...priorConversation, assistantWithToolCalls, toolResult],
+  approvedToolCallIds: ['tc_id'],   // or rejectedToolCallIds
+})
+```
+
+When continuing after an approval round-trip, the loop transparently
+**resumes the pending tool call server-side** before re-entering the model
+loop — the resulting `tool` messages are exposed via
+`result.resumedToolMessages` so callers can persist them. This guarantees
+the conversation store never holds an unfulfilled `tool_use` block.
+
+`@rudderjs/panels` does all the wiring (validating message prefixes against
+the persisted store, executing client tools via the `clientTools` registry,
+showing the inline approval card) — see its README for the end-to-end flow.
 
 ### Structured Output
 

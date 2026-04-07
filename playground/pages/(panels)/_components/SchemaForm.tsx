@@ -11,8 +11,8 @@ import { useAutosave } from '../_hooks/useAutosave.js'
 import { useFormPersist } from '../_hooks/useFormPersist.js'
 import { useFieldPersist } from '../_hooks/useFieldPersist.js'
 import { flattenFormFields } from '../_lib/formHelpers.js'
-import type { SchemaItem } from '../_lib/formHelpers.js'
 import { registerClientTool } from './agents/clientTools.js'
+import type { SchemaItem } from '../_lib/formHelpers.js'
 
 interface SchemaFormProps {
   form:       SchemaFormMeta
