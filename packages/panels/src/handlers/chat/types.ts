@@ -1,19 +1,28 @@
 import type { AppRequest } from '@rudderjs/core'
+import type { AiMessage, ConversationStoreMeta } from '@rudderjs/ai'
 
 export interface ChatRequestBody {
-  message:          string
+  // Either of these is required (not both)
+  message?:         string
+  /** Reserved for the future client-tool round-trip plan; not used today. */
+  messages?:        AiMessage[]
+
   conversationId?:  string
   model?:           string
   history?:         Array<{ role: 'user' | 'assistant'; content: string }>
+
+  // Discriminated context (zero or one of these). Absence of all = global.
   resourceContext?: { resourceSlug: string; recordId: string }
+  pageContext?:     { pageSlug: string }
+
   forceAgent?:      string
   selection?:       { field: string; text: string }
 }
 
 export interface ConversationStoreLike {
-  create(title?: string, meta?: { userId?: string | undefined; resourceSlug?: string | undefined; recordId?: string | undefined }): Promise<string>
-  load(conversationId: string): Promise<Array<{ role: string; content: string; toolCallId?: string; toolCalls?: unknown[] }>>
-  append(conversationId: string, messages: Array<{ role: string; content: string; toolCallId?: string; toolCalls?: unknown[] }>): Promise<void>
+  create(title?: string, meta?: ConversationStoreMeta): Promise<string>
+  load(conversationId: string): Promise<AiMessage[]>
+  append(conversationId: string, messages: AiMessage[]): Promise<void>
   setTitle(conversationId: string, title: string): Promise<void>
   list(userId?: string): Promise<Array<{ id: string; title: string; createdAt: Date; updatedAt?: Date }>>
   delete?(conversationId: string): Promise<void>
