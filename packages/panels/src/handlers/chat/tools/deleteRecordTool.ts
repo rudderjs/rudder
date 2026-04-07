@@ -22,15 +22,21 @@ export async function buildDeleteRecordTool(deps: {
     }),
     needsApproval: true,
   }).server(async ({ reason }: { reason: string }) => {
-    // Only runs after the user clicks Approve in the modal — see the
+    // Only runs after the user clicks Approve in the inline card — see
     // `needsApproval` enforcement in @rudderjs/ai's runAgentLoop.
     const record = await Model.find(recordId)
     if (!record) return `Record ${recordId} not found.`
+
+    // `Model.delete(id)` is a STATIC method on @rudderjs/orm Model classes.
+    // It honors the model's `softDeletes` flag (sets `deletedAt`) when the
+    // model opts in, otherwise hard-deletes via the query builder.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof (record as any).delete === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (record as any).delete()
-    }
-    return `Record ${recordId} deleted. Reason: ${reason}`
+    await (Model as any).delete(recordId)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isSoft = (Model as any).softDeletes === true
+    return isSoft
+      ? `Record ${recordId} soft-deleted. Reason: ${reason}`
+      : `Record ${recordId} deleted. Reason: ${reason}`
   })
 }
