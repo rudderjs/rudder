@@ -227,7 +227,7 @@ const text = await Transcription.fromPath('/audio/meeting.mp3')
 
 ---
 
-## Phase 3: Boost Phases 2-3 (High Priority)
+## Phase 3: Boost Phases 2-3 (High Priority) ✅
 
 ### 3.1 — `boost:install` Command
 
@@ -323,7 +323,7 @@ search_docs({ query: 'how to define middleware', packages: ['core', 'router'] })
 
 ---
 
-## Phase 4: `@rudderjs/mcp` Package (High Priority)
+## Phase 4: `@rudderjs/mcp` Package (High Priority) ✅
 
 Build the MCP framework package per the existing plan at `docs/plans/rudderjs-mcp.md`.
 
@@ -413,8 +413,8 @@ Client-side Lexical block operations triggered by SSE tool_call events.
 
 ```
 Phase 1 (AI Core)     — 1.1 middleware, 1.2 attachments, 1.3 queue, 1.4 conversations, 1.5 providers  ✅
-Phase 3 (Boost 2-3)   — 3.1 install, 3.2 guidelines, 3.3 skills, 3.4 tools, 3.5 update, 3.6 search docs  ← parallel with Phase 4
-Phase 4 (MCP Package)  — 4.1 core, 4.2 stdio, 4.3 testing, 4.4 scaffolders
+Phase 3 (Boost 2-3)   — 3.1 install, 3.2 guidelines, 3.3 skills, 3.4 tools, 3.5 update, 3.6 search docs  ✅ (3.3 skills + 3.6 search docs deferred)
+Phase 4 (MCP Package)  — 4.1 core, 4.2 stdio, 4.3 testing, 4.4 scaffolders  ✅
 Phase 2 (AI Caps)      — 2.1 image, 2.2 provider tools, 2.3 vercel, 2.4 audio, 2.5 embeddings
 Phase 5 (Panels AI)    — 5.1 field assist, 5.2 suggestions, 5.3 blocks
 ```

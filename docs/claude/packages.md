@@ -9,7 +9,7 @@
 
 ```
 rudderjs/
-├── packages/           # 42 published packages (@rudderjs/*)
+├── packages/           # 43 published packages (@rudderjs/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
@@ -57,7 +57,8 @@ rudderjs/
 │   │                   #   queue integration (agent.queue()), AI facade, AiFake
 │   ├── workspaces/     # AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator
 │   │                   #   Panel plugin: workspaces(). Uses @rudderjs/ai for LLM, Prisma for persistence.
-│   ├── boost/          # AI dev tools — MCP server (app_info, db_schema, route_list, model_list, config_get, last_error)
+│   ├── boost/          # AI dev tools — MCP server (10 tools), boost:install/update commands, guidelines/skills system
+│   ├── mcp/            # MCP server framework — McpServer, McpTool, McpResource, McpPrompt, decorators, testing
 │   ├── log/            # Structured logging — channels (console, single, daily, stack, null), RFC 5424 levels,
 │   │                   #   LineFormatter/JsonFormatter, context propagation (per-channel + shared), listeners,
 │   │                   #   LogFake for testing, extendLog() for custom drivers
@@ -99,7 +100,7 @@ rudderjs/
 | `@rudderjs/orm` | 0.0.6 | Model, QueryBuilder, ModelRegistry, Attribute casts (`boolean`, `date`, `json`, `encrypted`, custom `CastUsing`), `Attribute.make({ get, set })` accessors/mutators, `@Hidden`/`@Visible`/`@Appends`/`@Cast` decorators, instance `makeVisible()`/`makeHidden()`/`setVisible()`/`setHidden()`, `JsonResource`/`ResourceCollection` (conditional: `when`/`whenLoaded`/`whenNotNull`/`mergeWhen`), `ModelCollection` (wrap/find/contains/except/only/diff/unique/fresh/load/toQuery), `ModelFactory`/`sequence()` |
 | `@rudderjs/orm-prisma` | 0.0.1 | Prisma adapter, multi-driver |
 | `@rudderjs/orm-drizzle` | 0.0.1 | Drizzle adapter — multi-driver (sqlite, postgresql, libsql) |
-| `@rudderjs/cli` | 0.0.2 | make:*, module:*, module:publish — markers: `<rudderjs:modules:start/end>` |
+| `@rudderjs/cli` | 0.0.6 | make:* (model, provider, middleware, controller, request, job, command, event, listener, mail, agent, mcp-server, mcp-tool, mcp-resource, mcp-prompt), module:*, module:publish |
 | `@rudderjs/hash` | 0.0.1 | Password hashing — Hash facade, BcryptDriver, Argon2Driver, hash() factory |
 | `@rudderjs/crypt` | 0.0.1 | Symmetric encryption — Crypt facade, AES-256-CBC, parseKey(), crypt() factory |
 | `@rudderjs/auth` | 0.2.0 | Native auth: Guards (SessionGuard), Providers (EloquentUserProvider), Auth facade, Gate/Policy, PasswordBroker, AuthMiddleware(), RequireAuth(), `MustVerifyEmail` interface, `EnsureEmailIsVerified()` middleware, `verificationUrl()`, `handleEmailVerification()`. Depends on hash + session |
@@ -118,7 +119,8 @@ rudderjs/
 | `@rudderjs/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
 | `@rudderjs/ai` | 0.0.1 | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware (wired into agent loop), structured Output, conversation memory (`forUser()`/`continue()`), file/image attachments (`Document`/`Image`), queue integration (`agent.queue()`), AI facade, AiFake. |
 | `@rudderjs/workspaces` | 0.0.1 | AI workspace canvas — Isoflow-style 3D nodes, departments, connections. Panel plugin: `workspaces()` |
-| `@rudderjs/boost` | 0.0.1 | AI dev tools — MCP server exposing project internals (DB schema, routes, models, config, logs) to AI coding assistants |
+| `@rudderjs/boost` | 0.0.1 | AI dev tools — MCP server (10 tools: app_info, db_schema, route_list, model_list, config_get, last_error, db_query, read_logs, browser_logs, get_absolute_url), `boost:install`/`boost:update` commands, auto-generated AI guidelines and skills from installed packages |
+| `@rudderjs/mcp` | 0.0.1 | MCP server framework — `McpServer`, `McpTool`, `McpResource`, `McpPrompt` base classes, `@Name`/`@Version`/`@Instructions`/`@Description` decorators, `Mcp.web()`/`Mcp.local()` registration, stdio transport, `McpTestClient` for testing, `mcp:start`/`mcp:list` CLI commands, `make:mcp-server`/`make:mcp-tool`/`make:mcp-resource`/`make:mcp-prompt` scaffolders |
 | `@rudderjs/log` | 0.0.1 | Structured logging — channels (console, single, daily, stack, null), RFC 5424 levels, LineFormatter/JsonFormatter, per-channel + shared context, listeners, `LogFake` for testing, `extendLog()` for custom drivers |
 | `@rudderjs/http` | 0.0.1 | Fluent HTTP client — `Http` facade, retries, timeouts, pools (`Pool.concurrency()`), request/response interceptors, `Http.fake()` with URL pattern matching + assertions |
 | `@rudderjs/localization` | 0.0.1 | i18n — `trans()`, `setLocale()`, `getLocale()`, locale middleware, JSON translation files |

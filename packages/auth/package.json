@@ -10,6 +10,7 @@
   "type": "module",
   "files": [
     "dist",
+    "boost",
     "pages",
     "schema"
   ],

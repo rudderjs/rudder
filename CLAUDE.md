@@ -17,7 +17,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@rudderjs/*`
 - **GitHub**: https://github.com/rudderjs/rudder
-- **Status**: Early development — 38 packages published to npm
+- **Status**: Early development — 43 packages published to npm
 
 ---
 

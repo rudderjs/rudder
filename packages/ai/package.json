@@ -9,7 +9,7 @@
     "directory": "packages/ai"
   },
   "type": "module",
-  "files": ["dist"],
+  "files": ["dist", "boost"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
