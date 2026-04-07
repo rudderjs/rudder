@@ -25,6 +25,8 @@ export class RequestCollector implements Collector {
     const ignore   = this.config.ignoreRequests ?? []
 
     return async (req: AppRequest, res: AppResponse, next: () => Promise<void>) => {
+      // Skip Vite internals, static assets, and source files
+      if (this.isAsset(req.path)) return next()
       if (this.shouldIgnore(req.path, ignore)) {
         return next()
       }
@@ -61,5 +63,16 @@ export class RequestCollector implements Collector {
       if (p.endsWith('*')) return path.startsWith(p.slice(0, -1))
       return path === p
     })
+  }
+
+  /** True for Vite internals, source files, and static assets */
+  private isAsset(path: string): boolean {
+    if (path.startsWith('/@'))            return true  // Vite internals: /@vite, /@react-refresh, /@id, /@fs
+    if (path.startsWith('/node_modules')) return true
+    if (path.startsWith('/src/'))         return true  // Vite source modules during dev
+    if (path.startsWith('/pages/'))       return true  // Vike page modules during dev
+    if (path.startsWith('/.vite/'))       return true  // Vite cache
+    const segment = path.split('/').pop() ?? ''
+    return segment.includes('.')                       // any file extension → static asset
   }
 }

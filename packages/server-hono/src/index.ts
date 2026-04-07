@@ -107,7 +107,13 @@ function normalizeResponse(c: Context): AppResponse {
     send(data) {
       Object.entries(headers).forEach(([k, v]) => c.header(k, v))
       c.status(statusCode as StatusCode)
-      c.res = c.text(data)
+      // Use c.body() (not c.text()) so a custom Content-Type set via res.header()
+      // is preserved. c.text() forces Content-Type: text/plain and overrides headers.
+      if (headers['Content-Type'] || headers['content-type']) {
+        c.res = c.body(data)
+      } else {
+        c.res = c.text(data)
+      }
       return c.res
     },
     redirect(url, code = 302) {

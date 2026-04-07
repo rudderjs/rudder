@@ -1,5 +1,9 @@
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import type { TelescopeStorage, TelescopeConfig, EntryType } from '../types.js'
+import {
+  dashboardPage, requestsPage, queriesPage, jobsPage, exceptionsPage,
+  logsPage, mailPage, notificationsPage, eventsPage, cachePage, schedulePage, modelsPage,
+} from '../ui/pages.js'
 
 const ENTRY_TYPES: EntryType[] = [
   'request', 'query', 'job', 'exception', 'log',
@@ -16,8 +20,26 @@ export async function registerRoutes(
 ): Promise<void> {
   const { router } = await import('@rudderjs/router')
 
-  const prefix     = `/${config.path ?? 'telescope'}/api`
+  const basePath   = `/${config.path ?? 'telescope'}`
+  const prefix     = `${basePath}/api`
   const middleware  = config.auth ? [authMiddleware(config)] : []
+
+  // ── UI Pages ─────────────────────────────────────────────
+  const html = (_req: AppRequest, res: AppResponse, content: string) =>
+    res.header('Content-Type', 'text/html').send(content)
+
+  router.get(basePath,                   (r, s) => html(r, s, dashboardPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/requests`,     (r, s) => html(r, s, requestsPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/queries`,      (r, s) => html(r, s, queriesPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/jobs`,         (r, s) => html(r, s, jobsPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/exceptions`,   (r, s) => html(r, s, exceptionsPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/logs`,         (r, s) => html(r, s, logsPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/mail`,         (r, s) => html(r, s, mailPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/notifications`,(r, s) => html(r, s, notificationsPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/events`,       (r, s) => html(r, s, eventsPage(basePath, prefix)), middleware)
+  router.get(`${basePath}/cache`,        (r, s) => html(r, s, cachePage(basePath, prefix)), middleware)
+  router.get(`${basePath}/schedule`,     (r, s) => html(r, s, schedulePage(basePath, prefix)), middleware)
+  router.get(`${basePath}/models`,       (r, s) => html(r, s, modelsPage(basePath, prefix)), middleware)
 
   // ── List routes for each entry type ──────────────────────
   for (const type of ENTRY_TYPES) {
