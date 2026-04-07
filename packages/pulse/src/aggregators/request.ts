@@ -1,5 +1,6 @@
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import type { Aggregator, PulseStorage, PulseConfig } from '../types.js'
+import { isAsset } from '../utils.js'
 
 /**
  * Tracks request throughput, duration (p50/p95/p99), and slow requests.
@@ -25,8 +26,8 @@ export class RequestAggregator implements Aggregator {
     return async (req: AppRequest, res: AppResponse, next: () => Promise<void>) => {
       // Skip pulse's own routes
       if (req.path.startsWith(`/${ignore}`)) return next()
-      // Skip static assets
-      if (req.path.startsWith('/@') || (req.path.split('/').pop() ?? '').includes('.')) return next()
+      // Skip Vite internals, source files, and static assets
+      if (isAsset(req.path)) return next()
 
       const start = Date.now()
       await next()

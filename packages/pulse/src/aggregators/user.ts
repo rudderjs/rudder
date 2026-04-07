@@ -1,5 +1,6 @@
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import type { Aggregator, PulseStorage } from '../types.js'
+import { isAsset } from '../utils.js'
 
 /**
  * Tracks active (unique) users per minute bucket.
@@ -20,8 +21,8 @@ export class UserAggregator implements Aggregator {
     const storage = this.storage
 
     return async (req: AppRequest, _res: AppResponse, next: () => Promise<void>) => {
-      // Skip static assets
-      if (req.path.startsWith('/@') || (req.path.split('/').pop() ?? '').includes('.')) return next()
+      // Skip Vite internals, source files, and static assets
+      if (isAsset(req.path)) return next()
 
       const minute = Math.floor(Date.now() / 60_000)
       if (minute !== this.currentMinute) {
