@@ -24,6 +24,7 @@ Admin panel builder for RudderJS. Define resources in TypeScript — panels auto
 - **Collaborative editing** — real-time co-editing via Yjs CRDT (requires `@rudderjs/live`)
 - **Draft recovery & versioning** — localStorage backup, restore banner, and full version history
 - **Custom pages & sub-pages** — add arbitrary schema-driven or React pages to the nav
+- **AI chat with block introspection** — record-edit chat agent receives a structured catalog of every block type declared on `RichContentField` / `BuilderField` fields, so it can answer block questions and call `update_block` against real schemas instead of guessing
 - **i18n + RTL** — built-in English and Arabic translations, automatic RTL layout
 - **Dark mode** — light, dark, and system themes with no flash on load
 - **Two layouts** — sidebar (default) or topbar navigation

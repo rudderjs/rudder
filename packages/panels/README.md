@@ -991,6 +991,33 @@ class TranslateAgent extends ResourceAgent {
 
 Requires `@rudderjs/ai` as a peer dependency.
 
+### Block introspection in chat
+
+When the user opens the AI chat from a record edit page, the agent automatically receives a structured catalog of every block type declared on the resource's `RichContentField` / `BuilderField` fields:
+
+```ts
+RichContentField.make('content')
+  .blocks([
+    Block.make('callToAction')
+      .label('Call to Action')
+      .schema([
+        TextField.make('title').required(),
+        TextField.make('buttonText'),
+        TextField.make('url'),
+      ]),
+    Block.make('video')
+      .label('Video Embed')
+      .schema([
+        TextField.make('url').required(),
+        TextField.make('caption'),
+      ]),
+  ])
+```
+
+The agent walks into the conversation already knowing the block names, labels, and field schemas — no extra configuration. Ask "what blocks can I add to this article?" and you'll get a grounded answer; ask "change the button text in the first call to action" and the agent will call `edit_text` with the correct `update_block` operation against the structured field name from the catalog instead of guessing from rendered placeholders.
+
+> Today the agent can read the catalog and update existing blocks. Inserting and deleting blocks is planned — see `docs/plans/panels-block-write-completion-plan.md`.
+
 ---
 
 ## Theming
