@@ -1284,6 +1284,9 @@ importers:
       '@rudderjs/hash':
         specifier: workspace:*
         version: link:../packages/hash
+      '@rudderjs/horizon':
+        specifier: workspace:*
+        version: link:../packages/horizon
       '@rudderjs/image':
         specifier: workspace:*
         version: link:../packages/image
@@ -1320,6 +1323,9 @@ importers:
       '@rudderjs/panels-lexical':
         specifier: workspace:*
         version: link:../packages/panels-lexical
+      '@rudderjs/pulse':
+        specifier: workspace:*
+        version: link:../packages/pulse
       '@rudderjs/queue':
         specifier: workspace:*
         version: link:../packages/queue
@@ -1344,6 +1350,9 @@ importers:
       '@rudderjs/storage':
         specifier: workspace:*
         version: link:../packages/storage
+      '@rudderjs/telescope':
+        specifier: workspace:*
+        version: link:../packages/telescope
       '@rudderjs/vite':
         specifier: workspace:*
         version: link:../packages/vite

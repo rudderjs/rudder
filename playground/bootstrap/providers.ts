@@ -13,9 +13,12 @@ import { localization } from '@rudderjs/localization'
 import { database } from '@rudderjs/orm-prisma'
 import { broadcasting } from '@rudderjs/broadcast'
 import { live }   from '@rudderjs/live'
-import { ai }     from '@rudderjs/ai'
-import { boost }  from '@rudderjs/boost'
-import { log }    from '@rudderjs/log'
+import { ai }        from '@rudderjs/ai'
+import { boost }     from '@rudderjs/boost'
+import { log }       from '@rudderjs/log'
+import { telescope } from '@rudderjs/telescope'
+import { pulse }     from '@rudderjs/pulse'
+import { horizon }   from '@rudderjs/horizon'
 import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
@@ -42,6 +45,11 @@ export default [
   live(configs.live),
   ai(configs.ai),
   boost(),
+
+  // ── Monitoring ──────────────────────────────────────────
+  telescope(configs.telescope),
+  pulse(configs.pulse),
+  horizon(configs.horizon),
 
   // ── Application ─────────────────────────────────────────
   AppServiceProvider,
