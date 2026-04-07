@@ -35,6 +35,7 @@ export type {
   ProviderResponse,
   ServerTool,
   StopCondition,
+  Tool,
   StreamChunk,
   TokenUsage,
   ToolCall,
@@ -72,7 +73,7 @@ export { MistralProvider, type MistralConfig } from './providers/mistral.js'
 export { AzureOpenAIProvider, type AzureOpenAIConfig } from './providers/azure.js'
 
 // Tools
-export { toolDefinition, ToolBuilder, toolToSchema } from './tool.js'
+export { toolDefinition, dynamicTool, ToolBuilder, toolToSchema } from './tool.js'
 export { zodToJsonSchema } from './zod-to-json-schema.js'
 
 // Agent

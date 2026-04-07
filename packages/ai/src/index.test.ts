@@ -158,18 +158,19 @@ describe('toolDefinition', () => {
     }).server(async ({ location }) => ({ temp: 72 }))
 
     assert.strictEqual(tool.definition.name, 'get_weather')
-    assert.strictEqual(tool.type, 'server')
     assert.ok(typeof tool.execute === 'function')
   })
 
-  it('creates a client tool', () => {
+  it('creates a client tool when .server() is not called', () => {
     const tool = toolDefinition({
       name: 'apply_theme',
       description: 'Apply a UI theme',
       inputSchema: z.object({ theme: z.string() }),
-    }).client(async ({ theme }) => ({ applied: true }))
+    })
 
-    assert.strictEqual(tool.type, 'client')
+    // No .server() ⇒ no execute ⇒ tool is a client tool
+    assert.strictEqual(tool.execute, undefined)
+    assert.strictEqual(tool.definition.name, 'apply_theme')
   })
 
   it('supports needsApproval', () => {
@@ -231,7 +232,7 @@ describe('toolDefinition', () => {
       inputSchema: z.object({ a: z.number(), b: z.number() }),
     }).server(async ({ a, b }) => a + b)
 
-    const result = await tool.execute({ a: 2, b: 3 })
+    const result = await tool.execute!({ a: 2, b: 3 })
     assert.strictEqual(result, 5)
   })
 })
@@ -760,5 +761,263 @@ describe('ai() factory', () => {
     })
     assert.ok(typeof Provider === 'function')
     assert.ok(Provider.prototype)
+  })
+})
+
+// ─── Client tools + tool approval ────────────────────────────
+//
+// A scriptable mock provider lets each test queue up provider responses
+// (text and/or tool_calls) so we can simulate multi-turn loops.
+
+import { dynamicTool } from './tool.js'
+import type { ToolCall as _ToolCall } from './types.js'
+
+interface ScriptedResponse {
+  text?: string
+  toolCalls?: _ToolCall[]
+  finishReason?: ProviderResponse['finishReason']
+}
+
+let _script: ScriptedResponse[] = []
+let _calls: ProviderRequestOptions[] = []
+
+function installScriptedFake() {
+  _script = []
+  _calls = []
+  const adapter: ProviderAdapter = {
+    async generate(opts: ProviderRequestOptions): Promise<ProviderResponse> {
+      _calls.push(opts)
+      const next = _script.shift() ?? { text: 'done', finishReason: 'stop' as const }
+      return {
+        message: {
+          role: 'assistant',
+          content: next.text ?? '',
+          ...(next.toolCalls ? { toolCalls: next.toolCalls } : {}),
+        },
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
+      }
+    },
+    async *stream(opts: ProviderRequestOptions): AsyncIterable<StreamChunk> {
+      _calls.push(opts)
+      const next = _script.shift() ?? { text: 'done', finishReason: 'stop' as const }
+      if (next.text) yield { type: 'text-delta', text: next.text }
+      if (next.toolCalls) {
+        for (const tc of next.toolCalls) {
+          yield { type: 'tool-call', toolCall: tc }
+        }
+      }
+      yield {
+        type: 'finish',
+        finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      }
+    },
+  }
+  AiRegistry.reset()
+  AiRegistry.register({ name: '__loop_test__', create: () => adapter })
+  AiRegistry.setDefault('__loop_test__/test')
+}
+
+describe('client tool execution', () => {
+  beforeEach(() => installScriptedFake())
+
+  it('placeholder mode (default) writes a placeholder result and continues the loop', async () => {
+    const clientTool = toolDefinition({
+      name: 'apply_theme',
+      description: 'Apply a UI theme',
+      inputSchema: z.object({ theme: z.string() }),
+    })
+
+    _script = [
+      { toolCalls: [{ id: 'c1', name: 'apply_theme', arguments: { theme: 'dark' } }] },
+      { text: 'Theme applied.' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [clientTool] }).prompt('go')
+
+    assert.strictEqual(result.steps.length, 2)
+    assert.strictEqual(result.text, 'Theme applied.')
+    assert.strictEqual(result.finishReason, undefined)
+    assert.strictEqual(result.pendingClientToolCalls, undefined)
+  })
+
+  it('stop-on-client-tool mode breaks out and exposes the pending call', async () => {
+    const clientTool = toolDefinition({
+      name: 'read_form_state',
+      description: 'Read local form values',
+      inputSchema: z.object({}),
+    })
+
+    _script = [
+      { toolCalls: [{ id: 'c1', name: 'read_form_state', arguments: {} }] },
+      { text: 'should not be reached' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [clientTool] })
+      .prompt('go', { toolCallStreamingMode: 'stop-on-client-tool' })
+
+    assert.strictEqual(result.finishReason, 'client_tool_calls')
+    assert.strictEqual(result.pendingClientToolCalls?.length, 1)
+    assert.strictEqual(result.pendingClientToolCalls?.[0]?.name, 'read_form_state')
+    assert.strictEqual(_calls.length, 1, 'loop must not have made a second provider call')
+  })
+
+  it('streaming variant emits a pending-client-tools chunk and stops', async () => {
+    const clientTool = toolDefinition({
+      name: 'ping',
+      description: 'ping',
+      inputSchema: z.object({}),
+    })
+
+    _script = [
+      { toolCalls: [{ id: 'c1', name: 'ping', arguments: {} }] },
+    ]
+
+    const a = agent({ instructions: 'sys', tools: [clientTool] })
+    const { stream, response } = a.stream('go', { toolCallStreamingMode: 'stop-on-client-tool' })
+
+    const chunkTypes: string[] = []
+    for await (const chunk of stream) chunkTypes.push(chunk.type)
+
+    const result = await response
+    assert.strictEqual(result.finishReason, 'client_tool_calls')
+    assert.strictEqual(result.pendingClientToolCalls?.length, 1)
+    assert.ok(chunkTypes.includes('pending-client-tools'), `expected pending-client-tools, got: ${chunkTypes.join(',')}`)
+  })
+
+  it('dynamicTool() builds a Tool whose input is unknown', () => {
+    const t = dynamicTool({
+      name: 'runtime_built',
+      description: 'built at runtime',
+      inputSchema: z.object({ q: z.string() }),
+    }).server(async (input) => JSON.stringify(input))
+    assert.strictEqual(t.definition.name, 'runtime_built')
+    assert.ok(typeof t.execute === 'function')
+  })
+})
+
+describe('tool approval enforcement', () => {
+  beforeEach(() => installScriptedFake())
+
+  it('server tool with needsApproval: true stops the loop and does NOT execute', async () => {
+    let executed = false
+    const dangerousTool = toolDefinition({
+      name: 'delete_record',
+      description: 'delete',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executed = true; return 'deleted' })
+
+    _script = [
+      { toolCalls: [{ id: 't1', name: 'delete_record', arguments: { id: '42' } }] },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [dangerousTool] }).prompt('go')
+
+    assert.strictEqual(result.finishReason, 'tool_approval_required')
+    assert.strictEqual(result.pendingApprovalToolCall?.toolCall.id, 't1')
+    assert.strictEqual(result.pendingApprovalToolCall?.isClientTool, false)
+    assert.strictEqual(executed, false)
+  })
+
+  it('predicate variant only stops when predicate returns true', async () => {
+    let executions = 0
+    const tool = toolDefinition({
+      name: 'op',
+      description: 'op',
+      inputSchema: z.object({ destructive: z.boolean() }),
+      needsApproval: (args: { destructive: boolean }) => args.destructive === true,
+    }).server(async () => { executions++; return 'ok' })
+
+    _script = [
+      { toolCalls: [{ id: 'a1', name: 'op', arguments: { destructive: false } }] },
+      { text: 'done' },
+    ]
+    const r1 = await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+    assert.strictEqual(r1.finishReason, undefined)
+    assert.strictEqual(executions, 1)
+
+    _script = [
+      { toolCalls: [{ id: 'a2', name: 'op', arguments: { destructive: true } }] },
+    ]
+    const r2 = await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+    assert.strictEqual(r2.finishReason, 'tool_approval_required')
+    assert.strictEqual(executions, 1)
+  })
+
+  it('approvedToolCallIds lets the tool execute on the next run', async () => {
+    let executed = false
+    const tool = toolDefinition({
+      name: 'delete_record',
+      description: 'd',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executed = true; return 'deleted' })
+
+    _script = [
+      { toolCalls: [{ id: 'apv-1', name: 'delete_record', arguments: { id: '7' } }] },
+      { text: 'all done' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] })
+      .prompt('go', { approvedToolCallIds: ['apv-1'] })
+
+    assert.strictEqual(executed, true)
+    assert.strictEqual(result.text, 'all done')
+    assert.strictEqual(result.finishReason, undefined)
+  })
+
+  it('streaming variant emits a pending-approval chunk and stops', async () => {
+    let executed = false
+    const tool = toolDefinition({
+      name: 'delete_record',
+      description: 'd',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executed = true; return 'deleted' })
+
+    _script = [
+      { toolCalls: [{ id: 's1', name: 'delete_record', arguments: { id: '99' } }] },
+    ]
+
+    const a = agent({ instructions: 'sys', tools: [tool] })
+    const { stream, response } = a.stream('go')
+
+    const chunkTypes: string[] = []
+    for await (const chunk of stream) chunkTypes.push(chunk.type)
+
+    const result = await response
+    assert.strictEqual(result.finishReason, 'tool_approval_required')
+    assert.strictEqual(result.pendingApprovalToolCall?.toolCall.id, 's1')
+    assert.strictEqual(executed, false)
+    assert.ok(chunkTypes.includes('pending-approval'), `expected pending-approval chunk, got: ${chunkTypes.join(',')}`)
+  })
+
+  it('rejectedToolCallIds skips execution and continues with a rejection result', async () => {
+    let executed = false
+    const tool = toolDefinition({
+      name: 'delete_record',
+      description: 'd',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executed = true; return 'deleted' })
+
+    _script = [
+      { toolCalls: [{ id: 'rej-1', name: 'delete_record', arguments: { id: '7' } }] },
+      { text: 'understood, no delete' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] })
+      .prompt('go', { rejectedToolCallIds: ['rej-1'] })
+
+    assert.strictEqual(executed, false)
+    assert.strictEqual(result.text, 'understood, no delete')
+    assert.strictEqual(result.finishReason, undefined)
+    const firstStep = result.steps[0]
+    assert.ok(firstStep)
+    const toolResult = firstStep.toolResults[0]
+    assert.ok(toolResult)
+    assert.deepEqual(toolResult.result, { rejected: true, reason: 'User rejected this tool call' })
   })
 })

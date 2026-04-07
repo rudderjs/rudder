@@ -23,6 +23,7 @@ import type {
   AnyTool,
   ContentPart,
   ConversationStore,
+  FinishReason,
   HasMiddleware,
   HasTools,
   MiddlewareContext,
@@ -30,6 +31,7 @@ import type {
   ProviderRequestOptions,
   StopCondition,
   StreamChunk,
+  Tool,
   ToolCall,
   ToolResult,
   TokenUsage,
@@ -372,15 +374,24 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   const toolSchemas = buildToolSchemas(tools)
   const toolMap = buildToolMap(tools)
 
-  const messages: AiMessage[] = [
-    { role: 'system', content: a.instructions() },
-    ...(options?.history ?? []),
-    buildUserMessage(input, options?.attachments),
-  ]
+  const messages: AiMessage[] = options?.messages
+    ? [{ role: 'system', content: a.instructions() }, ...options.messages]
+    : [
+      { role: 'system', content: a.instructions() },
+      ...(options?.history ?? []),
+      buildUserMessage(input, options?.attachments),
+    ]
 
   const steps: AgentStep[] = []
   const stopConditions = normalizeStopConditions(a.stopWhen())
   const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+
+  // State for client-tool-stopping and approval-stopping
+  const pendingClientToolCalls: ToolCall[] = []
+  let pendingApprovalToolCall: { toolCall: ToolCall; isClientTool: boolean } | undefined
+  let loopFinishReason: FinishReason | undefined
+  let stopForClientTools = false
+  let stopForApproval = false
 
   // Create middleware context
   const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
@@ -465,10 +476,32 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
             messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
             continue
           }
-          if (tool.type === 'client') {
+          if (!tool.execute) {
+            // Client tool — no server-side handler.
+            if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
+              pendingClientToolCalls.push(tc)
+              loopFinishReason = 'client_tool_calls'
+              stopForClientTools = true
+              continue
+            }
             toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
             messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
             continue
+          }
+
+          // needsApproval enforcement
+          const approvalDecision = await evaluateApproval(tool, tc, options)
+          if (approvalDecision === 'rejected') {
+            const rejectionResult = { rejected: true, reason: 'User rejected this tool call' }
+            toolResults.push({ toolCallId: tc.id, result: rejectionResult })
+            messages.push({ role: 'tool', content: JSON.stringify(rejectionResult), toolCallId: tc.id })
+            continue
+          }
+          if (approvalDecision === 'pending') {
+            pendingApprovalToolCall = { toolCall: tc, isClientTool: false }
+            loopFinishReason = 'tool_approval_required'
+            stopForApproval = true
+            break
           }
 
           // onBeforeToolCall
@@ -526,6 +559,8 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
       }
       steps.push(step)
 
+      if (stopForClientTools || stopForApproval) break
+
       const shouldStop = stopConditions.some(cond =>
         cond({ steps, iteration, lastMessage: response.message }),
       )
@@ -543,11 +578,15 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   if (middlewares.length > 0) await runSequential(middlewares, 'onFinish', ctx)
 
   const lastStep = steps[steps.length - 1]
-  return {
+  const result: AgentResponse = {
     text: lastStep ? getMessageText(lastStep.message.content) : '',
     steps,
     usage: totalUsage,
   }
+  if (loopFinishReason) result.finishReason = loopFinishReason
+  if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
+  if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
+  return result
 }
 
 // ─── Agent Loop (streaming) ──────────────────────────────
@@ -563,15 +602,24 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     const toolSchemas = buildToolSchemas(tools)
     const toolMap = buildToolMap(tools)
 
-    const messages: AiMessage[] = [
-      { role: 'system', content: a.instructions() },
-      ...(options?.history ?? []),
-      buildUserMessage(input, options?.attachments),
-    ]
+    const messages: AiMessage[] = options?.messages
+      ? [{ role: 'system', content: a.instructions() }, ...options.messages]
+      : [
+        { role: 'system', content: a.instructions() },
+        ...(options?.history ?? []),
+        buildUserMessage(input, options?.attachments),
+      ]
 
     const steps: AgentStep[] = []
     const stopConditions = normalizeStopConditions(a.stopWhen())
     const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+
+    // State for client-tool-stopping and approval-stopping
+    const pendingClientToolCalls: ToolCall[] = []
+    let pendingApprovalToolCall: { toolCall: ToolCall; isClientTool: boolean } | undefined
+    let loopFinishReason: FinishReason | undefined
+    let stopForClientTools = false
+    let stopForApproval = false
 
     // Create middleware context
     const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
@@ -705,11 +753,35 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
               continue
             }
-            if (tool.type === 'client') {
+            if (!tool.execute) {
+              // Client tool — no server-side handler.
+              if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
+                pendingClientToolCalls.push(tc)
+                loopFinishReason = 'client_tool_calls'
+                stopForClientTools = true
+                yield { type: 'tool-call' as const, toolCall: tc }
+                continue
+              }
               toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
               messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
               yield { type: 'tool-call' as const, toolCall: tc }
               continue
+            }
+
+            // needsApproval enforcement
+            const approvalDecision = await evaluateApproval(tool, tc, options)
+            if (approvalDecision === 'rejected') {
+              const rejectionResult = { rejected: true, reason: 'User rejected this tool call' }
+              toolResults.push({ toolCallId: tc.id, result: rejectionResult })
+              messages.push({ role: 'tool', content: JSON.stringify(rejectionResult), toolCallId: tc.id })
+              continue
+            }
+            if (approvalDecision === 'pending') {
+              pendingApprovalToolCall = { toolCall: tc, isClientTool: false }
+              loopFinishReason = 'tool_approval_required'
+              stopForApproval = true
+              yield { type: 'tool-call' as const, toolCall: tc }
+              break
             }
 
             // onBeforeToolCall
@@ -768,6 +840,8 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         }
         steps.push(step)
 
+        if (stopForClientTools || stopForApproval) break
+
         const shouldStop = stopConditions.some(cond =>
           cond({ steps, iteration, lastMessage: step.message }),
         )
@@ -786,12 +860,24 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     // onFinish
     if (middlewares.length > 0) await runSequential(middlewares, 'onFinish', ctx)
 
+    // Emit pending state to consumers via dedicated chunk types
+    if (pendingClientToolCalls.length > 0) {
+      yield { type: 'pending-client-tools' as const, toolCalls: pendingClientToolCalls } as unknown as StreamChunk
+    }
+    if (pendingApprovalToolCall) {
+      yield { type: 'pending-approval' as const, toolCall: pendingApprovalToolCall.toolCall, isClientTool: pendingApprovalToolCall.isClientTool } as unknown as StreamChunk
+    }
+
     const lastStep = steps[steps.length - 1]
-    resolveResponse!({
+    const result: AgentResponse = {
       text: lastStep ? getMessageText(lastStep.message.content) : '',
       steps,
       usage: totalUsage,
-    })
+    }
+    if (loopFinishReason) result.finishReason = loopFinishReason
+    if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
+    if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
+    resolveResponse!(result)
   }
 
   return {
@@ -802,4 +888,27 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
 
 function normalizeStopConditions(cond: StopCondition | StopCondition[]): StopCondition[] {
   return Array.isArray(cond) ? cond : [cond]
+}
+
+/**
+ * Resolve `needsApproval` for a tool call, taking into account the
+ * client-supplied `approvedToolCallIds` / `rejectedToolCallIds` lists.
+ *
+ * Returns:
+ * - `'allow'`     — execute the tool normally (default; also when approved)
+ * - `'pending'`   — needsApproval is truthy and the call has not been approved
+ * - `'rejected'`  — the call appears in `rejectedToolCallIds`
+ */
+async function evaluateApproval(
+  tool: Tool,
+  tc: ToolCall,
+  options: AgentPromptOptions | undefined,
+): Promise<'allow' | 'pending' | 'rejected'> {
+  const needs = tool.definition.needsApproval
+  const requires = typeof needs === 'function' ? await needs(tc.arguments) : !!needs
+  if (!requires) return 'allow'
+
+  if (options?.rejectedToolCallIds?.includes(tc.id)) return 'rejected'
+  if (options?.approvedToolCallIds?.includes(tc.id)) return 'allow'
+  return 'pending'
 }

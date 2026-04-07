@@ -45,15 +45,34 @@ export interface ProviderResponse {
   finishReason: FinishReason
 }
 
-export type FinishReason = 'stop' | 'tool_calls' | 'length' | 'content_filter'
+export type FinishReason =
+  | 'stop'
+  | 'tool_calls'
+  | 'length'
+  | 'content_filter'
+  /** Loop stopped because client-side tool calls are pending execution. */
+  | 'client_tool_calls'
+  /** Loop stopped because a tool call requires user approval. */
+  | 'tool_approval_required'
 
 /** A single streamed chunk */
 export interface StreamChunk {
-  type: 'text-delta' | 'tool-call-delta' | 'tool-call' | 'usage' | 'finish'
+  type:
+    | 'text-delta'
+    | 'tool-call-delta'
+    | 'tool-call'
+    | 'usage'
+    | 'finish'
+    | 'pending-client-tools'
+    | 'pending-approval'
   /** Text content delta (when type === 'text-delta') */
   text?: string
-  /** Tool call info (when type === 'tool-call' or 'tool-call-delta') */
+  /** Tool call info (when type === 'tool-call' or 'tool-call-delta' or 'pending-approval') */
   toolCall?: Partial<ToolCall>
+  /** Pending client tool calls (when type === 'pending-client-tools') */
+  toolCalls?: ToolCall[]
+  /** Approval-pending metadata (when type === 'pending-approval') */
+  isClientTool?: boolean
   /** Usage stats (when type === 'finish' or 'usage') */
   usage?: TokenUsage | undefined
   /** Finish reason (when type === 'finish') */
@@ -200,20 +219,37 @@ export interface ToolDefinitionOptions<
   meta?: Record<string, unknown> | undefined
 }
 
-export interface ServerTool<TInput = unknown, TOutput = unknown> {
+/**
+ * A tool the model can call.
+ *
+ * `execute` is optional — its presence/absence is the only discriminator
+ * between server tools (have an executor) and client tools (run in the
+ * browser via the `clientTools` registry on the panels side).
+ *
+ * This shape mirrors Vercel AI SDK v4+ and TanStack AI.
+ */
+export interface Tool<TInput = unknown, TOutput = unknown> {
   readonly definition: ToolDefinitionOptions
-  readonly type: 'server'
-  execute: ToolExecuteFn<TInput, TOutput>
-}
-
-export interface ClientTool<TInput = unknown, TOutput = unknown> {
-  readonly definition: ToolDefinitionOptions
-  readonly type: 'client'
-  execute: ToolExecuteFn<TInput, TOutput>
+  readonly execute?: ToolExecuteFn<TInput, TOutput> | undefined
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyTool = ServerTool<any, any> | ClientTool<any, any>
+export type AnyTool = Tool<any, any>
+
+/**
+ * @deprecated Use {@link Tool}. A "server tool" is just a `Tool` whose
+ * `execute` is defined.
+ */
+export interface ServerTool<TInput = unknown, TOutput = unknown> extends Tool<TInput, TOutput> {
+  readonly execute: ToolExecuteFn<TInput, TOutput>
+}
+
+/**
+ * @deprecated Use {@link Tool}. A "client tool" is just a `Tool` whose
+ * `execute` is omitted; the browser handles execution via the
+ * `clientTools` registry in `@rudderjs/panels`.
+ */
+export type ClientTool<TInput = unknown, TOutput = unknown> = Tool<TInput, TOutput>
 
 // ─── Middleware ────────────────────────────────────────────
 
@@ -306,6 +342,12 @@ export interface AgentResponse {
   steps: AgentStep[]
   usage: TokenUsage
   conversationId?: string
+  /** When the loop stopped early, why. */
+  finishReason?: FinishReason
+  /** Client tool calls awaiting browser-side execution. */
+  pendingClientToolCalls?: ToolCall[]
+  /** A tool call awaiting user approval. */
+  pendingApprovalToolCall?: { toolCall: ToolCall; isClientTool: boolean }
 }
 
 export interface AgentStreamResponse {
@@ -341,8 +383,30 @@ export interface AiConfig {
 export interface AgentPromptOptions {
   /** Prior conversation messages to prepend (after system prompt, before current user message) */
   history?: AiMessage[]
+  /**
+   * Full message list to send instead of `[system, ...history, user(input)]`.
+   * When set, the loop runs with `[system, ...messages]` directly — `input`
+   * is ignored. Used for continuations after a client-tool round-trip or
+   * approval round-trip, where the conversation ends with a tool result
+   * message and there is no fresh user input.
+   */
+  messages?: AiMessage[]
   /** File/image attachments to include with the prompt */
   attachments?: Attachment[]
+  /**
+   * How to handle tool calls for tools without a server-side handler.
+   *
+   * - `'placeholder'` (default): write a placeholder tool result and continue the loop.
+   *   Preserves the historical behavior.
+   * - `'stop-on-client-tool'`: stop the loop, expose pending tool calls on the
+   *   `AgentResponse`, and let the caller (typically the panels chat handler)
+   *   re-submit with tool results once the browser has executed them.
+   */
+  toolCallStreamingMode?: 'placeholder' | 'stop-on-client-tool'
+  /** Tool call ids the user has approved. */
+  approvedToolCallIds?: string[]
+  /** Tool call ids the user has rejected. */
+  rejectedToolCallIds?: string[]
 }
 
 /** An attachment (file or image) to include with a prompt */
