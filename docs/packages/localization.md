@@ -138,3 +138,30 @@ __('messages.nav.profile')
 ## Fallback locale
 
 If a key is missing in the current locale, RudderJS automatically checks the configured fallback locale.
+
+## Pre-loading namespaces
+
+Some packages need a namespace available **synchronously** (e.g. `@rudderjs/panels` resolves UI strings during render). Use `preloadNamespace()` from a service provider's `boot()` to warm the cache:
+
+```ts
+import { preloadNamespace, LocalizationRegistry } from '@rudderjs/localization'
+
+const { locale, fallback } = LocalizationRegistry.getConfig()
+await preloadNamespace(locale, 'panels')
+if (fallback !== locale) await preloadNamespace(fallback, 'panels')
+```
+
+After this runs, `__('panels.signOut')` resolves without an `await`.
+
+## Overriding bundled translations (vendor namespaces)
+
+Some packages ship their own bundled translations as the canonical schema (e.g. `@rudderjs/panels`). To override individual strings or add a new locale, drop a JSON file at `lang/<locale>/<package>.json`:
+
+```json
+// lang/en/panels.json
+{
+  "signOut": "Logout"
+}
+```
+
+Only the keys you specify are overridden; missing keys fall back to the bundled defaults. See [`@rudderjs/panels` › Localization](./panels/index.md#localization) for the full pattern.

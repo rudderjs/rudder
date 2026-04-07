@@ -671,6 +671,9 @@ importers:
       '@rudderjs/live':
         specifier: workspace:*
         version: link:../live
+      '@rudderjs/localization':
+        specifier: workspace:*
+        version: link:../localization
       '@rudderjs/storage':
         specifier: workspace:*
         version: link:../storage
