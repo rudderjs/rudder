@@ -2,7 +2,7 @@
 
 Enable AI agents to (1) call tools that execute on the browser (client-side) and (2) require user approval before executing destructive or sensitive tools — both via a shared re-submission infrastructure.
 
-**Status:** NOT STARTED
+**Status:** DONE (2026-04-07)
 **Estimated LOC:** ~220 (reduced from ~320 — see "Depends on" below)
 **Packages affected:** `@rudderjs/ai`, `@rudderjs/panels`
 **Depends on:** `chat-context-refactor-plan.md` must land first. That plan collapses the three duplicated branches in `chatHandler.ts` into a single dispatcher and fixes the conversation persistence bugs that this plan would otherwise have to fix as a precondition. Phase 2 below assumes the dispatcher exists.
