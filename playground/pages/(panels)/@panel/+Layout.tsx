@@ -112,7 +112,7 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
     <PanelErrorBoundary>
       {themeCss && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       <AiChatProvider panelPath={data.panelMeta.path}>
-        <I18nProvider locale={data.panelMeta.locale}>
+        <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
           <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
             {children}
           </AdminLayout>
