@@ -141,6 +141,9 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
         </div>
       )
 
+    case 'tool_result':
+      return null  // Tool results are persisted to the wire log; nothing useful to show inline
+
     case 'agent_start':
       return (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
@@ -163,7 +166,56 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
           Error: {part.message}
         </div>
       )
+
+    case 'approval_request':
+      return <ApprovalCard part={part} />
   }
+}
+
+// ─── Inline approval card (rendered as a chat part) ─────────
+
+function ApprovalCard({ part }: { part: Extract<ChatMessagePart, { type: 'approval_request' }> }) {
+  const { approvePending, rejectPending } = useAiChat()
+  const { toolCall, isClientTool, resolved } = part
+  const argsJson = JSON.stringify(toolCall.arguments ?? {}, null, 2)
+
+  return (
+    <div className="my-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-900 dark:text-amber-200">
+        <SparklesIcon className="h-3 w-3 shrink-0" />
+        <span>
+          Approval needed: <span className="font-mono">{toolCall.name}</span>
+          {isClientTool ? ' (browser)' : ''}
+        </span>
+      </div>
+      <pre className="mb-2 max-h-40 overflow-auto rounded bg-background/60 p-1.5 text-[10px] text-foreground">
+        {argsJson}
+      </pre>
+      {resolved ? (
+        <div className={`text-xs font-medium ${resolved === 'approved' ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+          {resolved === 'approved' ? '✓ Approved' : '✗ Rejected'}
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 flex-1 text-xs"
+            onClick={rejectPending}
+          >
+            Reject
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 flex-1 bg-destructive text-xs text-white hover:bg-destructive/90"
+            onClick={approvePending}
+          >
+            Approve
+          </Button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Message bubble ─────────────────────────────────────────
