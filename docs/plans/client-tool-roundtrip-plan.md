@@ -3,8 +3,9 @@
 Enable AI agents to (1) call tools that execute on the browser (client-side) and (2) require user approval before executing destructive or sensitive tools — both via a shared re-submission infrastructure.
 
 **Status:** NOT STARTED
-**Estimated LOC:** ~320
+**Estimated LOC:** ~220 (reduced from ~320 — see "Depends on" below)
 **Packages affected:** `@rudderjs/ai`, `@rudderjs/panels`
+**Depends on:** `chat-context-refactor-plan.md` must land first. That plan collapses the three duplicated branches in `chatHandler.ts` into a single dispatcher and fixes the conversation persistence bugs that this plan would otherwise have to fix as a precondition. Phase 2 below assumes the dispatcher exists.
 
 ---
 
@@ -82,20 +83,33 @@ All changes are **additive**. Honors the Laravel-style API stability commitment 
 - Add `'client_tool_calls'` and `'tool_approval_required'` as valid `finishReason` values
 
 **File:** `packages/ai/src/agent.ts` — `runAgentLoop` and `runAgentLoopStreaming`
-- Locate the existing `if (tool.type === 'client')` branches
+- Locate the two existing client-tool branches (lines 468 and 708, post-§1.3 they read `if (!tool.execute)`)
 - Wrap them so the new mode breaks out of the iteration loop instead of writing a placeholder:
   ```ts
-  if (tool.type === 'client') {
+  if (!tool.execute) {
     if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
+      pendingClientToolCalls.push(tc)
       finishReason = 'client_tool_calls'
       break
     }
-    // Existing placeholder behavior (unchanged)
+    // Existing placeholder behavior (unchanged for back-compat)
     toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
     messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
     continue
   }
   ```
+
+**Non-streaming variant (`runAgentLoop`)** returns the pending tool calls to the caller via the existing result shape — add a `pendingToolCalls?: ToolCall[]` field to `AgentLoopResult` so `chatHandler.ts` can read them after the loop exits with `finishReason: 'client_tool_calls'` or `'tool_approval_required'`.
+
+**Streaming variant (`runAgentLoopStreaming`)** emits the pending tool calls as a new SSE chunk type before closing. Add to the streaming chunk union in `agent.ts`:
+```ts
+type AgentStreamChunk =
+  | { type: 'text-delta'; text: string }
+  | ...existing chunks
+  | { type: 'pending-client-tools'; toolCalls: ToolCall[] }
+  | { type: 'pending-approval'; toolCall: ToolCall; isClientTool: boolean }
+```
+The loop yields one of these chunks immediately before yielding the final `finish` chunk with the new `finishReason`. `chatHandler.ts` translates them to the wire-level SSE events `pending_client_tools` and `tool_approval_required` (see §2.1).
 
 ### 1.2 Wire up `needsApproval` enforcement
 
@@ -141,11 +155,38 @@ approvedToolCallIds?: string[]   // tool call ids the user has approved
 rejectedToolCallIds?: string[]   // tool call ids the user has rejected
 ```
 
-### 1.3 Auto-detect client tools (no `.server()`)
+### 1.3 Collapse to a single `Tool` type (Vercel-style)
+
+The current `ServerTool` / `ClientTool` discriminated union is broken: `ClientTool.execute` is a server-side stub that carries no real information, and `.client(execute)` is conceptually wrong (client tools execute on the client). Replace the union with a single `Tool` type where `execute` is optional — its presence/absence is the discriminator. This matches Vercel AI SDK v4+ and TanStack AI.
+
+**File:** `packages/ai/src/types.ts`
+- Replace `ServerTool`, `ClientTool`, and `AnyTool` with one interface:
+  ```ts
+  export interface Tool<TInput = unknown, TOutput = unknown> {
+    readonly definition: ToolDefinitionOptions<any, any>
+    readonly execute?: ToolExecuteFn<TInput, TOutput>  // absent = client tool
+  }
+  ```
 
 **File:** `packages/ai/src/tool.ts`
-- In `toolDefinition()`, default `type` to `'client'` if `.server()` is never called
-- `.server(handler)` flips type to `'server'` and stores the handler
+- `ToolBuilder` implements `Tool` directly — a builder with no `.server()` call is itself a valid client tool (`{ definition }` with no `execute`):
+  ```ts
+  export class ToolBuilder<TInput, TOutput> implements Tool<z.infer<TInput>, never> {
+    readonly definition: ToolDefinitionOptions<TInput, TOutput>
+    constructor(options) { this.definition = options }
+
+    server<TReturn>(execute: ToolExecuteFn<z.infer<TInput>, TReturn>): Tool<z.infer<TInput>, TReturn> {
+      return { definition: this.definition, execute }
+    }
+    // toSchema() unchanged
+  }
+  ```
+- **Delete `.client(execute)`** — there are zero call sites in the repo, and the method is conceptually wrong. Client handlers register separately via the `clientTools.ts` registry on the panels side (§2.2).
+
+**File:** `packages/ai/src/agent.ts`
+- Replace both `if (tool.type === 'client')` checks (lines 468 and 708) with `if (!tool.execute)`. TypeScript narrows `tool.execute` to defined in the `else` branch automatically.
+
+**Migration impact:** ~15 lines outside the new code. All 8 existing `.server(handler)` call sites are unchanged. `AnyTool` references become `Tool`. No test changes — `index.test.ts` uses `.server()` exclusively.
 
 ### 1.4 Add `dynamicTool()` helper
 
@@ -184,11 +225,20 @@ rejectedToolCallIds?: string[]   // tool call ids the user has rejected
   ```
 - Document new SSE events: `pending_client_tools`, `tool_approval_required`
 
-**File:** `packages/panels/src/handlers/chat/chatHandler.ts`
-- In `handleAiChat`, if `body.messages` is set, use it directly as the conversation
+**File:** `packages/panels/src/handlers/chat/chatHandler.ts` (the slim dispatcher, post-Plan-0)
+- In the single `runChat` function, if `body.messages` is set, use it as the conversation **after validating it against the persisted conversation** (see security checks below)
 - Pass `toolCallStreamingMode: 'stop-on-client-tool'`, `approvedToolCallIds`, `rejectedToolCallIds` to `agent()`
+- Because Plan 0 collapsed the three branches into one dispatcher, this wiring happens in exactly one place — it automatically applies to resource, page, and global contexts
 - On `finishReason === 'client_tool_calls'`, send `pending_client_tools` SSE event with the tool calls, close stream
 - On `finishReason === 'tool_approval_required'`, send `tool_approval_required` SSE event with the tool call (name, args, description, isClientTool flag), close stream
+
+**Security checks (must implement, not optional):**
+
+1. **Validate `messages` against `ConversationStore`.** When `body.messages` is provided, load the persisted conversation and verify that the prefix matches what the server already wrote. The client may only *append* (its own user message + tool result messages from the previous round) — never rewrite history. Reject the request with 400 if the prefix diverges.
+
+2. **Validate `approvedToolCallIds` / `rejectedToolCallIds`.** For each id in either array, verify it exists in the most recent assistant message of the loaded conversation and corresponds to a tool call that's actually pending approval. Reject unknown ids with 400. Without this check, an attacker can POST `approvedToolCallIds: ['anything']` to bypass approval gates.
+
+3. **Scope "always approve" decisions to the conversation, not globally.** If §2.4 adds an "always approve `tool_name`" checkbox, the allowlist lives on the `Conversation` row in `ConversationStore`, not in client-side state or a session-wide map. This prevents cross-conversation privilege escalation.
 
 ### 2.2 Client-side: tool registry
 
@@ -347,9 +397,7 @@ export function buildDeleteRecordTool(resourceSlug: string, recordId: string) {
 
 3. **`messages` array on the wire** — bigger requests for long conversations. Mitigation: server can load `loadedHistory` from store and accept `messages` as a delta. Defer optimization.
 
-4. **Approval bypass** — an attacker could potentially POST `approvedToolCallIds` for tool calls they didn't see. Mitigation: server should verify the toolCallId actually exists in the most recent assistant message of the conversation. Add this check in `chatHandler.ts`.
-
-5. **"Always approve" trust scope** — if we add a session-level "always approve `tool_name`" option in the modal, it must be scoped to the current conversation, not global, to prevent cross-conversation privilege escalation.
+(Approval-bypass and "always approve" scope concerns are now hard requirements in §2.1, not deferred risks.)
 
 ---
 
