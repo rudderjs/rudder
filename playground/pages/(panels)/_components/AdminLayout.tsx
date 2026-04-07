@@ -578,6 +578,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
   const branding = panelMeta.branding
 
   return (
+    <div dir={dir} className="contents">
     <SidebarProvider>
       <Sidebar side={dir === 'rtl' ? 'right' : 'left'} collapsible="icon">
         <SidebarHeader>
@@ -595,8 +596,8 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 bg-background">
           <div className="flex flex-1 items-center gap-2 px-3">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+            <SidebarTrigger className="-ms-1" />
+            <Separator orientation="vertical" className="me-2 data-[orientation=vertical]:h-4" />
             <HeaderBreadcrumb panelMeta={panelMeta} items={items} currentSlug={currentSlug} i18n={i18n} />
           </div>
           <div className="flex items-center gap-1 px-3">
@@ -613,6 +614,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
       <AiChatPanel />
       <Toaster richColors position="bottom-right" />
     </SidebarProvider>
+    </div>
   )
 }
 

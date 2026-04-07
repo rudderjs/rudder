@@ -49,7 +49,7 @@ export const adminPanel = Panel.make('admin')
   })
   .themeEditor()
   .layout('sidebar')
-  .locale('en')
+  .locale('ar')
   // .guard(async (ctx) => ctx.user?.role === 'admin')
   .resources([
     ArticleResource,

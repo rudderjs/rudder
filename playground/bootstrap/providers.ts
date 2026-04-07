@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import type { Application, ServiceProvider } from '@rudderjs/core'
 import { events } from '@rudderjs/core'
 import { auth } from '@rudderjs/auth'
@@ -38,7 +39,11 @@ export default [
   events({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
   mail(configs.mail),
   storage(configs.storage),
-  localization(configs.localization),
+  localization({
+    locale:   configs.app.locale,
+    fallback: configs.app.fallback,
+    path:     resolve(process.cwd(), 'lang'),
+  }),
   scheduler(),
   notifications(),
   broadcasting(),
