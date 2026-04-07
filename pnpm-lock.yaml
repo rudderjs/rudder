@@ -296,6 +296,38 @@ importers:
         specifier: ^0.41.0
         version: 0.41.1
 
+  packages/horizon:
+    dependencies:
+      '@rudderjs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@rudderjs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@rudderjs/middleware':
+        specifier: workspace:*
+        version: link:../middleware
+      '@rudderjs/queue':
+        specifier: workspace:*
+        version: link:../queue
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../router
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.0
+        version: 7.6.13
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+    optionalDependencies:
+      better-sqlite3:
+        specifier: ^11.0.0
+        version: 11.10.0
+
   packages/http:
     devDependencies:
       '@types/node':
