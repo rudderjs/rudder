@@ -41,7 +41,7 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 ## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Rudder CLI, FormRequest validation
-- **Pay-as-you-go** — 42 optional `@rudderjs/*` packages; use only what you need
+- **Pay-as-you-go** — 47 optional `@rudderjs/*` packages; use only what you need
 - **AI-native** — 9-provider AI engine (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), agents with tools, streaming, middleware, attachments, conversations, queue integration
 - **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
@@ -536,11 +536,19 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/media` | Media library — file browser, uploads, folders, preview, image conversions |
 | `@rudderjs/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
+### Monitoring
+| Package | Description |
+|---|---|
+| `@rudderjs/telescope` | Development inspector — records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, model changes |
+| `@rudderjs/pulse` | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
+| `@rudderjs/horizon` | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
+
 ### AI & Workspaces
 | Package | Description |
 |---|---|
-| `@rudderjs/ai` | AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class, tool system, streaming, middleware |
+| `@rudderjs/ai` | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware |
 | `@rudderjs/boost` | AI dev tools — MCP server for Claude Code, Cursor, Copilot |
+| `@rudderjs/mcp` | MCP server framework — build custom MCP servers with decorators and testing utilities |
 | `@rudderjs/workspaces` | AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator |
 | `@rudderjs/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
@@ -564,8 +572,8 @@ const svc = resolve<UserService>(UserService)
 
 RudderJS is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 42 packages published to npm under `@rudderjs/*`
-- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, media library, AI engine with multi-provider support, AI workspace canvas, request-scoped context, feature flags, and shell/concurrency utilities — all end-to-end
+- 47 packages published to npm under `@rudderjs/*`
+- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, media library, AI engine with multi-provider support, AI workspace canvas, monitoring (Telescope, Pulse, Horizon), request-scoped context, feature flags, and shell/concurrency utilities — all end-to-end
 
 ---
 

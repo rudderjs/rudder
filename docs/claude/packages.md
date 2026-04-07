@@ -9,7 +9,7 @@
 
 ```
 rudderjs/
-├── packages/           # 46 published packages (@rudderjs/*)
+├── packages/           # 47 published packages (@rudderjs/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
