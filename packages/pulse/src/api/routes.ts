@@ -1,5 +1,6 @@
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 import type { PulseStorage, PulseConfig, MetricType } from '../types.js'
+import { dashboardPage } from '../ui/dashboard.js'
 
 const PERIODS: Record<string, number> = {
   '1h':  60 * 60 * 1000,
@@ -22,8 +23,14 @@ export async function registerRoutes(
 ): Promise<void> {
   const { router } = await import('@rudderjs/router')
 
-  const prefix    = `/${config.path ?? 'pulse'}/api`
+  const basePath  = `/${config.path ?? 'pulse'}`
+  const prefix    = `${basePath}/api`
   const middleware = config.auth ? [authMiddleware(config)] : []
+
+  // ── Dashboard UI ─────────────────────────────────────────
+  router.get(basePath, (_req: AppRequest, res: AppResponse) => {
+    res.header('Content-Type', 'text/html').send(dashboardPage(prefix))
+  }, middleware)
 
   // ── Overview ─────────────────────────────────────────────
   router.get(`${prefix}/overview`, async (req: AppRequest, res: AppResponse) => {
