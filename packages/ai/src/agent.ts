@@ -392,6 +392,19 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   let loopFinishReason: FinishReason | undefined
   let stopForClientTools = false
   let stopForApproval = false
+  let resumedToolMessages: AiMessage[] = []
+
+  // Resume server tools left pending by a previous approval round-trip.
+  // (Must run before middleware context creation since `messages` may grow.)
+  {
+    const resume = await resumePendingToolCalls({ messages, toolMap, options })
+    resumedToolMessages = resume.resumed
+    if (resume.approvalStillRequired) {
+      pendingApprovalToolCall = resume.approvalStillRequired
+      loopFinishReason = 'tool_approval_required'
+      stopForApproval = true
+    }
+  }
 
   // Create middleware context
   const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
@@ -406,6 +419,9 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   if (middlewares.length > 0) await runSequential(middlewares, 'onStart', ctx)
 
   try {
+    if (stopForApproval) {
+      // Approval is still required from the resume — skip the model loop.
+    } else {
     for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
       ctx.iteration = iteration
 
@@ -568,6 +584,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
         break
       }
     }
+    } // close `else` (skip-loop-when-resume-needs-approval)
   } catch (err) {
     // onError
     if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
@@ -586,6 +603,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   if (loopFinishReason) result.finishReason = loopFinishReason
   if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
   if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
+  if (resumedToolMessages.length > 0) result.resumedToolMessages = resumedToolMessages
   return result
 }
 
@@ -620,6 +638,18 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     let loopFinishReason: FinishReason | undefined
     let stopForClientTools = false
     let stopForApproval = false
+    let resumedToolMessages: AiMessage[] = []
+
+    // Resume server tools left pending by a previous approval round-trip.
+    {
+      const resume = await resumePendingToolCalls({ messages, toolMap, options })
+      resumedToolMessages = resume.resumed
+      if (resume.approvalStillRequired) {
+        pendingApprovalToolCall = resume.approvalStillRequired
+        loopFinishReason = 'tool_approval_required'
+        stopForApproval = true
+      }
+    }
 
     // Create middleware context
     const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
@@ -634,6 +664,9 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     if (middlewares.length > 0) await runSequential(middlewares, 'onStart', ctx)
 
     try {
+      if (stopForApproval) {
+        // Resume detected unfulfilled approval — skip the model loop entirely.
+      } else {
       for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
         ctx.iteration = iteration
         ctx.chunkIndex = 0
@@ -851,6 +884,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         text = ''
         currentToolCalls = []
       }
+      } // close `else` (skip-loop-when-resume-needs-approval)
     } catch (err) {
       // onError
       if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
@@ -877,6 +911,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     if (loopFinishReason) result.finishReason = loopFinishReason
     if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
     if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
+    if (resumedToolMessages.length > 0) result.resumedToolMessages = resumedToolMessages
     resolveResponse!(result)
   }
 
@@ -888,6 +923,91 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
 
 function normalizeStopConditions(cond: StopCondition | StopCondition[]): StopCondition[] {
   return Array.isArray(cond) ? cond : [cond]
+}
+
+/**
+ * When continuing a chat after a stop-on-approval round-trip, the supplied
+ * `messages` array ends with an `assistant` message whose `toolCalls` were
+ * never fulfilled (the loop paused before executing them). Most providers
+ * (Anthropic in particular) reject such conversations because every
+ * `tool_use` block must be followed by a matching `tool_result`.
+ *
+ * This helper detects that case, executes the pending **server** tool calls
+ * (honoring `approvedToolCallIds` / `rejectedToolCallIds`), appends the
+ * resulting tool messages to `messages` in place, and returns them. The
+ * caller can attach the returned list to `AgentResponse.resumedToolMessages`
+ * so that the panels dispatcher persists them in the conversation store.
+ *
+ * Client tools (no `execute`) must come back from the browser with their
+ * tool result already in the conversation, so the trailing assistant message
+ * will not have unmatched `toolCalls` for them — they're handled outside.
+ */
+async function resumePendingToolCalls(deps: {
+  messages: AiMessage[]
+  toolMap:  Map<string, AnyTool>
+  options:  AgentPromptOptions | undefined
+}): Promise<{
+  resumed:               AiMessage[]
+  approvalStillRequired: { toolCall: ToolCall; isClientTool: boolean } | undefined
+}> {
+  const { messages, toolMap, options } = deps
+  const last = messages[messages.length - 1]
+  if (!last || last.role !== 'assistant' || !last.toolCalls || last.toolCalls.length === 0) {
+    return { resumed: [], approvalStillRequired: undefined }
+  }
+
+  const resumed: AiMessage[] = []
+  let approvalStillRequired: { toolCall: ToolCall; isClientTool: boolean } | undefined
+
+  for (const tc of last.toolCalls) {
+    const tool = toolMap.get(tc.name)
+    if (!tool) {
+      const err = `Error: Unknown tool "${tc.name}"`
+      const m: AiMessage = { role: 'tool', content: err, toolCallId: tc.id }
+      messages.push(m)
+      resumed.push(m)
+      continue
+    }
+    if (!tool.execute) {
+      // Client tool whose result is missing from the supplied messages.
+      // Surface an error so the model can recover instead of hanging.
+      const err = `Error: client tool "${tc.name}" was not executed by the browser`
+      const m: AiMessage = { role: 'tool', content: err, toolCallId: tc.id }
+      messages.push(m)
+      resumed.push(m)
+      continue
+    }
+
+    const decision = await evaluateApproval(tool, tc, options)
+    if (decision === 'rejected') {
+      const rej = { rejected: true, reason: 'User rejected this tool call' }
+      const m: AiMessage = { role: 'tool', content: JSON.stringify(rej), toolCallId: tc.id }
+      messages.push(m)
+      resumed.push(m)
+      continue
+    }
+    if (decision === 'pending') {
+      // Still pending — the user has not yet approved this call. Re-emit
+      // the pending state and stop processing further tools.
+      approvalStillRequired = { toolCall: tc, isClientTool: false }
+      break
+    }
+
+    try {
+      const result = await tool.execute(tc.arguments)
+      const content = typeof result === 'string' ? result : JSON.stringify(result)
+      const m: AiMessage = { role: 'tool', content, toolCallId: tc.id }
+      messages.push(m)
+      resumed.push(m)
+    } catch (err) {
+      const errMsg = `Error: ${err instanceof Error ? err.message : String(err)}`
+      const m: AiMessage = { role: 'tool', content: errMsg, toolCallId: tc.id }
+      messages.push(m)
+      resumed.push(m)
+    }
+  }
+
+  return { resumed, approvalStillRequired }
 }
 
 /**

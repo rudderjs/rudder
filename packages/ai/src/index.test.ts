@@ -946,6 +946,73 @@ describe('tool approval enforcement', () => {
     assert.strictEqual(executions, 1)
   })
 
+  it('approval continuation: executes server tool and emits resumedToolMessages', async () => {
+    let executions = 0
+    const tool = toolDefinition({
+      name: 'delete_record',
+      description: 'd',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executions++; return 'deleted' })
+
+    // Continuation: messages already contain the prior assistant{toolCalls}
+    // (no fresh provider call should be needed before executing the tool).
+    _script = [
+      { text: 'All done.' },  // first iteration after resume executes
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] })
+      .prompt('', {
+        messages: [
+          { role: 'user', content: 'delete this record' },
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{ id: 'res-1', name: 'delete_record', arguments: { id: '99' } }],
+          },
+        ],
+        approvedToolCallIds: ['res-1'],
+      })
+
+    assert.strictEqual(executions, 1, 'tool must execute exactly once')
+    assert.strictEqual(result.text, 'All done.')
+    assert.strictEqual(result.finishReason, undefined)
+    assert.strictEqual(result.resumedToolMessages?.length, 1)
+    assert.strictEqual(result.resumedToolMessages?.[0]?.role, 'tool')
+    assert.strictEqual(result.resumedToolMessages?.[0]?.toolCallId, 'res-1')
+    assert.strictEqual(result.resumedToolMessages?.[0]?.content, 'deleted')
+  })
+
+  it('approval continuation: rejects without executing', async () => {
+    let executions = 0
+    const tool = toolDefinition({
+      name: 'delete_record',
+      description: 'd',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executions++; return 'deleted' })
+
+    _script = [{ text: 'OK, will not delete.' }]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] })
+      .prompt('', {
+        messages: [
+          { role: 'user', content: 'delete this record' },
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{ id: 'res-1', name: 'delete_record', arguments: { id: '99' } }],
+          },
+        ],
+        rejectedToolCallIds: ['res-1'],
+      })
+
+    assert.strictEqual(executions, 0)
+    assert.strictEqual(result.resumedToolMessages?.length, 1)
+    const rej = JSON.parse(result.resumedToolMessages![0]!.content as string)
+    assert.strictEqual(rej.rejected, true)
+  })
+
   it('approvedToolCallIds lets the tool execute on the next run', async () => {
     let executed = false
     const tool = toolDefinition({

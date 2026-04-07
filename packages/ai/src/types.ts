@@ -348,6 +348,13 @@ export interface AgentResponse {
   pendingClientToolCalls?: ToolCall[]
   /** A tool call awaiting user approval. */
   pendingApprovalToolCall?: { toolCall: ToolCall; isClientTool: boolean }
+  /**
+   * Tool result messages that were injected at the start of a continuation
+   * to fulfill an `assistant{toolCalls}` carried over from the previous turn
+   * (e.g. an approval round-trip). The panels dispatcher persists these so
+   * the conversation store never holds an unfulfilled `tool_use` block.
+   */
+  resumedToolMessages?: AiMessage[]
 }
 
 export interface AgentStreamResponse {

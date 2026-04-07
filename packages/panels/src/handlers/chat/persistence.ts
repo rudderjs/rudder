@@ -22,7 +22,13 @@ export async function persistContinuation(
   const persisted = await store.load(conversationId)
   const clientAppended = bodyMessages.slice(persisted.length)
 
-  const messagesToAppend: AiMessage[] = [...clientAppended]
+  // Server-injected tool result messages that fulfilled an
+  // `assistant{toolCalls}` carried over from the previous turn (typical for
+  // approval round-trips). Without this, the conversation store would hold
+  // an unfulfilled `tool_use` block and the next turn would error out.
+  const resumed = result.resumedToolMessages ?? []
+
+  const messagesToAppend: AiMessage[] = [...clientAppended, ...resumed]
 
   for (const step of result.steps) {
     messagesToAppend.push(step.message)
