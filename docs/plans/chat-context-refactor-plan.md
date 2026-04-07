@@ -2,7 +2,7 @@
 
 Extract the three hardcoded branches in `packages/panels/src/handlers/chat/chatHandler.ts` into a pluggable `ChatContext` provider architecture, and fix the conversation persistence bugs that block tool-message round-tripping.
 
-**Status:** NOT STARTED
+**Status:** DONE (2026-04-07)
 **Estimated LOC:** ~180 (net: +230 new, -50 deleted)
 **Packages affected:** `@rudderjs/panels` only (per §3.4 recommendation, the `pageSlug` addition to `ConversationStoreMeta` in `@rudderjs/ai` is deferred to the future page-chat plan)
 **Blocks:** `client-tool-roundtrip-plan.md` (this should land first)
