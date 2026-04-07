@@ -8,17 +8,25 @@ import http from 'node:http'
 // Monkey-patch http.createServer at module load time so that any HTTP server
 // created after providers boot (including photon's nodeServe) gets the WS
 // upgrade handler attached. In dev, the @rudderjs/vite plugin does the same.
-const _origCreateServer = http.createServer.bind(http)
-http.createServer = ((...args: Parameters<typeof http.createServer>) => {
-  const srv = (_origCreateServer as (...a: unknown[]) => import('node:http').Server)(...args)
-  srv.on('upgrade', (req: unknown, socket: unknown, head: unknown) => {
-    const handler = (globalThis as Record<string, unknown>)['__rudderjs_ws_upgrade__'] as
-      | ((req: unknown, socket: unknown, head: unknown) => void)
-      | undefined
-    handler?.(req, socket, head)
-  })
-  return srv
-}) as typeof http.createServer
+//
+// IMPORTANT: Skip the patch if @rudderjs/vite has already patched http.createServer.
+// Otherwise both patches would attach listeners, causing handleUpgrade() to be
+// called twice for the same socket ("called more than once" error in dev mode).
+const _G = globalThis as Record<string, unknown>
+if (!_G['__rudderjs_http_upgrade_patched__']) {
+  _G['__rudderjs_http_upgrade_patched__'] = true
+  const _origCreateServer = http.createServer.bind(http)
+  http.createServer = ((...args: Parameters<typeof http.createServer>) => {
+    const srv = (_origCreateServer as (...a: unknown[]) => import('node:http').Server)(...args)
+    srv.on('upgrade', (req: unknown, socket: unknown, head: unknown) => {
+      const handler = _G['__rudderjs_ws_upgrade__'] as
+        | ((req: unknown, socket: unknown, head: unknown) => void)
+        | undefined
+      handler?.(req, socket, head)
+    })
+    return srv
+  }) as typeof http.createServer
+}
 import type {
   ServerAdapter,
   ServerAdapterProvider,
@@ -278,16 +286,14 @@ class HonoAdapter implements ServerAdapter {
   }
 
   listen(port: number, callback?: () => void): void {
-    const server = serve({ fetch: this.app.fetch, port: port }, () => {
+    serve({ fetch: this.app.fetch, port: port }, () => {
       callback?.()
       console.log(`[RudderJS] Server running on http://localhost:${port}`)
     })
-    // Attach the @rudderjs/ws upgrade handler if registered.
-    // Uses globalThis so there is no hard dependency on @rudderjs/ws.
-    const wsHandler = (globalThis as Record<string, unknown>)['__rudderjs_ws_upgrade__'] as
-      | ((req: unknown, socket: unknown, head: unknown) => void)
-      | undefined
-    if (wsHandler) (server as unknown as { on: (e: string, h: unknown) => void }).on('upgrade', wsHandler)
+    // The WebSocket upgrade handler is attached automatically via the
+    // http.createServer monkey-patch at the top of this file. Attaching it
+    // again here would cause "handleUpgrade called more than once" errors
+    // because both listeners would fire for the same upgrade event.
   }
 
   getNativeServer(): Hono {
