@@ -7,6 +7,10 @@ export { getConfigValue } from './tools/config-get.js'
 export { getRouteList } from './tools/route-list.js'
 export { getModelList } from './tools/model-list.js'
 export { getLastError } from './tools/last-error.js'
+export { executeDbQuery } from './tools/db-query.js'
+export { readLogs } from './tools/read-logs.js'
+export { readBrowserLogs } from './tools/browser-logs.js'
+export { getAbsoluteUrl } from './tools/get-absolute-url.js'
 
 /**
  * Boost service provider — registers the `boost:mcp` rudder command.
