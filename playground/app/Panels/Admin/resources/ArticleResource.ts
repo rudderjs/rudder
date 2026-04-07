@@ -122,7 +122,7 @@ export class ArticleResource extends Resource {
               const docName = `panel:articles:${id}`
               // Clear all Y.Doc rooms (main + per-field)
               await Live.clearDocument(docName)
-              const fieldPrefixes = ['text:title', 'text:excerpt', 'text:slug', 'richcontent:content', 'richcontent:body']
+              const fieldPrefixes = ['text:title', 'text:slug', 'richcontent:content']
               for (const prefix of fieldPrefixes) {
                 await Live.clearDocument(`${docName}:${prefix}`)
               }
@@ -172,13 +172,6 @@ export class ArticleResource extends Resource {
         })
         .persist(['websocket', 'indexeddb']),
 
-      TextareaField.make('excerpt')
-        .label('Excerpt')
-        .rows(3)
-        .hideFromTable()
-        .collaborative()
-        .ai(['rewrite', 'shorten', 'expand', 'fix-grammar', 'summarize']),
-
       FileField.make('coverImage')
         .label('Cover Image')
         .image()
@@ -222,33 +215,6 @@ export class ArticleResource extends Resource {
             ]),
         ])
         .persist(['websocket', 'indexeddb']),
-
-      RichContentField.make('body')
-        .label('Body (Lexical)')
-        .placeholder('Start writing your article…')
-        .ai(['rewrite', 'expand', 'shorten', 'fix-grammar', 'translate', 'simplify'])
-        .blocks([
-          Block.make('callToAction')
-            .label('Call to Action')
-            .icon('📣')
-            .schema([
-              TextField.make('title').label('Title').required(),
-              TextField.make('buttonText').label('Button Text'),
-              TextField.make('url').label('URL'),
-              SelectField.make('style').label('Style').options([
-                { value: 'primary', label: 'Primary' },
-                { value: 'outline', label: 'Outline' },
-              ]),
-            ]),
-          Block.make('video')
-            .label('Video Embed')
-            .icon('🎬')
-            .schema([
-              TextField.make('url').label('URL').required(),
-              TextField.make('caption').label('Caption'),
-            ]),
-        ])
-        .collaborative(),
 
       TagsField.make('tags')
         .label('Tags')
@@ -319,36 +285,11 @@ export class ArticleResource extends Resource {
         .instructions('You are an SEO expert. Analyse the current article and improve the meta title and meta description for better search engine visibility. Keep the meta title under 60 characters and meta description under 160 characters. Use the title and excerpt for context.')
         .fields(['metaTitle', 'metaDescription']),
 
-      ResourceAgent.make('summarize')
-        .label('Write Excerpt')
-        .icon('Sparkles')
-        .instructions([
-          'Write a concise, engaging excerpt (2-3 sentences) for this article based on its title and content. The excerpt should hook readers and summarize the key points.',
-          'NEVER use update_field — it would overwrite the entire rich text.',
-        ].join('\n'))
-        .fields(['excerpt']),
-
       ResourceAgent.make('editor')
         .label('Edit Content')
         .icon('Pencil')
-        .instructions([
-          'You are a content editor. You can edit the article title, excerpt, body and content fields.',
-          '',
-          'IMPORTANT: Always call read_record first to see the current content.',
-          '',
-          'The body/content fields contain rich text with embedded blocks shown as:',
-          '  [BLOCK: callToAction | title: "...", buttonText: "...", url: "...", style: "..."]',
-          '  [BLOCK: video | url: "...", caption: "..."]',
-          '',
-          'To edit BLOCK fields (title, buttonText, url, caption, etc.), use edit_text with update_block operations:',
-          '  { type: "update_block", blockType: "callToAction", blockIndex: 0, field: "buttonText", value: "New Text" }',
-          '',
-          'To edit regular TEXT in the body, use edit_text with replace/insert_after/delete operations:',
-          '  { type: "replace", search: "old text", replace: "new text" }',
-          '',
-          'NEVER use update_field — it would overwrite the entire rich text.',
-        ].join('\n'))
-        .fields(['title', 'body', 'content', 'excerpt']),
+        .instructions('You are a content editor. You can edit the article title and content fields. Always call read_record first to see the current content.')
+        .fields(['title', 'content']),
     ]
   }
 
