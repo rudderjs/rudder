@@ -11,19 +11,22 @@ import { buildRunAgentTool } from '../tools/runAgentTool.js'
 import { buildEditTextTool } from '../tools/editTextTool.js'
 import { buildReadFormStateTool } from '../tools/readFormStateTool.js'
 import { buildDeleteRecordTool } from '../tools/deleteRecordTool.js'
+import { buildBuilderCatalogPrompt } from '../blockCatalog.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface ResolvedResourceState {
-  resourceSlug: string
-  recordId:     string
-  record:       Record<string, unknown>
-  agents:       ResourceAgent[]
-  agentCtx:     ResourceAgentContext
-  forceAgent:   ResourceAgent | null
-  selection:    { field: string; text: string } | undefined
-  userId:       string | undefined
-  tools:        AnyTool[]
+  resourceSlug:     string
+  recordId:         string
+  record:           Record<string, unknown>
+  agents:           ResourceAgent[]
+  agentCtx:         ResourceAgentContext
+  forceAgent:       ResourceAgent | null
+  selection:        { field: string; text: string } | undefined
+  userId:           string | undefined
+  tools:            AnyTool[]
+  /** Pre-rendered "Available block types" section, or '' if the resource has no builder fields. */
+  builderCatalog:   string
 }
 
 /**
@@ -136,6 +139,10 @@ export class ResourceChatContext implements ChatContext {
       ...(deleteRecordTool  ? [deleteRecordTool]  : []),
     ]
 
+    // 8. Pre-render the builder block catalog (LSP-style structured metadata
+    //    so the agent doesn't infer block types from raw Lexical JSON).
+    const builderCatalog = buildBuilderCatalogPrompt(resource)
+
     return new ResourceChatContext({
       resourceSlug,
       recordId,
@@ -146,6 +153,7 @@ export class ResourceChatContext implements ChatContext {
       selection,
       userId: extractUserId(req),
       tools,
+      builderCatalog,
     })
   }
 
@@ -160,7 +168,7 @@ export class ResourceChatContext implements ChatContext {
   }
 
   buildSystemPrompt(): string {
-    const { agents, record, selection } = this.state
+    const { agents, record, selection, builderCatalog } = this.state
     const hasAgents = agents.length > 0
     const agentList = agents
       .map(a => `- "${(a as any)._label}" (slug: ${a.getSlug()}) — fields: ${(a as any)._fields.join(', ')}`)
@@ -208,13 +216,16 @@ export class ResourceChatContext implements ChatContext {
       '## Deleting records',
       'If the user asks you to delete the current record, you MUST call the `delete_record` tool immediately — do NOT ask the user for confirmation in chat. The tool itself has a built-in approval gate: the browser will show an inline Approve/Reject card on the tool call, the user clicks one, and the agent loop resumes. Asking the user "are you sure?" in plain text wastes a turn and bypasses the approval flow.',
       '',
-      '## Block editing',
-      'Rich text fields may contain embedded blocks shown as `[BLOCK: type | field: "value", ...]` in the record.',
-      'To update a block field, use `edit_text` with an `update_block` operation:',
-      '  `{ type: "update_block", blockType: "callToAction", blockIndex: 0, field: "buttonText", value: "New Text" }`',
-      'Do NOT use `replace` to edit block fields — block data is not searchable text.',
-      'Do NOT use `update_field` on rich text fields — it would overwrite the entire content.',
-      '',
+      ...(builderCatalog ? [
+        builderCatalog,
+        '',
+        'Do NOT use `replace` operations to edit block fields — block data is not searchable text. Do NOT use `update_field` on rich text fields — it would overwrite the entire content.',
+        '',
+      ] : [
+        '## Block editing',
+        'Rich text fields may contain embedded blocks shown as `[BLOCK: type | field: "value", ...]` in the record. This resource has no builder fields with declared block types — if you encounter blocks, ask the user to clarify rather than guessing block names from the rendered placeholders.',
+        '',
+      ]),
       'Be concise and helpful.',
     ].join('\n')
   }
