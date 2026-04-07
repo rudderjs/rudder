@@ -244,6 +244,192 @@ This avoids bundling packages the user may not have installed and prevents circu
 
 ---
 
+## Bundled translations & overrides
+
+If your package ships its own UI strings (panel chrome, buttons, toasts, error messages — anything the end user reads), follow the **bundled defaults + JSON overrides** convention so apps can localize your package without forking it. `@rudderjs/panels` is the reference implementation; do the same in your package.
+
+### 1. Ship bundled defaults as TypeScript
+
+Bundled translations are the canonical, type-safe schema. Keep them in `src/i18n/`:
+
+```ts
+// src/i18n/en.ts
+export const en = {
+  signOut:        'Sign out',
+  search:         'Search :label…',
+  noResultsTitle: 'No results',
+  // …
+}
+export type MyPackageI18n = typeof en
+```
+
+```ts
+// src/i18n/ar.ts
+import type { MyPackageI18n } from './en.js'
+export const ar: MyPackageI18n = {
+  signOut:        'تسجيل الخروج',
+  search:         'بحث :label…',
+  noResultsTitle: 'لا توجد نتائج',
+  // …
+}
+```
+
+Add at least `en` (acts as the universal fallback). Keep the schema **flat** unless you have a real reason to nest — it's easier to override.
+
+### 2. Provide a sync resolver with override support
+
+```ts
+// src/i18n/index.ts
+import { en } from './en.js'
+import { ar } from './ar.js'
+import type { MyPackageI18n } from './en.js'
+
+export type { MyPackageI18n }
+
+const NAMESPACE   = 'my-package'              // matches lang/<locale>/my-package.json
+const translations: Record<string, MyPackageI18n> = { en, ar }
+const mergedCache = new Map<string, MyPackageI18n>()
+
+export function getMyPackageI18n(locale: string): MyPackageI18n {
+  const cached = mergedCache.get(locale)
+  if (cached) return cached
+
+  const base     = locale.split('-')[0] ?? locale
+  const bundled  = translations[locale] ?? translations[base] ?? en
+  const override = getOverride(locale) ?? getOverride(base)
+  const merged   = override ? deepMerge(bundled, override) : bundled
+
+  mergedCache.set(locale, merged)
+  return merged
+}
+
+function getOverride(locale: string): Partial<MyPackageI18n> | undefined {
+  const g     = globalThis as Record<string, unknown>
+  const cache = g['__rudderjs_localization_cache__'] as Map<string, unknown> | undefined
+  const data  = cache?.get(`${locale}:${NAMESPACE}`) as Partial<MyPackageI18n> | undefined
+  return data && Object.keys(data).length > 0 ? data : undefined
+}
+
+// deepMerge implementation — see packages/panels/src/i18n/index.ts
+
+/** @internal — for tests + HMR */
+export function _clearI18nCache(): void { mergedCache.clear() }
+```
+
+The resolver must be **sync** because UI render paths (React components, schema resolvers) can't `await`. The merge happens once per locale, then it's cached.
+
+### 3. Preload at boot from your service provider
+
+`getMyPackageI18n()` is sync, so the override file has to be in `@rudderjs/localization`'s cache before the first render. Preload it from your provider's `boot()`:
+
+```ts
+// src/MyPackageServiceProvider.ts
+import { ServiceProvider } from '@rudderjs/core'
+import { _clearI18nCache } from './i18n/index.js'
+
+async function preloadTranslations(): Promise<void> {
+  try {
+    const loc = await import('@rudderjs/localization') as {
+      preloadNamespace?: (locale: string, namespace: string) => Promise<void>
+      LocalizationRegistry?: { getConfig(): { locale: string; fallback: string } }
+    }
+    if (!loc.preloadNamespace || !loc.LocalizationRegistry) return
+    const { locale, fallback } = loc.LocalizationRegistry.getConfig()
+    await loc.preloadNamespace(locale, 'my-package')
+    if (fallback && fallback !== locale) {
+      await loc.preloadNamespace(fallback, 'my-package')
+    }
+    // Drop anything merged before the override landed in cache.
+    _clearI18nCache()
+  } catch {
+    // @rudderjs/localization not installed — fall back to bundled defaults.
+  }
+}
+
+export class MyPackageServiceProvider extends ServiceProvider {
+  async boot(): Promise<void> {
+    await preloadTranslations()
+    // …rest of your boot logic
+  }
+}
+```
+
+The dynamic import + try/catch makes `@rudderjs/localization` an **optional peer dependency** — your package still works standalone.
+
+### 4. Declare the optional peer
+
+```jsonc
+// package.json
+{
+  "peerDependencies": {
+    "@rudderjs/localization": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/localization": { "optional": true }
+  },
+  "devDependencies": {
+    "@rudderjs/localization": "workspace:*"
+  }
+}
+```
+
+The devDep is required so TypeScript can resolve types in the workspace.
+
+### 5. Publish a starter override file
+
+Create an empty `lang/en/my-package.json` in your package and register it as publishable so users can scaffold it via the CLI:
+
+```ts
+// In your service provider's register()
+const langDir = new URL('../lang/en', import.meta.url).pathname
+this.publishes([
+  { from: langDir, to: 'lang/en', tag: 'my-package-translations' },
+])
+```
+
+Add `"lang"` to your package.json `files` array so the directory ships to npm. Users then run:
+
+```bash
+pnpm rudder vendor:publish --tag=my-package-translations
+```
+
+### 6. Serialize the merged i18n to the client — never recompute
+
+This is the gotcha that bites every time. `@rudderjs/localization` reads files via `node:fs/promises`, so its cache only exists **on the server**. If your React components call `getMyPackageI18n(locale)` themselves on the client, they'll get bundled defaults (the cache is empty there) and overwrite the SSR'd HTML during hydration.
+
+Always pass the **merged i18n object** down through the page-data layer:
+
+```ts
+// Server: in your page +data.ts or meta route
+const i18n = getMyPackageI18n(locale)
+return { i18n, locale, /* … */ }
+
+// Client: consume from props, do not recompute
+function MyProvider({ i18n, children }: { i18n: MyPackageI18n; children: ReactNode }) {
+  return <Context.Provider value={i18n}>{children}</Context.Provider>
+}
+```
+
+If you have both a "navigation" meta and a "full" meta shape (like `Panel.toNavigationMeta()` vs `toMeta()`), make sure the layout's data source includes `i18n` — otherwise the client falls back to bundled defaults silently.
+
+### 7. Document override keys
+
+Point users at your bundled `en.ts` as the canonical key list — that's the source of truth.
+
+### 8. Naming conventions
+
+| Concept                | Convention                                            |
+|------------------------|-------------------------------------------------------|
+| Override file          | `lang/<locale>/<package-short-name>.json`             |
+| Localization namespace | `<package-short-name>` (matches the file basename)    |
+| Vendor publish tag     | `<package-short-name>-translations`                   |
+| Bundled defaults       | `src/i18n/<locale>.ts`, schema in `en.ts`             |
+| Resolver function      | `get<PackageName>I18n(locale)`                        |
+
+For `@rudderjs/panels` the short name is `panels`. For `@rudderjs/panels-lexical` use `panels-lexical`. For `@rudderjs/media` use `media`. Keep them distinct so multiple packages don't collide on the same JSON file.
+
+---
+
 ## Exports checklist
 
 `src/index.ts` should export everything a user needs — and nothing internal:
