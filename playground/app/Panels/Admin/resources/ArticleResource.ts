@@ -70,7 +70,6 @@ export class ArticleResource extends Resource {
       .remember('session')
       .autoAnimate()
       .animateScopes({ highlight: true, content: false })
-      .live()
       .emptyState({
         icon: 'file-text',
         heading: 'No :label yet',
