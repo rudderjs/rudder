@@ -9,7 +9,7 @@
 
 ```
 rudderjs/
-├── packages/           # 43 published packages (@rudderjs/*)
+├── packages/           # 45 published packages (@rudderjs/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
@@ -73,6 +73,8 @@ rudderjs/
 │   │                   #   real-time output, Process.fake() with assertions
 │   ├── concurrency/    # Parallel execution — worker thread pool, Concurrency.run/defer,
 │   │                   #   sync driver for testing, Concurrency.fake()
+│   ├── telescope/      # Dev inspector — records requests, queries, jobs, exceptions, logs, mail, etc.
+│   ├── pulse/          # App metrics dashboard — request throughput, cache hit rates, server stats
 │   └── cli/            # make:*, module:*, module:publish, rudder user commands
 ├── create-rudderjs-app/   # Interactive scaffolder CLI — see docs/claude/create-app.md
 ├── docs/               # VitePress documentation site
@@ -128,6 +130,8 @@ rudderjs/
 | `@rudderjs/pennant` | 0.0.1 | Feature flags — `Feature.define()`/`active()`/`value()`, scoping (`Feature.for(scope)`), `Feature.values()` bulk, `Lottery.odds()` gradual rollout, `activate()`/`deactivate()`/`purge()`, MemoryDriver, `FeatureMiddleware()`, `Feature.fake()` |
 | `@rudderjs/process` | 0.0.1 | Shell execution — `Process.run()`/`start()`/`pool()`/`pipe()`, `PendingProcess` builder (path/timeout/env/input/quietly/tty/onOutput), `ProcessResult` (successful/failed/throw), `RunningProcess`, `Process.fake()` with assertions |
 | `@rudderjs/concurrency` | 0.0.1 | Parallel execution — `Concurrency.run(tasks)` via worker threads, `Concurrency.defer(fn)` fire-and-forget, sync driver for testing via `Concurrency.fake()` |
+| `@rudderjs/telescope` | 0.0.1 | Dev inspector — 11 collectors (request, query, job, exception, log, mail, notification, event, cache, schedule, model), JSON API, `Telescope` facade, `TelescopeRegistry`, memory + SQLite storage, `telescope()` factory |
+| `@rudderjs/pulse` | 0.0.1 | App metrics — 7 aggregators (request, queue, cache, exception, user, query, server), time-series 1-min buckets, individual entries (slow requests/queries, exceptions, failed jobs), JSON API, `Pulse` facade, `PulseRegistry`, memory + SQLite storage, `pulse()` factory |
 
 **Merged/removed packages** (code absorbed, originals deleted):
 - `@rudderjs/di` -> merged into `@rudderjs/core`

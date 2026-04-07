@@ -1,0 +1,58 @@
+{
+  "name": "@rudderjs/pulse",
+  "version": "0.0.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rudderjs/rudder",
+    "directory": "packages/pulse"
+  },
+  "type": "module",
+  "files": [
+    "dist",
+    "boost"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "clean": "rm -rf dist",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
+  },
+  "dependencies": {
+    "@rudderjs/core": "workspace:*",
+    "@rudderjs/contracts": "workspace:*"
+  },
+  "peerDependencies": {
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/middleware": "workspace:*",
+    "@rudderjs/log": "workspace:*",
+    "@rudderjs/orm": "workspace:*",
+    "@rudderjs/cache": "workspace:*",
+    "@rudderjs/queue": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/log": { "optional": true },
+    "@rudderjs/orm": { "optional": true },
+    "@rudderjs/cache": { "optional": true },
+    "@rudderjs/queue": { "optional": true }
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

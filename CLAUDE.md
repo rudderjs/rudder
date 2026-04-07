@@ -83,7 +83,7 @@ npm requires browser passkey auth — press Enter when prompted to open the brow
 
 ### Dependency Flow (summary)
 
-Foundation (contracts, support) → Core (middleware, validation, router, server-hono, core) → Data (orm, cache, queue) → Auth & Security → Communication → Utilities → AI → Admin Panels → Testing/CLI/Build
+Foundation (contracts, support) → Core (middleware, validation, router, server-hono, core) → Data (orm, cache, queue) → Auth & Security → Communication → Utilities → AI → Admin Panels → Monitoring (telescope, pulse) → Testing/CLI/Build
 
 > **Cycle resolution**: `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer('@rudderjs/router')`. Never add `@rudderjs/core` to router's `dependencies` or `devDependencies`.
 
