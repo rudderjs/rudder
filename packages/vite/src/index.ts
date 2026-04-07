@@ -97,6 +97,14 @@ export function rudderjs(): Promise<Plugin[]> {
           //
           // We use createRequire to get the mutable CJS http module — ESM named exports
           // are read-only and cannot be reassigned.
+          //
+          // Set a sentinel flag so @rudderjs/server-hono's module-load patch knows to
+          // skip — otherwise both would attach upgrade listeners and handleUpgrade()
+          // would be called twice for the same socket.
+          const _G = globalThis as Record<string, unknown>
+          if (_G['__rudderjs_http_upgrade_patched__']) return
+          _G['__rudderjs_http_upgrade_patched__'] = true
+
           const http = _require('http') as typeof import('http')
           const orig = http.createServer.bind(http) as typeof http.createServer
           // Keep the monkey-patch active (don't restore) so that program reloads
@@ -104,7 +112,7 @@ export function rudderjs(): Promise<Plugin[]> {
           http.createServer = ((...args: Parameters<typeof http.createServer>) => {
             const srv = (orig as (...a: unknown[]) => import('node:http').Server)(...args)
             srv.on('upgrade', (req, socket, head) => {
-              const handler = (globalThis as Record<string, unknown>)['__rudderjs_ws_upgrade__'] as
+              const handler = _G['__rudderjs_ws_upgrade__'] as
                 | ((req: unknown, socket: unknown, head: unknown) => void)
                 | undefined
               handler?.(req, socket, head)
