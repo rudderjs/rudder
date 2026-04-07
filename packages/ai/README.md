@@ -131,23 +131,93 @@ const response = await new ResilientAgent().prompt('Hello')
 
 Works with both `prompt()` and `stream()`.
 
-### Embeddings
+### Image Generation
 
-Generate vector embeddings for text (requires a provider that supports embeddings, e.g. OpenAI):
+```ts
+import { AI } from '@rudderjs/ai'
+
+const result = await AI.image('A mountain at sunset')
+  .model('openai/dall-e-3')
+  .size('landscape')
+  .quality('hd')
+  .generate()
+
+// result.images[0].base64 or result.images[0].url
+await AI.image('Logo design').model('openai/dall-e-3').store('images/logo.png')
+```
+
+### Text-to-Speech
+
+```ts
+import { AI } from '@rudderjs/ai'
+
+const result = await AI.audio('Hello world')
+  .model('openai/tts-1')
+  .voice('nova')
+  .format('mp3')
+  .generate()
+
+// result.audio → Buffer
+await AI.audio('Welcome').model('openai/tts-1').store('audio/welcome.mp3')
+```
+
+### Speech-to-Text
+
+```ts
+import { AI } from '@rudderjs/ai'
+
+const result = await AI.transcribe('./meeting.mp3')
+  .model('openai/whisper-1')
+  .language('en')
+  .generate()
+
+// result.text → transcribed text
+```
+
+### Provider Tools (WebSearch, WebFetch)
+
+Built-in tools that leverage provider capabilities:
+
+```ts
+import { AI, WebSearch, WebFetch } from '@rudderjs/ai'
+
+const agent = AI.agent({
+  instructions: 'Research assistant',
+  tools: [
+    WebSearch.make().domains(['docs.rudderjs.dev']).toTool(),
+    WebFetch.make().maxLength(5000).toTool(),
+  ],
+})
+```
+
+### Embeddings
 
 ```ts
 import { AI } from '@rudderjs/ai'
 
 // Single text
 const result = await AI.embed('Hello world')
-// result.embeddings → [[0.012, -0.034, ...]]
 
-// Batch
+// Batch (auto-chunks arrays > 100 items)
 const result = await AI.embed(['text one', 'text two'])
-// result.embeddings → [[...], [...]]
+
+// With caching
+const result = await AI.embed('text', { cache: true })
 
 // Specific model
 const result = await AI.embed('text', { model: 'openai/text-embedding-3-small' })
+```
+
+### Vercel AI Protocol
+
+Stream to frontend frameworks (Next.js, Nuxt, SvelteKit):
+
+```ts
+import { toVercelResponse } from '@rudderjs/ai'
+
+// In a route handler
+const { stream } = agent('You are helpful.').stream(input)
+return toVercelResponse(stream)
 ```
 
 ### Streaming
@@ -229,16 +299,21 @@ fake.restore()
 
 ## Providers
 
-| Provider | SDK | Model String |
-|---|---|---|
-| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` |
-| OpenAI | `openai` | `openai/gpt-4o` |
-| Google | `@google/genai` | `google/gemini-2.5-pro` |
-| Ollama | *(none)* | `ollama/llama3` |
+| Provider | SDK | Model String | Embeddings | Images | TTS/STT |
+|---|---|---|---|---|---|
+| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` | | | |
+| OpenAI | `openai` | `openai/gpt-4o` | ✓ | ✓ | ✓ |
+| Google | `@google/genai` | `google/gemini-2.5-pro` | ✓ | ✓ | |
+| Ollama | *(none)* | `ollama/llama3` | | | |
+| Groq | *(none)* | `groq/llama-3.3-70b` | | | |
+| DeepSeek | *(none)* | `deepseek/deepseek-chat` | | | |
+| xAI | *(none)* | `xai/grok-3` | | | |
+| Mistral | *(none)* | `mistral/mistral-large` | ✓ | | |
+| Azure OpenAI | `openai` | `azure/gpt-4o` | | | |
 
 ## Notes
 
 - Provider SDKs are optional dependencies — install only what you use
 - `exactOptionalPropertyTypes` compatible
 - All adapters lazy-load their SDK on first use
-- Ollama reuses the OpenAI adapter (OpenAI-compatible API)
+- Ollama, Groq, DeepSeek, xAI, Mistral reuse the OpenAI adapter (OpenAI-compatible API)
