@@ -376,6 +376,52 @@ pnpm rudder vendor:publish --tag=panels-translations
 
 The full list of override keys is the `PanelI18n` type in `@rudderjs/panels` — open `node_modules/@rudderjs/panels/dist/i18n/en.d.ts` for an authoritative reference, or browse the [bundled `en.ts` source on GitHub](https://github.com/rudderjs/rudder/blob/main/packages/panels/src/i18n/en.ts).
 
+### Adding a new locale
+
+Only `en` and `ar` ship bundled. To add Spanish, French, German, or any other language without forking the package, drop a JSON file at `lang/<locale>/panels.json`:
+
+```json
+// lang/es/panels.json
+{
+  "signOut":         "Cerrar sesión",
+  "search":          "Buscar :label…",
+  "searchButton":    "Buscar",
+  "newRecord":       "+ Nuevo",
+  "newButton":       "+ Nuevo :label",
+  "actions":         "Acciones",
+  "edit":            "Editar",
+  "view":            "Ver",
+  "noResultsTitle":  "Sin resultados",
+  "noResultsHint":   "Prueba ajustando tu búsqueda o filtros.",
+  "noRecordsTitle":  "Aún no hay :label",
+  "createFirstLink": "Crea tu primer :singular"
+}
+```
+
+Translate as much as you want — anything you skip falls back to bundled `en`. The full key list lives in [`packages/panels/src/i18n/en.ts`](https://github.com/rudderjs/rudder/blob/main/packages/panels/src/i18n/en.ts).
+
+Then point your panel at it. **Per-panel:**
+
+```ts
+Panel.make('admin')
+  .path('/admin')
+  .locale('es')
+```
+
+**App-wide** — set the active locale via `@rudderjs/localization` and the panel picks it up automatically:
+
+```ts
+// config/app.ts
+export default {
+  locale:   Env.get('APP_LOCALE', 'es'),
+  fallback: 'en',
+}
+```
+
+For RTL languages (`ar`, `he`, `fa`, `ur`, `ps`, `sd`, `ug`), the panel auto-sets `dir="rtl"` and uses CSS logical properties — no extra config.
+
+> Translation overrides are loaded at panel boot. After editing `lang/<locale>/panels.json`, restart `pnpm dev` to pick up the changes.
+
 ---
 
 ## shadcn/ui Components

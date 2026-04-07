@@ -1097,6 +1097,69 @@ pnpm rudder vendor:publish --tag=panels-translations
 
 The full list of override keys is the `PanelI18n` type — see [`src/i18n/en.ts`](./src/i18n/en.ts) for the canonical schema.
 
+### Adding a new locale
+
+Bundled translations exist for `en` and `ar`. To ship a panel in any other language (Spanish, French, German, etc.), drop a JSON file at `lang/<locale>/panels.json` with the strings you want to translate:
+
+```json
+// lang/es/panels.json
+{
+  "signOut":         "Cerrar sesión",
+  "search":          "Buscar :label…",
+  "searchButton":    "Buscar",
+  "newRecord":       "+ Nuevo",
+  "newButton":       "+ Nuevo :label",
+  "actions":         "Acciones",
+  "edit":            "Editar",
+  "view":            "Ver",
+  "noResultsTitle":  "Sin resultados",
+  "noResultsHint":   "Prueba ajustando tu búsqueda o filtros.",
+  "noRecordsTitle":  "Aún no hay :label",
+  "createFirstLink": "Crea tu primer :singular"
+}
+```
+
+You don't have to translate everything — keys you omit fall back to bundled `en`. The full list of keys lives in [`src/i18n/en.ts`](./src/i18n/en.ts).
+
+Then point your panel at the new locale in one of two ways:
+
+**Per-panel** — set the locale on the panel builder:
+
+```ts
+Panel.make('admin')
+  .path('/admin')
+  .locale('es')
+```
+
+**App-wide** — configure `@rudderjs/localization` and let the panel auto-detect:
+
+```ts
+// config/app.ts
+export default {
+  locale:   Env.get('APP_LOCALE', 'es'),
+  fallback: 'en',
+}
+```
+
+```ts
+// bootstrap/providers.ts
+import { localization } from '@rudderjs/localization'
+import configs from '../config/index.js'
+
+export default [
+  localization({
+    locale:   configs.app.locale,
+    fallback: configs.app.fallback,
+    path:     resolve(process.cwd(), 'lang'),
+  }),
+  // ...other providers
+]
+```
+
+For **RTL languages** (`ar`, `he`, `fa`, `ur`, `ps`, `sd`, `ug`), the panel automatically sets `dir="rtl"` on the layout root and uses CSS logical properties so paddings, borders, and alignments flip correctly — no extra config needed.
+
+> **Note:** Translation overrides are loaded at panel boot. If you edit `lang/<locale>/panels.json` while the dev server is running, restart `pnpm dev` to pick up changes.
+
 ---
 
 ## Architecture
