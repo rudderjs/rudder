@@ -65,6 +65,15 @@ export function runWithLocale<T>(locale: string, fn: () => T): T {
 	return LocalizationRegistry.getAls().run({ locale }, fn)
 }
 
+/**
+ * Pre-load a translation namespace into the cache so it is available to
+ * sync consumers (e.g. `__()` or `getPanelI18n()`). Safe to call multiple
+ * times — already-cached namespaces are not re-read from disk.
+ */
+export async function preloadNamespace(locale: string, namespace: string): Promise<void> {
+  await loadNamespace(locale, namespace)
+}
+
 async function loadNamespace(locale: string, namespace: string): Promise<TranslationMap> {
 	const cached = LocalizationRegistry.getCached(locale, namespace)
 	if (cached) return cached

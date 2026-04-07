@@ -14,6 +14,31 @@ import {
 } from './handlers/index.js'
 import { mountThemeRoutes, loadThemeOverrides } from './handlers/themeRoutes.js'
 import { mountNotificationRoutes } from './handlers/notificationRoutes.js'
+import { _clearI18nCache } from './i18n/index.js'
+
+/**
+ * Best-effort preload of `lang/<locale>/panels.json` overrides into the
+ * `@rudderjs/localization` cache so `getPanelI18n()` can resolve them sync.
+ * No-ops if `@rudderjs/localization` isn't installed.
+ */
+async function preloadPanelTranslations(): Promise<void> {
+  try {
+    const loc = await import('@rudderjs/localization') as {
+      preloadNamespace?: (locale: string, namespace: string) => Promise<void>
+      LocalizationRegistry?: { getConfig(): { locale: string; fallback: string } }
+    }
+    if (!loc.preloadNamespace || !loc.LocalizationRegistry) return
+    const { locale, fallback } = loc.LocalizationRegistry.getConfig()
+    await loc.preloadNamespace(locale, 'panels')
+    if (fallback && fallback !== locale) {
+      await loc.preloadNamespace(fallback, 'panels')
+    }
+    // Drop any merged result computed before the override landed in cache.
+    _clearI18nCache()
+  } catch {
+    // @rudderjs/localization not installed — bundled defaults only.
+  }
+}
 
 // Re-export for public API
 export { buildDefaultLayout } from './handlers/index.js'
@@ -30,6 +55,15 @@ export class PanelServiceProvider extends ServiceProvider {
       { from: `${schemaDir}/panels.drizzle.pg.ts`,     to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'postgresql' as const },
       { from: `${schemaDir}/panels.drizzle.mysql.ts`,  to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'mysql' as const },
     ])
+
+    // Translation override starter — `lang/en/panels.json` (empty by default).
+    // Users edit it to override bundled UI strings; missing keys fall back to
+    // bundled defaults. Add a `lang/<locale>/panels.json` to introduce a new
+    // locale. See `getPanelI18n()` for the resolution chain.
+    const langDir = new URL(/* @vite-ignore */ '../lang/en', import.meta.url).pathname
+    this.publishes([
+      { from: langDir, to: 'lang/en', tag: 'panels-translations' },
+    ])
   }
 
   async boot(): Promise<void> {
@@ -38,6 +72,12 @@ export class PanelServiceProvider extends ServiceProvider {
       to:   'pages/(panels)',
       tag:  'panels-pages',
     })
+
+    // Pre-load panel translation overrides from `lang/<locale>/panels.json`
+    // (if `@rudderjs/localization` is installed). `getPanelI18n()` is sync,
+    // so the override has to be in the localization cache before any panel
+    // request is served. Silently no-ops if localization isn't present.
+    await preloadPanelTranslations()
 
     // Register conversation store if Prisma is available
     try {

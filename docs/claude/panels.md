@@ -33,6 +33,14 @@ Admin panel: Resource `table()`/`form()`/`detail()`/`agents()`/`relations()` API
 - Panel.notifications() config + notification routes
 - Panel.use() plugin system — PanelPlugin with schemas/pages/register/boot hooks
 
+### i18n Override Mechanism
+- Bundled defaults live in `packages/panels/src/i18n/{en,ar}.ts` (flat `PanelI18n` schema). These are the canonical type and ship with the package.
+- Apps can override individual strings or add a new locale by creating `lang/<locale>/panels.json`. `getPanelI18n()` deep-merges the override on top of the bundled default and caches the result per locale.
+- Override resolution requires `@rudderjs/localization` to be installed. `PanelServiceProvider.boot()` calls `preloadNamespace(locale, 'panels')` (and the fallback) before any panel request renders, so `getPanelI18n()` stays sync at render time. If localization isn't installed, panels falls back to bundled defaults silently.
+- `_clearI18nCache()` from `panels/src/i18n/index.ts` is the test/HMR escape hatch — used by `i18n-override.test.ts` and called once after preload to drop any merged result computed before the override landed in cache.
+- Starter file is published via `pnpm rudder vendor:publish --tag=panels-translations` (registered in `PanelServiceProvider.register()`, source at `packages/panels/lang/en/panels.json`).
+- `@rudderjs/localization` is an **optional peer dependency** — keep it that way. The dynamic import in `preloadPanelTranslations()` swallows resolution errors so the package still works standalone.
+
 ---
 
 ## @rudderjs/panels-lexical

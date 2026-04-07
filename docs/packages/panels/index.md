@@ -351,6 +351,31 @@ When a locale is set, the panel:
 
 If `.locale()` is not called, the panel reads the active locale from `@rudderjs/localization` — meaning all panels in a multilingual app use the right locale without extra config.
 
+### Overriding bundled strings
+
+The bundled `en` and `ar` translations cover every UI string out of the box. To change individual strings — or to add a new locale entirely — drop a JSON file at `lang/<locale>/panels.json`:
+
+```json
+// lang/en/panels.json
+{
+  "signOut":     "Logout",
+  "newButton":   "Create :label",
+  "noResultsHint": "Try a different query."
+}
+```
+
+Only the keys you specify are overridden; everything else falls back to the bundled defaults. Add `lang/es/panels.json`, `lang/fr/panels.json`, etc. to introduce new locales without forking the package — keys missing from your file fall back to bundled `en`.
+
+Scaffold an empty starter file via the CLI:
+
+```bash
+pnpm rudder vendor:publish --tag=panels-translations
+```
+
+> Requires `@rudderjs/localization` to be installed and registered. Panels eagerly preloads the `panels` namespace during boot, so `getPanelI18n()` resolves overrides synchronously at render time. Without `@rudderjs/localization`, panels still works using the bundled defaults only.
+
+The full list of override keys is the `PanelI18n` type in `@rudderjs/panels` — open `node_modules/@rudderjs/panels/dist/i18n/en.d.ts` for an authoritative reference, or browse the [bundled `en.ts` source on GitHub](https://github.com/rudderjs/rudder/blob/main/packages/panels/src/i18n/en.ts).
+
 ---
 
 ## shadcn/ui Components

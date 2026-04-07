@@ -1068,6 +1068,37 @@ Built-in light/dark/system theme toggle. Persists to `localStorage`.
 
 ---
 
+## Localization
+
+The panel UI ships with bundled English (`en`) and Arabic (`ar`) translations and automatic RTL handling for Arabic, Hebrew, Persian, Urdu, Pashto, Sindhi, and Uyghur. Set the locale per panel via `.locale('ar')`, or rely on `@rudderjs/localization`'s active locale.
+
+### Overriding bundled strings
+
+To change a few strings — or to add a brand-new locale without forking the package — drop a JSON file at `lang/<locale>/panels.json`:
+
+```json
+// lang/en/panels.json
+{
+  "signOut":     "Logout",
+  "newButton":   "Create :label",
+  "noResultsHint": "Try a different query."
+}
+```
+
+Only the keys you specify are overridden; missing keys fall back to the bundled defaults. Add `lang/es/panels.json` to introduce Spanish — keys you don't translate fall back to bundled `en`.
+
+Scaffold an empty starter file:
+
+```bash
+pnpm rudder vendor:publish --tag=panels-translations
+```
+
+> **Requires `@rudderjs/localization`** (optional peer dependency). Panels eagerly preloads the `panels` namespace during boot via `preloadNamespace()`, so `getPanelI18n()` resolves overrides synchronously at render time. Without `@rudderjs/localization`, panels still works using the bundled defaults — overrides are silently ignored.
+
+The full list of override keys is the `PanelI18n` type — see [`src/i18n/en.ts`](./src/i18n/en.ts) for the canonical schema.
+
+---
+
 ## Architecture
 
 Resource is a thin wrapper that auto-generates schema elements:
