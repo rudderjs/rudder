@@ -2,21 +2,32 @@ import type { AppRequest } from '@rudderjs/core'
 import type { AiMessage, ConversationStoreMeta } from '@rudderjs/ai'
 
 export interface ChatRequestBody {
-  // Either of these is required (not both)
-  message?:         string
-  /** Reserved for the future client-tool round-trip plan; not used today. */
-  messages?:        AiMessage[]
+  // Fresh prompt: a single user message string. The dispatcher will load
+  // history from the conversation store.
+  message?:           string
+  /**
+   * Continuation: a full message list (already includes prior history +
+   * any tool result messages from a client-tool round-trip). When set, the
+   * dispatcher validates the prefix against the persisted conversation and
+   * uses it as the conversation directly — no fresh `user` message is added.
+   */
+  messages?:          AiMessage[]
 
-  conversationId?:  string
-  model?:           string
-  history?:         Array<{ role: 'user' | 'assistant'; content: string }>
+  conversationId?:    string
+  model?:             string
+  history?:           Array<{ role: 'user' | 'assistant'; content: string }>
 
   // Discriminated context (zero or one of these). Absence of all = global.
-  resourceContext?: { resourceSlug: string; recordId: string }
-  pageContext?:     { pageSlug: string }
+  resourceContext?:   { resourceSlug: string; recordId: string }
+  pageContext?:       { pageSlug: string }
 
-  forceAgent?:      string
-  selection?:       { field: string; text: string }
+  forceAgent?:        string
+  selection?:         { field: string; text: string }
+
+  /** Tool-call ids the user has approved (server-side approval gate). */
+  approvedToolCallIds?: string[]
+  /** Tool-call ids the user has rejected. */
+  rejectedToolCallIds?: string[]
 }
 
 export interface ConversationStoreLike {

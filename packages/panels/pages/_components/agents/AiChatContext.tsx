@@ -1,14 +1,46 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import type { ResourceAgentMeta } from '@rudderjs/panels'
+import { executeClientTool, hasClientTool } from './clientTools.js'
 
 // ─── Chat message parts (structured content) ───────────────
 
 export type ChatMessagePart =
   | { type: 'text'; text: string }
-  | { type: 'tool_call'; tool: string; input?: Record<string, unknown> }
+  | { type: 'tool_call'; tool: string; input?: Record<string, unknown>; id?: string }
+  | { type: 'tool_result'; tool: string; result?: unknown; id?: string }
   | { type: 'agent_start'; agentSlug: string; agentLabel: string }
   | { type: 'complete'; steps: number; tokens: number }
   | { type: 'error'; message: string }
+  | {
+      type:         'approval_request'
+      toolCall:     { id: string; name: string; arguments: Record<string, unknown> }
+      isClientTool: boolean
+      /** Set once the user clicks one of the buttons. The card stays in the
+       * conversation as a record of the decision. */
+      resolved?:    'approved' | 'rejected'
+    }
+
+// ─── Wire-format message (matches @rudderjs/ai AiMessage) ──
+
+interface WireToolCall {
+  id:        string
+  name:      string
+  arguments: Record<string, unknown>
+}
+
+interface WireMessage {
+  role:        'system' | 'user' | 'assistant' | 'tool'
+  content:     string
+  toolCallId?: string
+  toolCalls?:  WireToolCall[]
+}
+
+// ─── Pending approval (surfaced to UI for the modal) ───────
+
+export interface PendingApproval {
+  toolCall:     WireToolCall
+  isClientTool: boolean
+}
 
 // ─── Chat message ──────────────────────────────────────────
 
@@ -128,17 +160,50 @@ interface AiChatContextValue {
   /** Text selection from an editor field — sent as context to AI. */
   selection: TextSelection | null
   setSelection: (sel: TextSelection | null) => void
+
+  /** A tool call awaiting user approval (null when none). */
+  pendingApproval: PendingApproval | null
+
+  /** Approve the currently-pending tool call. Re-submits the chat. */
+  approvePending: () => void
+
+  /** Reject the currently-pending tool call. Re-submits the chat. */
+  rejectPending: () => void
 }
 
 const AiChatContext = createContext<AiChatContextValue | null>(null)
 
 // ─── SSE parser helper ──────────────────────────────────────
+//
+// Mutable state collected across all chunks of a single chat turn. Used by
+// `runChatTurn` to know what happened during streaming and act on it after
+// the connection closes (e.g. execute pending client tools, surface a
+// pending approval to the UI, decide whether to re-POST).
+
+interface TurnState {
+  assistantText:        string
+  assistantToolCalls:   WireToolCall[]
+  pendingClientTools:   WireToolCall[]
+  pendingApproval:      PendingApproval | null
+  done:                 boolean
+}
+
+function newTurnState(): TurnState {
+  return {
+    assistantText:      '',
+    assistantToolCalls: [],
+    pendingClientTools: [],
+    pendingApproval:    null,
+    done:               false,
+  }
+}
 
 function parseSSELines(
   lines: string[],
   assistantId: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
   onFieldUpdateRef: React.RefObject<OnFieldUpdate | undefined>,
+  turnState: TurnState,
   onConversation?: (convId: string, isNew: boolean) => void,
 ) {
   let currentEvent = ''
@@ -159,6 +224,7 @@ function parseSSELines(
 
           case 'text': {
             const text = (data as { text: string }).text
+            turnState.assistantText += text
             setMessages(prev => prev.map(m => {
               if (m.id !== assistantId) return m
               // Append to text parts or create new one
@@ -175,16 +241,51 @@ function parseSSELines(
           }
 
           case 'tool_call': {
-            const toolData = data as { tool: string; input?: Record<string, unknown> }
+            const toolData = data as { id?: string; tool: string; input?: Record<string, unknown> }
+            // Track wire-format tool call so a possible continuation can
+            // round-trip the assistant message correctly.
+            turnState.assistantToolCalls.push({
+              id:        toolData.id ?? crypto.randomUUID(),
+              name:      toolData.tool,
+              arguments: toolData.input ?? {},
+            })
             setMessages(prev => prev.map(m => {
               if (m.id !== assistantId) return m
-              const parts = [...(m.parts ?? []), { type: 'tool_call' as const, tool: toolData.tool, input: toolData.input }]
+              const part: ChatMessagePart = { type: 'tool_call', tool: toolData.tool }
+              if (toolData.input !== undefined) part.input = toolData.input
+              if (toolData.id    !== undefined) part.id    = toolData.id
+              const parts = [...(m.parts ?? []), part]
               return { ...m, parts }
             }))
             // Trigger field animation for update_field
             if (toolData.tool === 'update_field' && toolData.input?.field && toolData.input?.value != null) {
               onFieldUpdateRef.current?.(toolData.input.field as string, toolData.input.value as string)
             }
+            break
+          }
+
+          case 'pending_client_tools': {
+            const pendingData = data as { toolCalls: WireToolCall[] }
+            turnState.pendingClientTools = pendingData.toolCalls ?? []
+            break
+          }
+
+          case 'tool_approval_required': {
+            const approvalData = data as { toolCall: WireToolCall; isClientTool: boolean }
+            turnState.pendingApproval = {
+              toolCall:     approvalData.toolCall,
+              isClientTool: approvalData.isClientTool,
+            }
+            // Also surface the approval card inline in the assistant bubble.
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              const part: ChatMessagePart = {
+                type:         'approval_request',
+                toolCall:     approvalData.toolCall,
+                isClientTool: approvalData.isClientTool,
+              }
+              return { ...m, parts: [...(m.parts ?? []), part] }
+            }))
             break
           }
 
@@ -200,7 +301,8 @@ function parseSSELines(
 
           case 'agent_complete':
           case 'complete': {
-            const completeData = data as { steps?: number; usage?: { totalTokens?: number }; tokens?: number; done?: boolean }
+            const completeData = data as { steps?: number; usage?: { totalTokens?: number }; tokens?: number; done?: boolean; awaiting?: string }
+            if (completeData.done === true) turnState.done = true
             const steps = completeData.steps ?? 0
             const tokens = completeData.tokens ?? completeData.usage?.totalTokens ?? 0
             if (steps > 0 || tokens > 0) {
@@ -252,6 +354,16 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
   const abortRef = useRef<AbortController | null>(null)
   const onFieldUpdateRef = useRef<OnFieldUpdate | undefined>(undefined)
 
+  // Wire-format conversation kept in lockstep with what the server has
+  // persisted, plus anything we've appended locally during a continuation
+  // round-trip. Used to re-POST as `body.messages`. Reset whenever the
+  // conversation changes.
+  const wireMessagesRef = useRef<WireMessage[]>([])
+
+  // Pending approval (surfaced to UI) — also stashed for re-submission.
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
+  const pendingApprovalAssistantIdRef = useRef<string | null>(null)
+
   // Keep refs in sync with state
   resourceContextRef.current = resourceContext
   conversationIdRef.current = conversationId
@@ -296,8 +408,9 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
         if (!latest || conversationIdRef.current) return
         fetch(`${panelApiBase}/_chat/conversations/${latest.id}`)
           .then(r => r.ok ? r.json() : null)
-          .then((convData: { messages: Array<{ role: string; content: string }> } | null) => {
+          .then((convData: { messages: WireMessage[] } | null) => {
             if (!convData?.messages?.length || conversationIdRef.current) return
+            wireMessagesRef.current = convData.messages
             const loaded: ChatMessage[] = convData.messages
               .filter(m => m.role === 'user' || m.role === 'assistant')
               .map(m => ({
@@ -324,6 +437,144 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
 
   const clearFieldUpdates = useCallback(() => {
     setFieldUpdates([])
+  }, [])
+
+  /**
+   * Run one POST + SSE-stream cycle. Recursively calls itself to handle
+   * client-tool round-trips. For approval-required stops, surfaces the tool
+   * call to UI state and exits; the caller decides what to do next via
+   * `approvePending` / `rejectPending`.
+   */
+  const runChatTurn = useCallback(async (params: {
+    assistantId:    string
+    body:           Record<string, unknown>
+    url:            string
+    usePanelChat:   boolean
+    abortCtrl:      AbortController
+    onConversation: (convId: string, isNew: boolean) => void
+  }): Promise<void> => {
+    const { assistantId, body, url, usePanelChat, abortCtrl, onConversation } = params
+    const turnState = newTurnState()
+
+    let resp: Response
+    try {
+      resp = await fetch(url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+        signal:  abortCtrl.signal,
+      })
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setMessages(prev => prev.map(m =>
+          m.id === assistantId
+            ? { ...m, text: `Error: ${(err as Error).message}`, parts: [{ type: 'error', message: (err as Error).message }] }
+            : m,
+        ))
+      }
+      return
+    }
+
+    if (!resp.ok || !resp.body) {
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId
+          ? { ...m, text: `Error: HTTP ${resp.status}`, parts: [{ type: 'error', message: `HTTP ${resp.status}` }] }
+          : m,
+      ))
+      return
+    }
+
+    const reader  = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      if (usePanelChat) {
+        parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef, turnState, onConversation)
+      } else {
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6)) as { text?: string; done?: boolean }
+            if (data.text) {
+              setMessages(prev => prev.map(m => {
+                if (m.id !== assistantId) return m
+                const parts = [...(m.parts ?? [])]
+                const lastPart = parts[parts.length - 1]
+                if (lastPart?.type === 'text') {
+                  parts[parts.length - 1] = { type: 'text', text: lastPart.text + data.text }
+                } else {
+                  parts.push({ type: 'text', text: data.text! })
+                }
+                return { ...m, text: m.text + data.text, parts }
+              }))
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+
+    // Stream closed. Build the assistant message in wire format and append
+    // it to the running conversation log.
+    const assistantMsg: WireMessage = {
+      role:    'assistant',
+      content: turnState.assistantText,
+      ...(turnState.assistantToolCalls.length > 0 ? { toolCalls: turnState.assistantToolCalls } : {}),
+    }
+    wireMessagesRef.current = [...wireMessagesRef.current, assistantMsg]
+
+    // ── Client tools pending: execute locally and re-POST ────
+    if (turnState.pendingClientTools.length > 0) {
+      const toolMessages: WireMessage[] = []
+      for (const tc of turnState.pendingClientTools) {
+        let resultStr: string
+        if (hasClientTool(tc.name)) {
+          try {
+            const result = await executeClientTool(tc.name, tc.arguments)
+            resultStr = typeof result === 'string' ? result : JSON.stringify(result)
+          } catch (err) {
+            resultStr = JSON.stringify({ error: (err as Error).message })
+          }
+        } else {
+          resultStr = JSON.stringify({ error: `No client handler for tool "${tc.name}"` })
+        }
+        toolMessages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+        // Visualise the result inline in the assistant message
+        setMessages(prev => prev.map(m => {
+          if (m.id !== assistantId) return m
+          const parts = [...(m.parts ?? []), { type: 'tool_result' as const, tool: tc.name, result: resultStr, id: tc.id }]
+          return { ...m, parts }
+        }))
+      }
+      wireMessagesRef.current = [...wireMessagesRef.current, ...toolMessages]
+
+      // Continuation request — strips fresh-prompt-only fields and hands the
+      // server the full wire log via `messages`. Pull conversationId from the
+      // ref (not the original body) because a brand-new conversation only
+      // gets its id mid-stream via the `conversation` SSE event.
+      const continuationBody: Record<string, unknown> = { ...body, messages: wireMessagesRef.current }
+      delete continuationBody.message
+      delete continuationBody.selection
+      delete continuationBody.forceAgent
+      if (conversationIdRef.current) continuationBody.conversationId = conversationIdRef.current
+
+      await runChatTurn({ assistantId, body: continuationBody, url, usePanelChat, abortCtrl, onConversation })
+      return
+    }
+
+    // ── Approval pending: surface to UI, await decision ──────
+    if (turnState.pendingApproval) {
+      pendingApprovalAssistantIdRef.current = assistantId
+      setPendingApproval(turnState.pendingApproval)
+      // Keep `isGenerating` true until the user decides — runChatTurn will
+      // be re-invoked from approvePending/rejectPending.
+    }
   }, [])
 
   const sendMessage = useCallback((text: string, opts?: { forceAgent?: string }) => {
@@ -384,72 +635,65 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       conversationIdRef.current = convId
     }
 
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    }).then(async (resp) => {
-      if (!resp.ok || !resp.body) {
-        setMessages(prev => prev.map(m =>
-          m.id === assistantId
-            ? { ...m, text: `Error: HTTP ${resp.status}`, parts: [{ type: 'error', message: `HTTP ${resp.status}` }] }
-            : m
-        ))
-        setIsGenerating(false)
-        return
-      }
+    // Track this user message in the wire log so a possible continuation can
+    // re-POST it as part of `body.messages`.
+    wireMessagesRef.current = [...wireMessagesRef.current, { role: 'user', content: text }]
 
-      const reader = resp.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
+    void runChatTurn({ assistantId, body, url, usePanelChat, abortCtrl: ctrl, onConversation })
+      .finally(() => {
+        // Only stop the spinner if we are not waiting on user approval.
+        if (!pendingApprovalAssistantIdRef.current) setIsGenerating(false)
+      })
+  }, [panelApiBase, runChatTurn])  // eslint-disable-line react-hooks/exhaustive-deps
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
+  // ── Approval decision → re-submit ─────────────────────────
 
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
+  const submitApprovalDecision = useCallback((approve: boolean) => {
+    const pa = pendingApproval
+    const assistantId = pendingApprovalAssistantIdRef.current
+    if (!pa || !assistantId) return
+    setPendingApproval(null)
+    pendingApprovalAssistantIdRef.current = null
 
-        if (usePanelChat) {
-          // Panel chat endpoint — named SSE events
-          parseSSELines(lines, assistantId, setMessages, onFieldUpdateRef, onConversation)
-        } else {
-          // Fallback /api/ai/stream — simple data-only SSE
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            try {
-              const data = JSON.parse(line.slice(6)) as { text?: string; done?: boolean }
-              if (data.text) {
-                setMessages(prev => prev.map(m => {
-                  if (m.id !== assistantId) return m
-                  const parts = [...(m.parts ?? [])]
-                  const lastPart = parts[parts.length - 1]
-                  if (lastPart?.type === 'text') {
-                    parts[parts.length - 1] = { type: 'text', text: lastPart.text + data.text }
-                  } else {
-                    parts.push({ type: 'text', text: data.text! })
-                  }
-                  return { ...m, text: m.text + data.text, parts }
-                }))
-              }
-            } catch { /* skip */ }
-          }
-        }
-      }
-      setIsGenerating(false)
-    }).catch((err) => {
-      if ((err as Error).name !== 'AbortError') {
-        setMessages(prev => prev.map(m =>
-          m.id === assistantId
-            ? { ...m, text: `Error: ${(err as Error).message}`, parts: [{ type: 'error', message: (err as Error).message }] }
-            : m
-        ))
-      }
-      setIsGenerating(false)
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    // Mark the inline approval card as resolved so it stops showing buttons.
+    const decision: 'approved' | 'rejected' = approve ? 'approved' : 'rejected'
+    setMessages(prev => prev.map(m => {
+      if (m.id !== assistantId) return m
+      const parts = (m.parts ?? []).map(p =>
+        p.type === 'approval_request' && p.toolCall.id === pa.toolCall.id
+          ? { ...p, resolved: decision }
+          : p,
+      )
+      return { ...m, parts }
+    }))
+
+    const usePanelChat = !!panelApiBase
+    const url = usePanelChat ? `${panelApiBase}/_chat` : '/api/ai/stream'
+    const ctrl = new AbortController()
+    abortRef.current?.abort()
+    abortRef.current = ctrl
+
+    const continuationBody: Record<string, unknown> = { messages: wireMessagesRef.current }
+    if (conversationIdRef.current) continuationBody.conversationId = conversationIdRef.current
+    if (selectedModelRef.current)   continuationBody.model          = selectedModelRef.current
+    const rc = resourceContextRef.current
+    if (rc) continuationBody.resourceContext = { resourceSlug: rc.resourceSlug, recordId: rc.recordId }
+    if (approve) continuationBody.approvedToolCallIds = [pa.toolCall.id]
+    else         continuationBody.rejectedToolCallIds = [pa.toolCall.id]
+
+    const onConversation = (convId: string, _isNew: boolean) => {
+      setConversationId(convId)
+      conversationIdRef.current = convId
+    }
+
+    void runChatTurn({ assistantId, body: continuationBody, url, usePanelChat, abortCtrl: ctrl, onConversation })
+      .finally(() => {
+        if (!pendingApprovalAssistantIdRef.current) setIsGenerating(false)
+      })
+  }, [pendingApproval, panelApiBase, runChatTurn])
+
+  const approvePending = useCallback(() => submitApprovalDecision(true),  [submitApprovalDecision])
+  const rejectPending  = useCallback(() => submitApprovalDecision(false), [submitApprovalDecision])
 
   const triggerRun = useCallback((run: AgentRunRequest) => {
     setOpen(true)
@@ -471,6 +715,9 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
     setMessages([])
     setConversationId(null)
     conversationIdRef.current = null
+    wireMessagesRef.current = []
+    setPendingApproval(null)
+    pendingApprovalAssistantIdRef.current = null
     setIsGenerating(false)
   }, [])
 
@@ -479,6 +726,9 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
     setMessages([])
     setConversationId(null)
     conversationIdRef.current = null
+    wireMessagesRef.current = []
+    setPendingApproval(null)
+    pendingApprovalAssistantIdRef.current = null
     setIsGenerating(false)
     setShowConversations(false)
   }, [])
@@ -510,8 +760,12 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
     try {
       const resp = await fetch(`${apiBase}/_chat/conversations/${id}`)
       if (resp.ok) {
-        const data = await resp.json() as { messages: Array<{ role: string; content: string }> }
-        const loaded: ChatMessage[] = (data.messages ?? [])
+        const data = await resp.json() as { messages: WireMessage[] }
+        const all = data.messages ?? []
+        // Mirror full wire-format conversation so a continuation re-POST has
+        // the entire prefix to satisfy server-side validation.
+        wireMessagesRef.current = all
+        const loaded: ChatMessage[] = all
           .filter(m => m.role === 'user' || m.role === 'assistant')
           .map(m => ({
             id: crypto.randomUUID(),
@@ -522,6 +776,8 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
         setMessages(loaded)
         setConversationId(id)
         conversationIdRef.current = id
+        setPendingApproval(null)
+        pendingApprovalAssistantIdRef.current = null
         setShowConversations(false)
       }
     } catch { /* failed to load conversation */ }
@@ -551,6 +807,7 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       loadConversation, loadConversations, newConversation, deleteConversation,
       models, selectedModel, setSelectedModel,
       selection, setSelection,
+      pendingApproval, approvePending, rejectPending,
     }}>
       {children}
     </AiChatContext.Provider>

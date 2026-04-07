@@ -3,6 +3,44 @@ import type { ConversationStoreLike } from './types.js'
 import { generateConversationTitle } from './conversationManager.js'
 
 /**
+ * Persist a continuation turn (after a client-tool round-trip or approval).
+ *
+ * The dispatcher loaded `persistedAtStart.length` messages from the store at
+ * the start of the request. The client added zero or more new messages to the
+ * tail of `bodyMessages` (its tool result messages from the previous round).
+ * Then the agent loop ran and produced more steps. We need to write everything
+ * the client added since the last persisted state, plus everything this turn
+ * added.
+ */
+export async function persistContinuation(
+  store:          ConversationStoreLike,
+  conversationId: string,
+  bodyMessages:   AiMessage[],
+  result:         AgentResponse,
+): Promise<void> {
+  // Re-load to find the boundary between persisted and client-supplied tail.
+  const persisted = await store.load(conversationId)
+  const clientAppended = bodyMessages.slice(persisted.length)
+
+  const messagesToAppend: AiMessage[] = [...clientAppended]
+
+  for (const step of result.steps) {
+    messagesToAppend.push(step.message)
+    for (const tr of step.toolResults) {
+      messagesToAppend.push({
+        role:       'tool',
+        content:    typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+        toolCallId: tr.toolCallId,
+      })
+    }
+  }
+
+  if (messagesToAppend.length > 0) {
+    await store.append(conversationId, messagesToAppend)
+  }
+}
+
+/**
  * Persist a completed chat turn — including assistant tool calls and tool
  * results, so that future turns can pass the full message graph back to the
  * model. The old chatHandler dropped tool messages on the floor; this is the

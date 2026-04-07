@@ -9,6 +9,8 @@ import { buildContext } from '../../shared/context.js'
 import { loadLive } from '../lazyImports.js'
 import { buildRunAgentTool } from '../tools/runAgentTool.js'
 import { buildEditTextTool } from '../tools/editTextTool.js'
+import { buildReadFormStateTool } from '../tools/readFormStateTool.js'
+import { buildDeleteRecordTool } from '../tools/deleteRecordTool.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -121,11 +123,17 @@ export class ResourceChatContext implements ChatContext {
       return !meta.readonly && !meta.hiddenFromEdit
     })
 
-    const runAgentTool = await buildRunAgentTool(agents, agentCtx, message, send)
-    const editTextTool = await buildEditTextTool(agentCtx, allFields, record, selection)
+    const runAgentTool      = await buildRunAgentTool(agents, agentCtx, message, send)
+    const editTextTool      = await buildEditTextTool(agentCtx, allFields, record, selection)
+    const readFormStateTool = await buildReadFormStateTool()
+    const deleteRecordTool  = Model
+      ? await buildDeleteRecordTool({ Model, recordId })
+      : null
     const tools: AnyTool[] = [
-      ...(runAgentTool ? [runAgentTool] : []),
-      ...(editTextTool ? [editTextTool] : []),
+      ...(runAgentTool      ? [runAgentTool]      : []),
+      ...(editTextTool      ? [editTextTool]      : []),
+      readFormStateTool,
+      ...(deleteRecordTool  ? [deleteRecordTool]  : []),
     ]
 
     return new ResourceChatContext({
@@ -192,6 +200,13 @@ export class ResourceChatContext implements ChatContext {
         'If the user\'s request maps to one of the available agents, call the `run_agent` tool with the agent slug.',
       ] : []),
       'If the user asks to edit, replace, insert, or delete specific text in a field, use the `edit_text` tool directly.',
+      '',
+      '## Reading the user\'s in-progress edits',
+      'The "Current Record" snapshot above includes saved DB values + collaborative (Yjs) field overlays — but it does NOT include unsaved edits to non-collaborative fields, which live only in the user\'s browser form state.',
+      'If the user asks about a field value and the snapshot looks stale or empty, call `read_form_state` (optionally with a `fields` array) to read the live local values from the browser before answering.',
+      '',
+      '## Deleting records',
+      'If the user asks you to delete the current record, you MUST call the `delete_record` tool immediately — do NOT ask the user for confirmation in chat. The tool itself has a built-in approval gate: the browser will show an inline Approve/Reject card on the tool call, the user clicks one, and the agent loop resumes. Asking the user "are you sure?" in plain text wastes a turn and bypasses the approval flow.',
       '',
       '## Block editing',
       'Rich text fields may contain embedded blocks shown as `[BLOCK: type | field: "value", ...]` in the record.',

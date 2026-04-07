@@ -7,7 +7,8 @@ import { loadAi } from './lazyImports.js'
 import { resolveContext } from './contexts/resolveContext.js'
 import { ChatContextError, type ChatContext } from './contexts/types.js'
 import { ResourceChatContext } from './contexts/ResourceChatContext.js'
-import { persistConversation } from './persistence.js'
+import { persistConversation, persistContinuation } from './persistence.js'
+import { validateContinuation, ContinuationError } from './continuation.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -28,6 +29,8 @@ export async function handlePanelChat(
     return res.status(400).json({ message: 'Invalid request body.' })
   }
 
+  const isContinuation = Array.isArray(body.messages) && body.messages.length > 0
+
   const { readable, send, close } = createSSEStream()
 
   // 1. Resolve context FIRST — may throw ChatContextError → return JSON 4xx.
@@ -43,14 +46,40 @@ export async function handlePanelChat(
     throw err
   }
 
-  // 2. Resolve conversation store + load history
+  // 2. Resolve conversation store
   let store: ConversationStoreLike | null = null
   try { store = await resolveConversationStore() } catch { /* no store */ }
 
   let conversationId = body.conversationId
   let loadedHistory: AiMessage[] = []
+  let continuationMessages: AiMessage[] | undefined
 
-  if (store) {
+  // 3a. Continuation flow: validate body.messages against persisted conversation
+  if (isContinuation) {
+    if (!store) {
+      return res.status(400).json({ message: 'Continuation requires a conversation store.' })
+    }
+    if (!conversationId) {
+      return res.status(400).json({ message: 'Continuation requires "conversationId".' })
+    }
+    try {
+      continuationMessages = await validateContinuation({
+        store,
+        conversationId,
+        bodyMessages:        body.messages!,
+        approvedToolCallIds: body.approvedToolCallIds,
+        rejectedToolCallIds: body.rejectedToolCallIds,
+      })
+    } catch (err) {
+      if (err instanceof ContinuationError) {
+        return res.status(err.status).json({ message: err.message })
+      }
+      throw err
+    }
+    send('conversation', { conversationId, isNew: false })
+  }
+  // 3b. Fresh-prompt flow: load (or create) conversation history
+  else if (store) {
     try {
       if (conversationId) {
         if (context.shouldLoadHistory()) {
@@ -67,18 +96,21 @@ export async function handlePanelChat(
       store = null
     }
   }
-  // Legacy fallback: if no store, accept history off the request body
-  if (!store && body.history && body.history.length > 0) {
+  // 3c. Legacy fallback: no store, accept history off the request body
+  if (!isContinuation && !store && body.history && body.history.length > 0) {
     loadedHistory = body.history.map(h => ({ role: h.role, content: h.content })) as AiMessage[]
   }
 
-  // 3. Run the chat (fire-and-forget — SSE pumps from the stream)
-  void runChat({ send, close, context, body, loadedHistory, conversationId, store }).catch(err => {
+  // 4. Run the chat (fire-and-forget — SSE pumps from the stream)
+  void runChat({
+    send, close, context, body, loadedHistory, continuationMessages,
+    conversationId, store,
+  }).catch(err => {
     send('error', { message: err instanceof Error ? err.message : 'Chat failed.' })
     close()
   })
 
-  // 4. Return SSE response
+  // 5. Return SSE response
   const c = res.raw as { header(key: string, value: string): void; res: unknown }
   c.res = new Response(readable, {
     headers: {
@@ -93,27 +125,28 @@ export async function handlePanelChat(
 // ─── Shared agent loop ──────────────────────────────────────
 
 interface RunChatDeps {
-  send:           SSESend
-  close:          () => void
-  context:        ChatContext
-  body:           ChatRequestBody
-  loadedHistory:  AiMessage[]
-  conversationId: string | undefined
-  store:          ConversationStoreLike | null
+  send:                 SSESend
+  close:                () => void
+  context:              ChatContext
+  body:                 ChatRequestBody
+  loadedHistory:        AiMessage[]
+  continuationMessages: AiMessage[] | undefined
+  conversationId:       string | undefined
+  store:                ConversationStoreLike | null
 }
 
 async function runChat(deps: RunChatDeps): Promise<void> {
-  const { send, close, context, body, loadedHistory, conversationId, store } = deps
+  const { send, close, context, body, loadedHistory, continuationMessages, conversationId, store } = deps
 
   // Force-agent branch — only meaningful for ResourceChatContext.
   // The current ResourceAgent path doesn't go through agent() at all; it
   // calls agentDef.stream() directly, so we keep it as a localized branch
   // here rather than pretending it folds into the main loop.
-  if (context.kind === 'resource') {
+  if (context.kind === 'resource' && !continuationMessages) {
     const resCtx = context as ResourceChatContext
     const forceAgent = resCtx.getForceAgent()
     if (forceAgent) {
-      const userInput = body.message ?? extractLastUserMessage(body.messages) ?? ''
+      const userInput = body.message ?? ''
       await runForceAgent({
         send,
         agentDef: forceAgent,
@@ -130,8 +163,10 @@ async function runChat(deps: RunChatDeps): Promise<void> {
   const systemPrompt = context.buildSystemPrompt()
   const tools = context.buildTools()
 
-  const userInput = body.message ?? extractLastUserMessage(body.messages) ?? ''
-  const transformedInput = context.transformUserInput(userInput, loadedHistory)
+  const userInput = body.message ?? ''
+  const transformedInput = continuationMessages
+    ? userInput
+    : context.transformUserInput(userInput, loadedHistory)
 
   try {
     const a = agentFn({
@@ -140,9 +175,28 @@ async function runChat(deps: RunChatDeps): Promise<void> {
       model:        body.model,
     })
 
-    const { stream, response } = a.stream(transformedInput, {
-      history: loadedHistory.length > 0 ? loadedHistory : undefined,
-    })
+    const promptOpts: {
+      history?: AiMessage[]
+      messages?: AiMessage[]
+      toolCallStreamingMode?: 'placeholder' | 'stop-on-client-tool'
+      approvedToolCallIds?: string[]
+      rejectedToolCallIds?: string[]
+    } = {
+      toolCallStreamingMode: 'stop-on-client-tool',
+    }
+    if (continuationMessages) {
+      promptOpts.messages = continuationMessages
+    } else if (loadedHistory.length > 0) {
+      promptOpts.history = loadedHistory
+    }
+    if (body.approvedToolCallIds && body.approvedToolCallIds.length > 0) {
+      promptOpts.approvedToolCallIds = body.approvedToolCallIds
+    }
+    if (body.rejectedToolCallIds && body.rejectedToolCallIds.length > 0) {
+      promptOpts.rejectedToolCallIds = body.rejectedToolCallIds
+    }
+
+    const { stream, response } = a.stream(transformedInput, promptOpts)
 
     for await (const chunk of stream) {
       switch (chunk.type) {
@@ -150,16 +204,41 @@ async function runChat(deps: RunChatDeps): Promise<void> {
           if (chunk.text) send('text', { text: chunk.text })
           break
         case 'tool-call':
-          send('tool_call', { tool: chunk.toolCall?.name, input: chunk.toolCall?.arguments })
+          send('tool_call', {
+            id:    chunk.toolCall?.id,
+            tool:  chunk.toolCall?.name,
+            input: chunk.toolCall?.arguments,
+          })
+          break
+        case 'pending-client-tools':
+          send('pending_client_tools', { toolCalls: chunk.toolCalls ?? [] })
+          break
+        case 'pending-approval':
+          send('tool_approval_required', {
+            toolCall:     chunk.toolCall,
+            isClientTool: chunk.isClientTool ?? false,
+          })
           break
       }
     }
 
     const result = await response
-    send('complete', { done: true, usage: result.usage, steps: result.steps.length })
 
+    // Persistence — branch on whether this was a fresh prompt or continuation.
     if (conversationId && store) {
-      await persistConversation(store, conversationId, userInput, result, loadedHistory.length === 0)
+      if (continuationMessages) {
+        await persistContinuation(store, conversationId, continuationMessages, result)
+      } else {
+        await persistConversation(store, conversationId, userInput, result, loadedHistory.length === 0)
+      }
+    }
+
+    if (result.finishReason === 'client_tool_calls') {
+      send('complete', { done: false, awaiting: 'client_tools', usage: result.usage, steps: result.steps.length })
+    } else if (result.finishReason === 'tool_approval_required') {
+      send('complete', { done: false, awaiting: 'approval', usage: result.usage, steps: result.steps.length })
+    } else {
+      send('complete', { done: true, usage: result.usage, steps: result.steps.length })
     }
   } finally {
     close()
@@ -199,17 +278,6 @@ async function runForceAgent(deps: RunForceAgentDeps): Promise<void> {
   } catch (err) {
     send('error', { message: err instanceof Error ? err.message : 'Agent run failed.' })
   }
-}
-
-// ─── Helpers ────────────────────────────────────────────────
-
-function extractLastUserMessage(messages: AiMessage[] | undefined): string | undefined {
-  if (!messages || messages.length === 0) return undefined
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
-    if (m && m.role === 'user' && typeof m.content === 'string') return m.content
-  }
-  return undefined
 }
 
 /* eslint-enable @typescript-eslint/no-explicit-any */

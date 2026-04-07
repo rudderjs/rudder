@@ -11,6 +11,7 @@ import { useAutosave } from '../_hooks/useAutosave.js'
 import { useFormPersist } from '../_hooks/useFormPersist.js'
 import { useFieldPersist } from '../_hooks/useFieldPersist.js'
 import { flattenFormFields } from '../_lib/formHelpers.js'
+import { registerClientTool } from './agents/clientTools.js'
 import type { SchemaItem } from '../_lib/formHelpers.js'
 
 interface SchemaFormProps {
@@ -278,6 +279,20 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
   // Ref to track latest values for compute without state updater
   const valuesRef = useRef(values)
   valuesRef.current = values
+
+  // Register the `read_form_state` client tool so the AI assistant can read
+  // unsaved local edits to non-collaborative fields. The handler reads from
+  // `valuesRef` (always the latest snapshot) and is unregistered on unmount.
+  useEffect(() => {
+    return registerClientTool('read_form_state', (args: unknown) => {
+      const all = valuesRef.current
+      const a = args as { fields?: string[] } | undefined
+      if (!a?.fields || a.fields.length === 0) return all
+      return Object.fromEntries(
+        Object.entries(all).filter(([k]) => a.fields!.includes(k)),
+      )
+    })
+  }, [])
 
   function handleChange(name: string, value: unknown) {
     const next = { ...valuesRef.current, [name]: value }
