@@ -51,10 +51,9 @@ rudderjs/
 │   ├── panels-lexical/ # Lexical rich-text editor adapter — see docs/claude/panels.md
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
 │   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
-│   ├── ai/             # AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI,
-│   │                   #   Mistral, Azure), Agent class, tool system, streaming, middleware (wired into loop),
-│   │                   #   structured output, conversation memory (forUser/continue), attachments (Document/Image),
-│   │                   #   queue integration (agent.queue()), AI facade, AiFake
+│   ├── ai/             # AI engine — 9 providers, Agent class, tools, streaming, middleware, structured output,
+│   │                   #   conversations, attachments, queue, image gen, TTS/STT, provider tools (WebSearch/WebFetch),
+│   │                   #   Vercel AI protocol, cached embeddings, AI facade, AiFake
 │   ├── workspaces/     # AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator
 │   │                   #   Panel plugin: workspaces(). Uses @rudderjs/ai for LLM, Prisma for persistence.
 │   ├── boost/          # AI dev tools — MCP server (10 tools), boost:install/update commands, guidelines/skills system
@@ -117,7 +116,7 @@ rudderjs/
 | `@rudderjs/panels-lexical` | 0.0.1 | Lexical rich-text editor adapter — see docs/claude/panels.md |
 | `@rudderjs/image` | 0.0.1 | Fluent image processing — resize, crop, convert, optimize. Wraps sharp. |
 | `@rudderjs/media` | 0.0.1 | Media library — `Media.make()` schema element, file browser, uploads, folders, preview, image conversions |
-| `@rudderjs/ai` | 0.0.1 | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware (wired into agent loop), structured Output, conversation memory (`forUser()`/`continue()`), file/image attachments (`Document`/`Image`), queue integration (`agent.queue()`), AI facade, AiFake. |
+| `@rudderjs/ai` | 0.0.1 | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware (wired into agent loop), structured output, conversation memory (`forUser()`/`continue()`), file/image attachments (`Document`/`Image`), queue integration (`agent.queue()`), image generation (`AI.image()`/`ImageGenerator`), TTS (`AI.audio()`/`AudioGenerator`), STT (`AI.transcribe()`/`Transcription`), provider tools (`WebSearch`/`WebFetch`/`CodeExecution`), Vercel AI Data Stream Protocol (`toVercelDataStream`/`toVercelResponse`), cached embeddings (`CachedEmbeddingAdapter`), batch embedding auto-chunking, Google+Mistral embeddings, AI facade, AiFake |
 | `@rudderjs/workspaces` | 0.0.1 | AI workspace canvas — Isoflow-style 3D nodes, departments, connections. Panel plugin: `workspaces()` |
 | `@rudderjs/boost` | 0.0.1 | AI dev tools — MCP server (10 tools: app_info, db_schema, route_list, model_list, config_get, last_error, db_query, read_logs, browser_logs, get_absolute_url), `boost:install`/`boost:update` commands, auto-generated AI guidelines and skills from installed packages |
 | `@rudderjs/mcp` | 0.0.1 | MCP server framework — `McpServer`, `McpTool`, `McpResource`, `McpPrompt` base classes, `@Name`/`@Version`/`@Instructions`/`@Description` decorators, `Mcp.web()`/`Mcp.local()` registration, stdio transport, `McpTestClient` for testing, `mcp:start`/`mcp:list` CLI commands, `make:mcp-server`/`make:mcp-tool`/`make:mcp-resource`/`make:mcp-prompt` scaffolders |

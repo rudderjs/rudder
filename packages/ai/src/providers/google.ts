@@ -8,6 +8,11 @@ import type {
   AiMessage,
   ToolCall,
   ToolChoice,
+  EmbeddingAdapter,
+  EmbeddingResult,
+  ImageGenerationAdapter,
+  ImageGenerationOptions,
+  ImageGenerationResult,
 } from '../types.js'
 
 export interface GoogleConfig {
@@ -24,6 +29,14 @@ export class GoogleProvider implements ProviderFactory {
 
   create(model: string): ProviderAdapter {
     return new GoogleAdapter(this.config, model)
+  }
+
+  createEmbedding(model: string): EmbeddingAdapter {
+    return new GoogleEmbeddingAdapter(this.config, model)
+  }
+
+  createImage(model: string): ImageGenerationAdapter {
+    return new GoogleImageAdapter(this.config, model)
   }
 }
 
@@ -227,5 +240,99 @@ function fromGeminiResponse(response: any): ProviderResponse {
       totalTokens: response.usageMetadata?.totalTokenCount ?? 0,
     },
     finishReason: toolCalls.length > 0 ? 'tool_calls' : 'stop',
+  }
+}
+
+// ─── Embedding Adapter ──────────────────────────────────
+
+class GoogleEmbeddingAdapter implements EmbeddingAdapter {
+  private client: any = null
+
+  constructor(
+    private readonly config: GoogleConfig,
+    private readonly model: string,
+  ) {}
+
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client
+    const sdk: any = await import(/* @vite-ignore */ '@google/genai')
+    const GoogleGenAI = sdk.GoogleGenAI ?? sdk.default
+    this.client = new GoogleGenAI({ apiKey: this.config.apiKey })
+    return this.client
+  }
+
+  async embed(input: string | string[]): Promise<EmbeddingResult> {
+    const client = await this.getClient()
+    const inputs = Array.isArray(input) ? input : [input]
+
+    const results = await Promise.all(
+      inputs.map(text =>
+        client.models.embedContent({
+          model: this.model,
+          content: { parts: [{ text }] },
+        }),
+      ),
+    )
+
+    const embeddings = results.map((r: any) => r.embedding?.values ?? [])
+
+    return {
+      embeddings,
+      usage: { promptTokens: 0, totalTokens: 0 },
+    }
+  }
+}
+
+// ─── Image Generation Adapter (Imagen) ──────────────────
+
+const GOOGLE_IMAGE_SIZE_MAP: Record<string, string> = {
+  square: '1024x1024',
+  landscape: '1792x1024',
+  portrait: '1024x1792',
+}
+
+class GoogleImageAdapter implements ImageGenerationAdapter {
+  constructor(
+    private readonly config: GoogleConfig,
+    private readonly model: string,
+  ) {}
+
+  async generate(options: ImageGenerationOptions): Promise<ImageGenerationResult> {
+    const size = options.size
+      ? (GOOGLE_IMAGE_SIZE_MAP[options.size] ?? options.size)
+      : '1024x1024'
+
+    const [width, height] = size.split('x').map(Number)
+
+    const body: Record<string, unknown> = {
+      instances: [{ prompt: options.prompt }],
+      parameters: {
+        sampleCount: options.n ?? 1,
+        ...(width && height ? { aspectRatio: `${width}:${height}` } : {}),
+      },
+    }
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:predict?key=${this.config.apiKey}`
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      throw new Error(`[RudderJS AI] Google image generation error: ${res.status} ${await res.text()}`)
+    }
+
+    const data = await res.json() as {
+      predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>
+    }
+
+    return {
+      images: (data.predictions ?? []).map((p: any) => ({
+        ...(p.bytesBase64Encoded ? { base64: p.bytesBase64Encoded as string } : {}),
+      })),
+      model: this.model,
+    }
   }
 }

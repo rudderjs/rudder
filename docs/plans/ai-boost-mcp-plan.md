@@ -125,7 +125,7 @@ OpenAI-compatible providers (DeepSeek, xAI, Azure) reuse `OpenAIAdapter` with cu
 
 ---
 
-## Phase 2: AI Capabilities (Medium Priority)
+## Phase 2: AI Capabilities (Medium Priority) ✅
 
 ### 2.1 — Image Generation
 
@@ -415,7 +415,7 @@ Client-side Lexical block operations triggered by SSE tool_call events.
 Phase 1 (AI Core)     — 1.1 middleware, 1.2 attachments, 1.3 queue, 1.4 conversations, 1.5 providers  ✅
 Phase 3 (Boost 2-3)   — 3.1 install, 3.2 guidelines, 3.3 skills, 3.4 tools, 3.5 update, 3.6 search docs  ✅ (3.3 skills + 3.6 search docs deferred)
 Phase 4 (MCP Package)  — 4.1 core, 4.2 stdio, 4.3 testing, 4.4 scaffolders  ✅
-Phase 2 (AI Caps)      — 2.1 image, 2.2 provider tools, 2.3 vercel, 2.4 audio, 2.5 embeddings
+Phase 2 (AI Caps)      — 2.1 image, 2.2 provider tools, 2.3 vercel, 2.4 audio, 2.5 embeddings  ✅
 Phase 5 (Panels AI)    — 5.1 field assist, 5.2 suggestions, 5.3 blocks
 ```
 

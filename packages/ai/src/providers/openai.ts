@@ -3,6 +3,15 @@ import type {
   ProviderAdapter,
   EmbeddingAdapter,
   EmbeddingResult,
+  ImageGenerationAdapter,
+  ImageGenerationOptions,
+  ImageGenerationResult,
+  TextToSpeechAdapter,
+  TextToSpeechOptions,
+  TextToSpeechResult,
+  SpeechToTextAdapter,
+  SpeechToTextOptions,
+  SpeechToTextResult,
   ProviderRequestOptions,
   ProviderResponse,
   StreamChunk,
@@ -32,6 +41,18 @@ export class OpenAIProvider implements ProviderFactory {
 
   createEmbedding(model: string): EmbeddingAdapter {
     return new OpenAIEmbeddingAdapter(this.config, model)
+  }
+
+  createImage(model: string): ImageGenerationAdapter {
+    return new OpenAIImageAdapter(this.config, model)
+  }
+
+  createTts(model: string): TextToSpeechAdapter {
+    return new OpenAITtsAdapter(this.config, model)
+  }
+
+  createStt(model: string): SpeechToTextAdapter {
+    return new OpenAISttAdapter(this.config, model)
   }
 }
 
@@ -243,6 +264,152 @@ class OpenAIEmbeddingAdapter implements EmbeddingAdapter {
     return {
       embeddings: data.data.map(d => d.embedding),
       usage: { promptTokens: data.usage.prompt_tokens, totalTokens: data.usage.total_tokens },
+    }
+  }
+}
+
+// ─── Image Generation Adapter ────────────────────────────
+
+const IMAGE_SIZE_MAP: Record<string, string> = {
+  square: '1024x1024',
+  landscape: '1792x1024',
+  portrait: '1024x1792',
+}
+
+class OpenAIImageAdapter implements ImageGenerationAdapter {
+  private client: any = null
+
+  constructor(
+    private readonly config: OpenAIConfig,
+    private readonly model: string,
+  ) {}
+
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client
+    const sdk = await import(/* @vite-ignore */ 'openai')
+    const OpenAI = sdk.default ?? sdk.OpenAI
+    this.client = new OpenAI({
+      apiKey: this.config.apiKey,
+      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
+      ...(this.config.organization ? { organization: this.config.organization } : {}),
+    })
+    return this.client
+  }
+
+  async generate(options: ImageGenerationOptions): Promise<ImageGenerationResult> {
+    const client = await this.getClient()
+
+    const size = options.size
+      ? (IMAGE_SIZE_MAP[options.size] ?? options.size)
+      : '1024x1024'
+
+    const params: Record<string, unknown> = {
+      model: this.model,
+      prompt: options.prompt,
+      size,
+      response_format: 'b64_json',
+    }
+    if (options.n !== undefined) params['n'] = options.n
+    if (options.quality) params['quality'] = options.quality
+    if (options.style) params['style'] = options.style
+
+    const response = await client.images.generate(params)
+
+    return {
+      images: (response.data ?? []).map((img: any) => ({
+        ...(img.b64_json ? { base64: img.b64_json } : {}),
+        ...(img.url ? { url: img.url } : {}),
+        ...(img.revised_prompt ? { revisedPrompt: img.revised_prompt } : {}),
+      })),
+      model: this.model,
+    }
+  }
+}
+
+// ─── TTS Adapter ─────────────────────────────────────────
+
+class OpenAITtsAdapter implements TextToSpeechAdapter {
+  private client: any = null
+
+  constructor(private readonly config: OpenAIConfig, private readonly model: string) {}
+
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client
+    const sdk = await import(/* @vite-ignore */ 'openai')
+    const OpenAI = sdk.default ?? sdk.OpenAI
+    this.client = new OpenAI({
+      apiKey: this.config.apiKey,
+      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
+      ...(this.config.organization ? { organization: this.config.organization } : {}),
+    })
+    return this.client
+  }
+
+  async generate(options: TextToSpeechOptions): Promise<TextToSpeechResult> {
+    const client = await this.getClient()
+    const format = options.format ?? 'mp3'
+
+    const params: Record<string, unknown> = {
+      model: this.model,
+      input: options.text,
+      voice: options.voice ?? 'alloy',
+    }
+    if (options.speed !== undefined) params['speed'] = options.speed
+    if (options.format) params['response_format'] = options.format
+
+    const response = await client.audio.speech.create(params)
+    const arrayBuffer = await response.arrayBuffer()
+
+    return {
+      audio: Buffer.from(arrayBuffer),
+      format,
+      model: this.model,
+    }
+  }
+}
+
+// ─── STT Adapter ─────────────────────────────────────────
+
+class OpenAISttAdapter implements SpeechToTextAdapter {
+  private client: any = null
+
+  constructor(private readonly config: OpenAIConfig, private readonly model: string) {}
+
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client
+    const sdk = await import(/* @vite-ignore */ 'openai')
+    const OpenAI = sdk.default ?? sdk.OpenAI
+    this.client = new OpenAI({
+      apiKey: this.config.apiKey,
+      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
+      ...(this.config.organization ? { organization: this.config.organization } : {}),
+    })
+    return this.client
+  }
+
+  async transcribe(options: SpeechToTextOptions): Promise<SpeechToTextResult> {
+    const client = await this.getClient()
+
+    const audioBuffer = typeof options.audio === 'string'
+      ? (await import('node:fs')).readFileSync(options.audio)
+      : options.audio
+    const file = new File([audioBuffer], 'audio.mp3', { type: 'audio/mpeg' })
+
+    const params: Record<string, unknown> = {
+      model: this.model,
+      file,
+      response_format: 'verbose_json',
+    }
+    if (options.language) params['language'] = options.language
+    if (options.prompt) params['prompt'] = options.prompt
+
+    const response = await client.audio.transcriptions.create(params)
+
+    return {
+      text: response.text,
+      language: response.language,
+      duration: response.duration,
+      model: this.model,
     }
   }
 }

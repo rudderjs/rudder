@@ -46,6 +46,15 @@ export type {
   ToolResult,
   EmbeddingAdapter,
   EmbeddingResult,
+  ImageGenerationAdapter,
+  ImageGenerationOptions,
+  ImageGenerationResult,
+  TextToSpeechAdapter,
+  TextToSpeechOptions,
+  TextToSpeechResult,
+  SpeechToTextAdapter,
+  SpeechToTextOptions,
+  SpeechToTextResult,
 } from './types.js'
 
 // Registry
@@ -84,6 +93,22 @@ export { AI } from './facade.js'
 
 // ServiceProvider factory
 export { ai } from './provider.js'
+
+// Image Generation
+export { ImageGenerator } from './image.js'
+
+// Audio (TTS & STT)
+export { AudioGenerator } from './audio.js'
+export { Transcription } from './transcription.js'
+
+// Provider Tools
+export { WebSearch, WebFetch, CodeExecution } from './provider-tools.js'
+
+// Vercel AI Protocol
+export { toVercelDataStream, toVercelResponse } from './vercel-protocol.js'
+
+// Cached Embeddings
+export { CachedEmbeddingAdapter } from './cached-embedding.js'
 
 // Testing
 export { AiFake } from './fake.js'

@@ -102,12 +102,80 @@ export interface EmbeddingAdapter {
   embed(input: string | string[], model: string): Promise<EmbeddingResult>
 }
 
+// ─── Image Generation ────────────────────────────────────
+
+export interface ImageGenerationOptions {
+  prompt: string
+  model?: string | undefined
+  size?: 'square' | 'landscape' | 'portrait' | string | undefined
+  quality?: 'standard' | 'hd' | undefined
+  style?: 'natural' | 'vivid' | undefined
+  n?: number | undefined
+}
+
+export interface ImageGenerationResult {
+  images: Array<{
+    url?: string | undefined
+    base64?: string | undefined
+    revisedPrompt?: string | undefined
+  }>
+  model: string
+}
+
+export interface ImageGenerationAdapter {
+  generate(options: ImageGenerationOptions): Promise<ImageGenerationResult>
+}
+
 /** Provider factory — creates a ProviderAdapter from a model string */
 export interface ProviderFactory {
   readonly name: string
   create(model: string): ProviderAdapter
   /** Create an embedding adapter (optional — not all providers support embeddings) */
   createEmbedding?(model: string): EmbeddingAdapter
+  /** Create an image generation adapter (optional — not all providers support image generation) */
+  createImage?(model: string): ImageGenerationAdapter
+  /** Create a text-to-speech adapter (optional) */
+  createTts?(model: string): TextToSpeechAdapter
+  /** Create a speech-to-text adapter (optional) */
+  createStt?(model: string): SpeechToTextAdapter
+}
+
+// ─── Audio (TTS & STT) ──────────────────────────────────
+
+export interface TextToSpeechOptions {
+  text: string
+  model?: string | undefined
+  voice?: string | undefined
+  speed?: number | undefined
+  format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | undefined
+}
+
+export interface TextToSpeechResult {
+  audio: Buffer
+  format: string
+  model: string
+}
+
+export interface SpeechToTextOptions {
+  audio: Buffer | string
+  model?: string | undefined
+  language?: string | undefined
+  prompt?: string | undefined
+}
+
+export interface SpeechToTextResult {
+  text: string
+  language?: string | undefined
+  duration?: number | undefined
+  model: string
+}
+
+export interface TextToSpeechAdapter {
+  generate(options: TextToSpeechOptions): Promise<TextToSpeechResult>
+}
+
+export interface SpeechToTextAdapter {
+  transcribe(options: SpeechToTextOptions): Promise<SpeechToTextResult>
 }
 
 // ─── Tool ─────────────────────────────────────────────────
@@ -128,6 +196,8 @@ export interface ToolDefinitionOptions<
   outputSchema?: TOutput | undefined
   needsApproval?: ToolNeedsApproval<z.infer<TInput>> | undefined
   lazy?: boolean | undefined
+  /** Arbitrary metadata — used by provider-native tools to signal special handling */
+  meta?: Record<string, unknown> | undefined
 }
 
 export interface ServerTool<TInput = unknown, TOutput = unknown> {
