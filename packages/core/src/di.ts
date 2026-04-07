@@ -1,5 +1,15 @@
 import 'reflect-metadata'
-import { AsyncLocalStorage } from 'node:async_hooks'
+
+// Lazy-load node:async_hooks to avoid bundling it into the client.
+// AsyncLocalStorage is only used by container.runScoped() — a server-only
+// feature for per-request scoped bindings. Importing statically would fail
+// in the browser bundle since async_hooks has no browser equivalent.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AsyncLocalStorageType = any
+let _AsyncLocalStorage: { new <T>(): { run<R>(store: T, fn: () => R): R; getStore(): T | undefined } } | undefined
+if (typeof globalThis.process !== 'undefined') {
+  import(/* @vite-ignore */ 'node:async_hooks').then(m => { _AsyncLocalStorage = m.AsyncLocalStorage as never }).catch(() => {})
+}
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -39,7 +49,18 @@ export class Container {
   private aliases   = new Map<string, string | symbol>()
 
   // ── Scoped bindings (per-request via ALS) ─────────────────
-  private _scopeAls = new AsyncLocalStorage<Map<string | symbol, unknown>>()
+  // Lazy-initialized so the class can be loaded in the browser bundle without
+  // triggering a node:async_hooks import error.
+  private _scopeAlsInstance: AsyncLocalStorageType = null
+  private get _scopeAls(): { run<R>(store: Map<string | symbol, unknown>, fn: () => R): R; getStore(): Map<string | symbol, unknown> | undefined } {
+    if (!this._scopeAlsInstance) {
+      if (!_AsyncLocalStorage) {
+        throw new Error('[RudderJS] AsyncLocalStorage is not available — runScoped() and scoped bindings require Node.js (node:async_hooks).')
+      }
+      this._scopeAlsInstance = new _AsyncLocalStorage<Map<string | symbol, unknown>>()
+    }
+    return this._scopeAlsInstance
+  }
 
   // ── Contextual bindings ───────────────────────────────────
   private _contextual = new Map<string, Map<string | symbol, Factory>>()
