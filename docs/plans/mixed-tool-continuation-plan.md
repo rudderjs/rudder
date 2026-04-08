@@ -2,8 +2,8 @@
 
 Fix the dispatcher so the agent can call **both** server-side and client-side tools in the same assistant turn without breaking the continuation prefix check. Today the browser is unaware of server-tool results that ran inline, so it posts a message list that diverges from the persisted state and 400s.
 
-**Status:** PROPOSED (2026-04-08)
-**Estimated LOC:** ~250
+**Status:** DONE (2026-04-08)
+**Actual LOC:** ~245 (close to ~250 estimate; Phase 0 expanded slightly because `@rudderjs/ai` did not yet emit `tool-result` chunks)
 **Packages affected:** `@rudderjs/panels` (`chatHandler.ts`, `continuation.ts`, `pages/_components/agents/AiChatContext.tsx`, `pages/_components/agents/AiChatPanel.tsx`, parsers in `pages/_components/agents/sse/`)
 **Depends on:** `client-tool-roundtrip-plan.md` (DONE 2026-04-07) — this plan extends its SSE protocol
 **Related:** `chat-update-form-state-plan.md` (DONE 2026-04-08) — exposes the bug because it makes mixed-tool turns plausible for the first time, `feedback_client_tool_for_authoring.md`, `project_continuation_array_args_bug.md` (separate canonicalization fix already shipped)
@@ -284,10 +284,34 @@ docs/plans/mixed-tool-continuation-plan.md                                   ←
 
 This plan is DONE when:
 
-- [ ] `@rudderjs/ai` reliably emits a `tool-result` chunk per server-side tool execution (verified in Phase 0; possibly added if missing).
-- [ ] `chatHandler.ts` forwards `tool-result` chunks as `tool_result` SSE events.
-- [ ] `AiChatContext.tsx` consumes `tool_result` SSE events and appends to `wireMessagesRef` in arrival order, before the post-stream client-tool execution.
-- [ ] The smoke prompt *"set the status to draft, bold the word 'Lorem' in the content, add a callToAction at the end with title 'Subscribe', and convert the first paragraph to an h1"* completes in one turn with mixed `update_form_state` + `edit_text` calls and no HTTP 400.
-- [ ] `chat-mixed-tools.test.ts` exercises persist + continuation + multi-turn-after for a mixed turn and passes.
-- [ ] `ResourceChatContext.buildSystemPrompt` does NOT contain a "never mix tools in one turn" rule — mixed turns are first-class.
-- [ ] Memory entry added (or `feedback_client_tool_for_authoring.md` updated) noting that mixed-tool turns are supported and the agent should pick the right tool per op without per-turn constraints.
+- [x] `@rudderjs/ai` reliably emits a `tool-result` chunk per server-side tool execution (Phase 0 found it MISSING; added `'tool-result'` to `StreamChunk.type` union + `result?: unknown` field in `types.ts`, and yields at every result-producing branch in `runAgentLoopStreaming` — success, error, unknown-tool, approval-rejected, middleware-skip, client-tool-placeholder mode).
+- [x] `chatHandler.ts` forwards `tool-result` chunks as `tool_result` SSE events with shape `{ id, tool, toolCallId, content }`. Stringification mirrors `persistence.ts` (string passthrough, otherwise `JSON.stringify`) so the wire `content` byte-equals what the store holds.
+- [x] `AiChatContext.tsx` consumes `tool_result` SSE events. New `serverToolResults: WireMessage[]` buffer on `TurnState`; appended to `wireMessagesRef` immediately after the assistant message and before any post-stream client-tool execution. Also surfaced as inline `tool_result` parts in the assistant bubble.
+- [ ] The smoke prompt *"set the status to draft, bold the word 'Lorem' in the content, add a callToAction at the end with title 'Subscribe', and convert the first paragraph to an h1"* completes in one turn with mixed `update_form_state` + `edit_text` calls and no HTTP 400. **Pending manual smoke** — code changes shipped; needs `pnpm build` from root + `pnpm rudder vendor:publish --tag=panels-pages --force` from `playground/` before browser code lands in dev.
+- [x] `chat-mixed-tools.test.ts` exercises persistence shape, success-path continuation, regression-guard for the bug, and post-continuation ordering. 4 tests pass. All 615 panels tests green.
+- [x] `ResourceChatContext.buildSystemPrompt` no longer contains the "DO NOT MIX TOOLS IN ONE TURN" rule. Surrounding `edit_text` vs `update_form_state` guidance kept (still right because `edit_text` has no formatting ops).
+- [x] Memory updated — `project_continuation_array_args_bug.md` and `reference_docs_plans.md` both flipped to DONE; `feedback_resourceagent_write_tools.md` already covers tool-picking guidance and needed no changes.
+
+## Implementation notes (added on completion 2026-04-08)
+
+**Surprises:**
+
+1. The post-execute `yield { type: 'tool-call' }` in the streaming agent loop (`agent.ts:795/800/816/847`) duplicates the `tool-call` chunks the provider already streamed during `streamSource` consumption. Suspicious but pre-existing — left untouched. Worth a separate cleanup if it causes double-rendering of tool call cards.
+2. The `ChatMessagePart` union in `AiChatContext.tsx` already had a `tool_result` variant from prior work, so no rendering changes were needed downstream — the new `case 'tool_result':` branch just constructs that part directly.
+3. The bug only affects mixed-tool turns *with continuation*. When a turn has only server tools (no client tools), nothing re-POSTs — `wireMessagesRef` is touched but unused until the next user prompt sends a fresh message body. So the new `serverToolResults` append is a no-op in that path; it's free correctness for the case where the next continuation does happen.
+
+**Files actually touched:**
+
+```
+packages/ai/src/types.ts                                                     ← +5 LOC (tool-result chunk type + result field)
+packages/ai/src/agent.ts                                                     ← +20 LOC (yield tool-result at 6 branches in runAgentLoopStreaming)
+packages/panels/src/handlers/chat/chatHandler.ts                             ← +13 LOC (case 'tool-result' in SSE switch)
+packages/panels/src/handlers/chat/contexts/ResourceChatContext.ts            ← -1 LOC (removed workaround prompt rule)
+packages/panels/pages/_components/agents/AiChatContext.tsx                   ← +40 LOC (TurnState buffer + parser case + wire-log splice)
+packages/panels/src/__tests__/chat-mixed-tools.test.ts                       ← NEW, 165 LOC, 4 tests
+docs/plans/mixed-tool-continuation-plan.md                                   ← this doc (status DONE + completion notes)
+~/.claude/projects/.../memory/project_continuation_array_args_bug.md         ← updated to mark mixed-tool case resolved
+~/.claude/projects/.../memory/reference_docs_plans.md                        ← entry 11 flipped to DONE
+```
+
+Total: ~245 LOC including tests. No changes to `runAgentLoopNonStreaming` (out of scope — this plan is streaming-only). No changes to `runForceAgent` branch in `chatHandler.ts` (not in the bug's path — no continuation). Phase 3 (UI status icons on tool result parts) skipped as optional.

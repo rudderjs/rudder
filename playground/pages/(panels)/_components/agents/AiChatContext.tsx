@@ -183,6 +183,12 @@ const AiChatContext = createContext<AiChatContextValue | null>(null)
 interface TurnState {
   assistantText:        string
   assistantToolCalls:   WireToolCall[]
+  /** Server-side tool results streamed via `tool_result` SSE events. We append
+   * these to `wireMessagesRef` after the assistant message so the wire log
+   * mirrors what the server persisted, which lets a follow-up continuation pass
+   * the prefix check in `continuation.ts`. Order is arrival order (== execution
+   * order in the agent loop). See docs/plans/mixed-tool-continuation-plan.md. */
+  serverToolResults:    WireMessage[]
   pendingClientTools:   WireToolCall[]
   pendingApproval:      PendingApproval | null
   done:                 boolean
@@ -192,6 +198,7 @@ function newTurnState(): TurnState {
   return {
     assistantText:      '',
     assistantToolCalls: [],
+    serverToolResults:  [],
     pendingClientTools: [],
     pendingApproval:    null,
     done:               false,
@@ -261,6 +268,33 @@ function parseSSELines(
             if (toolData.tool === 'update_field' && toolData.input?.field && toolData.input?.value != null) {
               onFieldUpdateRef.current?.(toolData.input.field as string, toolData.input.value as string)
             }
+            break
+          }
+
+          case 'tool_result': {
+            // Server-side tool result. Buffer it for the wire log so a
+            // follow-up continuation can present a prefix that matches what
+            // the server persisted. Also surface inline in the assistant
+            // bubble so users see what each tool actually returned.
+            const resultData = data as { id?: string; tool?: string; toolCallId?: string; content: string }
+            const toolCallId = resultData.toolCallId ?? resultData.id
+            if (toolCallId) {
+              turnState.serverToolResults.push({
+                role:       'tool',
+                content:    resultData.content,
+                toolCallId,
+              })
+            }
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              const part: ChatMessagePart = {
+                type:   'tool_result',
+                tool:   resultData.tool ?? 'unknown',
+                result: resultData.content,
+              }
+              if (toolCallId) part.id = toolCallId
+              return { ...m, parts: [...(m.parts ?? []), part] }
+            }))
             break
           }
 
@@ -527,7 +561,16 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       content: turnState.assistantText,
       ...(turnState.assistantToolCalls.length > 0 ? { toolCalls: turnState.assistantToolCalls } : {}),
     }
-    wireMessagesRef.current = [...wireMessagesRef.current, assistantMsg]
+    wireMessagesRef.current = [
+      ...wireMessagesRef.current,
+      assistantMsg,
+      // Server-side tool results land BEFORE any client-tool results so the
+      // wire log mirrors the persisted shape `[..., assistant, tool{server}]`
+      // (client tool results, if any, are appended below as the new tail).
+      // This is what unblocks mixed-tool turns through the continuation
+      // prefix check.
+      ...turnState.serverToolResults,
+    ]
 
     // ── Client tools pending: execute locally and re-POST ────
     if (turnState.pendingClientTools.length > 0) {
