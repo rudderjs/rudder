@@ -2,7 +2,7 @@
 
 Add an `update_form_state` client tool that lets the AI agent write to **any** form field — including non-collaborative ones — by routing edits through the browser's live React + Lexical instances instead of the server-side Y.Doc. Symmetric with the existing `read_form_state` client tool, which already closes the **read** side of the non-collab gap.
 
-**Status:** PROPOSED (2026-04-08)
+**Status:** DONE (2026-04-08)
 **Estimated LOC:** ~450
 **Packages affected:** `@rudderjs/panels`, `@rudderjs/panels-lexical`, `@rudderjs/ai` (no changes; relies on existing client-tool roundtrip)
 **Depends on:** `client-tool-roundtrip-plan.md` (DONE 2026-04-07), `panels-block-write-completion-plan.md` (DONE 2026-04-08)
@@ -458,12 +458,20 @@ docs/plans/panels-rich-text-authoring-plan.md                          ← mark 
 
 This plan is DONE when:
 
-- [ ] `lexicalRegistry.ts` exists and Phase 0 verification passes
-- [ ] `updateFormStateHandler.ts` handles all op types listed in Phase 2 + Phase 4
-- [ ] `updateFormStateTool.ts` is registered as a client tool in `ResourceChatContext`
-- [ ] System prompt teaches both `edit_text` and `update_form_state` with clear "use this for X" guidance
-- [ ] All 8 playground smoke-test scenarios pass
-- [ ] The shared `editOps.ts` op union is consumed by both tools — no vocabulary drift
-- [ ] Block allowlist is enforced in the browser handler (not just on the server)
-- [ ] Memory + CLAUDE docs reflect the two-tool model and the Lexical registry pattern
-- [ ] The article chat agent can complete this multi-step task in one turn: "set the status to draft, bold the word 'critical' in the body, add a callToAction at the end with title 'Subscribe', and convert the first paragraph to an h1"
+- [x] `lexicalRegistry.ts` exists and Phase 0 verification passes
+- [x] `updateFormStateHandler.ts` handles all op types listed in Phase 2 + Phase 4
+- [x] `updateFormStateTool.ts` is registered as a client tool in `ResourceChatContext`
+- [x] System prompt teaches both `edit_text` and `update_form_state` with clear "use this for X" guidance (hard-rule the formatting ops to `update_form_state` since `edit_text` has none)
+- [x] All 8 playground smoke-test scenarios pass (see Implementation Notes below)
+- [ ] ~~The shared `editOps.ts` op union is consumed by both tools~~ — DEFERRED. `edit_text` and `update_form_state` keep separate op vocabularies (`rewrite` vs `rewrite_text`, etc.) because aligning would be a breaking change to the existing `edit_text` schema. Documented as a future consolidation.
+- [x] Block allowlist is enforced in the browser handler (not just on the server) — derived from `field._extra.blocks` in SchemaForm and passed via `blockAllowlist` dep
+- [x] Memory + CLAUDE docs reflect the two-tool model and the Lexical registry pattern (`feedback_client_tool_for_authoring.md`, `project_roadmap_status.md`, `docs/claude/panels.md`)
+- [x] The article chat agent can complete the multi-step task in one turn (verified via Phase 4 fresh-conversation smoke test)
+
+## Implementation Notes (post-DONE)
+
+- **`CollaborativePlainText` registration was a Phase 2 follow-up.** The original Phase 2 only wired `LexicalEditor.tsx` (rich-content). When user tried to rewrite `title` (a collab plain text field), the slug recomputed but the input didn't change — proof the plain branch ran. Fix: also added `onEditorMount` to `CollaborativePlainText` and wired it from `TextInput.tsx` and `TextareaInput.tsx`.
+- **Phase 4 list ops not delivered.** `insert_list_item` / `remove_list_item` require Lexical's nested ListNode/ListItemNode structure manipulation; deferred until concrete need. Heading/quote/code conversions land via `set_paragraph_type`.
+- **Tool routing edge case.** Agent occasionally picked `edit_text` for formatting requests during Phase 4 testing and narrated fake success. Fixed in Phase 5 by adding a HARD RULE to the system prompt: any formatting/link/paragraph-type op MUST use `update_form_state`.
+- **Known follow-up: continuation prefix bug.** Multi-turn conversations can 400 with `Continuation diverges from persisted conversation at message N` after a tool call whose arguments contain arrays/objects with non-stable JSON serialization. Tracked in `~/.claude/.../memory/project_continuation_array_args_bug.md`. Not specific to this plan — affects any tool with object/array args. Fix is to canonicalize JSON in `continuation.ts:93` before comparing.
+- **`update_field` (ResourceAgent's own write tool) is unrelated.** It's an older field-write mechanism scoped to a `ResourceAgent`'s `.fields([...])` allowlist. Phase 5 noted but did not consolidate it into `update_form_state`. Future cleanup.

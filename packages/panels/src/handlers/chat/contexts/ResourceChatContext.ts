@@ -240,6 +240,8 @@ export class ResourceChatContext implements ChatContext {
       '  field; prefer `edit_text` otherwise.',
       '',
       '## Rich-text formatting (only via `update_form_state`)',
+      '**HARD RULE:** any request to bold, italicize, underline, strikethrough, code-format, link, unlink, or change a paragraph\'s type (heading, quote, code, list) MUST use `update_form_state`. `edit_text` has NO formatting ops — if you call it for a formatting request, you will silently fail and lie to the user. There is no exception.',
+      '',
       'On Lexical text/rich-content fields, `update_form_state` exposes formatting operations that `edit_text` does not:',
       '- `format_text` — apply or remove bold/italic/underline/strikethrough/code on a matched text range. `marks` keys default to "leave unchanged"; pass `true` to apply, `false` to remove.',
       '- `set_link` / `unset_link` — wrap a matched substring in a link, or unwrap an existing link.',

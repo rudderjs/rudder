@@ -2,11 +2,15 @@
 
 Give the AI agent in `@rudderjs/panels` the ability to author **structured rich text** — not just plain strings. Today the agent can `replace`/`insert_after`/`delete`/`rewrite` raw text and `update_block` custom blocks. It cannot bold a word, link a phrase, turn a paragraph into a heading, build a bulleted list, or change font family. The Y.Doc tree already supports all of this — the gap is purely on the `@rudderjs/live` API and `edit_text` tool surface.
 
-**Status:** PROPOSED (2026-04-08)
+**Status:** SUPERSEDED (2026-04-08) — formatting ops delivered via `chat-update-form-state-plan.md` Phase 4 instead. The new path runs in the browser via Lexical's `editor.update()` API rather than walking Y.XmlText fragments server-side. `format_text`, `set_link`/`unset_link`, `set_paragraph_type`, `insert_paragraph` all ship as `update_form_state` ops, executed against the live `LexicalEditor` instance registered in `pages/_components/agents/lexicalRegistry.ts`. List ops (`insert_list_item`/`remove_list_item`) and font/style ops are NOT delivered — punt until concrete need.
+
+**Keep this doc for:** the Y.Doc spike notes are still useful if/when **headless** rich-text formatting is needed (background agents, queue workers, scheduled jobs, webhooks — anywhere there's no browser to route through). At that point, resurrect this plan and implement the formatting ops on top of `@rudderjs/live` so they land in `edit_text` server-side. Until a real headless use case appears, the browser-routed path is sufficient.
+
+**Original status:** PROPOSED (2026-04-08)
 **Estimated LOC:** ~650
 **Packages affected:** `@rudderjs/live`, `@rudderjs/panels`
 **Depends on:** `panels-block-write-completion-plan` (insert/delete blocks) — recommended to ship first so block ops and text-structure ops land in stable order.
-**Related:** `project_product_identity.md` (VS Code-for-content north star — this plan delivers the equivalent of "format on save" / "wrap selection in tag" / "convert to list")
+**Related:** `project_product_identity.md` (VS Code-for-content north star — this plan delivers the equivalent of "format on save" / "wrap selection in tag" / "convert to list"), `chat-update-form-state-plan.md` (the plan that superseded this one for the interactive case)
 
 ---
 
