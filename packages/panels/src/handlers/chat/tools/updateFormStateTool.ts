@@ -71,6 +71,41 @@ export async function buildUpdateFormStateTool(allFields: string[]) {
           type: z.literal('delete'),
           search: z.string().describe('Exact text to delete'),
         }),
+        // Rich-text formatting ops (Lexical fields only)
+        z.object({
+          type: z.literal('format_text'),
+          search: z.string().describe('Exact text whose formatting should change. Must lie within a single text run.'),
+          marks: z.object({
+            bold:          z.boolean().optional(),
+            italic:        z.boolean().optional(),
+            underline:     z.boolean().optional(),
+            strikethrough: z.boolean().optional(),
+            code:          z.boolean().optional(),
+          }).describe('Set true to apply, false to remove. Omit to leave unchanged.'),
+        }),
+        z.object({
+          type: z.literal('set_link'),
+          search: z.string().describe('Exact text to wrap in a link'),
+          url: z.string().describe('Link URL (absolute or root-relative)'),
+        }),
+        z.object({
+          type: z.literal('unset_link'),
+          search: z.string().describe('Text within the link to unwrap'),
+        }),
+        z.object({
+          type: z.literal('set_paragraph_type'),
+          selector: z.union([
+            z.object({ paragraphIndex: z.number().describe('0-based child index of the paragraph to convert') }),
+            z.object({ textContains: z.string().describe('First paragraph whose text content contains this substring') }),
+          ]),
+          paragraphType: z.enum(['paragraph', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'quote', 'code'])
+            .describe('Target paragraph node type'),
+        }),
+        z.object({
+          type: z.literal('insert_paragraph'),
+          text: z.string().describe('Plain text content for the new paragraph'),
+          position: z.number().optional().describe('0-based child index. Omit to append at end.'),
+        }),
         // Block ops (rich-content fields only — allowlist enforced client-side)
         z.object({
           type: z.literal('insert_block'),

@@ -18,6 +18,20 @@ import { getLexicalEditor } from './lexicalRegistry.js'
 
 // ── Op union ────────────────────────────────────────────────
 
+export type TextFormatMarks = {
+  bold?:          boolean
+  italic?:        boolean
+  underline?:     boolean
+  strikethrough?: boolean
+  code?:          boolean
+}
+
+export type ParagraphType = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'code'
+
+export type ParagraphSelector =
+  | { paragraphIndex: number }
+  | { textContains: string }
+
 export type UpdateFormStateOp =
   // Any-field ops
   | { type: 'set_value'; value: unknown }
@@ -26,7 +40,13 @@ export type UpdateFormStateOp =
   | { type: 'replace'; search: string; replace: string }
   | { type: 'insert_after'; search: string; text: string }
   | { type: 'delete'; search: string }
-  // Lexical-only ops
+  // Rich-text formatting ops (Lexical fields only)
+  | { type: 'format_text'; search: string; marks: TextFormatMarks }
+  | { type: 'set_link'; search: string; url: string }
+  | { type: 'unset_link'; search: string }
+  | { type: 'set_paragraph_type'; selector: ParagraphSelector; paragraphType: ParagraphType }
+  | { type: 'insert_paragraph'; text: string; position?: number }
+  // Block ops (Lexical fields only)
   | { type: 'insert_block'; blockType: string; blockData: Record<string, unknown>; position?: number }
   | { type: 'update_block'; blockType: string; blockIndex: number; field: string; value: unknown }
   | { type: 'delete_block'; blockType: string; blockIndex: number }
@@ -153,6 +173,12 @@ function applyPlainOp(
     case 'update_block':
     case 'delete_block':
       return `block ops only work on Lexical-backed rich-content fields; "${field}" is plain`
+    case 'format_text':
+    case 'set_link':
+    case 'unset_link':
+    case 'set_paragraph_type':
+    case 'insert_paragraph':
+      return `formatting ops only work on Lexical-backed text/rich-content fields; "${field}" is plain`
     default: {
       const exhaustive: never = op
       return `unknown op "${(exhaustive as { type: string }).type}"`
@@ -179,12 +205,15 @@ async function applyLexicalOps(
 ): Promise<UpdateFormStateResult> {
   // Dynamic imports — same pattern as `pages/@panel/+Layout.tsx`. These resolve
   // at runtime in the playground (or any host that installs panels-lexical).
-  let lexical: typeof import('lexical')
-  let panelsLexical: typeof import('@rudderjs/panels-lexical')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let lexical: any, panelsLexical: any, richText: any, link: any, code: any
   try {
-    ;[lexical, panelsLexical] = await Promise.all([
+    ;[lexical, panelsLexical, richText, link, code] = await Promise.all([
       import('lexical'),
       import('@rudderjs/panels-lexical'),
+      import('@lexical/rich-text'),
+      import('@lexical/link'),
+      import('@lexical/code'),
     ])
   } catch (err) {
     return {
@@ -196,6 +225,9 @@ async function applyLexicalOps(
 
   const { $getRoot, $createParagraphNode, $createTextNode } = lexical
   const { $createBlockNode, $isBlockNode } = panelsLexical
+  const { $createHeadingNode, $createQuoteNode } = richText
+  const { $createLinkNode, $isLinkNode } = link
+  const { $createCodeNode } = code
   // applyTextOp is exported from CollaborativePlainText — re-exported via index? Check fallback.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyTextOp = (panelsLexical as unknown as { applyTextOp?: any }).applyTextOp as
@@ -246,6 +278,112 @@ async function applyLexicalOps(
             } else {
               applied++
             }
+            break
+          }
+          case 'format_text': {
+            const target = findAndSplitText($getRoot, op.search)
+            if (!target) {
+              rejected.push(`format_text: search text "${op.search}" not found`)
+              break
+            }
+            const formats: Array<keyof TextFormatMarks> = ['bold', 'italic', 'underline', 'strikethrough', 'code']
+            for (const f of formats) {
+              if (op.marks[f] === true && !target.hasFormat(f)) target.toggleFormat(f)
+              else if (op.marks[f] === false && target.hasFormat(f)) target.toggleFormat(f)
+            }
+            applied++
+            break
+          }
+          case 'set_link': {
+            const target = findAndSplitText($getRoot, op.search)
+            if (!target) {
+              rejected.push(`set_link: search text "${op.search}" not found`)
+              break
+            }
+            const linkNode = $createLinkNode(op.url)
+            const newText = $createTextNode(target.getTextContent())
+            // Preserve formatting from the original text node
+            newText.setFormat(target.getFormat())
+            linkNode.append(newText)
+            target.replace(linkNode)
+            applied++
+            break
+          }
+          case 'unset_link': {
+            // Walk all nodes to find a LinkNode whose text contains the search.
+            let unwrapped = false
+            const walk = (node: { getChildren?: () => unknown[] }): void => {
+              if (unwrapped) return
+              const children = node.getChildren?.() ?? []
+              for (const child of children) {
+                if (unwrapped) return
+                if ($isLinkNode(child)) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const link = child as any
+                  if (link.getTextContent().includes(op.search)) {
+                    // Unwrap: replace LinkNode with its children inline
+                    const linkChildren = link.getChildren()
+                    for (const lc of linkChildren) link.insertBefore(lc)
+                    link.remove()
+                    unwrapped = true
+                    return
+                  }
+                }
+                walk(child as { getChildren?: () => unknown[] })
+              }
+            }
+            walk($getRoot())
+            if (unwrapped) applied++
+            else rejected.push(`unset_link: no link containing "${op.search}" found`)
+            break
+          }
+          case 'set_paragraph_type': {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const root: any = $getRoot()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let target: any = null
+            if ('paragraphIndex' in op.selector) {
+              target = root.getChildAtIndex(op.selector.paragraphIndex)
+            } else {
+              for (const child of root.getChildren()) {
+                if (typeof child.getTextContent === 'function' && child.getTextContent().includes(op.selector.textContains)) {
+                  target = child
+                  break
+                }
+              }
+            }
+            if (!target) {
+              rejected.push(`set_paragraph_type: paragraph not found for selector ${JSON.stringify(op.selector)}`)
+              break
+            }
+            const newNode = createParagraphLikeNode(
+              op.paragraphType,
+              { $createParagraphNode, $createHeadingNode, $createQuoteNode, $createCodeNode },
+            )
+            if (!newNode) {
+              rejected.push(`set_paragraph_type: unsupported type "${op.paragraphType}"`)
+              break
+            }
+            // Move children from target → newNode, then replace
+            const children = typeof target.getChildren === 'function' ? target.getChildren() : []
+            for (const c of children) newNode.append(c)
+            target.replace(newNode)
+            applied++
+            break
+          }
+          case 'insert_paragraph': {
+            const p = $createParagraphNode()
+            if (op.text) p.append($createTextNode(op.text))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const root: any = $getRoot()
+            if (typeof op.position === 'number') {
+              const at = root.getChildAtIndex(op.position)
+              if (at) at.insertBefore(p)
+              else root.append(p)
+            } else {
+              root.append(p)
+            }
+            applied++
             break
           }
           case 'insert_block': {
@@ -333,6 +471,39 @@ function replaceAllText(getRoot: any, createParagraph: any, createText: any, tex
     const p = createParagraph()
     if (line) p.append(createText(line))
     root.append(p)
+  }
+}
+
+/**
+ * Walk the editor's text nodes, find the first one whose content includes the
+ * search string, splitText to isolate the matched range, and return the
+ * resulting middle TextNode. Returns null if no match.
+ *
+ * Caller can then operate on the returned node directly (setFormat, replace
+ * with LinkNode, etc.).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findAndSplitText(getRoot: any, search: string): any | null {
+  const textNodes = getRoot().getAllTextNodes()
+  for (const node of textNodes) {
+    const text = node.getTextContent()
+    const idx = text.indexOf(search)
+    if (idx === -1) continue
+    const parts = node.splitText(idx, idx + search.length)
+    return idx === 0 ? parts[0]! : parts[1]!
+  }
+  return null
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createParagraphLikeNode(type: ParagraphType, ctors: any): any | null {
+  switch (type) {
+    case 'paragraph': return ctors.$createParagraphNode()
+    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
+      return ctors.$createHeadingNode(type)
+    case 'quote': return ctors.$createQuoteNode()
+    case 'code':  return ctors.$createCodeNode()
+    default: return null
   }
 }
 
