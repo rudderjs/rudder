@@ -41,6 +41,14 @@ export interface AgentRunState {
   /** Optional field-scope — for per-field actions, the single field the agent is allowed to touch. */
   fieldScope:   string | undefined
   /**
+   * Optional active text selection — for selection-mode runs initiated by the
+   * floating selection toolbar's `✦` button. Persisted so the continuation
+   * pass restores selection mode (toolkit filter + prompt block) on the
+   * resumed agent context. Without this, a continuation would silently fall
+   * out of selection mode and the model would lose its constraints.
+   */
+  selection:    { field: string; text: string } | undefined
+  /**
    * Tool call ids that were pending CLIENT-side when the run paused. The
    * continuation request MUST contain a tool result message for each of
    * these ids (otherwise the loop has nothing to resume with).

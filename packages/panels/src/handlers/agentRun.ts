@@ -48,7 +48,7 @@ export async function handleAgentRun(
   // ── Auth + record load + agent lookup ────────────────
   const setup = await loadAgentRunContext(req, res, ResourceClass, id, agentSlug, panelSlug)
   if ('errorResponse' in setup) return setup.errorResponse
-  const { agentDef, agentCtx, fieldScope, userId } = setup
+  const { agentDef, agentCtx, fieldScope, selection, userId } = setup
 
   // ── Parse optional user input ──────────────────────────
   let input: string | undefined
@@ -69,6 +69,7 @@ export async function handleAgentRun(
       resourceSlug: agentCtx.resourceSlug,
       recordId:     agentCtx.recordId,
       fieldScope,
+      selection,
       userId,
     })
   })
@@ -125,7 +126,7 @@ export async function handleAgentRunContinuation(
   // ── Auth + record load + agent lookup ────────────────
   const setup = await loadAgentRunContext(req, res, ResourceClass, id, agentSlug, panelSlug)
   if ('errorResponse' in setup) return setup.errorResponse
-  const { agentDef, agentCtx, fieldScope, userId } = setup
+  const { agentDef, agentCtx, userId } = setup
 
   // ── Load + validate run state ───────────────────────────
   const runState = await consumeRun(runId)
@@ -140,6 +141,22 @@ export async function handleAgentRunContinuation(
   if (runState.userId !== userId) {
     return res.status(403).json({ message: 'Run started by a different user.' })
   }
+
+  // Restore per-run scope state from runStore onto the agent context. The
+  // browser only sends `field` / `selection` on the INITIAL POST, not on
+  // continuations (see useAgentRun.ts), so without this restore the resumed
+  // pass would lose its scope: built-in actions would lose their fieldScope
+  // (empty `_fields` → empty tool enum → broken tools), and selection mode
+  // would lose its toolkit filter and prompt block. Persisting these on the
+  // run state and re-applying them on continuation is the load-bearing fix.
+  if (runState.fieldScope) {
+    agentCtx.fieldScope = [runState.fieldScope]
+  }
+  if (runState.selection) {
+    agentCtx.selection = runState.selection
+  }
+  const fieldScope = runState.fieldScope
+  const selection  = runState.selection
 
   // Tool result coverage check (mixed-tool aware):
   //
@@ -194,6 +211,7 @@ export async function handleAgentRunContinuation(
       resourceSlug: agentCtx.resourceSlug,
       recordId:     agentCtx.recordId,
       fieldScope,
+      selection,
       userId,
     })
   })
@@ -205,6 +223,7 @@ interface AgentRunSetup {
   agentDef:   PanelAgent
   agentCtx:   PanelAgentContext
   fieldScope: string | undefined
+  selection:  { field: string; text: string } | undefined
   userId:     string | undefined
 }
 
@@ -261,10 +280,20 @@ async function loadAgentRunContext(
   // `agentCtx.fieldScope` so `PanelAgent.buildTools()` builds the write
   // tools' enums against the single field instead of the agent's `_fields`
   // (which is empty for built-in actions like `rewrite`).
+  //
+  // Optional `selection` param activates selection mode — see
+  // `PanelAgentContext.selection` and `feedback_chat_selection_mode_prompt.md`.
   let fieldScope: string | undefined
+  let selection:  { field: string; text: string } | undefined
   try {
     const body = req.body as Record<string, unknown> | undefined
     if (body && typeof body['field'] === 'string') fieldScope = body['field']
+    if (body && typeof body['selection'] === 'object' && body['selection'] !== null) {
+      const sel = body['selection'] as Record<string, unknown>
+      if (typeof sel['field'] === 'string' && typeof sel['text'] === 'string') {
+        selection = { field: sel['field'], text: sel['text'] }
+      }
+    }
   } catch { /* no body */ }
 
   const agentCtx: PanelAgentContext = {
@@ -274,12 +303,14 @@ async function loadAgentRunContext(
     panelSlug,
     fieldMeta:    resource.getFieldMeta(),
     ...(fieldScope ? { fieldScope: [fieldScope] } : {}),
+    ...(selection ? { selection } : {}),
   }
 
   return {
     agentDef,
     agentCtx,
     fieldScope,
+    selection,
     userId: extractUserId(req),
   }
 }
@@ -334,6 +365,7 @@ async function emitTerminalState(
     resourceSlug: string
     recordId:     string
     fieldScope:   string | undefined
+    selection:    { field: string; text: string } | undefined
     userId:       string | undefined
   },
 ): Promise<void> {
@@ -371,6 +403,7 @@ async function emitTerminalState(
       resourceSlug:       meta.resourceSlug,
       recordId:           meta.recordId,
       fieldScope:         meta.fieldScope,
+      selection:          meta.selection,
       pendingToolCallIds: pendingIds,
       serverToolCallIds:  serverIds,
       userId:             meta.userId,

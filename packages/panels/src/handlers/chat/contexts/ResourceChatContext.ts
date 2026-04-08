@@ -13,6 +13,7 @@ import { buildReadFormStateTool } from '../tools/readFormStateTool.js'
 import { buildUpdateFormStateTool } from '../tools/updateFormStateTool.js'
 import { buildDeleteRecordTool } from '../tools/deleteRecordTool.js'
 import { buildBuilderCatalogPrompt, extractBuilderCatalog } from '../blockCatalog.js'
+import { buildSelectionInstructions } from '../selectionInstructions.js'
 import type { FieldBlockAllowlist } from '../tools/editTextTool.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -183,35 +184,16 @@ export class ResourceChatContext implements ChatContext {
       .join('\n')
 
     if (selection) {
-      // Selection mode MUST direct the model to `update_form_state`, never
-      // `edit_text`. `edit_text` on a non-collaborative field writes to a Yjs
-      // `fields` map that the plain React inputs don't subscribe to, so the
-      // tool returns success while the form is unchanged — the model then
-      // confidently lies to the user. `update_form_state` always operates on
-      // the live form state for every field type and supports formatting ops
-      // that `edit_text` lacks. The latency difference is negligible for a
-      // single selection-scoped edit; correctness wins.
+      // Selection mode is built from the shared `buildSelectionInstructions`
+      // helper so chat and the standalone path use one source of truth and
+      // can't drift. See `feedback_chat_selection_mode_prompt.md` for the
+      // bug that motivated extracting this. Callers must ALSO filter the
+      // toolkit (below, in `resolveContext`) — the prompt is the soft
+      // defense, the toolkit filter is the structural one.
       return [
         'You are an AI assistant that edits text fields in an admin panel.',
         '',
-        `## ACTIVE SELECTION — "${selection.field}" field`,
-        'The user selected this text:',
-        '"""',
-        selection.text,
-        '"""',
-        '',
-        'INSTRUCTIONS:',
-        `1. You MUST call \`update_form_state\` to apply the change. Do NOT use \`edit_text\` — it cannot reliably write to non-collaborative fields and has no formatting ops, so calling it here will silently fail and lie to the user. Do NOT just respond with text either.`,
-        `2. The field is "${selection.field}" — do NOT touch any other field.`,
-        '3. Pass the selected text above as the `search` argument for whichever op matches the user\'s request:',
-        '   - `replace` with `search: "<selected text>", replace: "<new text>"` — for rewrite, translate, shorten, expand, fix grammar, make formal, simplify, etc.',
-        '   - `delete` with `search: "<selected text>"` — for deletions',
-        '   - `format_text` with `search: "<selected text>", marks: {...}` — for bold / italic / underline / strikethrough / code (set `true` to apply, `false` to remove, omit to leave unchanged)',
-        '   - `set_link` with `search: "<selected text>", url: "..."` — for wrapping the selection in a link',
-        '   - `unset_link` with `search: "<selected text>"` — for removing a link from the selection',
-        '   - `set_paragraph_type` with `selector: { textContains: "<selected text>" }` and `paragraphType: ...` — only when the selection is (or sits inside) a single paragraph being converted to a heading / quote / code / etc.',
-        '4. SCOPE — every word the user types ("delete", "remove", "rewrite", "fix", etc.) refers to the SELECTED TEXT inside the field, never to the field as a whole and never to the record. "Delete selected" means delete the selected text from the field — it does NOT mean delete the record. There is no `delete_record` tool available in this mode for that reason.',
-        '5. After your `update_form_state` call returns success, STOP. Reply with one short confirmation sentence ("Deleted." / "Rewritten." / etc.) and end your turn. Do NOT call any other tools. Do NOT call `update_form_state` a second time. Do NOT continue reasoning about further edits unless the user asks again.',
+        buildSelectionInstructions(selection),
       ].join('\n')
     }
 

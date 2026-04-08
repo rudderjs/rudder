@@ -1,4 +1,5 @@
 import type { PanelAgentMeta } from './types.js'
+import { buildSelectionInstructions } from '../handlers/chat/selectionInstructions.js'
 
 // ─── Lazy imports (optional peer deps) ─────────────────────
 
@@ -49,6 +50,15 @@ export interface PanelAgentContext {
    * because they don't know in advance which field they'll run against.
    */
   fieldScope?:  string[]
+  /**
+   * Per-request active text selection. When set, the agent runs in
+   * "selection mode": `resolveInstructions()` appends the shared selection
+   * instructions block (telling the model to use `update_form_state` with
+   * `search: <selectedText>`), and `buildTools()` filters the toolkit down
+   * to `update_form_state` + `read_form_state` only. Both defenses are
+   * load-bearing — see `feedback_chat_selection_mode_prompt.md`.
+   */
+  selection?:   { field: string; text: string }
 }
 
 // ─── PanelAgent ─────────────────────────────────────────
@@ -191,7 +201,17 @@ export class PanelAgent {
       ? this.context.fieldScope
       : this._fields
     const preamble = buildToolSelectionPreamble(allFields, this.context.fieldMeta)
-    return preamble ? `${preamble}\n\n${interpolated}` : interpolated
+    const base = preamble ? `${preamble}\n\n${interpolated}` : interpolated
+
+    // Selection mode: append the shared selection instructions block. The
+    // helper is the single source of truth shared with the chat path
+    // (`ResourceChatContext.buildSystemPrompt()`) so the two surfaces can't
+    // drift. The toolkit filter in `buildTools()` is the structural
+    // counterpart to this prompt — both are load-bearing.
+    if (this.context.selection) {
+      return `${base}\n\n${buildSelectionInstructions(this.context.selection)}`
+    }
+    return base
   }
 
   /** Override to provide additional tools beyond field update tools. */
@@ -416,6 +436,21 @@ export class PanelAgent {
     const { buildReadFormStateTool }   = await import('../handlers/chat/tools/readFormStateTool.js')
     const updateFormStateTool = await buildUpdateFormStateTool(allFields)
     const readFormStateTool   = await buildReadFormStateTool()
+
+    // Selection mode: filter the toolkit to `update_form_state` +
+    // `read_form_state` only. Hides `update_field`, `edit_text`, `read_record`,
+    // any custom `_tools`, and any subclass `extraTools()`. This is the
+    // structural defense from `feedback_chat_selection_mode_prompt.md`: even
+    // if the model misreads "delete selected" as "delete the record" (caught
+    // in chat-side testing), the destructive tools simply aren't available.
+    // App devs who add custom tools via `Field.ai([Agent])` will see them
+    // stripped here too — intentional, see the plan's Risks section.
+    if (this.context.selection) {
+      return [
+        ...(updateFormStateTool ? [updateFormStateTool] : []),
+        readFormStateTool,
+      ]
+    }
 
     return [
       updateField,
