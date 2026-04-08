@@ -62,6 +62,14 @@ export interface Props {
   editorRef?:    React.MutableRefObject<LexicalEditorHandle | null>
   /** Callback when user clicks "Ask AI" on selected text in the floating toolbar. */
   onAskAi?:      (text: string) => void
+  /**
+   * Called once the live `LexicalEditor` instance is available. Return an
+   * optional cleanup function — invoked on unmount or when the instance
+   * changes. Used by `@rudderjs/panels` to register the editor in a global
+   * registry keyed by field name so the AI `update_form_state` client tool
+   * can dispatch ops to the same editor the user is typing into.
+   */
+  onEditorMount?: (editor: LexicalEditorType) => void | (() => void)
 }
 
 const EDITOR_NODES = [
@@ -100,7 +108,7 @@ export function LexicalEditor({
   value, onChange, placeholder, disabled,
   wsPath, docName, fragmentName = 'richcontent',
   blocks, toolbar: toolbarInput, slashCommand,
-  userName, userColor, editorRef, onAskAi,
+  userName, userColor, editorRef, onAskAi, onEditorMount,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
@@ -241,6 +249,7 @@ export function LexicalEditor({
         <OnChangePlugin onChange={onChange} />
         <EnsureBlockParagraphsPlugin />
         {editorRef && <EditorRefPlugin editorRef={editorRef} />}
+        {onEditorMount && <EditorMountPlugin onMount={onEditorMount} />}
         {collabActive && providerSynced && <SeedPlugin value={value} yjsRef={collabRef} />}
 
         <DragHandleLoader anchorRef={anchorRef} />
@@ -427,6 +436,20 @@ function EditorRefPlugin({ editorRef }: { editorRef: React.MutableRefObject<Lexi
     return () => { editorRef.current = null }
   }, [editor, editorRef])
 
+  return null
+}
+
+// ── EditorMountPlugin ──────────────────────────────────────
+// Surfaces the live LexicalEditor instance to the parent so it can be
+// registered in cross-cutting registries (e.g. the AI client-tool registry
+// in @rudderjs/panels). Cleanup runs on unmount or when the editor changes.
+
+function EditorMountPlugin({ onMount }: { onMount: (editor: LexicalEditorType) => void | (() => void) }) {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    const cleanup = onMount(editor)
+    return typeof cleanup === 'function' ? cleanup : undefined
+  }, [editor, onMount])
   return null
 }
 

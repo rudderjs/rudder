@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { getField, subscribeFields } from '@rudderjs/panels'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
+import { registerLexicalEditor } from '../agents/lexicalRegistry.js'
 import type { FieldInputProps } from './types.js'
 
 /** Global registry of editor refs for version restore + AI text extraction. Keyed by field name. */
@@ -38,6 +39,16 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
     return () => { editorRefs.delete(field.name) }
   }, [field.name])
 
+  // Register the live LexicalEditor instance under this field name so the AI
+  // `update_form_state` client tool can dispatch ops via editor.update().
+  // Stable across renders so onEditorMount itself doesn't re-fire on parent
+  // re-renders, only when the editor instance actually changes.
+  const onEditorMount = useCallback(
+    (editor: Parameters<typeof registerLexicalEditor>[1]) =>
+      registerLexicalEditor(fieldName, editor),
+    [fieldName],
+  )
+
   // Reactively wait for the Lexical rich-text component to register.
   const RichEditor = useSyncExternalStore(
     subscribeFields,
@@ -61,6 +72,7 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
         {...(userName !== undefined ? { userName } : {})}
         {...(userColor !== undefined ? { userColor } : {})}
         editorRef={editorRef}
+        onEditorMount={onEditorMount}
         {...(hasAskAi ? { onAskAi } : {})}
       />
     )
