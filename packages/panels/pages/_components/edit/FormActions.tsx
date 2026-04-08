@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { PanelI18n, PanelAgentMeta } from '@rudderjs/panels'
 import { useAgentRun } from '../agents/useAgentRun.js'
+import { AiActionProgress } from '../agents/AiActionProgress.js'
 
 interface Props {
   draftable:     boolean
@@ -26,7 +27,15 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
   // endpoint instead of being injected into chat. The agent uses the
   // client-tool toolkit (update_form_state, read_form_state) so non-collab
   // fields are no longer clobbered.
-  const { run, status } = useAgentRun(apiBase ?? '', resourceSlug ?? '')
+  const { run, reset, entries, status } = useAgentRun(apiBase ?? '', resourceSlug ?? '')
+
+  // Auto-dismiss the success popover ~3s after a clean completion. Errors
+  // stay until the user dismisses them so they don't get missed.
+  useEffect(() => {
+    if (status !== 'complete') return
+    const timer = setTimeout(() => reset(), 3000)
+    return () => clearTimeout(timer)
+  }, [status, reset])
 
   function handleAgentClick(agent: PanelAgentMeta) {
     setDropdownOpen(false)
@@ -34,7 +43,8 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
     run(agent.slug, recordId)
   }
 
-  const isRunning = status === 'running'
+  const isRunning    = status === 'running'
+  const showProgress = entries.length > 0
 
   return (
     <div className="flex items-center gap-3 pt-2">
@@ -92,7 +102,7 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
             onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-md transition-colors disabled:opacity-50"
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className={`w-3.5 h-3.5 ${isRunning ? 'animate-pulse text-primary' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
             </svg>
             AI Agents
@@ -100,7 +110,7 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
               <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
             </svg>
           </button>
-          {dropdownOpen && (
+          {dropdownOpen && !showProgress && (
             <div className="absolute bottom-full mb-1 right-0 w-52 border rounded-md bg-popover shadow-md py-1 z-50">
               {agents!.map(agent => (
                 <button
@@ -114,6 +124,14 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
                 </button>
               ))}
             </div>
+          )}
+          {showProgress && (
+            <AiActionProgress
+              entries={entries}
+              status={status}
+              onDismiss={reset}
+              className="absolute right-0 bottom-full mb-1"
+            />
           )}
         </div>
       )}

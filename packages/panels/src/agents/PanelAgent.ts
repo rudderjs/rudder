@@ -151,24 +151,47 @@ export class PanelAgent {
   /**
    * Override for dynamic instructions based on record data.
    *
-   * Built-in field actions (`rewrite`, `shorten`, etc.) and any custom
-   * agent that wants to render the active field name in its prompt can use
-   * `{field}` as a placeholder — it gets substituted with the first entry
-   * of `context.fieldScope` (set by the standalone endpoint when the user
-   * clicks an action on a specific field). Falls back to the agent's first
-   * declared `_fields` entry, then to a generic "the active" if neither is
-   * available.
+   * Returns the user-supplied `.instructions(...)` text with two
+   * augmentations:
+   *
+   * 1. **`{field}` interpolation** — built-in field actions (`rewrite`,
+   *    `shorten`, etc.) and any custom agent that wants to render the
+   *    active field name in its prompt can use `{field}` as a placeholder.
+   *    Substituted with the first entry of `context.fieldScope` (set by
+   *    the standalone endpoint when the user clicks an action on a
+   *    specific field). Falls back to `_fields[0]`, then to "the active".
+   *
+   * 2. **Tool selection preamble** — auto-prepends rules that teach the
+   *    model which write tool to use for which field type. Uses
+   *    `context.fieldMeta` to be specific about which fields are
+   *    collaborative vs. not, so the model knows that (e.g.) writing to
+   *    `metaTitle` MUST go through `update_form_state` because it's a
+   *    plain text field where the user might have unsaved edits. Without
+   *    this, the model picks `update_field` (which writes to the DB and
+   *    bypasses live React state) and the user sees no visible change.
    */
   resolveInstructions(): string {
     const raw = typeof this._instructions === 'function'
       ? this._instructions(this.context.record)
       : this._instructions
-    if (!raw.includes('{field}')) return raw
+
+    // Substitute {field} placeholders.
     const fieldName =
       this.context.fieldScope?.[0] ??
       this._fields[0] ??
       'the active'
-    return raw.split('{field}').join(fieldName)
+    const interpolated = raw.includes('{field}')
+      ? raw.split('{field}').join(fieldName)
+      : raw
+
+    // Build the tool selection preamble. Reads context.fieldMeta to
+    // partition the agent's allowed fields into "collab text" vs
+    // "non-collab" so the rules can name them explicitly.
+    const allFields = this.context.fieldScope && this.context.fieldScope.length > 0
+      ? this.context.fieldScope
+      : this._fields
+    const preamble = buildToolSelectionPreamble(allFields, this.context.fieldMeta)
+    return preamble ? `${preamble}\n\n${interpolated}` : interpolated
   }
 
   /** Override to provide additional tools beyond field update tools. */
@@ -203,9 +226,10 @@ export class PanelAgent {
     const updateField = toolDefinition({
       name: 'update_field',
       description: [
-        'Set a field on the current record to a new value. Whole-replace, not surgical.',
-        'Works on every field type: text, richcontent, select, boolean, number, date, tags, json.',
-        'For surgical text edits (replace a phrase, insert after, etc.) prefer `edit_text`.',
+        '⚠️ HEADLESS-ONLY write tool. Writes directly to the database / Y.Doc, bypassing the user\'s live React form state.',
+        '🚫 DO NOT CALL THIS TOOL when there is a user interacting with the page. They will see NO visible change.',
+        '✅ Use `update_form_state` instead — it routes through the live form state so the user actually sees the change.',
+        'This tool exists ONLY for headless runs (cron jobs, queue workers, background scripts) where no browser is connected.',
         'Available fields: ' + allFields.join(', '),
       ].join(' '),
       inputSchema: z.object({
@@ -284,10 +308,10 @@ export class PanelAgent {
     const editText = toolDefinition({
       name: 'edit_text',
       description: [
-        'Edit text or blocks in a field. Use `rewrite` to replace the entire content,',
-        '`replace`/`insert_after`/`delete` for surgical text edits, and `update_block`',
-        'to update embedded block fields (callToAction, video, etc.).',
-        'For non-text fields (boolean, select, number, date, tags), use `update_field` instead.',
+        '⚠️ HEADLESS-ONLY tool. Edits text/blocks in a field by writing directly to the Y.Doc.',
+        '🚫 DO NOT CALL THIS TOOL when there is a user interacting with the page — use `update_form_state` instead.',
+        '`update_form_state` has all of these operations PLUS formatting (bold/italic/links/paragraph types) AND it routes through the user\'s live React/Lexical state so the user actually sees the change.',
+        'This tool exists ONLY for headless runs (cron jobs, queue workers, background scripts) where no browser is connected.',
         'Available fields: ' + allFields.join(', '),
       ].join(' '),
       inputSchema: z.object({
@@ -467,4 +491,80 @@ export class PanelAgent {
       fields: this._fields,
     }
   }
+}
+
+// ─── Tool selection preamble ───────────────────────────────
+
+/**
+ * Build a system-prompt preamble that teaches the model which write tool to
+ * use for which field. Auto-prepended by `PanelAgent.resolveInstructions()`.
+ *
+ * **Why this exists:** the standalone runner has no system-prompt
+ * augmentation layer (chat does — see `ResourceChatContext.buildSystemPrompt`).
+ * Without the preamble, agents pick `update_field` (DB write) for non-collab
+ * fields and the user sees no visible change because the React form state
+ * isn't refreshed. The chat path's tool selection rules need to live on the
+ * agent itself so they apply equally to both surfaces.
+ *
+ * The preamble is built from the agent's actual `fieldMeta`, so it names
+ * fields specifically: "field `metaTitle` is non-collaborative — write via
+ * update_form_state" rather than abstract guidance the model might ignore.
+ */
+function buildToolSelectionPreamble(
+  allFields: string[],
+  fieldMeta: PanelAgentContext['fieldMeta'],
+): string {
+  if (!allFields || allFields.length === 0) return ''
+
+  // Partition the fields by type for the per-field guidance line. We don't
+  // change the rule based on collab vs non-collab anymore — the rule is
+  // always the same: use update_form_state. The partition just lets us
+  // explain *why* in the prompt (Lexical fields surface formatting ops via
+  // update_form_state too).
+  const richTextFields: string[] = []
+  const plainFields:    string[] = []
+  for (const name of allFields) {
+    const meta = fieldMeta?.[name]
+    const isRich = meta?.type === 'richcontent' || meta?.type === 'content'
+    if (isRich) richTextFields.push(name)
+    else        plainFields.push(name)
+  }
+
+  const lines = [
+    '# Tool selection rules — READ BEFORE WRITING ANYTHING',
+    '',
+    'You have multiple write tools. **THERE IS A USER INTERACTING WITH THE PAGE RIGHT NOW** — picking the wrong tool will silently fail because their browser will not see your change.',
+    '',
+    '## ✅ ALWAYS USE `update_form_state` FOR WRITES',
+    '',
+    '`update_form_state` is the ONLY write tool that updates what the user actually sees on screen. It routes through the user\'s live React form state and Lexical editor instances. Every write you do MUST go through it.',
+    '',
+  ]
+
+  if (plainFields.length > 0) {
+    lines.push(
+      `- For plain fields (${plainFields.join(', ')}): use \`update_form_state\` with a \`set_value\` operation.`,
+    )
+  }
+  if (richTextFields.length > 0) {
+    lines.push(
+      `- For rich-text fields (${richTextFields.join(', ')}): use \`update_form_state\` with \`rewrite_text\` for whole replacements, or surgical ops (\`format_text\`, \`set_link\`, \`insert_paragraph\`, \`set_paragraph_type\`, block ops) for precise edits.`,
+    )
+  }
+
+  lines.push(
+    '',
+    '## ❌ DO NOT USE `update_field` OR `edit_text`',
+    '',
+    '`update_field` writes to the database directly and bypasses the user\'s live form state. They will see NO visible change and may lose unsaved edits. `edit_text` writes to the Y.Doc directly and has the same problem for non-collab fields plus has no formatting operations.',
+    '',
+    'These two tools are for HEADLESS / BACKGROUND runs only (cron jobs, queue workers — when there is no browser open). When in doubt, they are wrong. Use `update_form_state`.',
+    '',
+    '## Reading',
+    '',
+    '- `read_record` — fast, reads from the database (good for context).',
+    '- `read_form_state` — reads the user\'s live form values including unsaved edits (use when you need the latest visible state).',
+  )
+
+  return lines.join('\n')
 }

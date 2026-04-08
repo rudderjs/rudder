@@ -41,12 +41,21 @@ export interface AgentRunState {
   /** Optional field-scope — for per-field actions, the single field the agent is allowed to touch. */
   fieldScope:   string | undefined
   /**
-   * Tool call ids that were pending when the run paused. The continuation
-   * request's tool result messages must cover exactly these ids — no more,
-   * no less. This blocks an attacker from injecting tool results for tool
-   * calls the model never made.
+   * Tool call ids that were pending CLIENT-side when the run paused. The
+   * continuation request MUST contain a tool result message for each of
+   * these ids (otherwise the loop has nothing to resume with).
    */
   pendingToolCallIds: string[]
+  /**
+   * Tool call ids whose results were already produced server-side during
+   * the initial run (`read_record`, `update_field`, `edit_text`, etc.). The
+   * continuation request MAY include tool result messages for these ids,
+   * because the browser mirrors the full SSE wire log into its
+   * continuation body — see mixed-tool-continuation-plan.md. Any tool
+   * result id that's NOT in `pendingToolCallIds ∪ serverToolCallIds` is a
+   * forgery attempt and gets rejected.
+   */
+  serverToolCallIds:  string[]
   /** User id captured at run start — continuation must come from the same user. */
   userId: string | undefined
 }

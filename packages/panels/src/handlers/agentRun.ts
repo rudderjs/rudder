@@ -141,18 +141,42 @@ export async function handleAgentRunContinuation(
     return res.status(403).json({ message: 'Run started by a different user.' })
   }
 
-  // Tool result coverage check: every pending tool call id from the original
-  // run must have a matching tool result message in the continuation body, and
-  // no extra tool result messages may appear (no forging).
+  // Tool result coverage check (mixed-tool aware):
+  //
+  //   1. Every pending CLIENT tool call id MUST appear as a tool result —
+  //      otherwise the loop has nothing to resume with.
+  //   2. Every submitted tool result id MUST appear in the union of pending
+  //      client ids + server ids that ran during the initial pass —
+  //      anything else is a forgery attempt.
+  //
+  // The reason we have to allow server tool result ids in the body at all
+  // is that the browser mirrors the full SSE wire log into its continuation
+  // (server tool results were emitted as `tool_result` SSE events and the
+  // browser captured them into wireMessages). Without this allowance,
+  // mixed-tool turns 400 — see mixed-tool-continuation-plan.md for the
+  // chat-side equivalent of this fix.
   const submittedToolResultIds = messages
     .filter(m => m.role === 'tool' && typeof m.toolCallId === 'string')
     .map(m => m.toolCallId as string)
-  const expected = new Set(runState.pendingToolCallIds)
-  const submitted = new Set(submittedToolResultIds)
-  if (expected.size !== submitted.size || ![...expected].every(id => submitted.has(id))) {
-    return res.status(400).json({
-      message: 'Continuation tool results do not match the run\'s pending tool calls.',
-    })
+  const requiredClientIds = new Set(runState.pendingToolCallIds)
+  const allowedAllIds     = new Set([...runState.pendingToolCallIds, ...runState.serverToolCallIds])
+  const submittedSet      = new Set(submittedToolResultIds)
+
+  // Every required client tool call must have a result.
+  for (const id of requiredClientIds) {
+    if (!submittedSet.has(id)) {
+      return res.status(400).json({
+        message: `Continuation missing tool result for pending client tool call ${id}.`,
+      })
+    }
+  }
+  // Every submitted result must reference a tool call that actually happened.
+  for (const id of submittedSet) {
+    if (!allowedAllIds.has(id)) {
+      return res.status(400).json({
+        message: `Continuation contains tool result ${id} that does not match any tool call from the original run.`,
+      })
+    }
   }
 
   // ── Stream the resumed loop ─────────────────────────────
@@ -318,15 +342,27 @@ async function emitTerminalState(
     result.finishReason === 'tool_approval_required'
 
   if (isPending) {
-    // Collect the pending tool call ids so the continuation request can be
-    // validated against them. Both client-tool stops and approval stops
-    // surface the pending calls via the result fields.
+    // Collect pending CLIENT tool call ids — the continuation MUST cover
+    // each of these (the loop is waiting on them).
     const pendingIds: string[] = []
     if (result.pendingClientToolCalls) {
       for (const tc of result.pendingClientToolCalls) pendingIds.push(tc.id)
     }
     if (result.pendingApprovalToolCall) {
       pendingIds.push(result.pendingApprovalToolCall.toolCall.id)
+    }
+
+    // Collect SERVER tool call ids that already produced results during the
+    // initial pass. The browser mirrors their results into the continuation
+    // body (it captured them from `tool_result` SSE events), so they're
+    // ALLOWED to appear in the continuation — but anything outside this set
+    // is a forgery attempt. See the validation block in
+    // `handleAgentRunContinuation` and mixed-tool-continuation-plan.md.
+    const serverIds: string[] = []
+    for (const step of result.steps) {
+      for (const tr of step.toolResults) {
+        serverIds.push(tr.toolCallId)
+      }
     }
 
     const runId = generateRunId()
@@ -336,6 +372,7 @@ async function emitTerminalState(
       recordId:           meta.recordId,
       fieldScope:         meta.fieldScope,
       pendingToolCallIds: pendingIds,
+      serverToolCallIds:  serverIds,
       userId:             meta.userId,
     }
     await storeRun(runId, state)

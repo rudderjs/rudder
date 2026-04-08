@@ -307,10 +307,10 @@ export class ArticleResource extends Resource {
         .instructions('You are an SEO expert. Analyse the current article and improve the meta title and meta description for better search engine visibility. Keep the meta title under 60 characters and meta description under 160 characters. Use the title and excerpt for context.')
         .fields(['metaTitle', 'metaDescription']),
 
-      PanelAgent.make('editor')
-        .label('Edit Content')
-        .icon('Pencil')
-        .instructions('You are a content editor. You can edit the article title and content fields. Always call read_record first to see the current content.')
+      PanelAgent.make('improve-content')
+        .label('Improve Content')
+        .icon('Search')
+        .instructions('You are a content editor. you can edit the content of the article to improve clarity, grammar, and engagement. Use the current content and title for context.')
         .fields(['title', 'content']),
     ]
   }
