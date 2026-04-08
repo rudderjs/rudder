@@ -81,6 +81,17 @@ export function makeUpdateFormStateHandler(deps: UpdateFormStateDeps) {
       return { applied: 0, total: 0, error: 'No operations supplied' }
     }
 
+    // Phase 3 dev log — verifies the agent is routing through the client tool
+    // path. Remove once Phase 5 ships.
+    if (typeof console !== 'undefined') {
+      // eslint-disable-next-line no-console
+      console.log(
+        `%c[update_form_state]%c field="${args.field}" ops=${ops.map(o => o.type).join(',')}`,
+        'color:#8b5cf6;font-weight:bold',
+        'color:inherit',
+      )
+    }
+
     const editor = getLexicalEditor(args.field)
     if (editor) {
       return applyLexicalOps(editor, args.field, ops, deps)

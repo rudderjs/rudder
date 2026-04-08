@@ -137,6 +137,7 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
           <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
           <span>
             Updated <span className="font-medium text-foreground">{part.input?.field as string ?? part.tool.replace('update_', '')}</span>
+            <span className="ml-1 text-[10px] opacity-60">({part.tool})</span>
           </span>
         </div>
       )

@@ -10,6 +10,7 @@ import { loadLive } from '../lazyImports.js'
 import { buildRunAgentTool } from '../tools/runAgentTool.js'
 import { buildEditTextTool } from '../tools/editTextTool.js'
 import { buildReadFormStateTool } from '../tools/readFormStateTool.js'
+import { buildUpdateFormStateTool } from '../tools/updateFormStateTool.js'
 import { buildDeleteRecordTool } from '../tools/deleteRecordTool.js'
 import { buildBuilderCatalogPrompt, extractBuilderCatalog } from '../blockCatalog.js'
 import type { FieldBlockAllowlist } from '../tools/editTextTool.js'
@@ -134,17 +135,19 @@ export class ResourceChatContext implements ChatContext {
       blockAllowlist[entry.fieldName] = new Set(entry.blocks.map(b => b.name))
     }
 
-    const runAgentTool      = await buildRunAgentTool(agents, agentCtx, message, send)
-    const editTextTool      = await buildEditTextTool(agentCtx, allFields, record, selection, blockAllowlist)
-    const readFormStateTool = await buildReadFormStateTool()
-    const deleteRecordTool  = Model
+    const runAgentTool         = await buildRunAgentTool(agents, agentCtx, message, send)
+    const editTextTool         = await buildEditTextTool(agentCtx, allFields, record, selection, blockAllowlist)
+    const readFormStateTool    = await buildReadFormStateTool()
+    const updateFormStateTool  = await buildUpdateFormStateTool(allFields)
+    const deleteRecordTool     = Model
       ? await buildDeleteRecordTool({ Model, recordId })
       : null
     const tools: AnyTool[] = [
-      ...(runAgentTool      ? [runAgentTool]      : []),
-      ...(editTextTool      ? [editTextTool]      : []),
+      ...(runAgentTool         ? [runAgentTool]        : []),
+      ...(editTextTool         ? [editTextTool]        : []),
       readFormStateTool,
-      ...(deleteRecordTool  ? [deleteRecordTool]  : []),
+      ...(updateFormStateTool  ? [updateFormStateTool] : []),
+      ...(deleteRecordTool     ? [deleteRecordTool]    : []),
     ]
 
     // 8. Pre-render the builder block catalog (LSP-style structured metadata
@@ -215,7 +218,26 @@ export class ResourceChatContext implements ChatContext {
         '',
         'If the user\'s request maps to one of the available agents, call the `run_agent` tool with the agent slug.',
       ] : []),
-      'If the user asks to edit, replace, insert, or delete specific text in a field, use the `edit_text` tool directly.',
+      'If the user asks to edit, replace, insert, or delete specific text in a field, use one of the edit tools below.',
+      '',
+      '## Editing fields — `edit_text` vs `update_form_state`',
+      'You have TWO write tools that overlap. Pick deliberately:',
+      '',
+      '- **`update_form_state`** — routes the edit through the user\'s browser. Use this for:',
+      '  (a) non-collaborative fields,',
+      '  (b) non-text field types (`select`, `boolean`, `number`, `date`, `tags`, `relation`),',
+      '  (c) any field where the user has unsaved local changes you want to preserve, or',
+      '  (d) the field the user is actively editing right now.',
+      '  This is the safer default. It always sees the user\'s in-progress edits.',
+      '',
+      '- **`edit_text`** — mutates the server-side Y.Doc directly. Faster (no browser round-trip),',
+      '  but only works on collaborative text/rich-content fields and CANNOT touch select/boolean/',
+      '  number/date fields. Prefer this when the field is collaborative AND the user is not actively',
+      '  editing it (e.g. background rewrites of body content while the user is typing in the title).',
+      '',
+      '- **Block operations** (`insert_block` / `update_block` / `delete_block`) work in BOTH tools',
+      '  for rich-content fields. Prefer `update_form_state` if the user is actively editing that',
+      '  field; prefer `edit_text` otherwise.',
       '',
       '## Reading the user\'s in-progress edits',
       'The "Current Record" snapshot above includes saved DB values + collaborative (Yjs) field overlays — but it does NOT include unsaved edits to non-collaborative fields, which live only in the user\'s browser form state.',
