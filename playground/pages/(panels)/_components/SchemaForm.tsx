@@ -12,6 +12,7 @@ import { useFormPersist } from '../_hooks/useFormPersist.js'
 import { useFieldPersist } from '../_hooks/useFieldPersist.js'
 import { flattenFormFields } from '../_lib/formHelpers.js'
 import { registerClientTool } from './agents/clientTools.js'
+import { makeUpdateFormStateHandler } from './agents/updateFormStateHandler.js'
 import type { SchemaItem } from '../_lib/formHelpers.js'
 
 interface SchemaFormProps {
@@ -280,6 +281,12 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
   const valuesRef = useRef(values)
   valuesRef.current = values
 
+  // Stable ref to the latest handleChange. Lets external callers (e.g. the AI
+  // `update_form_state` client tool handler) write to fields outside React's
+  // event flow while still triggering dependent-field recompute, persistence,
+  // and Y.Map sync — i.e. the same path human input takes.
+  const setFieldRef = useRef<(name: string, value: unknown) => void>(() => {})
+
   // Register the `read_form_state` client tool so the AI assistant can read
   // unsaved local edits to non-collaborative fields. The handler reads from
   // `valuesRef` (always the latest snapshot) and is unregistered on unmount.
@@ -293,6 +300,34 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       )
     })
   }, [])
+
+  // Register the `update_form_state` client tool. Phase 1 covers plain (non-
+  // Lexical) fields only; the Lexical branch is added in Phase 2. Phase 0/1
+  // also installs `window.__updateFormState` so the handler can be exercised
+  // from devtools before the server-side tool definition lands in Phase 3.
+  useEffect(() => {
+    const knownFieldsSnapshot = new Set(
+      flattenFormFields(form.fields as SchemaItem[], mode)
+        .map(f => f.name)
+        .filter((n): n is string => !!n),
+    )
+    const handler = makeUpdateFormStateHandler({
+      valuesRef,
+      setField: (name, value) => setFieldRef.current(name, value),
+      knownFields: () => knownFieldsSnapshot,
+    })
+    const unregister = registerClientTool('update_form_state', handler)
+    if (typeof window !== 'undefined') {
+      ;(window as unknown as { __updateFormState?: typeof handler }).__updateFormState = handler
+    }
+    return () => {
+      unregister()
+      if (typeof window !== 'undefined') {
+        delete (window as unknown as { __updateFormState?: unknown }).__updateFormState
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.id, mode])
 
   function handleChange(name: string, value: unknown) {
     const next = { ...valuesRef.current, [name]: value }
@@ -347,6 +382,8 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       }
     }
   }
+  // Keep the external setField ref pointing at the latest closure on every render.
+  setFieldRef.current = handleChange
 
   // ── Edit-mode features (autosave, versioning, draft) ──────
   const formMeta = form as SchemaFormMeta & { autosave?: boolean; autosaveInterval?: number; versioned?: boolean; draftable?: boolean }
