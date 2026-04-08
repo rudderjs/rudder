@@ -1,7 +1,7 @@
 export { LexicalEditor } from './LexicalEditor.js'
 export type { Props as LexicalEditorProps, LexicalEditorHandle } from './LexicalEditor.js'
 
-export { CollaborativePlainText } from './CollaborativePlainText.js'
+export { CollaborativePlainText, applyTextOp } from './CollaborativePlainText.js'
 export type { EditOperation, EditorHandle } from './CollaborativePlainText.js'
 
 export { BlockNode, $createBlockNode, $isBlockNode } from './lexical/BlockNode.js'

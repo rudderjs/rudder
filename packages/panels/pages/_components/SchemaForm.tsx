@@ -306,15 +306,30 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
   // also installs `window.__updateFormState` so the handler can be exercised
   // from devtools before the server-side tool definition lands in Phase 3.
   useEffect(() => {
+    const flatFields = flattenFormFields(form.fields as SchemaItem[], mode)
     const knownFieldsSnapshot = new Set(
-      flattenFormFields(form.fields as SchemaItem[], mode)
-        .map(f => f.name)
-        .filter((n): n is string => !!n),
+      flatFields.map(f => f.name).filter((n): n is string => !!n),
     )
+    // Derive block allowlist from each field's _extra.blocks meta — same
+    // source the rich-content editor uses for its slash menu / catalog.
+    const allowlistSnapshot = new Map<string, Set<string>>()
+    for (const f of flatFields) {
+      if (!f.name) continue
+      const blocks = (f as FieldMeta & { extra?: Record<string, unknown> }).extra?.['blocks']
+      if (Array.isArray(blocks)) {
+        const names = new Set<string>()
+        for (const b of blocks) {
+          const name = (b as { name?: unknown })?.name
+          if (typeof name === 'string') names.add(name)
+        }
+        allowlistSnapshot.set(f.name, names)
+      }
+    }
     const handler = makeUpdateFormStateHandler({
       valuesRef,
       setField: (name, value) => setFieldRef.current(name, value),
       knownFields: () => knownFieldsSnapshot,
+      blockAllowlist: () => allowlistSnapshot,
     })
     const unregister = registerClientTool('update_form_state', handler)
     if (typeof window !== 'undefined') {

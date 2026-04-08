@@ -7,7 +7,7 @@ import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin'
 import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin'
 import { LexicalCollaboration } from '@lexical/react/LexicalCollaborationContext'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { $getRoot, $getSelection, $isRangeSelection, $createParagraphNode, $createTextNode, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW, type TextNode } from 'lexical'
+import { $getRoot, $getSelection, $isRangeSelection, $createParagraphNode, $createTextNode, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW, type TextNode, type LexicalEditor as LexicalEditorType } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
 import { useYjsCollab } from './hooks/useYjsCollab.js'
 
@@ -99,6 +99,14 @@ interface Props {
   editorRef?:  React.MutableRefObject<EditorHandle | null>
   /** Callback when user clicks "Ask AI" on selected text. */
   onAskAi?:    ((text: string) => void) | undefined
+  /**
+   * Called once the live LexicalEditor instance is available. Return an
+   * optional cleanup function. Used by `@rudderjs/panels` to register the
+   * editor in a global registry keyed by field name so the AI
+   * `update_form_state` client tool can dispatch ops to the same editor the
+   * user is typing into.
+   */
+  onEditorMount?: (editor: LexicalEditorType) => void | (() => void)
 }
 
 const THEME = {
@@ -115,7 +123,7 @@ const THEME = {
 export function CollaborativePlainText({
   value, onChange, wsPath, docName, fieldName,
   userName, userColor, placeholder, disabled, required,
-  className, multiline = false, editorRef, onAskAi,
+  className, multiline = false, editorRef, onAskAi, onEditorMount,
 }: Props) {
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
   const fragmentName = `text:${fieldName}`
@@ -181,6 +189,7 @@ export function CollaborativePlainText({
         {!multiline && <BlockEnterPlugin />}
         {providerSynced && <SeedPlugin value={value} yjsRef={collabRef} />}
         {editorRef && <PlainTextEditorRefPlugin editorRef={editorRef} />}
+        {onEditorMount && <EditorMountPlugin onMount={onEditorMount} />}
         {onAskAi && <SelectionAiPlugin onAskAi={onAskAi} />}
       </div>
     </LexicalComposer>
@@ -301,6 +310,20 @@ function PlainTextEditorRefPlugin({ editorRef }: { editorRef: React.MutableRefOb
     return () => { editorRef.current = null }
   }, [editor, editorRef])
 
+  return null
+}
+
+// ── EditorMountPlugin ──────────────────────────────────────
+// Surfaces the live LexicalEditor instance to the parent so it can be
+// registered in cross-cutting registries (e.g. the AI client-tool registry
+// in @rudderjs/panels). Cleanup runs on unmount or when the editor changes.
+
+function EditorMountPlugin({ onMount }: { onMount: (editor: LexicalEditorType) => void | (() => void) }) {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => {
+    const cleanup = onMount(editor)
+    return typeof cleanup === 'function' ? cleanup : undefined
+  }, [editor, onMount])
   return null
 }
 
