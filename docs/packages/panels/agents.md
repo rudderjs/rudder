@@ -11,7 +11,7 @@ Requires `@rudderjs/ai` as a peer dependency.
 Override the `agents()` method on a resource to define available agents:
 
 ```ts
-import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@rudderjs/panels'
+import { Resource, PanelAgent, TextField, TextareaField, Form } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   static model = Article
@@ -27,13 +27,13 @@ export class ArticleResource extends Resource {
 
   agents() {
     return [
-      ResourceAgent.make('seo')
+      PanelAgent.make('seo')
         .label('Improve SEO')
         .icon('Search')
         .instructions('Analyse and improve the meta title and description for better SEO.')
         .fields(['metaTitle', 'metaDescription']),
 
-      ResourceAgent.make('summarize')
+      PanelAgent.make('summarize')
         .label('Write Excerpt')
         .icon('Sparkles')
         .instructions('Write a concise excerpt based on the article title and content.')
@@ -47,7 +47,7 @@ export class ArticleResource extends Resource {
 
 | Method | Description |
 |---|---|
-| `ResourceAgent.make(slug)` | Create a new agent with a unique slug |
+| `PanelAgent.make(slug)` | Create a new agent with a unique slug |
 | `.label(string)` | Display name in the UI |
 | `.icon(string)` | Lucide icon name |
 | `.instructions(string \| fn)` | System prompt — static string or function receiving the record |
@@ -69,11 +69,11 @@ Every agent automatically gets:
 For complex agents with custom tools or dynamic instructions:
 
 ```ts
-import { ResourceAgent } from '@rudderjs/panels'
+import { PanelAgent } from '@rudderjs/panels'
 import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 
-class TranslateAgent extends ResourceAgent {
+class TranslateAgent extends PanelAgent {
   constructor() {
     super('translate')
     this.label('Translate').icon('Languages')

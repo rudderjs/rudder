@@ -2,7 +2,7 @@
 
 Restore field-level AI actions and resource-level agents to the **standalone path** (button → dedicated SSE endpoint → result in field), unblock client-tool round-trips on that path, and unify both surfaces under a single `PanelAgent` primitive so app devs can ship custom actions and tools without forking `@rudderjs/panels`.
 
-**Status:** READY — all decisions and open questions resolved 2026-04-08; Phase 3 (rename) is next as PR #1
+**Status:** IN PROGRESS — all decisions resolved 2026-04-08. **Phase 3 (rename) DONE 2026-04-08** (~120 LOC actual incl. minor exactOptional fixes). Phase 1 (extract `agentStream` helpers) is next as PR #2.
 **Packages affected:** `@rudderjs/panels` (handlers, agents, schema, frontend chat + field renderers, service providers); `playground` (one reference resource migration)
 **Depends on:**
 - Nothing — this plan is itself the prerequisite for `ai-loop-parity-plan.md`
@@ -334,6 +334,8 @@ Six phases. Phases 1–2 are pure refactor and add no user-visible behavior. Pha
 ---
 
 ### Phase 3 — Rename `ResourceAgent` → `PanelAgent` (`@rudderjs/panels` + playground)
+
+**Status:** DONE 2026-04-08. ~120 LOC actual (close to ~80 estimate; small overage from `exactOptionalPropertyTypes` fixes in `SchemaForm.tsx` + `FormActions.tsx` that surfaced once `PanelAgentMeta` was imported as the canonical type).
 
 **Files:**
 - `packages/panels/src/agents/ResourceAgent.ts` → `packages/panels/src/agents/PanelAgent.ts`

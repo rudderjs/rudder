@@ -139,7 +139,7 @@ async function runChat(deps: RunChatDeps): Promise<void> {
   const { send, close, context, body, loadedHistory, continuationMessages, conversationId, store } = deps
 
   // Force-agent branch — only meaningful for ResourceChatContext.
-  // The current ResourceAgent path doesn't go through agent() at all; it
+  // The current PanelAgent path doesn't go through agent() at all; it
   // calls agentDef.stream() directly, so we keep it as a localized branch
   // here rather than pretending it folds into the main loop.
   if (context.kind === 'resource' && !continuationMessages) {
@@ -262,8 +262,8 @@ async function runChat(deps: RunChatDeps): Promise<void> {
 
 interface RunForceAgentDeps {
   send:     SSESend
-  agentDef: import('../../agents/ResourceAgent.js').ResourceAgent
-  agentCtx: import('../../agents/ResourceAgent.js').ResourceAgentContext
+  agentDef: import('../../agents/PanelAgent.js').PanelAgent
+  agentCtx: import('../../agents/PanelAgent.js').PanelAgentContext
   input:    string
 }
 

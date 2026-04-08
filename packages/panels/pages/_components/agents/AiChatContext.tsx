@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
-import type { ResourceAgentMeta } from '@rudderjs/panels'
+import type { PanelAgentMeta } from '@rudderjs/panels'
 import { executeClientTool, hasClientTool } from './clientTools.js'
 
 // ─── Chat message parts (structured content) ───────────────
@@ -70,7 +70,7 @@ export interface ResourceContext {
   resourceSlug: string
   recordId:     string
   apiBase:      string
-  agents:       ResourceAgentMeta[]
+  agents:       PanelAgentMeta[]
 }
 
 // ─── Conversation list item ─────────────────────────────────

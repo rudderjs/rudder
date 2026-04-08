@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import type { ResourceAgentMeta } from '@rudderjs/panels'
+import type { PanelAgentMeta } from '@rudderjs/panels'
 import { AgentOutput, useAgentRun, type AgentStatus, type OnFieldUpdate } from './AgentOutput.js'
 
 interface Props {
-  agents:       ResourceAgentMeta[]
+  agents:       PanelAgentMeta[]
   recordId:     string
   resourceSlug: string
   apiBase:      string

@@ -1,4 +1,4 @@
-import type { ResourceAgentMeta } from './types.js'
+import type { PanelAgentMeta } from './types.js'
 
 // ─── Lazy imports (optional peer deps) ─────────────────────
 
@@ -33,7 +33,7 @@ async function loadLive() {
 
 // ─── Runtime context ────────────────────────────────────────
 
-export interface ResourceAgentContext {
+export interface PanelAgentContext {
   record:       Record<string, unknown>
   resourceSlug: string
   recordId:     string
@@ -42,14 +42,14 @@ export interface ResourceAgentContext {
   fieldMeta?:   Record<string, { type: string; yjs: boolean; readonly?: boolean; hiddenFromEdit?: boolean }>
 }
 
-// ─── ResourceAgent ─────────────────────────────────────────
+// ─── PanelAgent ─────────────────────────────────────────
 
 /**
  * AI agent that operates on a panel resource record.
  *
  * Use the fluent builder for simple inline agents:
  * ```ts
- * ResourceAgent.make('seo')
+ * PanelAgent.make('seo')
  *   .label('Improve SEO')
  *   .instructions('Analyse and improve SEO...')
  *   .fields(['title', 'slug', 'metaDescription'])
@@ -57,7 +57,7 @@ export interface ResourceAgentContext {
  *
  * Or extend the class for complex agents with custom tools:
  * ```ts
- * class TranslateAgent extends ResourceAgent {
+ * class TranslateAgent extends PanelAgent {
  *   constructor() {
  *     super('translate')
  *     this.label('Translate').icon('Languages')
@@ -68,7 +68,7 @@ export interface ResourceAgentContext {
  * }
  * ```
  */
-export class ResourceAgent {
+export class PanelAgent {
   protected _slug:  string
   protected _label: string
   protected _icon?: string
@@ -78,7 +78,7 @@ export class ResourceAgent {
   protected _tools: Array<{ definition: { name: string }; type: string; execute: Function }> = []
 
   /** Runtime context — set before run/stream. */
-  protected context!: ResourceAgentContext
+  protected context!: PanelAgentContext
 
   constructor(slug: string) {
     this._slug  = slug
@@ -87,8 +87,8 @@ export class ResourceAgent {
 
   // ── Fluent builder ─────────────────────────────────────
 
-  static make(slug: string): ResourceAgent {
-    return new ResourceAgent(slug)
+  static make(slug: string): PanelAgent {
+    return new PanelAgent(slug)
   }
 
   label(l: string): this  { this._label = l; return this }
@@ -128,11 +128,11 @@ export class ResourceAgent {
   }
 
   /** Called before the agent runs. Throw to abort. */
-  async beforeRun?(_ctx: ResourceAgentContext): Promise<void>
+  async beforeRun?(_ctx: PanelAgentContext): Promise<void>
 
   /** Called after the agent completes. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async afterRun?(_ctx: ResourceAgentContext, _result: any): Promise<void>
+  async afterRun?(_ctx: PanelAgentContext, _result: any): Promise<void>
 
   // ── Build tools ────────────────────────────────────────
 
@@ -334,7 +334,7 @@ export class ResourceAgent {
 
   /** Run the agent (non-streaming). Returns the final response. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async run(ctx: ResourceAgentContext, input?: string): Promise<any> {
+  async run(ctx: PanelAgentContext, input?: string): Promise<any> {
     this.context = ctx
     await this.beforeRun?.(ctx)
 
@@ -354,7 +354,7 @@ export class ResourceAgent {
 
   /** Run the agent with SSE streaming. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async stream(ctx: ResourceAgentContext, input?: string): Promise<{ stream: AsyncIterable<any>; response: Promise<any> }> {
+  async stream(ctx: PanelAgentContext, input?: string): Promise<{ stream: AsyncIterable<any>; response: Promise<any> }> {
     this.context = ctx
     await this.beforeRun?.(ctx)
 
@@ -375,7 +375,7 @@ export class ResourceAgent {
   getSlug(): string { return this._slug }
 
   /** Serialise for the resource meta endpoint. */
-  toMeta(): ResourceAgentMeta {
+  toMeta(): PanelAgentMeta {
     return {
       slug:   this._slug,
       label:  this._label,

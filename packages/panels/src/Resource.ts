@@ -2,8 +2,8 @@ import type { Field, FieldMeta } from './schema/Field.js'
 import type { Section, SectionMeta } from './schema/Section.js'
 import type { Tabs, TabsMeta } from './schema/Tabs.js'
 import type { PolicyAction, PanelContext, ModelClass } from './types.js'
-import type { ResourceAgent } from './agents/ResourceAgent.js'
-import type { ResourceAgentMeta } from './agents/types.js'
+import type { PanelAgent } from './agents/PanelAgent.js'
+import type { PanelAgentMeta } from './agents/types.js'
 import type { RelationManager } from './schema/RelationManager.js'
 import type { RelationManagerMeta } from './schema/RelationManager.js'
 import { Table } from './schema/Table.js'
@@ -31,7 +31,7 @@ export interface ResourceMeta {
   emptyStateIcon?: string | undefined
   emptyStateHeading?: string | undefined
   emptyStateDescription?: string | undefined
-  agents?: ResourceAgentMeta[] | undefined
+  agents?: PanelAgentMeta[] | undefined
   relations?: RelationManagerMeta[] | undefined
 }
 
@@ -139,14 +139,14 @@ export class Resource {
    * @example
    * agents() {
    *   return [
-   *     ResourceAgent.make('seo')
+   *     PanelAgent.make('seo')
    *       .label('Improve SEO')
    *       .instructions('Analyse and improve SEO...')
    *       .fields(['title', 'slug', 'metaDescription']),
    *   ]
    * }
    */
-  agents(): ResourceAgent[] {
+  agents(): PanelAgent[] {
     return []
   }
 
@@ -157,7 +157,7 @@ export class Resource {
 
   /**
    * Get field type metadata: `{ fieldName: { type, yjs, readonly, hiddenFromEdit } }`.
-   * Used by ResourceAgent to route edit_text between server-side Yjs editing
+   * Used by PanelAgent to route edit_text between server-side Yjs editing
    * (for collaborative fields) and Y.Map string replacement (for non-collaborative fields).
    * Also used by panelChat to filter out non-editable fields from the AI edit_text tool.
    */
