@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PanelI18n, ResourceAgentMeta } from '@rudderjs/panels'
+import type { PanelI18n, PanelAgentMeta } from '@rudderjs/panels'
 import { useAiChat, type AgentRunRequest } from '../agents/AiChatContext.js'
 
 interface Props {
@@ -10,10 +10,10 @@ interface Props {
   onPublish:     () => void
   onUnpublish:   () => void
   i18n:          PanelI18n & Record<string, string>
-  agents?:       ResourceAgentMeta[]
-  resourceSlug?: string
-  recordId?:     string
-  apiBase?:      string
+  agents?:       PanelAgentMeta[] | undefined
+  resourceSlug?: string | undefined
+  recordId?:     string | undefined
+  apiBase?:      string | undefined
 }
 
 export function FormActions({ draftable, recordStatus, saving, backHref, onPublish, onUnpublish, i18n, agents, resourceSlug, recordId, apiBase }: Props) {
@@ -23,7 +23,7 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
 
   const hasAgents = !!agents?.length && !!resourceSlug && !!recordId && !!apiBase
 
-  function handleAgentClick(agent: ResourceAgentMeta) {
+  function handleAgentClick(agent: PanelAgentMeta) {
     setDropdownOpen(false)
     aiChat?.triggerRun({
       agentSlug:    agent.slug,
@@ -118,7 +118,7 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
   )
 }
 
-function AgentIcon({ name }: { name?: string }) {
+function AgentIcon({ name }: { name?: string | undefined }) {
   if (!name) return null
   const icons: Record<string, React.ReactNode> = {
     Search: (

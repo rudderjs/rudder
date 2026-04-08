@@ -807,7 +807,7 @@ table.importable(
 Define AI agents on resources — they read record data, update fields in real-time, and stream progress to a global chat panel.
 
 ```ts
-import { Resource, ResourceAgent, TextField, TextareaField, Form } from '@rudderjs/panels'
+import { Resource, PanelAgent, TextField, TextareaField, Form } from '@rudderjs/panels'
 
 export class ArticleResource extends Resource {
   static model = Article
@@ -823,13 +823,13 @@ export class ArticleResource extends Resource {
 
   agents() {
     return [
-      ResourceAgent.make('seo')
+      PanelAgent.make('seo')
         .label('Improve SEO')
         .icon('Search')
         .instructions('Analyse and improve the meta title and description for better SEO.')
         .fields(['metaTitle', 'metaDescription']),
 
-      ResourceAgent.make('summarize')
+      PanelAgent.make('summarize')
         .label('Write Excerpt')
         .icon('Sparkles')
         .instructions('Write a concise excerpt based on the article title and content.')
@@ -962,11 +962,11 @@ A **✦** sparkle button appears next to the field label. Click it to see a drop
 For complex agents with custom tools:
 
 ```ts
-import { ResourceAgent } from '@rudderjs/panels'
+import { PanelAgent } from '@rudderjs/panels'
 import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 
-class TranslateAgent extends ResourceAgent {
+class TranslateAgent extends PanelAgent {
   constructor() {
     super('translate')
     this.label('Translate').icon('Languages')

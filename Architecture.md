@@ -268,7 +268,7 @@ RudderJS Framework
 │         │           Wizard, Step, RelationManager, Import
 │         ├── Filters: Select, Search, Date, Boolean, Number, Query
 │         ├── Actions: Action (.form()), ActionGroup, headerActions
-│         ├── AI: ResourceAgent, chat sidebar, edit_text, run_agent
+│         ├── AI: PanelAgent, chat sidebar, edit_text, run_agent
 │         ├── Themes: 4 presets, colors, fonts, icons, themeEditor
 │         ├── Real-time: Yjs collaboration, live tables, version history
 │         ├── Notifications: Panel.notifications() widget

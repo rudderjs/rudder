@@ -1124,11 +1124,11 @@ Panels has built-in AI capabilities powered by `@rudderjs/ai`. Requires the AI p
 Define agents on resources to automate field editing:
 
 ```ts
-import { ResourceAgent } from '@rudderjs/panels'
+import { PanelAgent } from '@rudderjs/panels'
 
 agents() {
   return [
-    ResourceAgent.make('seo')
+    PanelAgent.make('seo')
       .label('Improve SEO')
       .icon('Search')
       .instructions('Improve meta title and description for SEO.')

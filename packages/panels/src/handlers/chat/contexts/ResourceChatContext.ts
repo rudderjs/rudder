@@ -1,5 +1,5 @@
 import type { AiMessage, AnyTool, ConversationStoreMeta } from '@rudderjs/ai'
-import type { ResourceAgent, ResourceAgentContext } from '../../../agents/ResourceAgent.js'
+import type { PanelAgent, PanelAgentContext } from '../../../agents/PanelAgent.js'
 import type { ModelClass, RecordRow } from '../../../types.js'
 import type { ChatContext } from './types.js'
 import type { ResolveContextDeps } from './resolveContext.js'
@@ -21,9 +21,9 @@ interface ResolvedResourceState {
   resourceSlug:     string
   recordId:         string
   record:           Record<string, unknown>
-  agents:           ResourceAgent[]
-  agentCtx:         ResourceAgentContext
-  forceAgent:       ResourceAgent | null
+  agents:           PanelAgent[]
+  agentCtx:         PanelAgentContext
+  forceAgent:       PanelAgent | null
   selection:        { field: string; text: string } | undefined
   userId:           string | undefined
   tools:            AnyTool[]
@@ -97,7 +97,7 @@ export class ResourceChatContext implements ChatContext {
 
     // 5. Resolve agents + agentCtx
     const agents = resource.agents()
-    const agentCtx: ResourceAgentContext = {
+    const agentCtx: PanelAgentContext = {
       record,
       resourceSlug,
       recordId,
@@ -106,7 +106,7 @@ export class ResourceChatContext implements ChatContext {
     }
 
     // 6. Resolve forceAgent if requested
-    let forceAgent: ResourceAgent | null = null
+    let forceAgent: PanelAgent | null = null
     if (body.forceAgent) {
       const target = agents.find(a => a.getSlug() === body.forceAgent)
       if (!target) {
@@ -169,12 +169,12 @@ export class ResourceChatContext implements ChatContext {
   }
 
   /** Used by the dispatcher's force-agent branch */
-  getForceAgent(): ResourceAgent | null {
+  getForceAgent(): PanelAgent | null {
     return this.state.forceAgent
   }
 
   /** Used by the dispatcher's force-agent branch — reuses the resolved agentCtx */
-  getAgentContext(): ResourceAgentContext {
+  getAgentContext(): PanelAgentContext {
     return this.state.agentCtx
   }
 

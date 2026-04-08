@@ -1,4 +1,4 @@
-import type { ResourceAgentContext } from '../../../agents/ResourceAgent.js'
+import type { PanelAgentContext } from '../../../agents/PanelAgent.js'
 import { loadAi, loadLive } from '../lazyImports.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -13,7 +13,7 @@ import { loadAi, loadLive } from '../lazyImports.js'
 export type FieldBlockAllowlist = Record<string, Set<string>>
 
 export async function buildEditTextTool(
-  agentCtx: ResourceAgentContext,
+  agentCtx: PanelAgentContext,
   allFields: string[],
   record: Record<string, unknown>,
   selection?: { field: string; text: string } | undefined,

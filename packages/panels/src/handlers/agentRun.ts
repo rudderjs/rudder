@@ -1,11 +1,11 @@
 import type { AppRequest, AppResponse } from '@rudderjs/core'
 import type { Resource } from '../Resource.js'
-import type { ResourceAgent, ResourceAgentContext } from '../agents/ResourceAgent.js'
+import type { PanelAgent, PanelAgentContext } from '../agents/PanelAgent.js'
 import type { ModelClass, RecordRow } from '../types.js'
 import { buildContext } from './shared/context.js'
 
 /**
- * SSE streaming handler for running a ResourceAgent against a record.
+ * SSE streaming handler for running a PanelAgent against a record.
  *
  * `POST /{panel}/api/{resource}/:id/_agents/:agentSlug`
  *
@@ -61,7 +61,7 @@ export async function handleAgentRun(
   } catch { /* no body */ }
 
   // ── Build agent context ───────────────────────────────
-  const agentCtx: ResourceAgentContext = {
+  const agentCtx: PanelAgentContext = {
     record:       typeof (record as any).toJSON === 'function' ? (record as any).toJSON() : record as Record<string, unknown>,
     resourceSlug: ResourceClass.getSlug(),
     recordId:     id,

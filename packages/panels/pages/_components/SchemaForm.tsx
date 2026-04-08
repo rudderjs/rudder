@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { SchemaFormMeta, PanelI18n, FieldMeta } from '@rudderjs/panels'
+import type { SchemaFormMeta, PanelI18n, FieldMeta, PanelAgentMeta } from '@rudderjs/panels'
 import { FieldInput } from './FieldInput.js'
 import { SchemaRenderer } from './edit/SchemaRenderer.js'
 import { EditToolbar } from './edit/EditToolbar.js'
@@ -40,7 +40,7 @@ interface SchemaFormProps {
   /** Agent field updates — each entry triggers a typing animation. Append to trigger new animations. */
   agentFieldUpdates?: Array<{ field: string; value: string }>
   /** Resource agent definitions (for form action dropdown). */
-  agents?: Array<{ slug: string; label: string; icon?: string; fields: string[] }>
+  agents?: PanelAgentMeta[]
 }
 
 // Text-based field types that get per-field Y.Doc (not shared Y.Map)

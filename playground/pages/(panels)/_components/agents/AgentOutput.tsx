@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { ResourceAgentMeta } from '@rudderjs/panels'
+import type { PanelAgentMeta } from '@rudderjs/panels'
 
 // ─── SSE event types ────────────────────────────────────────
 

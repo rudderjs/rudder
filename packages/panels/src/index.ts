@@ -228,9 +228,9 @@ export type {
 
 // ─── Agents ────────────────────────────────────────────────
 
-export { ResourceAgent } from './agents/ResourceAgent.js'
-export type { ResourceAgentContext } from './agents/ResourceAgent.js'
-export type { ResourceAgentMeta } from './agents/types.js'
+export { PanelAgent } from './agents/PanelAgent.js'
+export type { PanelAgentContext } from './agents/PanelAgent.js'
+export type { PanelAgentMeta } from './agents/types.js'
 
 // ─── Data helpers ───────────────────────────────────────────
 

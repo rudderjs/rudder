@@ -1,12 +1,12 @@
-import type { ResourceAgent, ResourceAgentContext } from '../../../agents/ResourceAgent.js'
+import type { PanelAgent, PanelAgentContext } from '../../../agents/PanelAgent.js'
 import type { SSESend } from '../types.js'
 import { loadAi } from '../lazyImports.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export async function buildRunAgentTool(
-  agents: ResourceAgent[],
-  agentCtx: ResourceAgentContext,
+  agents: PanelAgent[],
+  agentCtx: PanelAgentContext,
   message: string,
   send: SSESend,
 ) {
