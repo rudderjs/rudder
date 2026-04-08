@@ -2,8 +2,8 @@
 
 Complete the AI agent's block-editing capability by adding **insert** and **delete** operations alongside the existing **update** flow. Block introspection (Plan 5.3) is already done — the agent now knows what blocks exist and what fields they have, but it can only mutate blocks that are already in the document.
 
-**Status:** PROPOSED (2026-04-08)
-**Estimated LOC:** ~210
+**Status:** DONE (2026-04-08)
+**Estimated LOC:** ~210 (actual: ~280 incl. allowlist hardening)
 **Packages affected:** `@rudderjs/live`, `@rudderjs/panels`
 **Depends on:** Panels AI 5.3 (block introspection) — DONE 2026-04-08
 **Related:** `feedback_block_field_detection.md`, `project_product_identity.md` (VS Code framing — this plan delivers the equivalent of "insert function call" / "delete statement", not just "rename variable")
@@ -317,9 +317,23 @@ docs/plans/panels-block-write-completion-plan.md             ← this doc — fl
 
 This plan is DONE when:
 
-- [ ] `Live.insertBlock` and `Live.removeBlock` exist with unit tests covering the cases listed in Phase 1.
-- [ ] `edit_text` accepts `insert_block` and `delete_block` operations and dispatches them correctly for collab fields.
-- [ ] The injected system prompt section lists all three block operations.
-- [ ] All six playground smoke-test scenarios pass without manual intervention.
-- [ ] Memory + CLAUDE docs are updated to reflect that 5.3 covers introspection + read + insert + update + delete.
-- [ ] The article chat agent in the playground can complete this multi-step task in one turn: "remove the existing CTA, add a new video at the top, then update the existing video's caption to 'Watch this'."
+- [x] `Live.insertBlock` and `Live.removeBlock` exist with unit tests covering the cases listed in Phase 1.
+- [x] `edit_text` accepts `insert_block` and `delete_block` operations and dispatches them correctly for collab fields.
+- [x] The injected system prompt section lists all three block operations.
+- [x] All six playground smoke-test scenarios pass without manual intervention.
+- [x] Memory + CLAUDE docs are updated to reflect that 5.3 covers introspection + read + insert + update + delete.
+- [x] The article chat agent in the playground can complete this multi-step task in one turn: "remove the existing CTA, add a new video at the top, then update the existing video's caption to 'Watch this'."
+
+---
+
+## Post-implementation notes (2026-04-08)
+
+What surprised us during execution:
+
+1. **Lexical-Yjs DecoratorNode shape was wrong in the Background section.** The Background said "the custom-block element's `nodeName` must be `'custom-block'`". That's wrong. `LexicalYjs.dev.mjs:925` shows that for DecoratorNodes, Lexical-Yjs creates a bare `new XmlElement()` (no nodeName arg — Yjs defaults to `'UNDEFINED'`) and writes the Lexical type as a `__type='custom-block'` **attribute**. Our first implementation used the nodeName arg and skipped the `__type` attribute; the block landed in the Y.Doc but `CollabDecoratorNode` filters by attribute, not nodeName, so it was invisible to the editor. Fixed by mirroring the exact shape; added a regression test (`Live.insertBlock — produces a Lexical-compatible block shape`) that asserts the `__type` attribute. The Background section in this plan should be considered superseded by `live/src/index.ts:1170-1175` for future maintainers.
+
+2. **The "trust the catalog" non-goal didn't survive contact with reality.** The plan listed server-side block validation as a v2 hardening pass on the assumption the agent would honor the system prompt's allowlist. Smoke test #6 (refusal scenario) demonstrated otherwise — Claude inserted a `quote` block despite the catalog only listing `callToAction` and `video`. Worse, the editor rendered it as "Unknown block type: quote" which the agent saw as success. Added a `FieldBlockAllowlist` parameter to `buildEditTextTool` and `extractBuilderCatalog`-derived allowlist in `ResourceChatContext`. Rejected ops are reported back in the tool result so the agent can self-correct. After this fix, the agent now responds to the same prompt with "It looks like 'quote' is not a valid block type for the content field…" — surfaces the constraint rather than fabricating success.
+
+3. **`live:inspect` was incomplete for debugging.** It only dumped inner content for `Y.XmlElement` children, not for `Y.XmlText` paragraph nodes — so a 70-paragraph document showed up as 70 unhelpful `YXmlText` lines. Extended the helper to dump paragraph attributes, text content, and embedded blocks so future block-shape debugging is tractable. Lift this into a memory note: when debugging Lexical Y.Doc state, this is the tool — the dump is verbose but it's the only thing that shows the actual stored shape.
+
+4. **Build/restart cadence cost a lot of time.** `pnpm dev` in the playground hot-reloads via vite for the frontend but server-side handlers are loaded from `packages/panels/dist/`, which means every iteration on `editTextTool.ts` requires a root `pnpm build` + restart. Lift this into a feedback memory.

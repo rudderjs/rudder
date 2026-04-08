@@ -12,7 +12,7 @@ Admin panel: Resource `table()`/`form()`/`detail()`/`agents()`/`relations()` API
 ### AI Features
 - AI resource agents (ResourceAgent, SSE streaming, unified AI chat sidebar)
 - `POST /{panel}/api/_chat` with `run_agent` + `edit_text` + `read_form_state` (client tool) + `delete_record` (server tool, `needsApproval: true`) tools, resource context, field typing animation
-- **Block introspection (Plan 5.3)**: `extractBuilderCatalog()` at `src/handlers/chat/blockCatalog.ts` walks the resource form (Section + Tabs aware) and pulls each `BuilderField`'s declared blocks (`_extra.blocks` populated by `BuilderField.blocks([Block.make(...).schema(...)])`). `ResourceChatContext` injects the catalog as an "Available block types" markdown section in the system prompt so the agent calls `update_block` against the structured schema instead of guessing block names from rendered `[BLOCK: ...]` placeholders. Static injection by design — catalog is naturally scoped to one resource so it stays small. The extractor is a pure function reusable as a `describe_blocks` tool wrapper if a hybrid (summary in prompt + tool for detail) is ever needed — no rewrite required.
+- **Block authoring (Plan 5.3 + block-write completion)**: full CRUD on custom Lexical DecoratorNode blocks via three `edit_text` operations — `insert_block`, `update_block`, `delete_block`. `extractBuilderCatalog()` at `src/handlers/chat/blockCatalog.ts` walks the resource form (Section + Tabs aware) and pulls each `BuilderField` / `RichContentField`'s declared blocks (`_extra.blocks` populated by `.blocks([Block.make(...).schema(...)])`). `ResourceChatContext` injects the catalog as an "Available block types" markdown section in the system prompt **and** builds a `FieldBlockAllowlist` that the dispatcher uses to reject `insert_block`/`update_block`/`delete_block` calls with hallucinated block types — the rejection is reported back in the tool result so the agent self-corrects. Block primitives live in `@rudderjs/live`: `Live.insertBlock` / `Live.editBlock` / `Live.removeBlock`. Critical shape note: DecoratorNode XmlElements use bare `new XmlElement()` (no nodeName arg) + `__type='custom-block'` **attribute** — see `feedback_lexical_decorator_shape.md` and the regression test in `packages/live/src/index.test.ts`. Static catalog injection by design — naturally scoped to one resource so it stays small. The extractor is a pure function reusable as a `describe_blocks` tool wrapper if a hybrid (summary in prompt + tool for detail) is ever needed.
 - **Pluggable ChatContext architecture** (`ResourceChatContext`, `PageChatContext` stub, `GlobalChatContext`) at `src/handlers/chat/contexts/`. One slim dispatcher in `chatHandler.ts` resolves the context, loads/persists conversation, runs the agent loop. New context kinds (page chat, field chat) drop in cleanly.
 - **Client-tool round-trip**: `read_form_state` is a Vercel-style client tool — server stops the loop with `pending_client_tools` SSE event, the browser's `clientTools` registry executes the handler against `SchemaForm`'s `valuesRef`, then re-POSTs with `messages: [...]`. Closes the non-collab field visibility gap.
 - **`needsApproval` enforcement**: `delete_record` pauses the loop with `tool_approval_required` SSE event. The chat panel renders an **inline amber Approve/Reject card** inside the assistant bubble (no modal). On approve, the dispatcher's continuation flow runs the tool server-side via `resumePendingToolCalls` (in `@rudderjs/ai`), which fulfills the orphan `tool_use` block before re-entering the model loop and exposes the result via `result.resumedToolMessages` so persistence stays sound.
@@ -97,8 +97,11 @@ root (Y.XmlText)
   │     ├── Y.Map (__type="text")    <- TextNode metadata, offset += 1
   │     └── "hello world"            <- actual text, offset += string.length
   ├── Y.XmlText (__type="paragraph")
-  │     ├── Y.XmlElement (custom-block)  <- block INSIDE paragraph
-  │     │     attrs: __blockType, __blockData (raw object, NOT JSON string)
+  │     ├── Y.XmlElement (no nodeName!)  <- DecoratorNode block INSIDE paragraph
+  │     │     attrs:
+  │     │       __type      = "custom-block"   <- Lexical type as ATTRIBUTE
+  │     │       __blockType = "callToAction"
+  │     │       __blockData = { ... }          <- raw object, NOT JSON string
   │     ├── Y.Map (__type="text")
   │     └── "some text"
   └── Y.XmlText (__type="list")
@@ -107,6 +110,7 @@ root (Y.XmlText)
 ```
 - `toString()` is unreliable — returns `[object Object]text`. Must walk inner delta for text search.
 - `Y.XmlText.delete(offset, len)` / `insert(offset, text)` work on flattened offset across all inner items.
+- **DecoratorNode shape gotcha**: Lexical-Yjs creates blocks via `new XmlElement()` (NO nodeName arg — Yjs defaults to `'UNDEFINED'`) and writes the Lexical type as `__type='custom-block'` attribute. `CollabDecoratorNode` filters by attribute, not nodeName. If you create a block with `new XmlElement('custom-block')`, the block lands in the Y.Doc but the editor never picks it up — silent failure. Reference: `LexicalYjs.dev.mjs:925`. Working impl: `Live.insertBlock` in `packages/live/src/index.ts`. Debug with `pnpm rudder live:inspect '<doc-name>'` from playground/.
 
 **Config layers:**
 - `config/live.ts` `providers: ['websocket', 'indexeddb']` — controls form-level Y.Map providers
