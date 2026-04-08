@@ -45,7 +45,7 @@ export { resolveDataSource } from './datasource.js'
 // ─── Field ─────────────────────────────────────────────────
 
 export { Field } from './schema/Field.js'
-export type { FieldMeta, FieldVisibility, Condition, ConditionOp } from './schema/Field.js'
+export type { FieldMeta, FieldVisibility, Condition, ConditionOp, ResolvedAiAction } from './schema/Field.js'
 export { FieldType } from './schema/FieldType.js'
 export type { FieldTypeValue } from './schema/FieldType.js'
 
@@ -229,8 +229,9 @@ export type {
 // ─── Agents ────────────────────────────────────────────────
 
 export { PanelAgent } from './agents/PanelAgent.js'
-export type { PanelAgentContext } from './agents/PanelAgent.js'
+export type { PanelAgentContext, PanelAgentFieldType } from './agents/PanelAgent.js'
 export type { PanelAgentMeta } from './agents/types.js'
+export { BuiltInAiActionRegistry, builtInActions } from './ai-actions/index.js'
 
 // ─── Data helpers ───────────────────────────────────────────
 

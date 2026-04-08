@@ -137,6 +137,16 @@ export const en = {
   discardDraft:         'Discard',
   unsavedWarning:       'You have unsaved changes. Are you sure you want to leave?',
 
+  // AI quick actions (built-in PanelAgents registered in PanelServiceProvider.register())
+  aiAction_rewrite:      'Rewrite',
+  aiAction_shorten:      'Shorten',
+  aiAction_expand:       'Expand',
+  aiAction_fixGrammar:   'Fix grammar',
+  aiAction_translate:    'Translate',
+  aiAction_summarize:    'Summarize',
+  aiAction_makeFormal:   'Make formal',
+  aiAction_simplify:     'Simplify',
+
   // Dashboard
   customizeDashboard:   'Customize',
   doneDashboard:        'Done',

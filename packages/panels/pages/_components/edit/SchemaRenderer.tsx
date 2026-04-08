@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n } from '@rudderjs/panels'
+import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, ResolvedAiAction } from '@rudderjs/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
@@ -24,25 +24,7 @@ interface Props {
   docName?:    string | null
 }
 
-// ─── Predefined quick action labels ─────────────────────────
-
-interface QuickAction {
-  label:      string
-  prompt:     string
-  /** If set, this action has a submenu of language choices. */
-  languages?: boolean
-}
-
-const QUICK_ACTION_LABELS: Record<string, QuickAction> = {
-  rewrite:       { label: 'Rewrite',      prompt: 'Rewrite the following text while keeping the same meaning' },
-  expand:        { label: 'Expand',        prompt: 'Expand the following text with more detail' },
-  shorten:       { label: 'Shorten',       prompt: 'Shorten the following text while keeping the key points' },
-  'fix-grammar': { label: 'Fix grammar',   prompt: 'Fix any grammar and spelling mistakes in the following text' },
-  translate:     { label: 'Translate',      prompt: 'Translate the following text to', languages: true },
-  summarize:     { label: 'Summarize',      prompt: 'Summarize the following text concisely' },
-  'make-formal': { label: 'Make formal',    prompt: 'Rewrite the following text in a more formal tone' },
-  simplify:      { label: 'Simplify',       prompt: 'Simplify the following text so it is easier to understand' },
-}
+// ─── Translate language submenu ────────────────────────────
 
 const TRANSLATE_LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -104,9 +86,13 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
 
   if (!aiChat || !field.ai) return null
 
-  const actions = Array.isArray(field.ai)
-    ? field.ai.map(id => QUICK_ACTION_LABELS[id] ?? { label: id, prompt: id }).filter(Boolean)
-    : Object.values(QUICK_ACTION_LABELS).slice(0, 4) // default set when .ai(true)
+  // `field.ai` is now `boolean | ResolvedAiAction[]` (Phase 4 of
+  // standalone-client-tools-plan.md). The server resolves slugs through
+  // `BuiltInAiActionRegistry` at form-build time and ships ready-to-render
+  // metadata `{slug, label, icon?, prompt?}`. The frontend no longer holds
+  // a hardcoded prompt map.
+  const actions: ResolvedAiAction[] = Array.isArray(field.ai) ? field.ai : []
+  if (actions.length === 0) return null
 
   return (
     <div ref={ref} className="relative inline-flex ml-1.5">
@@ -121,8 +107,8 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
       {open && (
         <div className="absolute left-0 top-full mt-1 min-w-[140px] rounded-md border bg-popover shadow-md z-30 py-1">
           {actions.map(a => (
-            a.languages ? (
-              <div key={a.label} className="relative">
+            a.slug === 'translate' ? (
+              <div key={a.slug} className="relative">
                 <button
                   type="button"
                   className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
@@ -138,7 +124,7 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
                         key={lang.code}
                         type="button"
                         className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-                        onClick={() => handleAction(`${a.prompt} ${lang.label}`)}
+                        onClick={() => handleAction(`${a.prompt ?? a.label} to ${lang.label}`)}
                       >
                         {lang.label}
                       </button>
@@ -148,10 +134,10 @@ function AiQuickActions({ field, value }: { field: FieldMeta; value: unknown }) 
               </div>
             ) : (
               <button
-                key={a.label}
+                key={a.slug}
                 type="button"
                 className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-                onClick={() => handleAction(a.prompt)}
+                onClick={() => handleAction(a.prompt ?? a.label)}
               >
                 {a.label}
               </button>

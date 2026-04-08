@@ -4,6 +4,7 @@ import { debugWarn } from './debug.js'
 import { PanelRegistry } from './registries/PanelRegistry.js'
 import { registerResolver } from './registries/ResolverRegistry.js'
 import { DashboardRegistry } from './registries/DashboardRegistry.js'
+import { BuiltInAiActionRegistry, builtInActions } from './ai-actions/index.js'
 import {
   buildPanelMiddleware,
   mountMetaRoutes,
@@ -47,6 +48,15 @@ export { buildDefaultLayout } from './handlers/index.js'
 
 export class PanelServiceProvider extends ServiceProvider {
   register(): void {
+    // Built-in AI quick actions — registered in the sync `register()` phase
+    // so they're available before any field meta serialises (per Q1 in
+    // `docs/plans/standalone-client-tools-plan.md`). App code can override
+    // built-ins by registering its own with the same slug from a downstream
+    // provider's register() — later wins.
+    for (const action of builtInActions) {
+      BuiltInAiActionRegistry.register(action)
+    }
+
     // Panel schema (ORM + driver-specific)
     const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname
     this.publishes([
@@ -179,6 +189,13 @@ export function panels(
     register(): void {
       PanelRegistry.reset()
       DashboardRegistry.reset()
+
+      // Built-in AI quick actions — see PanelServiceProvider.register() above
+      // for the rationale. The factory overrides register() without calling
+      // super, so we register here too. Idempotent (later registrations win).
+      for (const action of builtInActions) {
+        BuiltInAiActionRegistry.register(action)
+      }
 
       const publishedSchemas = new Set<string>()
 

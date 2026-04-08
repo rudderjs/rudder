@@ -139,6 +139,16 @@ export const ar: PanelI18n = {
   discardDraft:         '\u062a\u062c\u0627\u0647\u0644',
   unsavedWarning:       '\u0644\u062f\u064a\u0643 \u062a\u063a\u064a\u064a\u0631\u0627\u062a \u063a\u064a\u0631 \u0645\u062d\u0641\u0648\u0638\u0629. \u0647\u0644 \u0623\u0646\u062a \u0645\u062a\u0623\u0643\u062f \u0645\u0646 \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629\u061f',
 
+  // AI quick actions (built-in PanelAgents)
+  aiAction_rewrite:      '\u0625\u0639\u0627\u062f\u0629 \u0635\u064a\u0627\u063a\u0629',
+  aiAction_shorten:      '\u062a\u0642\u0635\u064a\u0631',
+  aiAction_expand:       '\u062a\u0648\u0633\u064a\u0639',
+  aiAction_fixGrammar:   '\u0625\u0635\u0644\u0627\u062d \u0627\u0644\u0642\u0648\u0627\u0639\u062f',
+  aiAction_translate:    '\u062a\u0631\u062c\u0645\u0629',
+  aiAction_summarize:    '\u062a\u0644\u062e\u064a\u0635',
+  aiAction_makeFormal:   '\u062c\u0639\u0644\u0647\u0627 \u0631\u0633\u0645\u064a\u0629',
+  aiAction_simplify:     '\u062a\u0628\u0633\u064a\u0637',
+
   // Dashboard
   customizeDashboard:   '\u062a\u062e\u0635\u064a\u0635',
   doneDashboard:        '\u062a\u0645',

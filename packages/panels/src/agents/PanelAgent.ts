@@ -68,6 +68,16 @@ export interface PanelAgentContext {
  * }
  * ```
  */
+/**
+ * Field types a `PanelAgent` is allowed to operate on. Validated at field
+ * registration time when the agent is referenced from `Field.ai([...])` —
+ * see `D10` in `docs/plans/standalone-client-tools-plan.md`.
+ *
+ * Use `'*'` to mean "any field type" (default for agents that don't call
+ * `.appliesTo([...])` explicitly).
+ */
+export type PanelAgentFieldType = '*' | string
+
 export class PanelAgent {
   protected _slug:  string
   protected _label: string
@@ -76,6 +86,7 @@ export class PanelAgent {
   protected _fields: string[] = []
   protected _model?: string
   protected _tools: Array<{ definition: { name: string }; type: string; execute: Function }> = []
+  protected _appliesTo: PanelAgentFieldType[] = ['*']
 
   /** Runtime context — set before run/stream. */
   protected context!: PanelAgentContext
@@ -102,6 +113,20 @@ export class PanelAgent {
 
   fields(f: string[]): this {
     this._fields = f
+    return this
+  }
+
+  /**
+   * Declare which field types this agent can run against. Validated at
+   * `Field.ai([...])` registration time — see D10 in
+   * `docs/plans/standalone-client-tools-plan.md`. Default is `['*']` (any).
+   *
+   * @example
+   * PanelAgent.make('rewrite')
+   *   .appliesTo(['text', 'textarea', 'richcontent', 'content'])
+   */
+  appliesTo(types: PanelAgentFieldType[]): this {
+    this._appliesTo = types.length > 0 ? types : ['*']
     return this
   }
 
@@ -327,7 +352,25 @@ export class PanelAgent {
       }
     })
 
-    return [updateField, editText, readRecord, ...this._tools, ...this.extraTools()]
+    // Q6 (standalone-client-tools-plan): every PanelAgent gets the client-side
+    // form-state tools by default. They live in `chat/tools/` for historical
+    // reasons but are not chat-specific — `update_form_state` is the only
+    // sane way to write a non-collaborative field without clobbering unsaved
+    // local edits, so it must be available on the standalone path too.
+    const { buildUpdateFormStateTool } = await import('../handlers/chat/tools/updateFormStateTool.js')
+    const { buildReadFormStateTool }   = await import('../handlers/chat/tools/readFormStateTool.js')
+    const updateFormStateTool = await buildUpdateFormStateTool(allFields)
+    const readFormStateTool   = await buildReadFormStateTool()
+
+    return [
+      updateField,
+      editText,
+      readRecord,
+      ...(updateFormStateTool ? [updateFormStateTool] : []),
+      readFormStateTool,
+      ...this._tools,
+      ...this.extraTools(),
+    ]
   }
 
   // ── Run ────────────────────────────────────────────────
@@ -379,7 +422,10 @@ export class PanelAgent {
 
   // ── Meta ───────────────────────────────────────────────
 
-  getSlug(): string { return this._slug }
+  getSlug():       string                    { return this._slug }
+  getLabel():      string                    { return this._label }
+  getIcon():       string | undefined        { return this._icon }
+  getAppliesTo():  PanelAgentFieldType[]     { return this._appliesTo }
 
   /** Serialise for the resource meta endpoint. */
   toMeta(): PanelAgentMeta {

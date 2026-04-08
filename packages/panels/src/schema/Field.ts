@@ -1,4 +1,6 @@
 import { toTitleCase } from './utils.js'
+import type { PanelAgent } from '../agents/PanelAgent.js'
+import { BuiltInAiActionRegistry } from '../ai-actions/registry.js'
 
 // ─── Field visibility ──────────────────────────────────────
 
@@ -39,7 +41,22 @@ export interface FieldMeta {
   defaultValue?:       unknown
   from?:               string[]
   debounce?:           number
-  ai?:                 boolean | string[]
+  ai?:                 boolean | ResolvedAiAction[]
+}
+
+/**
+ * Field-level AI action serialised to the browser. Built by `Field.ai()` from
+ * either built-in slugs or `PanelAgent` instances. The browser reads `slug`
+ * + `label` + `icon` to render the dropdown; clicking POSTs to the standalone
+ * agent endpoint with the slug. The `prompt` is a Phase 4 transitional field
+ * — it will be removed in Phase 5 once the click handler stops injecting into
+ * chat and starts calling the standalone endpoint directly.
+ */
+export interface ResolvedAiAction {
+  slug:    string
+  label:   string
+  icon?:   string
+  prompt?: string
 }
 
 // ─── Field base class ──────────────────────────────────────
@@ -66,7 +83,7 @@ export abstract class Field {
   protected _from?: string[]
   protected _reactiveComputeFn?: (values: Record<string, unknown>) => unknown
   protected _debounce?: number
-  protected _ai: boolean | string[] = false
+  protected _ai: boolean | ResolvedAiAction[] = false
 
   constructor(name: string) {
     this._name = name
@@ -432,24 +449,42 @@ export abstract class Field {
   }
 
   /**
-   * Enable AI-powered quick actions for this field.
-   * When enabled, the field shows an AI button in the floating toolbar (richcontent)
-   * and the selection is sent as context to the AI chat.
+   * Enable AI-powered quick actions for this field. Each action becomes a
+   * button in the field's `✦` dropdown — click runs the action against the
+   * field via the standalone agent endpoint.
    *
-   * Pass an array of action names to enable specific quick actions,
-   * or `true` to enable AI without predefined actions.
+   * Accepts:
+   * - `true` (or no arg) — show the default text action set
+   * - `Array<string | PanelAgent>` — built-in slugs and/or custom `PanelAgent`
+   *   instances, in any combination
+   * - `false` — disabled (default)
+   *
+   * **Validation:** every action's `appliesTo([...])` must include this
+   * field's type (or be `'*'`). Throws at form-build time if mismatch.
+   * Built-in actions all target the text family (`text` / `textarea` /
+   * `richcontent` / `content`); putting `.ai(['rewrite'])` on a `number`
+   * field fails loudly. See D10 in `docs/plans/standalone-client-tools-plan.md`.
    *
    * @example
-   * TextField.make('title').ai()
-   * RichContentField.make('content').ai(['rewrite', 'expand', 'shorten', 'fix-grammar', 'translate'])
+   * TextField.make('title').ai()                           // default text actions
+   * TextField.make('title').ai(['rewrite', 'shorten'])      // built-in slugs
+   * TextField.make('title').ai([rewrite, customSeoAgent])  // mixed
    */
-  ai(actions?: boolean | string[]): this {
+  ai(actions?: boolean | Array<string | PanelAgent>): this {
     if (actions === undefined || actions === true) {
-      this._ai = true
-    } else if (Array.isArray(actions)) {
-      this._ai = actions.length > 0 ? actions : true
-    } else {
+      this._ai = resolveAiActions(DEFAULT_AI_ACTION_SLUGS, this.getType(), this._name)
+      return this
+    }
+    if (actions === false) {
       this._ai = false
+      return this
+    }
+    if (Array.isArray(actions)) {
+      if (actions.length === 0) {
+        this._ai = false
+        return this
+      }
+      this._ai = resolveAiActions(actions, this.getType(), this._name)
     }
     return this
   }
@@ -508,4 +543,74 @@ export abstract class Field {
     }
     return meta
   }
+}
+
+// ─── AI action resolution ──────────────────────────────────
+
+/**
+ * Default action set for `Field.ai(true)` (no explicit slug list). Matches
+ * the legacy hardcoded set from `SchemaRenderer.tsx` for visual continuity.
+ */
+const DEFAULT_AI_ACTION_SLUGS = ['rewrite', 'expand', 'shorten', 'fix-grammar']
+
+/**
+ * Resolve a mixed list of slugs and `PanelAgent` instances into the
+ * `ResolvedAiAction` shape that gets serialised in field meta. Validates
+ * `appliesTo` against the field type and throws at form-build time if any
+ * action doesn't apply (per D10 in `docs/plans/standalone-client-tools-plan.md`).
+ */
+function resolveAiActions(
+  refs: Array<string | PanelAgent>,
+  fieldType: string,
+  fieldName: string,
+): ResolvedAiAction[] {
+  const resolved: ResolvedAiAction[] = []
+  for (const ref of refs) {
+    let agent: PanelAgent | undefined
+    let displaySlug: string
+
+    if (typeof ref === 'string') {
+      agent = BuiltInAiActionRegistry.get(ref)
+      if (!agent) {
+        throw new Error(
+          `Field "${fieldName}": unknown AI action "${ref}". ` +
+          `Built-in slugs: rewrite, shorten, expand, fix-grammar, translate, summarize, make-formal, simplify. ` +
+          `For custom actions, pass a PanelAgent instance instead of a slug. ` +
+          `If this is an app-defined action, ensure the registering provider runs before the panel mounts.`,
+        )
+      }
+      displaySlug = ref
+    } else {
+      agent = ref
+      displaySlug = ref.getSlug()
+    }
+
+    // appliesTo validation (D10)
+    const allowed = agent.getAppliesTo()
+    const matches = allowed.includes('*') || allowed.includes(fieldType)
+    if (!matches) {
+      throw new Error(
+        `Field "${fieldName}" (type "${fieldType}"): AI action "${displaySlug}" does not apply to this field type. ` +
+        `Allowed types: ${allowed.join(', ')}.`,
+      )
+    }
+
+    const action: ResolvedAiAction = {
+      slug:  displaySlug,
+      label: agent.getLabel(),
+    }
+    const icon = agent.getIcon()
+    if (icon) action.icon = icon
+
+    // Phase 4 transitional: ship the agent's instructions as `prompt` so the
+    // chat-injection bridge in SchemaRenderer.tsx can keep working until
+    // Phase 5 swaps the click handler to the standalone endpoint. Phase 5
+    // will drop this field.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const instr = (agent as any)._instructions
+    if (typeof instr === 'string' && instr.length > 0) action.prompt = instr
+
+    resolved.push(action)
+  }
+  return resolved
 }

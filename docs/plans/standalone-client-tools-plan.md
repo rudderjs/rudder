@@ -2,7 +2,7 @@
 
 Restore field-level AI actions and resource-level agents to the **standalone path** (button → dedicated SSE endpoint → result in field), unblock client-tool round-trips on that path, and unify both surfaces under a single `PanelAgent` primitive so app devs can ship custom actions and tools without forking `@rudderjs/panels`.
 
-**Status:** IN PROGRESS — all decisions resolved 2026-04-08. **Phase 3 (rename) DONE 2026-04-08** (~120 LOC). **Phase 1 (extract `agentStream` helper) DONE 2026-04-08** (~115 LOC). **Phase 2 (upgrade standalone for client tools) DONE 2026-04-08** (~520 LOC; standalone path now supports the same client-tool round-trip protocol as chat, backed by `@rudderjs/cache`). Phase 4 (built-ins as registered `PanelAgent`s) is next as PR #4.
+**Status:** IN PROGRESS — all decisions resolved 2026-04-08. **Phase 3 (rename) DONE 2026-04-08** (~120 LOC). **Phase 1 (extract `agentStream` helper) DONE 2026-04-08** (~115 LOC). **Phase 2 (upgrade standalone for client tools) DONE 2026-04-08** (~520 LOC). **Phase 4 (built-ins as registered `PanelAgent`s) DONE 2026-04-08** (~430 LOC; 8 built-in text actions ship as real `PanelAgent` instances registered by `PanelServiceProvider.register()`, `Field.ai()` accepts mixed `(string | PanelAgent)[]` with `appliesTo` validation, hardcoded `QUICK_ACTION_LABELS` map deleted from frontend, default `PanelAgent` toolkit gained `update_form_state` + `read_form_state`). Phase 5 (restore standalone bridges for both surfaces; delete chat-injection bridges) is next as PR #5.
 **Packages affected:** `@rudderjs/panels` (handlers, agents, schema, frontend chat + field renderers, service providers); `playground` (one reference resource migration)
 **Depends on:**
 - Nothing — this plan is itself the prerequisite for `ai-loop-parity-plan.md`
@@ -369,6 +369,8 @@ Six phases. Phases 1–2 are pure refactor and add no user-visible behavior. Pha
 ---
 
 ### Phase 4 — Built-in actions as registered `PanelAgent` instances (`@rudderjs/panels`)
+
+**Status:** DONE 2026-04-08. ~430 LOC actual (vs. ~280 estimate; overage from `Field.ts` resolution helper, `PanelAgent` accessor methods + `appliesTo()`, the i18n key additions in both en/ar locales, and the `BuiltInAiActionRegistry.register()` plumbing in BOTH `PanelServiceProvider.register()` and the `panels()` factory's overriding `register()` since the factory does not call `super.register()`). Note: the chat-injection click handler in `SchemaRenderer.tsx`'s `AiQuickActions` is **kept intact** in this PR — Phase 5 will swap it to the standalone endpoint and drop the temporary `prompt` field on `ResolvedAiAction`. The `prompt` field exists as a Phase 4-only transitional shim so the bridge keeps working until Phase 5.
 
 **Files:**
 - `packages/panels/src/ai-actions/builtin.ts` (new, ~120 LOC)
