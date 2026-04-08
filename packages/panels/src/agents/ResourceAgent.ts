@@ -23,6 +23,7 @@ async function loadLive() {
     readText(docName: string): string
     editText(docName: string, operation: unknown, aiCursor?: { name: string; color: string }): boolean
     editBlock(docName: string, blockType: string, blockIndex: number, field: string, value: unknown): boolean
+    rewriteText(docName: string, newText: string, aiCursor?: { name: string; color: string }): boolean
     setAiAwareness(docName: string, state: { name: string; color: string }): void
     clearAiAwareness(docName: string): void
   }
@@ -145,18 +146,48 @@ export class ResourceAgent {
 
     const updateField = toolDefinition({
       name: 'update_field',
-      description: 'Update a field on the current record. Available fields: ' + allFields.join(', '),
+      description: [
+        'Set a field on the current record to a new value. Whole-replace, not surgical.',
+        'Works on every field type: text, richcontent, select, boolean, number, date, tags, json.',
+        'For surgical text edits (replace a phrase, insert after, etc.) prefer `edit_text`.',
+        'Available fields: ' + allFields.join(', '),
+      ].join(' '),
       inputSchema: z.object({
         field: z.enum(allFields as [string, ...string[]]),
-        value: z.string().describe('The new value for the field'),
+        value: z.unknown().describe('The new value — any JSON type matching the field schema'),
       }),
-    }).server(async (input: { field: string; value: string }) => {
-      // Set agent lock flag before writing
+    }).server(async (input: { field: string; value: unknown }) => {
+      const fieldInfo = this.context.fieldMeta?.[input.field]
+      const isCollabText = fieldInfo?.yjs === true && (
+        fieldInfo.type === 'richcontent' ||
+        fieldInfo.type === 'textarea'    ||
+        fieldInfo.type === 'text'
+      )
+
+      // Set agent lock flag (visible in UI as "AI: <label>" highlight)
       await Live.updateMap(docName, 'fields', `__agent:${input.field}`, `AI: ${this._label}`)
-      // Write the value
-      await Live.updateMap(docName, 'fields', input.field, input.value)
-      // Clear lock flag
-      await Live.updateMap(docName, 'fields', `__agent:${input.field}`, null)
+      try {
+        if (isCollabText) {
+          // Collab text/richcontent fields live in per-field Y.XmlText rooms,
+          // not the form Y.Map. Y.Map writes for these are silently lost
+          // because the editor doesn't read from there. Route through
+          // Live.rewriteText against the per-field room — same path the
+          // chat-level edit_text `rewrite` op uses.
+          const fragment = fieldInfo!.type === 'richcontent' ? 'richcontent' : 'text'
+          const fieldDocName = `${docName}:${fragment}:${input.field}`
+          const text = typeof input.value === 'string' ? input.value : String(input.value ?? '')
+          const aiCursor = { name: `AI: ${this._label}`, color: '#8b5cf6' }
+          Live.rewriteText(fieldDocName, text, aiCursor)
+          setTimeout(() => Live.clearAiAwareness(fieldDocName), 2000)
+        } else {
+          // Plain field — booleans/selects/numbers/dates/tags/json plus
+          // non-collab text. Stored in the form Y.Map. Pass the typed value
+          // through unchanged so booleans stay booleans, arrays stay arrays.
+          await Live.updateMap(docName, 'fields', input.field, input.value)
+        }
+      } finally {
+        await Live.updateMap(docName, 'fields', `__agent:${input.field}`, null)
+      }
       return `Updated "${input.field}" successfully`
     })
 
@@ -197,15 +228,19 @@ export class ResourceAgent {
     const editText = toolDefinition({
       name: 'edit_text',
       description: [
-        'Surgically edit text or blocks in a field without replacing all content.',
-        'Use for rich text or long text fields where you want to change specific words, sentences, or block fields.',
-        'For short fields like titles or slugs, use update_field instead.',
-        'For embedded blocks (callToAction, video, etc.), use the update_block operation type.',
+        'Edit text or blocks in a field. Use `rewrite` to replace the entire content,',
+        '`replace`/`insert_after`/`delete` for surgical text edits, and `update_block`',
+        'to update embedded block fields (callToAction, video, etc.).',
+        'For non-text fields (boolean, select, number, date, tags), use `update_field` instead.',
         'Available fields: ' + allFields.join(', '),
       ].join(' '),
       inputSchema: z.object({
         field: z.enum(allFields as [string, ...string[]]),
         operations: z.array(z.union([
+          z.object({
+            type: z.literal('rewrite'),
+            content: z.string().describe('The complete new text content — replaces everything in the field'),
+          }),
           z.object({
             type: z.literal('replace'),
             search: z.string().describe('The exact text to find (must match exactly)'),
@@ -241,7 +276,11 @@ export class ResourceAgent {
 
         let applied = 0
         for (const op of input.operations) {
-          if (op.type === 'update_block') {
+          if (op.type === 'rewrite') {
+            if (Live.rewriteText(fieldDocName, op.content as string, aiCursor)) {
+              applied++
+            }
+          } else if (op.type === 'update_block') {
             if (Live.editBlock(fieldDocName, op.blockType as string, (op.blockIndex as number) ?? 0, op.field as string, op.value)) {
               applied++
             }
@@ -268,6 +307,10 @@ export class ResourceAgent {
 
         for (const op of input.operations) {
           if (op.type === 'update_block') continue // Blocks only exist in collab fields
+          if (op.type === 'rewrite') {
+            current = op.content as string
+            continue
+          }
           const search = op.search as string
           if (op.type === 'replace' && search) {
             current = current.replace(search, () => op.replace as string)
