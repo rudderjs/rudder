@@ -210,6 +210,19 @@ async function runChat(deps: RunChatDeps): Promise<void> {
             input: chunk.toolCall?.arguments,
           })
           break
+        case 'tool-result':
+          // Forward server-side tool results so the browser can build a
+          // wireMessagesRef that mirrors the persisted state. The `content`
+          // string MUST match what persistence.ts writes (string passthrough,
+          // otherwise JSON.stringify) so the continuation prefix check passes.
+          // See docs/plans/mixed-tool-continuation-plan.md.
+          send('tool_result', {
+            id:         chunk.toolCall?.id,
+            tool:       chunk.toolCall?.name,
+            toolCallId: chunk.toolCall?.id,
+            content:    typeof chunk.result === 'string' ? chunk.result : JSON.stringify(chunk.result),
+          })
+          break
         case 'pending-client-tools':
           send('pending_client_tools', { toolCalls: chunk.toolCalls ?? [] })
           break

@@ -782,8 +782,10 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
           for (const tc of currentToolCalls) {
             const tool = toolMap.get(tc.name)
             if (!tool) {
-              toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
-              messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
+              const unknownResult = `Error: Unknown tool "${tc.name}"`
+              toolResults.push({ toolCallId: tc.id, result: unknownResult })
+              messages.push({ role: 'tool', content: unknownResult, toolCallId: tc.id })
+              yield { type: 'tool-result' as const, toolCall: tc, result: unknownResult }
               continue
             }
             if (!tool.execute) {
@@ -795,9 +797,11 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
                 yield { type: 'tool-call' as const, toolCall: tc }
                 continue
               }
-              toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
-              messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
+              const placeholder = '[client tool — execute on client]'
+              toolResults.push({ toolCallId: tc.id, result: placeholder })
+              messages.push({ role: 'tool', content: placeholder, toolCallId: tc.id })
               yield { type: 'tool-call' as const, toolCall: tc }
+              yield { type: 'tool-result' as const, toolCall: tc, result: placeholder }
               continue
             }
 
@@ -807,6 +811,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               const rejectionResult = { rejected: true, reason: 'User rejected this tool call' }
               toolResults.push({ toolCallId: tc.id, result: rejectionResult })
               messages.push({ role: 'tool', content: JSON.stringify(rejectionResult), toolCallId: tc.id })
+              yield { type: 'tool-result' as const, toolCall: tc, result: rejectionResult }
               continue
             }
             if (approvalDecision === 'pending') {
@@ -826,6 +831,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
                   const resultStr = typeof beforeResult.result === 'string' ? beforeResult.result : JSON.stringify(beforeResult.result)
                   toolResults.push({ toolCallId: tc.id, result: beforeResult.result })
                   messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+                  yield { type: 'tool-result' as const, toolCall: tc, result: beforeResult.result }
                   await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, beforeResult.result)
                   continue
                 }
@@ -845,16 +851,19 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               toolResults.push({ toolCallId: tc.id, result })
               messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
               yield { type: 'tool-call' as const, toolCall: tc }
+              yield { type: 'tool-result' as const, toolCall: tc, result }
 
               // onAfterToolCall
               if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err)
-              toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
-              messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
+              const errResult = `Error: ${msg}`
+              toolResults.push({ toolCallId: tc.id, result: errResult })
+              messages.push({ role: 'tool', content: errResult, toolCallId: tc.id })
+              yield { type: 'tool-result' as const, toolCall: tc, result: errResult }
 
               // onAfterToolCall (error case)
-              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, `Error: ${msg}`)
+              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, errResult)
             }
           }
 

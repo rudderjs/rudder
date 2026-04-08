@@ -221,7 +221,6 @@ export class ResourceChatContext implements ChatContext {
       'If the user asks to edit, replace, insert, or delete specific text in a field, use one of the edit tools below.',
       '',
       '## Editing fields — `edit_text` vs `update_form_state`',
-      '**HARD RULE — DO NOT MIX TOOLS IN ONE TURN.** If a single user request needs both tools, pick `update_form_state` for ALL operations in that turn — it can do everything `edit_text` can plus more. Splitting one assistant turn between `edit_text` and `update_form_state` is a known dispatcher bug that will fail the round-trip. (Tracked in `docs/plans/mixed-tool-continuation-plan.md`.)',
       '',
       'You have TWO write tools that overlap. Pick deliberately:',
       '',

@@ -61,14 +61,17 @@ export interface StreamChunk {
     | 'text-delta'
     | 'tool-call-delta'
     | 'tool-call'
+    | 'tool-result'
     | 'usage'
     | 'finish'
     | 'pending-client-tools'
     | 'pending-approval'
   /** Text content delta (when type === 'text-delta') */
   text?: string
-  /** Tool call info (when type === 'tool-call' or 'tool-call-delta' or 'pending-approval') */
+  /** Tool call info (when type === 'tool-call', 'tool-call-delta', 'tool-result', or 'pending-approval') */
   toolCall?: Partial<ToolCall>
+  /** Tool execution result (when type === 'tool-result') */
+  result?: unknown
   /** Pending client tool calls (when type === 'pending-client-tools') */
   toolCalls?: ToolCall[]
   /** Approval-pending metadata (when type === 'pending-approval') */
