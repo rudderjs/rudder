@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="./logo.png" alt="RudderJS — Boost Your Node App" width="480" />
+  <strong>Laravel's developer experience, reimagined for the Node.js ecosystem.</strong>
 </p>
 
 <p align="center">
-  <strong>Laravel's developer experience, reimagined for the Node.js ecosystem.</strong>
+  <img src="./logo.png" alt="RudderJS — Boost Your Node App" width="480" />
 </p>
 
 <p align="center">
