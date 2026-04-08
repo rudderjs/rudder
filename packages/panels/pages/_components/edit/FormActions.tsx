@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { PanelI18n, PanelAgentMeta } from '@rudderjs/panels'
-import { useAgentRun } from '../agents/AgentOutput.js'
+import { useAgentRun } from '../agents/useAgentRun.js'
 
 interface Props {
   draftable:     boolean

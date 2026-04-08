@@ -2,7 +2,16 @@
 
 Restore field-level AI actions and resource-level agents to the **standalone path** (button → dedicated SSE endpoint → result in field), unblock client-tool round-trips on that path, and unify both surfaces under a single `PanelAgent` primitive so app devs can ship custom actions and tools without forking `@rudderjs/panels`.
 
-**Status:** IN PROGRESS — all decisions resolved 2026-04-08. **Phase 3 (rename) DONE 2026-04-08** (~120 LOC). **Phase 1 (extract `agentStream` helper) DONE 2026-04-08** (~115 LOC). **Phase 2 (upgrade standalone for client tools) DONE 2026-04-08** (~520 LOC). **Phase 4 (built-ins as registered `PanelAgent`s) DONE 2026-04-08** (~430 LOC). **Phase 5 (restore standalone for both surfaces; delete chat bridges) DONE 2026-04-08** (~340 LOC; both `AiQuickActions` and `FormActions` now route through `useAgentRun` to the standalone endpoint, `triggerRun` / `forceAgent` / `runForceAgent` / `AgentRunRequest` / `getForceAgent` all deleted, playground `ArticleResource.ts` migrated with a custom `seoTitleAction` PanelAgent as the reference example). Phase 6 (cleanup, docs, memory) is the final step as PR #6.
+**Status:** DONE 2026-04-08. All 6 phases shipped. Total ~1655 LOC across 6 PRs. Standalone field actions and resource agents both run via the dedicated `/_agents/${slug}` endpoint with full client-tool round-trip support backed by `@rudderjs/cache`. Built-in actions ship as registered `PanelAgent` instances; custom actions plug in via `Field.ai([Agent])`. Inline progress popover gives streaming feedback. Chat panel is now exclusively for open-ended conversations. Latent bug (resource agents on non-collab fields silently clobbering unsaved local edits) fixed. Unblocks `ai-loop-parity-plan.md`.
+
+| Phase | Description | LOC |
+|---|---|---|
+| 3 | Rename `ResourceAgent` → `PanelAgent` | ~120 |
+| 1 | Extract `streamAgentToSSE` helper | ~115 |
+| 2 | Standalone supports client-tool round-trips | ~520 |
+| 4 | Built-in actions as registered `PanelAgent`s | ~430 |
+| 5 | Restore standalone for both surfaces; delete chat bridges | ~340 |
+| 6 | Cleanup, docs, memory | ~130 |
 **Packages affected:** `@rudderjs/panels` (handlers, agents, schema, frontend chat + field renderers, service providers); `playground` (one reference resource migration)
 **Depends on:**
 - Nothing — this plan is itself the prerequisite for `ai-loop-parity-plan.md`
@@ -463,6 +472,8 @@ Six phases. Phases 1–2 are pure refactor and add no user-visible behavior. Pha
 ---
 
 ### Phase 6 — Cleanup, docs, memory updates
+
+**Status:** DONE 2026-04-08. ~130 LOC actual (close to ~80 estimate; small overage from updating multiple memory entries and doing the proper file rename via `git mv`). Deletions: `AgentOutput` JSX renderer (was lines 277-341 of `AgentOutput.tsx`), orphaned `playground/pages/(panels)/_components/agents/AgentSidebar.tsx` and the stale vendored `AgentOutput.tsx` copy. Rename: `packages/panels/pages/_components/agents/AgentOutput.tsx` → `useAgentRun.ts` (`.tsx` → `.ts` since the file no longer contains JSX). Import paths updated in `SchemaRenderer.tsx` and `FormActions.tsx`. Docs verified clean (no stale references in `docs/claude/`, `docs/guide/`, `docs/packages/panels/`). Memory updated: this plan marked DONE, `feedback_standalone_field_actions_vs_chat.md` updated to mark "restored 2026-04-08", `project_ai_loop_parity.md` updated to note this prerequisite is done.
 
 **Files:**
 - `packages/panels/pages/_components/agents/AgentOutput.tsx` → rename to `useAgentRun.ts`, drop the `AgentOutput` component (lines 124-188)

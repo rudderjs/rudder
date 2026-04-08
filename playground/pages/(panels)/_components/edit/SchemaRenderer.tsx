@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, ResolvedAiAction } from '@rudderjs/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
-import { useAgentRun } from '../agents/AgentOutput.js'
+import { useAgentRun } from '../agents/useAgentRun.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'
 import type { SchemaItem } from '../../_lib/formHelpers.js'
 

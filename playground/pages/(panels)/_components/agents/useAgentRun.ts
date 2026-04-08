@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import type { PanelAgentMeta } from '@rudderjs/panels'
 import { executeClientTool, hasClientTool } from './clientTools.js'
 
 // ─── SSE event types ────────────────────────────────────────
@@ -272,70 +271,4 @@ export function useAgentRun(apiBase: string, resourceSlug: string, onFieldUpdate
   useEffect(() => () => { abortRef.current?.abort() }, [])
 
   return { entries, status, run, reset }
-}
-
-// ─── Output renderer ────────────────────────────────────────
-
-interface AgentOutputProps {
-  entries: OutputEntry[]
-  status:  AgentStatus
-}
-
-export function AgentOutput({ entries, status }: AgentOutputProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // Scroll within the sidebar container only — not the whole page
-    const el = bottomRef.current
-    if (el?.parentElement) {
-      el.parentElement.scrollTop = el.parentElement.scrollHeight
-    }
-  }, [entries.length])
-
-  if (entries.length === 0 && status === 'idle') return null
-
-  return (
-    <div className="space-y-2 text-sm">
-      {entries.map((entry, i) => {
-        switch (entry.type) {
-          case 'text':
-            return (
-              <div key={i} className="text-foreground whitespace-pre-wrap">
-                {entry.text}
-              </div>
-            )
-          case 'tool_call':
-            return (
-              <div key={i} className="flex items-center gap-2 text-muted-foreground">
-                <svg className="w-3.5 h-3.5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Updated <span className="font-medium text-foreground">{(entry as { input?: Record<string, unknown> }).input?.field as string ?? entry.tool.replace('update_', '')}</span></span>
-              </div>
-            )
-          case 'complete':
-            return (
-              <div key={i} className="pt-2 border-t text-muted-foreground">
-                Done — {entry.data.steps} step{entry.data.steps !== 1 ? 's' : ''}, {entry.data.usage.totalTokens} tokens
-              </div>
-            )
-          case 'error':
-            return (
-              <div key={i} className="text-red-600 dark:text-red-400">
-                Error: {entry.message}
-              </div>
-            )
-        }
-      })}
-
-      {status === 'running' && (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          Thinking...
-        </div>
-      )}
-
-      <div ref={bottomRef} />
-    </div>
-  )
 }
