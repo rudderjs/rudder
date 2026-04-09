@@ -151,6 +151,95 @@ the conversation store never holds an unfulfilled `tool_use` block.
 the persisted store, executing client tools via the `clientTools` registry,
 showing the inline approval card) — see its README for the end-to-end flow.
 
+### Tool execution context
+
+Server-tool executes can optionally accept a second `ctx: ToolCallContext`
+argument carrying loop-level metadata — currently `{ toolCallId }`. The
+parameter is optional, so existing one-arg tools keep working unchanged.
+
+```ts
+import { toolDefinition, type ToolCallContext } from '@rudderjs/ai'
+
+const myTool = toolDefinition({
+  name: 'my_tool',
+  description: '...',
+  inputSchema: z.object({ q: z.string() }),
+}).server(async (input, ctx?: ToolCallContext) => {
+  console.log('this call id:', ctx?.toolCallId)
+  return { ok: true }
+})
+```
+
+The primary consumer is `@rudderjs/panels`'s `runAgentTool`, which uses
+`ctx.toolCallId` to correlate sub-agent suspensions with the parent's
+`run_agent` call (see "Pausing the loop from a server tool" below).
+
+### Pausing the loop from a server tool
+
+A server tool's async-generator execute can `yield` a `pauseForClientTools`
+control chunk to halt the enclosing agent loop and surface a set of
+**client** tool calls to the caller — as if the model itself had emitted
+them. The yielding tool's own call stays orphaned in the message history
+until the caller resolves it on continuation.
+
+```ts
+import { toolDefinition, pauseForClientTools } from '@rudderjs/ai'
+
+const runNestedTool = toolDefinition({
+  name: 'run_nested',
+  description: 'Runs a nested workflow that may need browser interaction',
+  inputSchema: z.object({ task: z.string() }),
+}).server(async function* (input, ctx) {
+  // ...do some server-side work, maybe yield progress chunks...
+
+  if (needsBrowserAction) {
+    // Persist whatever state you need to resume later, keyed by an
+    // opaque `resumeHandle` your continuation logic understands.
+    const handle = await persistMyResumeState({
+      parentToolCallId: ctx?.toolCallId,
+      task: input.task,
+      // ...
+    })
+
+    // Yielding the control chunk halts iteration. The agent loop
+    // appends the toolCalls to its own pendingClientToolCalls,
+    // sets stop-for-client-tools, and emits 'pending-client-tools'
+    // upward. The browser executes the calls and POSTs back, your
+    // continuation handler picks up `handle` and resumes.
+    yield pauseForClientTools(
+      [{ id: 'call_xyz', name: 'update_form_state', arguments: { ... } }],
+      handle,
+    )
+    // Unreachable — the loop halts iteration after the pause chunk.
+    return null as never
+  }
+
+  return { result: 'done' }
+})
+```
+
+**Why a yield instead of a throw:**
+
+- Symmetry with the existing `tool-update` yield protocol (no parallel
+  catch-based control path)
+- Middleware can observe pauses through `runOnChunk`; throws would route
+  through `onError` and muddle telemetry
+- Exceptions signal "something went wrong"; this is not an error
+- Any server tool can yield this — not just nested agent runners. E.g., a
+  tool that wants the browser's geolocation, clipboard, or a user file
+  upload.
+
+**Recognizing the chunk:** the loop uses `isPauseForClientToolsChunk(value)`
+internally. Tool authors should construct chunks via the
+`pauseForClientTools()` factory rather than by hand so future shape
+changes stay source-compatible.
+
+**Resuming:** that's caller territory — `@rudderjs/ai` knows nothing about
+the resume protocol. The canonical implementation is in
+`@rudderjs/panels`'s `subAgentResume.ts`, which uses a runStore to persist
+sub-agent state and re-invokes the tool's enclosing agent on the
+continuation request.
+
 ### Structured Output
 
 ```ts
