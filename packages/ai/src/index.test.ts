@@ -1088,3 +1088,125 @@ describe('tool approval enforcement', () => {
     assert.deepEqual(toolResult.result, { rejected: true, reason: 'User rejected this tool call' })
   })
 })
+
+// ─── Async-generator tool execute (Phase 1: tool-update streaming) ────────
+
+describe('async-generator tool execute', () => {
+  beforeEach(() => installScriptedFake())
+
+  it('streaming loop emits a tool-update chunk for each yield, then tool-result with the return value', async () => {
+    const search = toolDefinition({
+      name: 'search',
+      description: 'streamed search',
+      inputSchema: z.object({ q: z.string() }),
+    }).server(async function* ({ q }) {
+      yield { state: 'searching', query: q }
+      yield { state: 'ranking', count: 3 }
+      return { hits: ['a', 'b', 'c'] }
+    })
+
+    _script = [
+      { toolCalls: [{ id: 'tc-stream-1', name: 'search', arguments: { q: 'hello' } }] },
+      { text: 'Done.' },
+    ]
+
+    const a = agent({ instructions: 'sys', tools: [search] })
+    const { stream, response } = a.stream('go')
+
+    const collected: StreamChunk[] = []
+    for await (const chunk of stream) collected.push(chunk)
+
+    const updates = collected.filter(c => c.type === 'tool-update')
+    const results = collected.filter(c => c.type === 'tool-result')
+
+    assert.strictEqual(updates.length, 2, 'expected 2 tool-update chunks (one per yield)')
+    assert.deepEqual(updates[0]!.update, { state: 'searching', query: 'hello' })
+    assert.deepEqual(updates[1]!.update, { state: 'ranking', count: 3 })
+    assert.strictEqual(updates[0]!.toolCall?.id, 'tc-stream-1')
+
+    assert.strictEqual(results.length, 1, 'expected exactly one tool-result chunk')
+    assert.deepEqual(results[0]!.result, { hits: ['a', 'b', 'c'] })
+
+    // Order check: every tool-update must come after at least one tool-call
+    // and before the tool-result. (The provider mock + loop both emit
+    // tool-call, so we don't pin the count of tool-calls.)
+    const types = collected.map(c => c.type)
+    const firstUpdate = types.indexOf('tool-update')
+    const lastUpdate = types.lastIndexOf('tool-update')
+    const lastToolCall = types.lastIndexOf('tool-call')
+    const toolResultIdx = types.indexOf('tool-result')
+    assert.ok(lastToolCall < firstUpdate, 'tool-call must precede tool-update')
+    assert.ok(lastUpdate < toolResultIdx, 'tool-update must precede tool-result')
+
+    const final = await response
+    assert.strictEqual(final.text, 'Done.')
+    assert.strictEqual(final.steps.length, 2)
+    assert.deepEqual(final.steps[0]!.toolResults[0]!.result, { hits: ['a', 'b', 'c'] })
+  })
+
+  it('non-streaming agent.prompt() drains generator yields and captures the return value', async () => {
+    const yielded: unknown[] = []
+    const tool = toolDefinition({
+      name: 'gen_tool',
+      description: 'generator under prompt()',
+      inputSchema: z.object({}),
+    }).server(async function* () {
+      yielded.push('first')
+      yield { progress: 1 }
+      yielded.push('second')
+      yield { progress: 2 }
+      yielded.push('done')
+      return 'final-value'
+    })
+
+    _script = [
+      { toolCalls: [{ id: 'tc-prompt-1', name: 'gen_tool', arguments: {} }] },
+      { text: 'OK' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+
+    // Generator ran to completion
+    assert.deepEqual(yielded, ['first', 'second', 'done'])
+    // The return value (not a yielded value) is what surfaces in toolResults
+    assert.strictEqual(result.steps[0]!.toolResults[0]!.result, 'final-value')
+    // The next model step saw the stringified return value
+    assert.strictEqual(result.text, 'OK')
+  })
+
+  it('middleware onChunk sees tool-update chunks', async () => {
+    const seen: StreamChunk[] = []
+    const recorder: AiMiddleware = {
+      name: 'recorder',
+      onChunk(_ctx, chunk) {
+        seen.push(chunk)
+        return chunk
+      },
+    }
+
+    const tool = toolDefinition({
+      name: 'gen_mw',
+      description: 'generator with middleware',
+      inputSchema: z.object({}),
+    }).server(async function* () {
+      yield { step: 'a' }
+      yield { step: 'b' }
+      return 'done'
+    })
+
+    _script = [
+      { toolCalls: [{ id: 'tc-mw-1', name: 'gen_mw', arguments: {} }] },
+      { text: 'finished' },
+    ]
+
+    const a = agent({ instructions: 'sys', tools: [tool], middleware: [recorder] })
+    const { stream, response } = a.stream('go')
+    for await (const _ of stream) { /* drain */ }
+    await response
+
+    const updateChunksSeenByMw = seen.filter(c => c.type === 'tool-update')
+    assert.strictEqual(updateChunksSeenByMw.length, 2, 'middleware should observe both tool-update chunks')
+    assert.deepEqual(updateChunksSeenByMw[0]!.update, { step: 'a' })
+    assert.deepEqual(updateChunksSeenByMw[1]!.update, { step: 'b' })
+  })
+})

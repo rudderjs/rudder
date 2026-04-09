@@ -62,16 +62,23 @@ export interface StreamChunk {
     | 'tool-call-delta'
     | 'tool-call'
     | 'tool-result'
+    | 'tool-update'
     | 'usage'
     | 'finish'
     | 'pending-client-tools'
     | 'pending-approval'
   /** Text content delta (when type === 'text-delta') */
   text?: string
-  /** Tool call info (when type === 'tool-call', 'tool-call-delta', 'tool-result', or 'pending-approval') */
+  /** Tool call info (when type === 'tool-call', 'tool-call-delta', 'tool-result', 'tool-update', or 'pending-approval') */
   toolCall?: Partial<ToolCall>
   /** Tool execution result (when type === 'tool-result') */
   result?: unknown
+  /**
+   * Preliminary tool progress payload (when type === 'tool-update').
+   * Emitted by async-generator tool executes for each `yield`.
+   * Ephemeral: not persisted, not seen by the model on the next step.
+   */
+  update?: unknown
   /** Pending client tool calls (when type === 'pending-client-tools') */
   toolCalls?: ToolCall[]
   /** Approval-pending metadata (when type === 'pending-approval') */
@@ -202,8 +209,23 @@ export interface SpeechToTextAdapter {
 
 // ─── Tool ─────────────────────────────────────────────────
 
-export type ToolExecuteFn<TInput = unknown, TOutput = unknown> =
-  (input: TInput) => TOutput | Promise<TOutput>
+/**
+ * Tool execute function.
+ *
+ * Returns either a value (sync), a promise (async), or an async generator.
+ * Generator-style executes can `yield` preliminary progress payloads —
+ * each yield is emitted as a `tool-update` stream chunk while the tool runs.
+ * The generator's `return` value is the final tool result (the value the
+ * model and the persisted store both see).
+ *
+ * `TUpdate` defaults to `never` so non-generator call sites infer cleanly
+ * without a third type parameter on every existing tool definition.
+ */
+export type ToolExecuteFn<TInput = unknown, TOutput = unknown, TUpdate = never> =
+  (input: TInput) =>
+    | TOutput
+    | Promise<TOutput>
+    | AsyncGenerator<TUpdate, TOutput, void>
 
 export type ToolNeedsApproval<TInput = unknown> =
   boolean | ((input: TInput) => boolean | Promise<boolean>)
@@ -233,7 +255,7 @@ export interface ToolDefinitionOptions<
  */
 export interface Tool<TInput = unknown, TOutput = unknown> {
   readonly definition: ToolDefinitionOptions
-  readonly execute?: ToolExecuteFn<TInput, TOutput> | undefined
+  readonly execute?: ToolExecuteFn<TInput, TOutput, unknown> | undefined
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,7 +266,7 @@ export type AnyTool = Tool<any, any>
  * `execute` is defined.
  */
 export interface ServerTool<TInput = unknown, TOutput = unknown> extends Tool<TInput, TOutput> {
-  readonly execute: ToolExecuteFn<TInput, TOutput>
+  readonly execute: ToolExecuteFn<TInput, TOutput, unknown>
 }
 
 /**

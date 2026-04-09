@@ -543,7 +543,14 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
           }
 
           try {
-            const result = await tool.execute(toolArgs)
+            // Drain generator yields silently in the non-streaming loop —
+            // the same tool definition must work in both prompt() and stream().
+            const execGen = executeMaybeStreaming(tool, toolArgs)
+            let result: unknown
+            while (true) {
+              const step = await execGen.next()
+              if (step.done) { result = step.value; break }
+            }
             const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
             toolResults.push({ toolCallId: tc.id, result })
             messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
@@ -846,11 +853,30 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
             }
 
             try {
-              const result = await tool.execute(toolArgs)
+              // Emit the tool-call marker before execution so the UI sees
+              // tool-call → tool-update* → tool-result in order. Async-
+              // generator executes stream their yields as tool-update chunks
+              // live; plain executes yield nothing here.
+              yield { type: 'tool-call' as const, toolCall: tc }
+              const execGen = executeMaybeStreaming(tool, toolArgs)
+              let result: unknown
+              while (true) {
+                const step = await execGen.next()
+                if (step.done) {
+                  result = step.value
+                  break
+                }
+                const updateChunk: StreamChunk = { type: 'tool-update', toolCall: tc, update: step.value }
+                if (middlewares.length > 0) {
+                  const transformed = runOnChunk(middlewares, ctx, updateChunk)
+                  if (transformed) yield transformed
+                } else {
+                  yield updateChunk
+                }
+              }
               const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
               toolResults.push({ toolCallId: tc.id, result })
               messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-              yield { type: 'tool-call' as const, toolCall: tc }
               yield { type: 'tool-result' as const, toolCall: tc, result }
 
               // onAfterToolCall
@@ -1003,7 +1029,15 @@ async function resumePendingToolCalls(deps: {
     }
 
     try {
-      const result = await tool.execute(tc.arguments)
+      // Drain generator yields silently — approval-resume runs outside the
+      // stream, so any preliminary updates are discarded; only the final
+      // return value is captured.
+      const execGen = executeMaybeStreaming(tool, tc.arguments)
+      let result: unknown
+      while (true) {
+        const step = await execGen.next()
+        if (step.done) { result = step.value; break }
+      }
       const content = typeof result === 'string' ? result : JSON.stringify(result)
       const m: AiMessage = { role: 'tool', content, toolCallId: tc.id }
       messages.push(m)
@@ -1017,6 +1051,51 @@ async function resumePendingToolCalls(deps: {
   }
 
   return { resumed, approvalStillRequired }
+}
+
+/**
+ * Detect an async generator (the value returned by `async function*` or any
+ * object implementing the AsyncGenerator protocol). We use a structural check
+ * because the executor may not be authored as a literal `async function*`
+ * (e.g. wrapped or returned from a factory).
+ */
+function isAsyncGenerator(value: unknown): value is AsyncGenerator<unknown, unknown, void> {
+  if (value === null || typeof value !== 'object') return false
+  const v = value as { next?: unknown; return?: unknown; [Symbol.asyncIterator]?: unknown }
+  return typeof v.next === 'function'
+    && typeof v.return === 'function'
+    && typeof v[Symbol.asyncIterator] === 'function'
+}
+
+/**
+ * Uniformly iterate a tool's `execute`, whether it returns a value, a
+ * promise, or an async generator.
+ *
+ * The helper is itself an async generator: each `yield` is a preliminary
+ * tool-update payload (only generator-style executes produce these), and the
+ * generator's `return` value is the final tool result.
+ *
+ * Streaming callers iterate and emit `tool-update` chunks live as updates
+ * arrive. Non-streaming callers iterate and discard yields, capturing only
+ * the final return value — same tool definition works in both modes.
+ */
+async function* executeMaybeStreaming(
+  tool: Tool,
+  args: Record<string, unknown>,
+): AsyncGenerator<unknown, unknown, void> {
+  const execute = tool.execute as ((input: unknown) => unknown) | undefined
+  if (!execute) {
+    throw new Error('Tool has no execute function')
+  }
+  const ret = execute(args)
+  if (isAsyncGenerator(ret)) {
+    while (true) {
+      const step = await ret.next()
+      if (step.done) return step.value
+      yield step.value
+    }
+  }
+  return await ret
 }
 
 /**
