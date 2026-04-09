@@ -25,9 +25,48 @@ import {
   Stats,
   Stat,
 } from '@rudderjs/panels'
+import { toolDefinition } from '@rudderjs/ai'
+import { z } from 'zod'
 import { RichContentField } from '@rudderjs/panels-lexical'
 import { MediaPickerField } from '@rudderjs/media'
 import { Article } from '../../../Models/Article.js'
+
+// ── ai-loop-parity Phase 1 + 2 smoke test tool ─────────────────────────────
+//
+// `slow_search` exercises:
+//   • Phase 1 — async-generator `.server()` execute. The yields are sent
+//     through the agent stream as `tool-update` chunks (NOT yet forwarded
+//     to the chat UI — that's Phase 3). The verification surface for now
+//     is server-side `console.log` lines, which should appear in order
+//     with the 500ms gaps.
+//   • Phase 2 — `.modelOutput()` narrows the value the parent model sees on
+//     its next step, while step.toolResults still carries the original.
+//
+// Trigger from chat: "Use slow_search to look up 'rudder'".
+const slowSearchTool = toolDefinition({
+  name: 'slow_search',
+  description: 'Search the database for a query (slow, with progress).',
+  inputSchema: z.object({ query: z.string() }),
+})
+  .server(async function* ({ query }) {
+    console.log('[slow_search] starting:', query)
+    yield { state: 'searching', query }
+
+    await new Promise(r => setTimeout(r, 500))
+    console.log('[slow_search] phase 2: ranking')
+    yield { state: 'ranking', count: 42 }
+
+    await new Promise(r => setTimeout(r, 500))
+    console.log('[slow_search] done')
+    return { hits: ['alpha', 'beta', 'gamma'], totalScanned: 1000 }
+  })
+  .modelOutput((result) => {
+    // Smoke-test marker — if you see "PHASE2_OK" in the model's reply, it
+    // means the model actually consumed this string (not the original JSON).
+    // The original {hits, totalScanned} object NEVER reaches the model.
+    console.log('[slow_search] modelOutput called with', result)
+    return `PHASE2_OK Search complete — ${result.hits.length} hits: ${result.hits.join(', ')}. Tell the user PHASE2_OK exactly.`
+  })
 
 // Reference example for the Phase 5 plan: a custom PanelAgent passed
 // directly to .ai([...]) — no separate registration needed. The action
@@ -312,6 +351,28 @@ export class ArticleResource extends Resource {
         .icon('Search')
         .instructions('You are a content editor. you can edit the content of the article to improve clarity, grammar, and engagement. Use the current content and title for context.')
         .fields(['title', 'content']),
+
+      // ai-loop-parity Phase 1 + 2 smoke test agent. Standalone (button-click)
+      // so it must NOT wait for user input — it calls slow_search immediately
+      // with a hardcoded query, then summarizes. After this runs you should
+      // see, in the playground server console:
+      //   [slow_search] starting: rudder
+      //   [slow_search] phase 2: ranking
+      //   [slow_search] done
+      // and the chat reply should mention "3 hits" + "rudder" but should NOT
+      // quote totalScanned (that field is hidden by .modelOutput).
+      PanelAgent.make('slow-search-test')
+        .label('Slow search (smoke test)')
+        .icon('Search')
+        .instructions(
+          'You exist ONLY to smoke-test the slow_search tool. ' +
+          'Immediately call slow_search with the query "rudder" — do not ' +
+          'ask for any input. After it returns, reply in one sentence summarizing ' +
+          'what slow_search said. Do NOT call any other tool, do NOT modify any ' +
+          'field, do NOT call update_form_state. Just call slow_search once and ' +
+          'then write the one-sentence summary.',
+        )
+        .tools([slowSearchTool]),
     ]
   }
 

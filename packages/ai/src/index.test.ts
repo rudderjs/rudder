@@ -1333,4 +1333,47 @@ describe('toModelOutput', () => {
     assert.ok(errors[0] instanceof Error)
     assert.match((errors[0] as Error).message, /formatter exploded/)
   })
+
+  // Regression: combining a generator-style .server() with .modelOutput()
+  // must infer the generator's RETURN type for the modelOutput callback,
+  // not the AsyncGenerator wrapper. The original Phase 2 overloads put the
+  // plain-async signature first, which made TypeScript bind
+  // `TReturn = AsyncGenerator<TUpdate, TActualReturn, void>` and broke
+  // chained refinements. Caught by the playground; this test guards it.
+  it('generator + modelOutput infers the return type, not the AsyncGenerator wrapper', async () => {
+    const tool = toolDefinition({
+      name: 'gen_with_summary',
+      description: 'streams progress, summarizes for the model',
+      inputSchema: z.object({}),
+    })
+      .server(async function* () {
+        yield { phase: 'one' }
+        yield { phase: 'two' }
+        return { hits: ['a', 'b', 'c'], totalScanned: 100 }
+      })
+      // If TS regresses, `result` here gets the AsyncGenerator type and the
+      // following property accesses fail to compile.
+      .modelOutput((result) =>
+        `Search complete — ${result.hits.length} hits out of ${result.totalScanned} scanned`,
+      )
+
+    _script = [
+      { toolCalls: [{ id: 'tmo-gen-1', name: 'gen_with_summary', arguments: {} }] },
+      { text: 'ack' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+
+    // Original structured value still in toolResults.
+    assert.deepEqual(result.steps[0]!.toolResults[0]!.result, {
+      hits: ['a', 'b', 'c'],
+      totalScanned: 100,
+    })
+
+    // Model saw the summary string, not the JSON.
+    const secondCall = _calls[1]
+    assert.ok(secondCall)
+    const toolMsg = secondCall.messages.find(m => m.role === 'tool' && m.toolCallId === 'tmo-gen-1')
+    assert.strictEqual(toolMsg?.content, 'Search complete — 3 hits out of 100 scanned')
+  })
 })

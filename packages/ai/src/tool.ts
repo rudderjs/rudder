@@ -37,11 +37,18 @@ export class ToolBuilder<
    * tool result. The same tool definition works in both `agent.prompt()`
    * (yields are silently drained) and `agent.stream()`.
    */
-  server<TReturn = unknown>(
-    execute: (input: z.infer<TInput>) => TReturn | Promise<TReturn>,
-  ): ServerToolBuilder<z.infer<TInput>, TReturn>
+  // The generator overload MUST come first. If the plain-async overload is
+  // tried first, TypeScript happily binds `TReturn = AsyncGenerator<...>` for
+  // an `async function*`, which then leaks the generator type into chained
+  // refinements like `.modelOutput(result => ...)`. Generators have a
+  // structural protocol (`.next` / `.return` / `[Symbol.asyncIterator]`) that
+  // doesn't match `Promise<T>`, so non-generator executes still resolve
+  // cleanly to the second overload.
   server<TReturn = unknown, TUpdate = unknown>(
     execute: (input: z.infer<TInput>) => AsyncGenerator<TUpdate, TReturn, void>,
+  ): ServerToolBuilder<z.infer<TInput>, TReturn>
+  server<TReturn = unknown>(
+    execute: (input: z.infer<TInput>) => TReturn | Promise<TReturn>,
   ): ServerToolBuilder<z.infer<TInput>, TReturn>
   server<TReturn = unknown>(
     execute: ToolExecuteFn<z.infer<TInput>, TReturn, unknown>,
