@@ -13,7 +13,7 @@ Caught + fixed during execution:
 - `loadAi()` lazy-import declares `toolDefinition: any` to keep `@rudderjs/ai` from being a hard type dep, which strips chained-builder return types in panels. Worked around in `runAgentTool.ts` with an explicit `r: RunAgentResult` annotation. Proper fix (typing `loadAi()`'s return value) deferred as a separate cleanup.
 - Plan-doc deviations from actual codebase: SSE forwarding lives in `agentStream/index.ts` (not `chatHandler.ts`) since `standalone-client-tools-plan` Phase 1 extracted it; builder method renamed `.toModelOutput(fn)` → `.modelOutput(fn)` because the original name collides with the `Tool.toModelOutput` field on the same class.
 
-Surfaced (NOT fixed — pre-existing, separate scope): when a sub-agent invoked via `run_agent` calls a client tool like `update_form_state`, the sub-agent loop runs in placeholder mode and the browser never executes the tool. The model thinks the call succeeded but the form never changes. R7-adjacent. Tracked as `bug_subagent_client_tools` in memory.
+Surfaced during execution (originally a pre-existing bug from before this plan, **NOW FIXED 2026-04-09 via `subagent-client-tools-plan.md`**): sub-agents invoked via `run_agent` couldn't actually execute browser-routed client tools. The follow-up plan added a yieldable `pauseForClientTools` control chunk to `@rudderjs/ai` and a server-side sub-run dispatch handler in panels.
 
 **Packages affected:** `@rudderjs/ai` (types, agent loop, tool builder), `@rudderjs/panels` (agentStream forwarder, AiChatContext, chat UI registry, runAgentTool, AgentRunRenderer)
 **Depends on:**

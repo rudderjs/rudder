@@ -2,7 +2,22 @@
 
 Make client tools (`update_form_state`, `read_form_state`, any future `.client()` tool) work when invoked from a sub-agent run through the chat-level `run_agent` tool. Today they silently no-op, because a sub-agent running inside the parent loop can't suspend → bounce to the browser → resume.
 
-**Status:** DRAFT 2026-04-09.
+**Status:** **DONE 2026-04-09.** All 5 phases shipped (~900 LOC across `@rudderjs/ai` and `@rudderjs/panels`). Verified end-to-end against the playground:
+- "improve this article" → `improve-content` sub-agent pauses twice (title then content), both fields visibly update, parent streams summary
+- Multi-turn continuity: follow-up "what is title?" passes the prefix check
+- "add a Call to Action block to the content" → uses `update_form_state`, block visibly appears
+
+**Phase deviations from the original draft:**
+- Phase 2's mechanism was originally drafted as a thrown `PauseLoopForClientTools` error class. Refactored to a yield-based control chunk (`pauseForClientTools(toolCalls, handle)`) before commit because (a) middleware can observe pauses via `runOnChunk`, (b) pauses are control signals not errors, (c) symmetric with the existing `tool-update` yield protocol from ai-loop-parity Phase 1, (d) any server tool can use it without subclassing an error. Same architectural endpoint, cleaner mechanism.
+- Phase 4 absorbed an unscoped bugfix surfaced during smoke testing: stripped `insert_block`/`update_block`/`delete_block` from `edit_text`'s schema in BOTH `chat/tools/editTextTool.ts` AND `agents/PanelAgent.ts`. Soft prompt rules don't override tool schema affordances. Also threaded `builderCatalog` through `PanelAgentContext` so sub-agents and standalone agents know block types — previously only the chat agent did.
+
+**Bugs caught during execution:**
+- `runAgentTool` initially captured sub-agent message history as `result.steps.map(s => s.message)` — this drops every tool-result message between assistant steps, and the provider rejects the resume with "tool_calls must be followed by tool messages." Fixed by interleaving each step's `toolResults` inline AND prepending the original user prompt.
+- Top-level `import { randomUUID } from 'node:crypto'` got externalized by Vite during client bundling and crashed the browser at module load. Fixed by lazy-loading via `import('node:crypto')` only when needed server-side. Same `feedback_production_build.md` pattern as before.
+- The browser's default stream-close wire-log assembly inverts the order of bridge `tool_result` vs final assistant text in sub-run resume turns, AND ghost-appends an empty assistant message on pause-to-pause-again turns. Fixed by emitting a `wire_log_sync` SSE event at the end of every sub-run turn carrying the canonical persisted parent history; the browser replaces `wireMessagesRef` wholesale instead of guessing.
+- Sub-agent text/tool_call/tool_result events during the resume phase were polluting the parent's wire log AND concatenating into the parent's assistant text. Fixed by wrapping `send` during the sub-agent phase to translate every event into a `tool_update` payload on the parent's `run_agent` tool-call id (`subagent_event` wrapper).
+
+**Status of original draft:** DRAFT 2026-04-09.
 
 **Packages affected:** `@rudderjs/ai` (optional — depends on chosen approach), `@rudderjs/panels` (runAgentTool, chat continuation, runStore, chatHandler)
 

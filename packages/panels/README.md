@@ -890,6 +890,38 @@ out of the box for resource chats:
 |---|---|
 | `pending_client_tools` | Server stopped because the model called a client tool. Client should execute it locally and re-POST with the result in `messages`. |
 | `tool_approval_required` | Server stopped because a tool needs approval. Client renders an inline approval card; on click, re-POSTs with `approvedToolCallIds` or `rejectedToolCallIds`. |
+| `wire_log_sync` | Server-authoritative parent conversation history. Browser replaces its wire log wholesale. Emitted at the end of sub-run resume turns. |
+
+### Sub-agents and client tools
+
+When the chat agent dispatches a sub-agent via `run_agent('seo')` and the
+sub-agent calls a client tool like `update_form_state`, the chat handler
+seamlessly bridges the round-trip. The sub-agent pauses, the browser
+executes the client tool, and the sub-agent resumes — all without the
+chat needing to know it was a nested call.
+
+How it works under the hood:
+
+1. The sub-agent yields a `pauseForClientTools` control chunk from its
+   stream when its model calls a client tool.
+2. The agent loop in `@rudderjs/ai` propagates the chunk as a parent-level
+   `pending-client-tools` state and `runAgentTool` stores `SubRunState` in
+   the runStore (cache-backed, 5-minute TTL) keyed by a fresh `subRunId`.
+3. The browser executes the client tools and POSTs to `/_chat` with
+   `body.subRunId` and `body.subAgentToolResults` (a dedicated field so
+   sub-agent internals never pollute the parent conversation).
+4. The chat handler short-circuits to `subAgentResume.ts`, which atomically
+   consumes the runStore state, validates ownership, rehydrates a fresh
+   context, resumes the sub-agent, and on completion injects a synthetic
+   `run_agent` tool result into the parent history before driving the
+   parent loop forward.
+5. The browser receives a `wire_log_sync` event with the canonical parent
+   history so its wire log stays in sync for follow-up turns.
+
+You don't need to configure anything — sub-agents in `Resource.agents()`
+work this way out of the box. See
+[`docs/plans/subagent-client-tools-plan.md`](../../docs/plans/subagent-client-tools-plan.md)
+for the full architecture.
 
 ### Registering your own client tools
 
