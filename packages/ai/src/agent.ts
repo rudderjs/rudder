@@ -1,5 +1,5 @@
 import { AiRegistry } from './registry.js'
-import { toolToSchema } from './tool.js'
+import { PauseLoopForClientTools, toolToSchema } from './tool.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import { QueuedPromptBuilder } from './queue-job.js'
 import {
@@ -566,6 +566,21 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
             // onAfterToolCall
             if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
           } catch (err: unknown) {
+            // A server tool can throw PauseLoopForClientTools to surface a
+            // set of nested client-tool calls to the parent loop's caller
+            // — used by panels' run_agent tool when a sub-agent paused on
+            // its own client tool and needs the browser to execute it.
+            // The throwing tool's own call stays orphaned in messages
+            // (no error result pushed); the caller is responsible for
+            // filling it in on continuation.
+            if (err instanceof PauseLoopForClientTools) {
+              for (const pending of err.toolCalls) {
+                pendingClientToolCalls.push(pending)
+              }
+              loopFinishReason = 'client_tool_calls'
+              stopForClientTools = true
+              continue
+            }
             const msg = err instanceof Error ? err.message : String(err)
             toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
             messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
@@ -898,6 +913,20 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               // onAfterToolCall
               if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
             } catch (err: unknown) {
+              // PauseLoopForClientTools — sub-agent nested pause. See the
+              // matching block in runAgentLoop (non-streaming) for
+              // rationale. Same semantics: append to pendingClientToolCalls,
+              // set stop flag, no error tool_result/tool message pushed.
+              // The post-loop emission at :949 will surface the appended
+              // calls as a `pending-client-tools` chunk.
+              if (err instanceof PauseLoopForClientTools) {
+                for (const pending of err.toolCalls) {
+                  pendingClientToolCalls.push(pending)
+                }
+                loopFinishReason = 'client_tool_calls'
+                stopForClientTools = true
+                continue
+              }
               const msg = err instanceof Error ? err.message : String(err)
               const errResult = `Error: ${msg}`
               toolResults.push({ toolCallId: tc.id, result: errResult })

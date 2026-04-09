@@ -2,11 +2,48 @@ import type { z } from 'zod'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
 import type {
   Tool,
+  ToolCall,
   ToolCallContext,
   ToolDefinitionOptions,
   ToolDefinitionSchema,
   ToolExecuteFn,
 } from './types.js'
+
+/**
+ * Typed error a server tool can throw to pause the enclosing agent loop
+ * and surface a set of CLIENT tool calls to the caller — as if the model
+ * itself had emitted them.
+ *
+ * This is the one sanctioned way for a server tool to inject client-tool
+ * calls into the parent loop's pending list. The agent loop's tool-execute
+ * catch recognizes the error (via `instanceof PauseLoopForClientTools`),
+ * appends `toolCalls` to the parent's `pendingClientToolCalls`, sets the
+ * stop-for-client-tools flag, and — critically — does NOT push an error
+ * tool result / tool message for the throwing tool call. The throwing
+ * tool's own call remains orphaned in the parent's message history until
+ * the caller resolves it on continuation (typically by computing a final
+ * result from whatever the client-side tool execution returned).
+ *
+ * **Primary use case:** nested agent runners. A `run_agent`-style tool
+ * that streams a sub-agent server-side can hit a pause point when the
+ * sub-agent's model calls a client tool. Those client calls have to be
+ * executed in the browser, not server-side, so the parent loop must
+ * surface them to its own caller. Throwing this error is how.
+ *
+ * Tools that throw this error are responsible for persisting any state
+ * they need to resume the inner work on continuation (usually in a cache
+ * or runStore). `@rudderjs/ai` does not know or care about that state —
+ * it just propagates the pause.
+ */
+export class PauseLoopForClientTools extends Error {
+  readonly toolCalls: ToolCall[]
+
+  constructor(toolCalls: ToolCall[], message?: string) {
+    super(message ?? 'Agent loop paused for nested client tool calls')
+    this.name = 'PauseLoopForClientTools'
+    this.toolCalls = toolCalls
+  }
+}
 
 /**
  * Builder returned by {@link toolDefinition}. The builder itself is a valid

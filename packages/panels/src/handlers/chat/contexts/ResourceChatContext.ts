@@ -125,7 +125,11 @@ export class ResourceChatContext implements ChatContext {
       blockAllowlist[entry.fieldName] = new Set(entry.blocks.map(b => b.name))
     }
 
-    const runAgentTool         = await buildRunAgentTool(agents, agentCtx, message)
+    const runAgentTool         = await buildRunAgentTool(agents, agentCtx, message, {
+      userId:       extractUserId(req),
+      resourceSlug,
+      recordId,
+    })
     const editTextTool         = await buildEditTextTool(agentCtx, allFields, record, selection, blockAllowlist)
     const readFormStateTool    = await buildReadFormStateTool()
     const updateFormStateTool  = await buildUpdateFormStateTool(allFields)

@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import type { PanelAgent, PanelAgentContext } from '../../../agents/PanelAgent.js'
 import { loadAi } from '../lazyImports.js'
+import { storeSubRun, type SubRunState } from '../../agentStream/runStore.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -11,9 +13,10 @@ import { loadAi } from '../lazyImports.js'
  * renderer keys off `kind` to drive its inline visualization.
  */
 export type RunAgentUpdate =
-  | { kind: 'agent_start';    agentSlug: string; agentLabel: string }
-  | { kind: 'tool_call';      tool: string; input?: Record<string, unknown> | undefined }
-  | { kind: 'agent_complete'; steps: number; tokens: number }
+  | { kind: 'agent_start';      agentSlug: string; agentLabel: string }
+  | { kind: 'tool_call';        tool: string; input?: Record<string, unknown> | undefined }
+  | { kind: 'agent_complete';   steps: number; tokens: number }
+  | { kind: 'subagent_paused';  subRunId: string; pendingToolCallIds: string[] }
 
 /**
  * Final structured value the tool returns. The full object is what
@@ -31,28 +34,40 @@ export interface RunAgentResult {
 /**
  * Build the `run_agent` tool for the chat dispatcher.
  *
- * Authored as an `async function*` (Phase 1 of `ai-loop-parity-plan`) so
- * preliminary progress flows through the agent stream — middleware sees it,
- * the SSE forwarder picks it up automatically, and the panels chat UI
- * renders it inline via the `agentRunRenderer` registered in
- * `AiChatPanel.tsx`. There is no `send` callback anymore: this used to take
- * an `SSESend` so it could call `send('agent_start' | 'tool_call' |
- * 'agent_complete', ...)` directly, bypassing the loop. That bypass is gone.
+ * Authored as an `async function*` so preliminary progress flows through
+ * the agent stream — middleware sees it, the SSE forwarder picks it up
+ * automatically, and the panels chat UI renders it inline via the
+ * `agentRunRenderer` registered in `AiChatPanel.tsx`.
  *
- * `.modelOutput(...)` (Phase 2) narrows what the parent model sees on its
- * next step to a one-line summary plus the sub-agent's final text — it does
- * NOT include the per-step transcript, which is what kept eating parent
- * context windows.
+ * **Sub-agent client-tool suspension (subagent-client-tools-plan Phase 2):**
+ * When the sub-agent's model calls a client tool like `update_form_state`,
+ * its loop pauses with `finishReason === 'client_tool_calls'`. This tool
+ * then:
+ *
+ *   1. Snapshots the sub-agent's messages from `response.steps`.
+ *   2. Stores a `SubRunState` under a fresh `subRunId` so the chat
+ *      continuation dispatcher can resume the same sub-agent later.
+ *   3. Throws `PauseLoopForClientTools` — which the `@rudderjs/ai` loop
+ *      catches, adds to its own `pendingClientToolCalls`, and breaks out
+ *      of. The parent chat SSE stream then emits `pending_client_tools`
+ *      with the SUB-AGENT's call ids, the browser executes them, and
+ *      on `/continue` the chat handler resolves the subRunId, resumes
+ *      the sub-agent with the results, and eventually feeds the final
+ *      text back into the parent's `run_agent` tool result.
+ *
+ * `.modelOutput(...)` narrows what the parent model sees on its next step
+ * to a one-line summary plus the sub-agent's final text.
  */
 export async function buildRunAgentTool(
   agents:   PanelAgent[],
   agentCtx: PanelAgentContext,
   message:  string,
+  ownerInfo: { userId: string | undefined; resourceSlug: string; recordId: string },
 ) {
   const slugs = agents.map(a => a.getSlug())
   if (slugs.length === 0) return null
 
-  const { toolDefinition, z } = await loadAi()
+  const { toolDefinition, z, PauseLoopForClientTools } = await loadAi()
 
   return toolDefinition({
     name: 'run_agent',
@@ -63,6 +78,7 @@ export async function buildRunAgentTool(
   })
     .server(async function* (
       input: { agentSlug: string },
+      ctx?: { toolCallId: string },
     ): AsyncGenerator<RunAgentUpdate, RunAgentResult, void> {
       const targetAgent = agents.find(a => a.getSlug() === input.agentSlug)
       const label = ((targetAgent as any)?._label as string | undefined) ?? input.agentSlug
@@ -83,8 +99,13 @@ export async function buildRunAgentTool(
         agentLabel: label,
       }
 
+      // `stop-on-client-tool` is what makes the sub-agent pause when its
+      // model emits a client-tool call instead of trying to "execute" the
+      // client tool server-side (which would no-op and lie to the model).
       const { stream: agentStream, response: agentResponse } =
-        await targetAgent.stream(agentCtx, message)
+        await targetAgent.stream(agentCtx, message, {
+          toolCallStreamingMode: 'stop-on-client-tool',
+        })
 
       for await (const chunk of agentStream) {
         if (chunk.type === 'tool-call' && chunk.toolCall?.name) {
@@ -99,6 +120,57 @@ export async function buildRunAgentTool(
       const result = await agentResponse
       const steps  = result.steps.length
       const tokens = result.usage?.totalTokens ?? 0
+
+      // Sub-agent paused on a client tool. Persist its state + pending
+      // calls + propagate the pause upward to the parent chat loop.
+      if (result.finishReason === 'client_tool_calls') {
+        const pending = result.pendingClientToolCalls ?? []
+
+        if (!ctx?.toolCallId) {
+          // Defensive: the parent loop should always pass ToolCallContext
+          // (Phase 0 landed that). If it's missing we can't persist the
+          // parent-side pointer to resume later, so fail loudly instead
+          // of silently dropping the sub-agent's pending calls.
+          throw new Error(
+            '[run_agent] missing ToolCallContext; cannot suspend sub-agent without parent toolCallId',
+          )
+        }
+
+        const subRunId = randomUUID()
+        const subMessages = result.steps.map((s: any) => s.message)
+        const subRunState: SubRunState = {
+          kind:             'subagent',
+          subAgentSlug:     targetAgent.getSlug(),
+          parentToolCallId: ctx.toolCallId,
+          resourceSlug:     ownerInfo.resourceSlug,
+          recordId:         ownerInfo.recordId,
+          fieldScope:       agentCtx.fieldScope ?? undefined,
+          subMessages,
+          pendingToolCallIds: pending.map((c: any) => c.id),
+          stepsSoFar:       steps,
+          tokensSoFar:      tokens,
+          userId:           ownerInfo.userId,
+        }
+        await storeSubRun(subRunId, subRunState)
+
+        // Tool-update yield so the UI's agentRunRenderer can show a
+        // "paused, waiting on browser" state inside the same run card,
+        // rather than flipping to a separate `update_form_state` card.
+        yield {
+          kind:              'subagent_paused',
+          subRunId,
+          pendingToolCallIds: subRunState.pendingToolCallIds,
+        }
+
+        // Propagate the sub-agent's pending calls to the parent loop as
+        // if the parent model itself had emitted them. The parent loop's
+        // tool-execute catch (in @rudderjs/ai agent.ts) recognizes this
+        // error, adds the toolCalls to pendingClientToolCalls, sets
+        // stop-for-client-tools, and breaks cleanly. The run_agent tool
+        // call stays orphaned in parent messages until the chat
+        // continuation dispatcher resolves it (Phase 3).
+        throw new PauseLoopForClientTools(pending)
+      }
 
       yield { kind: 'agent_complete', steps, tokens }
 

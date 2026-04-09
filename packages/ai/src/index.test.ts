@@ -340,6 +340,72 @@ describe('Agent', () => {
     assert.strictEqual(response.usage.totalTokens, 45)
   })
 
+  it('PauseLoopForClientTools bubbles nested client tool calls to parent pending list', async () => {
+    // Phase 2 of subagent-client-tools-plan. A server tool that throws
+    // PauseLoopForClientTools must cause the enclosing agent loop to:
+    //   1. Append err.toolCalls to pendingClientToolCalls
+    //   2. Set finishReason = 'client_tool_calls'
+    //   3. NOT push an error tool_result or tool message for the throwing
+    //      tool call — the run_agent call stays orphaned until its caller
+    //      resolves it on continuation.
+    //   4. Break the loop cleanly.
+    const { PauseLoopForClientTools } = await import('./tool.js')
+
+    const toolAdapter: import('./types.js').ProviderAdapter = {
+      async generate() {
+        return {
+          message: {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{ id: 'call_run_agent_1', name: 'fake_run_agent', arguments: {} }],
+          },
+          usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+          finishReason: 'tool_calls',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+
+    AiRegistry.reset()
+    AiRegistry.register({ name: 'pausemock', create: () => toolAdapter })
+    AiRegistry.setDefault('pausemock/v1')
+
+    const nestedClientCall = {
+      id: 'call_nested_update_form_state_1',
+      name: 'update_form_state',
+      arguments: { field: 'title', operations: [{ type: 'set_value', value: 'hi' }] },
+    }
+
+    const fakeRunAgentTool = toolDefinition({
+      name: 'fake_run_agent',
+      description: 'Simulates run_agent pausing on a nested client tool',
+      inputSchema: z.object({}),
+    }).server(async (): Promise<string> => {
+      throw new PauseLoopForClientTools([nestedClientCall])
+    })
+
+    const response = await agent({
+      instructions: 'T',
+      tools: [fakeRunAgentTool],
+    }).prompt('go', { toolCallStreamingMode: 'stop-on-client-tool' })
+
+    assert.strictEqual(response.finishReason, 'client_tool_calls')
+    assert.ok(response.pendingClientToolCalls, 'pendingClientToolCalls should be populated')
+    assert.strictEqual(response.pendingClientToolCalls!.length, 1)
+    assert.strictEqual(response.pendingClientToolCalls![0]!.id, 'call_nested_update_form_state_1')
+    assert.strictEqual(response.pendingClientToolCalls![0]!.name, 'update_form_state')
+
+    // The orphan assistant message is present, but there is NO tool-role
+    // message for call_run_agent_1 — it's awaiting resolution.
+    const lastStep = response.steps[response.steps.length - 1]!
+    const toolResultForRunAgent = lastStep.toolResults.find(r => r.toolCallId === 'call_run_agent_1')
+    assert.strictEqual(
+      toolResultForRunAgent,
+      undefined,
+      'no tool_result should be recorded for the throwing tool call',
+    )
+  })
+
   it('passes ToolCallContext with toolCallId to server tool execute', async () => {
     // Regression test for the subagent-client-tools-plan Phase 0 change:
     // a server tool's execute must receive the current toolCall.id as a
