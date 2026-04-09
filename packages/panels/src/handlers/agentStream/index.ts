@@ -40,6 +40,10 @@ export interface StreamAgentToSSEOptions {
  *
  *   text-delta            → event: text
  *   tool-call             → event: tool_call
+ *   tool-update           → event: tool_update         (preliminary progress
+ *                                                       from async-generator
+ *                                                       tool executes — see
+ *                                                       ai-loop-parity-plan)
  *   tool-result           → event: tool_result        (server-tool results,
  *                                                       see mixed-tool-continuation-plan.md)
  *   pending-client-tools  → event: pending_client_tools
@@ -68,6 +72,17 @@ export async function streamAgentToSSE(opts: StreamAgentToSSEOptions): Promise<A
           id:    chunk.toolCall?.id,
           tool:  chunk.toolCall?.name,
           input: chunk.toolCall?.arguments,
+        })
+        break
+      case 'tool-update':
+        // Preliminary progress payload from an async-generator tool. Pure UI
+        // signal — NOT persisted (persistence.ts ignores it), NOT included in
+        // the continuation prefix check (continuation.ts ignores it). The
+        // browser-side chat context aggregates these per tool-call id.
+        send('tool_update', {
+          id:     chunk.toolCall?.id,
+          tool:   chunk.toolCall?.name,
+          update: chunk.update,
         })
         break
       case 'tool-result':

@@ -6,7 +6,23 @@ import { executeClientTool, hasClientTool } from './clientTools.js'
 
 export type ChatMessagePart =
   | { type: 'text'; text: string }
-  | { type: 'tool_call'; tool: string; input?: Record<string, unknown>; id?: string }
+  | {
+      type:    'tool_call'
+      tool:    string
+      input?:  Record<string, unknown>
+      id?:     string
+      /**
+       * Preliminary `tool-update` payloads streamed from the server while
+       * the tool was running. Capped at 200 entries (R5 in
+       * `docs/plans/ai-loop-parity-plan.md`). Generative-UI renderers
+       * registered via `toolRenderers.ts` consume this; the default
+       * rendering ignores it.
+       */
+      updates?: unknown[]
+      /** Tool call lifecycle state — set to 'running' on tool_call,
+       *  flipped to 'complete' on tool_result. */
+      status?:  'running' | 'complete' | 'error'
+    }
   | { type: 'tool_result'; tool: string; result?: unknown; id?: string }
   | { type: 'agent_start'; agentSlug: string; agentLabel: string }
   | { type: 'complete'; steps: number; tokens: number }
@@ -244,7 +260,7 @@ function parseSSELines(
             })
             setMessages(prev => prev.map(m => {
               if (m.id !== assistantId) return m
-              const part: ChatMessagePart = { type: 'tool_call', tool: toolData.tool }
+              const part: ChatMessagePart = { type: 'tool_call', tool: toolData.tool, status: 'running' }
               if (toolData.input !== undefined) part.input = toolData.input
               if (toolData.id    !== undefined) part.id    = toolData.id
               const parts = [...(m.parts ?? []), part]
@@ -254,6 +270,27 @@ function parseSSELines(
             if (toolData.tool === 'update_field' && toolData.input?.field && toolData.input?.value != null) {
               onFieldUpdateRef.current?.(toolData.input.field as string, toolData.input.value as string)
             }
+            break
+          }
+
+          case 'tool_update': {
+            // Preliminary progress payload from an async-generator server
+            // tool. Mutate the matching tool_call part by id, appending the
+            // payload to its `updates` array. Cap at 200 entries (R5).
+            // Renderers registered via toolRenderers.ts consume the array.
+            const updateData = data as { id?: string; tool?: string; update: unknown }
+            if (!updateData.id) break
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              const parts = (m.parts ?? []).map(p => {
+                if (p.type !== 'tool_call' || p.id !== updateData.id) return p
+                const existing = p.updates ?? []
+                const next = [...existing, updateData.update]
+                const capped = next.length > 200 ? next.slice(-200) : next
+                return { ...p, updates: capped }
+              })
+              return { ...m, parts }
+            }))
             break
           }
 
@@ -273,13 +310,22 @@ function parseSSELines(
             }
             setMessages(prev => prev.map(m => {
               if (m.id !== assistantId) return m
-              const part: ChatMessagePart = {
+              // Two updates in one pass: append the tool_result part AND
+              // flip the matching tool_call part's status to 'complete' so
+              // generative-UI renderers can stop their spinners.
+              const parts = (m.parts ?? []).map(p => {
+                if (p.type === 'tool_call' && toolCallId && p.id === toolCallId) {
+                  return { ...p, status: 'complete' as const }
+                }
+                return p
+              })
+              const resultPart: ChatMessagePart = {
                 type:   'tool_result',
                 tool:   resultData.tool ?? 'unknown',
                 result: resultData.content,
               }
-              if (toolCallId) part.id = toolCallId
-              return { ...m, parts: [...(m.parts ?? []), part] }
+              if (toolCallId) resultPart.id = toolCallId
+              return { ...m, parts: [...parts, resultPart] }
             }))
             break
           }
