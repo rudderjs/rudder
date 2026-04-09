@@ -1,11 +1,11 @@
 'use client'
 
 import { lazy, Suspense, useState, useEffect } from 'react'
-import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@rudderjs/panels'
-import { getElement, getLazyElement } from '@rudderjs/panels'
+import type { PanelSchemaElementMeta, PanelStatMeta, PanelI18n, ChartElementMeta, ChartDataset, ListElementMeta, SnippetElementMeta, ExampleElementMeta, CardElementMeta, AlertElementMeta, DividerElementMeta, EachElementMeta, ViewElementMeta, PlaygroundElementMeta, FieldMeta } from '@pilotiq/panels'
+import { getElement, getLazyElement } from '@pilotiq/panels'
 import { SchemaDataView } from './SchemaDataView.js'
 import { SchemaForm } from './SchemaForm.js'
-import type { SchemaFormMeta } from '@rudderjs/panels'
+import type { SchemaFormMeta } from '@pilotiq/panels'
 import { CodeBlock, CopyButton } from './CodeBlock.js'
 import { FieldInput } from './FieldInput.js'
 

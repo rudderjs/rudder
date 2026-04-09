@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { PanelI18n } from '@rudderjs/panels'
-import type { WidgetMeta, WidgetSettingsField } from '@rudderjs/panels'
+import type { PanelI18n } from '@pilotiq/panels'
+import type { WidgetMeta, WidgetSettingsField } from '@pilotiq/panels'
 
 interface Props {
   widget:          WidgetMeta

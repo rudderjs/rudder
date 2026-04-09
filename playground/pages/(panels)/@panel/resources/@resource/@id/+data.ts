@@ -1,5 +1,5 @@
-import { PanelRegistry, flattenFields } from '@rudderjs/panels'
-import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@rudderjs/panels'
+import { PanelRegistry, flattenFields } from '@pilotiq/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow } from '@pilotiq/panels'
 import { getSessionUser } from '../../../../_lib/getSessionUser.js'
 import type { PageContextServer } from 'vike/types'
 

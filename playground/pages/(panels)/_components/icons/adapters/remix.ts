@@ -1,4 +1,4 @@
-import { iconMap } from '@rudderjs/panels'
+import { iconMap } from '@pilotiq/panels'
 import type { IconAdapter, IconComponent } from '../types.js'
 
 let iconsRecord: Record<string, IconComponent> | null = null

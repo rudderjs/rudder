@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Table, Column, SelectField, TextareaField } from '@rudderjs/panels'
-import type { PanelContext } from '@rudderjs/panels'
+import { Page, Heading, Text, Table, Column, SelectField, TextareaField } from '@pilotiq/panels'
+import type { PanelContext } from '@pilotiq/panels'
 
 export class InlineEditDemo extends Page {
   static slug  = 'inline-edit-demo'

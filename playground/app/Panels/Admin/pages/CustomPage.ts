@@ -1,4 +1,4 @@
-import { Page } from '@rudderjs/panels'
+import { Page } from '@pilotiq/panels'
 
 export class CustomPage extends Page {
   static slug  = 'custom'

@@ -4,7 +4,7 @@ import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { toast } from 'sonner'
 import { SchemaForm }  from '../../../_components/SchemaForm.js'
-import type { SchemaFormMeta } from '@rudderjs/panels'
+import type { SchemaFormMeta } from '@pilotiq/panels'
 import { useI18n } from '../../../_hooks/useI18n.js'
 import type { Data } from './+data.js'
 

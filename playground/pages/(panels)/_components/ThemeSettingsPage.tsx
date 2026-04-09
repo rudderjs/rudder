@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { navigate } from 'vike/client/router'
-import { resolveTheme, generateThemeCSS } from '@rudderjs/panels'
-import type { PanelThemeConfig } from '@rudderjs/panels'
+import { resolveTheme, generateThemeCSS } from '@pilotiq/panels'
+import type { PanelThemeConfig } from '@pilotiq/panels'
 import { useTheme } from './ThemeProvider.js'
 
 // ─── Constants ──────────────────────────────────────────────

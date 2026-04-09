@@ -1,4 +1,4 @@
-import { Page, Heading, Text } from '@rudderjs/panels'
+import { Page, Heading, Text } from '@pilotiq/panels'
 
 export class SimplePage extends Page {
   static slug  = 'simple-demo'

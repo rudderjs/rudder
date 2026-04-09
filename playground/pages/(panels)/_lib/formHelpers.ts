@@ -1,4 +1,4 @@
-import type { FieldMeta, SectionMeta, TabsMeta } from '@rudderjs/panels'
+import type { FieldMeta, SectionMeta, TabsMeta } from '@pilotiq/panels'
 
 export type SchemaItem = FieldMeta | SectionMeta | TabsMeta
 

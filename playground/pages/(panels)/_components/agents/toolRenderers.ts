@@ -5,7 +5,7 @@
  * render that tool's args, preliminary progress (`tool-update` chunks from
  * async-generator executes), and final result inline in the chat bubble.
  *
- * This is the "generative UI" surface for `@rudderjs/panels` chat — the
+ * This is the "generative UI" surface for `@pilotiq/panels` chat — the
  * counterpart to {@link ./clientTools.ts}, which holds *executors* for
  * client-side tools. Renderers are pure presentational React, owned by
  * application code; this file only provides the registry mechanism.
@@ -25,7 +25,7 @@
  * **Why a registry, not a switch?** RudderJS uses registries as its default
  * extension mechanism (~30 of them across the monorepo). A downstream
  * package can ship its own tool *and* its own renderer and register both
- * from a service provider's `boot()` without forking `@rudderjs/panels`.
+ * from a service provider's `boot()` without forking `@pilotiq/panels`.
  * Vercel uses an inline JSX switch in their chat component, which closes
  * the extension surface. See `docs/plans/ai-loop-parity-plan.md` Phase 3
  * for the full rationale.

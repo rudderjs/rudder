@@ -1,4 +1,4 @@
-import type { FieldMeta, PanelI18n } from '@rudderjs/panels'
+import type { FieldMeta, PanelI18n } from '@pilotiq/panels'
 
 export interface FieldInputProps {
   field:       FieldMeta

@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Tab, Tabs, Table, Column, Chart, List, Stats, Stat } from '@rudderjs/panels'
-import type { PanelContext } from '@rudderjs/panels'
+import { Page, Heading, Text, Tab, Tabs, Table, Column, Chart, List, Stats, Stat } from '@pilotiq/panels'
+import type { PanelContext } from '@pilotiq/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
 import { Category } from '../../../Models/Category.js'

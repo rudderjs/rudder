@@ -1,4 +1,4 @@
-import { PanelRegistry } from '@rudderjs/panels'
+import { PanelRegistry } from '@pilotiq/panels'
 import type { PageContextServer } from 'vike/types'
 
 export type Data = Awaited<ReturnType<typeof data>>

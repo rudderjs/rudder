@@ -1,5 +1,5 @@
-import { PanelRegistry, resolveForm, flattenFields } from '@rudderjs/panels'
-import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow, PanelSchemaElementMeta } from '@rudderjs/panels'
+import { PanelRegistry, resolveForm, flattenFields } from '@pilotiq/panels'
+import type { FieldOrGrouping, Field, QueryBuilderLike, RecordRow, PanelSchemaElementMeta } from '@pilotiq/panels'
 import { buildPanelContext } from '../../../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 

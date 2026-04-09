@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useData } from 'vike-react/useData'
 import type { Data } from './+data.js'
-import type { MediaRecord } from '@rudderjs/media'
+import type { MediaRecord } from '@pilotiq/media'
 import { useMediaActions } from './_lib/useMediaActions.js'
 import { MediaGrid } from './_components/MediaGrid.js'
 import { MediaList } from './_components/MediaList.js'

@@ -1,8 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { generateThemeCSS } from '@rudderjs/panels'
-import type { PanelThemeMeta } from '@rudderjs/panels'
+import { generateThemeCSS } from '@pilotiq/panels'
+import type { PanelThemeMeta } from '@pilotiq/panels'
 
 type Theme = 'light' | 'dark' | 'system'
 

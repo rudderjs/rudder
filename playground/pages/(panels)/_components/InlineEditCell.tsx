@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
-import type { FieldMeta, PanelI18n } from '@rudderjs/panels'
+import type { FieldMeta, PanelI18n } from '@pilotiq/panels'
 import { CellValue, resolveCellValue } from './CellValue.js'
 
 interface Props {

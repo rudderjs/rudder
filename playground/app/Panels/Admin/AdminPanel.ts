@@ -1,7 +1,7 @@
-import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@rudderjs/panels'
-import { panelsLexical } from '@rudderjs/panels-lexical/server'
-import { media } from '@rudderjs/media/server'
-import { workspaces } from '@rudderjs/workspaces'
+import { Panel, Heading, Text, Stats, Stat, Chart, List, Table, Column, Tabs, Tab, Dashboard, Widget } from '@pilotiq/panels'
+import { panelsLexical } from '@pilotiq/lexical/server'
+import { media } from '@pilotiq/media/server'
+import { workspaces } from '@pilotiq/workspaces'
 
 import configs from '../../../config/index.js'
 import { TodoResource }         from './resources/TodoResource.js'

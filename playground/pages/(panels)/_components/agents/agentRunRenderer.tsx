@@ -3,7 +3,7 @@
  *
  * The first canonical consumer of the {@link ./toolRenderers.ts} registry,
  * shipped together with the Phase 4 rewrite of `runAgentTool` in
- * `@rudderjs/panels/handlers/chat/tools/runAgentTool.ts`.
+ * `@pilotiq/panels/handlers/chat/tools/runAgentTool.ts`.
  *
  * The server-side tool is an `async function*` that yields update
  * payloads while a sub-agent runs. Kinds recognized by this card:

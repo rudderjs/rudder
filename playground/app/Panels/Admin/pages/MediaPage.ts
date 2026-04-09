@@ -1,5 +1,5 @@
-import { Page, Heading, Text } from '@rudderjs/panels'
-import { Media } from '@rudderjs/media'
+import { Page, Heading, Text } from '@pilotiq/panels'
+import { Media } from '@pilotiq/media'
 
 export class MediaPage extends Page {
   static slug  = 'media-demo'

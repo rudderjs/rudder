@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Dialog } from '@base-ui-components/react/dialog'
-import type { FieldMeta } from '@rudderjs/panels'
+import type { FieldMeta } from '@pilotiq/panels'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 import { CheckIcon } from './Icons.js'

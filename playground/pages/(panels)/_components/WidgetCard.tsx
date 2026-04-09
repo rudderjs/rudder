@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { SchemaElementRenderer } from './SchemaElementRenderer.js'
-import type { PanelSchemaElementMeta, PanelI18n } from '@rudderjs/panels'
-import type { WidgetMeta } from '@rudderjs/panels'
+import type { PanelSchemaElementMeta, PanelI18n } from '@pilotiq/panels'
+import type { WidgetMeta } from '@pilotiq/panels'
 
 export interface WidgetWithSchema extends WidgetMeta {
   schema?: PanelSchemaElementMeta[]

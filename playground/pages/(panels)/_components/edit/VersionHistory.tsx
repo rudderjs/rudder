@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import type { PanelI18n, FieldMeta } from '@rudderjs/panels'
+import type { PanelI18n, FieldMeta } from '@pilotiq/panels'
 
 export interface VersionEntry {
   id:        string

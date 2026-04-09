@@ -1,5 +1,5 @@
 import { icons } from 'lucide-react'
-import { iconMap } from '@rudderjs/panels'
+import { iconMap } from '@pilotiq/panels'
 import type { IconAdapter, IconComponent } from '../types.js'
 
 const iconsRecord = icons as unknown as Record<string, IconComponent>

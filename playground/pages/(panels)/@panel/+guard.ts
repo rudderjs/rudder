@@ -3,7 +3,7 @@ import type { GuardAsync } from 'vike/types'
 
 export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
   if (!import.meta.env.SSR) return
-  const { PanelRegistry } = await import('@rudderjs/panels')
+  const { PanelRegistry } = await import('@pilotiq/panels')
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
 

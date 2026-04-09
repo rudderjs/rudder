@@ -1,8 +1,8 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type { PanelI18n } from '@rudderjs/panels'
-import { getPanelI18n } from '@rudderjs/panels'
+import type { PanelI18n } from '@pilotiq/panels'
+import { getPanelI18n } from '@pilotiq/panels'
 
 const I18nContext = createContext<PanelI18n>(getPanelI18n('en'))
 

@@ -450,43 +450,6 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  packages/media:
-    dependencies:
-      react:
-        specifier: '>=18'
-        version: 19.2.4
-      react-dom:
-        specifier: '>=18'
-        version: 19.2.4(react@19.2.4)
-    devDependencies:
-      '@rudderjs/core':
-        specifier: workspace:*
-        version: link:../core
-      '@rudderjs/image':
-        specifier: workspace:*
-        version: link:../image
-      '@rudderjs/panels':
-        specifier: workspace:*
-        version: link:../panels
-      '@rudderjs/router':
-        specifier: workspace:*
-        version: link:../router
-      '@rudderjs/storage':
-        specifier: workspace:*
-        version: link:../storage
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.2.3
-        version: 19.2.3(@types/react@19.2.14)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   packages/middleware:
     dependencies:
       '@rudderjs/cache':
@@ -616,155 +579,6 @@ importers:
       pg:
         specifier: ^8.0.0
         version: 8.19.0
-
-  packages/panels:
-    dependencies:
-      '@phosphor-icons/react':
-        specifier: '>=2.0.0'
-        version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@remixicon/react':
-        specifier: '>=4.0.0'
-        version: 4.9.0(react@19.2.4)
-      '@rudderjs/core':
-        specifier: workspace:*
-        version: link:../core
-      '@rudderjs/image':
-        specifier: workspace:*
-        version: link:../image
-      '@rudderjs/router':
-        specifier: workspace:*
-        version: link:../router
-      '@rudderjs/support':
-        specifier: workspace:*
-        version: link:../support
-      '@tabler/icons-react':
-        specifier: '>=3.0.0'
-        version: 3.41.1(react@19.2.4)
-      dnd-kit-sortable-tree:
-        specifier: ^0.1.73
-        version: 0.1.73(@dnd-kit/core@6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@dnd-kit/sortable@10.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4))(@dnd-kit/utilities@3.2.2(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      quill-delta:
-        specifier: ^5.1.0
-        version: 5.1.0
-      recharts:
-        specifier: '>=2.0.0'
-        version: 3.8.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react-is@19.2.4)(react@19.2.4)(redux@5.0.1)
-    devDependencies:
-      '@base-ui-components/react':
-        specifier: 1.0.0-rc.0
-        version: 1.0.0-rc.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@dnd-kit/core':
-        specifier: ^6.3.1
-        version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@dnd-kit/sortable':
-        specifier: ^10.0.0
-        version: 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
-      '@dnd-kit/utilities':
-        specifier: ^3.2.2
-        version: 3.2.2(react@19.2.4)
-      '@rudderjs/ai':
-        specifier: workspace:*
-        version: link:../ai
-      '@rudderjs/broadcast':
-        specifier: workspace:*
-        version: link:../broadcast
-      '@rudderjs/cache':
-        specifier: workspace:*
-        version: link:../cache
-      '@rudderjs/live':
-        specifier: workspace:*
-        version: link:../live
-      '@rudderjs/localization':
-        specifier: workspace:*
-        version: link:../localization
-      '@rudderjs/storage':
-        specifier: workspace:*
-        version: link:../storage
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/react':
-        specifier: ^19.2.14
-        version: 19.2.14
-      lucide-react:
-        specifier: ^0.575.0
-        version: 0.575.0(react@19.2.4)
-      sonner:
-        specifier: ^2.0.7
-        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      vike:
-        specifier: ^0.4.239
-        version: 0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      vike-react:
-        specifier: ^0.6.20
-        version: 0.6.20(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vike@0.4.255(react-streaming@0.4.15(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)))
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-
-  packages/panels-lexical:
-    dependencies:
-      react-dom:
-        specifier: '>=18'
-        version: 19.2.4(react@19.2.4)
-      y-indexeddb:
-        specifier: '>=9'
-        version: 9.0.12(yjs@13.6.29)
-    devDependencies:
-      '@floating-ui/dom':
-        specifier: ^1.6.0
-        version: 1.7.6
-      '@lexical/code':
-        specifier: ^0.41.0
-        version: 0.41.0
-      '@lexical/link':
-        specifier: ^0.41.0
-        version: 0.41.0
-      '@lexical/list':
-        specifier: ^0.41.0
-        version: 0.41.0
-      '@lexical/react':
-        specifier: ^0.41.0
-        version: 0.41.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(yjs@13.6.29)
-      '@lexical/rich-text':
-        specifier: ^0.41.0
-        version: 0.41.0
-      '@lexical/utils':
-        specifier: ^0.41.0
-        version: 0.41.0
-      '@rudderjs/core':
-        specifier: workspace:*
-        version: link:../core
-      '@rudderjs/panels':
-        specifier: workspace:*
-        version: link:../panels
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.14)
-      lexical:
-        specifier: ^0.41.0
-        version: 0.41.0
-      react:
-        specifier: ^19.0.0
-        version: 19.2.4
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      y-websocket:
-        specifier: ^2.1.0
-        version: 2.1.0(yjs@13.6.29)
-      yjs:
-        specifier: ^13.6.29
-        version: 13.6.29
 
   packages/pennant:
     dependencies:
@@ -1134,67 +948,6 @@ importers:
         specifier: ^7.1.0
         version: 7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/workspaces:
-    dependencies:
-      '@rudderjs/ai':
-        specifier: workspace:*
-        version: link:../ai
-      '@rudderjs/core':
-        specifier: workspace:*
-        version: link:../core
-      '@rudderjs/orm':
-        specifier: workspace:*
-        version: link:../orm
-      '@rudderjs/panels':
-        specifier: workspace:*
-        version: link:../panels
-      react-dom:
-        specifier: '>=18'
-        version: 19.2.4(react@19.2.4)
-      y-indexeddb:
-        specifier: '>=9'
-        version: 9.0.12(yjs@13.6.29)
-      y-websocket:
-        specifier: '>=2'
-        version: 2.1.0(yjs@13.6.29)
-      yjs:
-        specifier: '>=13'
-        version: 13.6.29
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-    devDependencies:
-      '@react-three/drei':
-        specifier: ^10.0.0
-        version: 10.7.7(@react-three/fiber@9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0))(@types/react@19.2.14)(@types/three@0.175.0)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)
-      '@react-three/fiber':
-        specifier: ^9.0.0
-        version: 9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)
-      '@rudderjs/broadcast':
-        specifier: workspace:*
-        version: link:../broadcast
-      '@rudderjs/router':
-        specifier: workspace:*
-        version: link:../router
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.35
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      '@types/three':
-        specifier: ^0.175.0
-        version: 0.175.0
-      react:
-        specifier: ^19.0.0
-        version: 19.2.4
-      three:
-        specifier: ^0.175.0
-        version: 0.175.0
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
   playground:
     dependencies:
       '@anthropic-ai/sdk':
@@ -1254,6 +1007,18 @@ importers:
       '@lexical/yjs':
         specifier: ^0.41.0
         version: 0.41.0(yjs@13.6.29)
+      '@pilotiq/lexical':
+        specifier: link:../../pilotiq/packages/lexical
+        version: link:../../pilotiq/packages/lexical
+      '@pilotiq/media':
+        specifier: link:../../pilotiq/packages/media
+        version: link:../../pilotiq/packages/media
+      '@pilotiq/panels':
+        specifier: link:../../pilotiq/packages/panels
+        version: link:../../pilotiq/packages/panels
+      '@pilotiq/workspaces':
+        specifier: link:../../pilotiq/packages/workspaces
+        version: link:../../pilotiq/packages/workspaces
       '@prisma/adapter-better-sqlite3':
         specifier: ^7.0.0
         version: 7.4.2
@@ -1308,9 +1073,6 @@ importers:
       '@rudderjs/mail':
         specifier: workspace:*
         version: link:../packages/mail
-      '@rudderjs/media':
-        specifier: workspace:*
-        version: link:../packages/media
       '@rudderjs/middleware':
         specifier: workspace:*
         version: link:../packages/middleware
@@ -1323,12 +1085,6 @@ importers:
       '@rudderjs/orm-prisma':
         specifier: workspace:*
         version: link:../packages/orm-prisma
-      '@rudderjs/panels':
-        specifier: workspace:*
-        version: link:../packages/panels
-      '@rudderjs/panels-lexical':
-        specifier: workspace:*
-        version: link:../packages/panels-lexical
       '@rudderjs/pulse':
         specifier: workspace:*
         version: link:../packages/pulse
@@ -1362,9 +1118,6 @@ importers:
       '@rudderjs/vite':
         specifier: workspace:*
         version: link:../packages/vite
-      '@rudderjs/workspaces':
-        specifier: workspace:*
-        version: link:../packages/workspaces
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.2.1(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -3771,13 +3524,6 @@ packages:
     resolution: {integrity: sha512-m7X9U6BG2+J+R1lSOdCiITLLrxm+cWlNI3HUFA92oLO77ObGNzaKdh8pMLqdZcshtkKuV84olNNXDfMc4FezBQ==}
     engines: {node: '>=10'}
 
-  '@phosphor-icons/react@2.1.10':
-    resolution: {integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==}
-    engines: {node: '>=10'}
-    peerDependencies:
-      react: '>= 16.8'
-      react-dom: '>= 16.8'
-
   '@photonjs/core@0.1.21':
     resolution: {integrity: sha512-dfAUHhWGsKYPNAKqBaOfvGPKOm6l80yWJ3dq1vSG4GICa5ZJemM1xK5JRJhT1lZD4rEHPOJfQncZ8LHiMPivcg==}
     peerDependencies:
@@ -4659,11 +4405,6 @@ packages:
       react-redux:
         optional: true
 
-  '@remixicon/react@4.9.0':
-    resolution: {integrity: sha512-5/jLDD4DtKxH2B4QVXTobvV1C2uL8ab9D5yAYNtFt+w80O0Ys1xFOrspqROL3fjrZi+7ElFUWE37hBfaAl6U+Q==}
-    peerDependencies:
-      react: '>=18.2.0'
-
   '@rolldown/binding-android-arm64@1.0.0-beta.51':
     resolution: {integrity: sha512-Ctn8FUXKWWQI9pWC61P1yumS9WjQtelNS9riHwV7oCkknPGaAry4o7eFx2KgoLMnI2BgFJYpW7Im8/zX3BuONg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -5185,14 +4926,6 @@ packages:
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
 
-  '@tabler/icons-react@3.41.1':
-    resolution: {integrity: sha512-kUgweE+DJtAlMZVIns1FTDdcbpRVnkK7ZpUOXmoxy3JAF0rSHj0TcP4VHF14+gMJGnF+psH2Zt26BLT6owetBA==}
-    peerDependencies:
-      react: '>= 16'
-
-  '@tabler/icons@3.41.1':
-    resolution: {integrity: sha512-OaRnVbRmH2nHtFeg+RmMJ/7m2oBIF9XCJAUD5gQnMrpK9f05ydj8MZrAf3NZQqOXyxGN1UBL0D5IKLLEUfr74Q==}
-
   '@tailwindcss/node@4.2.1':
     resolution: {integrity: sha512-jlx6sLk4EOwO6hHe1oCGm1Q4AN/s0rSrTTPBGPM0/RQ6Uylwq17FuU8IeJJKEjtc6K6O07zsvP+gDO6MMWo7pg==}
 
@@ -5452,9 +5185,6 @@ packages:
 
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
-
-  '@types/three@0.175.0':
-    resolution: {integrity: sha512-ldMSBgtZOZ3g9kJ3kOZSEtZIEITmJOzu8eKVpkhf036GuNkM4mt0NXecrjCn5tMm1OblOF7dZehlaDypBfNokw==}
 
   '@types/three@0.183.1':
     resolution: {integrity: sha512-f2Pu5Hrepfgavttdye3PsH5RWyY/AvdZQwIVhrc4uNtvF7nOWJacQKcoVJn0S4f0yYbmAE6AR+ve7xDcuYtMGw==}
@@ -7534,9 +7264,6 @@ packages:
     resolution: {integrity: sha512-/TQj+JdZkeSUOl5Mk2J7eLcYTLiQm2IDzmlSvYm7ov15anEcDJ92GHqqazxTSreeNgfnYu24kiEvvv0WlbCdFQ==}
     peerDependencies:
       three: '>=0.137'
-
-  meshoptimizer@0.18.1:
-    resolution: {integrity: sha512-ZhoIoL7TNV4s5B6+rx5mC//fw8/POGyNxS/DZyCJeiZ12ScLfVwRE/GfsxwiTkMYYD5DmK2/JXnEVXqL4rF+Sw==}
 
   meshoptimizer@1.0.1:
     resolution: {integrity: sha512-Vix+QlA1YYT3FwmBBZ+49cE5y/b+pRrcXKqGpS5ouh33d3lSp2PoTpCw19E0cKDFWalembrHnIaZetf27a+W2g==}
@@ -12107,11 +11834,6 @@ snapshots:
   '@phc/format@1.0.0':
     optional: true
 
-  '@phosphor-icons/react@2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-
   '@photonjs/core@0.1.21(hono@4.12.3)(srvx@0.9.8)(vite@7.3.1(@types/node@20.19.35)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@brillout/vite-plugin-server-entry': 0.7.18
@@ -13079,39 +12801,6 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
-  '@react-three/drei@10.7.7(@react-three/fiber@9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0))(@types/react@19.2.14)(@types/three@0.175.0)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)':
-    dependencies:
-      '@babel/runtime': 7.28.6
-      '@mediapipe/tasks-vision': 0.10.17
-      '@monogrid/gainmap-js': 3.4.0(three@0.175.0)
-      '@react-three/fiber': 9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)
-      '@use-gesture/react': 10.3.1(react@19.2.4)
-      camera-controls: 3.1.2(three@0.175.0)
-      cross-env: 7.0.3
-      detect-gpu: 5.0.70
-      glsl-noise: 0.0.0
-      hls.js: 1.6.15
-      maath: 0.10.8(@types/three@0.175.0)(three@0.175.0)
-      meshline: 3.3.1(three@0.175.0)
-      react: 19.2.4
-      stats-gl: 2.4.2(@types/three@0.175.0)(three@0.175.0)
-      stats.js: 0.17.0
-      suspend-react: 0.1.3(react@19.2.4)
-      three: 0.175.0
-      three-mesh-bvh: 0.8.3(three@0.175.0)
-      three-stdlib: 2.36.1(three@0.175.0)
-      troika-three-text: 0.52.4(three@0.175.0)
-      tunnel-rat: 0.1.2(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)
-      use-sync-external-store: 1.6.0(react@19.2.4)
-      utility-types: 3.11.0
-      zustand: 5.0.12(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
-    optionalDependencies:
-      react-dom: 19.2.4(react@19.2.4)
-    transitivePeerDependencies:
-      - '@types/react'
-      - '@types/three'
-      - immer
-
   '@react-three/drei@10.7.7(@react-three/fiber@9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0))(@types/react@19.2.14)(@types/three@0.183.1)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.175.0)':
     dependencies:
       '@babel/runtime': 7.28.6
@@ -13176,10 +12865,6 @@ snapshots:
     optionalDependencies:
       react: 19.2.4
       react-redux: 9.2.0(@types/react@19.2.14)(react@19.2.4)(redux@5.0.1)
-
-  '@remixicon/react@4.9.0(react@19.2.4)':
-    dependencies:
-      react: 19.2.4
 
   '@rolldown/binding-android-arm64@1.0.0-beta.51':
     optional: true
@@ -13790,13 +13475,6 @@ snapshots:
 
   '@standard-schema/utils@0.3.0': {}
 
-  '@tabler/icons-react@3.41.1(react@19.2.4)':
-    dependencies:
-      '@tabler/icons': 3.41.1
-      react: 19.2.4
-
-  '@tabler/icons@3.41.1': {}
-
   '@tailwindcss/node@4.2.1':
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -14054,15 +13732,6 @@ snapshots:
   '@types/tedious@4.0.14':
     dependencies:
       '@types/node': 20.19.35
-
-  '@types/three@0.175.0':
-    dependencies:
-      '@tweenjs/tween.js': 23.1.3
-      '@types/stats.js': 0.17.4
-      '@types/webxr': 0.5.24
-      '@webgpu/types': 0.1.69
-      fflate: 0.8.2
-      meshoptimizer: 0.18.1
 
   '@types/three@0.183.1':
     dependencies:
@@ -16120,11 +15789,6 @@ snapshots:
 
   luxon@3.7.2: {}
 
-  maath@0.10.8(@types/three@0.175.0)(three@0.175.0):
-    dependencies:
-      '@types/three': 0.175.0
-      three: 0.175.0
-
   maath@0.10.8(@types/three@0.183.1)(three@0.175.0):
     dependencies:
       '@types/three': 0.183.1
@@ -16175,8 +15839,6 @@ snapshots:
   meshline@3.3.1(three@0.175.0):
     dependencies:
       three: 0.175.0
-
-  meshoptimizer@0.18.1: {}
 
   meshoptimizer@1.0.1: {}
 
@@ -17449,11 +17111,6 @@ snapshots:
       - supports-color
 
   standard-as-callback@2.1.0: {}
-
-  stats-gl@2.4.2(@types/three@0.175.0)(three@0.175.0):
-    dependencies:
-      '@types/three': 0.175.0
-      three: 0.175.0
 
   stats-gl@2.4.2(@types/three@0.183.1)(three@0.175.0):
     dependencies:

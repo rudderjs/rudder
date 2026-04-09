@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
-import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@rudderjs/panels'
+import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@pilotiq/panels'
 import { TableEditPopover } from './TableEditPopover.js'
 import { TableEditModal } from './TableEditModal.js'
 import { formatCellValue } from './formatCellValue.js'

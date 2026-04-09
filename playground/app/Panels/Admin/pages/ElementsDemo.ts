@@ -1,8 +1,8 @@
 import {
   Page, Heading, Text, Card, Alert, Divider, Each, View, Example, Snippet, Code, Playground,
   Stats, Stat, TextField, ToggleField, SelectField, NumberField, ColorField,
-} from '@rudderjs/panels'
-import type { PanelContext } from '@rudderjs/panels'
+} from '@pilotiq/panels'
+import type { PanelContext } from '@pilotiq/panels'
 import { Article } from '../../../Models/Article.js'
 import { User } from '../../../Models/User.js'
 

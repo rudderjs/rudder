@@ -1,5 +1,5 @@
-import { PanelRegistry, resolveForm } from '@rudderjs/panels'
-import type { PanelSchemaElementMeta } from '@rudderjs/panels'
+import { PanelRegistry, resolveForm } from '@pilotiq/panels'
+import type { PanelSchemaElementMeta } from '@pilotiq/panels'
 import { buildPanelContext } from '../../../../_lib/buildPanelContext.js'
 import type { PageContextServer } from 'vike/types'
 

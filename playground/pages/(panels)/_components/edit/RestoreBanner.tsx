@@ -1,4 +1,4 @@
-import type { PanelI18n } from '@rudderjs/panels'
+import type { PanelI18n } from '@pilotiq/panels'
 import { t } from '../../_lib/formHelpers.js'
 
 interface Props {

@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Stats, Stat, Chart, List, Tabs, Table, Column, Form, Section, TextField, TextareaField, EmailField, SelectFilter, Action, Dialog } from '@rudderjs/panels'
-import type { PanelContext } from '@rudderjs/panels'
+import { Page, Heading, Text, Stats, Stat, Chart, List, Tabs, Table, Column, Form, Section, TextField, TextareaField, EmailField, SelectFilter, Action, Dialog } from '@pilotiq/panels'
+import type { PanelContext } from '@pilotiq/panels'
 import { Article } from '../../../Models/Article.js'
 import { User }    from '../../../Models/User.js'
 import { Todo }    from '../../../Models/Todo.js'

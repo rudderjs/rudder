@@ -1,5 +1,5 @@
 import type { PageContextServer } from 'vike/types'
-import type { MediaRecord } from '@rudderjs/media'
+import type { MediaRecord } from '@pilotiq/media'
 
 export type Data = Awaited<ReturnType<typeof data>>
 
@@ -7,7 +7,7 @@ export async function data(pageContext: PageContextServer) {
   const { panel: pathSegment } = pageContext.routeParams as { panel: string }
 
   // Resolve panel
-  const { PanelRegistry } = await import('@rudderjs/panels')
+  const { PanelRegistry } = await import('@pilotiq/panels')
   const panel = PanelRegistry.all().find((p) => p.getPath() === `/${pathSegment}`)
   if (!panel) throw new Error(`Panel "/${pathSegment}" not found.`)
 

@@ -24,11 +24,11 @@ import {
   ViewMode,
   Stats,
   Stat,
-} from '@rudderjs/panels'
+} from '@pilotiq/panels'
 import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
-import { RichContentField } from '@rudderjs/panels-lexical'
-import { MediaPickerField } from '@rudderjs/media'
+import { RichContentField } from '@pilotiq/lexical'
+import { MediaPickerField } from '@pilotiq/media'
 import { Article } from '../../../Models/Article.js'
 
 // ── ai-loop-parity Phase 1 + 2 smoke test tool ─────────────────────────────

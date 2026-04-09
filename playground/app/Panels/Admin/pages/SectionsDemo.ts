@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Section, Stats, Stat, Chart, List, Table, Column, Tab, Tabs, Dialog, Form, TextField, TextareaField } from '@rudderjs/panels'
-import type { PanelContext } from '@rudderjs/panels'
+import { Page, Heading, Text, Section, Stats, Stat, Chart, List, Table, Column, Tab, Tabs, Dialog, Form, TextField, TextareaField } from '@pilotiq/panels'
+import type { PanelContext } from '@pilotiq/panels'
 import { Article } from '../../../Models/Article.js'
 
 export class SectionsDemo extends Page {

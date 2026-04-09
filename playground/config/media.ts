@@ -1,4 +1,4 @@
-import type { MediaPluginConfig } from '@rudderjs/media/server'
+import type { MediaPluginConfig } from '@pilotiq/media/server'
 
 export default {
   libraries: {
