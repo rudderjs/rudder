@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ChevronDownIcon, TrashIcon, MessageSquareIcon, TypeIcon } from 'lucide-react'
 import { useAiChat, type ChatMessage, type ChatMessagePart, type ConversationItem } from './AiChatContext.js'
+import { getToolRenderer, registerToolRenderer } from './toolRenderers.js'
+import { AgentRunRenderer } from './agentRunRenderer.js'
+
+// ─── Built-in tool renderers ────────────────────────────────
+//
+// Register at module load (R4 in `docs/plans/ai-loop-parity-plan.md`) so
+// the renderer is available on the first render of the message that
+// triggers the tool, not after a `useEffect` runs. Top-level registration
+// is safe because the registry is a plain Map — no React lifecycle hooks
+// involved.
+registerToolRenderer('run_agent', AgentRunRenderer)
 import { useIsMobile } from '@/hooks/use-mobile.js'
 import { Button } from '@/components/ui/button.js'
 import {
@@ -131,7 +142,28 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
         </div>
       )
 
-    case 'tool_call':
+    case 'tool_call': {
+      // Generative-UI dispatch: if a renderer is registered for this tool
+      // name, hand the props to it; otherwise fall back to the default
+      // "Updated <field>" pill below. The registry is the public extension
+      // point — see toolRenderers.ts. (Phase 4 of the ai-loop-parity plan
+      // will register the first canonical renderer for `run_agent`.)
+      const Renderer = part.id ? getToolRenderer(part.tool) : undefined
+      if (Renderer && part.id) {
+        const props: {
+          toolCallId: string
+          args:       unknown
+          updates:    unknown[]
+          result?:    unknown
+          status:     'running' | 'complete' | 'error'
+        } = {
+          toolCallId: part.id,
+          args:       part.input,
+          updates:    part.updates ?? [],
+          status:     part.status ?? 'running',
+        }
+        return <>{Renderer(props)}</>
+      }
       return (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-0.5">
           <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -141,17 +173,14 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
           </span>
         </div>
       )
+    }
 
     case 'tool_result':
       return null  // Tool results are persisted to the wire log; nothing useful to show inline
 
-    case 'agent_start':
-      return (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-          <SparklesIcon className="h-3 w-3 shrink-0" />
-          <span className="font-medium">Running: {part.agentLabel}</span>
-        </div>
-      )
+    // `agent_start` part type was removed in ai-loop-parity Phase 4 —
+    // sub-agent progress now renders via AgentRunRenderer keyed to the
+    // run_agent tool_call part, not as a separate part.
 
     case 'complete':
       if (part.steps === 0 && part.tokens === 0) return null

@@ -2,12 +2,25 @@
 
 Close the three remaining gaps between `@rudderjs/ai` and the Vercel AI SDK / TanStack AI loop, treating them as one coherent multi-phase initiative because they share data flow: a server tool produces preliminary output → that output flows through the agent stream → the browser renders it as a UI component.
 
-**Status:** READY — all open questions resolved 2026-04-08; awaiting prerequisite cleanup PR (standalone field actions) before Phase 1 starts
-**Packages affected:** `@rudderjs/ai` (types, agent loop, tool builder), `@rudderjs/panels` (chatHandler, AiChatContext, chat UI registry, runAgentTool)
+**Status:** **DONE 2026-04-09.** All four phases shipped (PRs #10 / #11 / #12 / #13). Verified end-to-end against the playground:
+- Phase 1 — generator yields surface as `tool-update` chunks (slow_search smoke test)
+- Phase 2 — `.modelOutput()` decouples model-input from UI/result (`PHASE2_OK` smoke test)
+- Phase 3 — SSE forwarding + renderer registry wired through to the chat UI
+- Phase 4 — `runAgentTool` migrated, bypass deleted, `AgentRunRenderer` rendering live updates inline
+
+Caught + fixed during execution:
+- `.server()` overload-order bug (commit `13211090`) — TS bound `TReturn = AsyncGenerator<...>` for plain-async overload first, breaking chained `.modelOutput(result => ...)`. Fixed by reordering overloads + regression test.
+- `loadAi()` lazy-import declares `toolDefinition: any` to keep `@rudderjs/ai` from being a hard type dep, which strips chained-builder return types in panels. Worked around in `runAgentTool.ts` with an explicit `r: RunAgentResult` annotation. Proper fix (typing `loadAi()`'s return value) deferred as a separate cleanup.
+- Plan-doc deviations from actual codebase: SSE forwarding lives in `agentStream/index.ts` (not `chatHandler.ts`) since `standalone-client-tools-plan` Phase 1 extracted it; builder method renamed `.toModelOutput(fn)` → `.modelOutput(fn)` because the original name collides with the `Tool.toModelOutput` field on the same class.
+
+Surfaced (NOT fixed — pre-existing, separate scope): when a sub-agent invoked via `run_agent` calls a client tool like `update_form_state`, the sub-agent loop runs in placeholder mode and the browser never executes the tool. The model thinks the call succeeded but the form never changes. R7-adjacent. Tracked as `bug_subagent_client_tools` in memory.
+
+**Packages affected:** `@rudderjs/ai` (types, agent loop, tool builder), `@rudderjs/panels` (agentStream forwarder, AiChatContext, chat UI registry, runAgentTool, AgentRunRenderer)
 **Depends on:**
 - `mixed-tool-continuation-plan.md` (DONE 2026-04-08) — this plan extends the same SSE protocol with a new event class
-- **Prerequisite cleanup PR** (not yet started): restore standalone field AI actions (summarize/expand/etc.) to the `/_agents/${agentSlug}` endpoint instead of routing through chat. Must land before this plan so chat machinery isn't built on top of misrouted actions. See `feedback_standalone_field_actions_vs_chat.md`.
-**Related memory:** `project_ai_loop_parity.md`, `project_ai_system_identity.md`, `feedback_inline_over_modal.md`
+- `standalone-client-tools-plan.md` (DONE 2026-04-08) — restored standalone field AI actions before this plan started, so chat machinery wasn't built on misrouted actions
+
+**Related memory:** `project_ai_loop_parity.md`, `project_ai_system_identity.md`, `feedback_inline_over_modal.md`, `feedback_authoring_streaming_tools.md`, `bug_subagent_client_tools.md`
 
 ---
 
