@@ -1,6 +1,6 @@
 'use client'
 
-import { Component, type ReactNode } from 'react'
+import { Component, useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import { I18nProvider }   from '../_hooks/useI18n.js'
@@ -13,6 +13,41 @@ import.meta.glob('../_register-*.ts', { eager: true })
 // Lexical uses registerField — only register on client to avoid SSR/client hydration mismatch
 if (typeof window !== 'undefined') {
   import('@pilotiq/lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
+}
+
+// ── Collab provider (open-core seam) ────────────────────────────────────────
+// If @pilotiq-pro/collab is installed, dynamically load its <CollabProvider>
+// and wrap the panel tree in it. This activates real Yjs-backed collaboration
+// for LexicalEditor / CollaborativePlainText by overriding the CollabHookContext
+// that @pilotiq/lexical ships with a stub default.
+//
+// Without pro installed: the import fails, the state stays null, and the
+// tree renders with the stub hook (local-only mode).
+//
+// SSR note: the stub and the real impl both return collabReady=false on first
+// render (real impl's collab wiring runs inside useEffect, client-only), so
+// hydration matches regardless of whether the Provider is present.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic-import type surface
+function useCollabProvider(): ComponentType<{ children: ReactNode }> | null {
+  const [Provider, setProvider] = useState<ComponentType<{ children: ReactNode }> | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    // Optional runtime dep — Vite must NOT statically resolve this specifier,
+    // otherwise dev crashes with "Failed to resolve import" when pro isn't
+    // installed (see pilotiq/docs/plans/phase-5-collab-extraction.md R5/R6).
+    // Literal string + /* @vite-ignore */ is not enough in Vite 7 — the
+    // import-analysis plugin still inspects the literal. The workaround is
+    // a non-literal specifier (string concatenation) so static analysis
+    // can't see the target at all; the import falls through to runtime
+    // where .catch() handles "not installed" gracefully.
+    const pkg = '@pilotiq-pro' + '/collab'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optional dep surface
+    import(/* @vite-ignore */ pkg)
+      .then((mod: any) => { if (!cancelled && mod?.CollabProvider) setProvider(() => mod.CollabProvider) })
+      .catch(() => { /* pro not installed — stay in local-only mode */ })
+    return () => { cancelled = true }
+  }, [])
+  return Provider
 }
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
@@ -108,16 +143,21 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
   // SSR: inject theme CSS inline to prevent FOUC
   const themeCss = data.panelMeta.theme ? generateThemeCSS(data.panelMeta.theme) : null
 
+  const CollabProvider = useCollabProvider()
+  const tree = (
+    <AiChatProvider panelPath={data.panelMeta.path}>
+      <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
+        <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
+          {children}
+        </AdminLayout>
+      </I18nProvider>
+    </AiChatProvider>
+  )
+
   return (
     <PanelErrorBoundary>
       {themeCss && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
-      <AiChatProvider panelPath={data.panelMeta.path}>
-        <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
-          <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
-            {children}
-          </AdminLayout>
-        </I18nProvider>
-      </AiChatProvider>
+      {CollabProvider ? <CollabProvider>{tree}</CollabProvider> : tree}
     </PanelErrorBoundary>
   )
 }
