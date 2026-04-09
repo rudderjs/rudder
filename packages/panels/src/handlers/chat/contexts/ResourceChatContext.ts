@@ -95,7 +95,16 @@ export class ResourceChatContext implements ChatContext {
       }
     } catch { /* Live not available */ }
 
-    // 5. Resolve agents + agentCtx
+    // 5. Pre-render the builder block catalog (LSP-style structured
+    //    metadata so the agent doesn't infer block types from raw
+    //    Lexical JSON). Built once and reused for both:
+    //    (a) the chat agent's own system prompt (`buildSystemPrompt`),
+    //    (b) sub-agents dispatched via `run_agent`, threaded through
+    //        `agentCtx.builderCatalog`. Without (b), sub-agents either
+    //        hallucinate block names or refuse to touch blocks.
+    const builderCatalog = buildBuilderCatalogPrompt(resource)
+
+    // Resolve agents + agentCtx
     const agents = resource.agents()
     const agentCtx: PanelAgentContext = {
       record,
@@ -103,6 +112,7 @@ export class ResourceChatContext implements ChatContext {
       recordId,
       panelSlug: panel.getName(),
       fieldMeta: resource.getFieldMeta(),
+      builderCatalog,
     }
 
     // 6. Pre-build the tools (async — they import zod/ai and live)
@@ -157,10 +167,6 @@ export class ResourceChatContext implements ChatContext {
           ...(updateFormStateTool  ? [updateFormStateTool] : []),
           ...(deleteRecordTool     ? [deleteRecordTool]    : []),
         ]
-
-    // 8. Pre-render the builder block catalog (LSP-style structured metadata
-    //    so the agent doesn't infer block types from raw Lexical JSON).
-    const builderCatalog = buildBuilderCatalogPrompt(resource)
 
     return new ResourceChatContext({
       resourceSlug,
@@ -234,9 +240,9 @@ export class ResourceChatContext implements ChatContext {
       '  number/date fields. Prefer this when the field is collaborative AND the user is not actively',
       '  editing it (e.g. background rewrites of body content while the user is typing in the title).',
       '',
-      '- **Block operations** (`insert_block` / `update_block` / `delete_block`) work in BOTH tools',
-      '  for rich-content fields. Prefer `update_form_state` if the user is actively editing that',
-      '  field; prefer `edit_text` otherwise.',
+      '',
+      '## Block operations — only via `update_form_state`',
+      '**HARD RULE:** `insert_block` / `update_block` / `delete_block` MUST use `update_form_state`. `edit_text` nominally accepts block ops too, but it writes to a server-side Y.Doc room that the browser may not be listening to (non-collaborative fields, or the user\'s browser is mid-edit). If you call `edit_text` with a block op, the server will report success and the user will see NOTHING on screen — you will silently lie to them. There is no exception. This rule overrides any earlier "prefer edit_text for background rewrites" heuristic.',
       '',
       '## Rich-text formatting (only via `update_form_state`)',
       '**HARD RULE:** any request to bold, italicize, underline, strikethrough, code-format, link, unlink, or change a paragraph\'s type (heading, quote, code, list) MUST use `update_form_state`. `edit_text` has NO formatting ops — if you call it for a formatting request, you will silently fail and lie to the user. There is no exception.',

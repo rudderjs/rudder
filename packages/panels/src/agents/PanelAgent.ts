@@ -59,6 +59,24 @@ export interface PanelAgentContext {
    * load-bearing — see `feedback_chat_selection_mode_prompt.md`.
    */
   selection?:   { field: string; text: string }
+  /**
+   * Pre-rendered markdown "Available block types" section from
+   * `buildBuilderCatalogPrompt(resource)`. When set, the catalog is
+   * appended to the agent's system prompt so it knows which block
+   * names / field schemas it can insert/update/delete on rich-content
+   * fields. Without this, agents either hallucinate block types or
+   * refuse to touch blocks at all.
+   *
+   * Empty string when the resource has no builder fields with
+   * declared blocks — callers should pass the pre-rendered string
+   * either way so the agent can treat "empty catalog" as "don't
+   * touch blocks" rather than guessing.
+   *
+   * Populated by `ResourceChatContext.create()` when dispatching a
+   * sub-agent via `run_agent`, and by the standalone agent runner
+   * in `agentRun.ts`.
+   */
+  builderCatalog?: string
 }
 
 // ─── PanelAgent ─────────────────────────────────────────
@@ -201,7 +219,11 @@ export class PanelAgent {
       ? this.context.fieldScope
       : this._fields
     const preamble = buildToolSelectionPreamble(allFields, this.context.fieldMeta)
-    const base = preamble ? `${preamble}\n\n${interpolated}` : interpolated
+    const parts: string[] = []
+    if (preamble)                   parts.push(preamble)
+    if (this.context.builderCatalog) parts.push(this.context.builderCatalog)
+    parts.push(interpolated)
+    const base = parts.join('\n\n')
 
     // Selection mode: append the shared selection instructions block. The
     // helper is the single source of truth shared with the chat path
@@ -328,12 +350,19 @@ export class PanelAgent {
     const editText = toolDefinition({
       name: 'edit_text',
       description: [
-        '⚠️ HEADLESS-ONLY tool. Edits text/blocks in a field by writing directly to the Y.Doc.',
+        '⚠️ HEADLESS-ONLY plain-text editing tool. Writes directly to the Y.Doc.',
         '🚫 DO NOT CALL THIS TOOL when there is a user interacting with the page — use `update_form_state` instead.',
-        '`update_form_state` has all of these operations PLUS formatting (bold/italic/links/paragraph types) AND it routes through the user\'s live React/Lexical state so the user actually sees the change.',
+        '`update_form_state` has all of these operations PLUS block ops (insert/update/delete) PLUS formatting (bold/italic/links/paragraph types) AND it routes through the user\'s live React/Lexical state so the user actually sees the change.',
+        'Block operations are NOT supported here — they are only on `update_form_state`.',
         'This tool exists ONLY for headless runs (cron jobs, queue workers, background scripts) where no browser is connected.',
         'Available fields: ' + allFields.join(', '),
       ].join(' '),
+      // Block operations (insert_block / update_block / delete_block)
+      // intentionally absent. See `chat/tools/editTextTool.ts` for the
+      // same surgery + rationale: block ops written through edit_text
+      // bypass the live React/Lexical state and silently lie to the
+      // user. Removing the variants from the schema prevents the model
+      // from constructing them at all.
       inputSchema: z.object({
         field: z.enum(allFields as [string, ...string[]]),
         operations: z.array(z.union([
@@ -355,13 +384,6 @@ export class PanelAgent {
             type: z.literal('delete'),
             search: z.string().describe('The exact text to delete'),
           }),
-          z.object({
-            type: z.literal('update_block'),
-            blockType: z.string().describe('The block type (e.g. "callToAction", "video")'),
-            blockIndex: z.number().describe('0-based index if multiple blocks of the same type'),
-            field: z.string().describe('The block field to update (e.g. "title", "buttonText")'),
-            value: z.string().describe('The new value'),
-          }),
         ])),
       }),
     }).server(async (input: { field: string; operations: Array<Record<string, unknown>> }) => {
@@ -378,10 +400,6 @@ export class PanelAgent {
         for (const op of input.operations) {
           if (op.type === 'rewrite') {
             if (Live.rewriteText(fieldDocName, op.content as string, aiCursor)) {
-              applied++
-            }
-          } else if (op.type === 'update_block') {
-            if (Live.editBlock(fieldDocName, op.blockType as string, (op.blockIndex as number) ?? 0, op.field as string, op.value)) {
               applied++
             }
           } else {
@@ -406,7 +424,6 @@ export class PanelAgent {
         } catch { /* Live not available */ }
 
         for (const op of input.operations) {
-          if (op.type === 'update_block') continue // Blocks only exist in collab fields
           if (op.type === 'rewrite') {
             current = op.content as string
             continue

@@ -313,12 +313,20 @@ async function loadAgentRunContext(
     }
   } catch { /* no body */ }
 
+  // Pre-render the builder block catalog so standalone agents (button-
+  // triggered + field AI actions) know which block types they can
+  // insert/update on rich-content fields. Same data the chat path
+  // injects via `ResourceChatContext.create()`.
+  const { buildBuilderCatalogPrompt } = await import('./chat/blockCatalog.js')
+  const builderCatalog = buildBuilderCatalogPrompt(resource)
+
   const agentCtx: PanelAgentContext = {
     record:       typeof (record as any).toJSON === 'function' ? (record as any).toJSON() : record as Record<string, unknown>,
     resourceSlug: ResourceClass.getSlug(),
     recordId:     id,
     panelSlug,
     fieldMeta:    resource.getFieldMeta(),
+    builderCatalog,
     ...(fieldScope ? { fieldScope: [fieldScope] } : {}),
     ...(selection ? { selection } : {}),
   }

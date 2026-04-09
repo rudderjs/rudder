@@ -160,14 +160,17 @@ export async function handleSubAgentResume(deps: SubAgentResumeDeps): Promise<vo
 
     // 6. Rebuild the PanelAgentContext via the same internals Phase 2's
     //    runAgentTool used. The context carries `record`, `fieldMeta`,
-    //    and optional `fieldScope`.
-    const fieldMeta = (context as any).state.agentCtx.fieldMeta
+    //    `builderCatalog` (so the resumed sub-agent still knows which
+    //    block types it can insert/update), and optional `fieldScope`.
+    const fieldMeta       = (context as any).state.agentCtx.fieldMeta
+    const builderCatalog  = (context as any).state.agentCtx.builderCatalog
     const agentCtx = {
       record:       (context as any).state.record,
       resourceSlug: state.resourceSlug,
       recordId:     state.recordId,
       panelSlug:    panel.getName(),
       fieldMeta,
+      builderCatalog,
       ...(state.fieldScope ? { fieldScope: state.fieldScope } : {}),
     } as any
 
@@ -313,6 +316,20 @@ export async function handleSubAgentResume(deps: SubAgentResumeDeps): Promise<vo
     }
     const runAgentResultStr =
       `Agent "${runAgentResult.label}" finished (${runAgentResult.steps} step${runAgentResult.steps === 1 ? '' : 's'}, ${runAgentResult.tokens} tokens). Result: ${runAgentResult.text}`
+
+    // Tell the agentRunRenderer card to display the final totals in
+    // its footer. Accumulated across every pause so the step count
+    // matches what the sub-agent actually ran, not just this last
+    // resume's delta. (Phase 4 of subagent-client-tools-plan.)
+    send('tool_update', {
+      id:   state.parentToolCallId,
+      tool: 'run_agent',
+      update: {
+        kind:   'agent_complete',
+        steps:  totalSteps,
+        tokens: totalTokens,
+      },
+    })
 
     // Emit the delayed tool_result SSE for the ORPHAN run_agent call so
     // the browser's assistant bubble completes the run_agent tool card.
