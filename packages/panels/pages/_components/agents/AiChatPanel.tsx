@@ -178,13 +178,9 @@ function MessagePartView({ part }: { part: ChatMessagePart }) {
     case 'tool_result':
       return null  // Tool results are persisted to the wire log; nothing useful to show inline
 
-    case 'agent_start':
-      return (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-          <SparklesIcon className="h-3 w-3 shrink-0" />
-          <span className="font-medium">Running: {part.agentLabel}</span>
-        </div>
-      )
+    // `agent_start` part type was removed in ai-loop-parity Phase 4 —
+    // sub-agent progress now renders via AgentRunRenderer keyed to the
+    // run_agent tool_call part, not as a separate part.
 
     case 'complete':
       if (part.steps === 0 && part.tokens === 0) return null

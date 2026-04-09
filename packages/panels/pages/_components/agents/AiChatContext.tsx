@@ -24,7 +24,6 @@ export type ChatMessagePart =
       status?:  'running' | 'complete' | 'error'
     }
   | { type: 'tool_result'; tool: string; result?: unknown; id?: string }
-  | { type: 'agent_start'; agentSlug: string; agentLabel: string }
   | { type: 'complete'; steps: number; tokens: number }
   | { type: 'error'; message: string }
   | {
@@ -355,17 +354,12 @@ function parseSSELines(
             break
           }
 
-          case 'agent_start': {
-            const agentData = data as { agentSlug: string; agentLabel: string }
-            setMessages(prev => prev.map(m => {
-              if (m.id !== assistantId) return m
-              const parts = [...(m.parts ?? []), { type: 'agent_start' as const, ...agentData }]
-              return { ...m, parts }
-            }))
-            break
-          }
+          // `agent_start` and `agent_complete` SSE events were removed in
+          // ai-loop-parity Phase 4 — `runAgentTool` no longer calls
+          // `send()` directly. Sub-agent progress now flows as `tool_update`
+          // events with `kind: 'agent_start' | 'tool_call' | 'agent_complete'`
+          // payloads, rendered inline by AgentRunRenderer.
 
-          case 'agent_complete':
           case 'complete': {
             const completeData = data as { steps?: number; usage?: { totalTokens?: number }; tokens?: number; done?: boolean; awaiting?: string }
             if (completeData.done === true) turnState.done = true
