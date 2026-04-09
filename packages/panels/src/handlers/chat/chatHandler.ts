@@ -38,7 +38,7 @@ export async function handlePanelChat(
   // of this function; an orphan readable just gets garbage collected.
   let context: ChatContext
   try {
-    context = await resolveContext({ body, panel, req, send })
+    context = await resolveContext({ body, panel, req })
   } catch (err) {
     if (err instanceof ChatContextError) {
       return res.status(err.status).json({ message: err.message })

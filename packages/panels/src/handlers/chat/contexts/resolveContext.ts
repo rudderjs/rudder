@@ -1,6 +1,6 @@
 import type { AppRequest } from '@rudderjs/core'
 import type { Panel } from '../../../Panel.js'
-import type { ChatRequestBody, SSESend } from '../types.js'
+import type { ChatRequestBody } from '../types.js'
 import type { ChatContext } from './types.js'
 import { ResourceChatContext } from './ResourceChatContext.js'
 import { PageChatContext } from './PageChatContext.js'
@@ -10,7 +10,6 @@ export interface ResolveContextDeps {
   body:  ChatRequestBody
   panel: Panel
   req:   AppRequest
-  send:  SSESend
 }
 
 /**

@@ -44,7 +44,7 @@ export class ResourceChatContext implements ChatContext {
   private constructor(private readonly state: ResolvedResourceState) {}
 
   static async create(deps: ResolveContextDeps): Promise<ResourceChatContext> {
-    const { body, panel, req, send } = deps
+    const { body, panel, req } = deps
     const ctxBody = body.resourceContext!
     const { resourceSlug, recordId } = ctxBody
 
@@ -125,7 +125,7 @@ export class ResourceChatContext implements ChatContext {
       blockAllowlist[entry.fieldName] = new Set(entry.blocks.map(b => b.name))
     }
 
-    const runAgentTool         = await buildRunAgentTool(agents, agentCtx, message, send)
+    const runAgentTool         = await buildRunAgentTool(agents, agentCtx, message)
     const editTextTool         = await buildEditTextTool(agentCtx, allFields, record, selection, blockAllowlist)
     const readFormStateTool    = await buildReadFormStateTool()
     const updateFormStateTool  = await buildUpdateFormStateTool(allFields)
