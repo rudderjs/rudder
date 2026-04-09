@@ -4,18 +4,17 @@ import assert from 'node:assert/strict'
 import { GlobalChatContext } from '../handlers/chat/contexts/GlobalChatContext.js'
 import { PageChatContext } from '../handlers/chat/contexts/PageChatContext.js'
 import { resolveContext } from '../handlers/chat/contexts/resolveContext.js'
-import type { ChatRequestBody, SSESend } from '../handlers/chat/types.js'
+import type { ChatRequestBody } from '../handlers/chat/types.js'
 
 // ─── Helpers ────────────────────────────────────────────────
 
-const noopSend: SSESend = () => { /* noop */ }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fakeReq = { user: undefined, headers: {}, path: '/', body: {} } as any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fakePanel = { getResources: () => [], getName: () => 'admin' } as any
 
 function deps(body: ChatRequestBody) {
-  return { body, panel: fakePanel, req: fakeReq, send: noopSend }
+  return { body, panel: fakePanel, req: fakeReq }
 }
 
 // ─── GlobalChatContext ──────────────────────────────────────
@@ -55,7 +54,7 @@ describe('GlobalChatContext', () => {
   it('extracts userId from req.user', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const req = { user: { id: 'u-1' }, headers: {}, path: '/', body: {} } as any
-    const ctx = await GlobalChatContext.create({ body: { message: 'hi' }, panel: fakePanel, req, send: noopSend })
+    const ctx = await GlobalChatContext.create({ body: { message: 'hi' }, panel: fakePanel, req })
     assert.deepEqual(ctx.getConversationMeta(), { userId: 'u-1' })
   })
 })
