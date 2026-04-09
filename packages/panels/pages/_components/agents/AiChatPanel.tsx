@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanelLeftIcon, XIcon, PlusIcon, ArrowUpIcon, SparklesIcon, CheckIcon, ChevronDownIcon, TrashIcon, MessageSquareIcon, TypeIcon } from 'lucide-react'
 import { useAiChat, type ChatMessage, type ChatMessagePart, type ConversationItem } from './AiChatContext.js'
-import { getToolRenderer } from './toolRenderers.js'
+import { getToolRenderer, registerToolRenderer } from './toolRenderers.js'
+import { AgentRunRenderer } from './agentRunRenderer.js'
+
+// ─── Built-in tool renderers ────────────────────────────────
+//
+// Register at module load (R4 in `docs/plans/ai-loop-parity-plan.md`) so
+// the renderer is available on the first render of the message that
+// triggers the tool, not after a `useEffect` runs. Top-level registration
+// is safe because the registry is a plain Map — no React lifecycle hooks
+// involved.
+registerToolRenderer('run_agent', AgentRunRenderer)
 import { useIsMobile } from '@/hooks/use-mobile.js'
 import { Button } from '@/components/ui/button.js'
 import {
