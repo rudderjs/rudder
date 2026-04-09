@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
-import type { PanelAgentMeta } from '@rudderjs/panels'
+import type { PanelAgentMeta } from '@pilotiq/panels'
 import { executeClientTool, hasClientTool } from './clientTools.js'
 
 // ─── Chat message parts (structured content) ───────────────

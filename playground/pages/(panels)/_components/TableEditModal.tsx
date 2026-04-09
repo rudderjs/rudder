@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@rudderjs/panels'
+import type { FieldMeta, PanelI18n, PanelColumnMeta } from '@pilotiq/panels'
 import { FieldInput } from './FieldInput.js'
 import { formatCellValue } from './formatCellValue.js'
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { PanelI18n, PanelAgentMeta } from '@rudderjs/panels'
+import type { PanelI18n, PanelAgentMeta } from '@pilotiq/panels'
 import { useAgentRun } from '../agents/useAgentRun.js'
 import { AiActionProgress } from '../agents/AiActionProgress.js'
 

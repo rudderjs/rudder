@@ -5,9 +5,9 @@ import {
   DateField, ColorField, TagsField, SlugField,
   JsonField, HiddenField, FileField,
   RepeaterField, BuilderField, Block,
-} from '@rudderjs/panels'
-import { RichContentField } from '@rudderjs/panels-lexical'
-import type { PanelContext } from '@rudderjs/panels'
+} from '@pilotiq/panels'
+import { RichContentField } from '@pilotiq/lexical'
+import type { PanelContext } from '@pilotiq/panels'
 
 export class FieldsDemo extends Page {
   static slug  = 'fields-demo'
@@ -378,7 +378,7 @@ pnpm build
 cd playground && pnpm dev`).language('bash').title('Quick Start'),
 
       Code.make(`{
-  "name": "@rudderjs/panels",
+  "name": "@pilotiq/panels",
   "version": "0.0.3",
   "type": "module"
 }`).language('json').title('package.json'),
@@ -502,7 +502,7 @@ LIMIT 10;`).language('sql').title('Top Articles by Comments').lineNumbers(),
 
       // ── Rich Content Field ────────────────────────────────────
       Heading.make('Rich Content Field (Lexical)').level(2),
-      Text.make('RichContentField renders a Lexical rich-text editor. Requires @rudderjs/panels-lexical. Supports custom blocks and real-time collaboration.'),
+      Text.make('RichContentField renders a Lexical rich-text editor. Requires @pilotiq/lexical. Supports custom blocks and real-time collaboration.'),
 
       Form.make('richcontent-demo')
         .fields([

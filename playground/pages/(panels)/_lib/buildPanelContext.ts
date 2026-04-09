@@ -1,4 +1,4 @@
-import type { PanelUser } from '@rudderjs/panels'
+import type { PanelUser } from '@pilotiq/panels'
 import type { PageContextServer } from 'vike/types'
 import { getSessionUser } from './getSessionUser.js'
 

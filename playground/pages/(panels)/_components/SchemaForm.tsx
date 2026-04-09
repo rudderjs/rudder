@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { SchemaFormMeta, PanelI18n, FieldMeta, PanelAgentMeta } from '@rudderjs/panels'
+import type { SchemaFormMeta, PanelI18n, FieldMeta, PanelAgentMeta } from '@pilotiq/panels'
 import { FieldInput } from './FieldInput.js'
 import { SchemaRenderer } from './edit/SchemaRenderer.js'
 import { EditToolbar } from './edit/EditToolbar.js'

@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { getField, subscribeFields } from '@rudderjs/panels'
-import type { ResolvedAiAction } from '@rudderjs/panels'
+import { getField, subscribeFields } from '@pilotiq/panels'
+import type { ResolvedAiAction } from '@pilotiq/panels'
 import { useAiChatSafe } from '../agents/AiChatContext.js'
 import { registerLexicalEditor } from '../agents/lexicalRegistry.js'
 import { usePanelAgentApi } from '../agents/standaloneAgentApiContext.js'

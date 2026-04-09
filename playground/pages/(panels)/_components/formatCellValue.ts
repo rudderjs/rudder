@@ -1,4 +1,4 @@
-import type { PanelColumnMeta, PanelI18n } from '@rudderjs/panels'
+import type { PanelColumnMeta, PanelI18n } from '@pilotiq/panels'
 
 export function formatCellValue(value: unknown, col: PanelColumnMeta | null, i18n: PanelI18n, _panelPath?: string): string {
   if (value === null || value === undefined) return '\u2014'

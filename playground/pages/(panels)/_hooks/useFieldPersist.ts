@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import type { FieldMeta } from '@rudderjs/panels'
+import type { FieldMeta } from '@pilotiq/panels'
 
 interface UseFieldPersistOptions {
   /** Storage key prefix — e.g. 'bk:admin:articles:create' */

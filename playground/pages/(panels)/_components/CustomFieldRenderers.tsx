@@ -1,4 +1,4 @@
-import type { FieldMeta } from '@rudderjs/panels'
+import type { FieldMeta } from '@pilotiq/panels'
 
 /**
  * Custom field renderer props — same interface as built-in FieldInput.

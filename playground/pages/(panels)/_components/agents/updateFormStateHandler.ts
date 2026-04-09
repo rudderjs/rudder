@@ -8,7 +8,7 @@
  *   2. **Lexical editor branch** — looks up the live editor in `lexicalRegistry`
  *      and runs every op inside one `editor.update()` (single undo step) using
  *      Lexical primitives loaded via dynamic import (no static dep on
- *      `@rudderjs/panels-lexical` from this package).
+ *      `@pilotiq/lexical` from this package).
  *
  * The op vocabulary intentionally mirrors the server-side `edit_text` tool so
  * the agent uses one mental model regardless of routing.
@@ -210,7 +210,7 @@ async function applyLexicalOps(
   try {
     ;[lexical, panelsLexical, richText, link, code] = await Promise.all([
       import('lexical'),
-      import('@rudderjs/panels-lexical'),
+      import('@pilotiq/lexical'),
       import('@lexical/rich-text'),
       import('@lexical/link'),
       import('@lexical/code'),
@@ -263,7 +263,7 @@ async function applyLexicalOps(
           case 'insert_after':
           case 'delete': {
             if (!applyTextOp) {
-              rejected.push(`${op.type}: applyTextOp helper unavailable in this build of @rudderjs/panels-lexical`)
+              rejected.push(`${op.type}: applyTextOp helper unavailable in this build of @pilotiq/lexical`)
               break
             }
             // Capture text content before to detect "no match" — applyTextOp is

@@ -1,5 +1,5 @@
-import { Page, Heading, Text, Form, Dialog, Section, TextField, EmailField, TextareaField, NumberField, BooleanField, SelectField } from '@rudderjs/panels'
-import type { PanelContext } from '@rudderjs/panels'
+import { Page, Heading, Text, Form, Dialog, Section, TextField, EmailField, TextareaField, NumberField, BooleanField, SelectField } from '@pilotiq/panels'
+import type { PanelContext } from '@pilotiq/panels'
 
 export class FormsDemo extends Page {
   static slug  = 'forms-demo'

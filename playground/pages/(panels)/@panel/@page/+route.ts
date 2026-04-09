@@ -1,5 +1,5 @@
 import type { RouteSync } from 'vike/types'
-import { PanelRegistry } from '@rudderjs/panels'
+import { PanelRegistry } from '@pilotiq/panels'
 
 // Match /{panel}/{page...} for registered schema-based Pages.
 //

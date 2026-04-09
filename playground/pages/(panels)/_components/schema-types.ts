@@ -1,4 +1,4 @@
-import type { PanelSchemaElementMeta, PanelI18n } from '@rudderjs/panels'
+import type { PanelSchemaElementMeta, PanelI18n } from '@pilotiq/panels'
 import type { DashboardGridProps } from './DashboardGrid.js'
 
 export type DashboardLayoutItem = DashboardGridProps['ssrLayout'] extends (infer T)[] | undefined ? T : never

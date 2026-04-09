@@ -1,6 +1,6 @@
-import { Page, Heading, Text, Table, Column, SelectFilter, Action, SelectField, TextareaField, ToggleField, Form, TextField } from '@rudderjs/panels'
+import { Page, Heading, Text, Table, Column, SelectFilter, Action, SelectField, TextareaField, ToggleField, Form, TextField } from '@pilotiq/panels'
 import { Table as TableIcon } from 'lucide-static'
-import type { PanelContext } from '@rudderjs/panels'
+import type { PanelContext } from '@pilotiq/panels'
 import { Article } from '../../../Models/Article.js'
 import { PaginationDemo }   from './tables/PaginationDemo.js'
 import { ExternalDataDemo } from './tables/ExternalDataDemo.js'

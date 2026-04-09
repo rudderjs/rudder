@@ -1,5 +1,5 @@
 import { usePageContext } from 'vike-react/usePageContext'
-import type { PanelNavigationMeta } from '@rudderjs/panels'
+import type { PanelNavigationMeta } from '@pilotiq/panels'
 
 export default function PanelHead() {
   let fontFamilies: string[] = []

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { FieldMeta, NodeMap } from '@rudderjs/panels'
-import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from '@rudderjs/panels'
+import type { FieldMeta, NodeMap } from '@pilotiq/panels'
+import { ensureNodeMap, addNode, updateNodeProps, removeNode, reorderNode } from '@pilotiq/panels'
 import { SortableBlockList } from '../SortableBlockList.js'
 import type { FieldInputProps } from './types.js'
 import { FieldInput } from '../FieldInput.js'

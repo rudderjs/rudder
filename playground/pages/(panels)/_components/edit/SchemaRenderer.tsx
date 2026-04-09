@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, ResolvedAiAction } from '@rudderjs/panels'
+import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, ResolvedAiAction } from '@pilotiq/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
 import { AiDropdown } from '../agents/AiDropdown.js'

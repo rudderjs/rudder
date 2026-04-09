@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import type { ResolvedAiAction } from '@rudderjs/panels'
+import type { ResolvedAiAction } from '@pilotiq/panels'
 import { useAgentRun } from './useAgentRun.js'
 import { useAiChatSafe } from './AiChatContext.js'
 import { AiActionProgress } from './AiActionProgress.js'

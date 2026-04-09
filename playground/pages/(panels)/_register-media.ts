@@ -1,12 +1,12 @@
-import { registerLazyElement, registerField } from '@rudderjs/panels'
+import { registerLazyElement, registerField } from '@pilotiq/panels'
 
 // Lazy-load Media schema element (SSR-safe via React.lazy)
 registerLazyElement('media', () =>
-  import('@rudderjs/media').then(m => ({ default: (m as Record<string, unknown>).MediaElement as React.ComponentType }))
+  import('@pilotiq/media').then(m => ({ default: (m as Record<string, unknown>).MediaElement as React.ComponentType }))
 )
 
 // Register MediaPickerField input component
-import('@rudderjs/media').then(m => {
+import('@pilotiq/media').then(m => {
   const { MediaPickerInput } = m as { MediaPickerInput: React.ComponentType }
   registerField('mediaPicker', MediaPickerInput)
 }).catch(() => {})

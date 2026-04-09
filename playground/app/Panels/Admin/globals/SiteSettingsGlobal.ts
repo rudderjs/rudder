@@ -1,4 +1,4 @@
-import { Global, Form, TextField, TextareaField, ToggleField, FileField, ColorField, Section } from '@rudderjs/panels'
+import { Global, Form, TextField, TextareaField, ToggleField, FileField, ColorField, Section } from '@pilotiq/panels'
 
 export class SiteSettingsGlobal extends Global {
   static slug  = 'site-settings'
