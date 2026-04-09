@@ -916,21 +916,9 @@ useEffect(() =>
 Add the definition to the right `ChatContext`'s `buildTools()` and the model
 will start using it.
 
-### Selected Text Context
+### Field AI dropdown (`.ai()`)
 
-Select text in any collaborative field (title, textarea, or rich content) and click the **✦** button that appears. This opens the AI chat with the selection pre-filled — the AI knows exactly which field and text to edit.
-
-```
-1. Select text in editor → ✦ button appears
-2. Click ✦ → chat opens with selection context
-3. Type "make this shorter" → AI edits that exact text in that exact field
-```
-
-The selection context locks the AI to the correct field — it cannot accidentally edit a different field. After editing, the AI confirms what it changed.
-
-### AI Quick Actions (`.ai()`)
-
-Add predefined AI actions to any field with `.ai()`:
+Opt any field into AI by passing actions to `.ai()`:
 
 ```ts
 TextField.make('title')
@@ -941,9 +929,27 @@ RichContentField.make('content')
 
 TextareaField.make('excerpt')
   .ai()  // default actions: rewrite, expand, shorten, fix-grammar
+
+// Forward-compatible object form (for future per-field knobs)
+TextField.make('title')
+  .ai({ actions: ['rewrite', 'shorten'] })
 ```
 
-A **✦** sparkle button appears next to the field label. Click it to see a dropdown of actions — each sends a one-click prompt to the AI chat that edits the field directly.
+A **✦** button appears next to the field label. Click it to open a dropdown with three input modes in one surface:
+
+1. **Quick action buttons** — `Rewrite`, `Shorten`, `Expand`, etc. — one-click edits
+2. **`💬 Discuss in chat`** — pushes the selection (when you have one) to the chat panel as context
+3. **Free-form textarea** — type any prompt ("translate to French", "make this rhyme") and Send (or press Enter)
+
+The dropdown is **selection-aware**: if you've highlighted text in the field before clicking `✦`, the dropdown shows a quoted preview at the top (`Selection: "..."`) and every action runs **scoped to the selection**, not the whole field. Without a selection, actions target the entire field.
+
+```
+1. Select "VPN" in metaDescription
+2. Click ✦ at the top of the field → dropdown opens with "Selection: VPN"
+3. Click Delete (or type "remove this" + Enter) → only "VPN" is removed
+```
+
+For Lexical fields (richcontent + collaborative plain text), the **same dropdown** is also reachable from a second `✦` button that appears inline next to the selection — in the floating formatting toolbar (richcontent) or beside the cursor (collab plain text). It opens the same content with `fixed`-mode anchoring; both triggers share the underlying `AiDropdown` component. Plain non-collab `<input>` and `<textarea>` only get the field-level `✦` (no inline button), but the dropdown still does selection mode because it reads `selectionStart`/`selectionEnd` from the live DOM at click time.
 
 **Available built-in actions:**
 
@@ -953,10 +959,12 @@ A **✦** sparkle button appears next to the field label. Click it to see a drop
 | `expand` | Expand with more detail |
 | `shorten` | Shorten while keeping key points |
 | `fix-grammar` | Fix grammar and spelling |
-| `translate` | Translate to English |
+| `translate` | Translate (target language picked from a submenu) |
 | `summarize` | Summarize concisely |
 | `make-formal` | Rewrite in a more formal tone |
 | `simplify` | Simplify for easier understanding |
+
+The dropdown's free-form textarea posts to a global `freeform` agent that's registered automatically — your typed prompt becomes the run input, and it inherits the selection scope when you have text highlighted. You don't need to opt fields into `freeform` explicitly.
 
 ### Class-Based Agents
 

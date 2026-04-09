@@ -33,7 +33,7 @@ For Tailwind CSS to scan the component classes, add to your CSS:
 - **CollaborativePlainText** — Lexical-based collaborative plain text field (single-line or multi-line) with Ask AI on selection
 - **BlockNode** — Custom decorator node for embedding typed blocks in rich text
 - **SlashCommandPlugin** — "/" slash command menu (headings, lists, quotes, code, divider, custom blocks)
-- **FloatingToolbarPlugin** — Floating formatting toolbar on text selection (includes ✦ Ask AI button)
+- **FloatingToolbarPlugin** — Floating formatting toolbar on text selection. Includes inline `✦` (selection AI actions) and `💬` (push selection to chat) buttons via `onSelectionAction(text, anchorRect)` and `onAskChat(text)` callbacks.
 - **FixedToolbarPlugin** — Google Docs-style persistent toolbar pinned to editor top
 - **FloatingLinkEditorPlugin** — Inline link URL editor (view + edit modes)
 
@@ -263,32 +263,42 @@ Version history uses a **comparison view** — not a preview mode:
 
 ## AI Integration
 
-Both `LexicalEditor` and `CollaborativePlainText` support an **Ask AI** button that appears when text is selected.
+Both `LexicalEditor` and `CollaborativePlainText` render two inline buttons next to a text selection: a **`✦`** for selection-scoped AI actions and a **`💬`** for pushing the selection into an AI chat panel as context. The actual menu / chat surface is rendered by the parent (typically `@rudderjs/panels`) via callback props — `panels-lexical` only provides the buttons and the captured selection text + button rect.
 
 ### How it works
 
-1. User selects text in any collaborative field (title, textarea, rich content)
-2. A **✦** button appears — in the floating toolbar (rich text) or beside the selection (plain text)
-3. Clicking ✦ opens the AI chat sidebar with the selected text and field name pre-filled
-4. The user types a request (e.g. "make this shorter") and the AI edits that exact text in that exact field
+1. User selects text in a Lexical-backed field
+2. The buttons appear in the floating toolbar (rich content, alongside bold/italic/link) or beside the selection (collaborative plain text via `SelectionAiPlugin`)
+3. Clicking `✦` fires `onSelectionAction(text, anchorRect)` — the parent renders a popover anchored to `anchorRect` with the captured text. In `@rudderjs/panels` this is the shared `AiDropdown` component (selection-aware quick actions, chat-bridge item, free-form textarea)
+4. Clicking `💬` fires `onAskChat(text)` — the parent typically routes this to its chat panel as a selection context chip
 
 ### Props
 
-Both components accept an optional `onAskAi` callback:
+Both components accept the two callback props (each gated independently — pass only the ones you want to expose):
 
 ```ts
-// LexicalEditor
-<LexicalEditor onAskAi={(text) => { /* handle selected text */ }} />
+import type { SelectionAiAnchorRect } from '@rudderjs/panels-lexical'
 
-// CollaborativePlainText
-<CollaborativePlainText onAskAi={(text) => { /* handle selected text */ }} />
+// LexicalEditor (richcontent)
+<LexicalEditor
+  onSelectionAction={(text, rect) => { /* open your AI menu anchored to rect */ }}
+  onAskChat={(text) => { /* push to chat */ }}
+/>
+
+// CollaborativePlainText (collab plain text/textarea)
+<CollaborativePlainText
+  onSelectionAction={(text, rect) => { /* same */ }}
+  onAskChat={(text) => { /* same */ }}
+/>
 ```
 
-When used inside `@rudderjs/panels`, the callback is auto-wired to the AI chat context — no manual setup needed.
+The `SelectionAiAnchorRect` type is `{ left, top, right, bottom }` — viewport-relative coordinates from `getBoundingClientRect()` on the inline button, ready to feed into a `position: fixed` popover.
+
+When used inside `@rudderjs/panels`, both callbacks are auto-wired by the field input components: `onSelectionAction` opens `AiDropdown` in fixed mode, `onAskChat` calls the chat context's `setSelection + setOpen` flow. No manual setup needed.
 
 ### Server-side editing
 
-When the AI edits collaborative fields, changes are applied via `Live.editText()` / `Live.editBlock()` on the server. These edits propagate through Yjs to all connected clients in real-time, with an AI cursor highlight showing where changes are being made.
+When the AI edits collaborative fields, changes are applied via `Live.editText()` / `Live.editBlock()` on the server. These edits propagate through Yjs to all connected clients in real-time, with an AI cursor highlight showing where changes are being made. (Inside panels, the `update_form_state` client tool is the preferred path — see the panels README — because it routes through the live React/Lexical state and supports formatting ops the server-side path doesn't.)
 
 ## Without this package
 

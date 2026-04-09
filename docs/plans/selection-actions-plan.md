@@ -2,9 +2,18 @@
 
 Make the existing per-field `✦ Quick Actions` dropdown selection-aware so that when the user has highlighted text in a field, clicking `✦` runs the chosen action against the **selection** instead of the whole field. Same UI, same standalone path, scope determined by selection state. Preserve the existing chat-bridge intent (`💬` button) as a separate trigger for "discuss this selection in chat."
 
-**Status:** READY 2026-04-09. Prerequisites complete:
-- `standalone-client-tools-plan.md` (DONE 2026-04-08) — `useAgentRun`, `AiActionProgress`, `BuiltInAiActionRegistry`, `PanelAgent`, standalone endpoint, client-tool round-trip
-- Chat selection-mode fix (committed 2026-04-09) — proves the `update_form_state` + `search`-string approach works end-to-end and gives us a proven instructions block to mirror on the standalone path
+**Status:** DONE 2026-04-09. Both phases shipped + a load-bearing chat-fix prerequisite. Final shape diverged from the initial draft in two places: (a) the inline `✦` was kept in panels-lexical's `FloatingToolbarPlugin` / `SelectionAiPlugin` (instead of removing it as the plan first proposed), so Lexical fields now have BOTH a field-level `✦` and an inline `✦`, both opening the same `AiDropdown` via two anchor modes (`absolute` / `fixed`); (b) the dropdown gained a free-form textarea that posts to a new `freeform` built-in agent — three input modes in one surface (quick actions, chat-bridge item, textarea), all selection-aware.
+
+| Commit | What |
+|---|---|
+| `c95216e6` | Chat selection-mode fix (prerequisite) — `ResourceChatContext` selection branch directs the model to `update_form_state` + filters the toolkit, fixing the silent-lie bug on non-collab fields |
+| `ff408e2e` | Phase 1 server — standalone endpoint accepts `selection`, shared `buildSelectionInstructions` helper between chat and standalone, `PanelAgent.buildTools()` selection-mode toolkit filter, latent fieldScope-on-continuation bug fixed as a side-effect |
+| `20875b93` | Phase 2 frontend — shared `AiDropdown` component, `readFieldSelection` helper, `Field.ai()` extended to accept object form, slimmed `AiQuickActions`, removed `useNativeSelectionAi` (no inline buttons on plain non-collab inputs) |
+
+Three deferred follow-ups (none blocking):
+- **i18n** — hardcoded English in `AiDropdown` (`"Selection: "`, `"Tell AI what to do…"`, `"💬 Discuss in chat"`) and the `freeform` built-in's label. Wire through `@rudderjs/localization` per `feedback_panels_localization.md`
+- **Selection-only Lexical formatting actions** (`make-bold`, `italicize`, `wrap-link`, `convert-to-heading`) — never built. The textarea may already cover this intent ("make this bold" via natural language) so verify need before building
+- **Multi-pause continuation inheritance** — fixed in Phase 1 as a beneficial side-effect; recorded in `feedback_mixed_tool_continuation_validation.md` as the third variation of that bug
 
 | Phase | Description | LOC est |
 |---|---|---|
