@@ -404,3 +404,270 @@ Phases 2, 4, 5 each end with explicit memory-update steps. Don't defer them — 
 - After Phase 2: Pilotic exists as a standalone OSS product. Rebrand complete.
 - After Phase 4: First pro package shipping. Revenue possible.
 - After Phase 6: Open core fully realized with paid tier. Cloud is the next leap.
+
+---
+
+## Audit Results (Phase 0 — completed 2026-04-09)
+
+### Baseline
+
+| Package | Source files (excl. tests) | Tests | Build | Test | Notes |
+|---|---|---|---|---|---|
+| `@rudderjs/panels` | 167 `.ts(x)` | 21 test files / **620 tests** | ✅ green | ✅ green | Last green: 2026-04-09 after task A/B/C commit |
+| `@rudderjs/panels-lexical` | 17 `.ts(x)` | 2 test files / **21 tests** | ✅ green | ✅ green | |
+
+### Cross-package dependency direction
+
+**`panels-lexical` depends on `panels`** (single direction, confirmed).
+
+- `panels-lexical/package.json` declares `@rudderjs/panels` as a `peerDependency`
+- 4 source files import from `@rudderjs/panels`:
+  - `register.ts`: `registerField` (runtime)
+  - `RichContentField.ts`: `Field` class (runtime) + `BlockMeta` type
+  - `lexical/BlockNodeComponent.tsx`: `FieldMeta`, `BlockMeta` (type-only)
+  - `LexicalEditor.tsx`: `BlockMeta` (type-only)
+  - `PanelLexicalServiceProvider.ts`: `PanelPlugin` (type-only)
+
+**`panels` does NOT depend on `panels-lexical` at runtime.** The 4 grep hits inside `panels/src` for `@rudderjs/panels-lexical` are all comments, JSDoc, or test fixtures — no `import` statements. Confirmed via:
+- `PanelServiceProvider.ts:185` — JSDoc example
+- `handlers/chat/blockCatalog.ts:13,50` — comments explaining where blocks come from
+- `registries/EditorRegistry.ts:37` — deprecated comment
+- `__tests__/blockCatalog.test.ts:111` — test fixture comment
+
+**Implication for extraction order:** extract `@pilotic/panels` first, `@pilotic/lexical` second. The lexical package will pin `@pilotic/panels` as a peer.
+
+### Other consumers of `@rudderjs/panels` in the monorepo
+
+| Package | Consumer type | Impact |
+|---|---|---|
+| `@rudderjs/panels-lexical` | runtime + types | Will become `@pilotic/lexical`, follows panels in extraction |
+| `@rudderjs/media` | runtime: `Field`, `registerField`, `registerLazyElement`, `PanelPlugin` type | Will need to consume `@pilotic/panels` from npm post-extraction. Optional plugin — works with or without |
+| `@rudderjs/workspaces` | runtime: `Field`, `Panel`, `PanelPlugin` type | Same as media — will consume `@pilotic/panels` from npm. Optional plugin |
+| `@rudderjs/ai` | **doc comment only** (`packages/ai/src/types.ts:311`) | ✅ no real coupling — no rebuild needed |
+| `@rudderjs/core` | **README example only** | ✅ no code coupling |
+
+**Cross-package decisions:** `@rudderjs/media` and `@rudderjs/workspaces` are framework packages (live in `rudderjs/rudder`) but they import from `@rudderjs/panels` which will move to `pilotic/pilotic`. Two options:
+1. **Bump them to depend on `@pilotic/panels` from npm** after extraction. Cleanest, but introduces a cross-repo version coupling that bites every release.
+2. **Move them to `pilotic/pilotic` too** since they're conceptually panel extensions. Probably the right call long-term — they're not framework primitives, they're admin/CMS features. Worth flagging as a Phase 2 sub-decision.
+
+**Recommendation:** **Move `media` and `workspaces` to `pilotic/pilotic`** as `@pilotic/media` and `@pilotic/workspaces` during Phase 2. They have no consumers outside of admin/CMS use cases. This expands Phase 2's scope but eliminates the cross-repo coupling for two more packages.
+
+### Playground consumer surface
+
+The playground imports from `@rudderjs/panels` in **~70 files** across `bootstrap/`, `app/Panels/`, and `pages/(panels)/_components/**`. All of those are end-user code that will need to be updated to `@pilotic/panels` during Phase 2 — but it's a single find-and-replace in the playground, not an architectural change.
+
+### File-level extraction map for `@rudderjs/panels`
+
+Buckets:
+- **CORE** → stays in `@pilotic/panels` (free, public)
+- **AI** → moves to `@pilotic-pro/ai` (private, commercial)
+- **TBD** → has cross-bucket coupling that needs Phase 3 (extension hooks) to resolve
+
+#### CORE (167 files — stays)
+
+```
+src/
+├── Panel.ts                              # main runtime class
+├── Page.ts
+├── Resource.ts                           # ⚠️ type-imports PanelAgent — see TBD section
+├── Global.ts
+├── PanelServiceProvider.ts               # ⚠️ registers AI actions — see TBD section
+├── ThemeSettingsPage.ts
+├── NodeMap.ts
+├── debug.ts
+├── datasource.ts
+├── persist.ts
+├── resolveSchema.ts
+├── resourceData.ts
+├── types.ts
+├── index.ts                              # ⚠️ re-exports AI types — see TBD section
+├── i18n/{ar,en,index}.ts                 # localization (just shipped)
+├── theme/*.ts                            # 11 files — theming
+├── handlers/
+│   ├── index.ts
+│   ├── panelMiddleware.ts
+│   ├── dashboardRoutes.ts
+│   ├── globalRoutes.ts
+│   ├── metaRoutes.ts
+│   ├── notificationRoutes.ts
+│   ├── themeRoutes.ts
+│   ├── versionRoutes.ts
+│   ├── types.ts
+│   ├── meta/*.ts                         # 8 files — meta endpoints
+│   ├── resource/*.ts                     # 8 files — CRUD handlers
+│   └── shared/*.ts                       # 5 files — coercion/validation/transforms
+├── registries/                           # 12 files — Panel/Resolver/etc registries
+├── resolvers/                            # 15 files — schema → meta resolvers
+├── schema/
+│   ├── *.ts                              # ~30 schema element classes
+│   ├── fields/*.ts                       # 19 field type classes
+│   ├── filters/*.ts                      # 4 filter classes
+│   ├── Field.ts                          # ⚠️ runtime-imports BuiltInAiActionRegistry — see TBD section
+│   └── ...
+└── utils/queryHelpers.ts
+```
+
+**Test files in CORE bucket** (15 of 21):
+`chart`, `field`, `fields`, `form`, `i18n`, `i18n-override`, `list`, `persist`, `registries`, `resource`, `section`, `stats`, `table`, `tabs`, `viewmode`, `widget`
+
+#### AI (23 source files + 6 test files — moves to `@pilotic-pro/ai`)
+
+```
+src/
+├── agents/
+│   ├── PanelAgent.ts                     # base class — runtime + system prompt
+│   └── types.ts                          # PanelAgentMeta, PanelAgentContext
+├── ai-actions/
+│   ├── index.ts                          # public re-export
+│   ├── registry.ts                       # BuiltInAiActionRegistry
+│   └── builtin.ts                        # 8 built-in actions: rewrite, expand, etc.
+├── conversation/
+│   └── PrismaConversationStore.ts        # AI chat persistence
+├── handlers/
+│   ├── agentRun.ts                       # standalone agent run endpoint
+│   ├── agentStream/
+│   │   ├── index.ts                      # SSE streaming
+│   │   └── runStore.ts                   # cache-backed run state (sub-agent resume)
+│   └── chat/
+│       ├── chatHandler.ts                # main chat dispatcher
+│       ├── continuation.ts               # client-tool round-trip validation
+│       ├── conversationManager.ts        # auto-title, persistence orchestration
+│       ├── persistence.ts                # AiMessage[] graph persist/load
+│       ├── subAgentResume.ts             # sub-agent dispatch/resume bridging
+│       ├── lazyImports.ts
+│       ├── selectionInstructions.ts      # selection-mode prompt block
+│       ├── blockCatalog.ts               # extracts BuilderField blocks for prompts
+│       ├── index.ts
+│       ├── types.ts
+│       ├── contexts/
+│       │   ├── resolveContext.ts
+│       │   ├── types.ts
+│       │   ├── ResourceChatContext.ts
+│       │   ├── PageChatContext.ts        # (stub)
+│       │   └── GlobalChatContext.ts
+│       └── tools/
+│           ├── deleteRecordTool.ts       # server tool, needsApproval
+│           ├── editTextTool.ts           # server tool — Yjs surgical edits
+│           ├── readFormStateTool.ts      # client tool
+│           ├── runAgentTool.ts           # sub-agent dispatch
+│           └── updateFormStateTool.ts    # client tool — write side
+```
+
+**Test files in AI bucket** (6 of 21):
+`blockCatalog`, `chat-contexts`, `chat-mixed-tools`, `chat-persistence`, `subagent-runStore`, plus the AI portions of `resource.test.ts`
+
+#### Chat UI (in `packages/panels/pages/_components/agents/` — moves with AI)
+
+```
+pages/_components/agents/
+├── AiActionProgress.tsx
+├── AiChatContext.tsx
+├── AiDropdown.tsx
+├── agentRunRenderer.tsx
+├── clientTools.ts                        # ⚠️ may need to stay shared — see TBD
+├── lexicalRegistry.ts                    # ⚠️ may need to stay shared — see TBD
+├── toolRenderers.ts
+├── updateFormStateHandler.ts
+└── useAgentRun.ts
+```
+
+These files are authored in `packages/panels/pages/` and **mirrored to playground** via `pnpm rudder vendor:publish --tag=panels-pages` (registered at `PanelServiceProvider.ts:91`). In the extraction:
+- `panels-pages` tag becomes `pilotic-pages`
+- The agents/ subfolder migrates from the panels mirror to the pro AI package's mirror — likely a new tag like `pilotic-ai-pages`
+- Means `vendor:publish` may need to support multi-source tags (one tag, multiple package sources). Or the pro package gets its own tag and the playground runs both publish commands.
+
+#### TBD — cross-bucket couplings that need Phase 3 (extension hooks) before extraction
+
+There are **5 places where CORE imports from AI**. These are the seams that Phase 3 must resolve:
+
+| # | File | Imports | Severity | Resolution path |
+|---|---|---|---|---|
+| 1 | `PanelServiceProvider.ts:7,57-58` | `BuiltInAiActionRegistry`, `builtInActions` (registers built-in AI actions in `register()`) | **High** | Move the action registration into the pro provider's `register()` instead of core. Free package ships an empty registry; pro populates it. |
+| 2 | `schema/Field.ts:3,592` | `BuiltInAiActionRegistry` (runtime — `Field.ai()` calls `BuiltInAiActionRegistry.get(slug)` to resolve string slugs) | **High** | Free `BuiltInAiActionRegistry.get()` returns `undefined` for unknown slugs; without pro, `.ai(['rewrite'])` throws a helpful "install @pilotic-pro/ai" error instead of crashing. The registry shape stays in core, the population moves to pro. |
+| 3 | `schema/Field.ts:2` | `PanelAgent` (type-only) | Low | Keep `PanelAgent` as a thin **interface** in core (`agents/PanelAgent.ts` becomes the abstract type definition), full runtime moves to pro. Type-only import is fine. |
+| 4 | `Resource.ts:5-6` | `PanelAgent`, `PanelAgentMeta` (type-only) | Low | Same — type-only, resolved by leaving the interface in core. |
+| 5 | `index.ts:231-234` | Re-exports `PanelAgent`, `PanelAgentContext`, `PanelAgentFieldType`, `PanelAgentMeta`, `BuiltInAiActionRegistry`, `builtInActions` from the public package entry | Medium | Free package re-exports the **interfaces** only. Concrete `PanelAgent` class + `BuiltInAiActionRegistry` populate via pro. Public type surface preserved; runtime class lives in pro. |
+
+**Internal AI→AI dependency** (not a leak, but worth noting):
+- `agents/PanelAgent.ts:2` imports `buildSelectionInstructions` from `handlers/chat/selectionInstructions.js` — agents and chat are intertwined. Both move to pro together, no action needed.
+
+**Pages-side TBD** (in `pages/_components/agents/`):
+- `clientTools.ts` and `lexicalRegistry.ts` may have non-AI consumers. Need a deeper grep in Phase 3 — if non-AI fields in core also use them, they stay; if only AI uses them, they move with AI.
+
+#### Verdict on extraction readiness
+
+**Core is mostly clean.** Of 167 source files in `panels/src`:
+- **162 files** have ZERO imports from `agents/`, `ai-actions/`, `conversation/`, `handlers/agentRun.ts`, `handlers/agentStream/`, or `handlers/chat/**`
+- **5 files** have couplings — all of them resolvable via Phase 3 hooks without cross-cutting refactors:
+  - 2 type-only (trivial)
+  - 1 import via index re-export (cosmetic)
+  - 2 runtime (`PanelServiceProvider` action registration + `Field.ai()` slug resolver) — both fixable by moving the *population* to the pro provider while keeping the *interface* in core
+
+**No core file imports from `handlers/chat/**`.** This is the strongest signal that the AI extraction is feasible — the entire chat surface is genuinely contained.
+
+### `panels-lexical` extraction map
+
+```
+src/
+├── index.ts                              # public entry
+├── server.ts                             # /server entry — exports the service provider
+├── PanelLexicalServiceProvider.ts        # plugin registration
+├── register.ts                           # registerField calls
+├── LexicalEditor.tsx                     # CORE: the main editor component
+├── CollaborativePlainText.tsx            # ⚠️ "Collaborative" in the name — but the file is the editor primitive; collab is per-instance
+├── RichContentField.ts                   # Field class subtype
+├── toolbar.ts                            # toolbar profile resolution
+├── hooks/
+│   └── useYjsCollab.ts                   # ⚠️ COLLAB — moves to @pilotic-pro/collab
+├── lexical/
+│   ├── BlockNode.tsx
+│   ├── BlockNodeComponent.tsx
+│   ├── SlashCommandPlugin.tsx
+│   ├── FixedToolbarPlugin.tsx
+│   ├── FloatingLinkEditorPlugin.tsx
+│   ├── FloatingToolbarPlugin.tsx
+│   ├── InsertParagraphAtEndPlugin.tsx
+│   └── AddBlockHandlePlugin.tsx
+└── types/y-websocket.d.ts                # type stub — moves with collab
+```
+
+**Critical finding for the collab split**: `@rudderjs/panels-lexical` already declares `yjs`, `y-websocket`, and `y-indexeddb` as **optional** peer dependencies (`peerDependenciesMeta` in `package.json:54-64`). This means **`panels-lexical` is already designed to run without collab at the dependency level**. The free `@pilotic/lexical` will work in local-only mode by simply not installing the Yjs peers; the pro `@pilotic-pro/collab` will declare them as required.
+
+**Collab files to extract** (much smaller than I assumed):
+- `hooks/useYjsCollab.ts` — the only file that hard-depends on Yjs
+- `types/y-websocket.d.ts` — type stub
+- The `LexicalEditor.tsx` Yjs integration is conditional on `useYjsCollab` being passed — refactor to inject the Yjs binding via Phase 3's `LexicalCollabPlugin` hook so the editor knows nothing about Yjs internals
+
+That's it. **Collab is ~2 files of `panels-lexical` plus the conditional injection in LexicalEditor.tsx.** Far smaller than I estimated in the original plan.
+
+### Chat UI authoring/mirror flow (confirmed)
+
+- **Source of truth:** `packages/panels/pages/**`
+- **Mirror destination:** `playground/pages/(panels)/**`
+- **Mirror command:** `pnpm rudder vendor:publish --tag=panels-pages` (registered in `PanelServiceProvider.boot()` at line 91)
+- **Memory note:** `feedback_panels_pages_parallel_copy.md` — must run `--force` after every edit
+
+In the extraction:
+- The `panels-pages` tag becomes `pilotic-pages`, owned by `@pilotic/panels`
+- The chat UI subfolder (`pages/_components/agents/**`) needs to migrate to `@pilotic-pro/ai`'s page mirror, likely under a new tag `pilotic-ai-pages`
+- This is the mechanism that makes "free panels chat-less, pro panels with chat" work at the file level — the playground only gets the AI components if `@pilotic-pro/ai` is installed
+
+### Surprises (things I didn't predict in the original plan)
+
+1. **`media` and `workspaces` are panel extensions, not framework features.** They should move to `pilotic/pilotic` too. This expands Phase 2 from "2 packages → 4 packages" but eliminates a future cross-repo coupling.
+2. **`@rudderjs/ai` has zero code coupling to `@rudderjs/panels`.** A doc comment is the only mention. The two packages communicate via the chat handler / agent loop interface, not via direct imports. Clean separation.
+3. **`panels-lexical` collab is much smaller than I estimated** — basically 1 hook + 1 type stub + a conditional plug-point in `LexicalEditor.tsx`. Phase 5 is now a half-day, not a multi-day effort.
+4. **`PanelServiceProvider.register()` already publishes a `panels-translations` vendor tag for the localization starter** (line 75) — wait, that's `pilotic-translations` post-task A. The schema and pages tags (`panels-schema`, `panels-pages`) still use `panels-` prefix. Phase 2 will rename all three together.
+5. **Test file split for AI** — 6 of 21 test files are AI-specific and move with the AI extraction. Means free `@pilotic/panels` ships with 615 tests, pro `@pilotic-pro/ai` ships with ~5–6 tests (small surface, more verification needed during Phase 4).
+6. **`Field.ai()` is the trickiest coupling.** The string-slug shorthand (`.ai(['rewrite'])`) bakes the AI action registry into the schema. Resolution is clean (free returns undefined, pro populates) but it's the one user-facing API surface where free vs pro behavior diverges visibly.
+
+### Action items before Phase 1 starts
+
+These are not code changes — just decisions to record.
+
+- [ ] **Decide: do `media` and `workspaces` move to `pilotic/pilotic` in Phase 2?** Recommendation: **yes** (they're admin/CMS extensions, not framework primitives).
+- [ ] **Decide: `Field.ai(['rewrite'])` behavior in free `@pilotic/panels` without pro installed.** Options: (a) silent no-op (the field renders no AI button), (b) helpful error pointing at `@pilotic-pro/ai`, (c) types-only — `.ai()` exists at the type level but is a no-op at runtime. Recommendation: **(b)** — fail loudly and informatively at form-build time, like the current `unknown AI action` error does.
+- [ ] **Decide: chat UI vendor:publish tag strategy.** Option (a) one tag, two source packages (requires `@rudderjs/cli` extension). Option (b) two tags, both run on each playground sync (current pattern, less elegant). Recommendation: **(b)** for v1, **(a)** as a follow-up CLI improvement.
+- [ ] **Decide: `panels-schema` vendor tag rename.** Becomes `pilotic-schema`. Just confirm.
+- [ ] **Decide: Phase 3's `PanelAgent` interface vs class split.** Free `@pilotic/panels` exports `PanelAgent` as a TypeScript `interface` (the type contract); pro `@pilotic-pro/ai` exports `PanelAgent` as a runtime `class` that *implements* the interface. Same import path looks different to consumers depending on whether pro is installed. This is the cleanest pattern but requires careful TypeScript handling — flag as a Phase 3 design item.
+
