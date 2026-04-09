@@ -1,7 +1,18 @@
-import { randomUUID } from 'node:crypto'
 import type { PanelAgent, PanelAgentContext } from '../../../agents/PanelAgent.js'
 import { loadAi } from '../lazyImports.js'
 import { storeSubRun, type SubRunState } from '../../agentStream/runStore.js'
+
+/**
+ * Lazy `node:crypto` loader. Top-level `import { randomUUID } from 'node:crypto'`
+ * gets externalized by Vite during client bundling (panels' pages import
+ * from the same package entry), crashing the browser at module load. The
+ * lazy import is only reached server-side when the tool actually executes.
+ * See `feedback_production_build.md` in memory for the pattern.
+ */
+async function loadRandomUUID(): Promise<() => string> {
+  const mod = await import(/* @vite-ignore */ 'node:crypto') as { randomUUID: () => string }
+  return mod.randomUUID
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -136,8 +147,31 @@ export async function buildRunAgentTool(
           )
         }
 
+        const randomUUID = await loadRandomUUID()
         const subRunId = randomUUID()
-        const subMessages = result.steps.map((s: any) => s.message)
+        // Reconstruct the full sub-agent message history from the
+        // response steps. CANNOT just do `steps.map(s => s.message)` —
+        // that produces ONLY the assistant messages and loses every
+        // server-side tool result between them, which the provider then
+        // rejects on resume with "tool_calls must be followed by tool
+        // messages." We need to interleave each step's tool results
+        // inline with its assistant message, matching what the loop
+        // pushes internally via `applyToModelOutput`'s default stringify.
+        // Also prepend the original user prompt — the sub-agent sees
+        // it when `subAgent.stream(ctx, message)` is called for the
+        // initial run, but `messages`-mode resume requires it to live
+        // in the messages array explicitly.
+        const subMessages: any[] = [{ role: 'user', content: message }]
+        for (const step of result.steps) {
+          subMessages.push(step.message)
+          for (const tr of step.toolResults as Array<{ toolCallId: string; result: unknown }>) {
+            subMessages.push({
+              role:       'tool',
+              content:    typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+              toolCallId: tr.toolCallId,
+            })
+          }
+        }
         const subRunState: SubRunState = {
           kind:             'subagent',
           subAgentSlug:     targetAgent.getSlug(),

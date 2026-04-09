@@ -193,6 +193,26 @@ interface TurnState {
   pendingClientTools:   WireToolCall[]
   pendingApproval:      PendingApproval | null
   done:                 boolean
+  /**
+   * Sub-agent pause handle, captured from a `tool_update` with
+   * `update.kind === 'subagent_paused'`. When set, the pending client
+   * tools from this turn belong to a nested sub-agent (dispatched via
+   * `run_agent`), not to the parent chat agent directly. The continuation
+   * POST must carry this id in `body.subRunId` so the server routes the
+   * resume to `subAgentResume.ts` instead of the normal parent-prefix
+   * continuation path. See docs/plans/subagent-client-tools-plan.md.
+   */
+  subRunId:             string | null
+  /**
+   * Server-authoritative parent-conversation wire log, received via a
+   * `wire_log_sync` SSE event during sub-run turns. When set, the
+   * stream-close assembly REPLACES `wireMessagesRef` with this array
+   * instead of appending its own (bucket-order-dependent, error-prone)
+   * assistantMsg + serverToolResults. Lets the server tell the browser
+   * the exact persisted shape so future continuations pass the prefix
+   * check. See docs/plans/subagent-client-tools-plan.md Phase 3.
+   */
+  syncedWireLog:        WireMessage[] | null
 }
 
 function newTurnState(): TurnState {
@@ -203,6 +223,8 @@ function newTurnState(): TurnState {
     pendingClientTools: [],
     pendingApproval:    null,
     done:               false,
+    subRunId:           null,
+    syncedWireLog:      null,
   }
 }
 
@@ -277,8 +299,18 @@ function parseSSELines(
             // tool. Mutate the matching tool_call part by id, appending the
             // payload to its `updates` array. Cap at 200 entries (R5).
             // Renderers registered via toolRenderers.ts consume the array.
+            //
+            // Special-case: `subagent_paused` updates from runAgentTool
+            // carry the subRunId the browser must echo on its next
+            // continuation POST. Capture it on the turn state so the
+            // post-stream handler can route to the sub-run resume path.
+            // (subagent-client-tools-plan Phase 3.)
             const updateData = data as { id?: string; tool?: string; update: unknown }
             if (!updateData.id) break
+            const payload = updateData.update as { kind?: string; subRunId?: string } | null
+            if (payload && payload.kind === 'subagent_paused' && typeof payload.subRunId === 'string') {
+              turnState.subRunId = payload.subRunId
+            }
             setMessages(prev => prev.map(m => {
               if (m.id !== assistantId) return m
               const parts = (m.parts ?? []).map(p => {
@@ -359,6 +391,19 @@ function parseSSELines(
           // `send()` directly. Sub-agent progress now flows as `tool_update`
           // events with `kind: 'agent_start' | 'tool_call' | 'agent_complete'`
           // payloads, rendered inline by AgentRunRenderer.
+
+          case 'wire_log_sync': {
+            // Server-authoritative parent conversation history for this
+            // turn. Sub-run turns (see subAgentResume.ts) emit this after
+            // persisting, so the browser can replace its wire log with
+            // the canonical persisted shape instead of guessing.
+            // subagent-client-tools-plan Phase 3.
+            const syncData = data as { messages: WireMessage[] }
+            if (Array.isArray(syncData.messages)) {
+              turnState.syncedWireLog = syncData.messages
+            }
+            break
+          }
 
           case 'complete': {
             const completeData = data as { steps?: number; usage?: { totalTokens?: number }; tokens?: number; done?: boolean; awaiting?: string }
@@ -580,23 +625,38 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       }
     }
 
-    // Stream closed. Build the assistant message in wire format and append
-    // it to the running conversation log.
-    const assistantMsg: WireMessage = {
-      role:    'assistant',
-      content: turnState.assistantText,
-      ...(turnState.assistantToolCalls.length > 0 ? { toolCalls: turnState.assistantToolCalls } : {}),
+    // Stream closed. Assemble the wire log for this turn.
+    //
+    // Preferred path: the server emitted a `wire_log_sync` event
+    // carrying the canonical persisted parent history. This is the
+    // sub-run case (see subAgentResume.ts): the default append-based
+    // assembly below interleaves tool results and assistants in the
+    // wrong order across multi-turn sub-runs, so we trust the server.
+    //
+    // Fallback: regular turn assembly — build one assistant message
+    // from the streamed text/tool_calls, append, and stick server tool
+    // results after it. The order [assistant, ...serverToolResults]
+    // matches what `persistConversation`/`persistContinuation` write
+    // so follow-up continuations pass the prefix check.
+    if (turnState.syncedWireLog) {
+      wireMessagesRef.current = turnState.syncedWireLog
+    } else {
+      const assistantMsg: WireMessage = {
+        role:    'assistant',
+        content: turnState.assistantText,
+        ...(turnState.assistantToolCalls.length > 0 ? { toolCalls: turnState.assistantToolCalls } : {}),
+      }
+      wireMessagesRef.current = [
+        ...wireMessagesRef.current,
+        assistantMsg,
+        // Server-side tool results land BEFORE any client-tool results so the
+        // wire log mirrors the persisted shape `[..., assistant, tool{server}]`
+        // (client tool results, if any, are appended below as the new tail).
+        // This is what unblocks mixed-tool turns through the continuation
+        // prefix check.
+        ...turnState.serverToolResults,
+      ]
     }
-    wireMessagesRef.current = [
-      ...wireMessagesRef.current,
-      assistantMsg,
-      // Server-side tool results land BEFORE any client-tool results so the
-      // wire log mirrors the persisted shape `[..., assistant, tool{server}]`
-      // (client tool results, if any, are appended below as the new tail).
-      // This is what unblocks mixed-tool turns through the continuation
-      // prefix check.
-      ...turnState.serverToolResults,
-    ]
 
     // ── Client tools pending: execute locally and re-POST ────
     if (turnState.pendingClientTools.length > 0) {
@@ -621,7 +681,19 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
           return { ...m, parts }
         }))
       }
-      wireMessagesRef.current = [...wireMessagesRef.current, ...toolMessages]
+
+      // Sub-agent pause: keep tool results OUT of the parent wire log
+      // and send them in the dedicated `subAgentToolResults` body field.
+      // The parent conversation only ever sees the final `run_agent`
+      // tool-result once the sub-run completes. (subagent-client-tools-
+      // plan Phase 3.)
+      //
+      // Regular client tool pause (no subRunId): append to the wire log
+      // as before so a follow-up continuation's prefix check passes.
+      const isSubRun = !!turnState.subRunId
+      if (!isSubRun) {
+        wireMessagesRef.current = [...wireMessagesRef.current, ...toolMessages]
+      }
 
       // Continuation request — strips fresh-prompt-only fields and hands the
       // server the full wire log via `messages`. Pull conversationId from the
@@ -631,6 +703,16 @@ export function AiChatProvider({ children, panelPath }: { children: React.ReactN
       delete continuationBody.message
       delete continuationBody.selection
       if (conversationIdRef.current) continuationBody.conversationId = conversationIdRef.current
+
+      // Sub-agent pause: echo the subRunId so the server routes to its
+      // resume path. Stale subRunId from a prior body is dropped because
+      // we rebuild continuationBody from scratch; the turn-level id wins.
+      delete continuationBody.subRunId
+      delete continuationBody.subAgentToolResults
+      if (isSubRun) {
+        continuationBody.subRunId            = turnState.subRunId
+        continuationBody.subAgentToolResults = toolMessages
+      }
 
       await runChatTurn({ assistantId, body: continuationBody, url, usePanelChat, abortCtrl, onConversation })
       return

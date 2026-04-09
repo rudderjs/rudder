@@ -27,6 +27,30 @@ export interface ChatRequestBody {
   approvedToolCallIds?: string[]
   /** Tool-call ids the user has rejected. */
   rejectedToolCallIds?: string[]
+
+  /**
+   * Sub-agent resume handle. Set by the browser on a continuation POST
+   * when the previous turn's `pending_client_tools` event was triggered
+   * by a sub-agent (via `run_agent`) rather than by a tool the parent
+   * chat called directly. Presence of this field routes the request to
+   * the sub-agent resume path in `subAgentResume.ts`, bypassing the
+   * normal parent-prefix continuation check — sub-agent message history
+   * is server-held state keyed by this id, not client-supplied.
+   *
+   * See `docs/plans/subagent-client-tools-plan.md` Phase 3.
+   */
+  subRunId?:          string
+  /**
+   * Sub-agent client-tool results, carried in a separate field so the
+   * browser can keep its parent-level wire log clean. These messages are
+   * consumed by `subAgentResume.ts` to feed the sub-agent's continuation
+   * and are NEVER persisted to the parent conversation — the parent only
+   * ever sees the single synthesized `run_agent` tool-result message
+   * after the sub-run completes.
+   *
+   * Only read when `subRunId` is present.
+   */
+  subAgentToolResults?: AiMessage[]
 }
 
 export interface ConversationStoreLike {

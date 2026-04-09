@@ -9,6 +9,7 @@ import { ChatContextError, type ChatContext } from './contexts/types.js'
 import { persistConversation, persistContinuation } from './persistence.js'
 import { validateContinuation, ContinuationError } from './continuation.js'
 import { streamAgentToSSE } from '../agentStream/index.js'
+import { handleSubAgentResume } from './subAgentResume.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -30,8 +31,44 @@ export async function handlePanelChat(
   }
 
   const isContinuation = Array.isArray(body.messages) && body.messages.length > 0
+  const isSubRunResume = typeof body.subRunId === 'string' && body.subRunId.length > 0
 
   const { readable, send, close } = createSSEStream()
+
+  // Sub-run resume path — short-circuits the normal chat flow. The
+  // sub-run dispatcher owns context resolution (it synthesizes a
+  // resourceContext from stored state), validation (pending-id coverage
+  // + ownership guards), and SSE output. Does NOT go through resolveContext,
+  // runChat, or persistConversation below.
+  if (isSubRunResume) {
+    let store: ConversationStoreLike | null = null
+    try { store = await resolveConversationStore() } catch { /* no store */ }
+
+    // Sub-run resume requires a conversationId to resume the parent
+    // chat agent against its persisted history. Without one, the
+    // dispatcher still resumes the sub-agent itself but skips the
+    // parent-loop drive-forward — see subAgentResume.ts.
+    const convId = body.conversationId
+    if (convId) send('conversation', { conversationId: convId, isNew: false })
+
+    void handleSubAgentResume({
+      req, body, panel, send, close, store,
+      conversationId: convId,
+    }).catch(err => {
+      send('error', { message: err instanceof Error ? err.message : 'Sub-run resume failed.' })
+      close()
+    })
+
+    const c = res.raw as { header(key: string, value: string): void; res: unknown }
+    c.res = new Response(readable, {
+      headers: {
+        'Content-Type':  'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection':    'keep-alive',
+      },
+    })
+    return c.res
+  }
 
   // 1. Resolve context FIRST — may throw ChatContextError → return JSON 4xx.
   // Safe because the readable is not wired to the Response until the very end
