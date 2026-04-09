@@ -119,14 +119,14 @@ export class ArticleResource extends Resource {
           DataField.make('featured').badge(),
         ]),
       ])
-      .live()
+      // .live()
       .sortBy('createdAt', 'DESC')
       .titleField('title')
-      .softDeletes()
+      // .softDeletes()
       .searchable(['title'])
       .paginated('pages', 5)
       .remember('session')
-      .autoAnimate()
+      // .autoAnimate()
       .animateScopes({ highlight: true, content: false })
       .emptyState({
         icon: 'file-text',
@@ -203,7 +203,6 @@ export class ArticleResource extends Resource {
             }
           }),
       ])
-      .live()
   }
 
   form(form: Form) {
@@ -215,7 +214,7 @@ export class ArticleResource extends Resource {
         .required()
         .searchable()
         .sortable()
-        .persist(['websocket', 'indexeddb'])
+        // .persist(['websocket', 'indexeddb'])
         .ai(['rewrite', 'shorten', 'expand', 'fix-grammar']),
 
       SlugField.make('slug')
@@ -226,21 +225,21 @@ export class ArticleResource extends Resource {
           const q = Article.query().where('slug', value as string)
           if (data['id']) (q as any).where('id', '!=', data['id'])
           return await (q as any).first() ? 'Slug already in use' : true
-        })
-        .persist(['websocket', 'indexeddb']),
+        }),
+        // .persist(['websocket', 'indexeddb']),
 
-      FileField.make('coverImage')
-        .label('Cover Image')
-        .image()
-        .optimize()
-        .conversions([
-          { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
-          { name: 'preview', width: 800, format: 'webp' },
-        ])
-        .accept('image/*')
-        .maxSize(5)
-        .disk('public')
-        .directory('articles'),
+      // FileField.make('coverImage')
+      //   .label('Cover Image')
+      //   .image()
+      //   .optimize()
+      //   .conversions([
+      //     { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
+      //     { name: 'preview', width: 800, format: 'webp' },
+      //   ])
+      //   .accept('image/*')
+      //   .maxSize(5)
+      //   .disk('public')
+      //   .directory('articles'),
 
       MediaPickerField.make('mediaId')
         .label('Featured Media')
@@ -270,8 +269,8 @@ export class ArticleResource extends Resource {
               TextField.make('url').label('URL').required(),
               TextField.make('caption').label('Caption'),
             ]),
-        ])
-        .persist(['websocket', 'indexeddb']),
+        ]),
+        // .persist(['websocket', 'indexeddb']),
 
       TagsField.make('tags')
         .label('Tags')
@@ -315,7 +314,7 @@ export class ArticleResource extends Resource {
       Section.make('SEO & Metadata')
         .description('Optional fields to improve search engine visibility.')
         .collapsible()
-        .collapsed()
+        // .collapsed()
         .schema(
           TextField.make('metaTitle')
             .label('Meta Title').hideFromTable()
