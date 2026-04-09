@@ -141,7 +141,7 @@ If a key is missing in the current locale, RudderJS automatically checks the con
 
 ## Pre-loading namespaces
 
-Some packages need a namespace available **synchronously** (e.g. `@rudderjs/panels` resolves UI strings during render). Use `preloadNamespace()` from a service provider's `boot()` to warm the cache:
+Some packages need a namespace available **synchronously** (e.g. `@pilotiq/panels` resolves UI strings during render). Use `preloadNamespace()` from a service provider's `boot()` to warm the cache:
 
 ```ts
 import { preloadNamespace, LocalizationRegistry } from '@rudderjs/localization'
@@ -174,11 +174,11 @@ LocalizationRegistry.deleteCached('en', 'pilotiq')
 LocalizationRegistry.reset()
 ```
 
-These methods are the **typed boundary** for any package that needs to read or write the localization cache directly. Prefer them over reaching into `globalThis['__rudderjs_localization_cache__']` — even though both end up at the same Map, the static methods are the public, type-safe contract that won't break if the internal cache shape changes. The reference implementation is `@rudderjs/panels`'s `getOverride()`, which captures the `LocalizationRegistry` reference at boot time and reads through it from sync render paths.
+These methods are the **typed boundary** for any package that needs to read or write the localization cache directly. Prefer them over reaching into `globalThis['__rudderjs_localization_cache__']` — even though both end up at the same Map, the static methods are the public, type-safe contract that won't break if the internal cache shape changes. The reference implementation is `@pilotiq/panels`'s `getOverride()`, which captures the `LocalizationRegistry` reference at boot time and reads through it from sync render paths.
 
 ## Overriding bundled translations (vendor namespaces)
 
-Some packages ship their own bundled translations as the canonical schema (e.g. `@rudderjs/panels`). To override individual strings or add a new locale, drop a JSON file at `lang/<locale>/<short-name>.json` (the short name is documented per package — for `@rudderjs/panels` it is `pilotiq`):
+Some packages ship their own bundled translations as the canonical schema (e.g. `@pilotiq/panels`). To override individual strings or add a new locale, drop a JSON file at `lang/<locale>/<short-name>.json` (the short name is documented per package — for `@pilotiq/panels` it is `pilotiq`):
 
 ```json
 // lang/en/pilotiq.json
@@ -187,4 +187,4 @@ Some packages ship their own bundled translations as the canonical schema (e.g. 
 }
 ```
 
-Only the keys you specify are overridden; missing keys fall back to the bundled defaults. See [`@rudderjs/panels` › Localization](./panels/index.md#localization) for the full pattern, and `docs/contributing/new-package.md` § "Bundled translations & overrides" for the convention all RudderJS packages should follow when shipping UI strings.
+Only the keys you specify are overridden; missing keys fall back to the bundled defaults. See `docs/contributing/new-package.md` § "Bundled translations & overrides" for the convention all RudderJS packages should follow when shipping UI strings; the canonical implementation lives in [`@pilotiq/panels`](https://github.com/pilotiq-io/pilotiq).

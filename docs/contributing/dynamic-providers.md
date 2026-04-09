@@ -25,35 +25,20 @@ An `AppServiceProvider` can register feature modules conditionally:
 ```ts
 // app/Providers/AppServiceProvider.ts
 import { app } from '@rudderjs/core'
-import { PanelServiceProvider } from '@rudderjs/panels'
 import { TodoServiceProvider } from '../Modules/Todo/TodoServiceProvider.js'
+import { ReportingServiceProvider } from '../Modules/Reporting/ReportingServiceProvider.js'
 
 export class AppServiceProvider {
   async boot() {
-    app().register(PanelServiceProvider)
     app().register(TodoServiceProvider)
+    app().register(ReportingServiceProvider)
   }
 }
 ```
 
-### Panels extensions
+### Plugin factories
 
-The `panels()` factory accepts an extensions array. Each extension is a provider that gets dynamically registered when panels boots:
-
-```ts
-// bootstrap/providers.ts
-import { panels } from '@rudderjs/panels'
-import { media } from '@rudderjs/media'
-import { AdminPanel } from '../app/Panels/AdminPanel.js'
-
-export default [
-  panels([AdminPanel], [
-    media({ conversions: [...] }),
-  ]),
-]
-```
-
-Under the hood, `panels()` calls `app().register()` for each extension provider during its own boot phase.
+A plugin factory can dynamically register child providers when its own boot runs. Pilotiq's `panels()` factory is a good example — it accepts an extensions array and calls `app().register()` for each extension during its boot phase, so apps can opt into media, workspaces, lexical, etc. without wiring them up in `providers.ts` directly. See the [Pilotiq docs](https://github.com/pilotiq-io/pilotiq) for the panels-specific shape.
 
 ### Conditional features
 

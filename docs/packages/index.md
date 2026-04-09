@@ -81,9 +81,7 @@ All `@rudderjs/*` packages are published to npm individually. Install only what 
 
 ## Admin
 
-| Package | Description | Install |
-|---|---|---|
-| [@rudderjs/panels](./panels/index) | Admin panel builder — define resources, fields, filters, and actions in TypeScript; auto-generates CRUD API routes and a React UI with sidebar or topbar layout. | `pnpm add @rudderjs/panels` |
+The admin panel builder, rich-text editor, media library, and workspaces canvas live in the standalone [Pilotiq](https://github.com/pilotiq-io/pilotiq) project — `@pilotiq/panels`, `@pilotiq/lexical`, `@pilotiq/media`, `@pilotiq/workspaces`. Pilotiq is built on top of RudderJS and shares the same conventions.
 
 ## Features
 

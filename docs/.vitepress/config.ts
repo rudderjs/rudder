@@ -62,12 +62,6 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Admin & Panels',
-          items: [
-            { text: 'Panels', link: '/guide/panels' },
-          ],
-        },
-        {
           text: 'Production',
           items: [
             { text: 'Testing', link: '/guide/testing' },
@@ -180,23 +174,6 @@ export default defineConfig({
             { text: 'Middleware & Testing', link: '/packages/ai/middleware' },
           ],
         },
-        {
-          text: 'Panels',
-          items: [
-            { text: 'Overview', link: '/packages/panels/' },
-            { text: 'Resources', link: '/packages/panels/resources' },
-            { text: 'Fields', link: '/packages/panels/fields' },
-            { text: 'Listing Records', link: '/packages/panels/listing' },
-            { text: 'Schema Elements', link: '/packages/panels/schema' },
-            { text: 'Navigation', link: '/packages/panels/navigation' },
-            { text: 'Globals', link: '/packages/panels/globals' },
-            { text: 'Custom Pages', link: '/packages/panels/pages' },
-            { text: 'Editor', link: '/packages/panels/editor' },
-            { text: 'AI Agents', link: '/packages/panels/agents' },
-            { text: 'Media Library', link: '/packages/media/' },
-            { text: 'API Routes', link: '/packages/panels/api' },
-          ],
-        },
       ],
 
       '/cli/': [
@@ -227,7 +204,6 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/contributing/' },
             { text: 'Creating a New Package', link: '/contributing/new-package' },
-            { text: 'Creating a Panels Extension', link: '/contributing/panels-extension' },
             { text: 'Dynamic Providers', link: '/contributing/dynamic-providers' },
           ],
         },

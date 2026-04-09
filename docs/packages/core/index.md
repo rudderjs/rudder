@@ -149,21 +149,24 @@ Providers can dynamically register other providers at runtime using `this.app.re
 
 ```ts
 import { ServiceProvider } from '@rudderjs/core'
-import { panels } from '@rudderjs/panels'
 import { cache } from '@rudderjs/cache'
-import { adminPanel } from '../Panels/Admin/AdminPanel.js'
+import { queue } from '@rudderjs/queue'
+import { ReportingServiceProvider } from '../Modules/Reporting/ReportingServiceProvider.js'
 
 export class AppServiceProvider extends ServiceProvider {
   register() {}
 
   async boot() {
-    // A module can register its own panels
-    await this.app.register(panels([adminPanel]))
+    // A module can register its own sub-providers
+    await this.app.register(ReportingServiceProvider)
 
     // Conditional features based on config
     const config = this.app.make<{ get(k: string): unknown }>('config')
     if (config.get('cache.enabled')) {
       await this.app.register(cache(cacheConfig))
+    }
+    if (config.get('queue.enabled')) {
+      await this.app.register(queue(queueConfig))
     }
   }
 }

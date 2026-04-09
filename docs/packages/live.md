@@ -180,7 +180,7 @@ Edits made offline are merged back automatically when the connection restores.
 
 ## Live Facade
 
-The `Live` facade provides server-side access to ydoc operations without needing to import Yjs directly. Used internally by `@rudderjs/panels` for versioning.
+The `Live` facade provides server-side access to ydoc operations without needing to import Yjs directly. Used by `@pilotiq/panels` for versioning.
 
 ```ts
 import { Live } from '@rudderjs/live'

@@ -7,7 +7,6 @@ Guides for working on the RudderJS monorepo — adding packages, extending the p
 | Guide | Description |
 |---|---|
 | [Creating a New Package](./new-package) | Scaffold, conventions, testing, and publishing a new `@rudderjs/*` package |
-| [Creating a Panels Extension](./panels-extension) | Build a package that extends `@rudderjs/panels` with new field types or editor integrations |
 
 ## Quick orientation
 
