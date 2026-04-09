@@ -60,8 +60,17 @@ export interface Props {
   userColor?:    string
   /** Ref for imperative editor control (e.g. version restore) */
   editorRef?:    React.MutableRefObject<LexicalEditorHandle | null>
-  /** Callback when user clicks "Ask AI" on selected text in the floating toolbar. */
-  onAskAi?:      (text: string) => void
+  /**
+   * Called when the user clicks the floating-toolbar `✦` button. Receives the
+   * captured selection text and the button's bounding rect — pass to a
+   * popover anchored to the button.
+   */
+  onSelectionAction?: (text: string, anchorRect: { left: number; top: number; right: number; bottom: number }) => void
+  /**
+   * Called when the user clicks the floating-toolbar `💬` button. Receives the
+   * captured selection text. Use to push the selection into the chat panel.
+   */
+  onAskChat?:    (text: string) => void
   /**
    * Called once the live `LexicalEditor` instance is available. Return an
    * optional cleanup function — invoked on unmount or when the instance
@@ -108,7 +117,7 @@ export function LexicalEditor({
   value, onChange, placeholder, disabled,
   wsPath, docName, fragmentName = 'richcontent',
   blocks, toolbar: toolbarInput, slashCommand,
-  userName, userColor, editorRef, onAskAi, onEditorMount,
+  userName, userColor, editorRef, onSelectionAction, onAskChat, onEditorMount,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
@@ -229,7 +238,12 @@ export function LexicalEditor({
         )}
         {/* Floating toolbar — only when not using fixed toolbar and profile has tools */}
         {!toolbarConfig.fixed && toolbarConfig.tools.length > 0 && (
-          <FloatingToolbarPlugin config={toolbarConfig} onInsertLink={() => setIsLinkEditMode(true)} onAskAi={onAskAi} />
+          <FloatingToolbarPlugin
+            config={toolbarConfig}
+            onInsertLink={() => setIsLinkEditMode(true)}
+            {...(onSelectionAction ? { onSelectionAction } : {})}
+            {...(onAskChat ? { onAskChat } : {})}
+          />
         )}
         <FloatingLinkEditorPlugin isEditMode={isLinkEditMode} setIsEditMode={setIsLinkEditMode} />
 

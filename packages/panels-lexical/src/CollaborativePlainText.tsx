@@ -97,8 +97,16 @@ interface Props {
   multiline?:  boolean
   /** Ref for imperative control (e.g. version restore, AI edits) */
   editorRef?:  React.MutableRefObject<EditorHandle | null>
-  /** Callback when user clicks "Ask AI" on selected text. */
-  onAskAi?:    ((text: string) => void) | undefined
+  /**
+   * Called when the user clicks the inline `✦` selection-action button.
+   * Receives the captured selection text and the button's bounding rect.
+   */
+  onSelectionAction?: ((text: string, anchorRect: SelectionAiAnchorRect) => void) | undefined
+  /**
+   * Called when the user clicks the inline `💬` chat-bridge button. Receives
+   * the captured selection text.
+   */
+  onAskChat?:  ((text: string) => void) | undefined
   /**
    * Called once the live LexicalEditor instance is available. Return an
    * optional cleanup function. Used by `@rudderjs/panels` to register the
@@ -123,7 +131,7 @@ const THEME = {
 export function CollaborativePlainText({
   value, onChange, wsPath, docName, fieldName,
   userName, userColor, placeholder, disabled, required,
-  className, multiline = false, editorRef, onAskAi, onEditorMount,
+  className, multiline = false, editorRef, onSelectionAction, onAskChat, onEditorMount,
 }: Props) {
   const cursorsContainerRef = useRef<HTMLDivElement>(null)
   const fragmentName = `text:${fieldName}`
@@ -190,7 +198,12 @@ export function CollaborativePlainText({
         {providerSynced && <SeedPlugin value={value} yjsRef={collabRef} />}
         {editorRef && <PlainTextEditorRefPlugin editorRef={editorRef} />}
         {onEditorMount && <EditorMountPlugin onMount={onEditorMount} />}
-        {onAskAi && <SelectionAiPlugin onAskAi={onAskAi} />}
+        {(onSelectionAction || onAskChat) && (
+          <SelectionAiPlugin
+            {...(onSelectionAction ? { onSelectionAction } : {})}
+            {...(onAskChat ? { onAskChat } : {})}
+          />
+        )}
       </div>
     </LexicalComposer>
   )
@@ -328,13 +341,29 @@ function EditorMountPlugin({ onMount }: { onMount: (editor: LexicalEditorType) =
 }
 
 // ── SelectionAiPlugin ─────────────────────────────────────
-// Shows a small "✦" Ask AI button when text is selected in a plain-text field.
+// Shows two small floating buttons (`✦` action menu, `💬` chat bridge) when
+// text is selected in a plain-text field. Each button is gated on its
+// callback being defined.
 
-function SelectionAiPlugin({ onAskAi }: { onAskAi: (text: string) => void }) {
+export interface SelectionAiAnchorRect {
+  left:   number
+  top:    number
+  right:  number
+  bottom: number
+}
+
+function SelectionAiPlugin({
+  onSelectionAction,
+  onAskChat,
+}: {
+  onSelectionAction?: (text: string, anchorRect: SelectionAiAnchorRect) => void
+  onAskChat?:         (text: string) => void
+}) {
   const [editor] = useLexicalComposerContext()
   const [visible, setVisible] = useState(false)
   const selectedTextRef = useRef('')
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const aiBtnRef     = useRef<HTMLButtonElement>(null)
 
   const updateSelection = useCallback(() => {
     const selection = $getSelection()
@@ -346,15 +375,15 @@ function SelectionAiPlugin({ onAskAi }: { onAskAi: (text: string) => void }) {
     setVisible(true)
   }, [])
 
-  // Position the button at the end of the native selection
+  // Position the button container at the end of the native selection
   useEffect(() => {
-    if (!visible || !btnRef.current) return
+    if (!visible || !containerRef.current) return
     const nativeSel = window.getSelection()
     if (!nativeSel || nativeSel.rangeCount === 0) return
     const range = nativeSel.getRangeAt(0)
     const rect = range.getBoundingClientRect()
-    btnRef.current.style.left = `${rect.right + 4}px`
-    btnRef.current.style.top = `${rect.top + (rect.height / 2) - 12}px`
+    containerRef.current.style.left = `${rect.right + 4}px`
+    containerRef.current.style.top  = `${rect.top + (rect.height / 2) - 12}px`
   }, [visible])
 
   useEffect(() => {
@@ -374,7 +403,7 @@ function SelectionAiPlugin({ onAskAi }: { onAskAi: (text: string) => void }) {
   useEffect(() => {
     if (!visible) return
     const handle = (e: MouseEvent) => {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setVisible(false)
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setVisible(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -382,23 +411,57 @@ function SelectionAiPlugin({ onAskAi }: { onAskAi: (text: string) => void }) {
 
   if (!visible) return null
 
+  function handleAi(e: React.MouseEvent) {
+    e.preventDefault()
+    const text = selectedTextRef.current
+    if (!text || !onSelectionAction) return
+    const btn = aiBtnRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    onSelectionAction(text, {
+      left:   rect.left,
+      top:    rect.top,
+      right:  rect.right,
+      bottom: rect.bottom,
+    })
+    setVisible(false)
+  }
+
+  function handleChat(e: React.MouseEvent) {
+    e.preventDefault()
+    const text = selectedTextRef.current
+    if (!text || !onAskChat) return
+    onAskChat(text)
+    setVisible(false)
+  }
+
   return createPortal(
-    <button
-      ref={btnRef}
-      type="button"
-      className="fixed z-50 flex items-center justify-center h-6 w-6 rounded-md bg-popover border border-border shadow-lg text-primary hover:bg-accent/50 transition-colors"
-      title="Ask AI"
-      onMouseDown={(e) => {
-        e.preventDefault()
-        const text = selectedTextRef.current
-        if (text) {
-          onAskAi(text)
-          setVisible(false)
-        }
-      }}
+    <div
+      ref={containerRef}
+      className="fixed z-50 flex items-center gap-1"
     >
-      <span className="text-sm">✦</span>
-    </button>,
+      {onSelectionAction && (
+        <button
+          ref={aiBtnRef}
+          type="button"
+          className="flex items-center justify-center h-6 w-6 rounded-md bg-popover border border-border shadow-lg text-primary hover:bg-accent/50 transition-colors"
+          title="AI actions on selection"
+          onMouseDown={handleAi}
+        >
+          <span className="text-sm">✦</span>
+        </button>
+      )}
+      {onAskChat && (
+        <button
+          type="button"
+          className="flex items-center justify-center h-6 w-6 rounded-md bg-popover border border-border shadow-lg text-foreground hover:bg-accent/50 transition-colors"
+          title="Discuss selection in chat"
+          onMouseDown={handleChat}
+        >
+          <span className="text-sm">💬</span>
+        </button>
+      )}
+    </div>,
     document.body,
   )
 }

@@ -12,15 +12,35 @@ import { mergeRegister } from '@lexical/utils'
 import type { ToolbarConfig } from '../toolbar.js'
 import { hasTool } from '../toolbar.js'
 
+/**
+ * Anchor-rect type passed back to `onSelectionAction` so the parent can
+ * position its inline menu just below the trigger button.
+ */
+export interface SelectionAiAnchorRect {
+  left:   number
+  top:    number
+  right:  number
+  bottom: number
+}
+
 interface FloatingToolbarProps {
   config?: ToolbarConfig | undefined
   /** Callback to enter link edit mode (shared with FloatingLinkEditorPlugin) */
   onInsertLink?: () => void
-  /** Callback when user clicks "Ask AI" — receives the selected text. */
-  onAskAi?: ((text: string) => void) | undefined
+  /**
+   * Called when the user clicks the inline `✦` button. Receives the captured
+   * selection text and the button's bounding rect (so the parent can anchor
+   * a popover to it). Hide the button by passing `undefined`.
+   */
+  onSelectionAction?: ((text: string, anchorRect: SelectionAiAnchorRect) => void) | undefined
+  /**
+   * Called when the user clicks the inline `💬` button. Receives the captured
+   * selection text. Hide the button by passing `undefined`.
+   */
+  onAskChat?: ((text: string) => void) | undefined
 }
 
-export function FloatingToolbarPlugin({ config, onInsertLink, onAskAi }: FloatingToolbarProps = {}) {
+export function FloatingToolbarPlugin({ config, onInsertLink, onSelectionAction, onAskChat }: FloatingToolbarProps = {}) {
   const [editor] = useLexicalComposerContext()
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
@@ -135,13 +155,30 @@ export function FloatingToolbarPlugin({ config, onInsertLink, onAskAi }: Floatin
     }
   }, [editor, isLink, onInsertLink])
 
-  const handleAskAi = useCallback(() => {
+  const aiBtnRef = useRef<HTMLButtonElement>(null)
+
+  const handleSelectionAction = useCallback(() => {
     const text = selectedTextRef.current
-    if (text && onAskAi) {
-      onAskAi(text)
+    if (!text || !onSelectionAction) return
+    const btn = aiBtnRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    onSelectionAction(text, {
+      left:   rect.left,
+      top:    rect.top,
+      right:  rect.right,
+      bottom: rect.bottom,
+    })
+    setIsVisible(false)
+  }, [onSelectionAction])
+
+  const handleAskChat = useCallback(() => {
+    const text = selectedTextRef.current
+    if (text && onAskChat) {
+      onAskChat(text)
       setIsVisible(false)
     }
-  }, [onAskAi])
+  }, [onAskChat])
 
   if (!isVisible) return null
 
@@ -159,7 +196,9 @@ export function FloatingToolbarPlugin({ config, onInsertLink, onAskAi }: Floatin
     has('link') && <ToolbarBtn key="link" active={isLink} onClick={handleInsertLink} label="🔗" title="Link" />,
   ].filter(Boolean)
 
-  const showAiBtn = !!onAskAi
+  const showAiBtn   = !!onSelectionAction
+  const showChatBtn = !!onAskChat
+  const hasAnyAi    = showAiBtn || showChatBtn
 
   return createPortal(
     <div
@@ -169,9 +208,20 @@ export function FloatingToolbarPlugin({ config, onInsertLink, onAskAi }: Floatin
       {formatBtns}
       {formatBtns.length > 0 && extraBtns.length > 0 && <div className="w-px h-5 bg-border mx-0.5" />}
       {extraBtns}
-      {showAiBtn && (formatBtns.length > 0 || extraBtns.length > 0) && <div className="w-px h-5 bg-border mx-0.5" />}
+      {hasAnyAi && (formatBtns.length > 0 || extraBtns.length > 0) && <div className="w-px h-5 bg-border mx-0.5" />}
       {showAiBtn && (
-        <ToolbarBtn key="ai" active={false} onClick={handleAskAi} label="✦" title="Ask AI" className="text-primary" />
+        <button
+          ref={aiBtnRef}
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); handleSelectionAction() }}
+          title="AI actions on selection"
+          className="px-2 py-1 rounded text-sm transition-colors hover:bg-accent/50 text-primary"
+        >
+          ✦
+        </button>
+      )}
+      {showChatBtn && (
+        <ToolbarBtn key="chat" active={false} onClick={handleAskChat} label="💬" title="Discuss selection in chat" />
       )}
     </div>,
     document.body,

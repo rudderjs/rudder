@@ -50,6 +50,17 @@ export interface FieldMeta {
  * + `label` + `icon` to render the dropdown; clicking POSTs to the standalone
  * agent endpoint with `field` set to this field's name.
  */
+/**
+ * Input shape accepted by `Field.ai()`. Backwards-compatible with the
+ * historical array form; the object form is a forward-compat extension that
+ * lets us add per-field knobs (e.g. `textarea: false`, `chat: false`) later
+ * without changing the call signature. For v1 only `actions` is read.
+ */
+export type AiInput =
+  | boolean
+  | Array<string | PanelAgent>
+  | { actions: Array<string | PanelAgent> }
+
 export interface ResolvedAiAction {
   slug:  string
   label: string
@@ -463,11 +474,18 @@ export abstract class Field {
    * field fails loudly. See D10 in `docs/plans/standalone-client-tools-plan.md`.
    *
    * @example
-   * TextField.make('title').ai()                           // default text actions
-   * TextField.make('title').ai(['rewrite', 'shorten'])      // built-in slugs
-   * TextField.make('title').ai([rewrite, customSeoAgent])  // mixed
+   * TextField.make('title').ai()                              // default text actions
+   * TextField.make('title').ai(['rewrite', 'shorten'])         // built-in slugs
+   * TextField.make('title').ai([rewrite, customSeoAgent])     // mixed
+   * TextField.make('title').ai({ actions: ['rewrite'] })      // object form (forward-compat)
+   *
+   * **Object form:** The object form is a forward-compatible shape for adding
+   * future per-field knobs (e.g. `textarea: false` to disable the dropdown's
+   * free-form input, `chat: false` to hide the chat-bridge item). Today only
+   * `actions` is read; new fields will default to "feature on" so existing
+   * call sites don't change.
    */
-  ai(actions?: boolean | Array<string | PanelAgent>): this {
+  ai(actions?: AiInput): this {
     if (actions === undefined || actions === true) {
       this._ai = resolveAiActions(DEFAULT_AI_ACTION_SLUGS, this.getType(), this._name)
       return this
@@ -476,13 +494,17 @@ export abstract class Field {
       this._ai = false
       return this
     }
-    if (Array.isArray(actions)) {
-      if (actions.length === 0) {
-        this._ai = false
-        return this
-      }
-      this._ai = resolveAiActions(actions, this.getType(), this._name)
+    // Normalise array form to object form, then resolve. The object form
+    // exists so we can add per-field knobs later (textarea / chat / etc.)
+    // without changing this signature. For v1 only `actions` is read.
+    const refs: Array<string | PanelAgent> = Array.isArray(actions)
+      ? actions
+      : actions.actions
+    if (refs.length === 0) {
+      this._ai = false
+      return this
     }
+    this._ai = resolveAiActions(refs, this.getType(), this._name)
     return this
   }
 

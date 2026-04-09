@@ -43,6 +43,14 @@ export type OnFieldUpdate = (field: string, value: string) => void
 export interface RunOptions {
   /** Field-scope override — for per-field action button clicks. */
   field?: string
+  /**
+   * Active text selection — for selection-mode runs initiated by the floating
+   * selection toolbar's `✦` button. When set, the server activates selection
+   * mode (toolkit filtered to update_form_state + read_form_state, prompt
+   * gains the selection block telling the model to use `search: <text>`).
+   * See selection-actions-plan.md Phase 1.
+   */
+  selection?: { field: string; text: string }
 }
 
 export function useAgentRun(apiBase: string, resourceSlug: string, onFieldUpdate?: OnFieldUpdate) {
@@ -70,7 +78,11 @@ export function useAgentRun(apiBase: string, resourceSlug: string, onFieldUpdate
       { role: 'user', content: input ?? 'Run your task on this record.' },
     ]
 
-    void streamRequest(baseUrl, { input, ...(opts?.field ? { field: opts.field } : {}) })
+    void streamRequest(baseUrl, {
+      input,
+      ...(opts?.field     ? { field:     opts.field }     : {}),
+      ...(opts?.selection ? { selection: opts.selection } : {}),
+    })
       .catch((err) => {
         if ((err as Error).name !== 'AbortError') {
           setStatus('error')

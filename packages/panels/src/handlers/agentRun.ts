@@ -197,6 +197,22 @@ export async function handleAgentRunContinuation(
   }
 
   // ── Stream the resumed loop ─────────────────────────────
+  //
+  // Capture the prior allowed tool call ids (from the run state we just
+  // consumed) so that if THIS pass also pauses for another client tool, the
+  // new run state we store inherits the prior pause's allowlist. Without
+  // this, multi-pause logical runs (e.g. read_form_state → resume →
+  // update_form_state → resume) 400 on the second continuation: the
+  // browser's wireMessages contains tool results from BOTH pauses, but the
+  // second pause's run state only knows about its own tool calls — the
+  // first pause's read_form_state result looks like a forgery. This is
+  // the third variation of `feedback_mixed_tool_continuation_validation.md`;
+  // the first two were intra-pause mixed tools, this one is inter-pause.
+  const priorAllowedToolCallIds = [
+    ...runState.pendingToolCallIds,
+    ...runState.serverToolCallIds,
+  ]
+
   return streamAgentRunResponse(res, async (send) => {
     const { stream, response } = await agentDef.stream(agentCtx, '', {
       toolCallStreamingMode: 'stop-on-client-tool',
@@ -213,6 +229,7 @@ export async function handleAgentRunContinuation(
       fieldScope,
       selection,
       userId,
+      priorAllowedToolCallIds,
     })
   })
 }
@@ -367,6 +384,15 @@ async function emitTerminalState(
     fieldScope:   string | undefined
     selection:    { field: string; text: string } | undefined
     userId:       string | undefined
+    /**
+     * Tool call ids that were "allowed" in the PRIOR pause's run state
+     * (i.e. its `pendingToolCallIds ∪ serverToolCallIds`). When set, they
+     * are merged into THIS pause's `serverToolCallIds` so subsequent
+     * continuations don't reject the browser's accumulated wireMessages.
+     * Set by `handleAgentRunContinuation` when chaining; undefined for the
+     * initial `handleAgentRun` call. See the comment at the call site.
+     */
+    priorAllowedToolCallIds?: string[]
   },
 ): Promise<void> {
   const isPending =
@@ -397,6 +423,16 @@ async function emitTerminalState(
       }
     }
 
+    // Merge the prior pause's allowed ids (if any) into THIS pause's
+    // serverToolCallIds. The browser carries forward all tool results across
+    // pauses in `wireMessages`, so each new pause's allowlist must include
+    // every id that was already allowed in any prior pause of the same
+    // logical run. De-dupe via Set in case the same id somehow appears in
+    // both lists.
+    const mergedServerIds = meta.priorAllowedToolCallIds
+      ? [...new Set([...meta.priorAllowedToolCallIds, ...serverIds])]
+      : serverIds
+
     const runId = generateRunId()
     const state: AgentRunState = {
       agentSlug:          meta.agentSlug,
@@ -405,7 +441,7 @@ async function emitTerminalState(
       fieldScope:         meta.fieldScope,
       selection:          meta.selection,
       pendingToolCallIds: pendingIds,
-      serverToolCallIds:  serverIds,
+      serverToolCallIds:  mergedServerIds,
       userId:             meta.userId,
     }
     await storeRun(runId, state)

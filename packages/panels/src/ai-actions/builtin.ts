@@ -100,4 +100,22 @@ export const builtInActions: PanelAgent[] = [
     'Lightbulb',
     `Simplify the value of the {field} field so it is easier to understand. Use plain language and shorter sentences. Preserve all the original information. ${COMMON_RULES}`,
   ),
+
+  // ── Freeform: dropdown textarea ─────────────────────────────
+  //
+  // Used by the field-level `✦` dropdown's free-form textarea — the user
+  // types a custom prompt ("translate to French", "make this rhyme",
+  // "shorter and punchier") and the dropdown POSTs to this slug. The user's
+  // text becomes the run input. The selection block from Phase 1 layers on
+  // top when there is an active selection.
+  //
+  // Not displayed as a button anywhere — only the dropdown's textarea sends
+  // to it. Always registered globally regardless of which slugs a field
+  // opted into via `Field.ai([...])`.
+  makeTextAction(
+    'freeform',
+    'Custom prompt',
+    'Sparkles',
+    `Apply the user's request to the {field} field. Read the user's prompt carefully and follow it precisely — they have already chosen what to do, your job is to execute their instructions. ${COMMON_RULES}`,
+  ),
 ]

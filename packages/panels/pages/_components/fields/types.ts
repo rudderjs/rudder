@@ -17,7 +17,13 @@ export interface FieldInputProps {
   wsPath?:   string | null
   /** Base document name for live collaboration — used by LexicalEditor */
   docName?:  string | null
-  /** Callback when user clicks "Ask AI" on selected text — receives selected text. */
+  /**
+   * Legacy "Ask AI" callback — receives the selected text and routes to chat.
+   * Still passed by some surfaces; selection-actions Phase 2 prefers the
+   * inline `SelectionActionsMenu` flow which reads selection from the
+   * floating-button surfaces directly. Kept here for backwards-compatibility
+   * with any consumer that wires it up.
+   */
   onAskAi?:  (text: string) => void
 }
 

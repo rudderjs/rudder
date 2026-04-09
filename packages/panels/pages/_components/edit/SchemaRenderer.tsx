@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, ResolvedAiAction } from '@rudderjs/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
-import { useAgentRun } from '../agents/useAgentRun.js'
-import { AiActionProgress } from '../agents/AiActionProgress.js'
+import { AiDropdown } from '../agents/AiDropdown.js'
+import { readFieldSelection } from '../agents/readFieldSelection.js'
+import { PanelAgentApiProvider } from '../agents/standaloneAgentApiContext.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'
 import type { SchemaItem } from '../../_lib/formHelpers.js'
 
@@ -31,23 +32,6 @@ interface Props {
   docName?:    string | null
 }
 
-// ─── Translate language submenu ────────────────────────────
-
-const TRANSLATE_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'zh', label: 'Chinese' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'ru', label: 'Russian' },
-  { code: 'tr', label: 'Turkish' },
-  { code: 'hi', label: 'Hindi' },
-]
-
 // ─── AI quick actions button ────────────────────────────────
 
 interface AiQuickActionsProps {
@@ -57,114 +41,60 @@ interface AiQuickActionsProps {
   recordId:     string
 }
 
+/**
+ * Field-level `✦` trigger. Opens the shared `AiDropdown` anchored below the
+ * button. Captures the field's current text selection at click time so the
+ * dropdown can render in selection-aware mode (header + scoped actions).
+ *
+ * The dropdown body — quick actions, chat-bridge item, free-form textarea —
+ * lives in `AiDropdown` and is shared with the inline-trigger surfaces in
+ * `panels-lexical` (`FloatingToolbarPlugin` for richcontent,
+ * `SelectionAiPlugin` for collab plain text). Both triggers render the same
+ * dropdown component with different anchor modes.
+ */
 function AiQuickActions({ field, apiBase, resourceSlug, recordId }: AiQuickActionsProps) {
   const [open, setOpen] = useState(false)
-  const [translateOpen, setTranslateOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [selection, setSelection] = useState<{ text: string } | null>(null)
 
-  // Standalone agent runner — POSTs to /_agents/${slug} with field-scope.
-  // After Phase 5 the agent runs the action against the live form state via
-  // update_form_state (client tool) — no chat panel involvement.
-  const { run, reset, entries, status } = useAgentRun(apiBase, resourceSlug)
+  // Capture selection at the moment the dropdown opens. The browser preserves
+  // selectionStart/End on plain inputs across blur, and Lexical preserves its
+  // RangeSelection across focus changes — so reading at click time captures
+  // whatever the user had highlighted before they reached for the ✦ button.
+  function openDropdown() {
+    setSelection(readFieldSelection(field.name))
+    setOpen(true)
+  }
 
-  // Auto-dismiss the success popover ~3s after a clean completion. Errors
-  // stay until the user dismisses them so they don't get missed.
-  useEffect(() => {
-    if (status !== 'complete') return
-    const timer = setTimeout(() => reset(), 3000)
-    return () => clearTimeout(timer)
-  }, [status, reset])
-
-  useEffect(() => {
-    if (!open) return
-    const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [open])
-
-  function handleAction(action: ResolvedAiAction, languageHint?: string) {
-    // The agent reads the current field value from live form state via
-    // `read_form_state` (client tool) and writes the result back via
-    // `update_form_state`. The instructions interpolate `{field}` server-side.
-    const input = languageHint
-      ? `Translate the ${field.name} field to ${languageHint}.`
-      : `Run the "${action.label}" action on the ${field.name} field.`
-    run(action.slug, recordId, input, { field: field.name })
+  function closeDropdown() {
     setOpen(false)
-    setTranslateOpen(false)
+    setSelection(null)
   }
 
   if (!field.ai) return null
 
-  // `field.ai` is now `boolean | ResolvedAiAction[]` (Phase 4). The server
-  // resolves slugs through `BuiltInAiActionRegistry` at form-build time and
-  // ships ready-to-render metadata `{slug, label, icon?}`. The frontend no
-  // longer holds a hardcoded prompt map.
   const actions: ResolvedAiAction[] = Array.isArray(field.ai) ? field.ai : []
   if (actions.length === 0) return null
 
-  const isRunning   = status === 'running'
-  const showProgress = entries.length > 0
-
   return (
-    <div ref={ref} className="relative inline-flex ml-1.5">
+    <div className="relative inline-flex ml-1.5">
       <button
         type="button"
-        disabled={isRunning}
-        className="inline-flex items-center justify-center h-4 w-4 rounded text-primary/60 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-        title={isRunning ? 'AI action running…' : 'AI actions'}
-        onClick={() => { setOpen(!open); setTranslateOpen(false) }}
+        className="inline-flex items-center justify-center h-4 w-4 rounded text-primary/60 hover:text-primary hover:bg-primary/10 transition-colors"
+        title="AI actions"
+        onClick={() => open ? closeDropdown() : openDropdown()}
       >
-        <span className={`text-xs leading-none ${isRunning ? 'animate-pulse' : ''}`}>✦</span>
+        <span className="text-xs leading-none">✦</span>
       </button>
-      {open && !showProgress && (
-        <div className="absolute left-0 top-full mt-1 min-w-[140px] rounded-md border bg-popover shadow-md z-30 py-1">
-          {actions.map(a => (
-            a.slug === 'translate' ? (
-              <div key={a.slug} className="relative">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-                  onClick={() => setTranslateOpen(!translateOpen)}
-                >
-                  {a.label}
-                  <span className="text-[10px] text-muted-foreground ml-2">{'>'}</span>
-                </button>
-                {translateOpen && (
-                  <div className="absolute left-full top-0 ml-1 min-w-[120px] rounded-md border bg-popover shadow-md z-30 py-1 max-h-64 overflow-y-auto">
-                    {TRANSLATE_LANGUAGES.map(lang => (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-                        onClick={() => handleAction(a, lang.label)}
-                      >
-                        {lang.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                key={a.slug}
-                type="button"
-                className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-                onClick={() => handleAction(a)}
-              >
-                {a.label}
-              </button>
-            )
-          ))}
-        </div>
-      )}
-      {showProgress && (
-        <AiActionProgress
-          entries={entries}
-          status={status}
-          onDismiss={reset}
+      {open && (
+        <AiDropdown
+          fieldName={field.name}
+          actions={actions}
+          apiBase={apiBase}
+          resourceSlug={resourceSlug}
+          recordId={recordId}
+          selection={selection}
+          position={{ mode: 'absolute' }}
+          onClose={closeDropdown}
         />
       )}
     </div>
@@ -286,8 +216,19 @@ export function SchemaRenderer({
     return renderField(item as FieldMeta)
   }
 
+  // Provide the standalone agent API context to descendant field input
+  // components so RichContentInput / collab text inputs can render their
+  // own inline AiDropdown (anchored to the FloatingToolbarPlugin /
+  // SelectionAiPlugin `✦` button) without prop-drilling. Null when AI is
+  // disabled (create mode or no API params), in which case fields treat
+  // inline AI surfaces as off — the field-level `✦` dropdown still works
+  // for any field that opted into `.ai([...])`.
+  const agentApiCtx = (aiApiBase && aiResourceSlug && aiRecordId)
+    ? { apiBase: aiApiBase, resourceSlug: aiResourceSlug, recordId: aiRecordId }
+    : null
+
   return (
-    <>
+    <PanelAgentApiProvider value={agentApiCtx}>
       {schema
         .filter((item) => {
           if (item.type === 'section' || item.type === 'tabs') return true
@@ -295,6 +236,6 @@ export function SchemaRenderer({
         })
         .map((item, i) => renderSchemaItem(item, i))
       }
-    </>
+    </PanelAgentApiProvider>
   )
 }
