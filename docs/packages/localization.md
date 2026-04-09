@@ -147,11 +147,11 @@ Some packages need a namespace available **synchronously** (e.g. `@rudderjs/pane
 import { preloadNamespace, LocalizationRegistry } from '@rudderjs/localization'
 
 const { locale, fallback } = LocalizationRegistry.getConfig()
-await preloadNamespace(locale, 'pilotic')
-if (fallback !== locale) await preloadNamespace(fallback, 'pilotic')
+await preloadNamespace(locale, 'pilotiq')
+if (fallback !== locale) await preloadNamespace(fallback, 'pilotiq')
 ```
 
-After this runs, `__('pilotic.signOut')` resolves without an `await`.
+After this runs, `__('pilotiq.signOut')` resolves without an `await`.
 
 ## Typed cache access
 
@@ -161,14 +161,14 @@ Packages that bundle their own translations and need a sync, typed read path can
 import { LocalizationRegistry } from '@rudderjs/localization'
 
 // Read a pre-loaded namespace
-const data = LocalizationRegistry.getCached('en', 'pilotic')
+const data = LocalizationRegistry.getCached('en', 'pilotiq')
 //    ^? Record<string, unknown> | undefined
 
 // Seed the cache (for tests, fixtures, or programmatic translations)
-LocalizationRegistry.setCached('en', 'pilotic', { signOut: 'Logout' })
+LocalizationRegistry.setCached('en', 'pilotiq', { signOut: 'Logout' })
 
 // Clear a single namespace entry (for test teardown)
-LocalizationRegistry.deleteCached('en', 'pilotic')
+LocalizationRegistry.deleteCached('en', 'pilotiq')
 
 // Reset everything (cache + config)
 LocalizationRegistry.reset()
@@ -178,10 +178,10 @@ These methods are the **typed boundary** for any package that needs to read or w
 
 ## Overriding bundled translations (vendor namespaces)
 
-Some packages ship their own bundled translations as the canonical schema (e.g. `@rudderjs/panels`). To override individual strings or add a new locale, drop a JSON file at `lang/<locale>/<short-name>.json` (the short name is documented per package — for `@rudderjs/panels` it is `pilotic`):
+Some packages ship their own bundled translations as the canonical schema (e.g. `@rudderjs/panels`). To override individual strings or add a new locale, drop a JSON file at `lang/<locale>/<short-name>.json` (the short name is documented per package — for `@rudderjs/panels` it is `pilotiq`):
 
 ```json
-// lang/en/pilotic.json
+// lang/en/pilotiq.json
 {
   "signOut": "Logout"
 }

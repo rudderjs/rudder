@@ -18,7 +18,7 @@ import { mountNotificationRoutes } from './handlers/notificationRoutes.js'
 import { _clearI18nCache, _setLocalizationRegistry } from './i18n/index.js'
 
 /**
- * Best-effort preload of `lang/<locale>/pilotic.json` overrides into the
+ * Best-effort preload of `lang/<locale>/pilotiq.json` overrides into the
  * `@rudderjs/localization` cache so `getPanelI18n()` can resolve them sync.
  * Also wires the `LocalizationRegistry` reference into the panels i18n
  * module so `getOverride()` can read the cache via a typed API instead of
@@ -36,9 +36,9 @@ async function preloadPanelTranslations(): Promise<void> {
     }
     if (!loc.preloadNamespace || !loc.LocalizationRegistry) return
     const { locale, fallback } = loc.LocalizationRegistry.getConfig()
-    await loc.preloadNamespace(locale, 'pilotic')
+    await loc.preloadNamespace(locale, 'pilotiq')
     if (fallback && fallback !== locale) {
-      await loc.preloadNamespace(fallback, 'pilotic')
+      await loc.preloadNamespace(fallback, 'pilotiq')
     }
     // Wire the typed registry for sync reads from `getOverride()`.
     _setLocalizationRegistry(loc.LocalizationRegistry)
@@ -74,13 +74,13 @@ export class PanelServiceProvider extends ServiceProvider {
       { from: `${schemaDir}/panels.drizzle.mysql.ts`,  to: 'database/schema', tag: 'panels-schema', orm: 'drizzle' as const, driver: 'mysql' as const },
     ])
 
-    // Translation override starter — `lang/en/pilotic.json` (empty by default).
+    // Translation override starter — `lang/en/pilotiq.json` (empty by default).
     // Users edit it to override bundled UI strings; missing keys fall back to
-    // bundled defaults. Add a `lang/<locale>/pilotic.json` to introduce a new
+    // bundled defaults. Add a `lang/<locale>/pilotiq.json` to introduce a new
     // locale. See `getPanelI18n()` for the resolution chain.
     const langDir = new URL(/* @vite-ignore */ '../lang/en', import.meta.url).pathname
     this.publishes([
-      { from: langDir, to: 'lang/en', tag: 'pilotic-translations' },
+      { from: langDir, to: 'lang/en', tag: 'pilotiq-translations' },
     ])
   }
 
@@ -91,7 +91,7 @@ export class PanelServiceProvider extends ServiceProvider {
       tag:  'panels-pages',
     })
 
-    // Pre-load panel translation overrides from `lang/<locale>/pilotic.json`
+    // Pre-load panel translation overrides from `lang/<locale>/pilotiq.json`
     // (if `@rudderjs/localization` is installed). `getPanelI18n()` is sync,
     // so the override has to be in the localization cache before any panel
     // request is served. Silently no-ops if localization isn't present.

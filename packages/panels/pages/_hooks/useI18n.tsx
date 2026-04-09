@@ -7,7 +7,7 @@ import { getPanelI18n } from '@rudderjs/panels'
 const I18nContext = createContext<PanelI18n>(getPanelI18n('en'))
 
 interface I18nProviderProps {
-  /** Pre-merged i18n from `panelMeta.i18n` (serialized from the server). Preferred — preserves any `lang/<locale>/pilotic.json` overrides on the client. */
+  /** Pre-merged i18n from `panelMeta.i18n` (serialized from the server). Preferred — preserves any `lang/<locale>/pilotiq.json` overrides on the client. */
   i18n?:    PanelI18n
   /** Fallback when `i18n` isn't provided. Recomputes from bundled defaults only — overrides will not apply on the client. */
   locale?:  string

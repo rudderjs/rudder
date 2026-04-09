@@ -2,7 +2,7 @@
 
 **Status:** **DONE 2026-04-09.** Phases 1–4 complete. Phase 5 (HMR) deferred indefinitely as nice-to-have. Tasks A (namespace rename), B (typed `LocalizationRegistry` cache access), and C (documentation polish) all landed in a single session after the audit revealed Phases 1–3 had already been silently shipped under the original `panels` namespace.
 
-**Lands in:** `rudderjs/rudder` (`@rudderjs/panels` + `@rudderjs/localization`) BEFORE the Pilotic extraction.
+**Lands in:** `rudderjs/rudder` (`@rudderjs/panels` + `@rudderjs/localization`) BEFORE the Pilotiq extraction.
 
 ---
 
@@ -26,7 +26,7 @@
 
 | Item | Why it matters |
 |---|---|
-| Namespace renamed `panels` → `pilotic` | Forward compat for the Pilotic rename. Avoids a breaking migration of `lang/<locale>/panels.json` → `lang/<locale>/pilotic.json` for early users one release later. |
+| Namespace renamed `panels` → `pilotiq` | Forward compat for the Pilotiq rename. Avoids a breaking migration of `lang/<locale>/panels.json` → `lang/<locale>/pilotiq.json` for early users one release later. |
 | Typed `getNamespaceCache()` export from `@rudderjs/localization` | Read path in `getOverride()` currently uses `globalThis['__rudderjs_localization_cache__']` (`i18n/index.ts:42`). Fragile string-keyed global. Symmetric with the existing `preloadNamespace` export. |
 | Documentation (user guide + README) | Status unverified. Likely missing or stub. |
 | Phase 5 HMR | Optional, deferred. |
@@ -39,20 +39,20 @@ The plan was written before the work was done. **Reframing**: the remaining work
 
 ## Remaining Work (post-audit)
 
-### A. Rename namespace `panels` → `pilotic`
+### A. Rename namespace `panels` → `pilotiq`
 
 **Files to change (4 occurrences across 5 files):**
 
-1. `packages/panels/src/i18n/index.ts:45` — change `cache.get(\`${locale}:panels\`)` → `cache.get(\`${locale}:pilotic\`)`. Also update the doc comment on lines 37–38.
-2. `packages/panels/src/PanelServiceProvider.ts:33-35` — change `loc.preloadNamespace(locale, 'panels')` and the fallback call to use `'pilotic'`. Update the doc comment on lines 21–23 and 86–89.
-3. `packages/panels/src/PanelServiceProvider.ts:75` — change `tag: 'panels-translations'` → `tag: 'pilotic-translations'`. Update the comment on lines 69–72.
-4. `packages/panels/lang/en/panels.json` → `packages/panels/lang/en/pilotic.json` (file rename, content stays `{}`)
-5. `packages/panels/src/__tests__/i18n-override.test.ts:19,25` — update the seed function to use `${locale}:pilotic` and the cleanup loop to match `:pilotic`.
+1. `packages/panels/src/i18n/index.ts:45` — change `cache.get(\`${locale}:panels\`)` → `cache.get(\`${locale}:pilotiq\`)`. Also update the doc comment on lines 37–38.
+2. `packages/panels/src/PanelServiceProvider.ts:33-35` — change `loc.preloadNamespace(locale, 'panels')` and the fallback call to use `'pilotiq'`. Update the doc comment on lines 21–23 and 86–89.
+3. `packages/panels/src/PanelServiceProvider.ts:75` — change `tag: 'panels-translations'` → `tag: 'pilotiq-translations'`. Update the comment on lines 69–72.
+4. `packages/panels/lang/en/panels.json` → `packages/panels/lang/en/pilotiq.json` (file rename, content stays `{}`)
+5. `packages/panels/src/__tests__/i18n-override.test.ts:19,25` — update the seed function to use `${locale}:pilotiq` and the cleanup loop to match `:pilotiq`.
 
 **Acceptance:**
 - All tests still pass (`pnpm test` from `packages/panels`)
-- `pnpm rudder vendor:publish --tag=pilotic-translations` from `playground/` creates `lang/en/pilotic.json`
-- Verified end-to-end: edit `playground/lang/en/pilotic.json` to override `signOut: 'Logout'`, restart playground, see "Logout" in the panel UI
+- `pnpm rudder vendor:publish --tag=pilotiq-translations` from `playground/` creates `lang/en/pilotiq.json`
+- Verified end-to-end: edit `playground/lang/en/pilotiq.json` to override `signOut: 'Logout'`, restart playground, see "Logout" in the panel UI
 
 ### B. Add typed `getNamespaceCache()` to `@rudderjs/localization`
 
@@ -77,7 +77,7 @@ The plan was written before the work was done. **Reframing**: the remaining work
          getNamespaceCache?: <T>(locale: string, namespace: string) => T | undefined
        }
        if (!getNamespaceCache) return undefined
-       const data = getNamespaceCache<Partial<PanelI18n>>(locale, 'pilotic')
+       const data = getNamespaceCache<Partial<PanelI18n>>(locale, 'pilotiq')
        if (!data || Object.keys(data).length === 0) return undefined
        return data
      } catch {
@@ -95,7 +95,7 @@ The plan was written before the work was done. **Reframing**: the remaining work
 
 **Files:**
 
-1. `docs/guide/pilotic-localization.md` (new, VitePress) — explain the override pattern, fallback chain, how to add a new locale, how to override a single string
+1. `docs/guide/pilotiq-localization.md` (new, VitePress) — explain the override pattern, fallback chain, how to add a new locale, how to override a single string
 2. `packages/panels/README.md` — add a section on the override mechanism with a 5-line example
 3. `docs/claude/panels.md` — note about the override mechanism for AI context
 
@@ -105,7 +105,7 @@ The plan was written before the work was done. **Reframing**: the remaining work
 
 ### D. Phase 5 HMR (still deferred — skip unless cheap)
 
-Same as before — nice to have, not blocking. Watch `lang/**/pilotic.json` in dev, invalidate caches, send HMR signal.
+Same as before — nice to have, not blocking. Watch `lang/**/pilotiq.json` in dev, invalidate caches, send HMR signal.
 
 ---
 
@@ -143,10 +143,10 @@ This plan adds Laravel Filament-style override support while keeping the zero-co
 ## Goals
 
 1. **Keep zero-config UX** — install panels, get translated UI immediately. No publishing step required.
-2. **Allow adding new locales** — users can ship `lang/es/pilotic.json`, `lang/fr/pilotic.json` without forking the package
+2. **Allow adding new locales** — users can ship `lang/es/pilotiq.json`, `lang/fr/pilotiq.json` without forking the package
 3. **Allow overriding individual strings** — change "Sign Out" to "Logout" without copying the entire i18n file
 4. **Type safety preserved** — bundled `en.ts`/`ar.ts` defaults stay as the canonical schema
-5. **Backward compatible** — apps that don't add `lang/*/pilotic.json` continue working unchanged
+5. **Backward compatible** — apps that don't add `lang/*/pilotiq.json` continue working unchanged
 
 ---
 
@@ -162,15 +162,15 @@ This plan adds Laravel Filament-style override support while keeping the zero-co
 
 ### Concept: Vendor Namespaces
 
-Laravel Filament uses translation keys like `filament-pilotic::layout.actions.logout`. The `filament-pilotic::` prefix is a "vendor namespace" — `__()` resolves it by looking in `lang/<locale>/vendor/filament-panels/layout.php` first, then falling back to the package's bundled translations.
+Laravel Filament uses translation keys like `filament-pilotiq::layout.actions.logout`. The `filament-pilotiq::` prefix is a "vendor namespace" — `__()` resolves it by looking in `lang/<locale>/vendor/filament-panels/layout.php` first, then falling back to the package's bundled translations.
 
-For RudderJS, we'll use `pilotic::` as the namespace prefix:
-- `pilotic::sidebar.signOut` → look for override in `lang/<locale>/pilotic.json` first, fall back to bundled `en.ts`/`ar.ts`
-- `pilotic::dataTable.empty` → same pattern
+For RudderJS, we'll use `pilotiq::` as the namespace prefix:
+- `pilotiq::sidebar.signOut` → look for override in `lang/<locale>/pilotiq.json` first, fall back to bundled `en.ts`/`ar.ts`
+- `pilotiq::dataTable.empty` → same pattern
 
 ### Override File Format
 
-Users can override panel strings by creating JSON files in `lang/<locale>/pilotic.json`:
+Users can override panel strings by creating JSON files in `lang/<locale>/pilotiq.json`:
 
 ```json
 {
@@ -188,7 +188,7 @@ Only keys present in the override file are used; missing keys fall through to th
 
 ### Locale Coverage
 
-A locale that doesn't exist in bundled translations (e.g. Spanish) can be created entirely from `lang/es/pilotic.json`:
+A locale that doesn't exist in bundled translations (e.g. Spanish) can be created entirely from `lang/es/pilotiq.json`:
 
 ```json
 {
@@ -201,7 +201,7 @@ A locale that doesn't exist in bundled translations (e.g. Spanish) can be create
 }
 ```
 
-The fallback chain: `pilotic.json[es]` → `pilotic.json[en]` (fallback locale) → `bundled.en` → key as string.
+The fallback chain: `pilotiq.json[es]` → `pilotiq.json[en]` (fallback locale) → `bundled.en` → key as string.
 
 ---
 
@@ -267,7 +267,7 @@ function getOverride(locale: string): Partial<PanelI18n> | undefined {
       getNamespaceCache?: (locale: string, namespace: string) => unknown
     }
     if (!getNamespaceCache) return undefined
-    return getNamespaceCache(locale, 'pilotic') as Partial<PanelI18n> | undefined
+    return getNamespaceCache(locale, 'pilotiq') as Partial<PanelI18n> | undefined
   } catch {
     return undefined
   }
@@ -310,7 +310,7 @@ export function _clearI18nCache(): void {
 
 ### 2. Pre-load `panels` namespace at panel boot
 
-The override file (`lang/<locale>/pilotic.json`) needs to be loaded into the localization cache before any panel renders. Two options:
+The override file (`lang/<locale>/pilotiq.json`) needs to be loaded into the localization cache before any panel renders. Two options:
 
 **Option A: Lazy-load via `getOverride()`**
 - Don't pre-load. The first call to `getPanelI18n()` checks the cache.
@@ -318,7 +318,7 @@ The override file (`lang/<locale>/pilotic.json`) needs to be loaded into the loc
 
 **Option B: Eager pre-load during panel boot**
 - Add a `preloadPanelTranslations()` function to `@rudderjs/panels` that the panel service provider calls during boot.
-- It calls `loadNamespace(locale, 'pilotic')` and `loadNamespace(fallback, 'pilotic')` from `@rudderjs/localization`.
+- It calls `loadNamespace(locale, 'pilotiq')` and `loadNamespace(fallback, 'pilotiq')` from `@rudderjs/localization`.
 - Once loaded, `getPanelI18n()` finds it sync from the cache.
 
 **Recommendation: Option B.** Add to panels service provider boot:
@@ -333,9 +333,9 @@ async boot(): Promise<void> {
     const { LocalizationRegistry } = await import('@rudderjs/localization')
     const config = LocalizationRegistry.getConfig()
     const { loadNamespace } = await import('@rudderjs/localization/internal') // export needed
-    await loadNamespace(config.locale, 'pilotic')
+    await loadNamespace(config.locale, 'pilotiq')
     if (config.locale !== config.fallback) {
-      await loadNamespace(config.fallback, 'pilotic')
+      await loadNamespace(config.fallback, 'pilotiq')
     }
   } catch {
     // @rudderjs/localization not installed — use bundled defaults only
@@ -381,8 +381,8 @@ Then panels' provider does:
 ```ts
 const { preloadNamespace, LocalizationRegistry } = await import('@rudderjs/localization')
 const { locale, fallback } = LocalizationRegistry.getConfig()
-await preloadNamespace(locale, 'pilotic')
-if (locale !== fallback) await preloadNamespace(fallback, 'pilotic')
+await preloadNamespace(locale, 'pilotiq')
+if (locale !== fallback) await preloadNamespace(fallback, 'pilotiq')
 ```
 
 ### 4. Override File Template (no schema in v1)
@@ -390,10 +390,10 @@ if (locale !== fallback) await preloadNamespace(fallback, 'pilotic')
 Scaffold a starter override file via the existing vendor:publish command:
 
 ```bash
-pnpm rudder vendor:publish --tag=pilotic-translations
+pnpm rudder vendor:publish --tag=pilotiq-translations
 ```
 
-This scaffolds an empty `lang/en/pilotic.json`:
+This scaffolds an empty `lang/en/pilotiq.json`:
 ```json
 {
   "sidebar": {
@@ -406,17 +406,17 @@ This scaffolds an empty `lang/en/pilotic.json`:
 
 ### 5. HMR Support
 
-When `lang/<locale>/pilotic.json` is edited in dev mode, the override should hot-reload. Two pieces:
+When `lang/<locale>/pilotiq.json` is edited in dev mode, the override should hot-reload. Two pieces:
 
 1. **Localization package** — already has cache invalidation via `LocalizationRegistry.reset()`. Need a way to invalidate just one namespace.
 2. **Panels i18n cache** — need to call `_clearI18nCache()` when overrides change.
 
 Add a Vite plugin hook in `@rudderjs/vite` or `@rudderjs/panels`:
 ```ts
-// Watch lang/**/pilotic.json and invalidate caches on change
+// Watch lang/**/pilotiq.json and invalidate caches on change
 configureServer(server) {
   server.watcher.on('change', (file) => {
-    if (file.endsWith('/pilotic.json')) {
+    if (file.endsWith('/pilotiq.json')) {
       // Clear localization cache for the namespace
       // Clear panels merged cache
       // Send HMR signal to client to refetch panel meta
@@ -438,10 +438,10 @@ This is nice-to-have, not required for v1.
 - `packages/panels/src/__tests__/i18n.test.ts` — extend with override merge + fallback chain tests
 
 **Acceptance:**
-- `getPanelI18n('ar')` returns merged result if `lang/ar/pilotic.json` is in the localization cache
+- `getPanelI18n('ar')` returns merged result if `lang/ar/pilotiq.json` is in the localization cache
 - Returns bundled defaults if no override exists
 - Cache prevents re-merging on every call
-- **Browser receives merged (override + bundled) strings via panel meta payload.** Verify by editing `lang/en/pilotic.json` in the playground, restarting, and inspecting the rendered panel UI in the browser — the override must take effect client-side, not just server-side. If translations don't currently flow through `Panel.toMeta()` / `Panel.toNavigationMeta()`, that's a blocking sub-task before Phase 1 ships (cross-ref `feedback_panel_navigation_vs_full_meta.md`).
+- **Browser receives merged (override + bundled) strings via panel meta payload.** Verify by editing `lang/en/pilotiq.json` in the playground, restarting, and inspecting the rendered panel UI in the browser — the override must take effect client-side, not just server-side. If translations don't currently flow through `Panel.toMeta()` / `Panel.toNavigationMeta()`, that's a blocking sub-task before Phase 1 ships (cross-ref `feedback_panel_navigation_vs_full_meta.md`).
 - Tests cover: deep merge edge cases, fallback chain (`es → en → bundled.en → key-as-string`), graceful degradation when `@rudderjs/localization` is not installed (panels works with bundled defaults only)
 
 ### Phase 2: Pre-load at Panel Boot
@@ -451,7 +451,7 @@ This is nice-to-have, not required for v1.
 
 **Files:**
 - `packages/localization/src/index.ts` — export `preloadNamespace()` AND `getNamespaceCache()` (the symmetric read accessor used by panels' `getOverride()`)
-- `packages/panels/src/<actual-boot-file>.ts` — call `preloadNamespace('pilotic')` during boot for both active locale and fallback
+- `packages/panels/src/<actual-boot-file>.ts` — call `preloadNamespace('pilotiq')` during boot for both active locale and fallback
 - `packages/panels/src/i18n/index.ts` — replace the `globalThis` cache access in `getOverride()` with `getNamespaceCache()`
 
 **Acceptance:**
@@ -461,32 +461,32 @@ This is nice-to-have, not required for v1.
 ### Phase 3: Vendor Publish Command
 
 **Files:**
-- `packages/cli/src/commands/vendor-publish.ts` — extend or add `--tag=pilotic-translations`
+- `packages/cli/src/commands/vendor-publish.ts` — extend or add `--tag=pilotiq-translations`
 - `packages/panels/lang/template.json` — empty starter file (no `$schema` reference in v1)
 
 **Acceptance:**
-- `pnpm rudder vendor:publish --tag=pilotic-translations` creates `lang/en/pilotic.json`
+- `pnpm rudder vendor:publish --tag=pilotiq-translations` creates `lang/en/pilotiq.json`
 - The created file is a plain JSON object with example keys; no `$schema` reference (deferred until schema generation lands)
 
 ### Phase 4: Documentation
 
 **Files:**
 - `docs/guide/panels-localization.md` (VitePress) — explains override pattern + example
-- Update `packages/panels/README.md` — mention `pilotic::` namespace and override file location
+- Update `packages/panels/README.md` — mention `pilotiq::` namespace and override file location
 - Update `docs/claude/panels.md` — note about override mechanism for the AI
 
 ### Phase 5 (Optional): HMR Support
 
 **Files:**
-- `packages/vite/src/index.ts` — watch `lang/**/pilotic.json` and invalidate caches on change
+- `packages/vite/src/index.ts` — watch `lang/**/pilotiq.json` and invalidate caches on change
 
 **Acceptance:**
-- Edit `lang/ar/pilotic.json` in dev mode — panel UI updates without restart
+- Edit `lang/ar/pilotiq.json` in dev mode — panel UI updates without restart
 
 ### Deferred to follow-up plans (NOT in v1)
 
-- **Per-extension namespaces actually implemented.** This plan establishes the convention (Open Q #3) but only ships the `pilotic` namespace for `@rudderjs/panels` itself. `@rudderjs/panels-lexical` (toolbar buttons, link dialog strings, etc.) keeps its bundled-only translations until a follow-up applies the same pattern under namespace `pilotic-lexical`.
-- **Pro package translations.** `@pilotic-pro/ai` (chat UI strings, system messages) and `@pilotic-pro/collab` (presence labels) will follow the same pattern as separate follow-ups, post-extraction. Namespaces: `pilotic-ai`, `pilotic-collab`.
+- **Per-extension namespaces actually implemented.** This plan establishes the convention (Open Q #3) but only ships the `pilotiq` namespace for `@rudderjs/panels` itself. `@rudderjs/panels-lexical` (toolbar buttons, link dialog strings, etc.) keeps its bundled-only translations until a follow-up applies the same pattern under namespace `pilotiq-lexical`.
+- **Pro package translations.** `@pilotiq-pro/ai` (chat UI strings, system messages) and `@pilotiq-pro/collab` (presence labels) will follow the same pattern as separate follow-ups, post-extraction. Namespaces: `pilotiq-ai`, `pilotiq-collab`.
 - **JSON Schema generation** from the `PanelI18n` interface for IDE autocomplete (Open Q #5).
 - **Pluralization and interpolation** in panel strings (Open Q #4).
 - **Per-tenant translation overrides.** This plan's overrides are app-global. Multi-tenant apps that want different translations per tenant are out of scope; the merged cache is keyed by locale only.
@@ -496,15 +496,15 @@ This is nice-to-have, not required for v1.
 ## Migration Strategy
 
 ### For existing apps
-**Backward compatible** — apps that don't add `lang/<locale>/pilotic.json` continue using bundled defaults. Zero changes required.
+**Backward compatible** — apps that don't add `lang/<locale>/pilotiq.json` continue using bundled defaults. Zero changes required.
 
 ### For users who want to override
-1. Run `pnpm rudder vendor:publish --tag=pilotic-translations`
-2. Edit `lang/<locale>/pilotic.json` with the keys they want to override
+1. Run `pnpm rudder vendor:publish --tag=pilotiq-translations`
+2. Edit `lang/<locale>/pilotiq.json` with the keys they want to override
 3. Restart dev server (or HMR if Phase 5 implemented)
 
 ### For users adding a new locale
-1. Create `lang/es/pilotic.json` (or use the publish command to scaffold)
+1. Create `lang/es/pilotiq.json` (or use the publish command to scaffold)
 2. Fill in all keys (no bundled fallback for unsupported locales — but English will be used as last-resort fallback via the existing fallback chain)
 3. Set `app.locale = 'es'` in config
 
@@ -515,26 +515,26 @@ This is nice-to-have, not required for v1.
 ### 1. Where do override files live?
 
 **Options:**
-- **A. `lang/<locale>/pilotic.json`** — Laravel-style flat namespace
-- **B. `lang/<locale>/vendor/pilotic.json`** — Laravel Filament style with `vendor/` subfolder
+- **A. `lang/<locale>/pilotiq.json`** — Laravel-style flat namespace
+- **B. `lang/<locale>/vendor/pilotiq.json`** — Laravel Filament style with `vendor/` subfolder
 - **C. `lang/vendor/panels/<locale>.json`** — vendor-first structure
 
 **Recommendation:** **A**. Simplest. Matches the existing localization package's expectation that `${locale}:${namespace}` maps to `lang/<locale>/<namespace>.json`. Adding a vendor subfolder would require changing how `loadNamespace()` resolves paths.
 
-### 2. Should the `pilotic::` prefix be exposed to users?
+### 2. Should the `pilotiq::` prefix be exposed to users?
 
 The internal `getPanelI18n()` doesn't use the prefix — it loads the `panels` namespace directly. The prefix is conceptual.
 
-But if users want to use `trans('pilotic::sidebar.signOut')` in their own components, the localization package would need to handle the `::` prefix as a namespace override.
+But if users want to use `trans('pilotiq::sidebar.signOut')` in their own components, the localization package would need to handle the `::` prefix as a namespace override.
 
 **Recommendation:** Don't expose the prefix in v1. Internal panel UI uses `getPanelI18n()` directly. Users who want to reference panel strings in their own code can use `trans('panels.sidebar.signOut')` (no prefix, just the namespace).
 
 ### 3. What about extension packages (panels-lexical, media, workspaces)?
 
-Extensions may also have UI strings. Should they share the `pilotic.json` namespace or use their own?
+Extensions may also have UI strings. Should they share the `pilotiq.json` namespace or use their own?
 
 **Recommendation:** Each extension uses its own namespace:
-- `lang/<locale>/pilotic.json` — core panels
+- `lang/<locale>/pilotiq.json` — core panels
 - `lang/<locale>/panels-lexical.json` — lexical editor strings
 - `lang/<locale>/media.json` — media library strings
 - `lang/<locale>/workspaces.json` — workspaces strings
@@ -571,19 +571,19 @@ Auto-generating a JSON schema from the `PanelI18n` TypeScript interface requires
 
 ## Acceptance Criteria
 
-- [ ] `lang/en/pilotic.json` with overrides changes panel UI strings
+- [ ] `lang/en/pilotiq.json` with overrides changes panel UI strings
 - [ ] **Override changes are visible in the browser**, not just server-side (translations flow through panel meta payload)
-- [ ] `lang/es/pilotic.json` with full Spanish translations works (new locale not bundled)
+- [ ] `lang/es/pilotiq.json` with full Spanish translations works (new locale not bundled)
 - [ ] Missing keys in override fall back to bundled defaults
 - [ ] Panels still works with no override files (zero-config preserved)
 - [ ] Panels still works with `@rudderjs/localization` not installed (bundled defaults only — verified with a test that mocks the optional peer as missing)
 - [ ] `getPanelI18n()` is sync, no async leaks into the render path
 - [ ] Cache prevents re-merging on every call
 - [ ] `getOverride()` reads via `getNamespaceCache()` from `@rudderjs/localization`, not via direct `globalThis` access
-- [ ] `pnpm rudder vendor:publish --tag=pilotic-translations` scaffolds the override file (no `$schema` reference)
+- [ ] `pnpm rudder vendor:publish --tag=pilotiq-translations` scaffolds the override file (no `$schema` reference)
 - [ ] Tests cover the merge logic, fallback chain, boot pre-load integration, and the missing-localization-package degradation path
 - [ ] README updated with override example
-- [ ] `feedback_panels_localization.md` memory note updated to reference the new namespace name (`pilotic`) and the `getNamespaceCache` export
+- [ ] `feedback_panels_localization.md` memory note updated to reference the new namespace name (`pilotiq`) and the `getNamespaceCache` export
 
 ---
 
@@ -592,18 +592,18 @@ Auto-generating a JSON schema from the `PanelI18n` TypeScript interface requires
 ```
 packages/panels/src/__tests__/i18n.test.ts         # extend with override merge + fallback tests (file already exists)
 packages/panels/lang/template.json                 # starter override file (no $schema)
-docs/guide/panels-localization.md                  # user guide (renamed to pilotic-localization.md before extraction)
+docs/guide/panels-localization.md                  # user guide (renamed to pilotiq-localization.md before extraction)
 ```
 
 ## Files to Modify
 
 ```
 packages/panels/src/i18n/index.ts                  # add getOverride (via getNamespaceCache), deepMerge, cache
-packages/panels/src/<actual-boot-file>.ts          # pre-load 'pilotic' namespace at boot — FILE NAME TBD in Phase 2 pre-flight
+packages/panels/src/<actual-boot-file>.ts          # pre-load 'pilotiq' namespace at boot — FILE NAME TBD in Phase 2 pre-flight
 packages/localization/src/index.ts                 # export preloadNamespace + getNamespaceCache
-packages/cli/src/commands/vendor-publish.ts        # add pilotic-translations tag
+packages/cli/src/commands/vendor-publish.ts        # add pilotiq-translations tag
 packages/panels/README.md                          # document override pattern
-docs/claude/panels.md                              # add override mechanism note (will move to pilotic/pilotic during extraction)
+docs/claude/panels.md                              # add override mechanism note (will move to pilotiq-io/pilotiq during extraction)
 ```
 
 ---

@@ -10,12 +10,12 @@ import { ar } from '../i18n/ar.js'
 const SEEDED_LOCALES = ['en', 'ar', 'es', 'en-US', 'es-MX', 'xx']
 
 function seed(locale: string, data: Record<string, unknown>): void {
-  LocalizationRegistry.setCached(locale, 'pilotic', data)
+  LocalizationRegistry.setCached(locale, 'pilotiq', data)
 }
 
 function clearOverrides(): void {
   for (const locale of SEEDED_LOCALES) {
-    LocalizationRegistry.deleteCached(locale, 'pilotic')
+    LocalizationRegistry.deleteCached(locale, 'pilotiq')
   }
 }
 

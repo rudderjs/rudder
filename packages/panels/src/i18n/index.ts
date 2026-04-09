@@ -58,11 +58,11 @@ export function getPanelI18n(locale: string): PanelI18n {
  * the `LocalizationRegistry` reference captured at boot. Returns undefined
  * if no override exists or localization isn't installed.
  *
- * Override files live at `lang/<locale>/pilotic.json` (the `pilotic` namespace).
+ * Override files live at `lang/<locale>/pilotiq.json` (the `pilotiq` namespace).
  */
 function getOverride(locale: string): Partial<PanelI18n> | undefined {
   if (!_localizationRegistry) return undefined
-  const data = _localizationRegistry.getCached(locale, 'pilotic') as Partial<PanelI18n> | undefined
+  const data = _localizationRegistry.getCached(locale, 'pilotiq') as Partial<PanelI18n> | undefined
   if (!data || Object.keys(data).length === 0) return undefined
   return data
 }

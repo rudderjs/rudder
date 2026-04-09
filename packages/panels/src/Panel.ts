@@ -84,7 +84,7 @@ export interface PanelNavigationMeta {
   layout:    PanelLayout
   locale:    string
   dir:       'ltr' | 'rtl'
-  /** Merged i18n strings (bundled defaults + any `lang/<locale>/pilotic.json` overrides). Resolved on the server so the client doesn't need access to the localization cache. */
+  /** Merged i18n strings (bundled defaults + any `lang/<locale>/pilotiq.json` overrides). Resolved on the server so the client doesn't need access to the localization cache. */
   i18n:      PanelI18n
   /** Resolved theme — CSS variables, fonts, radius. Undefined = use app CSS defaults. */
   theme?:    PanelThemeMeta

@@ -1127,10 +1127,10 @@ Panel.make('admin')
 
 ### Overriding strings
 
-To change a few strings — or add an entirely new locale — drop a JSON file at `lang/<locale>/pilotic.json`:
+To change a few strings — or add an entirely new locale — drop a JSON file at `lang/<locale>/pilotiq.json`:
 
 ```json
-// lang/en/pilotic.json
+// lang/en/pilotiq.json
 {
   "signOut":     "Logout",
   "newButton":   "Create :label",
@@ -1138,18 +1138,18 @@ To change a few strings — or add an entirely new locale — drop a JSON file a
 }
 ```
 
-Only the keys you specify are overridden; missing keys fall back to the bundled defaults. Add `lang/es/pilotic.json` to introduce Spanish — keys you don't translate fall back to bundled `en`.
+Only the keys you specify are overridden; missing keys fall back to the bundled defaults. Add `lang/es/pilotiq.json` to introduce Spanish — keys you don't translate fall back to bundled `en`.
 
 Scaffold an empty starter file:
 
 ```bash
-pnpm rudder vendor:publish --tag=pilotic-translations
+pnpm rudder vendor:publish --tag=pilotiq-translations
 ```
 
 ::: tip Requires `@rudderjs/localization`
 The override mechanism uses `@rudderjs/localization` (an optional peer dependency) to load namespace JSON files at panel boot. Without it, panels still works using the bundled defaults — overrides are silently ignored.
 
-If you edit `lang/<locale>/pilotic.json` while the dev server is running, restart `pnpm dev` to pick up the changes.
+If you edit `lang/<locale>/pilotiq.json` while the dev server is running, restart `pnpm dev` to pick up the changes.
 :::
 
 The full list of override keys is the `PanelI18n` type — see [`src/i18n/en.ts`](https://github.com/rudderjs/rudder/blob/main/packages/panels/src/i18n/en.ts) for the canonical schema.

@@ -1,17 +1,17 @@
-# Pilotic Extraction Plan
+# Pilotiq Extraction Plan
 
-Extract `packages/panels` and `packages/panels-lexical` out of the `rudderjs/rudder` monorepo into a brand-new `pilotic/pilotic` monorepo under the `@pilotic/*` npm scope, then carve out two private pro packages (`@pilotic-pro/ai`, `@pilotic-pro/collab`) into a sibling `pilotic/pilotic-pro` repo. Result: RudderJS becomes a focused Laravel-style framework, Pilotic becomes a standalone admin/CMS product with an open core and a paid pro tier.
+Extract `packages/panels` and `packages/panels-lexical` out of the `rudderjs/rudder` monorepo into a brand-new `pilotiq-io/pilotiq` monorepo under the `@pilotiq/*` npm scope, then carve out two private pro packages (`@pilotiq-pro/ai`, `@pilotiq-pro/collab`) into a sibling `pilotiq-io/pilotiq-pro` repo. Result: RudderJS becomes a focused Laravel-style framework, Pilotiq becomes a standalone admin/CMS product with an open core and a paid pro tier.
 
 **Status:** DRAFT 2026-04-09.
 
 **Packages affected:**
 - Removed from `rudderjs/rudder`: `@rudderjs/panels`, `@rudderjs/panels-lexical`
-- New in `pilotic/pilotic` (public, MIT): `@pilotic/panels`, `@pilotic/lexical`
-- New in `pilotic/pilotic-pro` (private, commercial): `@pilotic-pro/ai`, `@pilotic-pro/collab`
+- New in `pilotiq-io/pilotiq` (public, MIT): `@pilotiq/panels`, `@pilotiq/lexical`
+- New in `pilotiq-io/pilotiq-pro` (private, commercial): `@pilotiq-pro/ai`, `@pilotiq-pro/collab`
 
 **Depends on:** none — foundational restructuring.
 
-**Related memory:** `project_pilotic_rebrand.md`, `reference_panels_ai_surfaces.md`, `feedback_yjs_idb_ws_order.md`, `feedback_panels_pages_parallel_copy.md`, `feedback_panels_dist_rebuild.md`
+**Related memory:** `project_pilotiq_rebrand.md`, `reference_panels_ai_surfaces.md`, `feedback_yjs_idb_ws_order.md`, `feedback_panels_pages_parallel_copy.md`, `feedback_panels_dist_rebuild.md`
 
 ---
 
@@ -20,27 +20,27 @@ Extract `packages/panels` and `packages/panels-lexical` out of the `rudderjs/rud
 After this plan:
 
 1. `rudderjs/rudder` contains no panel/admin/CMS code. The framework is exclusively the Laravel-style runtime: core, router, orm, auth, cache, queue, mail, etc.
-2. `pilotic/pilotic` is a standalone public monorepo containing `@pilotic/panels` and `@pilotic/lexical`, each depending on the relevant `@rudderjs/*` packages via pinned npm versions.
+2. `pilotiq-io/pilotiq` is a standalone public monorepo containing `@pilotiq/panels` and `@pilotiq/lexical`, each depending on the relevant `@rudderjs/*` packages via pinned npm versions.
 3. The public consumer API is unchanged at the call site:
    ```ts
-   import { Panel } from '@pilotic/panels'
+   import { Panel } from '@pilotiq/panels'
    export const adminPanel = Panel.make('admin').path('/admin')...
    ```
-4. `pilotic/pilotic-pro` is a private monorepo with `@pilotic-pro/ai` (PanelAgent + chat + tools + chat UI) and `@pilotic-pro/collab` (Yjs persistence + presence). Both register via `panel.use(...)` plugin hooks exposed by `@pilotic/panels`.
+4. `pilotiq-io/pilotiq-pro` is a private monorepo with `@pilotiq-pro/ai` (PanelAgent + chat + tools + chat UI) and `@pilotiq-pro/collab` (Yjs persistence + presence). Both register via `panel.use(...)` plugin hooks exposed by `@pilotiq/panels`.
 5. `@rudderjs/panels` and `@rudderjs/panels-lexical` exist on npm only as deprecation stubs pointing at the new names.
-6. Brand surface: `pilotic.io` is live (placeholder OK), the `pilotic` GitHub org hosts both repos, the README leads with the product story.
-7. A documented cross-repo dev workflow lets you iterate on `@rudderjs/core` and `@pilotic/panels` simultaneously without npm publishes.
+6. Brand surface: `pilotiq.io` is live (placeholder OK), the `pilotiq` GitHub org hosts both repos, the README leads with the product story.
+7. A documented cross-repo dev workflow lets you iterate on `@rudderjs/core` and `@pilotiq/panels` simultaneously without npm publishes.
 
 ---
 
 ## Non-Goals
 
-- **Cloud (managed Pilotic).** Out of scope for this plan; covered in a future `pilotic-cloud-plan.md` once pro packages are shipping.
-- **Marketing site at `pilotic.io`.** A placeholder landing page is acceptable; the polished site is its own effort.
+- **Cloud (managed Pilotiq).** Out of scope for this plan; covered in a future `pilotiq-cloud-plan.md` once pro packages are shipping.
+- **Marketing site at `pilotiq.io`.** A placeholder landing page is acceptable; the polished site is its own effort.
 - **Renaming the `Panel` class or any other public API symbol.** Only package names and import paths change.
-- **Splitting `@pilotic/panels` into smaller packages** (`@pilotic/media`, `@pilotic/blocks`, `@pilotic/cli`). Leave as one package for now; split later only if there's real coupling pain.
+- **Splitting `@pilotiq/panels` into smaller packages** (`@pilotiq/media`, `@pilotiq/blocks`, `@pilotiq/cli`). Leave as one package for now; split later only if there's real coupling pain.
 - **Preserving git history.** Clean cut — `git blame` on the new repo starts at the extraction commit. Decision rationale: history is preserved in `rudderjs/rudder` forever, the new repo's blame fresh-start is acceptable for solo dev.
-- **Backporting fixes to `@rudderjs/panels`.** Once deprecated, no patches. Users must migrate to `@pilotic/panels`.
+- **Backporting fixes to `@rudderjs/panels`.** Once deprecated, no patches. Users must migrate to `@pilotiq/panels`.
 - **License keys with phone-home or DRM.** Phase 6 ships a light JWT signature check only; no usage metering, no online verification.
 - **Multi-level pro package gating.** Each pro package decides its own license check; no shared license server.
 
@@ -68,7 +68,7 @@ Earlier in the planning conversation we considered keeping panels inside the rud
 
 1. **Framework is now stable** — the precondition for a clean split. No more weekly framework churn driven by panels.
 2. **Brand clarity** — two repos = two stories = two npm scopes. Removes the persistent "is panels part of the framework?" confusion.
-3. **Pro repo fits naturally** — `pilotic/pilotic-pro` as a private sibling is cleaner than wedging `@rudderjs-pro/*` into a framework that has nothing to do with the product.
+3. **Pro repo fits naturally** — `pilotiq-io/pilotiq-pro` as a private sibling is cleaner than wedging `@rudderjs-pro/*` into a framework that has nothing to do with the product.
 4. **Contributor narrowing** — someone fixing a Lexical block doesn't need to clone 47 framework packages.
 5. **Forces framework API stability** — pinned npm version coupling is a feature, not a cost.
 
@@ -76,14 +76,14 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 ### Locked decisions (from planning conversation)
 
-- npm scope: `@pilotic` (owned)
-- GitHub: `pilotic` org (owned), repos `pilotic/pilotic` (public) + `pilotic/pilotic-pro` (private)
-- Domain: `pilotic.io` primary, `pilotic.dev` and `pilotic.store` secondary
+- npm scope: `@pilotiq` (owned)
+- GitHub: `pilotiq` org (owned), repos `pilotiq-io/pilotiq` (public) + `pilotiq-io/pilotiq-pro` (private)
+- Domain: `pilotiq.io` primary, `pilotiq.dev` and `pilotiq.store` secondary
 - Public API: `Panel.make('admin')...` unchanged; only the import path moves
-- Free packages: `@pilotic/panels`, `@pilotic/lexical`
-- Pro packages: `@pilotic-pro/ai` (PanelAgent + chat + tools + UI), `@pilotic-pro/collab` (Yjs + presence + persistence)
+- Free packages: `@pilotiq/panels`, `@pilotiq/lexical`
+- Pro packages: `@pilotiq-pro/ai` (PanelAgent + chat + tools + UI), `@pilotiq-pro/collab` (Yjs + presence + persistence)
 - History: clean cut, no `git filter-repo`
-- Plan doc: drafted here in `rudderjs/rudder/docs/plans/`, copied to `pilotic/pilotic/docs/plans/` at Phase 1
+- Plan doc: drafted here in `rudderjs/rudder/docs/plans/`, copied to `pilotiq-io/pilotiq/docs/plans/` at Phase 1
 
 ---
 
@@ -108,25 +108,25 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 ---
 
-## Phase 1 — Bootstrap `pilotic/pilotic` repo
+## Phase 1 — Bootstrap `pilotiq-io/pilotiq` repo
 
-**Goal:** Empty but production-ready monorepo at `pilotic/pilotic` with tooling, CI, README, and a copy of this plan. No code extracted yet.
+**Goal:** Empty but production-ready monorepo at `pilotiq-io/pilotiq` with tooling, CI, README, and a copy of this plan. No code extracted yet.
 
 **Steps:**
 
-1. Create `pilotic/pilotic` GitHub repo (public, MIT license).
+1. Create `pilotiq-io/pilotiq` GitHub repo (public, MIT license).
 2. Initialize as a pnpm + Turborepo monorepo matching `rudderjs/rudder`'s setup:
    - `pnpm-workspace.yaml`, `turbo.json`, root `package.json`, `tsconfig.base.json`
-   - `.changeset/` configured for `@pilotic/*` scope
+   - `.changeset/` configured for `@pilotiq/*` scope
    - GitHub Actions: build + typecheck + test on PR
    - `.gitignore`, `.npmrc` (`access=public`)
-3. Copy `docs/plans/pilotic-extraction-plan.md` (this file) into `pilotic/pilotic/docs/plans/`.
-4. Write the README — lead with positioning: "Pilotic — the open-source admin and CMS for RudderJS, with a built-in agent." Link to `pilotic.io`, GitHub, RudderJS framework.
-5. Reserve `@pilotic/panels` and `@pilotic/lexical` on npm (publish empty `0.0.0` placeholder packages with `private: false` and a `README.md` saying "extraction in progress").
-6. Stand up `pilotic.io` placeholder page (single-page "coming soon" + GitHub link is fine).
+3. Copy `docs/plans/pilotiq-extraction-plan.md` (this file) into `pilotiq-io/pilotiq/docs/plans/`.
+4. Write the README — lead with positioning: "Pilotiq — the open-source admin and CMS for RudderJS, with a built-in agent." Link to `pilotiq.io`, GitHub, RudderJS framework.
+5. Reserve `@pilotiq/panels` and `@pilotiq/lexical` on npm (publish empty `0.0.0` placeholder packages with `private: false` and a `README.md` saying "extraction in progress").
+6. Stand up `pilotiq.io` placeholder page (single-page "coming soon" + GitHub link is fine).
 7. Configure `pnpm` in the new repo to consume `@rudderjs/*` from npm (not workspace).
 
-**Done when:** `git clone pilotic/pilotic && pnpm install && pnpm build` succeeds on an empty workspace; `npm view @pilotic/panels` returns the placeholder.
+**Done when:** `git clone pilotiq-io/pilotiq && pnpm install && pnpm build` succeeds on an empty workspace; `npm view @pilotiq/panels` returns the placeholder.
 
 **Risks:** none meaningful. This is plumbing.
 
@@ -134,14 +134,14 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 ## Phase 1.5 — Cross-repo dev workflow
 
-**Goal:** Document and verify the workflow for iterating on `@rudderjs/*` and `@pilotic/*` simultaneously without npm publishes.
+**Goal:** Document and verify the workflow for iterating on `@rudderjs/*` and `@pilotiq/*` simultaneously without npm publishes.
 
 **Steps:**
 
-1. In `pilotic/pilotic/package.json`, document a `pnpm.overrides` recipe (commented out) pointing each `@rudderjs/*` dep at `link:../rudder/packages/<name>`. Users uncomment when active framework dev is needed.
+1. In `pilotiq-io/pilotiq/package.json`, document a `pnpm.overrides` recipe (commented out) pointing each `@rudderjs/*` dep at `link:../rudder/packages/<name>`. Users uncomment when active framework dev is needed.
 2. Document the alternative: `pnpm link --global` per package.
-3. Add a `docs/development.md` to `pilotic/pilotic` explaining the workflow.
-4. Smoke test it: with overrides active, make a trivial change in `rudderjs/rudder/packages/core`, rebuild, verify `@pilotic/panels` picks it up.
+3. Add a `docs/development.md` to `pilotiq-io/pilotiq` explaining the workflow.
+4. Smoke test it: with overrides active, make a trivial change in `rudderjs/rudder/packages/core`, rebuild, verify `@pilotiq/panels` picks it up.
 
 **Done when:** the dev loop is documented, smoke-tested, and reproducible from a clean clone.
 
@@ -149,76 +149,76 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 ---
 
-## Phase 2 — Extract `@pilotic/panels` and `@pilotic/lexical`
+## Phase 2 — Extract `@pilotiq/panels` and `@pilotiq/lexical`
 
-**Goal:** Move all panels code out of `rudderjs/rudder` into `pilotic/pilotic`, rename the packages, update every consumer, ship `0.1.0` of both new packages.
+**Goal:** Move all panels code out of `rudderjs/rudder` into `pilotiq-io/pilotiq`, rename the packages, update every consumer, ship `0.1.0` of both new packages.
 
 **Steps:**
 
-1. **Copy** (not git-mv, since we're crossing repos with no history) the contents of `rudderjs/rudder/packages/panels/` into `pilotic/pilotic/packages/panels/`.
-2. Same for `panels-lexical/` → `pilotic/pilotic/packages/lexical/`.
+1. **Copy** (not git-mv, since we're crossing repos with no history) the contents of `rudderjs/rudder/packages/panels/` into `pilotiq-io/pilotiq/packages/panels/`.
+2. Same for `panels-lexical/` → `pilotiq-io/pilotiq/packages/lexical/`.
 3. Rewrite both `package.json` files:
-   - `name`: `@pilotic/panels`, `@pilotic/lexical`
+   - `name`: `@pilotiq/panels`, `@pilotiq/lexical`
    - `version`: `0.1.0`
-   - `repository.url`: `https://github.com/pilotic/pilotic`
+   - `repository.url`: `https://github.com/pilotiq-io/pilotiq`
    - `repository.directory`: `packages/panels` / `packages/lexical`
    - Convert `@rudderjs/*` workspace deps to pinned npm versions matching the latest published `rudderjs/rudder` release
-   - If `@pilotic/lexical` depends on `@pilotic/panels` (TBD in audit), use `workspace:*`
-4. Find/replace `@rudderjs/panels` → `@pilotic/panels` and `@rudderjs/panels-lexical` → `@pilotic/lexical` across the new repo (source, configs, docs, tests).
+   - If `@pilotiq/lexical` depends on `@pilotiq/panels` (TBD in audit), use `workspace:*`
+4. Find/replace `@rudderjs/panels` → `@pilotiq/panels` and `@rudderjs/panels-lexical` → `@pilotiq/lexical` across the new repo (source, configs, docs, tests).
 5. Update all internal documentation in the new repo (README, CLAUDE.md if any, docs/).
 6. `pnpm build && pnpm typecheck && pnpm test` — must pass green in the new repo before proceeding.
 7. **In `rudderjs/rudder`**:
    - `git rm -r packages/panels packages/panels-lexical`
-   - Update `playground/` to depend on `@pilotic/panels` and `@pilotic/lexical` from npm (not workspace)
-   - Update `playground/bootstrap/providers.ts`, page imports, vendor:publish tag (`panels-pages` → `pilotic-pages`)
-   - Update `CLAUDE.md`: remove panels references, link to `pilotic/pilotic` for panel docs
-   - Rename `docs/claude/panels.md` → delete (lives in pilotic repo now)
+   - Update `playground/` to depend on `@pilotiq/panels` and `@pilotiq/lexical` from npm (not workspace)
+   - Update `playground/bootstrap/providers.ts`, page imports, vendor:publish tag (`panels-pages` → `pilotiq-pages`)
+   - Update `CLAUDE.md`: remove panels references, link to `pilotiq-io/pilotiq` for panel docs
+   - Rename `docs/claude/panels.md` → delete (lives in pilotiq repo now)
    - Run `pnpm build && pnpm typecheck` from root — must pass green
 8. **Publish**:
-   - `@pilotic/panels@0.1.0` and `@pilotic/lexical@0.1.0` from `pilotic/pilotic`
-   - Final `@rudderjs/panels@<next>` from `rudderjs/rudder` containing only a README pointing at `@pilotic/panels`; mark `deprecated` via `npm deprecate`
+   - `@pilotiq/panels@0.1.0` and `@pilotiq/lexical@0.1.0` from `pilotiq-io/pilotiq`
+   - Final `@rudderjs/panels@<next>` from `rudderjs/rudder` containing only a README pointing at `@pilotiq/panels`; mark `deprecated` via `npm deprecate`
    - Same for `@rudderjs/panels-lexical`
 9. Update memory:
-   - `feedback_panels_pages_parallel_copy.md` — point at `@pilotic/panels` paths
+   - `feedback_panels_pages_parallel_copy.md` — point at `@pilotiq/panels` paths
    - `feedback_panels_dist_rebuild.md` — same
    - `feedback_yjs_idb_ws_order.md` — same
-   - `reference_panels_ai_surfaces.md` — rename to `reference_pilotic_ai_surfaces.md`
-   - Add `reference_pilotic_repo.md` pointing at the new repo's README + dev docs
+   - `reference_panels_ai_surfaces.md` — rename to `reference_pilotiq_ai_surfaces.md`
+   - Add `reference_pilotiq_repo.md` pointing at the new repo's README + dev docs
 
 **Done when:**
 - `rudderjs/rudder` has zero references to panels in `git grep`
-- `playground` runs against `@pilotic/panels` from npm
+- `playground` runs against `@pilotiq/panels` from npm
 - `npm view @rudderjs/panels` shows deprecation
-- `npm view @pilotic/panels` shows `0.1.0`
+- `npm view @pilotiq/panels` shows `0.1.0`
 
 **Risks:**
-- **`vendor:publish` mirror desync.** The `panels-pages` → `pilotic-pages` rename has to happen atomically with the package rename or the playground breaks. Mitigation: do both in the same commit.
-- **Pinned npm version drift.** `@pilotic/panels` will pin `@rudderjs/core@x.y.z`. If you bump `@rudderjs/core` later, `@pilotic/panels` needs an explicit bump. Mitigation: documented in `pilotic/pilotic/docs/development.md`.
-- **Optional peer deps that aren't installed in `pilotic/pilotic` will trip CI typecheck.** Mitigation: add them as devDependencies in `pilotic/pilotic` for testing, mirror the existing `panels` setup.
+- **`vendor:publish` mirror desync.** The `panels-pages` → `pilotiq-pages` rename has to happen atomically with the package rename or the playground breaks. Mitigation: do both in the same commit.
+- **Pinned npm version drift.** `@pilotiq/panels` will pin `@rudderjs/core@x.y.z`. If you bump `@rudderjs/core` later, `@pilotiq/panels` needs an explicit bump. Mitigation: documented in `pilotiq-io/pilotiq/docs/development.md`.
+- **Optional peer deps that aren't installed in `pilotiq-io/pilotiq` will trip CI typecheck.** Mitigation: add them as devDependencies in `pilotiq-io/pilotiq` for testing, mirror the existing `panels` setup.
 - **Production build pitfalls** (`feedback_production_build.md`) — node:crypto lazy-load, vite externals — must carry over to the new repo's vite config and test against the playground.
 
 ---
 
 ## Phase 3 — Define extension hooks for AI and collab
 
-**Goal:** Before extracting AI or collab, harden the `panel.use(...)` plugin contract so pro packages can register without forking `@pilotic/panels`.
+**Goal:** Before extracting AI or collab, harden the `panel.use(...)` plugin contract so pro packages can register without forking `@pilotiq/panels`.
 
 **Steps:**
 
-1. **AI hook**: `@pilotic/panels` exports a stable `PanelAiPlugin` interface with registration points for:
+1. **AI hook**: `@pilotiq/panels` exports a stable `PanelAiPlugin` interface with registration points for:
    - chat handler (`registerChatHandler(panel, handler)`)
    - default panel agent (`registerPanelAgent(panel, AgentClass)`)
    - chat UI mount point (the panel renders a slot; the AI plugin fills it)
    - client tool registry (`registerClientTool(panel, name, executor)`)
-   The `PanelAgent` *base class* moves to `@pilotic/panels` (it's primitive); the *chat runtime* and the *5 default tools* move to `@pilotic-pro/ai`.
-2. **Collab hook**: `@pilotic/lexical` exports a `LexicalCollabPlugin` interface with:
+   The `PanelAgent` *base class* moves to `@pilotiq/panels` (it's primitive); the *chat runtime* and the *5 default tools* move to `@pilotiq-pro/ai`.
+2. **Collab hook**: `@pilotiq/lexical` exports a `LexicalCollabPlugin` interface with:
    - Yjs binding factory (`createYjsBinding(doc, awareness)`)
    - persistence adapter (`registerPersistence(adapter)`)
    - presence renderer slot
-   The free `@pilotic/lexical` ships an editor in **local-only mode** (saves on form submit, no real-time sync). The pro plugin injects collab.
-3. Refactor existing chat / collab code in `@pilotic/panels` and `@pilotic/lexical` to consume these hooks internally — i.e., the current monolithic wiring becomes "the panel uses its own AI plugin from inside the same package." This validates the contract without breaking anything.
-4. Add a `docs/plugins.md` to `pilotic/pilotic` documenting the contracts.
-5. Ship `@pilotic/panels@0.2.0` and `@pilotic/lexical@0.2.0`.
+   The free `@pilotiq/lexical` ships an editor in **local-only mode** (saves on form submit, no real-time sync). The pro plugin injects collab.
+3. Refactor existing chat / collab code in `@pilotiq/panels` and `@pilotiq/lexical` to consume these hooks internally — i.e., the current monolithic wiring becomes "the panel uses its own AI plugin from inside the same package." This validates the contract without breaking anything.
+4. Add a `docs/plugins.md` to `pilotiq-io/pilotiq` documenting the contracts.
+5. Ship `@pilotiq/panels@0.2.0` and `@pilotiq/lexical@0.2.0`.
 
 **Done when:**
 - The `PanelAiPlugin` and `LexicalCollabPlugin` types are exported and documented
@@ -231,69 +231,69 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 ---
 
-## Phase 4 — Extract `@pilotic-pro/ai`
+## Phase 4 — Extract `@pilotiq-pro/ai`
 
-**Goal:** Move the AI runtime out of `@pilotic/panels` into the private `@pilotic-pro/ai` package.
+**Goal:** Move the AI runtime out of `@pilotiq/panels` into the private `@pilotiq-pro/ai` package.
 
 **Steps:**
 
-1. Create `pilotic/pilotic-pro` private GitHub repo, mirror the monorepo tooling from `pilotic/pilotic`.
+1. Create `pilotiq-io/pilotiq-pro` private GitHub repo, mirror the monorepo tooling from `pilotiq-io/pilotiq`.
 2. Configure `.npmrc` for private package publishing (npm or self-hosted Verdaccio — decide here).
-3. Copy these files from `pilotic/pilotic/packages/panels/` into `pilotic/pilotic-pro/packages/ai/`:
+3. Copy these files from `pilotiq-io/pilotiq/packages/panels/` into `pilotiq-io/pilotiq-pro/packages/ai/`:
    - `src/handlers/chat/**` (21 files)
-   - `src/agents/PanelAgent.ts` runtime (the base class stays in `@pilotic/panels` per Phase 3; only the runtime moves)
+   - `src/agents/PanelAgent.ts` runtime (the base class stays in `@pilotiq/panels` per Phase 3; only the runtime moves)
    - `pages/_components/agents/**` chat UI components
-4. Create `@pilotic-pro/ai` package.json depending on `@pilotic/panels`, `@rudderjs/ai`, `@rudderjs/cache` (for runStore TTL).
+4. Create `@pilotiq-pro/ai` package.json depending on `@pilotiq/panels`, `@rudderjs/ai`, `@rudderjs/cache` (for runStore TTL).
 5. Implement `pilotAi(opts)` plugin entry point that registers everything via the Phase 3 hooks:
    ```ts
-   import { piloticAi } from '@pilotic-pro/ai'
-   panel.use(piloticAi({ defaultAgent: MyAgent }))
+   import { pilotiqAi } from '@pilotiq-pro/ai'
+   panel.use(pilotiqAi({ defaultAgent: MyAgent }))
    ```
 6. **Decision: which 5 default tools stay free vs. move to pro?**
-   - Free (in `@pilotic/panels` as plain server actions, not as AI tools): `update_field`, `read_record`. They're useful without AI.
-   - Pro (in `@pilotic-pro/ai`): `edit_text`, `update_form_state`, `read_form_state`, all chat-mode prompt logic, the dispatcher.
-7. Delete the moved files from `pilotic/pilotic/packages/panels/`.
-8. Ship `@pilotic-pro/ai@0.1.0`.
-9. Bump `@pilotic/panels@0.3.0` (no AI runtime).
-10. Update `playground` to install `@pilotic-pro/ai` and call `panel.use(piloticAi(...))`.
+   - Free (in `@pilotiq/panels` as plain server actions, not as AI tools): `update_field`, `read_record`. They're useful without AI.
+   - Pro (in `@pilotiq-pro/ai`): `edit_text`, `update_form_state`, `read_form_state`, all chat-mode prompt logic, the dispatcher.
+7. Delete the moved files from `pilotiq-io/pilotiq/packages/panels/`.
+8. Ship `@pilotiq-pro/ai@0.1.0`.
+9. Bump `@pilotiq/panels@0.3.0` (no AI runtime).
+10. Update `playground` to install `@pilotiq-pro/ai` and call `panel.use(pilotiqAi(...))`.
 11. Smoke test against the playground's `slow_search` agent and `improve-content` sub-agent (per `reference_playground_smoke_tests.md`).
-12. Update memory: `bug_subagent_client_tools.md`, `feedback_chat_selection_mode_prompt.md`, `feedback_authoring_streaming_tools.md` — repath to `@pilotic-pro/ai`.
+12. Update memory: `bug_subagent_client_tools.md`, `feedback_chat_selection_mode_prompt.md`, `feedback_authoring_streaming_tools.md` — repath to `@pilotiq-pro/ai`.
 
 **Done when:**
-- `@pilotic/panels` has zero `chat/` or AI runtime code
-- `@pilotic-pro/ai` ships and the playground's chat + agent flows work identically
+- `@pilotiq/panels` has zero `chat/` or AI runtime code
+- `@pilotiq-pro/ai` ships and the playground's chat + agent flows work identically
 - All AI memory notes point at the new package
 
 **Risks:**
-- **Vendor:publish for `pages/_components/agents`** now needs to publish from a *different* package (`@pilotic-pro/ai`). The `pnpm rudder vendor:publish` flow may need to support multi-source tags.
+- **Vendor:publish for `pages/_components/agents`** now needs to publish from a *different* package (`@pilotiq-pro/ai`). The `pnpm rudder vendor:publish` flow may need to support multi-source tags.
 - **Free users will lose the chat UI entirely.** Verify the panel renders cleanly without the AI plugin loaded — no broken slots, no missing icons.
-- **`@rudderjs/ai` peer dep** must be present at runtime when `@pilotic-pro/ai` is installed. Document.
+- **`@rudderjs/ai` peer dep** must be present at runtime when `@pilotiq-pro/ai` is installed. Document.
 
 ---
 
-## Phase 5 — Extract `@pilotic-pro/collab`
+## Phase 5 — Extract `@pilotiq-pro/collab`
 
-**Goal:** Move Yjs persistence + presence out of `@pilotic/lexical` into `@pilotic-pro/collab`.
+**Goal:** Move Yjs persistence + presence out of `@pilotiq/lexical` into `@pilotiq-pro/collab`.
 
 **Steps:**
 
-1. Identify the collab files in `@pilotic/lexical` (Phase 0 audit pinned this).
-2. Copy them into `pilotic/pilotic-pro/packages/collab/`.
-3. Create `@pilotic-pro/collab` package.json depending on `@pilotic/lexical`, `yjs`, `y-prosemirror` or whichever bindings are in use, optionally `@rudderjs/broadcast` for the WS provider.
-4. Implement `piloticCollab(opts)` plugin entry point:
+1. Identify the collab files in `@pilotiq/lexical` (Phase 0 audit pinned this).
+2. Copy them into `pilotiq-io/pilotiq-pro/packages/collab/`.
+3. Create `@pilotiq-pro/collab` package.json depending on `@pilotiq/lexical`, `yjs`, `y-prosemirror` or whichever bindings are in use, optionally `@rudderjs/broadcast` for the WS provider.
+4. Implement `pilotiqCollab(opts)` plugin entry point:
    ```ts
-   import { piloticCollab } from '@pilotic-pro/collab'
-   panel.use(piloticCollab({ provider: 'hocuspocus', persistence: prisma }))
+   import { pilotiqCollab } from '@pilotiq-pro/collab'
+   panel.use(pilotiqCollab({ provider: 'hocuspocus', persistence: prisma }))
    ```
-5. Delete the moved files from `@pilotic/lexical`.
-6. Verify free `@pilotic/lexical` editor works in local-only mode (saves on form submit, no Yjs).
-7. Ship `@pilotic-pro/collab@0.1.0` and `@pilotic/lexical@0.3.0`.
-8. Update `playground` to install `@pilotic-pro/collab`.
+5. Delete the moved files from `@pilotiq/lexical`.
+6. Verify free `@pilotiq/lexical` editor works in local-only mode (saves on form submit, no Yjs).
+7. Ship `@pilotiq-pro/collab@0.1.0` and `@pilotiq/lexical@0.3.0`.
+8. Update `playground` to install `@pilotiq-pro/collab`.
 9. Smoke test multi-user editing.
 10. Carry the `feedback_yjs_idb_ws_order.md` quirk into the new package and update the memory note's file path.
 
 **Done when:**
-- `@pilotic/lexical` has zero Yjs code
+- `@pilotiq/lexical` has zero Yjs code
 - Two browser tabs editing the same record see live updates
 - Memory notes repathed
 
@@ -311,15 +311,15 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 1. Generate an Ed25519 keypair. Public key bundled in both pro packages, private key stored in 1Password.
 2. Define license JWT claims: `customer_id`, `seats`, `expires`, `plan` (`'team' | 'business'`), `pkg` (`'ai' | 'collab' | 'all'`).
-3. On `panel.use(piloticAi(...))` and `panel.use(piloticCollab(...))`, read `PILOTIC_LICENSE_KEY` from env, verify signature, check `expires`, check `pkg` matches.
-4. On invalid: `console.warn('[pilotic-pro] license invalid: <reason> — running in unlicensed mode')`. Plugin still loads. No feature gating yet.
-5. Add a CLI command in `@pilotic/panels` (or a new `@pilotic/cli` if scaffolding exists): `pilotic license` to show current license status.
-6. Document the license format and how to request a key (`docs/licensing.md` in `pilotic/pilotic-pro`'s public-facing README — but the source is private).
+3. On `panel.use(pilotiqAi(...))` and `panel.use(pilotiqCollab(...))`, read `PILOTIC_LICENSE_KEY` from env, verify signature, check `expires`, check `pkg` matches.
+4. On invalid: `console.warn('[pilotiq-pro] license invalid: <reason> — running in unlicensed mode')`. Plugin still loads. No feature gating yet.
+5. Add a CLI command in `@pilotiq/panels` (or a new `@pilotiq/cli` if scaffolding exists): `pilotiq license` to show current license status.
+6. Document the license format and how to request a key (`docs/licensing.md` in `pilotiq-io/pilotiq-pro`'s public-facing README — but the source is private).
 
 **Done when:**
 - A valid JWT in `PILOTIC_LICENSE_KEY` boots silently
 - An invalid/missing JWT logs the warning and continues
-- `pilotic license` shows the expected output
+- `pilotiq license` shows the expected output
 
 **Risks:**
 - **Solo-dev license signing operations.** Keep it manual at this stage — no need for a license server. When you have >10 customers, build a small signing dashboard.
@@ -329,7 +329,7 @@ The cost — cross-repo dev loop — is mitigated by `pnpm overrides` pointing a
 
 ## Phase 7 — Cloud (deferred, separate plan)
 
-Out of scope here. Earmark only: hosted Pilotic = managed Postgres + managed hocuspocus + AI credits + auth/SSO + per-seat billing. Build the cloud plan only after `@pilotic-pro/ai` and `@pilotic-pro/collab` are shipping to at least a few private customers. Until then, all energy goes into Phases 0–6.
+Out of scope here. Earmark only: hosted Pilotiq = managed Postgres + managed hocuspocus + AI credits + auth/SSO + per-seat billing. Build the cloud plan only after `@pilotiq-pro/ai` and `@pilotiq-pro/collab` are shipping to at least a few private customers. Until then, all energy goes into Phases 0–6.
 
 ---
 
@@ -346,43 +346,43 @@ Phases 2, 4, 5 each end with explicit memory-update steps. Don't defer them — 
 ### Build pitfalls to carry across
 
 - `feedback_production_build.md` — node:crypto lazy-load, vite externals — applies to both new repos
-- `feedback_panels_dist_rebuild.md` — `pnpm dev` only HMRs the frontend; server handlers need full rebuild + restart. Same in `@pilotic/panels`.
+- `feedback_panels_dist_rebuild.md` — `pnpm dev` only HMRs the frontend; server handlers need full rebuild + restart. Same in `@pilotiq/panels`.
 - `feedback_panels_pages_parallel_copy.md` — `vendor:publish --force` after every `pages/` edit. Tag rename is part of Phase 2.
 - `feedback_turbo_cache_dist_stale.md` — Turbo cache can hide stale dist files. Same workaround in new repos.
-- `feedback_exactoptional.md` — strict optional types must match between framework and pilotic for cross-repo `pnpm.overrides` to typecheck.
+- `feedback_exactoptional.md` — strict optional types must match between framework and pilotiq for cross-repo `pnpm.overrides` to typecheck.
 
 ### Things that explicitly stay in `rudderjs/rudder`
 
 - All `@rudderjs/*` packages except `panels` and `panels-lexical`
-- `playground/` (now consumes `@pilotic/panels` from npm)
+- `playground/` (now consumes `@pilotiq/panels` from npm)
 - Framework-level docs (`docs/claude/packages.md`, `docs/claude/create-app.md`, etc.)
 - Plans for framework features: `monitoring-plan.md`, `auto-provider-discovery.md`, etc.
 
 ### Things that move
 
-- `packages/panels/` → `pilotic/pilotic/packages/panels/`
-- `packages/panels-lexical/` → `pilotic/pilotic/packages/lexical/`
-- `docs/claude/panels.md` → `pilotic/pilotic/docs/`
-- `docs/plans/panels-*.md` and any plan doc that's panels-specific → `pilotic/pilotic/docs/plans/`
-- This plan file → also copied to `pilotic/pilotic/docs/plans/pilotic-extraction-plan.md` at Phase 1
+- `packages/panels/` → `pilotiq-io/pilotiq/packages/panels/`
+- `packages/panels-lexical/` → `pilotiq-io/pilotiq/packages/lexical/`
+- `docs/claude/panels.md` → `pilotiq-io/pilotiq/docs/`
+- `docs/plans/panels-*.md` and any plan doc that's panels-specific → `pilotiq-io/pilotiq/docs/plans/`
+- This plan file → also copied to `pilotiq-io/pilotiq/docs/plans/pilotiq-extraction-plan.md` at Phase 1
 
 ### Things that need decisions during execution
 
 - **Private npm registry choice** (Phase 4): npm Pro org private packages vs. self-hosted Verdaccio. Recommendation: npm Pro — zero ops.
-- **Multi-source `vendor:publish` support** (Phase 4): the rudder CLI's `vendor:publish` may need extending to handle a tag whose source is in a different package than the original `@pilotic/panels`. Could be a small `@rudderjs/cli` PR.
-- **`@pilotic/cli` scaffolder** — a future package, not in this plan, but worth bookmarking. It would replace `pnpm create rudderjs-app` for Pilotic-flavored starts.
+- **Multi-source `vendor:publish` support** (Phase 4): the rudder CLI's `vendor:publish` may need extending to handle a tag whose source is in a different package than the original `@pilotiq/panels`. Could be a small `@rudderjs/cli` PR.
+- **`@pilotiq/cli` scaffolder** — a future package, not in this plan, but worth bookmarking. It would replace `pnpm create rudderjs-app` for Pilotiq-flavored starts.
 
 ---
 
 ## Risks (overall)
 
 1. **Cross-repo dev friction.** Mitigation: Phase 1.5 documents and verifies the workflow before any extraction. If overrides prove painful, fall back to publishing canary versions.
-2. **Dependency version drift between framework and Pilotic.** Mitigation: pinned versions + deliberate bumps + a `pilotic-framework-bump.md` checklist.
+2. **Dependency version drift between framework and Pilotiq.** Mitigation: pinned versions + deliberate bumps + a `pilotiq-framework-bump.md` checklist.
 3. **Extraction misses an import.** Mitigation: Phase 0 audit + mandatory green CI on both repos before publishing.
-4. **Pro packages leak free-only code or vice versa.** Mitigation: Phase 3 hooks are the only contract; CI in `pilotic/pilotic-pro` should fail if `@pilotic-pro/*` imports anything outside the published `@pilotic/*` API.
+4. **Pro packages leak free-only code or vice versa.** Mitigation: Phase 3 hooks are the only contract; CI in `pilotiq-io/pilotiq-pro` should fail if `@pilotiq-pro/*` imports anything outside the published `@pilotiq/*` API.
 5. **Memory/note rot.** Mitigation: explicit per-phase memory update steps with file path lists.
 6. **Solo-dev burnout.** Mitigation: each phase is independently shippable. Stop after Phase 2 if needed — even just the rebrand + extraction (without pro packages) is a meaningful release.
-7. **Brand confusion during transition.** Mitigation: deprecation messages on `@rudderjs/panels` are explicit; `pilotic.io` placeholder live before Phase 2 publishes.
+7. **Brand confusion during transition.** Mitigation: deprecation messages on `@rudderjs/panels` are explicit; `pilotiq.io` placeholder live before Phase 2 publishes.
 
 ---
 
@@ -401,7 +401,7 @@ Phases 2, 4, 5 each end with explicit memory-update steps. Don't defer them — 
 | 9 | Phase 7 — cloud | huge | separate plan |
 
 **Natural stop points:**
-- After Phase 2: Pilotic exists as a standalone OSS product. Rebrand complete.
+- After Phase 2: Pilotiq exists as a standalone OSS product. Rebrand complete.
 - After Phase 4: First pro package shipping. Revenue possible.
 - After Phase 6: Open core fully realized with paid tier. Cloud is the next leap.
 
@@ -434,33 +434,33 @@ Phases 2, 4, 5 each end with explicit memory-update steps. Don't defer them — 
 - `registries/EditorRegistry.ts:37` — deprecated comment
 - `__tests__/blockCatalog.test.ts:111` — test fixture comment
 
-**Implication for extraction order:** extract `@pilotic/panels` first, `@pilotic/lexical` second. The lexical package will pin `@pilotic/panels` as a peer.
+**Implication for extraction order:** extract `@pilotiq/panels` first, `@pilotiq/lexical` second. The lexical package will pin `@pilotiq/panels` as a peer.
 
 ### Other consumers of `@rudderjs/panels` in the monorepo
 
 | Package | Consumer type | Impact |
 |---|---|---|
-| `@rudderjs/panels-lexical` | runtime + types | Will become `@pilotic/lexical`, follows panels in extraction |
-| `@rudderjs/media` | runtime: `Field`, `registerField`, `registerLazyElement`, `PanelPlugin` type | Will need to consume `@pilotic/panels` from npm post-extraction. Optional plugin — works with or without |
-| `@rudderjs/workspaces` | runtime: `Field`, `Panel`, `PanelPlugin` type | Same as media — will consume `@pilotic/panels` from npm. Optional plugin |
+| `@rudderjs/panels-lexical` | runtime + types | Will become `@pilotiq/lexical`, follows panels in extraction |
+| `@rudderjs/media` | runtime: `Field`, `registerField`, `registerLazyElement`, `PanelPlugin` type | Will need to consume `@pilotiq/panels` from npm post-extraction. Optional plugin — works with or without |
+| `@rudderjs/workspaces` | runtime: `Field`, `Panel`, `PanelPlugin` type | Same as media — will consume `@pilotiq/panels` from npm. Optional plugin |
 | `@rudderjs/ai` | **doc comment only** (`packages/ai/src/types.ts:311`) | ✅ no real coupling — no rebuild needed |
 | `@rudderjs/core` | **README example only** | ✅ no code coupling |
 
-**Cross-package decisions:** `@rudderjs/media` and `@rudderjs/workspaces` are framework packages (live in `rudderjs/rudder`) but they import from `@rudderjs/panels` which will move to `pilotic/pilotic`. Two options:
-1. **Bump them to depend on `@pilotic/panels` from npm** after extraction. Cleanest, but introduces a cross-repo version coupling that bites every release.
-2. **Move them to `pilotic/pilotic` too** since they're conceptually panel extensions. Probably the right call long-term — they're not framework primitives, they're admin/CMS features. Worth flagging as a Phase 2 sub-decision.
+**Cross-package decisions:** `@rudderjs/media` and `@rudderjs/workspaces` are framework packages (live in `rudderjs/rudder`) but they import from `@rudderjs/panels` which will move to `pilotiq-io/pilotiq`. Two options:
+1. **Bump them to depend on `@pilotiq/panels` from npm** after extraction. Cleanest, but introduces a cross-repo version coupling that bites every release.
+2. **Move them to `pilotiq-io/pilotiq` too** since they're conceptually panel extensions. Probably the right call long-term — they're not framework primitives, they're admin/CMS features. Worth flagging as a Phase 2 sub-decision.
 
-**Recommendation:** **Move `media` and `workspaces` to `pilotic/pilotic`** as `@pilotic/media` and `@pilotic/workspaces` during Phase 2. They have no consumers outside of admin/CMS use cases. This expands Phase 2's scope but eliminates the cross-repo coupling for two more packages.
+**Recommendation:** **Move `media` and `workspaces` to `pilotiq-io/pilotiq`** as `@pilotiq/media` and `@pilotiq/workspaces` during Phase 2. They have no consumers outside of admin/CMS use cases. This expands Phase 2's scope but eliminates the cross-repo coupling for two more packages.
 
 ### Playground consumer surface
 
-The playground imports from `@rudderjs/panels` in **~70 files** across `bootstrap/`, `app/Panels/`, and `pages/(panels)/_components/**`. All of those are end-user code that will need to be updated to `@pilotic/panels` during Phase 2 — but it's a single find-and-replace in the playground, not an architectural change.
+The playground imports from `@rudderjs/panels` in **~70 files** across `bootstrap/`, `app/Panels/`, and `pages/(panels)/_components/**`. All of those are end-user code that will need to be updated to `@pilotiq/panels` during Phase 2 — but it's a single find-and-replace in the playground, not an architectural change.
 
 ### File-level extraction map for `@rudderjs/panels`
 
 Buckets:
-- **CORE** → stays in `@pilotic/panels` (free, public)
-- **AI** → moves to `@pilotic-pro/ai` (private, commercial)
+- **CORE** → stays in `@pilotiq/panels` (free, public)
+- **AI** → moves to `@pilotiq-pro/ai` (private, commercial)
 - **TBD** → has cross-bucket coupling that needs Phase 3 (extension hooks) to resolve
 
 #### CORE (167 files — stays)
@@ -510,7 +510,7 @@ src/
 **Test files in CORE bucket** (15 of 21):
 `chart`, `field`, `fields`, `form`, `i18n`, `i18n-override`, `list`, `persist`, `registries`, `resource`, `section`, `stats`, `table`, `tabs`, `viewmode`, `widget`
 
-#### AI (23 source files + 6 test files — moves to `@pilotic-pro/ai`)
+#### AI (23 source files + 6 test files — moves to `@pilotiq-pro/ai`)
 
 ```
 src/
@@ -572,8 +572,8 @@ pages/_components/agents/
 ```
 
 These files are authored in `packages/panels/pages/` and **mirrored to playground** via `pnpm rudder vendor:publish --tag=panels-pages` (registered at `PanelServiceProvider.ts:91`). In the extraction:
-- `panels-pages` tag becomes `pilotic-pages`
-- The agents/ subfolder migrates from the panels mirror to the pro AI package's mirror — likely a new tag like `pilotic-ai-pages`
+- `panels-pages` tag becomes `pilotiq-pages`
+- The agents/ subfolder migrates from the panels mirror to the pro AI package's mirror — likely a new tag like `pilotiq-ai-pages`
 - Means `vendor:publish` may need to support multi-source tags (one tag, multiple package sources). Or the pro package gets its own tag and the playground runs both publish commands.
 
 #### TBD — cross-bucket couplings that need Phase 3 (extension hooks) before extraction
@@ -583,7 +583,7 @@ There are **5 places where CORE imports from AI**. These are the seams that Phas
 | # | File | Imports | Severity | Resolution path |
 |---|---|---|---|---|
 | 1 | `PanelServiceProvider.ts:7,57-58` | `BuiltInAiActionRegistry`, `builtInActions` (registers built-in AI actions in `register()`) | **High** | Move the action registration into the pro provider's `register()` instead of core. Free package ships an empty registry; pro populates it. |
-| 2 | `schema/Field.ts:3,592` | `BuiltInAiActionRegistry` (runtime — `Field.ai()` calls `BuiltInAiActionRegistry.get(slug)` to resolve string slugs) | **High** | Free `BuiltInAiActionRegistry.get()` returns `undefined` for unknown slugs; without pro, `.ai(['rewrite'])` throws a helpful "install @pilotic-pro/ai" error instead of crashing. The registry shape stays in core, the population moves to pro. |
+| 2 | `schema/Field.ts:3,592` | `BuiltInAiActionRegistry` (runtime — `Field.ai()` calls `BuiltInAiActionRegistry.get(slug)` to resolve string slugs) | **High** | Free `BuiltInAiActionRegistry.get()` returns `undefined` for unknown slugs; without pro, `.ai(['rewrite'])` throws a helpful "install @pilotiq-pro/ai" error instead of crashing. The registry shape stays in core, the population moves to pro. |
 | 3 | `schema/Field.ts:2` | `PanelAgent` (type-only) | Low | Keep `PanelAgent` as a thin **interface** in core (`agents/PanelAgent.ts` becomes the abstract type definition), full runtime moves to pro. Type-only import is fine. |
 | 4 | `Resource.ts:5-6` | `PanelAgent`, `PanelAgentMeta` (type-only) | Low | Same — type-only, resolved by leaving the interface in core. |
 | 5 | `index.ts:231-234` | Re-exports `PanelAgent`, `PanelAgentContext`, `PanelAgentFieldType`, `PanelAgentMeta`, `BuiltInAiActionRegistry`, `builtInActions` from the public package entry | Medium | Free package re-exports the **interfaces** only. Concrete `PanelAgent` class + `BuiltInAiActionRegistry` populate via pro. Public type surface preserved; runtime class lives in pro. |
@@ -618,7 +618,7 @@ src/
 ├── RichContentField.ts                   # Field class subtype
 ├── toolbar.ts                            # toolbar profile resolution
 ├── hooks/
-│   └── useYjsCollab.ts                   # ⚠️ COLLAB — moves to @pilotic-pro/collab
+│   └── useYjsCollab.ts                   # ⚠️ COLLAB — moves to @pilotiq-pro/collab
 ├── lexical/
 │   ├── BlockNode.tsx
 │   ├── BlockNodeComponent.tsx
@@ -631,7 +631,7 @@ src/
 └── types/y-websocket.d.ts                # type stub — moves with collab
 ```
 
-**Critical finding for the collab split**: `@rudderjs/panels-lexical` already declares `yjs`, `y-websocket`, and `y-indexeddb` as **optional** peer dependencies (`peerDependenciesMeta` in `package.json:54-64`). This means **`panels-lexical` is already designed to run without collab at the dependency level**. The free `@pilotic/lexical` will work in local-only mode by simply not installing the Yjs peers; the pro `@pilotic-pro/collab` will declare them as required.
+**Critical finding for the collab split**: `@rudderjs/panels-lexical` already declares `yjs`, `y-websocket`, and `y-indexeddb` as **optional** peer dependencies (`peerDependenciesMeta` in `package.json:54-64`). This means **`panels-lexical` is already designed to run without collab at the dependency level**. The free `@pilotiq/lexical` will work in local-only mode by simply not installing the Yjs peers; the pro `@pilotiq-pro/collab` will declare them as required.
 
 **Collab files to extract** (much smaller than I assumed):
 - `hooks/useYjsCollab.ts` — the only file that hard-depends on Yjs
@@ -648,26 +648,41 @@ That's it. **Collab is ~2 files of `panels-lexical` plus the conditional injecti
 - **Memory note:** `feedback_panels_pages_parallel_copy.md` — must run `--force` after every edit
 
 In the extraction:
-- The `panels-pages` tag becomes `pilotic-pages`, owned by `@pilotic/panels`
-- The chat UI subfolder (`pages/_components/agents/**`) needs to migrate to `@pilotic-pro/ai`'s page mirror, likely under a new tag `pilotic-ai-pages`
-- This is the mechanism that makes "free panels chat-less, pro panels with chat" work at the file level — the playground only gets the AI components if `@pilotic-pro/ai` is installed
+- The `panels-pages` tag becomes `pilotiq-pages`, owned by `@pilotiq/panels`
+- The chat UI subfolder (`pages/_components/agents/**`) needs to migrate to `@pilotiq-pro/ai`'s page mirror, likely under a new tag `pilotiq-ai-pages`
+- This is the mechanism that makes "free panels chat-less, pro panels with chat" work at the file level — the playground only gets the AI components if `@pilotiq-pro/ai` is installed
 
 ### Surprises (things I didn't predict in the original plan)
 
-1. **`media` and `workspaces` are panel extensions, not framework features.** They should move to `pilotic/pilotic` too. This expands Phase 2 from "2 packages → 4 packages" but eliminates a future cross-repo coupling.
+1. **`media` and `workspaces` are panel extensions, not framework features.** They should move to `pilotiq-io/pilotiq` too. This expands Phase 2 from "2 packages → 4 packages" but eliminates a future cross-repo coupling.
 2. **`@rudderjs/ai` has zero code coupling to `@rudderjs/panels`.** A doc comment is the only mention. The two packages communicate via the chat handler / agent loop interface, not via direct imports. Clean separation.
 3. **`panels-lexical` collab is much smaller than I estimated** — basically 1 hook + 1 type stub + a conditional plug-point in `LexicalEditor.tsx`. Phase 5 is now a half-day, not a multi-day effort.
-4. **`PanelServiceProvider.register()` already publishes a `panels-translations` vendor tag for the localization starter** (line 75) — wait, that's `pilotic-translations` post-task A. The schema and pages tags (`panels-schema`, `panels-pages`) still use `panels-` prefix. Phase 2 will rename all three together.
-5. **Test file split for AI** — 6 of 21 test files are AI-specific and move with the AI extraction. Means free `@pilotic/panels` ships with 615 tests, pro `@pilotic-pro/ai` ships with ~5–6 tests (small surface, more verification needed during Phase 4).
+4. **`PanelServiceProvider.register()` already publishes a `panels-translations` vendor tag for the localization starter** (line 75) — wait, that's `pilotiq-translations` post-task A. The schema and pages tags (`panels-schema`, `panels-pages`) still use `panels-` prefix. Phase 2 will rename all three together.
+5. **Test file split for AI** — 6 of 21 test files are AI-specific and move with the AI extraction. Means free `@pilotiq/panels` ships with 615 tests, pro `@pilotiq-pro/ai` ships with ~5–6 tests (small surface, more verification needed during Phase 4).
 6. **`Field.ai()` is the trickiest coupling.** The string-slug shorthand (`.ai(['rewrite'])`) bakes the AI action registry into the schema. Resolution is clean (free returns undefined, pro populates) but it's the one user-facing API surface where free vs pro behavior diverges visibly.
 
 ### Action items before Phase 1 starts
 
-These are not code changes — just decisions to record.
+**Status: all decisions resolved 2026-04-09.** Recorded below.
 
-- [ ] **Decide: do `media` and `workspaces` move to `pilotic/pilotic` in Phase 2?** Recommendation: **yes** (they're admin/CMS extensions, not framework primitives).
-- [ ] **Decide: `Field.ai(['rewrite'])` behavior in free `@pilotic/panels` without pro installed.** Options: (a) silent no-op (the field renders no AI button), (b) helpful error pointing at `@pilotic-pro/ai`, (c) types-only — `.ai()` exists at the type level but is a no-op at runtime. Recommendation: **(b)** — fail loudly and informatively at form-build time, like the current `unknown AI action` error does.
-- [ ] **Decide: chat UI vendor:publish tag strategy.** Option (a) one tag, two source packages (requires `@rudderjs/cli` extension). Option (b) two tags, both run on each playground sync (current pattern, less elegant). Recommendation: **(b)** for v1, **(a)** as a follow-up CLI improvement.
-- [ ] **Decide: `panels-schema` vendor tag rename.** Becomes `pilotic-schema`. Just confirm.
-- [ ] **Decide: Phase 3's `PanelAgent` interface vs class split.** Free `@pilotic/panels` exports `PanelAgent` as a TypeScript `interface` (the type contract); pro `@pilotic-pro/ai` exports `PanelAgent` as a runtime `class` that *implements* the interface. Same import path looks different to consumers depending on whether pro is installed. This is the cleanest pattern but requires careful TypeScript handling — flag as a Phase 3 design item.
+- [x] **`media` and `workspaces` move to `pilotiq-io/pilotiq` in Phase 2.** They become `@pilotiq/media` and `@pilotiq/workspaces`. Phase 2 scope grows from 2 → 4 packages but eliminates a future cross-repo coupling. Both packages depend on `@rudderjs/panels` today via the `Field` / `PanelPlugin` API; post-extraction they'll depend on `@pilotiq/panels` from the same workspace.
+- [x] **`Field.ai(['rewrite'])` in free `@pilotiq/panels` without pro installed: throw a helpful error at form-build time.** Mirrors the existing `unknown AI action` error pattern. Free users see something like: `Field "title": AI actions require @pilotiq-pro/ai. Install it or remove the .ai() call.` Fail loudly, fail fast, fail informatively. Resolution: free `BuiltInAiActionRegistry.get(slug)` returns undefined; the existing throw at `schema/Field.ts:594` catches it with a message updated to point at `@pilotiq-pro/ai`.
+- [x] **Chat UI vendor:publish: two tags, two publish commands.** `@pilotiq/panels` publishes `pilotiq-pages`; `@pilotiq-pro/ai` publishes `pilotiq-ai-pages`. Playground runs both `pnpm rudder vendor:publish --tag=...` commands during sync. The single-tag-multi-source CLI extension is **deferred to a Phase 4 follow-up plan** (small `@rudderjs/cli` improvement) — ship Phase 4 first with the verbose-but-working pattern.
+- [x] **All `panels-*` vendor:publish tags rename to `pilotiq-*` in Phase 2.** Atomic rename of three tags: `panels-schema` → `pilotiq-schema`, `panels-pages` → `pilotiq-pages`, plus `panels-translations` → `pilotiq-translations` which already shipped in task A of the localization plan.
+- [ ] **`PanelAgent` interface vs class split** — explicitly deferred to **Phase 3 design discussion.** Working hypothesis: free `@pilotiq/panels` exports `PanelAgent` as a TypeScript `interface` (type contract only); pro `@pilotiq-pro/ai` exports `PanelAgent` as a runtime `class` that implements the interface. Same import path, different artifacts depending on whether pro is installed. Requires careful TypeScript handling around declaration merging vs replacement, and the interface needs to be expressive enough to type-check existing `Panel.make().resources([...])` chains in free without pulling AI types. Revisit when drafting the Phase 3 extension hooks design.
+
+### Phase 2 scope changes from these decisions
+
+Phase 2 in the original plan listed 2 packages to extract (`@rudderjs/panels`, `@rudderjs/panels-lexical`). After Phase 0:
+
+| Original Phase 2 | Revised Phase 2 |
+|---|---|
+| `@rudderjs/panels` → `@pilotiq/panels` | Same |
+| `@rudderjs/panels-lexical` → `@pilotiq/lexical` | Same |
+| — | `@rudderjs/media` → `@pilotiq/media` |
+| — | `@rudderjs/workspaces` → `@pilotiq/workspaces` |
+| Tag renames: `panels-pages`, `panels-translations` (already done) | Add: `panels-schema` → `pilotiq-schema` |
+| `playground` updates: panels deps from npm | Same — but now updates 4 deps not 2 |
+
+The audit step for `media` and `workspaces` (file-level extraction map) was NOT done in Phase 0 — only `panels` and `panels-lexical` were audited. **Sub-task for Phase 2:** spend ~15 minutes auditing `media` and `workspaces` for any imports that prevent a clean extraction. Both packages are small (media is `MediaPickerField` + `MediaServiceProvider` + a register-media page; workspaces is `WorkspaceResource` + `Field` subclasses + a plugin) so the audit should be quick.
 
