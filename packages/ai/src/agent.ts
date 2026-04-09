@@ -33,6 +33,7 @@ import type {
   StreamChunk,
   Tool,
   ToolCall,
+  ToolCallContext,
   ToolResult,
   TokenUsage,
   ToolChoice,
@@ -545,7 +546,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
           try {
             // Drain generator yields silently in the non-streaming loop —
             // the same tool definition must work in both prompt() and stream().
-            const execGen = executeMaybeStreaming(tool, toolArgs)
+            const execGen = executeMaybeStreaming(tool, toolArgs, { toolCallId: tc.id })
             let result: unknown
             while (true) {
               const step = await execGen.next()
@@ -865,7 +866,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               // generator executes stream their yields as tool-update chunks
               // live; plain executes yield nothing here.
               yield { type: 'tool-call' as const, toolCall: tc }
-              const execGen = executeMaybeStreaming(tool, toolArgs)
+              const execGen = executeMaybeStreaming(tool, toolArgs, { toolCallId: tc.id })
               let result: unknown
               while (true) {
                 const step = await execGen.next()
@@ -1047,7 +1048,7 @@ async function resumePendingToolCalls(deps: {
       // Drain generator yields silently — approval-resume runs outside the
       // stream, so any preliminary updates are discarded; only the final
       // return value is captured.
-      const execGen = executeMaybeStreaming(tool, tc.arguments)
+      const execGen = executeMaybeStreaming(tool, tc.arguments, { toolCallId: tc.id })
       let result: unknown
       while (true) {
         const step = await execGen.next()
@@ -1099,12 +1100,15 @@ function isAsyncGenerator(value: unknown): value is AsyncGenerator<unknown, unkn
 async function* executeMaybeStreaming(
   tool: Tool,
   args: Record<string, unknown>,
+  ctx: ToolCallContext,
 ): AsyncGenerator<unknown, unknown, void> {
-  const execute = tool.execute as ((input: unknown) => unknown) | undefined
+  const execute = tool.execute as
+    | ((input: unknown, ctx?: ToolCallContext) => unknown)
+    | undefined
   if (!execute) {
     throw new Error('Tool has no execute function')
   }
-  const ret = execute(args)
+  const ret = execute(args, ctx)
   if (isAsyncGenerator(ret)) {
     while (true) {
       const step = await ret.next()

@@ -39,6 +39,7 @@ export type {
   StreamChunk,
   TokenUsage,
   ToolCall,
+  ToolCallContext,
   ToolChoice,
   ToolDefinitionOptions,
   ToolDefinitionSchema,

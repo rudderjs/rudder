@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
 import type {
   Tool,
+  ToolCallContext,
   ToolDefinitionOptions,
   ToolDefinitionSchema,
   ToolExecuteFn,
@@ -45,10 +46,10 @@ export class ToolBuilder<
   // doesn't match `Promise<T>`, so non-generator executes still resolve
   // cleanly to the second overload.
   server<TReturn = unknown, TUpdate = unknown>(
-    execute: (input: z.infer<TInput>) => AsyncGenerator<TUpdate, TReturn, void>,
+    execute: (input: z.infer<TInput>, ctx?: ToolCallContext) => AsyncGenerator<TUpdate, TReturn, void>,
   ): ServerToolBuilder<z.infer<TInput>, TReturn>
   server<TReturn = unknown>(
-    execute: (input: z.infer<TInput>) => TReturn | Promise<TReturn>,
+    execute: (input: z.infer<TInput>, ctx?: ToolCallContext) => TReturn | Promise<TReturn>,
   ): ServerToolBuilder<z.infer<TInput>, TReturn>
   server<TReturn = unknown>(
     execute: ToolExecuteFn<z.infer<TInput>, TReturn, unknown>,

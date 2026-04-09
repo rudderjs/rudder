@@ -340,6 +340,55 @@ describe('Agent', () => {
     assert.strictEqual(response.usage.totalTokens, 45)
   })
 
+  it('passes ToolCallContext with toolCallId to server tool execute', async () => {
+    // Regression test for the subagent-client-tools-plan Phase 0 change:
+    // a server tool's execute must receive the current toolCall.id as a
+    // second `ctx` argument, so nested runners (run_agent) can correlate
+    // their sub-run state with the parent tool call that invoked them.
+    const observed: Array<{ input: unknown; ctx: unknown }> = []
+
+    const toolAdapter: import('./types.js').ProviderAdapter = {
+      async generate() {
+        if (observed.length === 0) {
+          return {
+            message: {
+              role: 'assistant',
+              content: '',
+              toolCalls: [{ id: 'tc-abc-123', name: 'capture_ctx', arguments: { marker: 'hi' } }],
+            },
+            usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            finishReason: 'tool_calls',
+          }
+        }
+        return {
+          message: { role: 'assistant', content: 'done' },
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+
+    AiRegistry.reset()
+    AiRegistry.register({ name: 'ctxmock', create: () => toolAdapter })
+    AiRegistry.setDefault('ctxmock/v1')
+
+    const captureCtxTool = toolDefinition({
+      name: 'capture_ctx',
+      description: 'Capture the ToolCallContext for assertion',
+      inputSchema: z.object({ marker: z.string() }),
+    }).server(async (input, ctx) => {
+      observed.push({ input, ctx })
+      return 'ok'
+    })
+
+    await agent({ instructions: 'T', tools: [captureCtxTool] }).prompt('go')
+
+    assert.strictEqual(observed.length, 1)
+    assert.deepStrictEqual(observed[0]!.input, { marker: 'hi' })
+    assert.deepStrictEqual(observed[0]!.ctx, { toolCallId: 'tc-abc-123' })
+  })
+
   it('stream() yields chunks and resolves response', async () => {
     const { stream, response } = agent('Test.').stream('Hello')
     const chunks: StreamChunk[] = []

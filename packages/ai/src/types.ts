@@ -210,6 +210,26 @@ export interface SpeechToTextAdapter {
 // ─── Tool ─────────────────────────────────────────────────
 
 /**
+ * Per-call context passed to a tool's `execute` as an optional second
+ * argument. Carries loop-level identity that the tool would otherwise have
+ * no way to observe.
+ *
+ * Today it contains only `toolCallId` — the id the model assigned to this
+ * particular invocation. Tools that need to correlate their side-effects
+ * with the surrounding loop (e.g. a sub-agent runner that pauses on a
+ * client tool and needs to record which parent tool-call id its suspension
+ * belongs to) read this id.
+ *
+ * Additional fields may be added over time; tools should destructure only
+ * what they need. The whole parameter is optional on the call signature so
+ * existing single-arg executes keep working.
+ */
+export interface ToolCallContext {
+  /** The id the model assigned to this particular tool call. */
+  readonly toolCallId: string
+}
+
+/**
  * Tool execute function.
  *
  * Returns either a value (sync), a promise (async), or an async generator.
@@ -218,11 +238,16 @@ export interface SpeechToTextAdapter {
  * The generator's `return` value is the final tool result (the value the
  * model and the persisted store both see).
  *
+ * The optional second `ctx` parameter carries loop-level metadata such as
+ * `toolCallId`. Tools that don't care can omit it and keep a one-arg
+ * signature — TypeScript's contravariant function parameter rules mean
+ * `(input) => ...` still satisfies `(input, ctx?) => ...`.
+ *
  * `TUpdate` defaults to `never` so non-generator call sites infer cleanly
  * without a third type parameter on every existing tool definition.
  */
 export type ToolExecuteFn<TInput = unknown, TOutput = unknown, TUpdate = never> =
-  (input: TInput) =>
+  (input: TInput, ctx?: ToolCallContext) =>
     | TOutput
     | Promise<TOutput>
     | AsyncGenerator<TUpdate, TOutput, void>
