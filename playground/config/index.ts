@@ -9,14 +9,13 @@ import auth     from './auth.js'
 import hash     from './hash.js'
 import session  from './session.js'
 import live     from './live.js'
-import media    from './media.js'
 import ai       from './ai.js'
 import log      from './log.js'
 import telescope from './telescope.js'
 import pulse    from './pulse.js'
 import horizon  from './horizon.js'
 
-const configs = { app, server, database, queue, mail, cache, storage, auth, hash, session, live, media, ai, log, telescope, pulse, horizon }
+const configs = { app, server, database, queue, mail, cache, storage, auth, hash, session, live, ai, log, telescope, pulse, horizon }
 
 export type Configs = typeof configs
 
