@@ -41,7 +41,7 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 ## Key Features
 
 - **Laravel-inspired DX** — service providers, fluent bootstrap, Rudder CLI, FormRequest validation
-- **Pay-as-you-go** — 47 optional `@rudderjs/*` packages; use only what you need
+- **Pay-as-you-go** — modular `@rudderjs/*` packages; use only what you need
 - **AI-native** — 9-provider AI engine (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), agents with tools, streaming, middleware, attachments, conversations, queue integration
 - **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
@@ -216,17 +216,6 @@ const users = await resolve(UserService).findAll()
 
 Swap the entire implementation by changing one line in `register()` — your routes and controllers never change.
 
-Providers can also register other providers at runtime — enabling self-contained modules:
-
-```ts
-export class AppServiceProvider extends ServiceProvider {
-  async boot() {
-    await this.app.register(panels([adminPanel], [panelsLexical(), media()]))
-    await this.app.register(TodoServiceProvider)
-  }
-}
-```
-
 ### 7. Mail
 
 ```ts
@@ -359,99 +348,7 @@ provider.awareness.on('change', () => {
 
 HTTP, WebSocket channels, and CRDT sync all share the same port — no separate process or proxy needed.
 
-### 11. Admin Panels — Filament-style resource CRUD
-
-```ts
-// app/Panels/Admin/AdminPanel.ts
-import { Panel, Dashboard, Widget } from '@rudderjs/panels'
-
-export const adminPanel = Panel.make('admin')
-  .path('/admin')
-  .branding({ title: 'My App' })
-  .resources([ArticleResource, UserResource])
-  .globals([SiteSettingsGlobal])
-  .schema(async () => [
-    Dashboard.make('overview')
-      .widgets([
-        Widget.make('total-users').component('stat').data(async () => ({
-          value: await User.query().count(),
-        })),
-      ]),
-  ])
-```
-
-```ts
-// app/Panels/Admin/resources/ArticleResource.ts
-import { Resource, TextField, RichContentField, SelectField, FileField } from '@rudderjs/panels'
-
-export class ArticleResource extends Resource {
-  static model = Article
-  static label = 'Articles'
-  static icon  = 'file-text'
-
-  fields() {
-    return [
-      TextField.make('title').required().searchable().sortable(),
-      RichContentField.make('content').collaborative(),
-      SelectField.make('status').options(['draft', 'published']),
-      FileField.make('image').image().optimize().conversions([
-        { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
-      ]),
-    ]
-  }
-}
-```
-
-Register panels with extensions — each extension gets dynamically registered via `app.register()`:
-
-```ts
-// bootstrap/providers.ts (or inside AppServiceProvider)
-import { panels } from '@rudderjs/panels'
-import { panelsLexical } from '@rudderjs/panels-lexical/server'
-import { media } from '@rudderjs/media/server'
-
-panels([adminPanel], [
-  panelsLexical(),
-  media({ conversions: [{ name: 'thumb', width: 200, height: 200, format: 'webp' }] }),
-])
-```
-
-### 12. Media Library
-
-Full-featured file browser built as a panels extension:
-
-- **Grid + list views** with file type icons and image thumbnails
-- **Upload** — multi-file, drag-and-drop files/directories, drag images from other browser tabs
-- **Folders** — DB-only hierarchy, breadcrumb navigation via Vike `navigate()`
-- **Preview** — images, video, audio, PDF, text, JSON, CSV rendered natively in the browser
-- **Scoped access** — shared files (all users) or private files (per user)
-- **Image conversions** — auto-generates thumbnails via `@rudderjs/image` on upload
-
-### 13. Image Processing
-
-Fluent image processing API, independent of the media library:
-
-```ts
-import { image } from '@rudderjs/image'
-
-// Resize, convert, optimize
-const buffer = await image(uploadedFile)
-  .resize(800, 600)
-  .format('webp')
-  .quality(85)
-  .stripMetadata()
-  .toBuffer()
-
-// Batch conversions to storage
-await image(file)
-  .conversions([
-    { name: 'thumb', width: 200, height: 200, crop: true, format: 'webp' },
-    { name: 'og',    width: 1200, height: 630, crop: true, format: 'webp' },
-  ])
-  .generateToStorage('public', 'posts/42/')
-```
-
-### 14. Debug helpers (the ones every Laravel dev misses)
+### 11. Debug helpers (the ones every Laravel dev misses)
 
 ```ts
 import { config, dump, dd, app, resolve } from '@rudderjs/core'
@@ -528,12 +425,9 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/concurrency` | Parallel execution via worker threads, deferred fire-and-forget, sync driver for testing |
 | `@rudderjs/testing` | TestCase, TestResponse assertions, RefreshDatabase, WithFaker, HTTP request helpers |
 
-### Admin & Media
+### Media & Image
 | Package | Description |
 |---|---|
-| `@rudderjs/panels` | Admin panel builder — resources, fields, dashboards, widgets, versioning, collaboration |
-| `@rudderjs/panels-lexical` | Lexical rich-text editor for panels (optional extension) |
-| `@rudderjs/media` | Media library — file browser, uploads, folders, preview, image conversions |
 | `@rudderjs/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
 ### Monitoring
@@ -543,13 +437,12 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/pulse` | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
 | `@rudderjs/horizon` | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
 
-### AI & Workspaces
+### AI
 | Package | Description |
 |---|---|
 | `@rudderjs/ai` | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware |
 | `@rudderjs/boost` | AI dev tools — MCP server for Claude Code, Cursor, Copilot |
 | `@rudderjs/mcp` | MCP server framework — build custom MCP servers with decorators and testing utilities |
-| `@rudderjs/workspaces` | AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator |
 | `@rudderjs/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
 ---
@@ -572,8 +465,17 @@ const svc = resolve<UserService>(UserService)
 
 RudderJS is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
-- 47 packages published to npm under `@rudderjs/*`
-- Playground demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT collaboration, admin panels with resource CRUD, media library, AI engine with multi-provider support, AI workspace canvas, monitoring (Telescope, Pulse, Horizon), request-scoped context, feature flags, and shell/concurrency utilities — all end-to-end
+- Framework packages published to npm under `@rudderjs/*`
+- Playground (port 3000) demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT, AI agents, monitoring (Telescope, Pulse, Horizon) — all end-to-end
+
+### Open-Core Ecosystem
+
+RudderJS is the framework layer. Two sibling projects build on it:
+
+| Project | Packages | Description |
+|---|---|---|
+| **[Pilotiq](https://github.com/pilotiq/pilotiq)** | `@pilotiq/{panels,lexical,media}` | Open-source admin panel builder (MIT) |
+| **Pilotiq Pro** | `@pilotiq-pro/{ai,collab,workspaces}` | Commercial extensions — AI agents, real-time collab |
 
 ---
 

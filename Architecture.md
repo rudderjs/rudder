@@ -37,7 +37,7 @@
 
 ```
 rudderjs/
-├── packages/               # 38 published packages (@rudderjs/*)
+├── packages/               # Framework packages (@rudderjs/*)
 │   ├── contracts/          # Pure TypeScript types + runtime helpers
 │   │                       #   AppRequest (typed input accessors), AppResponse, ServerAdapter,
 │   │                       #   MiddlewareHandler, InputTypeError, attachInputAccessors
@@ -97,14 +97,9 @@ rudderjs/
 │   │                       #   AnonymousNotifiable, Notification.route() (on-demand)
 │   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
 │   ├── live/               # Real-time collaborative sync via Yjs CRDT — /ws-live endpoint
-│   ├── panels/             # Admin panel builder — CRUD resources, schema elements, widgets,
-│   │                       #   dashboard builder, AI chat sidebar, theming, Panel.use() plugins
-│   ├── panels-lexical/     # Lexical rich-text editor adapter — RichContentField, block editor, collab
 │   ├── ai/                 # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class,
 │   │                       #   tool system, streaming, middleware, structured output, model registry
 │   ├── image/              # Fluent image processing — resize, crop, convert, optimize (wraps sharp)
-│   ├── media/              # Media library — file browser, uploads, preview, image conversions
-│   ├── workspaces/         # AI workspace canvas — 3D nodes, departments, connections, orchestrator
 │   ├── log/                # Structured logging — channels (console, single, daily, stack, null),
 │   │                       #   RFC 5424 levels, LineFormatter/JsonFormatter, context propagation,
 │   │                       #   listeners, LogFake for testing, extendLog() for custom drivers
@@ -118,7 +113,8 @@ rudderjs/
 ├── create-rudderjs-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
 │                           #   Prompts: name · DB · packages · Todo · frameworks · Tailwind · shadcn
 ├── docs/                   # VitePress documentation site
-└── playground/             # Canonical demo app — primary integration reference
+└── playground/             # Framework demo app (port 3000) — auth, routing, ORM, queue, mail,
+                            #   cache, storage, scheduling, broadcast, live, AI agents, monitoring
 ```
 
 **Merged/removed packages** (code absorbed, originals deleted):
@@ -128,7 +124,10 @@ rudderjs/
 - `@rudderjs/cache-redis` → merged into `@rudderjs/cache`
 - `@rudderjs/mail-nodemailer` → merged into `@rudderjs/mail`
 - `@rudderjs/events` → merged into `@rudderjs/core`
-- `@rudderjs/dashboards` → merged into `@rudderjs/panels`
+- `@rudderjs/panels` → extracted to `@pilotiq/panels` (pilotiq repo)
+- `@rudderjs/panels-lexical` → extracted to `@pilotiq/lexical` (pilotiq repo)
+- `@rudderjs/media` → extracted to `@pilotiq/media` (pilotiq repo)
+- `@rudderjs/workspaces` → extracted to `@pilotiq-pro/workspaces` (pilotiq-pro repo)
 
 ---
 
@@ -261,22 +260,6 @@ RudderJS Framework
 │    ├── @rudderjs/ai                 4 providers, Agent, tools, streaming, AiFake
 │    └── @rudderjs/boost              MCP server for AI coding assistants
 │
-├─── Admin Panels
-│    └── @rudderjs/panels             Panel builder, Resources, schema elements
-│         ├── Schema: Field (20 types), Column, Section, Tabs, Form,
-│         │           Table/List, Stats, Chart, Dashboard, Widget,
-│         │           Wizard, Step, RelationManager, Import
-│         ├── Filters: Select, Search, Date, Boolean, Number, Query
-│         ├── Actions: Action (.form()), ActionGroup, headerActions
-│         ├── AI: PanelAgent, chat sidebar, edit_text, run_agent
-│         ├── Themes: 4 presets, colors, fonts, icons, themeEditor
-│         ├── Real-time: Yjs collaboration, live tables, version history
-│         ├── Notifications: Panel.notifications() widget
-│         └── Plugins (via Panel.use())
-│              ├── @rudderjs/panels-lexical    Rich text editor (Lexical)
-│              ├── @rudderjs/media             Media library, file browser
-│              └── @rudderjs/workspaces        AI workspace canvas
-│
 ├─── Testing
 │    └── @rudderjs/testing            TestCase, TestResponse, RefreshDatabase, WithFaker
 │
@@ -293,7 +276,11 @@ RudderJS Framework
 
 **Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types. `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core. `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer`. Never add `@rudderjs/core` to router's dependencies.
 
-**AI separation**: `@rudderjs/ai` is a generic backend engine (no UI, no Prisma). All AI chat UI and panel-specific features live in `@rudderjs/panels`. Never add `@rudderjs/panels` as a dependency of `@rudderjs/ai`.
+**AI separation**: `@rudderjs/ai` is a generic backend engine (no UI, no Prisma). Panel-specific AI features (chat sidebar, PanelAgent, field actions) live in `@pilotiq-pro/ai`. Never add panel dependencies to `@rudderjs/ai`.
+
+**Open-core ecosystem**: RudderJS is the framework layer. Two sibling repos build on it:
+- **pilotiq** (`@pilotiq/{panels,lexical,media}`) — open-source admin panel builder (MIT)
+- **pilotiq-pro** (`@pilotiq-pro/{ai,collab,workspaces}`) — commercial extensions (AI agents, real-time collab)
 
 ### Package Merge Policy (Tight-Coupling Only)
 
@@ -841,6 +828,7 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | Phase 3 | Plan 4: Auth & Mail (email verification, queued mail, markdown, failover, queued notifications) | ✅ Complete |
 | Phase 4 | Plan 5: Advanced Features (context, pennant, scoped/deferred/contextual bindings, process, concurrency) | ⬜ Next |
 | Phase 4 | Plan 6: Testing Infrastructure (TestCase, Queue.fake, Mail.fake, Notification.fake, Event.fake, Cache.fake) | ✅ Complete |
-| Phase 5 | Plan 7: Monitoring & Observability (Pulse, Telescope, Horizon, Nightwatch) | ⬜ Later |
-| — | Panels Improvements (filters, actions, import, wizard, relations, notifications, handler refactoring) | ✅ Complete |
+| Phase 5 | Plan 7: Monitoring & Observability (Telescope, Pulse, Horizon) | ✅ Phases 1-3 |
+| Phase 5 | Plan 8: AI, Boost & MCP | ✅ Phases 1-4 |
 | — | Production Build Fixes (node:crypto, WS upgrade, vite externals) | ✅ Complete |
+| — | Open-core extraction (pilotiq + pilotiq-pro repos) | ✅ Complete |

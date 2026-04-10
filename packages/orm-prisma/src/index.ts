@@ -256,12 +256,16 @@ class PrismaAdapter implements OrmAdapter {
       opts['adapter'] = new PrismaBetterSqlite3({ url: dbUrl })
     }
 
-    type PrismaClientConstructor = new (opts: Record<string, unknown>) => PrismaClient
-    const mod = await import('@prisma/client') as unknown as { PrismaClient?: PrismaClientConstructor; default?: PrismaClientConstructor | { PrismaClient?: PrismaClientConstructor } }
-    const rawDefault = mod.default
-    const PC = (mod.PrismaClient
-      ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
-    ) as PrismaClientConstructor
+    let PC: PrismaClientConstructor
+    if (config.PrismaClient) {
+      PC = config.PrismaClient
+    } else {
+      const mod = await import('@prisma/client') as unknown as { PrismaClient?: PrismaClientConstructor; default?: PrismaClientConstructor | { PrismaClient?: PrismaClientConstructor } }
+      const rawDefault = mod.default
+      PC = (mod.PrismaClient
+        ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
+      ) as PrismaClientConstructor
+    }
     return new PrismaAdapter(new PC(opts))
   }
 
@@ -280,8 +284,13 @@ class PrismaAdapter implements OrmAdapter {
 
 // ─── Config & Factory ──────────────────────────────────────
 
+type PrismaClientConstructor = new (opts: Record<string, unknown>) => PrismaClient
+
 export interface PrismaConfig {
   client?: PrismaClient
+  /** Pass the PrismaClient class from your app's @prisma/client to avoid
+   *  cross-repo resolution issues with pnpm-linked packages. */
+  PrismaClient?: PrismaClientConstructor
   driver?: 'postgresql' | 'sqlite' | 'libsql' | 'mysql'
   url?: string
 }
@@ -294,6 +303,9 @@ export interface DatabaseConnectionConfig {
 export interface DatabaseConfig {
   default: string
   connections: Record<string, DatabaseConnectionConfig>
+  /** Pass the PrismaClient class from your app's @prisma/client to avoid
+   *  cross-repo resolution issues with pnpm-linked packages. */
+  PrismaClient?: PrismaClientConstructor
 }
 
 export function prisma(config: PrismaConfig = {}): OrmAdapterProvider {
@@ -319,6 +331,7 @@ export function database(config?: DatabaseConfig): new (app: Application) => Ser
       if (config) {
         const conn = config.connections[config.default]
         if (conn) prismaConfig = { driver: conn.driver, ...(conn.url !== undefined && { url: conn.url }) }
+        if (config.PrismaClient) prismaConfig.PrismaClient = config.PrismaClient
       }
 
       const adapter = await PrismaAdapter.make(prismaConfig)
