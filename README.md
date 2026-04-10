@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@rudderjs/core"><img src="https://img.shields.io/npm/v/@rudderjs/core?label=core&color=f5a623" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/create-rudder-app"><img src="https://img.shields.io/npm/v/create-rudder-app?label=create-rudder-app&color=f5a623" alt="create-rudder-app" /></a>
+  <a href="https://github.com/rudderjs/rudder/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/rudderjs/rudder/ci.yml?branch=main&label=CI" alt="CI" /></a>
   <a href="https://github.com/rudderjs/rudder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-powered-646cff" alt="Vite" />
@@ -46,7 +48,9 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 - **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
-- **TypeScript-first** — strict types, generics, and decorator support throughout
+- **TypeScript-first** — strict TypeScript with incremental builds (~10s for single-package changes)
+- **Test-friendly** — TestCase, fluent assertions, fakes for HTTP, queue, cache, events, notifications
+- **CI/CD ready** — automated testing, linting, and npm publishing via Changesets
 - **WinterCG compatible** — runs on Node.js, Cloudflare Workers, Deno, and Bun
 
 ---
@@ -56,11 +60,11 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
 
 ```bash
-pnpm create rudderjs-app my-app
+pnpm create rudder-app my-app
 # or
-npm create rudderjs-app@latest my-app
+npm create rudder-app@latest my-app
 # or
-yarn create rudderjs-app my-app
+yarn create rudder-app my-app
 # or
 bunx create-rudder-app my-app
 ```
@@ -466,7 +470,22 @@ const svc = resolve<UserService>(UserService)
 RudderJS is in **early development**. All packages are functional and the playground is a working full-stack application. Breaking changes may occur before v1.0.
 
 - Framework packages published to npm under `@rudderjs/*`
+- Scaffolder published as [`create-rudder-app`](https://www.npmjs.com/package/create-rudder-app)
+- CI runs build, typecheck, lint, and tests on every PR
+- Automated releases via Changesets — merge a version PR, packages publish automatically
 - Playground (port 3000) demonstrates routing, ORM, auth, queues, cache, storage, mail, notifications, scheduling, WebSocket broadcasting, real-time Yjs CRDT, AI agents, monitoring (Telescope, Pulse, Horizon) — all end-to-end
+
+## Contributing
+
+```bash
+git clone https://github.com/rudderjs/rudder.git
+cd rudder
+pnpm install
+pnpm build
+pnpm test
+```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for dependency conventions and the package merge policy.
 
 ### Open-Core Ecosystem
 
