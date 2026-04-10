@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const pm      = detectPackageManager()
 
   console.log()
-  intro(' create-rudderjs-app ')
+  intro(' create-rudder-app ')
 
   // ── Project name ───────────────────────────────────────
 

@@ -110,7 +110,7 @@ rudderjs/
 │   ├── testing/            # TestCase, TestResponse, RefreshDatabase, WithFaker, database assertions
 │   ├── boost/              # AI developer tools — MCP server exposing project internals
 │   └── cli/                # Rudder-style CLI (make:*, module:*, module:publish, user commands)
-├── create-rudderjs-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
+├── create-rudder-app/    # Interactive CLI scaffolder (pnpm create rudderjs-app)
 │                           #   Prompts: name · DB · packages · Todo · frameworks · Tailwind · shadcn
 ├── docs/                   # VitePress documentation site
 └── playground/             # Framework demo app (port 3000) — auth, routing, ORM, queue, mail,
@@ -268,7 +268,7 @@ RudderJS Framework
 │    └── @rudderjs/cli                make:*, module:*, vendor:publish
 │
 ├─── Scaffolding
-│    └── create-rudderjs-app          Interactive project scaffolder
+│    └── create-rudder-app          Interactive project scaffolder
 │
 └─── Build
      └── @rudderjs/vite               Vike integration, SSR externals, WS patch

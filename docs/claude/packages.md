@@ -72,7 +72,7 @@ rudderjs/
 │   ├── pulse/          # App metrics dashboard — request throughput, cache hit rates, server stats
 │   ├── horizon/        # Deep queue monitor — job lifecycle, per-queue metrics, worker status, retry/delete
 │   └── cli/            # make:*, module:*, module:publish, rudder user commands
-├── create-rudderjs-app/   # Interactive scaffolder CLI — see docs/claude/create-app.md
+├── create-rudder-app/   # Interactive scaffolder CLI — see docs/claude/create-app.md
 ├── docs/               # VitePress documentation site
 └── playground/         # Demo app — primary integration reference
 ```

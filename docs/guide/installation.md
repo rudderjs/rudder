@@ -5,7 +5,7 @@
 - **Node.js** 18 or later
 - Any of: **pnpm**, **npm**, **yarn**, or **bun**
 
-## Option 1: create-rudderjs-app (Recommended)
+## Option 1: create-rudder-app (Recommended)
 
 The fastest way to start a new RudderJS project is with the official scaffolder. Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
 
@@ -16,7 +16,7 @@ npm create rudderjs-app@latest my-app
 # or
 yarn create rudderjs-app my-app
 # or
-bunx create-rudderjs-app my-app
+bunx create-rudder-app my-app
 ```
 
 The CLI walks you through a series of prompts, adapting follow-up questions based on your choices:

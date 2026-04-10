@@ -36,7 +36,7 @@ jobs:
         run: pnpm build
 
       - name: Typecheck
-        run: pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudderjs-app'
+        run: pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudder-app'
 
       - name: Lint
         run: pnpm lint

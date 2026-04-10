@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 **Extended docs** (read on-demand when relevant):
 - `docs/claude/packages.md` — Full monorepo layout + package status table
-- `docs/claude/create-app.md` — create-rudderjs-app scaffolder details
+- `docs/claude/create-app.md` — create-rudder-app scaffolder details
 
 ---
 

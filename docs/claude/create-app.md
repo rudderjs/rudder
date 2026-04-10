@@ -1,4 +1,4 @@
-# create-rudderjs-app
+# create-rudder-app
 
 > This file is read on-demand by Claude Code when working on the scaffolder.
 > For the always-loaded essentials, see `/CLAUDE.md`.
@@ -72,7 +72,7 @@ log → database → session → hash → cache → auth → events → queue �
 
 ## Local Testing
 ```bash
-cd create-rudderjs-app
+cd create-rudder-app
 pnpm build
 node dist/index.js        # launches the full interactive CLI
 ```

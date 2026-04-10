@@ -281,7 +281,7 @@ export default function ErrorPage() {
 
 ## Multiple UI Frameworks
 
-When you select multiple frameworks in `create-rudderjs-app`, the root `pages/+config.ts` has no renderer. Each page folder declares its own:
+When you select multiple frameworks in `create-rudder-app`, the root `pages/+config.ts` has no renderer. Each page folder declares its own:
 
 ```
 pages/

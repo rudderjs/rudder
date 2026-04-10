@@ -1,4 +1,4 @@
-# create-rudderjs-app
+# create-rudder-app
 
 Interactive CLI scaffolder for [RudderJS](https://github.com/rudderjs/rudder) — a Laravel-inspired, framework-agnostic Node.js meta-framework built on Vike + Vite.
 
@@ -10,7 +10,7 @@ The installer auto-detects your package manager from the command you use:
 pnpm create rudderjs-app
 npm create rudderjs-app@latest
 yarn create rudderjs-app
-bunx create-rudderjs-app
+bunx create-rudder-app
 ```
 
 All four package managers are fully supported — generated files, install commands, and next-step instructions adapt automatically.
@@ -113,7 +113,7 @@ my-app/
 ## Local development / testing
 
 ```bash
-cd create-rudderjs-app
+cd create-rudder-app
 pnpm build
 node dist/index.js          # launches the interactive CLI
 ```

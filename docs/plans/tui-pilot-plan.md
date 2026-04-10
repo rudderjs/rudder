@@ -16,7 +16,7 @@ Two new packages that extend RudderJS into the terminal:
 ### Package Setup
 
 - `packages/tui/`
-- Dependencies: `@clack/prompts` (already used in cli + create-rudderjs-app)
+- Dependencies: `@clack/prompts` (already used in cli + create-rudder-app)
 - Peer dependencies: `@rudderjs/panels` (for schema types)
 
 ### Field Mapping
@@ -99,7 +99,7 @@ rudder.command('make:model {name}', async (args) => {
 - [ ] Validation integration (zod / inline validators)
 - [ ] Section + Tabs support (grouping)
 - [ ] Tests
-- [ ] Migrate `create-rudderjs-app` prompts to use `@rudderjs/tui` schemas (optional, proves the API)
+- [ ] Migrate `create-rudder-app` prompts to use `@rudderjs/tui` schemas (optional, proves the API)
 
 ---
 
@@ -232,7 +232,7 @@ npx rudderjs-pilot                     # if installed globally
 ## Phase 3: Enhancements (future)
 
 - [ ] Conversation persistence (save/resume sessions)
-- [ ] `@rudderjs/tui` — migrate `create-rudderjs-app` to schema-defined wizard
+- [ ] `@rudderjs/tui` — migrate `create-rudder-app` to schema-defined wizard
 - [ ] `@rudderjs/tui` — migrate `cli` make commands to schema-defined forms
 - [ ] `@rudderjs/pilot` — multi-agent mode (like workspaces but in terminal)
 - [ ] `@rudderjs/pilot` — MCP client support (connect to external MCP servers)

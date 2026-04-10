@@ -62,7 +62,7 @@ npm create rudderjs-app@latest my-app
 # or
 yarn create rudderjs-app my-app
 # or
-bunx create-rudderjs-app my-app
+bunx create-rudder-app my-app
 ```
 
 The interactive installer asks you to choose your database, frontend framework (React / Vue / Solid), Tailwind, shadcn/ui, and authentication pages — then scaffolds a production-ready project.

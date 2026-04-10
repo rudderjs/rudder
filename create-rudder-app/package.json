@@ -1,11 +1,11 @@
 {
-  "name": "create-rudderjs-app",
+  "name": "create-rudder-app",
   "version": "0.0.14",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/rudderjs/rudder",
-    "directory": "create-rudderjs-app"
+    "directory": "create-rudder-app"
   },
   "type": "module",
   "files": [
@@ -13,7 +13,7 @@
   ],
   "description": "Create a new RudderJS application",
   "bin": {
-    "create-rudderjs-app": "./dist/index.js"
+    "create-rudder-app": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "exports": {

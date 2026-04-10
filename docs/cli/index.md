@@ -4,7 +4,7 @@ The RudderJS CLI (`@rudderjs/cli`) provides code generators and rudder command d
 
 ## Installation
 
-The CLI is included when you scaffold a project with `create-rudderjs-app`. For manual setup:
+The CLI is included when you scaffold a project with `create-rudder-app`. For manual setup:
 
 ```bash
 pnpm add -D @rudderjs/cli

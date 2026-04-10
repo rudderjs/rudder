@@ -4,7 +4,7 @@
 **Date**: 2026-04-10
 **Scope**: `@rudderjs/server-hono`, `@rudderjs/vite`, `packages/core`, `playground`, `playground-multi`, docs
 
-> `create-rudderjs-app` is out of scope — it needs a broader refresh.
+> `create-rudder-app` is out of scope — it needs a broader refresh.
 
 ---
 

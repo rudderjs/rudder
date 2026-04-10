@@ -30,7 +30,7 @@ RudderJS uses [Vike](https://vike.dev) as its SSR and page-routing layer, which 
 - **Multiple at once** — the scaffolder lets you select several frameworks; each gets its own pages
 - **No frontend** — pure API mode works out of the box
 
-The `create-rudderjs-app` scaffolder asks which frameworks you want, which is primary (drives main pages), and whether to include Tailwind CSS and shadcn/ui. Secondary frameworks get minimal demo pages at `pages/{fw}-demo/`.
+The `create-rudder-app` scaffolder asks which frameworks you want, which is primary (drives main pages), and whether to include Tailwind CSS and shadcn/ui. Secondary frameworks get minimal demo pages at `pages/{fw}-demo/`.
 
 ### Deploy Anywhere
 

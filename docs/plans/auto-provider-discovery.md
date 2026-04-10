@@ -422,7 +422,7 @@ export default await defaultProviders(configs, {
 
 **Test:** `pnpm dev` and `pnpm preview` should work identically to before.
 
-### Phase 5: create-rudderjs-app Update
+### Phase 5: create-rudder-app Update
 
 Update the scaffolder template:
 - New `bootstrap/providers.ts` uses `defaultProviders()`
@@ -538,7 +538,7 @@ Application.configure({
 | 2. CLI command | ~120 | Low |
 | 3. Update 35 package.json files | ~35 lines × 35 = ~150 changed | Low (mechanical) |
 | 4. Update playground | ~30 changed | Low |
-| 5. create-rudderjs-app | ~50 changed | Low |
+| 5. create-rudder-app | ~50 changed | Low |
 | 6. Documentation | ~200 lines of prose | Low |
 
 **Total**: ~800 LOC + ~200 lines of docs. 1-2 days of focused work.
@@ -585,7 +585,7 @@ packages/cli/src/index.ts                       # register providers:discover co
 packages/<all-providers>/package.json           # add rudderjs field (~35 packages)
 playground/bootstrap/providers.ts               # use defaultProviders()
 playground/.gitignore                           # add bootstrap/cache/providers.json
-create-rudderjs-app/templates/...               # update scaffolder
+create-rudder-app/templates/...               # update scaffolder
 README.md                                       # update Quick Start
 CLAUDE.md                                       # add discover command to common ops
 docs/claude/packages.md                         # note rudderjs field requirement
