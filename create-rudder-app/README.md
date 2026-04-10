@@ -7,9 +7,9 @@ Interactive CLI scaffolder for [RudderJS](https://github.com/rudderjs/rudder) â€
 The installer auto-detects your package manager from the command you use:
 
 ```bash
-pnpm create rudderjs-app
-npm create rudderjs-app@latest
-yarn create rudderjs-app
+pnpm create rudder-app
+npm create rudder-app@latest
+yarn create rudder-app
 bunx create-rudder-app
 ```
 
