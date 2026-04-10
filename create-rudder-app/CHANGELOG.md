@@ -1,5 +1,11 @@
 # create-rudder-app
 
+## 0.0.15
+
+### Patch Changes
+
+- 1777e0a: Fix auth templates to use RudderJS Auth API instead of BetterAuth
+
 ## 0.0.4
 
 ### Patch Changes
