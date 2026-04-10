@@ -85,7 +85,9 @@ export class Application {
     const g = globalThis as Record<string, unknown>
     const env = config?.env ?? Env.get('APP_ENV', 'production')
     const isDev = env === 'development' || env === 'local'
-    const shouldRecreate = Boolean(config) && isDev
+    // Only reset when an instance already exists — avoids wiping a fresh container
+    // during cold-start when Vike imports the module multiple times.
+    const shouldRecreate = Boolean(config) && isDev && Boolean(g['__rudderjs_app__'])
 
     if (shouldRecreate) {
       container.reset()

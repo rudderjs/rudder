@@ -96,13 +96,40 @@ export function rudderjs(): Promise<Plugin[]> {
           if (_G['__rudderjs_http_upgrade_patched__']) return
           _G['__rudderjs_http_upgrade_patched__'] = true
 
-          server.httpServer?.on('upgrade', (req, socket, head) => {
-            // Skip Vite's own HMR WebSocket (handled by Vite internally)
-            if (req.headers['sec-websocket-protocol'] === 'vite-hmr') return
+          // Buffer early upgrade requests that arrive before providers have
+          // registered __rudderjs_ws_upgrade__ (the page SSR can trigger a
+          // browser WS connect before provider boot finishes).
+          let pending: Array<[unknown, unknown, unknown]> | null = []
+
+          const flush = () => {
+            if (!pending) return
             const handler = _G['__rudderjs_ws_upgrade__'] as
               | ((req: unknown, socket: unknown, head: unknown) => void)
               | undefined
-            handler?.(req, socket, head)
+            if (!handler) return
+            const queued = pending
+            pending = null
+            for (const [r, s, h] of queued) handler(r, s, h)
+          }
+
+          // Poll briefly for the handler to appear (providers boot async)
+          const interval = setInterval(() => {
+            if (_G['__rudderjs_ws_upgrade__']) { flush(); clearInterval(interval) }
+          }, 50)
+          setTimeout(() => clearInterval(interval), 10_000)
+
+          server.httpServer?.on('upgrade', (req, socket, head) => {
+            // Skip Vite's own HMR WebSocket (handled by Vite internally)
+            if (req.headers['sec-websocket-protocol'] === 'vite-hmr') return
+            if (req.headers['sec-websocket-protocol'] === 'vite-ping') return
+            const handler = _G['__rudderjs_ws_upgrade__'] as
+              | ((req: unknown, socket: unknown, head: unknown) => void)
+              | undefined
+            if (handler) {
+              handler(req, socket, head)
+            } else if (pending) {
+              pending.push([req, socket, head])
+            }
           })
         },
       },
