@@ -6,7 +6,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "eslint packages/*/src packages/panels/pages packages/panels-lexical/src --ext .ts,.tsx",
+    "lint": "eslint packages/*/src --ext .ts,.tsx",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
     "rudder": "tsx packages/cli/src/index.ts",

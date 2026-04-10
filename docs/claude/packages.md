@@ -47,15 +47,10 @@ rudderjs/
 │   ├── broadcast/      # WebSocket broadcasting — public, private, presence channels
 │   ├── live/           # Real-time collaborative document sync via Yjs CRDT — /ws-live endpoint
 │   │                   #   Built-in: MemoryPersistence. Optional: livePrisma(), liveRedis()
-│   ├── panels/         # Admin panel builder — see docs/claude/panels.md for details
-│   ├── panels-lexical/ # Lexical rich-text editor adapter — see docs/claude/panels.md
 │   ├── image/          # Fluent image processing — resize, crop, convert, optimize. Thin wrapper over sharp.
-│   ├── media/          # Media library — Media.make() schema element, file browser, uploads, preview, conversions
 │   ├── ai/             # AI engine — 9 providers, Agent class, tools, streaming, middleware, structured output,
 │   │                   #   conversations, attachments, queue, image gen, TTS/STT, provider tools (WebSearch/WebFetch),
 │   │                   #   Vercel AI protocol, cached embeddings, AI facade, AiFake
-│   ├── workspaces/     # AI workspace canvas — Isoflow-style 3D nodes, departments, connections, chat, orchestrator
-│   │                   #   Panel plugin: workspaces(). Uses @rudderjs/ai for LLM, Prisma for persistence.
 │   ├── boost/          # AI dev tools — MCP server (10 tools), boost:install/update commands, guidelines/skills system
 │   ├── mcp/            # MCP server framework — McpServer, McpTool, McpResource, McpPrompt, decorators, testing
 │   ├── log/            # Structured logging — channels (console, single, daily, stack, null), RFC 5424 levels,

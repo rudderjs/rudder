@@ -13,8 +13,6 @@ export interface TemplateContext {
   tailwind:   boolean
   shadcn:     boolean
   pm:         PackageManager
-  withMedia:      boolean
-  withWorkspaces: boolean
   packages: {
     auth:          boolean
     cache:         boolean
@@ -26,7 +24,6 @@ export interface TemplateContext {
     broadcast:     boolean
     live:          boolean
     ai:            boolean
-    panels:        boolean
   }
 }
 
@@ -117,7 +114,6 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (ctx.packages.cache)        files['config/cache.ts']    = configCache()
   if (ctx.packages.storage)      files['config/storage.ts']  = configStorage()
   if (ctx.packages.ai)           files['config/ai.ts']       = configAi()
-  if (ctx.withMedia)             files['config/media.ts']    = configMedia()
 
   files['config/index.ts']    = configIndex(ctx)
   files['env.d.ts']           = envDts()
@@ -125,13 +121,6 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (ctx.packages.auth && ctx.orm) files['app/Models/User.ts'] = userModel()
   files['app/Providers/AppServiceProvider.ts']  = appServiceProvider()
   files['app/Middleware/RequestIdMiddleware.ts'] = requestIdMiddleware()
-
-  // Admin panel
-  if (ctx.packages.panels) {
-    files['app/Panels/AdminPanel.ts'] = adminPanel(ctx)
-    if (ctx.packages.auth && ctx.orm) files['app/Panels/Resources/UserResource.ts'] = userResource()
-    if (ctx.withTodo)                 files['app/Panels/Resources/TodoResource.ts'] = todoResource()
-  }
 
   files['routes/api.ts']     = routesApi(ctx)
   files['routes/web.ts']     = routesWeb()
@@ -268,18 +257,6 @@ function packageJson(ctx: TemplateContext): string {
   if (ctx.packages.broadcast)     deps['@rudderjs/broadcast']    = 'latest'
   if (ctx.packages.live)          deps['@rudderjs/live']         = 'latest'
   if (ctx.packages.ai)          deps['@rudderjs/ai']           = 'latest'
-  if (ctx.packages.panels) {
-    deps['@rudderjs/panels']         = 'latest'
-    deps['@rudderjs/panels-lexical'] = 'latest'
-  }
-  if (ctx.withMedia) {
-    deps['@rudderjs/media'] = 'latest'
-    deps['@rudderjs/image'] = 'latest'
-  }
-  if (ctx.withWorkspaces) {
-    deps['@rudderjs/workspaces'] = 'latest'
-  }
-
   const devDeps: Record<string, string> = {
     '@rudderjs/cli': 'latest',
     '@types/node':   '^20.0.0',
@@ -853,17 +830,10 @@ function bootstrapProviders(ctx: TemplateContext): string {
     providers.push('ai(configs.ai),')
   }
 
-  if (ctx.packages.panels) {
-    imports.push("import { panels } from '@rudderjs/panels'")
-    imports.push("import { adminPanel } from '../app/Panels/AdminPanel.js'")
-    providers.push('panels([adminPanel]),')
-  }
-
   imports.push("import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'")
   providers.push('AppServiceProvider,')
 
-  if (ctx.withTodo && !ctx.packages.panels) {
-    // When panels is selected, todos are managed via TodoResource in AdminPanel
+  if (ctx.withTodo) {
     imports.push("import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'")
     providers.push('TodoServiceProvider,')
   }
@@ -1097,11 +1067,6 @@ function configIndex(ctx: TemplateContext): string {
     imports.push("import ai       from './ai.js'")
     keys.push('ai')
   }
-  if (ctx.withMedia) {
-    imports.push("import media    from './media.js'")
-    keys.push('media')
-  }
-
   return `${imports.join('\n')}
 
 const configs = { ${keys.join(', ')} }
@@ -1173,25 +1138,6 @@ export default {
 `
 }
 
-function configMedia(): string {
-  return `import type { MediaPluginConfig } from '@rudderjs/media/server'
-
-export default {
-  libraries: {
-    default: {
-      disk:      'public',
-      directory: 'media',
-      accept:    ['image/*', 'application/pdf'],
-      conversions: [
-        { name: 'thumb',   width: 200, height: 200, crop: true, format: 'webp' },
-        { name: 'preview', width: 800, format: 'webp' },
-      ],
-    },
-  },
-} satisfies MediaPluginConfig
-`
-}
-
 // ─── app files ─────────────────────────────────────────────
 
 function userModel(): string {
@@ -1244,121 +1190,6 @@ export class RequestIdMiddleware extends Middleware {
     ;(req as unknown as Record<string, unknown>)['requestId'] = id
     await next()
     res.header('X-Request-Id', id)
-  }
-}
-`
-}
-
-// ─── admin panel ──────────────────────────────────────────
-
-function adminPanel(ctx: TemplateContext): string {
-  const imports: string[] = [
-    "import { Panel } from '@rudderjs/panels'",
-    "import { panelsLexical } from '@rudderjs/panels-lexical'",
-  ]
-  const plugins: string[] = ['panelsLexical()']
-  const resources: string[] = []
-
-  if (ctx.withMedia) {
-    imports.push("import { media } from '@rudderjs/media/server'")
-    imports.push("import configs from '../../config/index.js'")
-    plugins.push('media(configs.media)')
-  }
-  if (ctx.withWorkspaces) {
-    imports.push("import { workspaces } from '@rudderjs/workspaces'")
-    plugins.push('workspaces()')
-  }
-  if (ctx.packages.auth && ctx.orm) {
-    imports.push("import { UserResource } from './Resources/UserResource.js'")
-    resources.push('UserResource')
-  }
-  if (ctx.withTodo) {
-    imports.push("import { TodoResource } from './Resources/TodoResource.js'")
-    resources.push('TodoResource')
-  }
-
-  const useLines = plugins.map(p => `  .use(${p})`).join('\n')
-  const resArray = resources.length > 0
-    ? `  .resources([${resources.join(', ')}])`
-    : `  .resources([])`
-
-  return `${imports.join('\n')}
-
-export const adminPanel = Panel.make('admin')
-  .path('/admin')
-${useLines}
-${resArray}
-`
-}
-
-function userResource(): string {
-  return `import { Resource } from '@rudderjs/panels'
-import { TextField, EmailField, DateField, BooleanField } from '@rudderjs/panels'
-
-export class UserResource extends Resource {
-  static model = 'user'
-  static label = 'Users'
-  static icon  = 'Users'
-
-  table(table: any) {
-    return table.columns([
-      TextField.make('name').sortable().searchable(),
-      EmailField.make('email').sortable().searchable(),
-      BooleanField.make('emailVerified').label('Verified'),
-      DateField.make('createdAt').label('Joined').sortable(),
-    ])
-  }
-
-  form(form: any) {
-    return form.schema([
-      TextField.make('name').required(),
-      EmailField.make('email').required(),
-    ])
-  }
-
-  detail(_record: any) {
-    return [
-      TextField.make('name'),
-      EmailField.make('email'),
-      BooleanField.make('emailVerified').label('Verified'),
-      DateField.make('createdAt').label('Joined'),
-    ]
-  }
-}
-`
-}
-
-function todoResource(): string {
-  return `import { Resource } from '@rudderjs/panels'
-import { TextField, BooleanField, DateField } from '@rudderjs/panels'
-
-export class TodoResource extends Resource {
-  static model = 'todo'
-  static label = 'Todos'
-  static icon  = 'CheckSquare'
-
-  table(table: any) {
-    return table.columns([
-      TextField.make('title').sortable().searchable(),
-      BooleanField.make('completed').sortable(),
-      DateField.make('createdAt').label('Created').sortable(),
-    ])
-  }
-
-  form(form: any) {
-    return form.schema([
-      TextField.make('title').required(),
-      BooleanField.make('completed'),
-    ])
-  }
-
-  detail(_record: any) {
-    return [
-      TextField.make('title'),
-      BooleanField.make('completed'),
-      DateField.make('createdAt').label('Created'),
-      DateField.make('updatedAt').label('Updated'),
-    ]
   }
 }
 `
@@ -1569,7 +1400,6 @@ function pagesIndexPageReact(ctx: TemplateContext): string {
     : ''
   const extraLinks: string[] = []
   if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="underline hover:text-foreground">AI Chat</a>')
-  if (ctx.packages.panels) extraLinks.push('        <a href="/admin" className="underline hover:text-foreground">Admin Panel</a>')
   const extraLinksStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
   return `${cssImport}import { useState } from 'react'
@@ -1637,7 +1467,6 @@ function pagesIndexPageVue(ctx: TemplateContext): string {
     : ''
   const vueExtraLinks: string[] = []
   if (ctx.packages.ai) vueExtraLinks.push('      <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
-  if (ctx.packages.panels) vueExtraLinks.push('      <a href="/admin" class="underline hover:text-foreground">Admin Panel</a>')
   const vueExtraStr = vueExtraLinks.length > 0 ? '\n' + vueExtraLinks.join('\n') : ''
 
   return `<script setup lang="ts">
@@ -1695,7 +1524,6 @@ function pagesIndexPageSolid(ctx: TemplateContext): string {
     : ''
   const solidExtraLinks: string[] = []
   if (ctx.packages.ai) solidExtraLinks.push('        <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
-  if (ctx.packages.panels) solidExtraLinks.push('        <a href="/admin" class="underline hover:text-foreground">Admin Panel</a>')
   const solidExtraStr = solidExtraLinks.length > 0 ? '\n' + solidExtraLinks.join('\n') : ''
 
   return `${cssImport}import { createSignal } from 'solid-js'

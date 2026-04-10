@@ -4,7 +4,6 @@ This file provides guidance to Claude Code when working in this repository.
 
 **Extended docs** (read on-demand when relevant):
 - `docs/claude/packages.md` — Full monorepo layout + package status table
-- `docs/claude/panels.md` — Panels, Lexical, collaborative editing architecture
 - `docs/claude/create-app.md` — create-rudderjs-app scaffolder details
 
 ---
@@ -17,7 +16,8 @@ This file provides guidance to Claude Code when working in this repository.
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@rudderjs/*`
 - **GitHub**: https://github.com/rudderjs/rudder
-- **Status**: Early development — 47 packages published to npm
+- **Status**: Early development
+- **Open-core**: Panels/media/lexical extracted to [pilotiq](https://github.com/pilotiq/pilotiq); AI agents/collab to pilotiq-pro
 
 ---
 
@@ -83,7 +83,7 @@ npm requires browser passkey auth — press Enter when prompted to open the brow
 
 ### Dependency Flow (summary)
 
-Foundation (contracts, support) → Core (middleware, validation, router, server-hono, core) → Data (orm, cache, queue) → Auth & Security → Communication → Utilities → AI → Admin Panels → Monitoring (telescope, pulse, horizon) → Testing/CLI/Build
+Foundation (contracts, support) → Core (middleware, validation, router, server-hono, core) → Data (orm, cache, queue) → Auth & Security → Communication → Utilities → AI → Monitoring (telescope, pulse, horizon) → Testing/CLI/Build
 
 > **Cycle resolution**: `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer('@rudderjs/router')`. Never add `@rudderjs/core` to router's `dependencies` or `devDependencies`.
 
@@ -97,13 +97,7 @@ Providers can be registered at runtime via `app().register(ProviderClass)`:
 
 ```ts
 // Inside a provider's boot()
-app().register(PanelServiceProvider)
-
-// Panels extensions use Panel.use()
-Panel.make('admin')
-  .use(media({ conversions: [...] }))
-  .use(panelsLexical())
-  .resources([...])
+app().register(SomeServiceProvider)
 ```
 
 ### Package Merge Policy (Tight-Coupling Only)
@@ -158,8 +152,8 @@ Three playgrounds exist across three repos, one per tier of the open-core stack.
 | Playground | Repo | Port | HMR | Purpose |
 |---|---|---|---|---|
 | `rudderjs/playground` | rudderjs | 3000 | 24678 | Pure framework demo — auth, routing, ORM, queue, mail, cache, storage, scheduling, broadcast, live, telescope/pulse/horizon, Agents (`@rudderjs/ai`). **Zero** `@pilotiq/*` or `@pilotiq-pro/*` deps. |
-| `pilotiq/playground` | pilotiq | 3001 | 24679 | Free pilotiq dogfood — panels + lexical (local-only) + media + workspaces. **No** AI chat, **no** collab, **no** `@pilotiq-pro/*`. |
-| `pilotiq-pro/playground` | pilotiq-pro | 3002 | 24680 | Full-stack pro dogfood — framework + free pilotiq + `@pilotiq-pro/{ai,collab}`. Title-field collab, AI chat sidebar, `✦` field actions, sub-agents. |
+| `pilotiq/playground` | pilotiq | 3001 | 24679 | Free pilotiq dogfood — panels + lexical (local-only) + media. **No** AI chat, **no** collab, **no** `@pilotiq-pro/*`. |
+| `pilotiq-pro/playground` | pilotiq-pro | 3002 | 24680 | Full-stack pro dogfood — framework + free pilotiq + `@pilotiq-pro/{ai,collab}`. AI chat sidebar, `✦` field actions, collab, sub-agents. |
 
 ### Running
 
