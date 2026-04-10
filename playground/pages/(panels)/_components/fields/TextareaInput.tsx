@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { getField, subscribeFields } from '@pilotiq/panels'
+import { getField, subscribeFields, useAiUi } from '@pilotiq/panels'
 import type { ResolvedAiAction } from '@pilotiq/panels'
-import { useAiChatSafe } from '../agents/AiChatContext.js'
 import { registerLexicalEditor } from '../agents/lexicalRegistry.js'
-import { usePanelAgentApi } from '../agents/standaloneAgentApiContext.js'
-import { AiDropdown } from '../agents/AiDropdown.js'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -24,12 +21,15 @@ export function getCollabTextareaRef(fieldName: string) {
 
 export function TextareaInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
-  const aiChat = useAiChatSafe()
-  const apiCtx = usePanelAgentApi()
+  // AI surfaces come from the open-core slot bag — see TextInput.tsx for
+  // the full rationale. Undefined slots silently disable inline AI when
+  // `@pilotiq-pro/ai` is not installed.
+  const { AiDropdown, useAiChat } = useAiUi()
+  const aiChat = useAiChat ? useAiChat() : null
   const fieldName = field.name
 
   const aiActions: ResolvedAiAction[] = Array.isArray(field.ai) ? field.ai : []
-  const hasInlineAi = aiActions.length > 0 && !!apiCtx
+  const hasInlineAi = aiActions.length > 0 && !!AiDropdown
 
   const [menu, setMenu] = useState<{ text: string; rect: InlineAiAnchorRect } | null>(null)
 
@@ -70,13 +70,11 @@ export function TextareaInput({ field, value, onChange, disabled = false, userNa
     () => null,
   )
 
-  const dropdownEl = menu && apiCtx && (
+  // Pro's slot-bag AiDropdown reads its own api context — see TextInput.tsx.
+  const dropdownEl = menu && AiDropdown && (
     <AiDropdown
       fieldName={fieldName}
       actions={aiActions}
-      apiBase={apiCtx.apiBase}
-      resourceSlug={apiCtx.resourceSlug}
-      recordId={apiCtx.recordId}
       selection={{ text: menu.text }}
       position={{ mode: 'fixed', left: menu.rect.left, top: menu.rect.bottom + 4 }}
       onClose={() => setMenu(null)}

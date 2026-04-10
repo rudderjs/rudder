@@ -1,53 +1,36 @@
 'use client'
 
-import { Component, useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import { Component, type ReactNode } from 'react'
 import { usePageContext } from 'vike-react/usePageContext'
 import { AdminLayout }    from '../_components/AdminLayout.js'
 import { I18nProvider }   from '../_hooks/useI18n.js'
-import { AiChatProvider } from '../_components/agents/AiChatContext.js'
 import { generateThemeCSS } from '@pilotiq/panels'
 import type { PanelNavigationMeta } from '@pilotiq/panels'
+// PLAYGROUND-LOCAL OVERRIDE: static imports of pro packages.
+//
+// The canonical pilotiq vendored Layout uses dynamic imports with a
+// string-concat specifier trick so apps without pro installed don't crash
+// at dev startup. That pattern is broken in browsers — Vite's runtime
+// dynamic-import helper does NOT resolve bare specifiers, only its static
+// import analyzer does. So the dynamic version never actually loads pro
+// packages on the client.
+//
+// The playground always has both pro packages linked, so we side-step the
+// problem with static imports. The proper open-core fix (free `<AiUiProvider>`
+// stub + Vite alias when pro is installed) is tracked as a Phase 4 follow-up.
+//
+// `vendor:publish --tag=pilotiq-pages` will overwrite this file. After a
+// re-vendor, re-apply this patch (or pull from git).
+// `@pilotiq-pro/collab` is not currently linked in this playground; collab
+// runs in local-only mode via the `@pilotiq/lexical` stub. Add the package
+// + link + optimizeDeps entry to enable real Yjs collaboration.
+import { AiUiProvider } from '@pilotiq-pro/ai'
 // Auto-discover plugin registrations (fields, lazy elements, etc.)
 // Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
 import.meta.glob('../_register-*.ts', { eager: true })
 // Lexical uses registerField — only register on client to avoid SSR/client hydration mismatch
 if (typeof window !== 'undefined') {
   import('@pilotiq/lexical').then(({ registerLexical }) => registerLexical()).catch(() => {})
-}
-
-// ── Collab provider (open-core seam) ────────────────────────────────────────
-// If @pilotiq-pro/collab is installed, dynamically load its <CollabProvider>
-// and wrap the panel tree in it. This activates real Yjs-backed collaboration
-// for LexicalEditor / CollaborativePlainText by overriding the CollabHookContext
-// that @pilotiq/lexical ships with a stub default.
-//
-// Without pro installed: the import fails, the state stays null, and the
-// tree renders with the stub hook (local-only mode).
-//
-// SSR note: the stub and the real impl both return collabReady=false on first
-// render (real impl's collab wiring runs inside useEffect, client-only), so
-// hydration matches regardless of whether the Provider is present.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic-import type surface
-function useCollabProvider(): ComponentType<{ children: ReactNode }> | null {
-  const [Provider, setProvider] = useState<ComponentType<{ children: ReactNode }> | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    // Optional runtime dep — Vite must NOT statically resolve this specifier,
-    // otherwise dev crashes with "Failed to resolve import" when pro isn't
-    // installed (see pilotiq/docs/plans/phase-5-collab-extraction.md R5/R6).
-    // Literal string + /* @vite-ignore */ is not enough in Vite 7 — the
-    // import-analysis plugin still inspects the literal. The workaround is
-    // a non-literal specifier (string concatenation) so static analysis
-    // can't see the target at all; the import falls through to runtime
-    // where .catch() handles "not installed" gracefully.
-    const pkg = '@pilotiq-pro' + '/collab'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optional dep surface
-    import(/* @vite-ignore */ pkg)
-      .then((mod: any) => { if (!cancelled && mod?.CollabProvider) setProvider(() => mod.CollabProvider) })
-      .catch(() => { /* pro not installed — stay in local-only mode */ })
-    return () => { cancelled = true }
-  }, [])
-  return Provider
 }
 
 // ── Error Boundary ──────────────────────────────────────────────────────────
@@ -143,21 +126,16 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
   // SSR: inject theme CSS inline to prevent FOUC
   const themeCss = data.panelMeta.theme ? generateThemeCSS(data.panelMeta.theme) : null
 
-  const CollabProvider = useCollabProvider()
-  const tree = (
-    <AiChatProvider panelPath={data.panelMeta.path}>
-      <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
-        <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
-          {children}
-        </AdminLayout>
-      </I18nProvider>
-    </AiChatProvider>
-  )
-
   return (
     <PanelErrorBoundary>
       {themeCss && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
-      {CollabProvider ? <CollabProvider>{tree}</CollabProvider> : tree}
+      <AiUiProvider panelPath={data.panelMeta.path}>
+        <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
+          <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
+            {children}
+          </AdminLayout>
+        </I18nProvider>
+      </AiUiProvider>
     </PanelErrorBoundary>
   )
 }

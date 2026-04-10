@@ -1007,6 +1007,9 @@ importers:
       '@lexical/yjs':
         specifier: ^0.41.0
         version: 0.41.0(yjs@13.6.29)
+      '@pilotiq-pro/ai':
+        specifier: link:../../pilotiq-pro/packages/ai
+        version: link:../../pilotiq-pro/packages/ai
       '@pilotiq/lexical':
         specifier: link:../../pilotiq/packages/lexical
         version: link:../../pilotiq/packages/lexical

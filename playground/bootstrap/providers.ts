@@ -15,6 +15,9 @@ import { database } from '@rudderjs/orm-prisma'
 import { broadcasting } from '@rudderjs/broadcast'
 import { live }   from '@rudderjs/live'
 import { ai }        from '@rudderjs/ai'
+import { panels } from '@pilotiq/panels'
+import { AiServiceProvider } from '@pilotiq-pro/ai'
+import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 import { boost }     from '@rudderjs/boost'
 import { log }       from '@rudderjs/log'
 import { telescope } from '@rudderjs/telescope'
@@ -55,6 +58,21 @@ export default [
   telescope(configs.telescope),
   pulse(configs.pulse),
   horizon(configs.horizon),
+
+  // ── Panels (open-core) + AI runtime (commercial) ────────
+  // Order matters here:
+  // 1. `AiServiceProvider.register()` seeds `BuiltInAiActionRegistry` so
+  //    `Field.ai(['rewrite'])` resolves at form-build time during the
+  //    panels factory's boot().
+  // 2. `panels(...)` registers the panel and (in boot()) iterates resources
+  //    to mount routes — Field.ai succeeds because the catalogue is seeded.
+  // 3. After both register() phases run, boot() runs in registration order:
+  //    AiServiceProvider.boot() iterates the now-populated PanelRegistry to
+  //    mount chat + standalone agent routes; panels.boot() mounts CRUD.
+  //    Both prerequisites are in place. See pilotiq/docs/plans/
+  //    phase-4-ai-extraction.md §4.6 R3 for the boot-order rationale.
+  AiServiceProvider,
+  panels([adminPanel]),
 
   // ── Application ─────────────────────────────────────────
   AppServiceProvider,

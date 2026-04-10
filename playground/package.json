@@ -39,6 +39,7 @@
     "@rudderjs/orm-prisma": "workspace:*",
     "@pilotiq/panels": "link:../../pilotiq/packages/panels",
     "@pilotiq/lexical": "link:../../pilotiq/packages/lexical",
+    "@pilotiq-pro/ai": "link:../../pilotiq-pro/packages/ai",
     "@rudderjs/queue": "workspace:*",
     "@rudderjs/queue-bullmq": "workspace:*",
     "@rudderjs/router": "workspace:*",

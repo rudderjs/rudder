@@ -4,10 +4,22 @@ import { useState, useEffect } from 'react'
 import { useData }   from 'vike-react/useData'
 import { useConfig } from 'vike-react/useConfig'
 import { SchemaForm }  from '../../../../../_components/SchemaForm.js'
-import type { SchemaFormMeta, PanelI18n } from '@pilotiq/panels'
+import type { SchemaFormMeta, PanelI18n, PanelAgentMeta } from '@pilotiq/panels'
+import { useAiUi } from '@pilotiq/panels'
 import { useI18n } from '../../../../../_hooks/useI18n.js'
-import { useAiChat } from '../../../../../_components/agents/AiChatContext.js'
 import type { Data } from './+data.js'
+
+/**
+ * Shape of the resource context that `@pilotiq-pro/ai`'s chat expects when
+ * driving the edit page. Defined locally so free doesn't depend on the pro
+ * type surface — pro's own `useAiChat` return narrows to this superset.
+ */
+interface ResourceContext {
+  resourceSlug: string
+  recordId:     string
+  apiBase:      string
+  agents:       PanelAgentMeta[]
+}
 
 export default function EditPage() {
   const config = useConfig()
@@ -18,25 +30,33 @@ export default function EditPage() {
 
   const agents = resourceMeta.agents ?? []
 
-  // AI chat — field updates + resource context
-  let fieldUpdates: Array<{ field: string; value: string }> = []
-  let setResourceContext: ((ctx: import('../../../../../_components/agents/AiChatContext.js').ResourceContext | null) => void) | null = null
-  try {
-    const aiChat = useAiChat()
-    fieldUpdates = aiChat.fieldUpdates
-    setResourceContext = aiChat.setResourceContext
-  } catch { /* no provider */ }
+  // AI chat surfaces come from the open-core slot bag. When
+  // `@pilotiq-pro/ai` is installed it contributes a `useAiChat` hook that
+  // exposes field-update animations + a `setResourceContext` setter so the
+  // chat assistant knows which record is active. Without pro: both are
+  // undefined and the edit page loses the animation + context plumbing,
+  // but the form itself still renders and saves normally.
+  //
+  // Conditional hook call is stable per mount — see the AiUiContext
+  // rationale in TextInput.tsx / @panel/+Layout.tsx.
+  const { useAiChat } = useAiUi()
+  const aiChat = useAiChat ? (useAiChat() as {
+    fieldUpdates?:       Array<{ field: string; value: string }>
+    setResourceContext?: (ctx: ResourceContext | null) => void
+  }) : null
+  const fieldUpdates       = aiChat?.fieldUpdates ?? []
+  const setResourceContext = aiChat?.setResourceContext ?? null
 
   // Set resource context for AI chat when on edit page
   useEffect(() => {
     if (!setResourceContext || agents.length === 0) return
     setResourceContext({
       resourceSlug: slug,
-      recordId: id,
-      apiBase: `/${pathSegment}/api`,
+      recordId:     id,
+      apiBase:      `/${pathSegment}/api`,
       agents,
     })
-    return () => setResourceContext!(null)
+    return () => setResourceContext(null)
   }, [slug, id, pathSegment, agents.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Back navigation

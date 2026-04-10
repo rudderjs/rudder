@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react'
 import type { PanelI18n, PanelAgentMeta } from '@pilotiq/panels'
-import { useAgentRun } from '../agents/useAgentRun.js'
-import { AiActionProgress } from '../agents/AiActionProgress.js'
+import { useAiUi } from '@pilotiq/panels'
+
+// Inert fallback used when `@pilotiq-pro/ai` is not installed — matches the
+// `useAgentRun` return shape closely enough that destructuring + rendering
+// below stay happy. `entries.length === 0` hides the progress popover.
+const noop = () => {}
+const EMPTY_AGENT_STATE = {
+  status: 'idle' as const,
+  entries: [] as Array<{ id: string; fieldName: string; status: string; actionSlug?: string }>,
+  run:    noop as (agentSlug: string, recordId: string) => void,
+  reset:  noop,
+}
 
 interface Props {
   draftable:     boolean
@@ -23,11 +33,22 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
   const hasAgents = !!agents?.length && !!resourceSlug && !!recordId && !!apiBase
 
   // Standalone agent runner for resource-level agents (the "AI Agents"
-  // dropdown). After Phase 5, these run via the dedicated /_agents/${slug}
-  // endpoint instead of being injected into chat. The agent uses the
-  // client-tool toolkit (update_form_state, read_form_state) so non-collab
-  // fields are no longer clobbered.
-  const { run, reset, entries, status } = useAgentRun(apiBase ?? '', resourceSlug ?? '')
+  // dropdown). Lives in `@pilotiq-pro/ai` and is exposed through the
+  // `AiUiContext` slot bag — see `src/ui/AiUiRegistry.ts`. When pro is not
+  // installed, fall back to an inert state so the button row still renders
+  // but the dropdown click becomes a no-op. Pro's `AiActionProgress` slot
+  // drives the progress popover; it's likewise inert when pro is absent.
+  //
+  // NB: the conditional `useAgentRun` call is stable per mount — the slot
+  // bag only flips when the outer `<AiUiProvider>` first mounts/unmounts,
+  // which remounts this subtree via the `{AiUiProvider ? <…>{tree}</…> :
+  // tree}` fork in `@panel/+Layout.tsx`. Inside a single mount, hook order
+  // doesn't change.
+  const { useAgentRun, AiActionProgress } = useAiUi()
+  const agentState = useAgentRun
+    ? useAgentRun(apiBase ?? '', resourceSlug ?? '')
+    : EMPTY_AGENT_STATE
+  const { run, reset, entries, status } = agentState
 
   // Auto-dismiss the success popover ~3s after a clean completion. Errors
   // stay until the user dismisses them so they don't get missed.
@@ -125,7 +146,7 @@ export function FormActions({ draftable, recordStatus, saving, backHref, onPubli
               ))}
             </div>
           )}
-          {showProgress && (
+          {showProgress && AiActionProgress && (
             <AiActionProgress
               entries={entries}
               status={status}

@@ -1,12 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { getField, subscribeFields } from '@pilotiq/panels'
+import { getField, subscribeFields, useAiUi } from '@pilotiq/panels'
 import type { ResolvedAiAction } from '@pilotiq/panels'
-import { useAiChatSafe } from '../agents/AiChatContext.js'
 import { registerLexicalEditor } from '../agents/lexicalRegistry.js'
-import { usePanelAgentApi } from '../agents/standaloneAgentApiContext.js'
-import { AiDropdown } from '../agents/AiDropdown.js'
 import type { FieldInputProps } from './types.js'
 
 /**
@@ -32,12 +29,13 @@ export function getRichContentRef(fieldName: string) {
 
 export function RichContentInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
-  const aiChat = useAiChatSafe()
-  const apiCtx = usePanelAgentApi()
+  // AI surfaces come from the open-core slot bag — see TextInput.tsx.
+  const { AiDropdown, useAiChat } = useAiUi()
+  const aiChat = useAiChat ? useAiChat() : null
   const fieldName = field.name
 
   const aiActions: ResolvedAiAction[] = Array.isArray(field.ai) ? field.ai : []
-  const hasInlineAi = aiActions.length > 0 && !!apiCtx
+  const hasInlineAi = aiActions.length > 0 && !!AiDropdown
 
   // Inline-trigger menu state. Captured at the moment the user clicks the
   // floating `✦` in the formatting toolbar; passed to AiDropdown in `fixed`
@@ -84,15 +82,13 @@ export function RichContentInput({ field, value, onChange, disabled = false, use
   )
 
   // Render AiDropdown in fixed mode anchored to the floating button rect.
-  // The dropdown owns its own state (selection, prompt, useAgentRun); we
-  // just hand it the captured selection text + position.
-  const dropdownEl = menu && apiCtx && (
+  // The dropdown owns its own state (selection, prompt, useAgentRun) and
+  // reads its own api context from pro's internal provider — free just
+  // hands it the captured selection text + position.
+  const dropdownEl = menu && AiDropdown && (
     <AiDropdown
       fieldName={fieldName}
       actions={aiActions}
-      apiBase={apiCtx.apiBase}
-      resourceSlug={apiCtx.resourceSlug}
-      recordId={apiCtx.recordId}
       selection={{ text: menu.text }}
       position={{ mode: 'fixed', left: menu.rect.left, top: menu.rect.bottom + 4 }}
       onClose={() => setMenu(null)}

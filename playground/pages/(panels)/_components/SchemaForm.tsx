@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { SchemaFormMeta, PanelI18n, FieldMeta, PanelAgentMeta } from '@pilotiq/panels'
+import { ClientToolRegistry } from '@pilotiq/panels'
 import { FieldInput } from './FieldInput.js'
 import { SchemaRenderer } from './edit/SchemaRenderer.js'
 import { EditToolbar } from './edit/EditToolbar.js'
@@ -11,7 +12,6 @@ import { useAutosave } from '../_hooks/useAutosave.js'
 import { useFormPersist } from '../_hooks/useFormPersist.js'
 import { useFieldPersist } from '../_hooks/useFieldPersist.js'
 import { flattenFormFields } from '../_lib/formHelpers.js'
-import { registerClientTool } from './agents/clientTools.js'
 import { makeUpdateFormStateHandler } from './agents/updateFormStateHandler.js'
 import type { SchemaItem } from '../_lib/formHelpers.js'
 
@@ -291,7 +291,7 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
   // unsaved local edits to non-collaborative fields. The handler reads from
   // `valuesRef` (always the latest snapshot) and is unregistered on unmount.
   useEffect(() => {
-    return registerClientTool('read_form_state', (args: unknown) => {
+    return ClientToolRegistry.register('read_form_state', (args: unknown) => {
       const all = valuesRef.current
       const a = args as { fields?: string[] } | undefined
       if (!a?.fields || a.fields.length === 0) return all
@@ -331,7 +331,7 @@ export function SchemaForm({ form, panelPath, i18n, onSuccess, submitUrl, submit
       knownFields: () => knownFieldsSnapshot,
       blockAllowlist: () => allowlistSnapshot,
     })
-    const unregister = registerClientTool('update_form_state', handler)
+    const unregister = ClientToolRegistry.register('update_form_state', handler)
     if (typeof window !== 'undefined') {
       ;(window as unknown as { __updateFormState?: typeof handler }).__updateFormState = handler
     }

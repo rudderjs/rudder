@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import type { FieldMeta, SectionMeta, TabsMeta, PanelI18n, ResolvedAiAction } from '@pilotiq/panels'
+import { useAiUi } from '@pilotiq/panels'
 import { Tabs, TabsPanel, TabsPanels, TabsList, TabsTab } from '@/components/animate-ui/components/base/tabs.js'
 import { FieldInput } from '../FieldInput.js'
-import { AiDropdown } from '../agents/AiDropdown.js'
 import { readFieldSelection } from '../agents/readFieldSelection.js'
-import { PanelAgentApiProvider } from '../agents/standaloneAgentApiContext.js'
 import { isFieldVisible, isFieldDisabled } from '../../_lib/conditions.js'
 import type { SchemaItem } from '../../_lib/formHelpers.js'
 
@@ -55,6 +54,10 @@ interface AiQuickActionsProps {
 function AiQuickActions({ field, apiBase, resourceSlug, recordId }: AiQuickActionsProps) {
   const [open, setOpen] = useState(false)
   const [selection, setSelection] = useState<{ text: string } | null>(null)
+  // AiDropdown is contributed by `@pilotiq-pro/ai` via the AiUiContext slot
+  // bag. Undefined when pro is not installed — the field trigger then has
+  // nothing to render and bails below.
+  const { AiDropdown } = useAiUi()
 
   // Capture selection at the moment the dropdown opens. The browser preserves
   // selectionStart/End on plain inputs across blur, and Lexical preserves its
@@ -74,6 +77,9 @@ function AiQuickActions({ field, apiBase, resourceSlug, recordId }: AiQuickActio
 
   const actions: ResolvedAiAction[] = Array.isArray(field.ai) ? field.ai : []
   if (actions.length === 0) return null
+  // No pro package installed → no dropdown to render → hide the trigger
+  // entirely. Keeps the label tidy instead of showing a dead ✦ button.
+  if (!AiDropdown) return null
 
   return (
     <div className="relative inline-flex ml-1.5">
@@ -216,19 +222,18 @@ export function SchemaRenderer({
     return renderField(item as FieldMeta)
   }
 
-  // Provide the standalone agent API context to descendant field input
-  // components so RichContentInput / collab text inputs can render their
-  // own inline AiDropdown (anchored to the FloatingToolbarPlugin /
-  // SelectionAiPlugin `✦` button) without prop-drilling. Null when AI is
-  // disabled (create mode or no API params), in which case fields treat
-  // inline AI surfaces as off — the field-level `✦` dropdown still works
-  // for any field that opted into `.ai([...])`.
-  const agentApiCtx = (aiApiBase && aiResourceSlug && aiRecordId)
-    ? { apiBase: aiApiBase, resourceSlug: aiResourceSlug, recordId: aiRecordId }
-    : null
+  // NB: the standalone `PanelAgentApiProvider` that used to wrap this tree
+  // has moved to `@pilotiq-pro/ai` — pro's own provider now supplies the
+  // apiBase / resourceSlug / recordId that inline AI surfaces (collab text
+  // inputs + rich content) need. Free field inputs no longer read that
+  // context; when pro is absent the inline ✦ affordances simply don't
+  // render. The field-level ✦ trigger above still works because its api
+  // params come from the `aiApiBase` / `aiResourceSlug` / `aiRecordId`
+  // props on this component, which are populated by `SchemaForm` in edit
+  // mode.
 
   return (
-    <PanelAgentApiProvider value={agentApiCtx}>
+    <>
       {schema
         .filter((item) => {
           if (item.type === 'section' || item.type === 'tabs') return true
@@ -236,6 +241,6 @@ export function SchemaRenderer({
         })
         .map((item, i) => renderSchemaItem(item, i))
       }
-    </PanelAgentApiProvider>
+    </>
   )
 }

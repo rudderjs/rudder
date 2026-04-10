@@ -12,8 +12,23 @@ export default defineConfig({
   server: {
     allowedHosts: true,
   },
+  resolve: {
+    // Dedupe modules that ship React Context — without dedupe, Vite's
+    // optimizeDeps pre-bundles `@pilotiq-pro/ai` with its OWN copies of
+    // `@pilotiq/panels` and React, creating duplicate `AiUiContext` /
+    // `React` instances. AdminLayout's `useAiUi()` reads the playground's
+    // workspace-link copy while pro's `AiUiContext.Provider` writes to
+    // its own bundled copy → context lookups return the empty default →
+    // AiChatTrigger never renders on the client → hydration mismatch.
+    dedupe: ['react', 'react-dom', '@pilotiq/panels', '@pilotiq/lexical'],
+  },
   optimizeDeps: {
     include: [
+      // Pilotiq pro — statically imported by the locally-overridden
+      // pages/(panels)/@panel/+Layout.tsx. Pre-bundling here keeps Vite's
+      // dep-graph and HMR happy across React boundary changes.
+      '@pilotiq-pro/ai',
+
       // Panels — UI primitives
       '@dnd-kit/core',
       '@dnd-kit/sortable',
@@ -66,6 +81,13 @@ export default defineConfig({
       '@lexical/list',
       '@lexical/code',
       '@floating-ui/dom',
+    ],
+    exclude: [
+      // Keep these as workspace-link runtime imports (NOT pre-bundled
+      // inside @pilotiq-pro/ai) so a single instance is shared with the
+      // playground's own imports. See `dedupe` rationale above.
+      '@pilotiq/panels',
+      '@pilotiq/lexical',
     ],
   },
   ssr: {

@@ -3,12 +3,12 @@ import { useState, useEffect } from 'react'
 import { navigate } from 'vike/client/router'
 import { Toaster } from 'sonner'
 import type { PanelNavigationMeta } from '@pilotiq/panels'
+import { useAiUi } from '@pilotiq/panels'
 import { GlobalSearch } from './GlobalSearch.js'
 import { useI18n } from '../_hooks/useI18n.js'
 import { ResourceIcon } from './ResourceIcon.js'
 import { ThemeProvider } from './ThemeProvider.js'
 import { ThemeToggle } from './ThemeToggle.js'
-import { AiChatPanel, AiChatTrigger } from './agents/AiChatPanel.js'
 import {
   Sidebar,
   SidebarContent,
@@ -576,6 +576,10 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
   const i18n   = useI18n()
   const dir    = panelMeta.dir ?? 'ltr'
   const branding = panelMeta.branding
+  // AI chat surfaces come from the open-core slot bag (`AiUiContext`).
+  // Empty when @pilotiq-pro/ai is not installed; populated by pro's
+  // `<AiUiProvider>` (auto-wrapped in @panel/+Layout.tsx) when it is.
+  const { AiChatPanel, AiChatTrigger } = useAiUi()
 
   return (
     <div dir={dir} className="contents">
@@ -603,7 +607,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
           <div className="flex items-center gap-1 px-3">
             <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
             <ThemeToggle />
-            <AiChatTrigger />
+            {AiChatTrigger && <AiChatTrigger />}
           </div>
         </header>
         <div className="flex flex-1 flex-col overflow-y-auto">
@@ -611,7 +615,7 @@ function SidebarLayout({ panelMeta, currentSlug, initialUser, children }: Props 
         </div>
       </SidebarInset>
 
-      <AiChatPanel />
+      {AiChatPanel && <AiChatPanel />}
       <Toaster richColors position="bottom-right" />
     </SidebarProvider>
     </div>
@@ -626,6 +630,7 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
   const i18n  = useI18n()
   const dir   = panelMeta.dir ?? 'ltr'
   const branding = panelMeta.branding
+  const { AiChatPanel, AiChatTrigger } = useAiUi()
 
   function UserDropdown() {
     if (!user) return null
@@ -699,14 +704,14 @@ function TopbarLayout({ panelMeta, currentSlug, initialUser, children }: Props &
         </nav>
         <GlobalSearch panelMeta={panelMeta} pathSegment={panelMeta.path.replace(/^\//, '')} />
         <ThemeToggle />
-        <AiChatTrigger />
+        {AiChatTrigger && <AiChatTrigger />}
         <UserDropdown />
       </header>
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>
-        <AiChatPanel />
+        {AiChatPanel && <AiChatPanel />}
       </div>
       <Toaster richColors position="bottom-right" />
     </div>

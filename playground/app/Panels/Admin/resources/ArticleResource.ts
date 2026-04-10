@@ -1,6 +1,5 @@
 import {
   Resource,
-  PanelAgent,
   Section,
   TextField,
   TextareaField,
@@ -25,6 +24,7 @@ import {
   Stats,
   Stat,
 } from '@pilotiq/panels'
+import { PanelAgent } from '@pilotiq-pro/ai'
 import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 import { RichContentField } from '@pilotiq/lexical'

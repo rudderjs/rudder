@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { getField, subscribeFields } from '@pilotiq/panels'
+import { getField, subscribeFields, useAiUi } from '@pilotiq/panels'
 import type { ResolvedAiAction } from '@pilotiq/panels'
-import { useAiChatSafe } from '../agents/AiChatContext.js'
 import { registerLexicalEditor } from '../agents/lexicalRegistry.js'
-import { usePanelAgentApi } from '../agents/standaloneAgentApiContext.js'
-import { AiDropdown } from '../agents/AiDropdown.js'
 import type { FieldInputProps } from './types.js'
 import { INPUT_CLS } from './types.js'
 
@@ -44,17 +41,24 @@ export function getCollabTextRef(fieldName: string) {
 export function TextInput({ field, value, onChange, disabled = false, userName, userColor, wsPath, docName }: FieldInputProps) {
   const isDisabled = disabled || field.readonly
   const inputType = typeMap[field.type] ?? 'text'
-  const aiChat = useAiChatSafe()
-  const apiCtx = usePanelAgentApi()
+  // AI surfaces come from the open-core slot bag (`AiUiContext`). When
+  // `@pilotiq-pro/ai` is not installed, both slots are undefined and
+  // inline AI is silently skipped — the CollabText editor still renders
+  // normally, just without the ✦ selection trigger. The conditional hook
+  // call is stable per mount because `<AiUiProvider>` is either present
+  // from first render or absent for the lifetime of this instance (the
+  // parent remounts on provider arrival — see `@panel/+Layout.tsx`).
+  const { AiDropdown, useAiChat } = useAiUi()
+  const aiChat = useAiChat ? useAiChat() : null
   const fieldName = field.name
 
   // Inline AI is only available on the COLLAB path (CollaborativePlainText
   // hosts a Lexical SelectionAiPlugin that emits the selection-action
   // callback). Non-collab plain `<input>` has no equivalent surface — for
   // those fields the field-level `✦` dropdown at the top of the field is
-  // the only AI trigger.
+  // the only AI trigger. Gated on pro providing an AiDropdown slot.
   const aiActions: ResolvedAiAction[] = Array.isArray(field.ai) ? field.ai : []
-  const hasInlineAi = aiActions.length > 0 && !!apiCtx
+  const hasInlineAi = aiActions.length > 0 && !!AiDropdown
 
   const [menu, setMenu] = useState<{ text: string; rect: InlineAiAnchorRect } | null>(null)
 
@@ -100,13 +104,14 @@ export function TextInput({ field, value, onChange, disabled = false, userName, 
     () => null, // SSR snapshot — never render collab on server
   )
 
-  const dropdownEl = menu && apiCtx && (
+  // Slot-bag `AiDropdown` reads its own api context (apiBase, resourceSlug,
+  // recordId) from a pro-side provider mounted inside `<AiUiProvider>`, so
+  // free field inputs no longer need to pass those props. Undefined slot →
+  // null element → nothing renders.
+  const dropdownEl = menu && AiDropdown && (
     <AiDropdown
       fieldName={fieldName}
       actions={aiActions}
-      apiBase={apiCtx.apiBase}
-      resourceSlug={apiCtx.resourceSlug}
-      recordId={apiCtx.recordId}
       selection={{ text: menu.text }}
       position={{ mode: 'fixed', left: menu.rect.left, top: menu.rect.bottom + 4 }}
       onClose={() => setMenu(null)}
