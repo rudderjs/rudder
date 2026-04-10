@@ -52,8 +52,9 @@ Helpers: `detectPackageManager()`, `pmExec(pm, bin)`, `pmRun(pm, script)`, `pmIn
 ---
 
 ## Vike +config.ts Strategy
-- **Single framework**: renderer (`vike-react`/`vike-vue`/`vike-solid`) included in root `pages/+config.ts` alongside `vike-photon`. No `pages/index/+config.ts` generated.
-- **Multi-framework**: root `pages/+config.ts` has `vike-photon` only (no renderer). Each page/folder has its own `+config.ts` extending the correct renderer. `pages/index/+config.ts` is generated for the primary framework.
+- **All apps**: `+server.ts` is generated at the project root, wiring `bootstrap/app.ts` to Vike via `@vikejs/hono`.
+- **Single framework**: renderer (`vike-react`/`vike-vue`/`vike-solid`) included in root `pages/+config.ts`. No `pages/index/+config.ts` generated.
+- **Multi-framework**: root `pages/+config.ts` has no renderer. Each page/folder has its own `+config.ts` extending the correct renderer. `pages/index/+config.ts` is generated for the primary framework.
 
 ---
 

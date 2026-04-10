@@ -6,8 +6,8 @@ import http from 'node:http'
 
 // ─── WebSocket upgrade handler for production ──────────────
 // Monkey-patch http.createServer at module load time so that any HTTP server
-// created after providers boot (including photon's nodeServe) gets the WS
-// upgrade handler attached. In dev, the @rudderjs/vite plugin does the same.
+// created after providers boot gets the WS upgrade handler attached.
+// In dev, the @rudderjs/vite plugin does the same.
 //
 // IMPORTANT: Skip the patch if @rudderjs/vite has already patched http.createServer.
 // Otherwise both patches would attach listeners, causing handleUpgrade() to be
@@ -316,9 +316,8 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
     },
 
     async createFetchHandler(setup?: (adapter: ServerAdapter) => void): Promise<FetchHandler> {
-      // Dynamic import keeps @photonjs/hono out of the vite.config.ts load path
-      // (virtual: URLs only exist inside Vite's runtime, not during config parsing)
-      const { apply, serve: photonServe } = await import('@photonjs/hono')
+      // Dynamic import keeps @vikejs/hono out of the vite.config.ts load path
+      const vike = (await import('@vikejs/hono')).default
 
       const app = new Hono()
 
@@ -333,7 +332,6 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
           await next()
         })
       }
-
 
       const isProd = process.env['APP_ENV'] === 'production' || process.env['NODE_ENV'] === 'production'
 
@@ -367,19 +365,17 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
         })
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      apply(app as any)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const server = photonServe(app as any)
+      // Attach Vike SSR middleware
+      vike(app)
 
       // Logging at the outermost fetch level catches ALL requests — including Vike's
       // client-side navigation data fetches, which bypass the Hono middleware chain.
       return async (request) => {
         const display = logPath(new URL(request.url).pathname)
-        if (display === null) return server.fetch(request)
+        if (display === null) return app.fetch(request)
         const n     = nextReqId()
         const start = performance.now()
-        const res   = await server.fetch(request)
+        const res   = await app.fetch(request)
         console.log(formatRequestLog(n, display, res.status, performance.now() - start))
         return res
       }

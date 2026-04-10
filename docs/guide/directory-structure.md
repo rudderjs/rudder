@@ -35,8 +35,9 @@ my-app/
 │   ├── api.ts              # router.get/post/all() — side-effect file, no exports
 │   ├── web.ts              # Non-API server routes (redirects, guards) — side-effect file
 │   └── console.ts          # rudder.command() — side-effect file, no exports
+├── +server.ts              # Wires Vike to bootstrap/app.ts (fetch handler)
 ├── pages/                  # Vike file-based SSR pages
-│   ├── +config.ts          # Root vike-photon config (points to bootstrap/app.ts)
+│   ├── +config.ts          # Root Vike config (UI renderer for single-framework apps)
 │   ├── index/
 │   │   ├── +config.ts      # Framework config (extends vike-react / vike-vue / vike-solid)
 │   │   ├── +data.ts        # SSR data loader
@@ -116,20 +117,19 @@ Contains `schema.prisma`. Run `pnpm exec prisma generate` after any schema chang
 
 `bootstrap/app.ts` is both the bootstrap and the HTTP entry point. It must have `import 'reflect-metadata'` at the top, and it `export default`s the `RudderJS` instance returned by `.create()`.
 
-`pages/+config.ts` wires Vike to use it via `vike-photon`:
+`+server.ts` at the project root wires Vike to the RudderJS instance:
 
 ```ts
-// pages/+config.ts
-import type { Config } from 'vike/types'
-import vikePhoton from 'vike-photon/config'
+// +server.ts
+import type { Server } from 'vike/types'
+import app from './bootstrap/app.js'
 
 export default {
-  extends: [vikePhoton],
-  photon: { server: 'bootstrap/app.ts' },
-} as unknown as Config
+  fetch: app.fetch,
+} satisfies Server
 ```
 
-No separate `src/index.ts` is needed — `vike-photon` consumes the `RudderJS` instance directly.
+No separate `src/index.ts` is needed — Vike consumes the `RudderJS` instance directly via `+server.ts`.
 
 ## Module Structure (optional)
 

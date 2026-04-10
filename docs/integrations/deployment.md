@@ -1,10 +1,10 @@
 # Deployment
 
-RudderJS apps use `vike-photon` to wire `bootstrap/app.ts` as the HTTP server, making them deployable to any runtime that supports the Fetch API — Node.js, Cloudflare Workers, Bun, or Deno.
+RudderJS apps use `+server.ts` to wire `bootstrap/app.ts` as the HTTP server via `@vikejs/hono`, making them deployable to any runtime that supports the Fetch API — Node.js, Cloudflare Workers, Bun, or Deno.
 
 ## Entry Point
 
-`bootstrap/app.ts` is the entry point. It exports the `RudderJS` instance, which `vike-photon` uses as the HTTP server:
+`bootstrap/app.ts` is the entry point. It exports the `RudderJS` instance, which `+server.ts` exposes to Vike as the HTTP server:
 
 ```ts
 // bootstrap/app.ts
@@ -17,17 +17,16 @@ export default Application.configure({ ... }).create()
 ```
 
 ```ts
-// pages/+config.ts
-import type { Config } from 'vike/types'
-import vikePhoton from 'vike-photon/config'
+// +server.ts (project root)
+import type { Server } from 'vike/types'
+import app from './bootstrap/app.js'
 
 export default {
-  extends: [vikePhoton],
-  photon: { server: 'bootstrap/app.ts' },
-} as unknown as Config
+  fetch: app.fetch,
+} satisfies Server
 ```
 
-`forge.handleRequest`:
+`app.fetch`:
 - Lazily bootstraps providers on the first request
 - Handles requests via the Hono adapter
 - Returns a standard `Response`

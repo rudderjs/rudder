@@ -23,21 +23,19 @@ Each page is a directory under `pages/` containing one or more `+` prefixed file
 
 ## Root Config
 
-`pages/+config.ts` is the root Vike config for the entire app. It wires `vike-photon` to your RudderJS server and — for single-framework apps — declares the UI renderer here too:
+`pages/+config.ts` is the root Vike config for the entire app. For single-framework apps, declare the UI renderer here:
 
 ```ts
 // pages/+config.ts — single framework (React)
 import type { Config } from 'vike/types'
-import vikePhoton from 'vike-photon/config'
 import vikeReact from 'vike-react/config'
 
 export default {
-  extends: [vikePhoton, vikeReact],
-  photon: {
-    server: 'bootstrap/app.ts',
-  },
-} as unknown as Config
+  extends: [vikeReact],
+} satisfies Config
 ```
+
+The server wiring lives in `+server.ts` at the project root (see [Installation](/guide/installation)).
 
 With the renderer in the root config, no per-page `+config.ts` files are needed — all pages inherit React automatically.
 
@@ -54,7 +52,7 @@ When mixing multiple UI frameworks, keep the renderer **out** of the root `pages
 import type { Config } from 'vike/types'
 import vikeReact from 'vike-react/config'
 
-export default { extends: vikeReact } as unknown as Config
+export default { extends: vikeReact } satisfies Config
 ```
 
 ```ts
@@ -62,7 +60,7 @@ export default { extends: vikeReact } as unknown as Config
 import type { Config } from 'vike/types'
 import vikeVue from 'vike-vue/config'
 
-export default { extends: vikeVue } as unknown as Config
+export default { extends: vikeVue } satisfies Config
 ```
 
 ```ts
@@ -70,7 +68,7 @@ export default { extends: vikeVue } as unknown as Config
 import type { Config } from 'vike/types'
 import vikeSolid from 'vike-solid/config'
 
-export default { extends: vikeSolid } as unknown as Config
+export default { extends: vikeSolid } satisfies Config
 ```
 
 A `+config.ts` in a parent directory applies to the entire subtree — you do not need one in every single page directory.
@@ -287,7 +285,7 @@ When you select multiple frameworks in `create-rudderjs-app`, the root `pages/+c
 
 ```
 pages/
-  +config.ts       ← vike-photon only (no renderer)
+  +config.ts       ← empty config (no renderer)
   index/
     +config.ts     ← extends vikeReact (primary)
     +Page.tsx
