@@ -214,7 +214,7 @@ export class ArticleResource extends Resource {
         .required()
         .searchable()
         .sortable()
-        // .persist(['websocket', 'indexeddb'])
+        .persist(['websocket', 'indexeddb'])
         .ai(['rewrite', 'shorten', 'expand', 'fix-grammar']),
 
       SlugField.make('slug')

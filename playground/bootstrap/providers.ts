@@ -17,6 +17,7 @@ import { live }   from '@rudderjs/live'
 import { ai }        from '@rudderjs/ai'
 import { panels } from '@pilotiq/panels'
 import { AiServiceProvider } from '@pilotiq-pro/ai'
+import { CollabServiceProvider } from '@pilotiq-pro/collab'
 import { adminPanel } from '../app/Panels/Admin/AdminPanel.js'
 import { boost }     from '@rudderjs/boost'
 import { log }       from '@rudderjs/log'
@@ -72,6 +73,11 @@ export default [
   //    Both prerequisites are in place. See pilotiq/docs/plans/
   //    phase-4-ai-extraction.md §4.6 R3 for the boot-order rationale.
   AiServiceProvider,
+  // CollabServiceProvider seeds CollabSupportRegistry with ['websocket',
+  // 'indexeddb'] so `Field.persist(['websocket'])` validation succeeds during
+  // panels factory boot. Must register before panels([adminPanel]) — same
+  // boot-order rule as AiServiceProvider. Phase 5 (2026-04-10).
+  CollabServiceProvider,
   panels([adminPanel]),
 
   // ── Application ─────────────────────────────────────────

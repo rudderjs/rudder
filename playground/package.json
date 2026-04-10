@@ -40,6 +40,7 @@
     "@pilotiq/panels": "link:../../pilotiq/packages/panels",
     "@pilotiq/lexical": "link:../../pilotiq/packages/lexical",
     "@pilotiq-pro/ai": "link:../../pilotiq-pro/packages/ai",
+    "@pilotiq-pro/collab": "link:../../pilotiq-pro/packages/collab",
     "@rudderjs/queue": "workspace:*",
     "@rudderjs/queue-bullmq": "workspace:*",
     "@rudderjs/router": "workspace:*",

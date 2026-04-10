@@ -21,10 +21,8 @@ import type { PanelNavigationMeta } from '@pilotiq/panels'
 //
 // `vendor:publish --tag=pilotiq-pages` will overwrite this file. After a
 // re-vendor, re-apply this patch (or pull from git).
-// `@pilotiq-pro/collab` is not currently linked in this playground; collab
-// runs in local-only mode via the `@pilotiq/lexical` stub. Add the package
-// + link + optimizeDeps entry to enable real Yjs collaboration.
 import { AiUiProvider } from '@pilotiq-pro/ai'
+import { CollabProvider } from '@pilotiq-pro/collab'
 // Auto-discover plugin registrations (fields, lazy elements, etc.)
 // Plugins publish _register-{name}.ts files that call registerField/registerLazyElement.
 import.meta.glob('../_register-*.ts', { eager: true })
@@ -130,11 +128,13 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
     <PanelErrorBoundary>
       {themeCss && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       <AiUiProvider panelPath={data.panelMeta.path}>
-        <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
-          <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
-            {children}
-          </AdminLayout>
-        </I18nProvider>
+        <CollabProvider>
+          <I18nProvider i18n={data.panelMeta.i18n} locale={data.panelMeta.locale}>
+            <AdminLayout panelMeta={data.panelMeta} currentSlug={data.slug ?? ''} {...(data.sessionUser !== undefined ? { initialUser: data.sessionUser } : {})}>
+              {children}
+            </AdminLayout>
+          </I18nProvider>
+        </CollabProvider>
       </AiUiProvider>
     </PanelErrorBoundary>
   )

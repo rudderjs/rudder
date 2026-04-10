@@ -1010,6 +1010,9 @@ importers:
       '@pilotiq-pro/ai':
         specifier: link:../../pilotiq-pro/packages/ai
         version: link:../../pilotiq-pro/packages/ai
+      '@pilotiq-pro/collab':
+        specifier: link:../../pilotiq-pro/packages/collab
+        version: link:../../pilotiq-pro/packages/collab
       '@pilotiq/lexical':
         specifier: link:../../pilotiq/packages/lexical
         version: link:../../pilotiq/packages/lexical

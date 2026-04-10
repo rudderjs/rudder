@@ -20,7 +20,18 @@ export default defineConfig({
     // workspace-link copy while pro's `AiUiContext.Provider` writes to
     // its own bundled copy → context lookups return the empty default →
     // AiChatTrigger never renders on the client → hydration mismatch.
-    dedupe: ['react', 'react-dom', '@pilotiq/panels', '@pilotiq/lexical'],
+    // `yjs`, `y-websocket`, `y-indexeddb`, `@lexical/yjs` MUST be deduped:
+    // both the playground and `@pilotiq-pro/collab` declare yjs as a runtime
+    // dep, and with `link:` installs they resolve to two different module
+    // instances. Yjs has a constructor-check guard that throws "Yjs was
+    // already imported" the moment a second copy is loaded into the same
+    // browser tab — see https://github.com/yjs/yjs/issues/438. Dedupe forces
+    // a single instance shared by free lexical, pro collab, and the app.
+    dedupe: [
+      'react', 'react-dom',
+      '@pilotiq/panels', '@pilotiq/lexical',
+      'yjs', 'y-websocket', 'y-indexeddb', '@lexical/yjs',
+    ],
   },
   optimizeDeps: {
     include: [
@@ -28,6 +39,7 @@ export default defineConfig({
       // pages/(panels)/@panel/+Layout.tsx. Pre-bundling here keeps Vite's
       // dep-graph and HMR happy across React boundary changes.
       '@pilotiq-pro/ai',
+      '@pilotiq-pro/collab',
 
       // Panels — UI primitives
       '@dnd-kit/core',
