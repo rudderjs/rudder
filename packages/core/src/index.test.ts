@@ -39,10 +39,10 @@ describe('Application', () => {
     assert.strictEqual(app1, app2)
   })
 
-  it('create() recreates the instance in development when config is provided', () => {
+  it('create() returns the same singleton in development (no auto-recreate)', () => {
     const app1 = Application.create({ name: 'First', env: 'local' })
     const app2 = Application.create({ name: 'Second', env: 'local' })
-    assert.notStrictEqual(app1, app2)
+    assert.strictEqual(app1, app2)
   })
 
   it('getInstance() throws when no instance has been created', () => {
@@ -413,7 +413,7 @@ describe('AppBuilder', () => {
 
 describe('ExceptionConfigurator', () => {
   function makeReq() {
-    return {} as Parameters<ReturnType<ExceptionConfigurator['buildHandler']>>[1]
+    return { headers: {} } as Parameters<ReturnType<ExceptionConfigurator['buildHandler']>>[1]
   }
 
   it('buildHandler() auto-handles ValidationError → 422 JSON', async () => {
@@ -440,11 +440,12 @@ describe('ExceptionConfigurator', () => {
     assert.strictEqual(body.code, 402)
   })
 
-  it('buildHandler() re-throws unhandled errors', async () => {
+  it('buildHandler() renders 500 for unhandled errors', async () => {
     const exc = new ExceptionConfigurator()
     const handler = exc.buildHandler()
     const err = new Error('unhandled')
-    await assert.rejects(async () => handler(err, makeReq()), /unhandled/)
+    const res = await handler(err, makeReq())
+    assert.strictEqual(res.status, 500)
   })
 
   it('buildHandler() re-throws ignored error types', async () => {
