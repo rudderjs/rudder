@@ -458,7 +458,7 @@ describe('Model scopes', () => {
 
   it('withoutGlobalScope excludes a scope', () => {
     let whereCalled = false  // eslint-disable-line no-useless-assignment
-    const _orderByCalled = false
+    let orderByCalled = false // eslint-disable-line @typescript-eslint/no-unused-vars, no-useless-assignment
     ModelRegistry.set(makeAdapter(makeQb({
       orderBy: function(this: QueryBuilder<unknown>) { orderByCalled = true; return this },
       where: function(this: QueryBuilder<unknown>) { whereCalled = true; return this },
@@ -472,7 +472,7 @@ describe('Model scopes', () => {
       }
     }
     // Reset flags after initial query() call (which applies both scopes)
-    orderByCalled = false
+    orderByCalled = false // eslint-disable-line @typescript-eslint/no-unused-vars
     whereCalled = false
     Post.query().withoutGlobalScope('ordered')
     // The rebuilt query should have 'where' (active) applied
