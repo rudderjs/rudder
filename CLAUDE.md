@@ -151,27 +151,52 @@ export default Application.configure({
 
 ---
 
-## Playground Structure
+## Playgrounds
+
+Three playgrounds exist across three repos, one per tier of the open-core stack. All three can run simultaneously.
+
+| Playground | Repo | Port | HMR | Purpose |
+|---|---|---|---|---|
+| `rudderjs/playground` | rudderjs | 3000 | 24678 | Pure framework demo — auth, routing, ORM, queue, mail, cache, storage, scheduling, broadcast, live, telescope/pulse/horizon, Agents (`@rudderjs/ai`). **Zero** `@pilotiq/*` or `@pilotiq-pro/*` deps. |
+| `pilotiq/playground` | pilotiq | 3001 | 24679 | Free pilotiq dogfood — panels + lexical (local-only) + media + workspaces. **No** AI chat, **no** collab, **no** `@pilotiq-pro/*`. |
+| `pilotiq-pro/playground` | pilotiq-pro | 3002 | 24680 | Full-stack pro dogfood — framework + free pilotiq + `@pilotiq-pro/{ai,collab}`. Title-field collab, AI chat sidebar, `✦` field actions, sub-agents. |
+
+### Running
+
+```bash
+cd ~/Projects/rudderjs/playground  && pnpm dev   # :3000
+cd ~/Projects/pilotiq/playground   && pnpm dev   # :3001
+cd ~/Projects/pilotiq-pro/playground && pnpm dev # :3002
+```
+
+> Always run `pnpm build` from the **rudderjs** root before running any playground — packages must be compiled first.
+
+### Cross-repo wiring
+
+All three resolve `@rudderjs/*` to `link:../rudderjs/packages/<name>` via `pnpm.overrides` in each repo's root `package.json`. `pilotiq-pro` also overrides `@pilotiq/*` to `link:../pilotiq/packages/<name>`. No git submodules; just sibling clones on disk.
+
+### rudderjs/playground structure
 
 ```
 playground/
 ├── bootstrap/
 │   ├── app.ts          # Application.configure()...create()
-│   └── providers.ts    # [hash, auth, events, queue, mail, notifications, cache, storage, scheduler, DatabaseServiceProvider, AppServiceProvider]
-├── config/             # app, server, database, auth, queue, mail, cache, storage, index
+│   └── providers.ts    # [log, database, session, hash, cache, auth, queue, events, mail, storage, localization, scheduler, notifications, broadcasting, live, ai, boost, telescope, pulse, horizon, AppServiceProvider]
+├── config/             # app, server, database, auth, queue, mail, cache, storage, ai, log, telescope, pulse, horizon, index
 ├── app/
 │   ├── Models/User.ts
-│   ├── Services/UserService.ts
-│   └── Providers/DatabaseServiceProvider.ts + AppServiceProvider.ts
+│   ├── Agents/ResearchAgent.ts   # @rudderjs/ai framework demo
+│   ├── Modules/Todo/             # self-contained module with its own .prisma + test
+│   └── Providers/AppServiceProvider.ts
 ├── routes/
 │   ├── api.ts          # router.get/post/all()
-│   └── console.ts      # rudder.command()
-├── pages/              # Vike file-based routing
-├── prisma/schema.prisma
+│   └── console.ts      # rudder.command() + db:seed + scheduler
+├── pages/              # Vike file-based routing (no /admin — panels are gone)
+├── prisma/schema/      # multi-file: auth, base, live, notification, app (Todo only)
 └── vite.config.ts
 ```
 
-**Provider boot order**: `DatabaseServiceProvider` must come before any provider that uses ORM models.
+**Provider boot order**: `DatabaseServiceProvider` (via `database()`) must come before any provider that uses ORM models.
 
 ---
 
