@@ -239,14 +239,14 @@ describe('getTemplates() — package.json deps', () => {
   it('includes shadcn deps when shadcn=true', () => {
     const files = getTemplates(ctx({ shadcn: true, tailwind: true }))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok('shadcn' in pkg.dependencies)
+    assert.ok('shadcn' in pkg.devDependencies)
     assert.ok('class-variance-authority' in pkg.dependencies)
   })
 
   it('does not include shadcn deps when shadcn=false', () => {
     const files = getTemplates(ctx({ shadcn: false }))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok(!('shadcn' in pkg.dependencies))
+    assert.ok(!('shadcn' in pkg.devDependencies))
   })
 
   it('includes tailwind deps when tailwind=true', () => {

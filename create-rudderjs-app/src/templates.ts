@@ -212,11 +212,13 @@ function packageJson(ctx: TemplateContext): string {
   } : {}
 
   const shadcnDeps: Record<string, string> = shadcn ? {
-    'shadcn':                   'latest',
     'class-variance-authority': '^0.7.1',
     'clsx':                     '^2.1.1',
     'tailwind-merge':           '^3.5.0',
     'lucide-react':             '^0.575.0',
+  } : {}
+  const shadcnDevDeps: Record<string, string> = shadcn ? {
+    'shadcn': 'latest',
   } : {}
 
   // Base framework deps (always included)
@@ -271,6 +273,7 @@ function packageJson(ctx: TemplateContext): string {
     'vite':          '^7.1.0',
     ...frameworkDevDeps,
     ...tailwindDevDeps,
+    ...shadcnDevDeps,
     ...dbDevDeps[db],
   }
   if (ctx.orm === 'prisma') devDeps['prisma'] = '^7.0.0'
