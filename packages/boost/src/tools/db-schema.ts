@@ -11,7 +11,7 @@ export function getDbSchema(cwd: string): { models: PrismaModel[]; raw?: string 
   const schemaDir = join(cwd, 'prisma', 'schema')
   const singleFile = join(cwd, 'prisma', 'schema.prisma')
 
-  let content = ''
+  let content = '' // eslint-disable-line no-useless-assignment
 
   if (existsSync(schemaDir)) {
     const files = readdirSync(schemaDir).filter(f => f.endsWith('.prisma')).sort()

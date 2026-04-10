@@ -457,8 +457,8 @@ describe('Model scopes', () => {
   })
 
   it('withoutGlobalScope excludes a scope', () => {
-    let whereCalled = false
-    let orderByCalled = false
+    let whereCalled = false  // eslint-disable-line no-useless-assignment
+    const _orderByCalled = false
     ModelRegistry.set(makeAdapter(makeQb({
       orderBy: function(this: QueryBuilder<unknown>) { orderByCalled = true; return this },
       where: function(this: QueryBuilder<unknown>) { whereCalled = true; return this },

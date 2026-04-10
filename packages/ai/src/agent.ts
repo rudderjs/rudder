@@ -188,7 +188,7 @@ export class ConversableAgent {
     let resolveResponse: (r: AgentResponse) => void
     const responsePromise = new Promise<AgentResponse>(r => { resolveResponse = r })
 
-    const self = this
+    const self = this // eslint-disable-line @typescript-eslint/no-this-alias
     const storeRef = store
     async function* generateStream(): AsyncIterable<StreamChunk> {
       await setupPromise
@@ -393,7 +393,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   let loopFinishReason: FinishReason | undefined
   let stopForClientTools = false
   let stopForApproval = false
-  let resumedToolMessages: AiMessage[] = []
+  let resumedToolMessages: AiMessage[] = [] // eslint-disable-line no-useless-assignment
 
   // Resume server tools left pending by a previous approval round-trip.
   // (Must run before middleware context creation since `messages` may grow.)
@@ -436,7 +436,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
       if (middlewares.length > 0) await runSequential(middlewares, 'onIteration', ctx)
 
       let currentModel = modelString
-      let currentToolSchemas = toolSchemas
+      const currentToolSchemas = toolSchemas
 
       // prepareStep hook
       if (a.prepareStep) {
@@ -670,7 +670,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     let loopFinishReason: FinishReason | undefined
     let stopForClientTools = false
     let stopForApproval = false
-    let resumedToolMessages: AiMessage[] = []
+    let resumedToolMessages: AiMessage[] = [] // eslint-disable-line no-useless-assignment
 
     // Resume server tools left pending by a previous approval round-trip.
     {

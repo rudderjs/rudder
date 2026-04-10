@@ -274,7 +274,7 @@ export class PendingRequest {
       return new HttpResponse(res.status, body, headers)
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`[RudderJS/Http] Request timed out after ${this._timeout}ms`)
+        throw new Error(`[RudderJS/Http] Request timed out after ${this._timeout}ms`, { cause: err })
       }
       throw err
     } finally {

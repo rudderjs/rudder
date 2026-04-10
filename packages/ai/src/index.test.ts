@@ -779,7 +779,7 @@ describe('Agent failover', () => {
     let failCount = 0
     const failAdapter: import('./types.js').ProviderAdapter = {
       async generate() { failCount++; throw new Error('Provider down') },
-      async *stream() { throw new Error('Provider down') },
+      async *stream() { yield; throw new Error('Provider down') },
     }
 
     AiRegistry.register({ name: 'fail', create: () => failAdapter })
@@ -802,7 +802,7 @@ describe('Agent failover', () => {
 
     const failAdapter: import('./types.js').ProviderAdapter = {
       async generate() { throw new Error('Down') },
-      async *stream() { throw new Error('Down') },
+      async *stream() { yield; throw new Error('Down') },
     }
 
     AiRegistry.register({ name: 'fail1', create: () => failAdapter })

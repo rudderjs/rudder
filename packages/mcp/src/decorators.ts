@@ -21,6 +21,7 @@ export function Description(description: string): ClassDecorator {
   return (target) => { Reflect.defineMetadata(DESCRIPTION_KEY, description, target) }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export function getServerMetadata(target: Function): { name: string | undefined; version: string | undefined; instructions: string | undefined } {
   return {
     name: Reflect.getMetadata(NAME_KEY, target) as string | undefined,
@@ -29,6 +30,7 @@ export function getServerMetadata(target: Function): { name: string | undefined;
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export function getDescription(target: Function): string | undefined {
   return Reflect.getMetadata(DESCRIPTION_KEY, target) as string | undefined
 }

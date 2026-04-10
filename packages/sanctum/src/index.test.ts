@@ -22,7 +22,7 @@ function fakeModel(users: Record<string, unknown>[]) {
   return {
     find: async (id: string | number) => users.find(u => u['id'] === String(id)) ?? null,
     query: () => {
-      let filters: Record<string, unknown> = {}
+      const filters: Record<string, unknown> = {}
       const builder = {
         where(col: string, val: unknown) { filters[col] = val; return builder },
         async first() {

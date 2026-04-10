@@ -212,7 +212,7 @@ export class Str {
     return value
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\x00-\x7F]/g, '')
+      .replace(/[^\u0000-\u007F]/g, '') // eslint-disable-line no-control-regex
   }
 
   /**

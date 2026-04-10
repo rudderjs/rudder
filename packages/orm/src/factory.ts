@@ -117,7 +117,7 @@ export abstract class ModelFactory<TAttrs extends Record<string, unknown>> {
 
   private async _build(overrides?: Partial<TAttrs>): Promise<TAttrs> {
     // Resolve definition (supports sequence() callables inside it)
-    let raw = await this.definition()
+    const raw = await this.definition()
 
     // Resolve any callable values (from sequence())
     const resolved: Record<string, unknown> = {}
