@@ -135,7 +135,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (ctx.frameworks.length > 1) {
     files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
   }
-  files['pages/index/+data.ts']          = pagesIndexData()
+  files['pages/index/+data.ts']          = pagesIndexData(ctx)
   files[`pages/index/+Page${ext}`]       = pagesIndexPage(ctx)
   files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
   files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
@@ -1453,7 +1453,18 @@ export default {
   }
 }
 
-function pagesIndexData(): string {
+function pagesIndexData(ctx: TemplateContext): string {
+  if (!ctx.packages.auth) {
+    return `export type Data = {
+  message: string
+}
+
+export async function data(): Promise<Data> {
+  return { message: 'Welcome to RudderJS' }
+}
+`
+  }
+
   return `import { app } from '@rudderjs/core'
 import type { BetterAuthInstance } from '@rudderjs/auth'
 
@@ -1482,16 +1493,35 @@ function pagesIndexPage(ctx: TemplateContext): string {
 
 function pagesIndexPageReact(ctx: TemplateContext): string {
   const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const extraLinks: string[] = []
+  if (ctx.withTodo) extraLinks.push('        <a href="/todos" className="underline hover:text-foreground">Todos</a>')
+  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="underline hover:text-foreground">AI Chat</a>')
+  const extraLinksStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
+
+  if (!ctx.packages.auth) {
+    return `${cssImport}import { useData } from 'vike-react/useData'
+import type { Data } from './+data.js'
+
+export default function Page() {
+  const data = useData<Data>()
+
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+      <h1 className="text-4xl font-bold tracking-tight">${ctx.name}</h1>
+      <p className="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <a href="/api/health" className="underline hover:text-foreground">API Health</a>\${extraLinksStr}
+      </div>
+    </div>
+  )
+}
+`
+  }
+
   const todosLink = ctx.withTodo
     ? `          <a href="/todos" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
-  const authLinks = ctx.packages.auth
-    ? `          <a href="/register" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
-          <a href="/login" className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
-    : ''
-  const extraLinks: string[] = []
-  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="underline hover:text-foreground">AI Chat</a>')
-  const extraLinksStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
   return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
@@ -1533,14 +1563,14 @@ ${todosLink}
       ) : (
         <div className="flex gap-2">
 ${todosLink}
-${authLinks}
+          <a href="/register" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
+          <a href="/login" className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>
         </div>
       )}
 
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
         <a href="/api/health" className="underline hover:text-foreground">API Health</a>
-        <a href="/api/me" className="underline hover:text-foreground">Session Info</a>
-\${extraLinksStr}
+        <a href="/api/me" className="underline hover:text-foreground">Session Info</a>\${extraLinksStr}
       </div>
     </div>
   )
@@ -1550,15 +1580,35 @@ ${authLinks}
 
 function pagesIndexPageVue(ctx: TemplateContext): string {
   const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const extraLinks: string[] = []
+  if (ctx.withTodo) extraLinks.push('      <a href="/todos" class="underline hover:text-foreground">Todos</a>')
+  if (ctx.packages.ai) extraLinks.push('      <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
+  const extraStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
+
+  if (!ctx.packages.auth) {
+    return `<script setup lang="ts">
+${cssImport}import { useData } from 'vike-vue/useData'
+import type { Data } from './+data.js'
+
+const data = useData<Data>()
+</script>
+
+<template>
+  <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+    <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
+    <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+
+    <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+      <a href="/api/health" class="underline hover:text-foreground">API Health</a>${extraStr}
+    </div>
+  </div>
+</template>
+`
+  }
+
   const todosLink = ctx.withTodo
     ? `\n      <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
-  const authLinks = ctx.packages.auth
-    ? `\n      <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>\n      <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
-    : ''
-  const vueExtraLinks: string[] = []
-  if (ctx.packages.ai) vueExtraLinks.push('      <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
-  const vueExtraStr = vueExtraLinks.length > 0 ? '\n' + vueExtraLinks.join('\n') : ''
 
   return `<script setup lang="ts">
 ${cssImport}import { ref } from 'vue'
@@ -1593,12 +1643,14 @@ async function signOut() {
         </button>
       </div>
     </div>
-    <div v-else class="flex gap-2">${todosLink}${authLinks}
+    <div v-else class="flex gap-2">${todosLink}
+      <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
+      <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>
     </div>
 
     <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
       <a href="/api/health" class="underline hover:text-foreground">API Health</a>
-      <a href="/api/me" class="underline hover:text-foreground">Session Info</a>${vueExtraStr}
+      <a href="/api/me" class="underline hover:text-foreground">Session Info</a>${extraStr}
     </div>
   </div>
 </template>
@@ -1607,15 +1659,35 @@ async function signOut() {
 
 function pagesIndexPageSolid(ctx: TemplateContext): string {
   const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const extraLinks: string[] = []
+  if (ctx.withTodo) extraLinks.push('        <a href="/todos" class="underline hover:text-foreground">Todos</a>')
+  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
+  const extraStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
+
+  if (!ctx.packages.auth) {
+    return `${cssImport}import { useData } from 'vike-solid/useData'
+import type { Data } from './+data.js'
+
+export default function Page() {
+  const data = useData<Data>()
+
+  return (
+    <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
+      <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
+      <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+
+      <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <a href="/api/health" class="underline hover:text-foreground">API Health</a>\${extraStr}
+      </div>
+    </div>
+  )
+}
+`
+  }
+
   const todosLink = ctx.withTodo
     ? `\n        <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
     : ''
-  const authLinks = ctx.packages.auth
-    ? `\n        <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>\n        <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>`
-    : ''
-  const solidExtraLinks: string[] = []
-  if (ctx.packages.ai) solidExtraLinks.push('        <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
-  const solidExtraStr = solidExtraLinks.length > 0 ? '\n' + solidExtraLinks.join('\n') : ''
 
   return `${cssImport}import { createSignal } from 'solid-js'
 import { useData } from 'vike-solid/useData'
@@ -1654,13 +1726,15 @@ export default function Page() {
           </div>
         </div>
       ) : (
-        <div class="flex gap-2">${todosLink}${authLinks}
+        <div class="flex gap-2">${todosLink}
+          <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
+          <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>
         </div>
       )}
 
       <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
         <a href="/api/health" class="underline hover:text-foreground">API Health</a>
-        <a href="/api/me" class="underline hover:text-foreground">Session Info</a>\${solidExtraStr}
+        <a href="/api/me" class="underline hover:text-foreground">Session Info</a>\${extraStr}
       </div>
     </div>
   )
