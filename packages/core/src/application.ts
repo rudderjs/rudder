@@ -83,16 +83,6 @@ export class Application {
 
   static create(config?: BootConfig): Application {
     const g = globalThis as Record<string, unknown>
-    const env = config?.env ?? Env.get('APP_ENV', 'production')
-    const isDev = env === 'development' || env === 'local'
-    // Only reset when an instance already exists — avoids wiping a fresh container
-    // during cold-start when Vike imports the module multiple times.
-    const shouldRecreate = Boolean(config) && isDev && Boolean(g['__rudderjs_app__'])
-
-    if (shouldRecreate) {
-      container.reset()
-      g['__rudderjs_app__'] = undefined
-    }
 
     if (!g['__rudderjs_app__']) {
       g['__rudderjs_app__'] = new Application(config)
@@ -411,11 +401,16 @@ export class AppBuilder {
   }
 
   create(): RudderJS {
+    const g = globalThis as Record<string, unknown>
+    if (g['__rudderjs_instance__']) return g['__rudderjs_instance__'] as RudderJS
+
     const app = Application.create({
       ...(this._options.config    && { config:    this._options.config }),
       ...(this._options.providers && { providers: this._options.providers }),
     })
-    return new RudderJS(app, this._options.server, this._loaders, this._mwFn, this._excFn)
+    const instance = new RudderJS(app, this._options.server, this._loaders, this._mwFn, this._excFn)
+    g['__rudderjs_instance__'] = instance
+    return instance
   }
 }
 
