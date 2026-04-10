@@ -1,5 +1,14 @@
 # create-rudder-app
 
+## 0.0.16
+
+### Patch Changes
+
+- 4804d67: Fix auth template: add sessionMiddleware to bootstrap/app.ts when auth is enabled.
+
+  The generated app was calling Auth.user() which requires session context,
+  but sessionMiddleware was never registered in the middleware pipeline.
+
 ## 0.0.15
 
 ### Patch Changes
