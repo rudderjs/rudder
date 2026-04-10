@@ -89,10 +89,14 @@ describe('Router — fluent methods', () => {
     assert.deepStrictEqual(r.list()[0]?.middleware, [])
   })
 
-  it('methods are chainable (return this)', () => {
-    const result = r.get('/a', handler).post('/b', handler).delete('/c', handler)
-    assert.strictEqual(result, r)
+  it('verb methods register routes and return RouteBuilder for .name()', () => {
+    r.get('/a', handler)
+    r.post('/b', handler)
+    r.delete('/c', handler)
     assert.strictEqual(r.list().length, 3)
+    // RouteBuilder supports .name() chaining
+    r.get('/d', handler).name('d-route')
+    assert.strictEqual(r.getNamedRoute('d-route'), '/d')
   })
 
   it('list() returns a copy — mutations do not affect internal state', () => {
