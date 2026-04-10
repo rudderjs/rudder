@@ -135,30 +135,38 @@ export default [
 
 ### 4. Wire Vike to the app
 
-Create `pages/+config.ts`. Include both `vike-photon` and your UI framework renderer here — this single file is all you need for a single-framework app:
+Create `+server.ts` at the project root. This connects Vike to your RudderJS application:
+
+```ts
+// +server.ts (project root)
+import type { Server } from 'vike/types'
+import app from './bootstrap/app.js'
+
+export default {
+  fetch: app.fetch,
+} satisfies Server
+```
+
+Create `pages/+config.ts`. For a single-framework app, declare the UI renderer here:
 
 ```ts
 // pages/+config.ts (React)
 import type { Config } from 'vike/types'
-import vikePhoton from 'vike-photon/config'
 import vikeReact from 'vike-react/config'
 
 export default {
-  extends: [vikePhoton, vikeReact],
-  photon: {
-    server: 'bootstrap/app.ts',
-  },
-} as unknown as Config
+  extends: [vikeReact],
+} satisfies Config
 ```
 
 For **Vue** replace `vike-react/config` with `vike-vue/config`, for **Solid** use `vike-solid/config`.
 
-> **Multiple frameworks?** Keep the renderer out of the root `pages/+config.ts` and instead add a `+config.ts` inside each page folder extending its own renderer. See [Frontend Pages](/guide/frontend-pages) for details.
+> **Multiple frameworks?** Keep the renderer out of `pages/+config.ts` and instead add a `+config.ts` inside each page folder extending its own renderer. See [Frontend Pages](/guide/frontend-pages) for details.
 
 ### 5. Vite config
 
 ```bash
-pnpm add vike vike-photon
+pnpm add vike @vikejs/hono
 # plus your framework plugin:
 pnpm add -D @vitejs/plugin-react    # React
 pnpm add    vike-vue                # Vue

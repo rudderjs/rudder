@@ -49,14 +49,13 @@ export default Application.configure({
 ```
 
 ```ts
-// pages/+config.ts  (wires Vike to the RudderJS instance)
-import type { Config } from 'vike/types'
-import vikePhoton from 'vike-photon/config'
+// +server.ts  (wires Vike to the RudderJS instance)
+import type { Server } from 'vike/types'
+import app from './bootstrap/app.js'
 
 export default {
-  extends: [vikePhoton],
-  photon: { server: 'bootstrap/app.ts' },
-} as unknown as Config
+  fetch: app.fetch,
+} satisfies Server
 ```
 
 `bootstrap/app.ts` is the entry point — `import 'reflect-metadata'` belongs at the top of that file.

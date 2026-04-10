@@ -440,7 +440,6 @@ export class RudderJS {
     const isNoise = (args: unknown[]): boolean => {
       const msg = args.map(a => String(a ?? '')).join(' ')
       if (msg.includes('[vike]')) return true
-      // Suppress duplicate "Server running at ..." from @hono/node-server / photon
       if (msg.includes('Server running at ')) return true
       return false
     }

@@ -35,12 +35,6 @@ const SSR_EXTERNALS = [
 ]
 
 // ─── SSR no-externals ──────────────────────────────────────
-// @rudderjs/server-hono dynamically imports @photonjs/hono which contains
-// virtual module imports (virtual:photon:get-middlewares:*). When loaded
-// natively (as an externalized npm package), these virtual imports fail
-// with ERR_UNSUPPORTED_ESM_URL_SCHEME. Marking it non-external forces
-// Vite's runner to process it, so @photonjs/hono is also processed through
-// Vite's plugin system where virtual modules are properly resolved.
 const SSR_NO_EXTERNALS = [
   '@rudderjs/server-hono',
 ]
@@ -90,10 +84,9 @@ export function rudderjs(): Promise<Plugin[]> {
       {
         name: 'rudderjs:ws',
         configureServer() {
-          // vike-photon patches vite.httpServer with { on: () => {} } (a no-op), so we
-          // cannot rely on server.httpServer. Instead, intercept http.createServer so we
-          // attach our upgrade handler to whatever Node.js HTTP server gets created next
-          // (srvx creates it when initializing the photon dev server entry).
+          // Intercept http.createServer so we attach our WebSocket upgrade handler to
+          // whatever Node.js HTTP server gets created next (srvx creates it when
+          // initializing the dev server entry).
           //
           // We use createRequire to get the mutable CJS http module — ESM named exports
           // are read-only and cannot be reassigned.
