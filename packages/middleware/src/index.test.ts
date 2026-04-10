@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
+import { attachInputAccessors } from '@rudderjs/contracts'
 import {
   Middleware,
   Pipeline,
@@ -17,7 +18,7 @@ import { CacheRegistry } from '@rudderjs/cache'
 // ─── Test helpers ──────────────────────────────────────────
 
 function makeReq(overrides: Partial<AppRequest> = {}): AppRequest {
-  return {
+  const req: Record<string, unknown> = {
     method:  'GET',
     url:     '/',
     path:    '/',
@@ -28,6 +29,8 @@ function makeReq(overrides: Partial<AppRequest> = {}): AppRequest {
     raw:     null,
     ...overrides,
   }
+  attachInputAccessors(req)
+  return req as unknown as AppRequest
 }
 
 function makeRes() {
