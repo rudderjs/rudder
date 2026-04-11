@@ -13,6 +13,7 @@ export interface WelcomeProps {
   user:          { name: string; email: string } | null
   loginUrl?:     string
   registerUrl?:  string
+  signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
 }
@@ -62,8 +63,19 @@ const features: Feature[] = [
 export default function Welcome(props: WelcomeProps) {
   const loginUrl    = props.loginUrl    ?? '/login'
   const registerUrl = props.registerUrl ?? '/register'
+  const signOutUrl  = props.signOutUrl  ?? '/api/auth/sign-out'
   const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
   const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
+
+  async function handleSignOut() {
+    await fetch(signOutUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    '{}',
+    })
+    // Full reload so the server resolves a fresh pageContext (logged-out user).
+    window.location.href = '/'
+  }
 
   return (
     <div className="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
@@ -74,10 +86,19 @@ export default function Welcome(props: WelcomeProps) {
         </div>
         <div className="flex items-center gap-4 text-sm">
           {props.user ? (
-            <span className="text-zinc-500 dark:text-zinc-400">
-              Signed in as{' '}
-              <span className="font-medium text-zinc-900 dark:text-zinc-100">{props.user.name}</span>
-            </span>
+            <>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                Signed in as{' '}
+                <span className="font-medium text-zinc-900 dark:text-zinc-100">{props.user.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
+                Sign out
+              </button>
+            </>
           ) : (
             <>
               <a
