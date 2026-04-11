@@ -46,6 +46,7 @@ export default defineConfig({
           items: [
             { text: 'Configuration', link: '/guide/configuration' },
             { text: 'Service Providers', link: '/guide/service-providers' },
+            { text: 'Provider Auto-Discovery', link: '/guide/auto-discovery' },
             { text: 'Dependency Injection', link: '/guide/dependency-injection' },
             { text: 'Routing', link: '/guide/routing' },
             { text: 'Middleware', link: '/guide/middleware' },

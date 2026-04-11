@@ -112,6 +112,20 @@ export default Application.configure({
   .create()
 ```
 
+```ts
+// bootstrap/providers.ts — providers auto-discovered from package.json
+import { defaultProviders, eventsProvider } from '@rudderjs/core'
+import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
+
+export default [
+  ...(await defaultProviders()),
+  eventsProvider({ /* event → listeners */ }),
+  AppServiceProvider,
+]
+```
+
+Run `pnpm rudder providers:discover` after installing or removing packages to refresh the manifest. See [Provider Auto-Discovery](docs/guide/auto-discovery.md) for the full story.
+
 ### 2. Routes
 
 Routes can return JSON (API endpoints) or a `view()` (Laravel-style SSR pages rendered through Vike). Both coexist in the same file, run the same middleware chain, and support full SPA navigation between them.

@@ -140,3 +140,31 @@ rudderjs/
 - `@rudderjs/panels-lexical` -> `@pilotiq/lexical`
 - `@rudderjs/media` -> `@pilotiq/media`
 - `@rudderjs/workspaces` -> `@pilotiq/workspaces`
+
+## Adding a New Provider Package
+
+When adding a new framework package that ships a service provider, declare it in `package.json` so `defaultProviders()` picks it up automatically:
+
+```json
+{
+  "name": "@rudderjs/my-package",
+  "rudderjs": {
+    "provider": "MyPackageProvider",
+    "stage":    "feature",
+    "depends":  ["@rudderjs/cache"],
+    "optional": false
+  }
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `provider` | Yes | The PascalCase class name exported from the package's main entry. |
+| `stage` | Yes | One of `foundation`, `infrastructure`, `feature`, `monitoring`. Determines boot order. |
+| `depends` | No | Package names that must boot before this one. Topo-sorted within each stage. |
+| `optional` | No | If `true`, missing peer is silently skipped instead of warning. Use for drivers (e.g. `orm-prisma`). |
+| `autoDiscover` | No | Set to `false` to opt the package out of auto-discovery — users must register it manually. |
+
+After adding the field, users run `pnpm rudder providers:discover` to refresh the manifest. New `*Provider` classes must extend `ServiceProvider` from `@rudderjs/core` and read their config from `config<TConfig>('key')` inside `boot()` (not from a constructor argument). See `packages/cache/src/index.ts` as the reference shape.
+
+For the full third-party-author guide (manifest format, opt-out paths, common errors), see `docs/guide/auto-discovery.md`.
