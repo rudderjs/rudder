@@ -48,6 +48,7 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 - **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
+- **Laravel-style views** — return `view('dashboard', { users })` from controllers and render typed React/Vue/Solid components with full Vike SSR + SPA navigation, no Inertia adapter
 - **TypeScript-first** — strict TypeScript with incremental builds (~10s for single-package changes)
 - **Test-friendly** — TestCase, fluent assertions, fakes for HTTP, queue, cache, events, notifications
 - **CI/CD ready** — automated testing, linting, and npm publishing via Changesets
@@ -113,10 +114,14 @@ export default Application.configure({
 
 ### 2. Routes
 
+Routes can return JSON (API endpoints) or a `view()` (Laravel-style SSR pages rendered through Vike). Both coexist in the same file, run the same middleware chain, and support full SPA navigation between them.
+
 ```ts
 // routes/api.ts
 import { Route } from '@rudderjs/router'
+import { view }  from '@rudderjs/view'
 
+// JSON API — return an object or use res.json()
 Route.get('/api/users', async (_req, res) => {
   const users = await User.all()
   return res.json({ data: users })
@@ -126,7 +131,35 @@ Route.post('/api/users', async (req, res) => {
   const user = await User.create(req.body)
   return res.status(201).json({ data: user })
 })
+
+// Laravel-style view — render a typed React/Vue/Solid component
+// from app/Views/Dashboard.tsx with controller-supplied props
+Route.get('/dashboard', async () => {
+  const users = await User.all()
+  return view('dashboard', { title: 'Dashboard', users })
+})
 ```
+
+The view file is a normal component that takes typed props:
+
+```tsx
+// app/Views/Dashboard.tsx
+interface DashboardProps {
+  title: string
+  users: { id: number; name: string; email: string }[]
+}
+
+export default function Dashboard({ title, users }: DashboardProps) {
+  return (
+    <div>
+      <h1>{title}</h1>
+      <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>
+    </div>
+  )
+}
+```
+
+Middleware (auth, rate limiting, CSRF, form validation) runs **before** the view renders — same router chain as JSON routes. Client-side navigation between views and between views and regular Vike pages is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike's native `pageContext.json` fetches (~400 bytes per nav). See [`@rudderjs/view`](./packages/view) for details.
 
 ### 3. Rudder CLI + Scheduling
 
@@ -386,6 +419,7 @@ const svc = resolve<UserService>(UserService)
 |---|---|
 | `@rudderjs/server-hono` | Hono HTTP adapter |
 | `@rudderjs/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
+| `@rudderjs/view` | Laravel-style `view('id', props)` controller responses via Vike SSR |
 | `@rudderjs/vite` | Vite + Vike plugin with SSR externals and RudderJS integration |
 
 ### Database
