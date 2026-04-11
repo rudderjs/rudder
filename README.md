@@ -48,7 +48,7 @@ RudderJS is the middle ground: a **batteries-included architecture that stays en
 - **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
 - **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
 - **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
-- **Laravel-style views** — return `view('dashboard', { users })` from controllers and render typed React/Vue/Solid components with full Vike SSR + SPA navigation, no Inertia adapter
+- **Laravel-style views** — return `view('dashboard', { users })` from controllers and render typed React/Vue/Solid components (or vanilla HTML strings for the Blade equivalent) with full Vike SSR + SPA navigation, no Inertia adapter
 - **TypeScript-first** — strict TypeScript with incremental builds (~10s for single-package changes)
 - **Test-friendly** — TestCase, fluent assertions, fakes for HTTP, queue, cache, events, notifications
 - **CI/CD ready** — automated testing, linting, and npm publishing via Changesets
@@ -138,6 +138,10 @@ Route.get('/dashboard', async () => {
   const users = await User.all()
   return view('dashboard', { title: 'Dashboard', users })
 })
+
+// Welcome page served at / — controller URL diverges from the id-derived
+// /welcome default, so the view file declares its canonical URL
+Route.get('/', async () => view('welcome', { appName: config('app.name') }))
 ```
 
 The view file is a normal component that takes typed props:
@@ -159,7 +163,23 @@ export default function Dashboard({ title, users }: DashboardProps) {
 }
 ```
 
-Middleware (auth, rate limiting, CSRF, form validation) runs **before** the view renders — same router chain as JSON routes. Client-side navigation between views and between views and regular Vike pages is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike's native `pageContext.json` fetches (~400 bytes per nav). See [`@rudderjs/view`](./packages/view) for details.
+View ids map 1:1 to URLs by convention (`'dashboard'` → `/dashboard`). When a controller serves a view at a URL that doesn't match the id — `view('welcome')` at `/`, `view('auth.login')` at `/login` — declare the canonical URL at the top of the view file:
+
+```tsx
+// app/Views/Welcome.tsx
+export const route = '/'
+export default function Welcome(props: WelcomeProps) { ... }
+```
+
+The scanner reads the constant and writes it into the generated Vike `+route.ts`, so Vike's client route table matches the browser URL and SPA navigation stays instant.
+
+Middleware (auth, rate limiting, CSRF, form validation) runs **before** the view renders — same router chain as JSON routes. Client-side navigation between views and between views and regular Vike pages is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike's native `pageContext.json` fetches (~400 bytes per nav).
+
+**Framework support**: React (`vike-react`), Vue (`vike-vue`), Solid (`vike-solid`), and vanilla HTML-string mode for the Blade equivalent — zero client JS, perfect for admin reports, email bodies, webhook responses. The scanner auto-detects which renderer is installed. Vanilla views use `@rudderjs/view`'s `html\`\`` tagged template, which auto-escapes interpolations and composes via `SafeString`.
+
+**Packages that ship views** follow a consistent shape: `views/<framework>/<Name>.{tsx,vue}` + a `registerXRoutes(router, opts)` helper. `@rudderjs/auth` is the reference implementation — `registerAuthRoutes(Route, { middleware })` wires `/login`, `/register`, `/forgot-password`, `/reset-password` in one line, with the views vendored into `app/Views/Auth/` for the consumer to customize.
+
+See [`@rudderjs/view`](./packages/view) for the full reference.
 
 ### 3. Rudder CLI + Scheduling
 

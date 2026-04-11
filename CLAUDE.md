@@ -100,6 +100,15 @@ Providers can be registered at runtime via `app().register(ProviderClass)`:
 app().register(SomeServiceProvider)
 ```
 
+### Controller Views (`@rudderjs/view`)
+
+Routes return `view('id', props)` and the page is rendered through Vike's SSR pipeline — Laravel ergonomics, Vike performance, no Inertia adapter. View files live in `app/Views/**` and are discovered by `@rudderjs/vite`'s scanner at dev/build time.
+
+- **Id → URL mapping** is 1:1 by default (`'dashboard'` → `/dashboard`, `'admin.users'` → `/admin/users`). Override by exporting a `route` constant at the top of the view file: `export const route = '/'` or `export const route = '/login'`. **Required** whenever the controller URL diverges from the id-derived path — otherwise Vike's client route table doesn't match the browser URL and SPA nav falls back to full reloads.
+- **Framework support**: React / Vue / Solid / vanilla (Blade equivalent — HTML-string functions, zero client JS). Scanner auto-detects the installed `vike-*` renderer. Vanilla views should use the `html\`\`` tagged template from `@rudderjs/view` for auto-escaping.
+- **Packages shipping views** follow the shape `packages/<name>/views/<framework>/<Name>.{tsx,vue}` + `src/routes.ts` exporting `registerXRoutes(router, opts)`. `@rudderjs/auth` is the reference implementation — see `feedback_package_ui_shape.md` in memory.
+- **Welcome page** (`app/Views/Welcome.tsx` with `export const route = '/'`) is the default landing page scaffolded by `create-rudder-app`. Auth-aware: shows Log in / Register links or a signed-in user with a Sign out button.
+
 ### Package Merge Policy (Tight-Coupling Only)
 
 Merge packages only when they are effectively one runtime unit.
@@ -181,11 +190,17 @@ playground/
 │   ├── Models/User.ts
 │   ├── Agents/ResearchAgent.ts   # @rudderjs/ai framework demo
 │   ├── Modules/Todo/             # self-contained module with its own .prisma + test
+│   ├── Views/                    # Laravel-style view() components (controller-returned)
+│   │   ├── Welcome.tsx           #   `export const route = '/'` → served at /
+│   │   ├── Home.tsx / About.tsx  #   id-derived URLs — /home, /about
+│   │   └── Auth/                 #   vendored from @rudderjs/auth/views/react/
+│   │       └── {Login,Register,ForgotPassword,ResetPassword}.tsx
 │   └── Providers/AppServiceProvider.ts
 ├── routes/
-│   ├── api.ts          # router.get/post/all()
+│   ├── web.ts          # Web routes: welcome + registerAuthRoutes() + redirects/guards
+│   ├── api.ts          # JSON API routes (router.get/post/all())
 │   └── console.ts      # rudder.command() + db:seed + scheduler
-├── pages/              # Vike file-based routing (no /admin — panels are gone)
+├── pages/              # Vike file-based routing; `pages/__view/` is auto-generated
 ├── prisma/schema/      # multi-file: auth, base, live, notification, app (Todo only)
 └── vite.config.ts
 ```
@@ -229,3 +244,6 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **`rudder` commands not appearing**: Run from `playground/` (needs `bootstrap/app.ts`)
 - **RateLimit not working**: Requires a cache provider registered before middleware runs
 - **S3 disk errors**: Install `@aws-sdk/client-s3` — it's an optional dep of `@rudderjs/storage`
+- **SPA nav falling back to full reloads between view() routes**: the controller URL must match the URL in the view's generated `+route.ts`. Add `export const route = '/...'` at the top of the view file so the scanner picks it up instead of using the id-derived default.
+- **Ghost signed-in user across requests**: `AuthManager` must not cache `SessionGuard` instances — the manager is a process-wide DI singleton and a cached guard's `_user` field leaks across requests. Fixed; don't re-introduce the `_guards` Map.
+- **Multi-renderer installed error from the view scanner**: install exactly one of `vike-react` / `vike-vue` / `vike-solid`. Multi-framework scaffolder projects with no `app/Views/` are fine because detection is lazy.
