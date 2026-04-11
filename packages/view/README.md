@@ -13,7 +13,9 @@ Route.get('/dashboard', async () => {
 })
 ```
 
-The view file lives at `app/Views/Dashboard.tsx` (or `.vue` / `.jsx`), takes typed props, and is rendered server-side with full hydration. Client-side navigation to and from controller views is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike doing what it's already great at.
+The view file lives at `app/Views/Dashboard.tsx`, takes typed props, and is rendered server-side with full hydration. Client-side navigation to and from controller views is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike doing what it's already great at.
+
+**Framework support:** React, Vue, Solid, and vanilla HTML-string mode are all supported. The scanner auto-detects which Vike renderer is installed (`vike-react`, `vike-vue`, `vike-solid`) and emits the matching stub — see [Framework support](#framework-support) below.
 
 ---
 
@@ -145,6 +147,85 @@ export default function ViewLayout({ children }: { children: ReactNode }) {
 The scanner only manages `+Page.tsx`, `+route.ts`, `+data.ts`, and `+config.ts` — any other file in `pages/__view/` (like `+Layout.tsx`) is preserved on regenerate.
 
 For nested layouts (e.g. an admin shell that wraps `app/Views/Admin/**` only), put a `+Layout.tsx` in `pages/__view/admin/`. Vike composes the layouts outward automatically.
+
+---
+
+## Framework support
+
+`@rudderjs/vite`'s view scanner auto-detects which Vike renderer is installed and emits the right stub per framework. One framework per project — this mirrors Vike's own single-renderer constraint.
+
+| Framework | Vike renderer | View file extension | Stub generated |
+|---|---|---|---|
+| **React** | `vike-react` | `.tsx` / `.jsx` | `+Page.tsx` |
+| **Vue** | `vike-vue` | `.vue` | `+Page.vue` |
+| **Solid** | `vike-solid` | `.tsx` / `.jsx` | `+Page.tsx` |
+| **Vanilla** | *(none)* | `.ts` / `.js` | `+Page.ts` |
+
+The scanner detects the framework once at plugin construction time by probing `node_modules/vike-*/package.json`. Install exactly one of `vike-react`, `vike-vue`, `vike-solid` — installing more than one throws a clear error. Install none of them and the scanner falls into **vanilla mode**.
+
+### Vanilla (HTML-string) mode
+
+When no `vike-*` renderer is installed, view files export a function returning an HTML string — no hydration, zero client-side JavaScript. This is the Blade equivalent: perfect for admin reports, printable invoices, HTML email bodies, webhook responses, marketing landing pages, anything where React is overkill.
+
+```ts
+// app/Views/AdminReport.ts
+import { html } from '@rudderjs/view'
+
+interface AdminReportProps {
+  title: string
+  rows:  { name: string; total: number }[]
+}
+
+export default function AdminReport({ title, rows }: AdminReportProps) {
+  return html`
+    <div class="mx-auto max-w-4xl p-8">
+      <h1 class="text-3xl font-bold">${title}</h1>
+      <table class="w-full border-collapse">
+        ${rows.map(r => html`
+          <tr>
+            <td class="border p-2">${r.name}</td>
+            <td class="border p-2 text-right">${r.total}</td>
+          </tr>
+        `)}
+      </table>
+    </div>
+  `
+}
+```
+
+The `html\`\`` tag auto-escapes every interpolated value — `title`, `r.name`, and everything else — so you can't accidentally ship an XSS hole by forgetting an escape. Nested `html\`\`` blocks (like the inner `<tr>` template) pass through without being re-escaped because they're `SafeString` instances. Arrays of `SafeString` join automatically.
+
+```ts
+// routes/api.ts
+Route.get('/admin/report', async () => {
+  const rows = await Orders.groupBy('customer').select('name', sum('total'))
+  return view('admin.report', { title: 'Monthly Report', rows })
+})
+```
+
+**Why you should prefer `html\`\`` over raw template literals:** vanilla views do **not** auto-escape interpolations the way JSX does. A plain template literal will happily ship `<script>` straight into the page. The `html\`\`` tag fixes this by escaping every interpolation unless it's explicitly wrapped in a `SafeString` (which is what `html\`\`` itself returns, so nested templates compose naturally).
+
+```ts
+import { html, escapeHtml, SafeString } from '@rudderjs/view'
+
+// Use html`` in 99% of cases — safe by default
+html`<p>${user.name}</p>`
+
+// escapeHtml() is available if you're building a raw string for some reason
+const raw = `<p>${escapeHtml(user.name)}</p>`
+
+// SafeString is the escape hatch for markup you *know* is safe (from a CMS,
+// a markdown renderer you trust, etc). Use sparingly.
+const fromCms = new SafeString(cms.renderTrustedHtml())
+html`<article>${fromCms}</article>`
+
+// ❌ Raw template literal with no escape — XSS if user.name is '<script>'
+const bad = `<p>${user.name}</p>`
+```
+
+Vanilla views still benefit from the full controller pipeline — middleware, DI, ORM, validation, request context — all run before the view function is called. You just get HTML instead of a hydrated React tree.
+
+Mixed-mode (vanilla `.ts` views alongside React `.tsx` views in a single project) is not supported in v1 — it requires per-page Vike config overrides that Vike doesn't expose cleanly yet. Tracked for a later phase.
 
 ---
 

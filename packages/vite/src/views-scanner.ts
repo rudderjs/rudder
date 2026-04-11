@@ -191,7 +191,11 @@ import type { PageContext } from 'vike/types'
 
 export function Page(pageContext: PageContext): string {
   const viewProps = (pageContext as { viewProps?: Record<string, unknown> }).viewProps ?? {}
-  return (renderView as (props: Record<string, unknown>) => string)(viewProps)
+  // View functions may return a plain string or a SafeString from @rudderjs/view's
+  // html\`\` tag. String(...) coerces both uniformly (SafeString.toString() returns
+  // its already-safe value).
+  const result = (renderView as (props: Record<string, unknown>) => unknown)(viewProps)
+  return typeof result === 'string' ? result : String(result)
 }
 `,
   }

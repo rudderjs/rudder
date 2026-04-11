@@ -149,3 +149,77 @@ export function escapeHtml(value: unknown): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 }
+
+/**
+ * Wraps a string that is already known to be safe HTML. Values of this type
+ * pass through `html\`\`` interpolations without being re-escaped. The `html`
+ * tag returns a `SafeString`, so nested templates compose naturally:
+ *
+ * ```ts
+ * const row = html`<tr><td>${user.name}</td></tr>`  // SafeString
+ * const table = html`<table>${rows}</table>`         // rows are SafeStrings, not re-escaped
+ * ```
+ *
+ * To intentionally inject pre-rendered markup (from a CMS, a markdown
+ * renderer, etc.), wrap it explicitly: `new SafeString(trustedHtml)`. Only
+ * do this for markup you produced or fully control — anything originating
+ * from user input must go through `escapeHtml()` first.
+ */
+export class SafeString {
+  constructor(public readonly value: string) {}
+  toString(): string { return this.value }
+}
+
+function renderHtmlValue(value: unknown): string {
+  if (value === null || value === undefined || value === false) return ''
+  if (value instanceof SafeString) return value.value
+  if (Array.isArray(value)) return value.map(renderHtmlValue).join('')
+  return escapeHtml(value)
+}
+
+/**
+ * Tagged template literal that auto-escapes interpolated values into HTML.
+ *
+ * This is the safe way to build HTML strings in vanilla views — unlike plain
+ * template literals, user-supplied values are escaped automatically, and
+ * nested `html\`\`` results compose without double-escaping.
+ *
+ * ```ts
+ * // app/Views/AdminReport.ts
+ * import { html } from '@rudderjs/view'
+ *
+ * interface AdminReportProps {
+ *   title: string
+ *   rows:  { name: string; total: number }[]
+ * }
+ *
+ * export default function AdminReport({ title, rows }: AdminReportProps): string {
+ *   return html`
+ *     <h1>${title}</h1>
+ *     <table>
+ *       ${rows.map(r => html`<tr><td>${r.name}</td><td>${r.total}</td></tr>`)}
+ *     </table>
+ *   `.toString()
+ * }
+ * ```
+ *
+ * - **Primitives** (string, number, boolean): escaped via `escapeHtml()`
+ * - **null / undefined / false**: rendered as empty string
+ * - **Arrays**: each item recursively handled, then joined (no separator)
+ * - **`SafeString`**: passed through unchanged — the escape hatch for
+ *   composing nested `html\`\`` blocks or injecting pre-rendered markup
+ *
+ * The return type is `SafeString` so the caller can either compose further
+ * with `html\`\`` or coerce to a plain string via `.toString()` (which is
+ * what the vanilla view contract expects from `export default`).
+ */
+export function html(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): SafeString {
+  let out = strings[0] ?? ''
+  for (let i = 0; i < values.length; i++) {
+    out += renderHtmlValue(values[i]) + (strings[i + 1] ?? '')
+  }
+  return new SafeString(out)
+}
