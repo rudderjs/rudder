@@ -1,4 +1,4 @@
-# forge-playground
+# rudderjs-playground
 
 ## 0.0.7
 
