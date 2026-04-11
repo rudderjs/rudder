@@ -177,10 +177,18 @@ describe('parseSignature', () => {
       assert.strictEqual(args[2]!.defaultValue, 'user')
     })
 
-    it('strips inline description from argument', () => {
+    it('captures inline description on argument', () => {
       const { args } = parseSignature('cmd {name : The user name}')
       assert.strictEqual(args[0]!.name, 'name')
       assert.strictEqual(args[0]!.required, true)
+      assert.strictEqual(args[0]!.description, 'The user name')
+    })
+
+    it('captures description on optional argument with default', () => {
+      const { args } = parseSignature('cmd {env=local : Target environment}')
+      assert.strictEqual(args[0]!.name, 'env')
+      assert.strictEqual(args[0]!.defaultValue, 'local')
+      assert.strictEqual(args[0]!.description, 'Target environment')
     })
   })
 
@@ -205,10 +213,19 @@ describe('parseSignature', () => {
       assert.deepStrictEqual(opts, [{ name: 'name', shorthand: 'N', hasValue: true }])
     })
 
-    it('strips inline description from option', () => {
+    it('captures inline description on option', () => {
       const { opts } = parseSignature('cmd {--force : Force overwrite}')
       assert.strictEqual(opts[0]!.name, 'force')
       assert.strictEqual(opts[0]!.hasValue, false)
+      assert.strictEqual(opts[0]!.description, 'Force overwrite')
+    })
+
+    it('captures description on option with value and default', () => {
+      const { opts } = parseSignature('cmd {--queue=default : Queue to dispatch on}')
+      assert.strictEqual(opts[0]!.name, 'queue')
+      assert.strictEqual(opts[0]!.hasValue, true)
+      assert.strictEqual(opts[0]!.defaultValue, 'default')
+      assert.strictEqual(opts[0]!.description, 'Queue to dispatch on')
     })
 
     it('parses a mix of args and options', () => {

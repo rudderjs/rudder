@@ -2,6 +2,9 @@ import { Rudder } from '@rudderjs/rudder'
 import { Schedule } from '@rudderjs/schedule'
 import { Cache } from '@rudderjs/cache'
 import { User } from '../app/Models/User.js'
+import { Greet } from '../app/Commands/Greet.js'
+
+Rudder.register(Greet)
 
 Rudder.command('inspire', () => {
   const quotes = [

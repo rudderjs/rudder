@@ -88,6 +88,38 @@ async function main(): Promise<void> {
   // Laravel-style custom help output
   program.configureHelp({
     formatHelp: (cmd, helper) => {
+      // Subcommand help: show description, usage, args, options (Laravel-ish)
+      if (cmd.parent) {
+        const args = helper.visibleArguments(cmd)
+        const opts = helper.visibleOptions(cmd)
+        const argLabel = (a: { name(): string; required: boolean; variadic: boolean }): string => {
+          const n = a.variadic ? `${a.name()}...` : a.name()
+          return a.required ? `<${n}>` : `[${n}]`
+        }
+
+        let out = `\n  ${C.dim('Description:')}\n    ${cmd.description()}\n`
+        out += `\n  ${C.dim('Usage:')}\n    ${cmd.name()}${opts.length ? ' [options]' : ''}${args.map(a => ` ${argLabel(a)}`).join('')}\n`
+
+        if (args.length > 0) {
+          const w = Math.max(...args.map(a => argLabel(a).length)) + 2
+          out += `\n  ${C.dim('Arguments:')}\n`
+          for (const a of args) {
+            out += `    ${C.green(argLabel(a).padEnd(w))}  ${helper.argumentDescription(a)}\n`
+          }
+        }
+
+        if (opts.length > 0) {
+          const w = Math.max(...opts.map(o => helper.optionTerm(o).length)) + 2
+          out += `\n  ${C.dim('Options:')}\n`
+          for (const o of opts) {
+            out += `    ${C.green(helper.optionTerm(o).padEnd(w))}  ${helper.optionDescription(o)}\n`
+          }
+        }
+
+        return out + '\n'
+      }
+
+      // Top-level help: list all commands grouped by namespace
       const cmds = helper.visibleCommands(cmd).filter(c => c.name() !== 'help')
       const nameWidth = Math.max(...cmds.map(c => c.name().length), 8) + 4
 
@@ -251,14 +283,14 @@ async function main(): Promise<void> {
         : arg.required
           ? `<${arg.name}>`
           : `[${arg.name}]`
-      sub.argument(token, '', arg.defaultValue)
+      sub.argument(token, arg.description ?? '', arg.defaultValue)
     }
 
     for (const opt of opts) {
       const flag = opt.shorthand
         ? `-${opt.shorthand}, --${opt.name}${opt.hasValue ? ' <value>' : ''}`
         : `--${opt.name}${opt.hasValue ? ' <value>' : ''}`
-      sub.option(flag, '', opt.defaultValue)
+      sub.option(flag, opt.description ?? '', opt.defaultValue)
     }
 
     sub.action(async (...comArgs: unknown[]) => {

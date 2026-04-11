@@ -65,6 +65,7 @@ export interface CommandArgDef {
   required:     boolean
   variadic:     boolean
   defaultValue?: string
+  description?: string
 }
 
 export interface CommandOptDef {
@@ -72,6 +73,7 @@ export interface CommandOptDef {
   shorthand?:    string
   hasValue:      boolean
   defaultValue?: string
+  description?:  string
 }
 
 export interface ParsedSignature {
@@ -90,8 +92,10 @@ export function parseSignature(signature: string): ParsedSignature {
   const opts: CommandOptDef[] = []
 
   for (const [, block] of signature.matchAll(/\{([^}]+)\}/g)) {
-    // Strip inline description: {user : The user ID} → {user}
-    const trimmed = (block ?? '').split(':')[0]?.trim() ?? ''
+    // Split inline description: {user : The user ID} → token=`user`, description=`The user ID`
+    const colonIdx  = (block ?? '').indexOf(':')
+    const trimmed   = (colonIdx === -1 ? (block ?? '') : (block ?? '').slice(0, colonIdx)).trim()
+    const description = colonIdx === -1 ? undefined : (block ?? '').slice(colonIdx + 1).trim() || undefined
 
     if (trimmed.startsWith('--')) {
       // Option: {--force} {--name=} {--name=default} {--N|name=}
@@ -106,6 +110,7 @@ export function parseSignature(signature: string): ParsedSignature {
       const optDef: CommandOptDef = { name: optName, hasValue }
       if (shorthand)    optDef.shorthand    = shorthand
       if (defaultValue) optDef.defaultValue = defaultValue
+      if (description)  optDef.description  = description
       opts.push(optDef)
     } else {
       // Argument: {user} {user?} {user=default} {user*}
@@ -118,6 +123,7 @@ export function parseSignature(signature: string): ParsedSignature {
       const defaultValue = hasDefault ? raw.slice(eqIdx + 1) || undefined : undefined
       const argDef: CommandArgDef = { name: argName, required: !optional && !hasDefault && !variadic, variadic }
       if (defaultValue) argDef.defaultValue = defaultValue
+      if (description)  argDef.description  = description
       args.push(argDef)
     }
   }
