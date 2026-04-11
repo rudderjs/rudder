@@ -10,6 +10,7 @@ import { providersDiscoverCommand } from './commands/providers-discover.js'
 import { routeListCommand } from './commands/route-list.js'
 import { commandListCommand } from './commands/command-list.js'
 import { rudder, parseSignature, CancelledError } from '@rudderjs/rudder'
+import { CliError } from './errors.js'
 
 const C = {
   green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -237,6 +238,10 @@ main().catch((err) => {
   if (err instanceof CancelledError) {
     console.log(C.yellow('Cancelled.'))
     process.exit(130)
+  }
+  if (err instanceof CliError) {
+    console.error(`\x1b[31m${err.message}\x1b[0m`)
+    process.exit(err.exitCode)
   }
   console.error(err)
   process.exit(1)

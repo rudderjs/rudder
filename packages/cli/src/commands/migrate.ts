@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import type { Command } from 'commander'
 import { intro, outro, log } from '@clack/prompts'
+import { CliError } from '../errors.js'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -84,8 +85,7 @@ export function migrateCommands(program: Command): void {
   function requireORM(): ORM {
     const orm = detectORM(cwd)
     if (!orm) {
-      log.error('No ORM detected. Install @rudderjs/orm-prisma or @rudderjs/orm-drizzle.')
-      process.exit(1)
+      throw new CliError('No ORM detected. Install @rudderjs/orm-prisma or @rudderjs/orm-drizzle.', 1)
     }
     return orm
   }
@@ -97,7 +97,9 @@ export function migrateCommands(program: Command): void {
       return
     }
     const code = await run('pnpm', args, cwd)
-    if (code !== 0) process.exit(code)
+    if (code !== 0) {
+      throw new CliError(`Migration command failed (exit ${code})`, code)
+    }
   }
 
   // ── migrate ───────────────────────────────────────────

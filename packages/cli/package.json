@@ -31,6 +31,14 @@
     "chalk": "^5.0.0",
     "@clack/prompts": "^1.0.0"
   },
+  "peerDependencies": {
+    "@rudderjs/router": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/router": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@rudderjs/router": "workspace:*",
     "@types/node": "^20.0.0",
