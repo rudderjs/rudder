@@ -7,6 +7,8 @@ import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
 import { migrateCommands } from './commands/migrate.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
+import { routeListCommand } from './commands/route-list.js'
+import { commandListCommand } from './commands/command-list.js'
 import { rudder, parseSignature, CancelledError } from '@rudderjs/rudder'
 
 const C = {
@@ -178,85 +180,8 @@ async function main(): Promise<void> {
 
   // ── Built-in framework commands ───────────────────────────
 
-  program
-    .command('route:list')
-    .description('List all registered routes')
-    .action(async () => {
-      let apiRoutes: Array<{ method: string; path: string; middleware: unknown[] }> = []
-      try {
-        const { router } = await import('@rudderjs/router') as { router: { list(): typeof apiRoutes } }
-        apiRoutes = router.list()
-      } catch { /* @rudderjs/router not installed */ }
-
-      // ── Scan Vike filesystem routes ──────────────────────
-      const vikeRoutes: Array<{ route: string; dir: string }> = []
-      const pagesDir = path.join(process.cwd(), 'pages')
-      try {
-        const scanPages = async (dir: string, base = ''): Promise<void> => {
-          const entries = await fs.readdir(dir, { withFileTypes: true })
-          const hasPage = entries.some(e => e.isFile() && e.name.startsWith('+Page.'))
-          if (hasPage) {
-            const route   = base === '' ? '/' : base
-            const relDir  = path.relative(pagesDir, dir)
-            vikeRoutes.push({ route, dir: relDir })
-          }
-          for (const entry of entries) {
-            if (!entry.isDirectory() || entry.name.startsWith('_')) continue
-            const segment    = entry.name
-            const routeSegment = segment.startsWith('@') ? `:${segment.slice(1)}` : segment
-            const nextBase   = segment === 'index' ? '' : `${base}/${routeSegment}`
-            await scanPages(path.join(dir, segment), nextBase)
-          }
-        }
-        await scanPages(pagesDir)
-      } catch { /* no pages dir */ }
-
-      const methodColor = (m: string): string => {
-        const colors: Record<string, string> = {
-          GET: '\x1b[32m', POST: '\x1b[33m', PUT: '\x1b[34m',
-          PATCH: '\x1b[35m', DELETE: '\x1b[31m', ALL: '\x1b[36m',
-        }
-        return `${colors[m] ?? '\x1b[37m'}${m.padEnd(7)}\x1b[0m`
-      }
-
-      const allPaths  = [...apiRoutes.map(r => r.path), ...vikeRoutes.map(r => r.route)]
-      const pathWidth = Math.min(Math.max(...allPaths.map(p => p.length), 4), 60)
-      const mwWidth   = 12
-
-      // ── API / Server routes ──────────────────────────────
-      if (apiRoutes.length > 0) {
-        console.log('\n  \x1b[1mAPI Routes\x1b[0m')
-        console.log(`  ${'METHOD'.padEnd(9)}  ${'PATH'.padEnd(pathWidth)}  MIDDLEWARE`)
-        console.log(`  ${'─'.repeat(9)}  ${'─'.repeat(pathWidth)}  ${'─'.repeat(mwWidth)}`)
-        for (const route of apiRoutes) {
-          const names = route.middleware
-            .map((fn: unknown) => (typeof fn === 'function' && fn.name) ? fn.name : null)
-            .filter(Boolean) as string[]
-          const mw = names.length > 0
-            ? names.join(', ')
-            : route.middleware.length > 0
-              ? `${route.middleware.length}×`
-              : '—'
-          console.log(`  ${methodColor(route.method)}  ${route.path.padEnd(pathWidth)}  ${mw}`)
-        }
-      }
-
-      // ── Vike page routes ─────────────────────────────────
-      if (vikeRoutes.length > 0) {
-        console.log('\n  \x1b[1mPage Routes\x1b[0m  \x1b[2m(Vike filesystem routing)\x1b[0m')
-        console.log(`  ${'GET'.padEnd(9)}  ${'PATH'.padEnd(pathWidth)}  SOURCE`)
-        console.log(`  ${'─'.repeat(9)}  ${'─'.repeat(pathWidth)}  ${'─'.repeat(mwWidth)}`)
-        for (const { route, dir } of vikeRoutes) {
-          console.log(`  \x1b[32mGET    \x1b[0m  ${route.padEnd(pathWidth)}  pages/${dir}`)
-        }
-      }
-
-      if (apiRoutes.length === 0 && vikeRoutes.length === 0) {
-        console.log('No routes registered.')
-      }
-
-      console.log()
-    })
+  routeListCommand(program)
+  commandListCommand(program)
 
   // Inline commands (rudder.command())
   for (const cmd of rudder.getCommands()) {
