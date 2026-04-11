@@ -1,6 +1,9 @@
 import '@/index.css'
 import { useState } from 'react'
 
+// URL this view is served at — see Login.tsx for rationale.
+export const route = '/forgot-password'
+
 export interface ForgotPasswordProps {
   submitUrl?:       string
   loginUrl?:        string

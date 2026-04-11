@@ -120,6 +120,41 @@ describe('views-scanner — framework detection', () => {
     assert.throws(() => viewsScannerPlugin(), /Multiple Vike renderers/)
   })
 
+  it('honors `export const route` override in a React view', () => {
+    root = scaffold('react')
+    // Overwrite the placeholder with a real file that exports a route.
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.tsx'),
+      `export const route = '/'\nexport default function Home() { return null }\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const routeFile = path.join(root, 'pages', '__view', 'home', '+route.ts')
+    const contents  = fs.readFileSync(routeFile, 'utf8')
+    assert.match(contents, /export default '\/'/)
+    assert.doesNotMatch(contents, /\/home/)
+  })
+
+  it('falls back to the id-derived URL when no route override is present', () => {
+    root = scaffold('react')
+    process.chdir(root)
+    viewsScannerPlugin()
+    const routeFile = path.join(root, 'pages', '__view', 'home', '+route.ts')
+    assert.match(fs.readFileSync(routeFile, 'utf8'), /export default '\/home'/)
+  })
+
+  it('honors `export const route` inside a Vue <script setup> block', () => {
+    root = scaffold('vue')
+    fs.writeFileSync(
+      path.join(root, 'app', 'Views', 'Home.vue'),
+      `<script setup lang="ts">\nexport const route = '/dashboard'\n</script>\n<template><div /></template>\n`,
+    )
+    process.chdir(root)
+    viewsScannerPlugin()
+    const routeFile = path.join(root, 'pages', '__view', 'home', '+route.ts')
+    assert.match(fs.readFileSync(routeFile, 'utf8'), /export default '\/dashboard'/)
+  })
+
   it('purges stale +Page.* files when the framework changes', () => {
     root = scaffold('react')
     process.chdir(root)

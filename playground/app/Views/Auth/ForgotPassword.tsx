@@ -1,6 +1,8 @@
 import '@/index.css'
 import { useState } from 'react'
 
+export const route = '/forgot-password'
+
 export interface ForgotPasswordProps {
   submitUrl?:       string
   loginUrl?:        string

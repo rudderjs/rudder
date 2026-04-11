@@ -2,6 +2,12 @@ import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
 
+// URL this view is served at — MUST match the controller route registered
+// by registerAuthRoutes() in the consumer project. If you override
+// `opts.paths.login` when calling registerAuthRoutes, update this too so
+// Vike's client router can SPA-navigate here instead of full-reloading.
+export const route = '/login'
+
 export interface LoginProps {
   submitUrl?:        string
   registerUrl?:      string

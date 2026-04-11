@@ -1,6 +1,8 @@
 import '@/index.css'
 import { useState, useEffect } from 'react'
 
+export const route = '/reset-password'
+
 export interface ResetPasswordProps {
   submitUrl?:        string
   loginUrl?:         string

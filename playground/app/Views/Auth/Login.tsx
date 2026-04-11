@@ -2,6 +2,8 @@ import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
 
+export const route = '/login'
+
 export interface LoginProps {
   submitUrl?:        string
   registerUrl?:      string

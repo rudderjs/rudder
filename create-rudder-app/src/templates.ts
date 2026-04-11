@@ -132,11 +132,20 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   const ext = pageExt(ctx.primary)
   files['pages/+config.ts']              = pagesRootConfig(ctx)
-  if (ctx.frameworks.length > 1) {
+  if (ctx.frameworks.length === 1) {
+    // Single-framework projects use a controller view for `/` — rendered
+    // through @rudderjs/view and wired in routes/web.ts. The file lives in
+    // app/Views/ and is owned by the user from day one.
+    files[`app/Views/Welcome.${welcomeExt(ctx.primary)}`] = welcomeView(ctx)
+  } else {
+    // Multi-framework projects keep pages/index/+Page.* with a per-page
+    // +config.ts that picks the primary renderer. The view scanner can't
+    // resolve a single framework when multiple vike-* are installed, so
+    // @rudderjs/view isn't usable in that setup yet.
     files['pages/index/+config.ts']      = pagesIndexConfig(ctx)
+    files['pages/index/+data.ts']        = pagesIndexData(ctx)
+    files[`pages/index/+Page${ext}`]     = pagesIndexPage(ctx)
   }
-  files['pages/index/+data.ts']          = pagesIndexData(ctx)
-  files[`pages/index/+Page${ext}`]       = pagesIndexPage(ctx)
   files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
   files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
 
@@ -1431,20 +1440,94 @@ router.post('/api/ai/chat', async (req, res) => {
 }
 
 function routesWeb(ctx: TemplateContext): string {
-  const authImport = ctx.packages.auth
-    ? `\nimport { SessionMiddleware } from '@rudderjs/session'\nimport { CsrfMiddleware } from '@rudderjs/middleware'\nimport { registerAuthRoutes } from '@rudderjs/auth/routes'\n`
+  const hasAuth     = ctx.packages.auth
+  const hasWelcome  = ctx.frameworks.length === 1
+
+  // ── imports ─────────────────────────────────────────────
+  const imports: string[] = [`import { Route } from '@rudderjs/router'`]
+  if (hasWelcome) {
+    imports.push(`import { createRequire } from 'node:module'`)
+    imports.push(`import { view } from '@rudderjs/view'`)
+    imports.push(`import { app, config } from '@rudderjs/core'`)
+  }
+  if (hasAuth) {
+    imports.push(`import { SessionMiddleware } from '@rudderjs/session'`)
+    imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
+    imports.push(`import { registerAuthRoutes } from '@rudderjs/auth/routes'`)
+    if (hasWelcome) {
+      imports.push(`import { AuthManager, Auth, runWithAuth } from '@rudderjs/auth'`)
+    }
+  }
+
+  // ── middleware chain shared with auth routes + welcome ─
+  const webMwBlock = hasAuth
+    ? `
+// Web middleware — session + CSRF apply to web routes (not API)
+const webMw = [SessionMiddleware(), CsrfMiddleware()]
+`
     : ''
-  const authWiring = ctx.packages.auth
-    ? `\n// Auth UI routes — login/register/forgot-password/reset-password\n// Views live in app/Views/Auth/ (vendored from @rudderjs/auth/views/${ctx.primary}/)\nregisterAuthRoutes(Route, { middleware: [SessionMiddleware(), CsrfMiddleware()] })\n`
+
+  // ── auth UI wiring ──────────────────────────────────────
+  const authBlock = hasAuth
+    ? `
+// Auth UI routes — login/register/forgot-password/reset-password
+// Views live in app/Views/Auth/ (vendored from @rudderjs/auth/views/${ctx.primary}/)
+registerAuthRoutes(Route, { middleware: webMw })
+`
     : ''
-  return `import { Route } from '@rudderjs/router'${authImport}
+
+  // ── welcome page wiring ─────────────────────────────────
+  const welcomeBlock = hasWelcome
+    ? `
+// Read RudderJS version from @rudderjs/core's package.json at boot time.
+const _require = createRequire(import.meta.url)
+const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: string }
+
+// Welcome page — delete this route and app/Views/Welcome.${welcomeExt(ctx.primary)} to replace it.
+Route.get('/', async () => {${hasAuth ? `
+  // Resolve the current user (if signed in) so the welcome page can show it.
+  let user: { name: string; email: string } | null = null
+  try {
+    const manager = app().make<AuthManager>('auth.manager')
+    await runWithAuth(manager, async () => {
+      const authUser = await Auth.user()
+      if (authUser) {
+        const record = authUser as unknown as Record<string, unknown>
+        user = {
+          name:  String(record['name']  ?? ''),
+          email: String(record['email'] ?? ''),
+        }
+      }
+    })
+  } catch {
+    // auth provider not registered — welcome page just won't show user info
+  }` : `
+  // Auth is not installed, so the welcome page never shows a signed-in user.
+  const user = null`}
+  return view('welcome', {
+    appName:       config<string>('app.name', 'RudderJS'),
+    rudderVersion: rudderCorePkg.version,
+    nodeVersion:   process.version.replace(/^v/, ''),
+    env:           config<string>('app.env', 'development'),
+    user,
+  })
+}${hasAuth ? ', webMw' : ''})
+`
+    : ''
+
+  return `${imports.join('\n')}
+${webMwBlock}${authBlock}${welcomeBlock}
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
 // Use this file for: redirects, server-side auth guards, download routes, sitemaps, etc.
-${authWiring}
+
 // Example: redirect root to /todos
 // Route.get('/', (_req, res) => res.redirect('/todos'))
 `
+}
+
+function welcomeExt(fw: 'react' | 'vue' | 'solid'): string {
+  return fw === 'vue' ? 'vue' : 'tsx'
 }
 
 function routesConsole(): string {
@@ -1815,6 +1898,367 @@ export default function Page() {
         <a href="/api/health" class="underline hover:text-foreground">API Health</a>
         <a href="/api/me" class="underline hover:text-foreground">Session Info</a>${extraStr}
       </div>
+    </div>
+  )
+}
+`
+}
+
+// ─── welcome view (controller-returned) ─────────────────────
+
+function welcomeView(ctx: TemplateContext): string {
+  switch (ctx.primary) {
+    case 'vue':   return welcomeViewVue()
+    case 'solid': return welcomeViewSolid()
+    default:      return welcomeViewReact()
+  }
+}
+
+const WELCOME_FEATURES = `const DEFAULT_DOCS   = 'https://github.com/rudderjs/rudder'
+const DEFAULT_GITHUB = 'https://github.com/rudderjs/rudder'
+
+const features: Feature[] = [
+  {
+    title:       'Controllers & Routing',
+    description: 'Explicit routes in routes/api.ts with middleware, params, named routes, and return types that just work.',
+    href:        \`\${DEFAULT_DOCS}#routing\`,
+  },
+  {
+    title:       'Eloquent ORM',
+    description: 'Laravel-style models on Prisma or Drizzle. Query relationships, scopes, and eager loading without changing mental models.',
+    href:        \`\${DEFAULT_DOCS}#orm\`,
+  },
+  {
+    title:       'Controller Views',
+    description: "The page you're looking at — return view() from a controller, rendered through Vike SSR. Zero adapter, full SPA nav.",
+    href:        \`\${DEFAULT_DOCS}#views\`,
+  },
+  {
+    title:       'Rudder CLI',
+    description: 'Laravel-style make:* generators, schedule, db:seed, and custom commands. Run \\\`pnpm rudder\\\` for the full list.',
+    href:        \`\${DEFAULT_DOCS}#cli\`,
+  },
+  {
+    title:       'Queues & Jobs',
+    description: 'Dispatch background jobs with sync, database, or Redis drivers. Monitor them with @rudderjs/horizon.',
+    href:        \`\${DEFAULT_DOCS}#queue\`,
+  },
+  {
+    title:       'Auth, Guards, Policies',
+    description: 'Session-backed auth, password reset, gates, and RequireAuth / RequireGuest middleware — all through one provider.',
+    href:        \`\${DEFAULT_DOCS}#auth\`,
+  },
+]`
+
+function welcomeViewReact(): string {
+  return `import '@/index.css'
+
+// URL this view is served at — MUST match the Route.get('/', ...) in routes/web.ts.
+// The scanner reads this constant and writes it into the generated +route.ts,
+// so Vike's client router can SPA-navigate here instead of doing full reloads.
+export const route = '/'
+
+export interface WelcomeProps {
+  appName:       string
+  rudderVersion: string
+  nodeVersion:   string
+  env:           string
+  user:          { name: string; email: string } | null
+  loginUrl?:     string
+  registerUrl?:  string
+  docsUrl?:      string
+  githubUrl?:    string
+}
+
+interface Feature {
+  title:       string
+  description: string
+  href:        string
+}
+
+${WELCOME_FEATURES}
+
+export default function Welcome(props: WelcomeProps) {
+  const loginUrl    = props.loginUrl    ?? '/login'
+  const registerUrl = props.registerUrl ?? '/register'
+  const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
+  const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
+
+  return (
+    <div className="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          RudderJS
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          {props.user ? (
+            <span className="text-zinc-500 dark:text-zinc-400">
+              Signed in as{' '}
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">{props.user.name}</span>
+            </span>
+          ) : (
+            <>
+              <a href={loginUrl} className="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+              <a href={registerUrl} className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+            </>
+          )}
+        </div>
+      </nav>
+
+      <section className="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
+        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">{props.appName}</h1>
+        <p className="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+          Laravel&apos;s developer experience, Vike&apos;s performance, Node&apos;s ecosystem.
+          <br className="hidden sm:block" />
+          This page is served by a controller, rendered through{' '}
+          <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view(&apos;welcome&apos;)</code>.
+        </p>
+        <div className="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+          <span>RudderJS v{props.rudderVersion}</span>
+          <span>•</span>
+          <span>Node {props.nodeVersion}</span>
+          <span>•</span>
+          <span>env={props.env}</span>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {features.map(f => (
+            <a
+              key={f.title}
+              href={f.href}
+              className="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
+            >
+              <h3 className="font-semibold">{f.title}</h3>
+              <p className="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
+                {f.description}
+              </p>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <footer className="border-t border-zinc-200 dark:border-zinc-900">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+          <div>Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.</div>
+          <div className="flex gap-4">
+            <a href={docsUrl} className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
+            <a href={githubUrl} className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">GitHub</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
+`
+}
+
+function welcomeViewVue(): string {
+  return `<script setup lang="ts">
+import '@/index.css'
+
+// URL this view is served at — see the React variant for rationale.
+export const route = '/'
+
+export interface WelcomeProps {
+  appName:       string
+  rudderVersion: string
+  nodeVersion:   string
+  env:           string
+  user:          { name: string; email: string } | null
+  loginUrl?:     string
+  registerUrl?:  string
+  docsUrl?:      string
+  githubUrl?:    string
+}
+
+const props = defineProps<WelcomeProps>()
+
+interface Feature {
+  title:       string
+  description: string
+  href:        string
+}
+
+${WELCOME_FEATURES}
+
+const loginUrl    = props.loginUrl    ?? '/login'
+const registerUrl = props.registerUrl ?? '/register'
+const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
+const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
+</script>
+
+<template>
+  <div class="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
+    <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+      <div class="flex items-center gap-2 text-sm font-semibold tracking-tight">
+        <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+        RudderJS
+      </div>
+      <div class="flex items-center gap-4 text-sm">
+        <span v-if="props.user" class="text-zinc-500 dark:text-zinc-400">
+          Signed in as
+          <span class="font-medium text-zinc-900 dark:text-zinc-100">{{ props.user.name }}</span>
+        </span>
+        <template v-else>
+          <a :href="loginUrl" class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+          <a :href="registerUrl" class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+        </template>
+      </div>
+    </nav>
+
+    <section class="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
+      <h1 class="text-5xl font-bold tracking-tight sm:text-6xl">{{ props.appName }}</h1>
+      <p class="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+        Laravel's developer experience, Vike's performance, Node's ecosystem.
+        <br class="hidden sm:block" />
+        This page is served by a controller, rendered through
+        <code class="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view('welcome')</code>.
+      </p>
+      <div class="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+        <span>RudderJS v{{ props.rudderVersion }}</span>
+        <span>•</span>
+        <span>Node {{ props.nodeVersion }}</span>
+        <span>•</span>
+        <span>env={{ props.env }}</span>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-6 pb-20">
+      <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <a
+          v-for="f in features"
+          :key="f.title"
+          :href="f.href"
+          class="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
+        >
+          <h3 class="font-semibold">{{ f.title }}</h3>
+          <p class="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
+            {{ f.description }}
+          </p>
+        </a>
+      </div>
+    </section>
+
+    <footer class="border-t border-zinc-200 dark:border-zinc-900">
+      <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+        <div>Built with RudderJS. Edit <code>app/Views/Welcome.vue</code> to customize this page.</div>
+        <div class="flex gap-4">
+          <a :href="docsUrl" class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
+          <a :href="githubUrl" class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">GitHub</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</template>
+`
+}
+
+function welcomeViewSolid(): string {
+  return `import '@/index.css'
+import { For, Show } from 'solid-js'
+
+// URL this view is served at — see the React variant for rationale.
+export const route = '/'
+
+export interface WelcomeProps {
+  appName:       string
+  rudderVersion: string
+  nodeVersion:   string
+  env:           string
+  user:          { name: string; email: string } | null
+  loginUrl?:     string
+  registerUrl?:  string
+  docsUrl?:      string
+  githubUrl?:    string
+}
+
+interface Feature {
+  title:       string
+  description: string
+  href:        string
+}
+
+${WELCOME_FEATURES}
+
+export default function Welcome(props: WelcomeProps) {
+  const loginUrl    = () => props.loginUrl    ?? '/login'
+  const registerUrl = () => props.registerUrl ?? '/register'
+  const docsUrl     = () => props.docsUrl     ?? DEFAULT_DOCS
+  const githubUrl   = () => props.githubUrl   ?? DEFAULT_GITHUB
+
+  return (
+    <div class="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
+      <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <div class="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          RudderJS
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+          <Show
+            when={props.user}
+            fallback={
+              <>
+                <a href={loginUrl()} class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+                <a href={registerUrl()} class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+              </>
+            }
+          >
+            {(user) => (
+              <span class="text-zinc-500 dark:text-zinc-400">
+                Signed in as <span class="font-medium text-zinc-900 dark:text-zinc-100">{user().name}</span>
+              </span>
+            )}
+          </Show>
+        </div>
+      </nav>
+
+      <section class="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
+        <h1 class="text-5xl font-bold tracking-tight sm:text-6xl">{props.appName}</h1>
+        <p class="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+          Laravel's developer experience, Vike's performance, Node's ecosystem.
+          <br class="hidden sm:block" />
+          This page is served by a controller, rendered through{' '}
+          <code class="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view('welcome')</code>.
+        </p>
+        <div class="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+          <span>RudderJS v{props.rudderVersion}</span>
+          <span>•</span>
+          <span>Node {props.nodeVersion}</span>
+          <span>•</span>
+          <span>env={props.env}</span>
+        </div>
+      </section>
+
+      <section class="mx-auto max-w-6xl px-6 pb-20">
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <For each={features}>
+            {(f) => (
+              <a
+                href={f.href}
+                class="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
+              >
+                <h3 class="font-semibold">{f.title}</h3>
+                <p class="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
+                  {f.description}
+                </p>
+              </a>
+            )}
+          </For>
+        </div>
+      </section>
+
+      <footer class="border-t border-zinc-200 dark:border-zinc-900">
+        <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+          <div>Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.</div>
+          <div class="flex gap-4">
+            <a href={docsUrl()} class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
+            <a href={githubUrl()} class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">GitHub</a>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

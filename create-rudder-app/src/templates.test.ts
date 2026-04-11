@@ -121,21 +121,35 @@ describe('getTemplates() — Todo module', () => {
 // ─── Framework page extensions ─────────────────────────────
 
 describe('getTemplates() — framework page files', () => {
-  it('React primary generates .tsx pages', () => {
+  // Single-framework projects now use a controller-returned view for `/` —
+  // app/Views/Welcome.* wired via Route.get('/', () => view('welcome', ...)) in
+  // routes/web.ts. The old pages/index/+Page.* only survives in multi-framework
+  // mode (where the scanner can't pick a single framework).
+
+  it('React primary generates Welcome.tsx + _error page', () => {
     const files = getTemplates(ctx({ frameworks: ['react'], primary: 'react' }))
-    assert.ok('pages/index/+Page.tsx' in files)
+    assert.ok('app/Views/Welcome.tsx' in files)
+    assert.ok(!('pages/index/+Page.tsx' in files))
     assert.ok('pages/_error/+Page.tsx' in files)
   })
 
-  it('Vue primary generates .vue pages', () => {
+  it('Vue primary generates Welcome.vue + _error page', () => {
     const files = getTemplates(ctx({ frameworks: ['vue'], primary: 'vue' }))
-    assert.ok('pages/index/+Page.vue' in files)
+    assert.ok('app/Views/Welcome.vue' in files)
+    assert.ok(!('pages/index/+Page.vue' in files))
     assert.ok('pages/_error/+Page.vue' in files)
   })
 
-  it('Solid primary generates .tsx pages', () => {
+  it('Solid primary generates Welcome.tsx + _error page', () => {
     const files = getTemplates(ctx({ frameworks: ['solid'], primary: 'solid' }))
+    assert.ok('app/Views/Welcome.tsx' in files)
+    assert.ok(!('pages/index/+Page.tsx' in files))
+  })
+
+  it('multi-framework projects keep pages/index (view scanner only handles one framework)', () => {
+    const files = getTemplates(ctx({ frameworks: ['react', 'vue'], primary: 'react' }))
     assert.ok('pages/index/+Page.tsx' in files)
+    assert.ok(!('app/Views/Welcome.tsx' in files))
   })
 })
 
@@ -186,18 +200,26 @@ describe('getTemplates() — auth pages', () => {
     }
   })
 
-  it('home page includes login/register links when auth selected', () => {
+  it('welcome view and routes/web.ts register /login when auth is selected', () => {
     const files = getTemplates(ctx({ packages: { ...defaultPkgs, auth: true }, tailwind: true }))
-    const page  = files['pages/index/+Page.tsx']!
-    assert.ok(page.includes('/login'))
-    assert.ok(page.includes('/register'))
+    const welcome = files['app/Views/Welcome.tsx']!
+    const web     = files['routes/web.ts']!
+    // The Welcome component falls back to /login and /register as defaults.
+    assert.ok(welcome.includes('/login'))
+    assert.ok(welcome.includes('/register'))
+    // routes/web.ts wires registerAuthRoutes() and the welcome route.
+    assert.ok(web.includes('registerAuthRoutes'))
+    assert.ok(web.includes("view('welcome'"))
   })
 
-  it('home page excludes login/register links when auth not selected', () => {
+  it('welcome view still exists without auth; routes/web.ts skips registerAuthRoutes', () => {
     const files = getTemplates(ctx({ packages: noAuth }))
-    const page  = files['pages/index/+Page.tsx']!
-    assert.ok(!page.includes('/login'))
-    assert.ok(!page.includes('/register'))
+    const welcome = files['app/Views/Welcome.tsx']!
+    const web     = files['routes/web.ts']!
+    // Welcome still ships — it just never shows a signed-in user.
+    assert.ok(welcome.length > 0)
+    assert.ok(!web.includes('registerAuthRoutes'))
+    assert.ok(web.includes("view('welcome'"))
   })
 })
 

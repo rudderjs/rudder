@@ -2,6 +2,9 @@ import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
 
+// URL this view is served at — see Login.tsx for rationale.
+export const route = '/register'
+
 export interface RegisterProps {
   submitUrl?: string
   loginUrl?:  string

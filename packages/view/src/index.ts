@@ -44,21 +44,17 @@ export class ViewResponse {
   async toResponse(ctx: ViewResolveContext): Promise<Response> {
     const { renderPage } = await import('vike/server')
 
-    // Build the URL we hand to Vike's renderPage. The id maps 1:1 to a URL
-    // path that the generated +route.ts file declares (e.g. 'home' → '/home',
-    // 'admin.users' → '/admin/users'). This MUST match what Vike's client
-    // router sees in its route table — otherwise client-side navigation falls
-    // back to a full page reload.
+    // Hand Vike the URL the browser actually requested. The scanner generates
+    // a +route.ts file whose default export matches this URL — either derived
+    // from the view id by convention ('home' → /home) or taken from a
+    // `export const route = '...'` override inside the view file. Either way,
+    // the incoming request URL IS the URL Vike's route table uses, so there's
+    // no remapping to do here.
     //
-    // Preserve Vike's `/index.pageContext.json` suffix if the request came
-    // from SPA nav so renderPage emits a JSON pageContext envelope instead
-    // of HTML. The `/index` prefix is mandatory (Vike hard-codes it).
-    const PAGE_CTX_SUFFIX = '/index.pageContext.json'
-    const parsedUrl = new URL(ctx.url, 'http://localhost')
-    const isPageCtx = parsedUrl.pathname.endsWith(PAGE_CTX_SUFFIX)
-    const suffix    = isPageCtx ? PAGE_CTX_SUFFIX : ''
-    const idPath    = '/' + this.id.replace(/\./g, '/')
-    const urlOriginal = `${idPath}${suffix}${parsedUrl.search}`
+    // The `/index.pageContext.json` suffix (present when the request came
+    // from SPA nav) is handled by Vike itself — passing it through makes
+    // renderPage return a JSON envelope instead of HTML.
+    const urlOriginal = ctx.url
 
     const pageContext = await renderPage({
       urlOriginal,

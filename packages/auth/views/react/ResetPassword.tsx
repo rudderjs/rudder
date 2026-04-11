@@ -1,6 +1,9 @@
 import '@/index.css'
 import { useState, useEffect } from 'react'
 
+// URL this view is served at — see Login.tsx for rationale.
+export const route = '/reset-password'
+
 export interface ResetPasswordProps {
   submitUrl?:        string
   loginUrl?:         string

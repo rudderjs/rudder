@@ -1,11 +1,14 @@
 ---
-status: draft
+status: done
 created: 2026-04-11
+shipped: 2026-04-11
 references:
   - controller-views-plan.md
 ---
 
 # Plan: Multi-framework support for `@rudderjs/view`
+
+> **Shipped 2026-04-11.** Phase 1 (Vue + Solid) and Phase 2 (vanilla HTML-string mode + `escapeHtml` helper) both landed in the same session. Phase 3 polish items (mixed-mode vanilla-in-React, `html\`\`` tagged template, explicit framework config option, Svelte) are deferred as non-blocking follow-ups. See `packages/view/README.md` § "Framework support" for the user-facing docs.
 
 ## Current state (v1, shipped 2026-04-11)
 
