@@ -2,10 +2,6 @@ import { Rudder } from '@rudderjs/rudder'
 import { Schedule } from '@rudderjs/schedule'
 import { Cache } from '@rudderjs/cache'
 import { User } from '../app/Models/User.js'
-import { SendEmails } from '../app/Commands/SendEmails.js'
-
-// Class-based commands (Laravel-style)
-Rudder.register(SendEmails)
 
 Rudder.command('inspire', () => {
   const quotes = [
