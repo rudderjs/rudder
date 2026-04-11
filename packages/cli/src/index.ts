@@ -7,7 +7,7 @@ import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
 import { migrateCommands } from './commands/migrate.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
-import { rudder, parseSignature } from '@rudderjs/rudder'
+import { rudder, parseSignature, CancelledError } from '@rudderjs/rudder'
 
 const C = {
   green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -276,4 +276,11 @@ async function main(): Promise<void> {
   await program.parseAsync()
 }
 
-main().catch((err) => console.error(err))
+main().catch((err) => {
+  if (err instanceof CancelledError) {
+    console.log(C.yellow('Cancelled.'))
+    process.exit(130)
+  }
+  console.error(err)
+  process.exit(1)
+})

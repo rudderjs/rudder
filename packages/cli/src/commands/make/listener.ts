@@ -1,8 +1,5 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
-import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(className: string): string {
   return `import type { Listener } from '@rudderjs/core'
@@ -16,24 +13,11 @@ export class ${className} implements Listener {
 }
 
 export function makeListener(program: Command): void {
-  program
-    .command('make:listener <name>')
-    .description('Create a new event listener class')
-    .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const className = name
-      const relPath   = `app/Listeners/${className}.ts`
-      const outPath   = resolve(process.cwd(), relPath)
-
-      if (existsSync(outPath) && !opts.force) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
-      await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, stub(className))
-
-      console.log(chalk.green('  ✔ Listener created:'), chalk.cyan(relPath))
-    })
+  registerMake(program, {
+    command:     'make:listener',
+    description: 'Create a new event listener class',
+    label:       'Listener created',
+    directory:   'app/Listeners',
+    stub,
+  })
 }

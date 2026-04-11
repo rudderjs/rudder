@@ -1,8 +1,6 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { Command } from 'commander'
-import { log } from '@clack/prompts'
+import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(name: string): string {
   // Convert PascalCase to kebab:case for default signature, e.g. SendEmails → send:emails
@@ -31,21 +29,14 @@ export class ${name} extends Command {
 }
 
 export function makeCommandCmd(program: Command): void {
-  program
-    .command('make:command <name>')
-    .description('Create a new rudder command class')
-    .option('-f, --force', 'Overwrite existing file')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const filePath = resolve(process.cwd(), `app/Commands/${name}.ts`)
-
-      if (existsSync(filePath) && !opts.force) {
-        log.error(`File already exists: app/Commands/${name}.ts\nUse --force to overwrite.`)
-        return
-      }
-
-      await mkdir(resolve(process.cwd(), 'app/Commands'), { recursive: true })
-      await writeFile(filePath, stub(name))
-      log.success(`Created app/Commands/${name}.ts`)
-      log.info(`Register it in routes/console.ts:\n  rudder.register(${name})`)
-    })
+  registerMake(program, {
+    command:     'make:command',
+    description: 'Create a new rudder command class',
+    label:       'Command created',
+    directory:   'app/Commands',
+    stub,
+    afterCreate: (className) => {
+      console.log(chalk.dim(`    Register it in routes/console.ts:  rudder.register(${className})`))
+    },
+  })
 }

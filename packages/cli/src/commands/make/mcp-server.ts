@@ -1,8 +1,5 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
-import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(className: string): string {
   return `import { McpServer } from '@rudderjs/mcp'
@@ -28,24 +25,12 @@ export class ${className} extends McpServer {
 }
 
 export function makeMcpServer(program: Command): void {
-  program
-    .command('make:mcp-server <name>')
-    .description('Create a new MCP server class')
-    .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const className = name.endsWith('Server') ? name : `${name}Server`
-      const relPath   = `app/Mcp/Servers/${className}.ts`
-      const outPath   = resolve(process.cwd(), relPath)
-
-      if (existsSync(outPath) && !opts.force) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
-      await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, stub(className))
-
-      console.log(chalk.green('  ✔ MCP server created:'), chalk.cyan(relPath))
-    })
+  registerMake(program, {
+    command:     'make:mcp-server',
+    description: 'Create a new MCP server class',
+    label:       'MCP server created',
+    suffix:      'Server',
+    directory:   'app/Mcp/Servers',
+    stub,
+  })
 }

@@ -1,8 +1,5 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
-import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(className: string, table: string): string {
   return `import { Model } from '@rudderjs/orm'
@@ -27,25 +24,11 @@ export function deriveTable(className: string): string {
 }
 
 export function makeModel(program: Command): void {
-  program
-    .command('make:model <name>')
-    .description('Create a new ORM model class')
-    .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const className = name
-      const table     = deriveTable(className)
-      const relPath   = `app/Models/${className}.ts`
-      const outPath   = resolve(process.cwd(), relPath)
-
-      if (existsSync(outPath) && !opts.force) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
-      await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, stub(className, table))
-
-      console.log(chalk.green('  ✔ Model created:'), chalk.cyan(relPath))
-    })
+  registerMake(program, {
+    command:     'make:model',
+    description: 'Create a new ORM model class',
+    label:       'Model created',
+    directory:   'app/Models',
+    stub:        (className) => stub(className, deriveTable(className)),
+  })
 }

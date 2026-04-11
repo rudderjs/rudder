@@ -1,8 +1,5 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
-import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(className: string, prefix: string): string {
   return `import { Controller, Get } from '@rudderjs/router'
@@ -28,25 +25,12 @@ export function derivePrefix(className: string): string {
 }
 
 export function makeController(program: Command): void {
-  program
-    .command('make:controller <name>')
-    .description('Create a new controller class')
-    .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const className = name.endsWith('Controller') ? name : `${name}Controller`
-      const prefix    = derivePrefix(className)
-      const relPath   = `app/Http/Controllers/${className}.ts`
-      const outPath   = resolve(process.cwd(), relPath)
-
-      if (existsSync(outPath) && !opts.force) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
-      await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, stub(className, prefix))
-
-      console.log(chalk.green('  ✔ Controller created:'), chalk.cyan(relPath))
-    })
+  registerMake(program, {
+    command:     'make:controller',
+    description: 'Create a new controller class',
+    label:       'Controller created',
+    suffix:      'Controller',
+    directory:   'app/Http/Controllers',
+    stub:        (className) => stub(className, derivePrefix(className)),
+  })
 }

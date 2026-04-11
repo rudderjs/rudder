@@ -1,8 +1,5 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
-import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(className: string): string {
   return `import { McpPrompt, Description } from '@rudderjs/mcp'
@@ -27,24 +24,12 @@ export class ${className} extends McpPrompt {
 }
 
 export function makeMcpPrompt(program: Command): void {
-  program
-    .command('make:mcp-prompt <name>')
-    .description('Create a new MCP prompt class')
-    .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const className = name.endsWith('Prompt') ? name : `${name}Prompt`
-      const relPath   = `app/Mcp/Prompts/${className}.ts`
-      const outPath   = resolve(process.cwd(), relPath)
-
-      if (existsSync(outPath) && !opts.force) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
-      await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, stub(className))
-
-      console.log(chalk.green('  ✔ MCP prompt created:'), chalk.cyan(relPath))
-    })
+  registerMake(program, {
+    command:     'make:mcp-prompt',
+    description: 'Create a new MCP prompt class',
+    label:       'MCP prompt created',
+    suffix:      'Prompt',
+    directory:   'app/Mcp/Prompts',
+    stub,
+  })
 }

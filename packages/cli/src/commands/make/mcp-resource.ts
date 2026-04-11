@@ -1,8 +1,5 @@
-import { writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
-import chalk from 'chalk'
+import { registerMake } from './_shared.js'
 
 export function stub(className: string): string {
   return `import { McpResource, Description } from '@rudderjs/mcp'
@@ -26,24 +23,12 @@ export class ${className} extends McpResource {
 }
 
 export function makeMcpResource(program: Command): void {
-  program
-    .command('make:mcp-resource <name>')
-    .description('Create a new MCP resource class')
-    .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
-      const className = name.endsWith('Resource') ? name : `${name}Resource`
-      const relPath   = `app/Mcp/Resources/${className}.ts`
-      const outPath   = resolve(process.cwd(), relPath)
-
-      if (existsSync(outPath) && !opts.force) {
-        console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
-        console.error(chalk.dim('    Use --force to overwrite.'))
-        return
-      }
-
-      await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, stub(className))
-
-      console.log(chalk.green('  ✔ MCP resource created:'), chalk.cyan(relPath))
-    })
+  registerMake(program, {
+    command:     'make:mcp-resource',
+    description: 'Create a new MCP resource class',
+    label:       'MCP resource created',
+    suffix:      'Resource',
+    directory:   'app/Mcp/Resources',
+    stub,
+  })
 }
