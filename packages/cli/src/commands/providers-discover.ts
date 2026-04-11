@@ -5,9 +5,26 @@ import { sortByStageAndDepends } from '@rudderjs/core'
 import type { ProviderEntry, ProviderManifest } from '@rudderjs/core'
 
 const C = {
-  green:  (s: string) => `\x1b[32m${s}\x1b[0m`,
-  dim:    (s: string) => `\x1b[2m${s}\x1b[0m`,
-  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  green:   (s: string) => `\x1b[32m${s}\x1b[0m`,
+  cyan:    (s: string) => `\x1b[36m${s}\x1b[0m`,
+  yellow:  (s: string) => `\x1b[33m${s}\x1b[0m`,
+  magenta: (s: string) => `\x1b[35m${s}\x1b[0m`,
+  dim:     (s: string) => `\x1b[2m${s}\x1b[0m`,
+  bold:    (s: string) => `\x1b[1m${s}\x1b[0m`,
+}
+
+const STAGE_COLORS: Record<ProviderEntry['stage'], (s: string) => string> = {
+  foundation:     C.magenta,
+  infrastructure: C.cyan,
+  feature:        C.green,
+  monitoring:     C.yellow,
+}
+
+const STAGE_ORDER: ProviderEntry['stage'][] = ['foundation', 'infrastructure', 'feature', 'monitoring']
+
+/** Strip the @rudderjs/ prefix for display since most entries share it. */
+function shortName(pkg: string): string {
+  return pkg.startsWith('@rudderjs/') ? pkg.slice('@rudderjs/'.length) : pkg
 }
 
 interface RudderJsField {
@@ -56,15 +73,51 @@ export function providersDiscoverCommand(program: Command): void {
         JSON.stringify(manifest, null, 2) + '\n',
       )
 
-      console.log(C.green(`✓ Discovered ${sorted.length} provider${sorted.length === 1 ? '' : 's'}`))
+      console.log()
+      console.log(`  ${C.green('✓')} ${C.bold(`Discovered ${sorted.length} provider${sorted.length === 1 ? '' : 's'}`)}`)
       if (skipped > 0) {
-        console.log(C.dim(`  (${skipped} package${skipped === 1 ? '' : 's'} opted out via autoDiscover: false)`))
+        console.log(C.dim(`    ${skipped} opted out via autoDiscover: false`))
       }
+
+      // Group by stage in canonical order
+      const grouped = new Map<ProviderEntry['stage'], ProviderEntry[]>()
       for (const e of sorted) {
-        const tag = e.optional ? C.dim(' (optional)') : ''
-        console.log(`  ${C.green(e.package.padEnd(28))} → ${e.provider} ${C.dim(`[${e.stage}]`)}${tag}`)
+        const list = grouped.get(e.stage) ?? []
+        list.push(e)
+        grouped.set(e.stage, list)
       }
-      console.log(C.dim(`\n  Wrote ${path.relative(cwd, path.join(cacheDir, 'providers.json'))}`))
+
+      // Calculate column widths from the entries actually present
+      const nameWidth = Math.max(
+        ...sorted.map(e => shortName(e.package).length),
+        4,
+      ) + 2
+
+      for (const stage of STAGE_ORDER) {
+        const list = grouped.get(stage)
+        if (!list || list.length === 0) continue
+
+        const stageColor = STAGE_COLORS[stage]
+        console.log()
+        console.log(`  ${stageColor(stage)}`)
+
+        list.forEach((e, i) => {
+          const isLast = i === list.length - 1
+          const branch = isLast ? '└─' : '├─'
+          const name   = shortName(e.package).padEnd(nameWidth)
+          const meta: string[] = []
+          if (e.depends && e.depends.length > 0) {
+            meta.push(C.dim('← ' + e.depends.map(shortName).join(', ')))
+          }
+          if (e.optional) meta.push(C.dim('(optional)'))
+          const metaStr = meta.length > 0 ? '  ' + meta.join('  ') : ''
+          console.log(`  ${C.dim(branch)} ${stageColor(name)}${e.provider}${metaStr}`)
+        })
+      }
+
+      console.log()
+      console.log(C.dim(`  Wrote ${path.relative(cwd, path.join(cacheDir, 'providers.json'))}`))
+      console.log()
     })
 }
 

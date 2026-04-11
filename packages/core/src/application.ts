@@ -466,28 +466,87 @@ export class RudderJS {
   /**
    * Dev-only — print the auto-discovered providers grouped by stage so a missing
    * package is visible at every boot instead of failing silently when first used.
+   * Wraps long stage lines so the output stays readable in narrow terminals.
    */
   private _printDevBootLog(): void {
     const entries = getLastLoadedProviderEntries()
     if (entries.length === 0) return
 
+    const C = {
+      dim:     (s: string) => `\x1b[2m${s}\x1b[0m`,
+      magenta: (s: string) => `\x1b[35m${s}\x1b[0m`,
+      cyan:    (s: string) => `\x1b[36m${s}\x1b[0m`,
+      green:   (s: string) => `\x1b[32m${s}\x1b[0m`,
+      yellow:  (s: string) => `\x1b[33m${s}\x1b[0m`,
+    }
+    const STAGE_COLORS = {
+      foundation:     C.magenta,
+      infrastructure: C.cyan,
+      feature:        C.green,
+      monitoring:     C.yellow,
+    } as const
+    const STAGE_ORDER = ['foundation', 'infrastructure', 'feature', 'monitoring'] as const
+
+    const shortName = (p: string): string => p.startsWith('@rudderjs/') ? p.slice('@rudderjs/'.length) : p
+
     const grouped = new Map<string, string[]>()
     for (const e of entries) {
       const list = grouped.get(e.stage) ?? []
-      list.push(e.package)
+      list.push(shortName(e.package))
       grouped.set(e.stage, list)
     }
 
-    const order: Array<'foundation' | 'infrastructure' | 'feature' | 'monitoring'> =
-      ['foundation', 'infrastructure', 'feature', 'monitoring']
+    console.log(`[RudderJS] ${entries.length} provider${entries.length === 1 ? '' : 's'} booted`)
 
-    console.log(`[RudderJS] booted ${entries.length} provider${entries.length === 1 ? '' : 's'}:`)
-    const labelWidth = 14
-    for (const stage of order) {
-      const list = grouped.get(stage)
-      if (!list || list.length === 0) continue
-      console.log(`  ${stage.padEnd(labelWidth)} → ${list.join(', ')}`)
-    }
+    // Find which stages have entries — needed to know which one is the last
+    // (gets `└─` instead of `├─`).
+    const activeStages = STAGE_ORDER.filter(s => (grouped.get(s)?.length ?? 0) > 0)
+
+    const labelWidth = 16
+    const indent     = '  '
+    const connector  = '── '   // 3 visible chars after the corner
+    const cornerLen  = 2 + connector.length // ├─ + space-after width
+    // Wrap at min(terminal width, 80) so the layout is consistent across
+    // narrow and wide terminals — wide terminals would otherwise stretch a
+    // long feature list to one unreadable line.
+    const termCols   = Math.min(process.stdout.columns ?? 80, 80)
+    const wrapWidth  = termCols - indent.length - cornerLen - labelWidth - 2
+
+    activeStages.forEach((stage, idx) => {
+      const list   = grouped.get(stage)!
+      const isLast = idx === activeStages.length - 1
+      const corner = isLast ? '└─ ' : '├─ '
+
+      const colorize = STAGE_COLORS[stage]
+      const label    = colorize(stage.padEnd(labelWidth))
+
+      // Greedy line-wrap: pack as many comma-joined names as fit per line.
+      const lines: string[][] = [[]]
+      let currentLen = 0
+      for (const name of list) {
+        const piece = (lines[lines.length - 1]!.length === 0 ? '' : ', ') + name
+        if (currentLen + piece.length > wrapWidth && lines[lines.length - 1]!.length > 0) {
+          lines.push([name])
+          currentLen = name.length
+        } else {
+          lines[lines.length - 1]!.push(name)
+          currentLen += piece.length
+        }
+      }
+
+      // Continuation lines use `│` to maintain the tree visual when there are
+      // more stages below; the last stage uses spaces instead.
+      const continuation = isLast
+        ? ' '.repeat(corner.length + labelWidth)
+        : C.dim('│  ') + ' '.repeat(labelWidth)
+
+      lines.forEach((parts, i) => {
+        const prefix = i === 0
+          ? `${indent}${C.dim(corner)}${label}`
+          : `${indent}${continuation}`
+        console.log(`${prefix}${parts.join(', ')}`)
+      })
+    })
   }
 
   /** Phase 2 — create the HTTP fetch handler. Requires Vite context (virtual: URLs). */
