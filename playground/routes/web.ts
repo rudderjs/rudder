@@ -1,12 +1,17 @@
 import { Route } from '@rudderjs/router'
 import { CsrfMiddleware } from '@rudderjs/middleware'
 import { SessionMiddleware } from '@rudderjs/session'
+import { registerAuthRoutes } from '@rudderjs/auth/routes'
 
 // Web middleware — session + CSRF apply to all web routes (not API)
 const webMw = [
   SessionMiddleware(),
   CsrfMiddleware(),
 ]
+
+// Auth UI routes — login/register/forgot-password/reset-password
+// Views live in app/Views/Auth/ (vendored from @rudderjs/auth/views/react/)
+registerAuthRoutes(Route, { middleware: webMw })
 
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing

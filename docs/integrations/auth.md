@@ -257,15 +257,22 @@ export default {
 } satisfies BetterAuthConfig
 ```
 
-### Auth pages
+### Auth views
 
-Publish the pre-built auth pages if you haven't already:
+Publish the pre-built auth view components if you haven't already:
 
 ```bash
-pnpm rudder vendor:publish --tag=auth-pages
+pnpm rudder vendor:publish --tag=auth-views
 ```
 
-This creates pages under `pages/(auth)/`:
+This vendors view files into `app/Views/Auth/` (Login, Register, ForgotPassword, ResetPassword). Wire the routes in `routes/web.ts`:
+
+```ts
+import { registerAuthRoutes } from '@rudderjs/auth/routes'
+registerAuthRoutes(Route, { middleware: [SessionMiddleware(), CsrfMiddleware()] })
+```
+
+This registers:
 
 - **`/forgot-password`** — form where the user enters their email to request a reset link
 - **`/reset-password?token=...`** — form where the user sets a new password using the token from the email

@@ -96,9 +96,15 @@ importers:
       '@rudderjs/hash':
         specifier: workspace:*
         version: link:../hash
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../router
       '@rudderjs/session':
         specifier: workspace:*
         version: link:../session
+      '@rudderjs/view':
+        specifier: workspace:*
+        version: link:../view
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35

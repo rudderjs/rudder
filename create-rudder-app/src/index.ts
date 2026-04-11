@@ -198,13 +198,15 @@ async function main(): Promise<void> {
     await fs.writeFile(abs, content, 'utf8')
   }
 
-  // Copy auth pages from installer's own @rudderjs/auth dependency
+  // Copy auth views from installer's own @rudderjs/auth dependency.
+  // Views are consumed via `registerAuthRoutes(Route)` from @rudderjs/auth/routes
+  // — the generated routes/web.ts wires this automatically.
   if (packages.auth) {
     try {
       const require      = createRequire(import.meta.url)
       const authPkgPath  = require.resolve('@rudderjs/auth/package.json')
-      const authPagesDir = path.join(path.dirname(authPkgPath), 'pages', primary)
-      await fs.cp(authPagesDir, path.join(target, 'pages', '(auth)'), { recursive: true })
+      const authViewsDir = path.join(path.dirname(authPkgPath), 'views', primary)
+      await fs.cp(authViewsDir, path.join(target, 'app', 'Views', 'Auth'), { recursive: true })
     } catch {
       // Package not found — user can publish manually after install
     }
@@ -235,7 +237,7 @@ async function main(): Promise<void> {
       `  ${pmExec(pm, 'prisma generate')}`,
       `  ${pmExec(pm, 'prisma db push')}`,
     ] : []),
-    ...(!install && packages.auth ? [`  ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-pages-${primary}`] : []),
+    ...(!install && packages.auth ? [`  ${pmRun(pm, 'rudder')} vendor:publish --tag=auth-views-${primary}`] : []),
     `  ${pmRun(pm, 'dev')}`,
   ]
 
