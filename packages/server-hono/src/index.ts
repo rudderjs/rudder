@@ -38,6 +38,18 @@ import type {
 } from '@rudderjs/contracts'
 import { attachInputAccessors } from '@rudderjs/contracts'
 
+// ─── ViewResponse duck-type check ──────────────────────────
+// Detects @rudderjs/view ViewResponse instances without importing the package.
+// The constructor's static `__rudder_view__ === true` marker is the contract.
+interface ViewResponseLike {
+  toResponse(ctx: { url: string }): Promise<Response>
+}
+function isViewResponse(value: unknown): value is ViewResponseLike {
+  if (value === null || typeof value !== 'object') return false
+  const ctor = (value as { constructor?: { __rudder_view__?: unknown } }).constructor
+  return ctor?.__rudder_view__ === true && typeof (value as ViewResponseLike).toResponse === 'function'
+}
+
 // ─── Hono Adapter Config ───────────────────────────────────
 
 export interface HonoConfig {
@@ -215,6 +227,16 @@ function logPath(path: string): string | null {
 class HonoAdapter implements ServerAdapter {
   private app: Hono
   private _errorHandler?: (err: unknown, req: AppRequest) => Response | Promise<Response>
+  /**
+   * Set of GET route paths registered via the router. Used by the outer fetch
+   * handler to decide whether a `.pageContext.json` request should be rewritten
+   * to a controller URL or left for Vike's middleware to handle directly.
+   * Without this, Vike's pageContext.json requests for its own pages would be
+   * misrouted into Hono and return HTML instead of JSON.
+   * Note: only exact-match paths are tracked — parameterized routes (`/users/:id`)
+   * are not supported as controller views in v1.
+   */
+  readonly controllerViewPaths = new Set<string>()
 
   constructor(app?: Hono) {
     this.app = app ?? new Hono()
@@ -230,6 +252,14 @@ class HonoAdapter implements ServerAdapter {
   registerRoute(route: RouteDefinition): void {
     const method = (route.method === 'ALL' ? 'all' : route.method.toLowerCase()) as
       'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'all'
+
+    // Track GET routes that don't contain dynamic segments — these are the
+    // candidates for `view()` returns and SPA-navigable. The outer fetch
+    // handler uses this set to know when a `.pageContext.json` request should
+    // be rewritten into a controller call.
+    if ((route.method === 'GET' || route.method === 'ALL') && !route.path.includes(':')) {
+      this.controllerViewPaths.add(route.path)
+    }
 
     this.app[method](route.path, async (c: Context) => {
       const req = normalizeRequest(c)
@@ -258,7 +288,16 @@ class HonoAdapter implements ServerAdapter {
         } else {
           // All middleware passed — run the handler with the same res
           const result = await route.handler(req, res)
-          if (result instanceof Response) {
+          if (isViewResponse(result)) {
+            // @rudderjs/view ViewResponse — resolve via Vike's renderPage().
+            // Detected by duck-typing on the static __rudder_view__ marker so
+            // server-hono has no hard import on @rudderjs/view.
+            // Pass the original URL (preserving any .pageContext.json suffix
+            // from Vike's client router) so toResponse() can request JSON
+            // instead of HTML for SPA navigation.
+            const originalUrl = c.req.header('x-rudder-original-url') ?? c.req.url
+            c.res = await result.toResponse({ url: originalUrl })
+          } else if (result instanceof Response) {
             c.res = result
           } else if (result !== undefined && result !== null) {
             c.res = c.json(result) as Response
@@ -371,11 +410,40 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       // Logging at the outermost fetch level catches ALL requests — including Vike's
       // client-side navigation data fetches, which bypass the Hono middleware chain.
       return async (request) => {
+        // Vike client-router SPA nav: rewrite /<path>.pageContext.json → /<path>
+        // so the controller route matches. Stash the original URL on a header so
+        // ViewResponse.toResponse() can pass it back to Vike — Vike then emits the
+        // JSON pageContext envelope instead of HTML, and the client does a smooth
+        // SPA transition. Without this, every controller-view link is a full reload.
+        // Vike's client router uses `/<path>/index.pageContext.json` (the
+        // `/index` prefix is hard-coded — see Vike's handlePageContextRequestUrl).
+        // For controller-view URLs, strip that suffix and route to the
+        // controller; the controller returns a ViewResponse, and toResponse()
+        // hands the original URL back to renderPage so Vike emits JSON.
+        // For pageContext.json requests targeting normal Vike pages, leave
+        // the request alone — Vike's middleware handles those directly.
+        let actualRequest = request
+        const reqUrl = new URL(request.url)
+        const PAGE_CTX_SUFFIX = '/index.pageContext.json'
+        if (reqUrl.pathname.endsWith(PAGE_CTX_SUFFIX)) {
+          const stripped = reqUrl.pathname.slice(0, -PAGE_CTX_SUFFIX.length) || '/'
+          if (adapter.controllerViewPaths.has(stripped)) {
+            const rewrittenUrl = new URL(request.url)
+            rewrittenUrl.pathname = stripped
+            const headers = new Headers(request.headers)
+            headers.set('x-rudder-original-url', request.url)
+            actualRequest = new Request(rewrittenUrl.toString(), {
+              method: request.method,
+              headers,
+            })
+          }
+        }
+
         const display = logPath(new URL(request.url).pathname)
-        if (display === null) return app.fetch(request)
+        if (display === null) return app.fetch(actualRequest)
         const n     = nextReqId()
         const start = performance.now()
-        const res   = await app.fetch(request)
+        const res   = await app.fetch(actualRequest)
         console.log(formatRequestLog(n, display, res.status, performance.now() - start))
         return res
       }

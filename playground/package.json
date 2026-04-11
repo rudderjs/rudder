@@ -48,6 +48,7 @@
     "@rudderjs/session": "workspace:*",
     "@rudderjs/storage": "workspace:*",
     "@rudderjs/telescope": "workspace:*",
+    "@rudderjs/view": "workspace:*",
     "@rudderjs/vite": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "@vikejs/hono": "^0.2.0",

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import type { Plugin } from 'vite'
+import { viewsScannerPlugin } from './views-scanner.js'
 
 // ─── SSR / build externals ─────────────────────────────────
 
@@ -70,6 +71,12 @@ export function rudderjs(): Promise<Plugin[]> {
   // Build plugins asynchronously — we need a dynamic import to guarantee we
   // load vike from the *app root* (not packages/vite/node_modules).
   const promise = (async (): Promise<Plugin[]> => {
+    // Construct the views scanner BEFORE loading Vike's plugin — the scanner's
+    // factory eagerly writes generated stubs to `pages/__view/`, and Vike scans
+    // the pages directory during its own plugin instantiation. If we load Vike
+    // first, the stubs don't exist yet and Vike will 404 on /__view/* routes.
+    const viewsScanner = viewsScannerPlugin()
+
     let vikePlugins: Plugin[] = []
     try {
       const vikePath = _require.resolve('vike/plugin')
@@ -81,6 +88,7 @@ export function rudderjs(): Promise<Plugin[]> {
 
     return [
       ...vikePlugins,
+      viewsScanner,
       {
         name: 'rudderjs:ws',
         configureServer(server) {

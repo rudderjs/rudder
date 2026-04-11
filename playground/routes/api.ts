@@ -1,4 +1,5 @@
 import { Route } from '@rudderjs/router'
+import { view } from '@rudderjs/view'
 import { resolve, app, dd, dump, config, validate } from '@rudderjs/core'
 import { broadcast, broadcastStats } from '@rudderjs/broadcast'
 import { getLocale, runWithLocale, setLocale, trans } from '@rudderjs/localization'
@@ -34,6 +35,35 @@ const authLimit = RateLimit.perMinute(10)
   .message('Too many auth attempts. Try again later.')
 
 Route.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+// Demo: Laravel-style controller views
+// Visit /home and /about — controllers fetch data, view() renders pages
+// from app/Views/Home.tsx and app/Views/About.tsx via Vike SSR.
+Route.get('/home', async () => {
+  return view('home', {
+    appName:  'RudderJS',
+    greeting: 'Laravel-style controller views, rendered through Vike SSR.',
+    features: [
+      'Routes return view() like Laravel controllers',
+      'Vike handles SSR + hydration automatically',
+      'Views live in app/Views/, not pages/',
+      'Middleware runs before view rendering',
+      'Works with React, Vue, Solid, or vanilla',
+    ],
+  })
+})
+
+Route.get('/about', async () => {
+  return view('about', {
+    title:   'About RudderJS',
+    version: '0.0.1',
+    team: [
+      { name: 'Ada Lovelace',  role: 'Algorithms'    },
+      { name: 'Alan Turing',   role: 'Computation'   },
+      { name: 'Grace Hopper',  role: 'Compilers'     },
+    ],
+  })
+})
 
 Route.get('/api/hello', async (req) => {
   const q = req.query['lang']
