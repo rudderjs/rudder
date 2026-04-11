@@ -11,7 +11,7 @@
   "files": [
     "dist",
     "boost",
-    "pages",
+    "views",
     "schema"
   ],
   "main": "./dist/index.js",
@@ -21,6 +21,14 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./routes": {
+      "import": "./dist/routes.js",
+      "types": "./dist/routes.d.ts"
+    },
+    "./views/react/Login":          "./views/react/Login.tsx",
+    "./views/react/Register":       "./views/react/Register.tsx",
+    "./views/react/ForgotPassword": "./views/react/ForgotPassword.tsx",
+    "./views/react/ResetPassword":  "./views/react/ResetPassword.tsx",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -37,15 +45,21 @@
   },
   "peerDependencies": {
     "@rudderjs/hash": "workspace:*",
-    "@rudderjs/session": "workspace:*"
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/session": "workspace:*",
+    "@rudderjs/view": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@rudderjs/hash": { "optional": false },
-    "@rudderjs/session": { "optional": false }
+    "@rudderjs/router": { "optional": false },
+    "@rudderjs/session": { "optional": false },
+    "@rudderjs/view": { "optional": false }
   },
   "devDependencies": {
     "@rudderjs/hash": "workspace:*",
+    "@rudderjs/router": "workspace:*",
     "@rudderjs/session": "workspace:*",
+    "@rudderjs/view": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

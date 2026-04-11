@@ -169,10 +169,11 @@ describe('getTemplates() — secondary framework demo pages', () => {
   })
 })
 
-// ─── Auth pages ────────────────────────────────────────────
-// Auth page files (login/register) are NOT generated inline — they live in
-// @rudderjs/auth/pages/ and are copied from node_modules after install,
-// or published via: rudder vendor:publish --tag=auth-pages-{framework}
+// ─── Auth views ────────────────────────────────────────────
+// Auth view files (Login/Register/...) are NOT generated inline — they live in
+// @rudderjs/auth/views/ and are copied into app/Views/Auth/ after install,
+// or published via: rudder vendor:publish --tag=auth-views-{framework}
+// Routes are wired in routes/web.ts via registerAuthRoutes(Route).
 
 describe('getTemplates() — auth pages', () => {
   it('never generates login/register page files (come from @rudderjs/auth)', () => {

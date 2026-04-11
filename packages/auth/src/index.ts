@@ -21,6 +21,7 @@ export { EloquentUserProvider, toAuthenticatable } from './providers.js'
 export { Gate, Policy, AuthorizationError } from './gate.js'
 export { PasswordBroker, MemoryTokenRepository } from './password-reset.js'
 export { EnsureEmailIsVerified, verificationUrl, handleEmailVerification, mustVerifyEmail } from './verification.js'
+export { RequireGuest } from './require-guest.js'
 
 export type { Authenticatable, AuthUser, Guard, UserProvider } from './contracts.js'
 export type { MustVerifyEmail } from './verification.js'
@@ -110,11 +111,10 @@ export function RequireAuth(guardName?: string): MiddlewareHandler {
 export function auth(config: AuthConfig): new (app: Application) => ServiceProvider {
   class AuthServiceProvider extends ServiceProvider {
     register(): void {
-      // Auth pages (framework-specific)
-      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages' })
-      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/react', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-react' })
-      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/vue',   import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-vue' })
-      this.publishes({ from: new URL(/* @vite-ignore */ '../pages/solid', import.meta.url).pathname, to: 'pages/(auth)', tag: 'auth-pages-solid' })
+      // Auth views — vendored into the consumer's `app/Views/Auth/` directory.
+      // Consumers then wire routes via `registerAuthRoutes(Route)` from `@rudderjs/auth/routes`.
+      this.publishes({ from: new URL(/* @vite-ignore */ '../views/react', import.meta.url).pathname, to: 'app/Views/Auth', tag: 'auth-views' })
+      this.publishes({ from: new URL(/* @vite-ignore */ '../views/react', import.meta.url).pathname, to: 'app/Views/Auth', tag: 'auth-views-react' })
 
       // Auth schema (ORM + driver-specific)
       const schemaDir = new URL(/* @vite-ignore */ '../schema', import.meta.url).pathname

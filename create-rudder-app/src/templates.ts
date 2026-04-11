@@ -127,7 +127,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['app/Middleware/RequestIdMiddleware.ts'] = requestIdMiddleware()
 
   files['routes/api.ts']     = routesApi(ctx)
-  files['routes/web.ts']     = routesWeb()
+  files['routes/web.ts']     = routesWeb(ctx)
   files['routes/console.ts'] = routesConsole()
 
   const ext = pageExt(ctx.primary)
@@ -1430,15 +1430,20 @@ router.post('/api/ai/chat', async (req, res) => {
   return imports.join('\n') + '\n' + lines.join('\n') + '\n'
 }
 
-function routesWeb(): string {
-  return `import { router } from '@rudderjs/router'
-
+function routesWeb(ctx: TemplateContext): string {
+  const authImport = ctx.packages.auth
+    ? `\nimport { SessionMiddleware } from '@rudderjs/session'\nimport { CsrfMiddleware } from '@rudderjs/middleware'\nimport { registerAuthRoutes } from '@rudderjs/auth/routes'\n`
+    : ''
+  const authWiring = ctx.packages.auth
+    ? `\n// Auth UI routes — login/register/forgot-password/reset-password\n// Views live in app/Views/Auth/ (vendored from @rudderjs/auth/views/${ctx.primary}/)\nregisterAuthRoutes(Route, { middleware: [SessionMiddleware(), CsrfMiddleware()] })\n`
+    : ''
+  return `import { Route } from '@rudderjs/router'${authImport}
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
 // Use this file for: redirects, server-side auth guards, download routes, sitemaps, etc.
-
+${authWiring}
 // Example: redirect root to /todos
-// router.get('/', (_req, res) => res.redirect('/todos'))
+// Route.get('/', (_req, res) => res.redirect('/todos'))
 `
 }
 

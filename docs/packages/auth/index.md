@@ -194,22 +194,37 @@ If you are using Drizzle instead of Prisma, the auth package auto-detects the OR
 
 ---
 
-## Auth Pages
+## Auth Views
 
-The auth package can publish pre-built authentication pages into your project:
+The auth package ships pure presentational view components under `@rudderjs/auth/views/<framework>/`. Publish them into your project's `app/Views/Auth/` directory:
 
 ```bash
-pnpm rudder vendor:publish --tag=auth-pages
+pnpm rudder vendor:publish --tag=auth-views
 ```
 
-This creates the following pages under `pages/(auth)/`:
+Then wire the routes in `routes/web.ts` with a single call:
 
-| Page | Path | Description |
+```ts
+import { Route } from '@rudderjs/router'
+import { SessionMiddleware } from '@rudderjs/session'
+import { CsrfMiddleware } from '@rudderjs/middleware'
+import { registerAuthRoutes } from '@rudderjs/auth/routes'
+
+registerAuthRoutes(Route, { middleware: [SessionMiddleware(), CsrfMiddleware()] })
+```
+
+`registerAuthRoutes` registers these routes, each guarded by `RequireGuest`:
+
+| View | Path | Description |
 |------|------|-------------|
 | Login | `/login` | Email/password sign-in form |
 | Register | `/register` | New user registration form |
 | Forgot Password | `/forgot-password` | Request a password reset email |
 | Reset Password | `/reset-password?token=...` | Set a new password using a reset token |
+
+The POST submit handlers (`/api/auth/sign-in/email`, `/api/auth/sign-up/email`, etc.) are registered separately in `routes/api.ts` — `registerAuthRoutes` only owns the GET pages.
+
+Customize any view by editing `app/Views/Auth/Login.tsx` (or the other files). The package no longer cares — the file is yours.
 
 ### Password Reset
 

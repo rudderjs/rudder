@@ -96,7 +96,7 @@ export function vendorPublishCommand(program: Command): void {
 
       // ── Deduplicate by destination (no-tag mode only) ──
       // When no --tag is given, multiple groups from the same provider may target the
-      // same `to` path (e.g. auth publishes React, Vue, Solid variants all to pages/(auth)).
+      // same `to` path (e.g. auth publishes React, Vue, Solid variants all to app/Views/Auth).
       // Only the first registered group per destination is published — that is the default.
       // Users must pass --tag to get a specific variant.
       if (!opts.tag) {
