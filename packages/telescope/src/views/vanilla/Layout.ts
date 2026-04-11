@@ -1,6 +1,18 @@
 /**
- * Shared HTML layout for Telescope UI pages.
- * Sidebar navigation + content area. Alpine.js + Tailwind CDN.
+ * Shared HTML chrome for Telescope dashboard pages.
+ *
+ * Vanilla mode (raw template literals + Alpine.js + Tailwind via CDN). No
+ * client framework dependency, no build step. The package's UI is fully
+ * self-contained so telescope can debug a host app of any framework.
+ *
+ * NOTE: this file deliberately does NOT use `html\`\`` from `@rudderjs/view`
+ * even though it's the established vanilla helper, because the per-page
+ * templates that compose this layout embed Alpine.js scripts inside
+ * `<script>` blocks where HTML escape semantics are wrong (escaping `'`
+ * to `&#39;` would break JS string literals). Phase 2 of the telescope
+ * refresh will move Alpine scripts to standalone client files and adopt
+ * `html\`\`` everywhere — for now, byte-for-byte parity with the previous
+ * `src/ui/layout.ts` is the goal.
  */
 
 export interface NavItem {
@@ -9,7 +21,16 @@ export interface NavItem {
   icon:  string
 }
 
-export function layout(title: string, body: string, basePath: string, activePath: string): string {
+export interface LayoutProps {
+  title:      string
+  body:       string
+  basePath:   string
+  activePath: string
+}
+
+export function Layout(props: LayoutProps): string {
+  const { title, body, basePath, activePath } = props
+
   const nav: NavItem[] = [
     { label: 'Dashboard',     path: '',              icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { label: 'Requests',      path: '/requests',     icon: 'M13 10V3L4 14h7v7l9-11h-7z' },

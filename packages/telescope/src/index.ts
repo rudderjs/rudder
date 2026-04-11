@@ -11,7 +11,7 @@ import { EventCollector } from './collectors/event.js'
 import { CacheCollector } from './collectors/cache.js'
 import { ScheduleCollector } from './collectors/schedule.js'
 import { ModelCollector } from './collectors/model.js'
-import { registerRoutes } from './api/routes.js'
+import { registerTelescopeRoutes } from './routes.js'
 import { defaultConfig, type TelescopeConfig, type TelescopeStorage, type TelescopeEntry, type EntryType, type Collector, type ListOptions } from './types.js'
 
 // ─── Re-exports ────────────────────────────────────────────
@@ -175,7 +175,14 @@ export class TelescopeProvider extends ServiceProvider {
         }
       }
 
-    // ── Register API routes ───────────────────────────────
-    await registerRoutes(storage, resolved)
+    // ── Register UI + API routes ──────────────────────────
+    const routeOpts: Parameters<typeof registerTelescopeRoutes>[1] = {}
+    if (resolved.path) routeOpts.path = resolved.path
+    if (resolved.auth) routeOpts.auth = resolved.auth
+    await registerTelescopeRoutes(storage, routeOpts)
   }
 }
+
+// ─── Re-exports ────────────────────────────────────────────
+
+export { registerTelescopeRoutes, type RegisterTelescopeRoutesOptions } from './routes.js'
