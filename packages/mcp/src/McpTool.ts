@@ -21,6 +21,9 @@ export abstract class McpTool {
   /** Input schema using Zod */
   abstract schema(): z.ZodObject<z.ZodRawShape>
 
+  /** Optional output schema using Zod — advertises the structure of the tool's response */
+  outputSchema?(): z.ZodObject<z.ZodRawShape>
+
   /** Handle the tool call */
   abstract handle(input: Record<string, unknown>): Promise<McpToolResult>
 }

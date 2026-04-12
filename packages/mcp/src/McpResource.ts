@@ -1,7 +1,7 @@
 import { getDescription } from './decorators.js'
 
 export abstract class McpResource {
-  /** Resource URI pattern */
+  /** Resource URI pattern — can contain `{param}` placeholders for templates */
   abstract uri(): string
 
   /** MIME type */
@@ -14,6 +14,11 @@ export abstract class McpResource {
     return getDescription(this.constructor) ?? ''
   }
 
-  /** Handle resource read */
-  abstract handle(): Promise<string>
+  /** Whether this resource uses URI templates (has `{param}` placeholders) */
+  isTemplate(): boolean {
+    return this.uri().includes('{')
+  }
+
+  /** Handle resource read. Receives extracted params if this is a template resource. */
+  abstract handle(params?: Record<string, string>): Promise<string>
 }

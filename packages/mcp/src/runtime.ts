@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
@@ -14,8 +15,46 @@ import type { McpResource } from './McpResource.js'
 import type { McpPrompt } from './McpPrompt.js'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
 
+/**
+ * Match a URI against a template pattern like `weather://location/{city}`.
+ * Returns extracted params or null if no match.
+ */
+function matchUriTemplate(template: string, uri: string): Record<string, string> | null {
+  // Convert `weather://location/{city}` → regex `^weather://location/(?<city>[^/]+)$`
+  const paramNames: string[] = []
+  const regexStr = template.replace(/\{(\w+)\}/g, (_, name: string) => {
+    paramNames.push(name)
+    return '([^/]+)'
+  })
+  const match = uri.match(new RegExp(`^${regexStr}$`))
+  if (!match) return null
+  const params: Record<string, string> = {}
+  for (let i = 0; i < paramNames.length; i++) {
+    params[paramNames[i]!] = decodeURIComponent(match[i + 1]!)
+  }
+  return params
+}
+
 function getProtected<T>(server: McpServer, key: string, fallback: T): T {
   return ((server as unknown as Record<string, T>)[key]) ?? fallback
+}
+
+/**
+ * Try to resolve a class via the framework's DI container (auto-injects
+ * constructor dependencies). Falls back to plain `new T()` if the container
+ * is not available or resolution fails.
+ */
+function resolveOrConstruct<T>(Ctor: new (...args: any[]) => T): T {
+  try {
+    const container = (globalThis as Record<string, unknown>)['__rudderjs_instance__'] as
+      { make?: <U>(target: new (...args: any[]) => U) => U } | undefined
+    if (container?.make) {
+      return container.make(Ctor)
+    }
+  } catch {
+    // DI resolution failed — fall back to plain constructor
+  }
+  return new Ctor()
 }
 
 export function createSdkServer(server: McpServer): Server {
@@ -25,21 +64,27 @@ export function createSdkServer(server: McpServer): Server {
     { capabilities: { tools: {}, resources: {}, prompts: {} } },
   )
 
-  const toolClasses = getProtected<(new () => McpTool)[]>(server, 'tools', [])
-  const resourceClasses = getProtected<(new () => McpResource)[]>(server, 'resources', [])
-  const promptClasses = getProtected<(new () => McpPrompt)[]>(server, 'prompts', [])
+  const toolClasses = getProtected<(new (...args: any[]) => McpTool)[]>(server, 'tools', [])
+  const resourceClasses = getProtected<(new (...args: any[]) => McpResource)[]>(server, 'resources', [])
+  const promptClasses = getProtected<(new (...args: any[]) => McpPrompt)[]>(server, 'prompts', [])
 
-  const tools: McpTool[] = toolClasses.map((T) => new T())
-  const resources: McpResource[] = resourceClasses.map((R) => new R())
-  const prompts: McpPrompt[] = promptClasses.map((P) => new P())
+  const tools: McpTool[] = toolClasses.map((T) => resolveOrConstruct(T))
+  const resources: McpResource[] = resourceClasses.map((R) => resolveOrConstruct(R))
+  const prompts: McpPrompt[] = promptClasses.map((P) => resolveOrConstruct(P))
 
   // ── Tools ────────────────────────────────────────────────
   sdk.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map((t) => ({
-      name: t.name(),
-      description: t.description(),
-      inputSchema: zodToJsonSchema(t.schema()),
-    })),
+    tools: tools.map((t) => {
+      const def: Record<string, unknown> = {
+        name: t.name(),
+        description: t.description(),
+        inputSchema: zodToJsonSchema(t.schema()),
+      }
+      if (t.outputSchema) {
+        def['outputSchema'] = zodToJsonSchema(t.outputSchema())
+      }
+      return def
+    }),
   }))
 
   sdk.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -57,8 +102,11 @@ export function createSdkServer(server: McpServer): Server {
   })
 
   // ── Resources ────────────────────────────────────────────
+  const staticResources = resources.filter((r) => !r.isTemplate())
+  const templateResources = resources.filter((r) => r.isTemplate())
+
   sdk.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: resources.map((r) => ({
+    resources: staticResources.map((r) => ({
       uri: r.uri(),
       name: r.uri(),
       description: r.description(),
@@ -66,15 +114,43 @@ export function createSdkServer(server: McpServer): Server {
     })),
   }))
 
+  if (templateResources.length > 0) {
+    sdk.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+      resourceTemplates: templateResources.map((r) => ({
+        uriTemplate: r.uri(),
+        name: r.uri(),
+        description: r.description(),
+        mimeType: r.mimeType(),
+      })),
+    }))
+  }
+
   sdk.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    const resource = resources.find((r) => r.uri() === request.params.uri)
+    const uri = request.params.uri
+
+    // Try exact match first (static resources)
+    let resource = staticResources.find((r) => r.uri() === uri)
+    let params: Record<string, string> | undefined
+
+    // Try template match
     if (!resource) {
-      throw new Error(`Unknown resource: ${request.params.uri}`)
+      for (const tmpl of templateResources) {
+        const extracted = matchUriTemplate(tmpl.uri(), uri)
+        if (extracted) {
+          resource = tmpl
+          params = extracted
+          break
+        }
+      }
+    }
+
+    if (!resource) {
+      throw new Error(`Unknown resource: ${uri}`)
     }
     return {
       contents: [{
-        uri: resource.uri(),
-        text: await resource.handle(),
+        uri,
+        text: await resource.handle(params),
         mimeType: resource.mimeType(),
       }],
     }
