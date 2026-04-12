@@ -1,14 +1,14 @@
 # Boost Enhancements Plan
 
-Improve `@rudderjs/boost` with documentation search, multi-agent IDE support, and custom agent registration — closing gaps vs Laravel Boost.
+Bring `@rudderjs/boost` to parity with Laravel Boost: multi-agent install, skills content, docs search, guidelines as MCP resources, runtime route list, and CLAUDE.md auto-update.
 
 **Status:** Not started
 
-**Packages affected:** `@rudderjs/boost`
+**Packages affected:** `@rudderjs/boost`, plus 4-6 packages that will ship new `boost/skills/` content
 
-**Breaking change risk:** None. All changes are additive. Existing MCP tools, commands, and guideline/skill collection are untouched.
+**Breaking change risk:** None. All changes are additive. Existing MCP tools, commands, and guideline collection are untouched. The MCP server stays on `@modelcontextprotocol/sdk` directly (same as Laravel Boost — it does NOT use `laravel/mcp` and we don't use `@rudderjs/mcp`).
 
-**Consumer impact:** None — boost is a dev dependency only. No runtime packages depend on it.
+**Consumer impact:** None — boost is a dev dependency only.
 
 **Depends on:** Nothing — independent of MCP and AI plans.
 
@@ -18,70 +18,49 @@ Improve `@rudderjs/boost` with documentation search, multi-agent IDE support, an
 
 After this plan:
 
-1. `search_docs` MCP tool provides semantic search over RudderJS documentation, so AI agents can look up framework APIs on demand instead of relying on stale context.
-2. `boost:install` supports multiple AI agents (Claude Code, Cursor, Copilot, Codex, Gemini CLI, Windsurf) and generates per-agent config files.
-3. Third-party packages and users can register custom agent adapters via `Boost.registerAgent()`.
-4. Guidelines support package-version awareness (preparing for when we have multiple major versions).
+1. `boost:install` is **interactive** — asks which AI agents you use and generates per-agent config files (Claude Code, Cursor, Copilot, Codex, Gemini CLI, Windsurf).
+2. `boost:update` also **regenerates CLAUDE.md** (and per-agent guideline files) — no need to re-run `boost:install`.
+3. Key packages ship **skills** (on-demand SKILL.md files) — not just guidelines.
+4. Guidelines are exposed as **MCP resources** — the AI agent can re-read them on demand, not just at install time.
+5. `search_docs` MCP tool provides **local documentation search** over framework docs.
+6. `route_list` tool uses **runtime route data** (`rudder route:list`) instead of regex parsing source files.
+7. Third-party packages can register **custom agent adapters** via `Boost.registerAgent()`.
 
 ---
 
 ## Non-Goals
 
-- **Hosting a full docs site.** We build a local search index from markdown docs in the repo — not a remote API.
-- **Real-time docs sync.** The index is rebuilt on `boost:update`. Not a live service.
-- **Agent-specific skill formats.** Skills follow the open Agent Skills spec (SKILL.md). We don't maintain separate formats per IDE.
-- **Paid docs API.** Unlike Laravel's 17k-entry hosted API, ours is local-first and open.
+- **Remote docs API.** Laravel has a 17k-entry hosted API. Ours is local-first — indexes README.md + docs/ from installed packages. No external dependency.
+- **Version-specific guidelines.** We're at v0. The infrastructure can be added later when we have multiple majors.
+- **Migrating to `@rudderjs/mcp`.** Boost uses the raw MCP SDK directly for simplicity, same as Laravel Boost. No class hierarchy needed for a fixed tool set.
 
 ---
 
-## Phase 1 — Documentation Search Tool
+## Phase 1 — Multi-Agent Interactive Install
 
-**What:** A `search_docs` MCP tool that searches RudderJS documentation locally.
+**What:** `boost:install` detects available agents, presents a selection, and generates per-agent config files.
 
-**Approach:** Build a lightweight local search index from the markdown docs in the monorepo. No external API dependency.
+### Current behavior
+- Generates `.mcp.json` (Claude Code only) + `CLAUDE.md` + `.ai/guidelines/` + `.ai/skills/` + `boost.json`
+- No agent detection, no selection, no support for other IDEs
 
-**Files to create/modify:**
-
-1. **`packages/boost/src/tools/search-docs.ts`** (new) — MCP tool:
-   - On first call, builds an in-memory index from `docs/**/*.md` files in the project root and `node_modules/@rudderjs/*/README.md` files
-   - Uses TF-IDF or simple keyword matching (no heavy deps)
-   - Input: `{ query: string, limit?: number }`
-   - Returns: ranked list of doc sections with file path, heading, and relevant excerpt
-   - Caches the index for the lifetime of the MCP server process
-
-2. **`packages/boost/src/docs-index.ts`** (new) — Index builder:
-   - Scans markdown files, splits by headings (## / ###)
-   - Stores: file path, heading hierarchy, content chunk, keywords
-   - Simple ranking: exact match > word overlap > partial match
-   - Future upgrade path: swap in embedding-based search if needed
-
-3. **`packages/boost/src/server.ts`** (modify) — Register `search_docs` as the 11th MCP tool.
-
-**Why local, not remote:** 
-- Works offline, no API key needed
-- Docs ship with the packages (README.md + docs/)
-- Zero latency — in-process search
-- Can upgrade to embeddings later without changing the tool interface
-
-**Test:** Call `search_docs` with "middleware", verify it returns relevant docs sections.
-
----
-
-## Phase 2 — Multi-Agent IDE Support
-
-**What:** `boost:install` detects and configures multiple AI coding agents, not just Claude Code.
+### New behavior
+- Detects which agents are likely in use (checks for config files, IDE directories)
+- Presents interactive checklist (or accepts `--agent=claude-code,cursor` flag)
+- Generates agent-specific files for each selected agent
+- Tracks selections in `boost.json` so `boost:update` knows which agents to refresh
 
 **Files to create/modify:**
 
-1. **`packages/boost/src/agents/`** (new directory) — Agent adapters:
+1. **`packages/boost/src/agents/`** (new directory):
    ```
    agents/
-   ├── types.ts           # Agent interface
+   ├── types.ts           # BoostAgent interface
    ├── claude-code.ts     # .mcp.json + CLAUDE.md
    ├── cursor.ts          # .cursor/mcp.json + .cursorrules
    ├── copilot.ts         # .github/copilot-instructions.md + .vscode/mcp.json
-   ├── codex.ts           # codex CLI mcp config + AGENTS.md
-   ├── gemini.ts          # .gemini/settings.json
+   ├── codex.ts           # AGENTS.md + codex CLI MCP config
+   ├── gemini.ts          # GEMINI.md + .gemini/settings.json
    └── windsurf.ts        # .windsurfrules + .windsurf/mcp.json
    ```
 
@@ -90,27 +69,31 @@ After this plan:
    export interface BoostAgent {
      name: string
      displayName: string
-     detect(): boolean              // check if agent is likely in use
+     detect(cwd: string): boolean
      supportsGuidelines: boolean
      supportsMcp: boolean
      supportsSkills: boolean
      installGuidelines(cwd: string, content: string): Promise<void>
-     installMcp(cwd: string, command: string): Promise<void>
+     installMcp(cwd: string, mcpCommand: { command: string; args: string[] }): Promise<void>
      installSkills?(cwd: string, skills: SkillEntry[]): Promise<void>
    }
    ```
 
-3. **`packages/boost/src/commands/install.ts`** (modify):
-   - Detect which agents are available (check for config files, CLI presence)
-   - Present interactive selection (or `--agent=claude-code,cursor` flag)
+3. **`packages/boost/src/commands/install.ts`** (rewrite):
+   - Import all built-in agents + any registered custom agents
+   - Detect which are available, present selection (using `@clack/prompts` or simple stdin)
    - Run each selected agent's install methods
-   - Track selections in `boost.json`
+   - Store selections in `boost.json`:
+     ```json
+     {
+       "version": "0.0.1",
+       "agents": ["claude-code", "cursor"],
+       "packages": ["@rudderjs/core", "@rudderjs/orm", ...],
+       "generatedAt": "..."
+     }
+     ```
 
-4. **`packages/boost/src/commands/update.ts`** (modify):
-   - Read agent selections from `boost.json`
-   - Update guidelines/MCP config for each agent
-
-**Agent config details:**
+**Per-agent output:**
 
 | Agent | Guidelines File | MCP Config | Skills |
 |---|---|---|---|
@@ -121,36 +104,211 @@ After this plan:
 | Gemini CLI | `GEMINI.md` | `.gemini/settings.json` | — |
 | Windsurf | `.windsurfrules` | `.windsurf/mcp.json` | — |
 
-**Test:** Run `boost:install` with `--agent=cursor`, verify `.cursor/mcp.json` and `.cursorrules` are created.
+All guideline files get the same concatenated content — just written to different paths. MCP config is the same `boost:mcp` command, just in different JSON formats per agent.
+
+**Test:** Run `boost:install --agent=cursor`, verify `.cursor/mcp.json` and `.cursorrules` created correctly.
 
 ---
 
-## Phase 3 — Custom Agent Registration
+## Phase 2 — `boost:update` Regenerates Everything
 
-**What:** Users and third-party packages can register their own agent adapters.
+**What:** `boost:update` refreshes guidelines, skills, AND per-agent files — no need to re-run `boost:install`.
+
+### Current behavior
+- Updates `.ai/guidelines/` and `.ai/skills/`
+- Prints "CLAUDE.md was not modified. Run `boost:install` to regenerate it." — friction
+
+### New behavior
+- Updates `.ai/guidelines/` and `.ai/skills/`
+- Reads `boost.json` to know which agents are configured
+- Regenerates each agent's guideline file (CLAUDE.md, .cursorrules, etc.)
+- With `--discover`: also finds newly installed packages
+
+**Files to modify:**
+
+1. **`packages/boost/src/commands/update.ts`** (rewrite):
+   - Read `boost.json` for agent list + package list
+   - Collect guidelines + skills (existing logic)
+   - For each agent in `boost.json.agents`, call `agent.installGuidelines()` with fresh content
+   - Update `boost.json` timestamp
+
+**Test:** Install with Claude Code + Cursor, add a new package with guidelines, run `boost:update --discover`, verify both `CLAUDE.md` and `.cursorrules` updated.
+
+---
+
+## Phase 3 — Ship Skills in Packages
+
+**What:** Write SKILL.md files for key packages so AI agents have on-demand deep knowledge.
+
+### What guidelines vs skills are
+
+| | Guidelines | Skills |
+|---|---|---|
+| **Loaded** | Always — injected into agent context upfront | On-demand — loaded when relevant to the task |
+| **Scope** | Broad conventions, key imports, pitfalls | Deep implementation patterns, step-by-step |
+| **Size** | Short (under 200 lines) | Longer, detailed |
+| **Example** | "Here's how agents work, here are the key imports" | "How to build a multi-step agent with tool approval, conversation persistence, and streaming" |
+
+### Skills to create
+
+| Package | Skill Name | Content |
+|---|---|---|
+| `@rudderjs/orm` | `orm-models` | Creating models, relationships, queries, migrations, seeding |
+| `@rudderjs/auth` | `auth-setup` | Setting up auth, guards, sessions, registration flow, vendor views |
+| `@rudderjs/ai` | `ai-agents` | Building agents with tools, streaming, approval flows, conversations, middleware |
+| `@rudderjs/ai` | `ai-tools` | Defining server/client tools, approval gates, generator yields, modelOutput |
+| `@rudderjs/mcp` | `mcp-servers` | Building MCP servers with tools, resources, prompts, testing |
+| `@rudderjs/view` | `controller-views` | Creating views, route overrides, multi-framework setup |
+
+**Files to create:**
+- `packages/orm/boost/skills/orm-models/SKILL.md`
+- `packages/auth/boost/skills/auth-setup/SKILL.md`
+- `packages/ai/boost/skills/ai-agents/SKILL.md`
+- `packages/ai/boost/skills/ai-tools/SKILL.md`
+- `packages/mcp/boost/skills/mcp-servers/SKILL.md`
+- `packages/view/boost/skills/controller-views/SKILL.md`
+
+Each follows the Agent Skills spec:
+```markdown
+---
+name: ai-agents
+description: Build AI agents with tools, streaming, approval flows, and conversations
+---
+
+# Building AI Agents
+
+## When to use this skill
+When creating a new agent class, adding tools, setting up conversations, or configuring streaming.
+
+## Step-by-step
+...
+
+## Examples
+...
+```
+
+**Test:** Run `boost:install`, verify skills appear in `.ai/skills/`.
+
+---
+
+## Phase 4 — Guidelines as MCP Resources
+
+**What:** Expose collected guidelines as MCP resources so the AI agent can re-read them on demand — not just at install time.
+
+### Why
+Guidelines are baked into CLAUDE.md at install time. But if the agent needs to re-check a specific package's guidelines mid-conversation, it can't. Making them available as MCP resources means the agent can call `readResource('guidelines://orm')` at any time.
+
+**Files to modify:**
+
+1. **`packages/boost/src/server.ts`** (modify) — After registering tools, register resources:
+   ```ts
+   // For each installed package that has guidelines
+   server.registerResource(`guidelines://${shortName}`, {
+     description: `AI coding guidelines for @rudderjs/${shortName}`,
+     mimeType: 'text/markdown',
+   }, async () => {
+     const content = readFileSync(guidelinePath, 'utf-8')
+     return { contents: [{ uri: `guidelines://${shortName}`, text: content }] }
+   })
+   ```
+
+2. Also register a `guidelines://all` resource that returns the concatenated guidelines (same content as CLAUDE.md).
+
+**Test:** Start MCP server, list resources, verify `guidelines://orm`, `guidelines://auth`, etc. appear. Read one, verify content matches the package's `boost/guidelines.md`.
+
+---
+
+## Phase 5 — Documentation Search Tool
+
+**What:** `search_docs` MCP tool for searching RudderJS documentation locally.
+
+**Approach:** Build a lightweight in-memory index from markdown files. No external API, no embeddings — simple keyword/TF-IDF search that can be upgraded later.
+
+**Files to create/modify:**
+
+1. **`packages/boost/src/docs-index.ts`** (new) — Index builder:
+   - Scans: `node_modules/@rudderjs/*/README.md` + `node_modules/@rudderjs/*/docs/**/*.md`
+   - Splits by headings (`##` / `###`) into sections
+   - Each section: `{ package, file, heading, headingHierarchy, content, keywords }`
+   - Ranking: exact phrase match > all words present > partial word overlap
+   - Index is built on first call, cached for MCP server lifetime
+
+2. **`packages/boost/src/tools/search-docs.ts`** (new) — MCP tool:
+   ```ts
+   Input: { query: string, package?: string, limit?: number }
+   Output: ranked list of { package, file, heading, excerpt, score }
+   ```
+
+3. **`packages/boost/src/server.ts`** (modify) — Register `search_docs` as the 11th tool.
+
+**Why local, not remote:**
+- Works offline, no API key
+- Docs ship with packages (README.md + docs/)
+- Zero latency — in-process
+- Upgrade path: swap in embeddings later without changing the tool interface
+
+**Test:** Call `search_docs` with "middleware", verify it returns relevant sections from core/contracts docs.
+
+---
+
+## Phase 6 — Runtime Route List
+
+**What:** Replace regex-based route parsing with actual runtime data.
+
+### Current behavior
+`route_list` tool regex-parses `routes/web.ts` and `routes/api.ts` for `Route.method('path')` patterns. Misses dynamic routes, programmatic registration, grouped routes.
+
+### New behavior
+Execute `rudder route:list --json` (already exists in CLI) and return the output. Falls back to regex parsing if the command isn't available.
+
+**Files to modify:**
+
+1. **`packages/boost/src/tools/route-list.ts`** (rewrite):
+   ```ts
+   export function getRouteList(cwd: string): RouteInfo[] {
+     try {
+       // Try runtime first
+       const result = execSync('pnpm rudder route:list --json', { cwd, timeout: 10000 })
+       return JSON.parse(result.toString())
+     } catch {
+       // Fall back to regex parsing
+       return regexParseRoutes(cwd)
+     }
+   }
+   ```
+
+**Test:** Start playground, call `route_list` tool, verify it returns all registered routes including auth routes from `registerAuthRoutes()`.
+
+---
+
+## Phase 7 — Custom Agent Registration
+
+**What:** Users and third-party packages can register custom agent adapters.
 
 **Files to create/modify:**
 
 1. **`packages/boost/src/Boost.ts`** (new) — Static registry:
    ```ts
    export class Boost {
-     private static agents = new Map<string, BoostAgent>()
+     private static customAgents = new Map<string, BoostAgent>()
 
-     static registerAgent(name: string, agent: BoostAgent): void
-     static getAgents(): Map<string, BoostAgent>
-     static getAgent(name: string): BoostAgent | undefined
+     static registerAgent(name: string, agent: BoostAgent): void {
+       this.customAgents.set(name, agent)
+     }
+
+     static getCustomAgents(): Map<string, BoostAgent> {
+       return this.customAgents
+     }
    }
    ```
 
 2. **`packages/boost/src/index.ts`** (modify) — Export `Boost` class and `BoostAgent` interface.
 
-3. **`packages/boost/src/commands/install.ts`** (modify) — Merge built-in agents with registered custom agents in the selection list.
+3. **`packages/boost/src/commands/install.ts`** (modify) — Merge built-in agents with custom agents in the selection list.
 
-**Usage in AppServiceProvider:**
+**Usage:**
 ```ts
 import { Boost } from '@rudderjs/boost'
-import { MyCustomAgent } from './agents/MyCustomAgent.js'
-
 Boost.registerAgent('my-agent', new MyCustomAgent())
 ```
 
@@ -158,51 +316,34 @@ Boost.registerAgent('my-agent', new MyCustomAgent())
 
 ---
 
-## Phase 4 — Version-Aware Guidelines
-
-**What:** Prepare the guideline collection system for version-specific content.
-
-**Files to create/modify:**
-
-1. **`packages/boost/src/commands/update.ts`** (modify):
-   - When scanning `@rudderjs/*` packages, read their `version` from package.json
-   - Look for `boost/guidelines.md` (default) and `boost/guidelines/{major}.md` (version-specific)
-   - If version-specific exists, use it; otherwise fall back to default
-   - Example: `@rudderjs/orm` v2 → check `boost/guidelines/2.md`, fall back to `boost/guidelines.md`
-
-2. **`packages/boost/boost.json` schema** (modify) — Track package versions:
-   ```json
-   {
-     "packages": {
-       "@rudderjs/orm": { "version": "0.0.1", "guideline": "default" }
-     }
-   }
-   ```
-
-This is lightweight prep work. Since we're at v0, no packages ship version-specific guidelines yet — but the infrastructure is ready.
-
-**Test:** Create a mock package with both default and version-specific guidelines, verify the correct one is selected.
-
----
-
 ## Phase Order
 
 | Phase | Description | Depends on |
 |---|---|---|
-| 1 | Documentation search tool | — |
-| 2 | Multi-agent IDE support | — (parallel with 1) |
-| 3 | Custom agent registration | Phase 2 (uses agent types) |
-| 4 | Version-aware guidelines | — (parallel with 1-3) |
+| 1 | Multi-agent interactive install | — |
+| 2 | boost:update regenerates everything | Phase 1 (uses agent types) |
+| 3 | Ship skills in packages | — (parallel with 1-2) |
+| 4 | Guidelines as MCP resources | — (parallel with 1-3) |
+| 5 | Documentation search tool | — (parallel with 1-4) |
+| 6 | Runtime route list | — (parallel with anything) |
+| 7 | Custom agent registration | Phase 1 (uses agent types) |
+
+Phases 3-6 are all independent and can be done in any order. Phase 1 is the foundation since 2 and 7 depend on the agent type system.
 
 ---
 
 ## Verification Checklist
 
 - [ ] Existing boost test suite passes (no regression)
-- [ ] `search_docs` MCP tool returns relevant results
-- [ ] `boost:install` generates correct config for each supported agent
-- [ ] `boost:update` updates all agent configs
-- [ ] Custom agent registration works from AppServiceProvider
-- [ ] Version-specific guideline fallback works correctly
+- [ ] `boost:install` interactive selection works
+- [ ] `boost:install --agent=claude-code,cursor` flag works
+- [ ] Each agent generates correct config files
+- [ ] `boost:update` refreshes all agent guideline files
+- [ ] `boost:update --discover` finds new packages
+- [ ] Skills appear in `.ai/skills/` after install
+- [ ] MCP resources list shows `guidelines://` entries
+- [ ] `search_docs` returns relevant results
+- [ ] `route_list` uses runtime data when available
+- [ ] Custom agent registration works
 - [ ] `pnpm typecheck` clean
-- [ ] Playground `boost:install` still works end-to-end
+- [ ] Playground `boost:install` + `boost:update` work end-to-end
