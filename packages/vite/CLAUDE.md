@@ -6,15 +6,15 @@ Vite build plugin — configures Vike SSR, path aliases, SSR externals, view sca
 
 - `src/index.ts` — Main plugin factory returning `Plugin[]`
 - View scanner generates Vike pages at `pages/__view/` from `app/Views/`
-- `rudderjs:routes` plugin watches `routes/` and `bootstrap/` for HMR invalidation
+- `rudderjs:routes` plugin watches `routes/`, `bootstrap/`, and `app/` for HMR invalidation
 
 ## Architecture Rules
 
 - **Async plugin**: returns `Promise<Plugin[]>` — loads Vike dynamically from the app root
 - **Path aliases**: `@/` and `App/` mapped to app directory
 - **SSR externals**: node built-ins (`node:*`) externalized — never import them at top level in client code
-- **HMR reload**: invalidates SSR module graph on route/bootstrap changes; never uses `server.restart()`
-- **GlobalThis cleanup**: clears `__rudderjs_instance__` and `__rudderjs_app__` on re-bootstrap
+- **HMR reload**: invalidates SSR module graph on route/bootstrap/app changes; never uses `server.restart()`
+- **GlobalThis cleanup**: clears `__rudderjs_instance__` and `__rudderjs_app__` on all watched changes (app/ files are captured in closures at boot, so they also need full re-bootstrap)
 
 ## Commands
 
