@@ -1,6 +1,6 @@
 # @rudderjs/boost
 
-AI developer experience layer for RudderJS. Exposes your project internals to AI coding assistants (Claude Code, Cursor, Copilot) via MCP.
+AI developer experience layer for RudderJS. Exposes your project internals to AI coding assistants via MCP. Supports Claude Code, Cursor, GitHub Copilot, Codex CLI, Gemini CLI, and Windsurf.
 
 ## Installation
 
@@ -19,30 +19,32 @@ import { boost } from '@rudderjs/boost'
 export default [..., boost()]
 ```
 
-### Connect to Claude Code
+### Quick Start
 
 ```bash
-claude mcp add -s local -t stdio rudderjs-boost -- npx tsx node_modules/@rudderjs/cli/src/index.ts boost:mcp
+rudder boost:install                        # Auto-detect agents, generate configs
+rudder boost:install --agent=claude-code    # Specific agent
+rudder boost:install --agent=cursor,copilot # Multiple agents
 ```
 
-Or add to `.mcp.json`:
+### Supported Agents
 
-```json
-{
-  "mcpServers": {
-    "rudderjs-boost": {
-      "command": "npx",
-      "args": ["tsx", "node_modules/@rudderjs/cli/src/index.ts", "boost:mcp"]
-    }
-  }
-}
-```
+| Agent | Guidelines | MCP Config | Skills |
+|---|---|---|---|
+| Claude Code | `CLAUDE.md` | `.mcp.json` | `.ai/skills/` |
+| Cursor | `.cursorrules` | `.cursor/mcp.json` | `.ai/skills/` |
+| GitHub Copilot | `.github/copilot-instructions.md` | `.vscode/mcp.json` | — |
+| Codex CLI | `AGENTS.md` | `.mcp.json` | — |
+| Gemini CLI | `GEMINI.md` | `.gemini/settings.json` | — |
+| Windsurf | `.windsurfrules` | `.windsurf/mcp.json` | — |
+
+`boost:install` auto-detects which agents you use by checking for existing config files. Defaults to Claude Code if nothing is detected.
 
 ## Commands
 
 ```bash
-rudder boost:install    # Generate .mcp.json, CLAUDE.md, .ai/guidelines/, .ai/skills/, boost.json
-rudder boost:update     # Re-scan packages and update guidelines/skills (--discover for new packages)
+rudder boost:install    # Generate per-agent configs, guidelines, skills, boost.json
+rudder boost:update     # Re-scan packages and update all agent configs (--discover for new packages)
 rudder boost:mcp        # Start the MCP server (stdio transport)
 ```
 
@@ -67,7 +69,7 @@ Each `@rudderjs/*` package can ship `boost/guidelines.md` and `boost/skills/*/SK
 
 - `.ai/guidelines/{package}.md` — per-package AI coding guidelines
 - `.ai/skills/*/SKILL.md` — on-demand task-specific knowledge modules
-- `CLAUDE.md` — concatenated guidelines for Claude Code
+- Per-agent guideline files (`CLAUDE.md`, `.cursorrules`, etc.) — concatenated guidelines
 
 ## Programmatic Use
 
