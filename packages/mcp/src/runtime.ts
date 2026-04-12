@@ -107,5 +107,103 @@ export async function startStdio(server: McpServer): Promise<void> {
   await sdk.connect(transport)
 }
 
-// TODO: Add createHttpHandler once StreamableHTTPServerTransport / SSEServerTransport
-// integration pattern is finalized. The low-level Server class requires manual transport wiring.
+// ─── HTTP Transport ─────────────────────────────────────
+
+export interface HttpTransportOptions {
+  /** Middleware to apply before MCP request handling */
+  middleware?: unknown[]
+  /** Generate session IDs for stateful mode. Set to undefined for stateless. */
+  sessionIdGenerator?: (() => string) | undefined
+}
+
+/**
+ * Mount an MCP server on the framework's router at the given path.
+ *
+ * Uses the MCP SDK's `WebStandardStreamableHTTPServerTransport` which
+ * accepts Web Standard `Request` objects and returns `Response` — a
+ * natural fit for Hono (the framework's server adapter).
+ *
+ * The transport handles all three HTTP methods:
+ * - POST — JSON-RPC messages (initialization + ongoing)
+ * - GET  — SSE stream for server-initiated notifications
+ * - DELETE — session termination
+ */
+export async function mountHttpTransport(
+  server: McpServer,
+  path: string,
+  options?: HttpTransportOptions,
+): Promise<void> {
+  const { WebStandardStreamableHTTPServerTransport } = await import(
+    '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+  )
+
+  // Session map: each session gets its own transport + SDK server pair.
+  // For stateless mode, a single transport is reused.
+  const sessions = new Map<string, { transport: InstanceType<typeof WebStandardStreamableHTTPServerTransport>; sdk: Server }>()
+
+  const sessionIdGen = options?.sessionIdGenerator !== undefined
+    ? options.sessionIdGenerator
+    : () => crypto.randomUUID()
+
+  // Import the router at runtime (same pattern as Telescope).
+  // Dynamic import avoids a hard dependency on @rudderjs/router.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const routerMod = await import(/* webpackIgnore: true */ '@rudderjs/router' as any) as {
+    router: {
+      all: (path: string, handler: (req: unknown, res: unknown) => unknown, middleware?: unknown[]) => unknown
+    }
+  }
+  const { router } = routerMod
+
+  const middleware = options?.middleware as ((req: unknown, res: unknown, next: () => Promise<void>) => void | Promise<void>)[] | undefined
+
+  router.all(`${path}`, async (req: any, res: any) => {
+    // Extract the Hono context → Web Standard Request
+    const honoCtx = req.raw
+    const nativeRequest: Request = honoCtx.req.raw
+
+    // For stateless mode (no session generator)
+    if (!sessionIdGen) {
+      let entry = sessions.get('__stateless__')
+      if (!entry) {
+        const transport = new WebStandardStreamableHTTPServerTransport()
+        const sdk = createSdkServer(server)
+        await sdk.connect(transport)
+        entry = { transport, sdk }
+        sessions.set('__stateless__', entry)
+      }
+      const response = await entry.transport.handleRequest(nativeRequest)
+      honoCtx.res = response
+      return honoCtx.res
+    }
+
+    // Stateful mode: route by session ID header
+    const sessionId = nativeRequest.headers.get('mcp-session-id')
+
+    if (sessionId && sessions.has(sessionId)) {
+      // Existing session
+      const entry = sessions.get(sessionId)!
+      const response = await entry.transport.handleRequest(nativeRequest)
+      honoCtx.res = response
+      return honoCtx.res
+    }
+
+    // New session — create transport + server pair
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: sessionIdGen,
+      onsessioninitialized: (id: string) => {
+        sessions.set(id, { transport, sdk })
+      },
+      onsessionclosed: (id: string) => {
+        sessions.delete(id)
+      },
+    })
+
+    const sdk = createSdkServer(server)
+    await sdk.connect(transport)
+
+    const response = await transport.handleRequest(nativeRequest)
+    honoCtx.res = response
+    return honoCtx.res
+  }, middleware)
+}

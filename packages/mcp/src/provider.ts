@@ -9,6 +9,23 @@ export function mcp(): new (app: Application) => ServiceProvider {
     }
 
     async boot(): Promise<void> {
+      // Mount web MCP servers on the router
+      const webServers = Mcp.getWebServers()
+      if (webServers.size > 0) {
+        try {
+          const { mountHttpTransport } = await import('./runtime.js')
+          for (const [path, entry] of webServers) {
+            const server = new entry.server()
+            await mountHttpTransport(server, path, {
+              middleware: entry.middleware,
+            })
+          }
+        } catch {
+          // router or transport not available — skip web mounting
+        }
+      }
+
+      // Register CLI commands
       try {
         const { rudder } = await import('@rudderjs/core')
 
