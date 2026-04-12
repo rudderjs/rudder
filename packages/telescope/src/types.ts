@@ -14,6 +14,7 @@ export type EntryType =
   | 'model'
   | 'command'
   | 'broadcast'
+  | 'live'
 
 export interface TelescopeEntry {
   id:         string
@@ -85,6 +86,14 @@ export interface TelescopeConfig {
   recordModels?:         boolean | undefined
   recordCommands?:       boolean | undefined
   recordBroadcasts?:     boolean | undefined
+  recordLive?:           boolean | undefined
+  /**
+   * Throttle window in ms for Yjs awareness events (cursor / selection /
+   * presence diffs). One entry per `(docName, clientId)` is recorded per
+   * window — the rest are dropped. Default `500`. Set to `0` to record
+   * every awareness change (only useful for very low-traffic debugging).
+   */
+  liveAwarenessSampleMs?: number | undefined
   ignoreRequests?:       string[] | undefined
   slowQueryThreshold?:   number | undefined
   /**
@@ -122,6 +131,8 @@ export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'
   recordModels:         true,
   recordCommands:       true,
   recordBroadcasts:     true,
+  recordLive:           true,
+  liveAwarenessSampleMs: 500,
   ignoreRequests:       ['/telescope*', '/health'],
   slowQueryThreshold:   100,
   hideRequestHeaders:   ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key'],

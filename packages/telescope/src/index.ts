@@ -13,6 +13,7 @@ import { ScheduleCollector } from './collectors/schedule.js'
 import { ModelCollector } from './collectors/model.js'
 import { CommandCollector } from './collectors/command.js'
 import { BroadcastCollector } from './collectors/broadcast.js'
+import { LiveCollector } from './collectors/live.js'
 import { registerTelescopeRoutes } from './routes.js'
 import { defaultConfig, type TelescopeConfig, type TelescopeStorage, type TelescopeEntry, type EntryType, type Collector, type ListOptions } from './types.js'
 
@@ -33,6 +34,7 @@ export { ScheduleCollector } from './collectors/schedule.js'
 export { ModelCollector } from './collectors/model.js'
 export { CommandCollector } from './collectors/command.js'
 export { BroadcastCollector } from './collectors/broadcast.js'
+export { LiveCollector } from './collectors/live.js'
 
 // ─── Telescope Registry ────────────────────────────────────
 
@@ -120,6 +122,8 @@ export class TelescopeProvider extends ServiceProvider {
     recordModels:        merged.recordModels        ?? defaultConfig.recordModels,
     recordCommands:      merged.recordCommands      ?? defaultConfig.recordCommands,
     recordBroadcasts:    merged.recordBroadcasts    ?? defaultConfig.recordBroadcasts,
+    recordLive:          merged.recordLive          ?? defaultConfig.recordLive,
+    liveAwarenessSampleMs: merged.liveAwarenessSampleMs ?? defaultConfig.liveAwarenessSampleMs,
     ignoreRequests:      merged.ignoreRequests      ?? defaultConfig.ignoreRequests,
     slowQueryThreshold:  merged.slowQueryThreshold  ?? defaultConfig.slowQueryThreshold,
     auth:                merged.auth                ?? defaultConfig.auth,
@@ -168,6 +172,7 @@ export class TelescopeProvider extends ServiceProvider {
       if (resolved.recordModels)         collectors.push(new ModelCollector(storage))
       if (resolved.recordCommands)       collectors.push(new CommandCollector(storage))
       if (resolved.recordBroadcasts)     collectors.push(new BroadcastCollector(storage))
+      if (resolved.recordLive)           collectors.push(new LiveCollector(storage, resolved.liveAwarenessSampleMs))
 
       for (const collector of collectors) {
         await collector.register()

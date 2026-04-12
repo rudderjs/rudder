@@ -147,4 +147,15 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Conn',    key: '(entry.content.connectionId || "").slice(0, 8) || "—"',   mono: true, className: 'text-xs' },
     ],
   },
+
+  live: {
+    type:  'live',
+    title: 'Live (Yjs)',
+    columns: [
+      { label: 'Kind',     key: 'entry.content.kind',                                      badge: true },
+      { label: 'Doc',      key: 'entry.content.docName || "—"',                            mono: true, className: 'truncate max-w-xs' },
+      { label: 'Client',   key: '(entry.content.clientId || "").slice(0, 8) || "—"',     mono: true, className: 'text-xs' },
+      { label: 'Bytes',    key: 'entry.content.byteSize != null ? entry.content.byteSize : "—"', className: 'text-right font-mono text-xs' },
+    ],
+  },
 }

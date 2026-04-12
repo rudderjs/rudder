@@ -1,6 +1,26 @@
 import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { WebSocketServer, type WebSocket as WsSocket } from 'ws'
 import * as Y                                          from 'yjs'
+import { liveObservers }                               from './observers.js'
+
+// ─── Per-WebSocket client id ────────────────────────────────
+//
+// Yjs clients are identified by stable ids in the awareness map, but at the
+// transport layer we just have raw WebSockets. We stamp a short id on each
+// connecting socket so observers (e.g. telescope's LiveCollector) can group
+// events by client and present a coherent timeline per connection.
+
+let _clientCounter = 0
+function nextClientId(): string {
+  return `lv${++_clientCounter}${Math.random().toString(36).slice(2, 6)}`
+}
+function getClientId(ws: import('ws').WebSocket): string {
+  const tagged = (ws as unknown as Record<string, string | undefined>)['__liveClientId']
+  if (tagged) return tagged
+  const id = nextClientId()
+  ;(ws as unknown as Record<string, string>)['__liveClientId'] = id
+  return id
+}
 
 // ─── Persistence Contract ───────────────────────────────────
 
@@ -263,11 +283,24 @@ function getOrCreateRoom(docName: string, persistence: LivePersistence): Room {
   g[KEY] = rooms
   if (!rooms.has(docName)) {
     const doc = new Y.Doc()
+    const loadStart = Date.now()
     const ready = persistence.getYDoc(docName).then(persisted => {
       const sv     = Y.encodeStateVector(doc)
       const update = Y.encodeStateAsUpdate(persisted, sv)
       if (update.length > 2) Y.applyUpdate(doc, update)
-    }).catch(() => {})
+      liveObservers.emit({
+        kind:       'persistence.load',
+        docName,
+        durationMs: Date.now() - loadStart,
+        byteSize:   update.length,
+      })
+    }).catch((e: unknown) => {
+      liveObservers.emit({
+        kind:    'sync.error',
+        docName,
+        error:   e instanceof Error ? e.message : String(e),
+      })
+    })
     const room: Room = { doc, clients: new Set(), ready, awarenessMap: new Map() }
     rooms.set(docName, room)
 
@@ -343,9 +376,17 @@ async function handleConnection(
   onChange?:   LiveConfig['onChange'],
 ): Promise<void> {
   // Extract document name from URL path: /ws-live/my-doc → my-doc
-  const docName = ((req.url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
-  const room    = getOrCreateRoom(docName, persistence)
+  const docName  = ((req.url ?? '/').split('?')[0] ?? '/').split('/').filter(Boolean).pop() ?? 'default'
+  const clientId = getClientId(ws)
+  const room     = getOrCreateRoom(docName, persistence)
   room.clients.add(ws)
+
+  liveObservers.emit({
+    kind:        'doc.opened',
+    docName,
+    clientId,
+    clientCount: room.clients.size,
+  })
 
   // ── Step 1: send server state vector ──────────────────────
   ws.send(encodeSyncMsg(syncStep1, Y.encodeStateVector(room.doc)))
@@ -384,14 +425,29 @@ async function handleConnection(
         Y.applyUpdate(room.doc, data)
 
         const fwd = encodeSyncMsg(syncUpdate, data)
+        let recipientCount = 0
         for (const client of room.clients) {
           if (client !== ws && client.readyState === 1 /* OPEN */) {
             client.send(fwd)
+            recipientCount++
           }
         }
 
         await persistence.storeUpdate(docName, data)
         onChange?.(docName, data)
+
+        liveObservers.emit({
+          kind:           'update.applied',
+          docName,
+          clientId,
+          byteSize:       data.byteLength,
+          recipientCount,
+        })
+        liveObservers.emit({
+          kind:     'persistence.save',
+          docName,
+          byteSize: data.byteLength,
+        })
       }
 
     } else if (type === messageAwareness) {
@@ -403,18 +459,36 @@ async function handleConnection(
           client.send(buf)
         }
       }
+      // Awareness is high-rate (every cursor/keystroke). Producers emit
+      // every event; the LiveCollector throttles in the consumer with a
+      // configurable per-(docName, clientId) sample window.
+      liveObservers.emit({
+        kind:     'awareness.changed',
+        docName,
+        clientId,
+        byteSize: buf.byteLength,
+      })
     }
   })
 
   ws.on('close', () => {
     room.clients.delete(ws)
     room.awarenessMap.delete(ws)
+    liveObservers.emit({
+      kind:        'doc.closed',
+      docName,
+      clientId,
+      clientCount: room.clients.size,
+    })
   })
 }
 
 // ─── globalThis key for upgrade handler ─────────────────────
 
 export const LIVE_UPGRADE_KEY = '__rudderjs_live_upgrade__'
+
+export { liveObservers, LiveObserverRegistry }      from './observers.js'
+export type { LiveEvent, LiveObserver }             from './observers.js'
 
 // ─── Factory ────────────────────────────────────────────────
 

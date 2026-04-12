@@ -259,6 +259,47 @@ const BroadcastView: ViewFn = (entry) => {
   `
 }
 
+const LiveView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const kind = String(c['kind'] ?? '')
+
+  const baseRows: Record<string, unknown> = {
+    Kind:     Badge(kind),
+    Document: c['docName'] != null ? raw(`<span class="font-mono text-xs">${escape(c['docName'] as string)}</span>`) : raw('<span class="text-gray-300">—</span>'),
+  }
+  if (c['clientId']) {
+    baseRows['Client'] = raw(`<a href="../live/${escape(c['clientId'] as string)}" class="font-mono text-xs text-indigo-600 hover:text-indigo-700">${escape((c['clientId'] as string).slice(0, 12))}…</a>`)
+  }
+
+  switch (kind) {
+    case 'doc.opened':
+    case 'doc.closed':
+      baseRows['Clients']  = c['clientCount']
+      break
+    case 'update.applied':
+      baseRows['Bytes']         = `${c['byteSize']} bytes`
+      baseRows['Recipients']    = c['recipientCount']
+      break
+    case 'awareness.changed':
+      baseRows['Bytes']         = `${c['byteSize']} bytes`
+      break
+    case 'persistence.load':
+      baseRows['Duration']      = `${c['durationMs']}ms`
+      baseRows['Bytes']         = `${c['byteSize']} bytes`
+      break
+    case 'persistence.save':
+      baseRows['Bytes']         = `${c['byteSize']} bytes`
+      break
+    case 'sync.error':
+      baseRows['Error']         = c['error']
+      break
+  }
+
+  return html`
+    ${Card(null, KeyValueTable(baseRows))}
+  `
+}
+
 /** Map of EntryType → detail view function. Used by the dispatcher. */
 export const detailViews: Record<string, ViewFn> = {
   request:      RequestView,
@@ -274,6 +315,7 @@ export const detailViews: Record<string, ViewFn> = {
   model:        ModelView,
   command:      CommandView,
   broadcast:    BroadcastView,
+  live:         LiveView,
 }
 
 /** Internal escape helper — used inside `raw()` blocks for safety. */

@@ -130,6 +130,7 @@ function entrySummary(type: string, c: Record<string, unknown>): string {
     case 'model':        return `${c['action'] ?? ''} ${c['model'] ?? ''}`
     case 'command':      return `${c['name'] ?? ''} (exit ${c['exitCode'] ?? '?'})`
     case 'broadcast':    return `${c['kind'] ?? ''}${c['channel'] ? ' ' + c['channel'] : ''}${c['event'] ? ' → ' + c['event'] : ''}`
+    case 'live':         return `${c['kind'] ?? ''}${c['docName'] ? ' ' + c['docName'] : ''}${c['byteSize'] != null ? ' (' + c['byteSize'] + 'b)' : ''}`
     default:             return ''
   }
 }

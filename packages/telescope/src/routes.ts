@@ -6,7 +6,7 @@ import { listEntries, showEntry, overview, prune, listBatch, authMiddleware } fr
 
 const ENTRY_TYPES: EntryType[] = [
   'request', 'query', 'job', 'exception', 'log',
-  'mail', 'notification', 'event', 'cache', 'schedule', 'model', 'command', 'broadcast',
+  'mail', 'notification', 'event', 'cache', 'schedule', 'model', 'command', 'broadcast', 'live',
 ]
 
 export interface RegisterTelescopeRoutesOptions {
