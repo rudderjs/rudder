@@ -29,6 +29,7 @@
     "@rudderjs/core": "workspace:*",
     "@rudderjs/hash": "workspace:*",
     "@rudderjs/horizon": "workspace:*",
+    "@rudderjs/http": "workspace:*",
     "@rudderjs/image": "workspace:*",
     "@rudderjs/live": "workspace:*",
     "@rudderjs/localization": "workspace:*",

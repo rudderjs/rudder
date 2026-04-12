@@ -108,15 +108,31 @@ Route.get('/test/mail', async (_req, res) => {
 
 // GET /test/notification — dispatches a test notification for telescope testing
 Route.get('/test/notification', async (_req, res) => {
-  const { Notification } = await import('@rudderjs/notification')
-  await Notification.send({ id: 'user-1', email: 'test@example.com' }, {
-    via: ['mail'],
-    toMail: () => ({
-      subject: 'Telescope Test Notification',
-      html: '<p>You have a new notification!</p>',
-    }),
-  })
+  const { notify, Notification } = await import('@rudderjs/notification')
+  const { Mailable } = await import('@rudderjs/mail')
+
+  class TestNotification extends Notification {
+    via() { return ['mail'] }
+    toMail() {
+      return new (class extends Mailable {
+        build() {
+          return this.subject('Telescope Test Notification')
+            .html('<p>You have a new notification!</p>')
+            .text('You have a new notification!')
+        }
+      })()
+    }
+  }
+
+  await notify({ id: 'user-1', email: 'test@example.com' }, new TestNotification())
   res.json({ notified: true })
+})
+
+// GET /test/http — fires outgoing HTTP requests for telescope testing
+Route.get('/test/http', async (_req, res) => {
+  const { Http } = await import('@rudderjs/http')
+  const response = await Http.get('https://jsonplaceholder.typicode.com/todos/1')
+  res.json({ status: response.status, data: response.json() })
 })
 
 // GET /test/cache — fires cache operations for telescope testing

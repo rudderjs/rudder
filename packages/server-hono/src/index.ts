@@ -267,6 +267,20 @@ class HonoAdapter implements ServerAdapter {
       const req = normalizeRequest(c)
       const res = normalizeResponse(c)
 
+      // Stash route metadata on the raw request for observability (Telescope).
+      // Middleware names are extracted from function.name — named functions
+      // (e.g. `async function SessionMiddleware(…)`) produce readable names,
+      // anonymous arrows produce '' (filtered out).
+      const meta = req.raw as Record<string, unknown>
+      meta['__rjs_route'] = {
+        method:     route.method,
+        path:       route.path,
+        handler:    route.handler.name || '(closure)',
+        middleware: route.middleware
+          .map(fn => fn.name || (fn as unknown as { _name?: string })['_name'])
+          .filter(Boolean),
+      }
+
       // Parse body for mutating methods — JSON only; leave multipart/form-data untouched
       if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
         const ct = c.req.header('content-type') ?? ''
@@ -299,6 +313,9 @@ class HonoAdapter implements ServerAdapter {
             // instead of HTML for SPA navigation.
             const originalUrl = c.req.header('x-rudder-original-url') ?? c.req.url
             c.res = await result.toResponse({ url: originalUrl })
+            // Stash view info for Telescope
+            const v = result as unknown as { id?: string; props?: Record<string, unknown> }
+            meta['__rjs_view'] = { id: v.id, props: Object.keys(v.props ?? {}) }
           } else if (result instanceof Response) {
             c.res = result
           } else if (result !== undefined && result !== null) {

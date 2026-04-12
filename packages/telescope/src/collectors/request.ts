@@ -88,6 +88,15 @@ export class RequestCollector implements Collector {
         if (session) sessionData = redactFields(session.all(), hideFields) as Record<string, unknown>
       } catch { /* session middleware may not be installed */ }
 
+      // Route metadata — stashed by server-hono's registerRoute()
+      const rawReqMeta = req.raw as Record<string, unknown> | undefined
+      const routeMeta = rawReqMeta?.['__rjs_route'] as {
+        method: string; path: string; handler: string; middleware: string[]
+      } | undefined
+      const viewMeta = rawReqMeta?.['__rjs_view'] as {
+        id: string; props: string[]
+      } | undefined
+
       // Authenticated user — read from @rudderjs/auth's AsyncLocalStorage context
       let user: Record<string, unknown> | undefined
       try {
@@ -119,8 +128,12 @@ export class RequestCollector implements Collector {
         userAgent,
         hostname,
         responseHeaders,
-        session:   sessionData,
+        session:    sessionData,
         user,
+        controller: routeMeta?.handler,
+        middleware: routeMeta?.middleware,
+        routePath:  routeMeta?.path,
+        view:       viewMeta,
       }, { batchId, tags })
 
       storage.store(entry)
