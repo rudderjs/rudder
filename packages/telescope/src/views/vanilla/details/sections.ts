@@ -98,6 +98,37 @@ export function Badge(value: string | undefined): SafeString {
 }
 
 /**
+ * Tabbed sections — uses Alpine.js `x-data` for tab switching.
+ * Only renders tabs that have non-empty content.
+ */
+export function Tabs(tabs: { label: string; content: SafeString | string }[]): SafeString {
+  const visible = tabs.filter(t => {
+    const s = typeof t.content === 'string' ? t.content : t.content.toString()
+    return s.trim().length > 0
+  })
+  if (visible.length === 0) return html``
+  if (visible.length === 1) return html`${visible[0]!.content}`
+
+  const id = `tabs_${Math.random().toString(36).slice(2, 8)}`
+  return html`
+    <div x-data="{ tab: '${visible[0]!.label}' }" class="bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
+      <div class="flex border-b border-gray-200">
+        ${visible.map(t => html`
+          <button @click="tab = '${t.label}'"
+            :class="tab === '${t.label}' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors">
+            ${t.label}
+          </button>
+        `)}
+      </div>
+      ${visible.map(t => html`
+        <div x-show="tab === '${t.label}'" class="p-5">${t.content}</div>
+      `)}
+    </div>
+  `
+}
+
+/**
  * Get a content field with a fallback. Helper to keep view files terse.
  */
 export function field(content: Record<string, unknown>, key: string): unknown {

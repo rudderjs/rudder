@@ -1,5 +1,5 @@
 import { html, raw, type SafeString } from '../_html.js'
-import { Card, KeyValueTable, JsonBlock, CodeBlock, Badge } from './sections.js'
+import { Card, KeyValueTable, JsonBlock, CodeBlock, Badge, Tabs } from './sections.js'
 import type { TelescopeEntry } from '../../../types.js'
 
 /**
@@ -44,6 +44,9 @@ const RequestView: ViewFn = (entry) => {
     'User-Agent':   c['userAgent'],
   })
 
+  const hasBody = body !== undefined && body !== null && body !== ''
+  const hasResHeaders = responseHeaders && Object.keys(responseHeaders).length > 0
+
   return html`
     ${Card('Request Details', KeyValueTable(details))}
 
@@ -58,9 +61,15 @@ const RequestView: ViewFn = (entry) => {
       Props: view.props.length > 0 ? view.props.join(', ') : '(none)',
     })) : ''}
 
-    ${headers ? Card('Request Headers', KeyValueTable(headers)) : ''}
-    ${body !== undefined && body !== null && body !== '' ? Card('Request Body', JsonBlock(body)) : ''}
-    ${responseHeaders && Object.keys(responseHeaders).length > 0 ? Card('Response Headers', KeyValueTable(responseHeaders)) : ''}
+    ${headers || hasBody ? Tabs([
+      { label: 'Headers', content: headers ? KeyValueTable(headers) : html`` },
+      { label: 'Body',    content: hasBody ? JsonBlock(body) : html`` },
+    ]) : ''}
+
+    ${hasResHeaders ? Tabs([
+      { label: 'Response Headers', content: KeyValueTable(responseHeaders!) },
+    ]) : ''}
+
     ${session && Object.keys(session).length > 0 ? Card('Session', JsonBlock(session)) : ''}
   `
 }

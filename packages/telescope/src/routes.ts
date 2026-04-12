@@ -2,7 +2,7 @@ import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contr
 import type { TelescopeStorage, TelescopeConfig, EntryType } from './types.js'
 import { Dashboard, EntryList, pages } from './views/vanilla/index.js'
 import { DetailLayout, detailViews, NotFoundPage, BatchPage } from './views/vanilla/details/index.js'
-import { listEntries, showEntry, overview, prune, listBatch, authMiddleware } from './api/routes.js'
+import { listEntries, showEntry, overview, prune, listBatch, getRecording, toggleRecording, authMiddleware } from './api/routes.js'
 
 const ENTRY_TYPES: EntryType[] = [
   'request', 'query', 'job', 'exception', 'log',
@@ -33,7 +33,7 @@ export async function registerTelescopeRoutes(
   storage: TelescopeStorage,
   opts:    RegisterTelescopeRoutesOptions = {},
 ): Promise<void> {
-  let router: { get: Function; delete: Function }
+  let router: { get: Function; post: Function; patch: Function; delete: Function }
   try {
     router = (await import('@rudderjs/router')).router as never
   } catch {
@@ -142,4 +142,8 @@ export async function registerTelescopeRoutes(
     overview(storage, res), middleware)
   router.delete(`${apiPrefix}/entries`, (req: AppRequest, res: AppResponse) =>
     prune(storage, req, res), middleware)
+  router.get(`${apiPrefix}/recording`, (_req: AppRequest, res: AppResponse) =>
+    getRecording(res), middleware)
+  router.patch(`${apiPrefix}/recording`, (_req: AppRequest, res: AppResponse) =>
+    toggleRecording(res), middleware)
 }

@@ -95,6 +95,23 @@ export function Layout(props: LayoutProps): string {
 
     <!-- Main content -->
     <main id="telescope-main" class="flex-1 overflow-auto" @telescope:navigate.window="navigate($event.detail)">
+      <!-- Toolbar -->
+      <div class="border-b border-gray-200 bg-white px-6 py-2 flex items-center justify-end gap-2"
+           x-data="telescopeToolbar('${basePath}/api')">
+        <button @click="toggleRecording()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition"
+                :class="recording ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-red-50 text-red-700 hover:bg-red-100'">
+          <span class="w-2 h-2 rounded-full" :class="recording ? 'bg-green-500' : 'bg-red-500'"></span>
+          <span x-text="recording ? 'Recording' : 'Paused'"></span>
+        </button>
+        <button @click="clearAll()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          Clear
+        </button>
+        <button @click="refresh()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh
+        </button>
+      </div>
       <div class="max-w-6xl mx-auto px-6 py-8">
         ${body}
       </div>
@@ -102,6 +119,28 @@ export function Layout(props: LayoutProps): string {
   </div>
 
   <script>
+    function telescopeToolbar(apiPrefix) {
+      return {
+        recording: true,
+        async init() {
+          const data = await fetch(apiPrefix + '/recording').then(r => r.json())
+          this.recording = data.recording
+        },
+        async toggleRecording() {
+          const data = await fetch(apiPrefix + '/recording', { method: 'PATCH' }).then(r => r.json())
+          this.recording = data.recording
+        },
+        async clearAll() {
+          if (!confirm('Clear all telescope entries?')) return
+          await fetch(apiPrefix + '/entries', { method: 'DELETE' })
+          this.$dispatch('telescope:navigate', location.href)
+        },
+        refresh() {
+          this.$dispatch('telescope:navigate', location.href)
+        }
+      }
+    }
+
     function telescopeSpa() {
       const basePath = '${basePath}'
       return {
