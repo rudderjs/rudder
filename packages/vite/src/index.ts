@@ -149,36 +149,39 @@ export function rudderjs(): Promise<Plugin[]> {
       {
         name: 'rudderjs:routes',
         configureServer(server) {
-          // Watch route + bootstrap files and restart the dev server when they
-          // change. These files are dynamically imported once during bootstrap
-          // (`() => import('../routes/web.ts')`) so Vite doesn't track them in
-          // its SSR module graph — changes go unnoticed without an explicit watcher.
+          // Watch route, bootstrap, and app files for SSR changes. These files
+          // are dynamically imported during bootstrap or within route handlers
+          // so Vite doesn't track them in its SSR module graph — changes go
+          // unnoticed without an explicit watcher.
           const cwd = process.cwd()
           const watchDirs = [
             path.resolve(cwd, 'routes'),
             path.resolve(cwd, 'bootstrap'),
+            path.resolve(cwd, 'app'),
           ]
+
           for (const dir of watchDirs) server.watcher.add(dir)
           server.watcher.on('change', (file) => {
             if (!watchDirs.some(d => file.startsWith(d))) return
+
             // Clear the two top-level singletons so a new RudderJS + Application
-            // pair is created when the module re-executes. Leave other __rudderjs_*
-            // keys — they're held by module-level constants and get reset/overwritten
-            // during re-bootstrap.
+            // pair is created when the module re-executes. App files (models,
+            // resources, controllers) are captured in closures during bootstrap
+            // so they also need a full re-bootstrap to pick up changes.
             const g = globalThis as Record<string, unknown>
             delete g['__rudderjs_instance__']
             delete g['__rudderjs_app__']
 
             // Invalidate all SSR modules so Vike re-executes bootstrap/app.ts
-            // (and transitively the route files) on the next request. This is
+            // (and transitively all app code) on the next request. This is
             // lighter than server.restart() and avoids closing the module runner
             // while requests may still be in flight.
             server.environments.ssr.moduleGraph.invalidateAll()
 
             // Tell the browser to do a full page reload so it picks up the
-            // new route registrations via a fresh SSR request.
+            // changes via a fresh SSR request.
             server.hot.send({ type: 'full-reload' })
-            console.log('[RudderJS] route/bootstrap change detected — reloading')
+            console.log(`[RudderJS] change detected — reloading (${path.relative(cwd, file)}`)
           })
         },
       },

@@ -14,9 +14,9 @@ Add to your providers:
 
 ```ts
 // bootstrap/providers.ts
-import { boost } from '@rudderjs/boost'
+import { BoostProvider } from '@rudderjs/boost'
 
-export default [..., boost()]
+export default [..., BoostProvider]
 ```
 
 ### Quick Start
@@ -62,6 +62,18 @@ rudder boost:mcp        # Start the MCP server (stdio transport)
 | `read_logs` | Read log entries with filtering by level and search term |
 | `browser_logs` | Read browser console logs from Vite dev server |
 | `get_absolute_url` | Convert relative URI paths to absolute URLs using APP_URL |
+| `search_docs` | Search local `@rudderjs/*` package documentation by keyword |
+
+## MCP Resources
+
+Guidelines are also exposed as MCP resources so AI agents can re-read them on demand:
+
+| Resource URI | Description |
+|---|---|
+| `guidelines://orm` | Guidelines for `@rudderjs/orm` |
+| `guidelines://auth` | Guidelines for `@rudderjs/auth` |
+| `guidelines://all` | All package guidelines concatenated |
+| ... | One resource per installed package with `boost/guidelines.md` |
 
 ## AI Guidelines & Skills
 
@@ -71,14 +83,38 @@ Each `@rudderjs/*` package can ship `boost/guidelines.md` and `boost/skills/*/SK
 - `.ai/skills/*/SKILL.md` — on-demand task-specific knowledge modules
 - Per-agent guideline files (`CLAUDE.md`, `.cursorrules`, etc.) — concatenated guidelines
 
+## Custom Agent Registration
+
+Third-party packages or users can register custom agent adapters:
+
+```ts
+import { Boost } from '@rudderjs/boost'
+import type { BoostAgent } from '@rudderjs/boost'
+
+const myAgent: BoostAgent = {
+  name: 'my-ide',
+  displayName: 'My IDE',
+  detect: (cwd) => existsSync(join(cwd, '.my-ide')),
+  supportsGuidelines: true,
+  supportsMcp: true,
+  supportsSkills: false,
+  installGuidelines: async (cwd, content) => { /* ... */ },
+  installMcp: async (cwd, cmd) => { /* ... */ },
+}
+
+Boost.registerAgent(myAgent)
+```
+
+Custom agents appear in `boost:install` auto-detection and `--agent=` selection.
+
 ## Programmatic Use
 
 ```ts
-import { getAppInfo, getDbSchema, getRouteList, getModelList } from '@rudderjs/boost'
-import { executeDbQuery, readLogs, readBrowserLogs, getAbsoluteUrl } from '@rudderjs/boost'
+import { getAppInfo, getDbSchema, getRouteList, getModelList, searchDocs } from '@rudderjs/boost'
 
-const info   = getAppInfo(process.cwd())
-const schema = getDbSchema(process.cwd())
-const routes = getRouteList(process.cwd())
-const models = getModelList(process.cwd())
+const info    = getAppInfo(process.cwd())
+const schema  = getDbSchema(process.cwd())
+const routes  = getRouteList(process.cwd())
+const models  = getModelList(process.cwd())
+const results = searchDocs(process.cwd(), 'middleware')
 ```

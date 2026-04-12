@@ -2,7 +2,7 @@
 
 Bring `@rudderjs/boost` to parity with Laravel Boost: multi-agent install, skills content, docs search, guidelines as MCP resources, runtime route list, and CLAUDE.md auto-update.
 
-**Status:** Not started
+**Status:** Done (2026-04-13)
 
 **Packages affected:** `@rudderjs/boost`, plus 4-6 packages that will ship new `boost/skills/` content
 
@@ -320,13 +320,13 @@ Boost.registerAgent('my-agent', new MyCustomAgent())
 
 | Phase | Description | Depends on |
 |---|---|---|
-| 1 | Multi-agent interactive install | — |
-| 2 | boost:update regenerates everything | Phase 1 (uses agent types) |
-| 3 | Ship skills in packages | — (parallel with 1-2) |
-| 4 | Guidelines as MCP resources | — (parallel with 1-3) |
-| 5 | Documentation search tool | — (parallel with 1-4) |
-| 6 | Runtime route list | — (parallel with anything) |
-| 7 | Custom agent registration | Phase 1 (uses agent types) |
+| 1 | Multi-agent interactive install | — | Done |
+| 2 | boost:update regenerates everything | Phase 1 | Done (was already in af696617) |
+| 3 | Ship skills in packages | — | Done (6 skills: orm, auth, ai×2, mcp, view) |
+| 4 | Guidelines as MCP resources | — | Done |
+| 5 | Documentation search tool | — | Done |
+| 6 | Runtime route list | — | Done |
+| 7 | Custom agent registration | Phase 1 | Done |
 
 Phases 3-6 are all independent and can be done in any order. Phase 1 is the foundation since 2 and 7 depend on the agent type system.
 
