@@ -17,25 +17,35 @@ const RequestView: ViewFn = (entry) => {
   const c = entry.content as Record<string, unknown>
   const headers   = c['headers']   as Record<string, string> | undefined
   const body      = c['body']
-  const response  = c['response']  as Record<string, unknown> | undefined
-  const respBody  = response?.['body']
-  const respHeaders = response?.['headers'] as Record<string, string> | undefined
+
+  // Status badge with color based on status code
+  const status = c['status'] as number | undefined
+  const statusBadge = status
+    ? raw(`<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor(status)}">${status}</span>`)
+    : raw('<span class="text-gray-300">—</span>')
 
   return html`
-    ${Card(null, KeyValueTable({
-      Method:    Badge(c['method'] as string),
-      Path:      raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
-      Status:    Badge(String(response?.['status'] ?? '')),
-      Duration:  c['duration'] != null ? `${c['duration']}ms` : '—',
-      IP:        c['ip'],
+    ${Card('Request Details', KeyValueTable({
+      Method:       Badge(c['method'] as string),
+      Path:         raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
+      Status:       statusBadge,
+      Duration:     c['duration'] != null ? `${c['duration']}ms` : '—',
+      Hostname:     c['hostname'],
+      'IP Address': c['ip'],
       'User-Agent': c['userAgent'],
     }))}
 
     ${headers ? Card('Request Headers', KeyValueTable(headers)) : ''}
     ${body !== undefined && body !== null && body !== '' ? Card('Request Body', JsonBlock(body)) : ''}
-    ${respHeaders ? Card('Response Headers', KeyValueTable(respHeaders)) : ''}
-    ${respBody !== undefined && respBody !== null && respBody !== '' ? Card('Response Body', JsonBlock(respBody)) : ''}
   `
+}
+
+function statusColor(status: number): string {
+  if (status >= 500) return 'bg-red-100 text-red-700'
+  if (status >= 400) return 'bg-amber-100 text-amber-700'
+  if (status >= 300) return 'bg-blue-100 text-blue-700'
+  if (status >= 200) return 'bg-green-100 text-green-700'
+  return 'bg-gray-100 text-gray-600'
 }
 
 const QueryView: ViewFn = (entry) => {

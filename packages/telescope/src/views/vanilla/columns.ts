@@ -7,9 +7,9 @@ import type { Column } from './EntryList.js'
  * the entry type as it appears in the URL (e.g. `requests`, `queries`),
  * NOT the singular `EntryType` from `../../src/types.ts`.
  *
- * To add a new column for an existing watcher: edit the array below.
- * To add a new watcher: add a key here AND register the route in
- * `../../src/routes.ts`.
+ * IMPORTANT: Column `key` expressions are placed inside HTML `x-text="..."`
+ * attributes (double-quoted). Use single quotes for string literals inside
+ * expressions — e.g. `"entry.content.status || '—'"` not `'...'`.
  */
 export interface PageConfig {
   /** Singular type name passed to EntryList — backend uses pluralisation rules */
@@ -25,7 +25,8 @@ export const pages: Record<string, PageConfig> = {
     columns: [
       { label: 'Method',   key: 'entry.content.method', badge: true },
       { label: 'Path',     key: 'entry.content.path',   mono: true },
-      { label: 'Duration', key: 'entry.content.duration + "ms"', className: 'text-right' },
+      { label: 'Status',   key: "entry.content.status || '—'", badge: true },
+      { label: 'Duration', key: "entry.content.duration + 'ms'", className: 'text-right' },
     ],
   },
 
@@ -34,8 +35,8 @@ export const pages: Record<string, PageConfig> = {
     title: 'Queries',
     columns: [
       { label: 'SQL',      key: 'entry.content.sql',      mono: true, className: 'truncate max-w-md' },
-      { label: 'Duration', key: 'entry.content.duration + "ms"', className: 'text-right' },
-      { label: 'Model',    key: 'entry.content.model || "—"' },
+      { label: 'Duration', key: "entry.content.duration + 'ms'", className: 'text-right' },
+      { label: 'Model',    key: "entry.content.model || '—'" },
     ],
   },
 
@@ -46,7 +47,7 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Class',    key: 'entry.content.class',  mono: true },
       { label: 'Queue',    key: 'entry.content.queue' },
       { label: 'Status',   key: 'entry.content.status', badge: true },
-      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"', className: 'text-right' },
+      { label: 'Duration', key: "(entry.content.duration || 0) + 'ms'", className: 'text-right' },
     ],
   },
 
@@ -75,7 +76,7 @@ export const pages: Record<string, PageConfig> = {
     columns: [
       { label: 'Class',   key: 'entry.content.class',   mono: true },
       { label: 'Subject', key: 'entry.content.subject',  className: 'truncate max-w-md' },
-      { label: 'To',      key: 'Array.isArray(entry.content.to) ? entry.content.to.join(", ") : entry.content.to' },
+      { label: 'To',      key: "Array.isArray(entry.content.to) ? entry.content.to.join(', ') : entry.content.to" },
     ],
   },
 
@@ -101,7 +102,7 @@ export const pages: Record<string, PageConfig> = {
     type:  'cache',
     title: 'Cache',
     columns: [
-      { label: 'Key',       key: 'entry.content.key || "—"', mono: true, className: 'truncate max-w-md' },
+      { label: 'Key',       key: "entry.content.key || '—'", mono: true, className: 'truncate max-w-md' },
       { label: 'Operation', key: 'entry.content.operation', badge: true },
     ],
   },
@@ -113,7 +114,7 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Description', key: 'entry.content.description' },
       { label: 'Expression',  key: 'entry.content.expression', mono: true },
       { label: 'Status',      key: 'entry.content.status', badge: true },
-      { label: 'Duration',    key: '(entry.content.duration || 0) + "ms"', className: 'text-right' },
+      { label: 'Duration',    key: "(entry.content.duration || 0) + 'ms'", className: 'text-right' },
     ],
   },
 
@@ -133,7 +134,7 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Name',     key: 'entry.content.name',                    mono: true },
       { label: 'Source',   key: 'entry.content.source',                  badge: true },
       { label: 'Exit',     key: 'entry.content.exitCode',                className: 'text-right font-mono text-xs' },
-      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"', className: 'text-right' },
+      { label: 'Duration', key: "(entry.content.duration || 0) + 'ms'", className: 'text-right' },
     ],
   },
 
@@ -143,8 +144,8 @@ export const pages: Record<string, PageConfig> = {
     columns: [
       { label: 'Method',   key: 'entry.content.method',                      badge: true },
       { label: 'URL',      key: 'entry.content.url',                         mono: true, className: 'truncate max-w-md' },
-      { label: 'Status',   key: 'entry.content.status || "ERR"',            badge: true },
-      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"',     className: 'text-right' },
+      { label: 'Status',   key: "entry.content.status || 'ERR'",            badge: true },
+      { label: 'Duration', key: "(entry.content.duration || 0) + 'ms'",     className: 'text-right' },
     ],
   },
 
@@ -153,9 +154,9 @@ export const pages: Record<string, PageConfig> = {
     title: 'Gates',
     columns: [
       { label: 'Ability',  key: 'entry.content.ability',                              mono: true },
-      { label: 'Result',   key: 'entry.content.allowed ? "Allowed" : "Denied"',      badge: true },
+      { label: 'Result',   key: "entry.content.allowed ? 'Allowed' : 'Denied'",      badge: true },
       { label: 'Via',      key: 'entry.content.resolvedVia',                          badge: true },
-      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"',              className: 'text-right' },
+      { label: 'Duration', key: "(entry.content.duration || 0) + 'ms'",              className: 'text-right' },
     ],
   },
 
@@ -164,8 +165,8 @@ export const pages: Record<string, PageConfig> = {
     title: 'Dumps',
     columns: [
       { label: 'Method', key: 'entry.content.method',                badge: true },
-      { label: 'Args',   key: 'entry.content.count + " value(s)"' },
-      { label: 'Caller', key: 'entry.content.caller || "—"',        mono: true, className: 'truncate max-w-md text-xs' },
+      { label: 'Args',   key: "entry.content.count + ' value(s)'" },
+      { label: 'Caller', key: "entry.content.caller || '—'",        mono: true, className: 'truncate max-w-md text-xs' },
     ],
   },
 
@@ -174,9 +175,9 @@ export const pages: Record<string, PageConfig> = {
     title: 'WebSockets',
     columns: [
       { label: 'Kind',    key: 'entry.content.kind',                                       badge: true },
-      { label: 'Channel', key: 'entry.content.channel || "—"',                             mono: true, className: 'truncate max-w-md' },
-      { label: 'Event',   key: 'entry.content.event || "—"' },
-      { label: 'Conn',    key: '(entry.content.connectionId || "").slice(0, 8) || "—"',   mono: true, className: 'text-xs' },
+      { label: 'Channel', key: "entry.content.channel || '—'",                             mono: true, className: 'truncate max-w-md' },
+      { label: 'Event',   key: "entry.content.event || '—'" },
+      { label: 'Conn',    key: "(entry.content.connectionId || '').slice(0, 8) || '—'",   mono: true, className: 'text-xs' },
     ],
   },
 
@@ -185,9 +186,9 @@ export const pages: Record<string, PageConfig> = {
     title: 'Live (Yjs)',
     columns: [
       { label: 'Kind',     key: 'entry.content.kind',                                      badge: true },
-      { label: 'Doc',      key: 'entry.content.docName || "—"',                            mono: true, className: 'truncate max-w-xs' },
-      { label: 'Client',   key: '(entry.content.clientId || "").slice(0, 8) || "—"',     mono: true, className: 'text-xs' },
-      { label: 'Bytes',    key: 'entry.content.byteSize != null ? entry.content.byteSize : "—"', className: 'text-right font-mono text-xs' },
+      { label: 'Doc',      key: "entry.content.docName || '—'",                            mono: true, className: 'truncate max-w-xs' },
+      { label: 'Client',   key: "(entry.content.clientId || '').slice(0, 8) || '—'",     mono: true, className: 'text-xs' },
+      { label: 'Bytes',    key: "entry.content.byteSize != null ? entry.content.byteSize : '—'", className: 'text-right font-mono text-xs' },
     ],
   },
 }

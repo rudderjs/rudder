@@ -5,14 +5,10 @@
  * client framework dependency, no build step. The package's UI is fully
  * self-contained so telescope can debug a host app of any framework.
  *
- * NOTE: this file deliberately does NOT use `html\`\`` from `@rudderjs/view`
- * even though it's the established vanilla helper, because the per-page
- * templates that compose this layout embed Alpine.js scripts inside
- * `<script>` blocks where HTML escape semantics are wrong (escaping `'`
- * to `&#39;` would break JS string literals). Phase 2 of the telescope
- * refresh will move Alpine scripts to standalone client files and adopt
- * `html\`\`` everywhere — for now, byte-for-byte parity with the previous
- * `src/ui/layout.ts` is the goal.
+ * SPA navigation: the `telescopeSpa()` Alpine component intercepts internal
+ * link clicks, fetches the target page via `fetch()`, swaps the `<main>`
+ * content, and pushes to `history.pushState()`. The sidebar never reloads.
+ * Back/forward buttons work via `popstate`. External links fall through.
  */
 
 export interface NavItem {
@@ -52,10 +48,13 @@ export function Layout(props: LayoutProps): string {
     { label: 'Live (Yjs)',    path: '/live',         icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   ]
 
+  // Build nav with Alpine-driven active state
   const navHtml = nav.map(n => {
-    const href   = `${basePath}${n.path}`
-    const active = activePath === n.path || (n.path === '' && activePath === '/')
-    return `<a href="${href}" class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition ${active ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}">
+    const href = `${basePath}${n.path}`
+    const pathExpr = n.path === '' ? `'/'` : `'${n.path}'`
+    return `<a href="${href}" @click.prevent="navigate('${href}')"
+          class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition"
+          :class="currentPath === ${pathExpr} ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'">
       <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${n.icon}"/></svg>
       ${n.label}
     </a>`
@@ -75,17 +74,19 @@ export function Layout(props: LayoutProps): string {
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans antialiased">
-  <div class="flex min-h-screen">
+  <div x-data="telescopeSpa()" @popstate.window="onPopState()" class="flex min-h-screen">
     <!-- Sidebar -->
     <aside class="w-56 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-4 py-5 flex items-center gap-2 border-b border-gray-100">
-        <div class="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center">
-          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-          </svg>
-        </div>
-        <span class="font-semibold text-sm">Telescope</span>
+        <a href="${basePath}" @click.prevent="navigate('${basePath}')" class="flex items-center gap-2">
+          <div class="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+          </div>
+          <span class="font-semibold text-sm">Telescope</span>
+        </a>
       </div>
       <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         ${navHtml}
@@ -93,12 +94,98 @@ export function Layout(props: LayoutProps): string {
     </aside>
 
     <!-- Main content -->
-    <main class="flex-1 overflow-auto">
+    <main id="telescope-main" class="flex-1 overflow-auto" @telescope:navigate.window="navigate($event.detail)">
       <div class="max-w-6xl mx-auto px-6 py-8">
         ${body}
       </div>
     </main>
   </div>
+
+  <script>
+    function telescopeSpa() {
+      const basePath = '${basePath}'
+      return {
+        currentPath: '${activePath}',
+
+        async navigate(href) {
+          // Stop any running auto-refresh timers from the previous page
+          this.stopPageTimers()
+
+          try {
+            const res = await fetch(href)
+            if (!res.ok) { window.location.href = href; return }
+            const text = await res.text()
+            const doc = new DOMParser().parseFromString(text, 'text/html')
+            const newMain = doc.getElementById('telescope-main')
+            if (!newMain) { window.location.href = href; return }
+
+            const mainEl = document.getElementById('telescope-main')
+
+            // Tear down old Alpine trees before replacing content
+            Alpine.mutateDom(() => {
+              mainEl.innerHTML = newMain.innerHTML
+            })
+
+            // Execute <script> tags from the swapped content — innerHTML
+            // doesn't execute scripts, so we need to manually create and
+            // append new <script> elements.
+            mainEl.querySelectorAll('script').forEach(oldScript => {
+              const newScript = document.createElement('script')
+              newScript.textContent = oldScript.textContent
+              oldScript.replaceWith(newScript)
+            })
+
+            // Now initialize Alpine on the new DOM
+            Alpine.initTree(mainEl)
+
+            // Update active path (strip basePath prefix for sidebar matching)
+            const url = new URL(href, location.origin)
+            const relative = url.pathname.replace(basePath, '') || '/'
+            this.currentPath = relative
+
+            // Update browser URL and title
+            const newTitle = doc.querySelector('title')
+            if (newTitle) document.title = newTitle.textContent
+            // Don't push if this was triggered by back/forward
+            if (this._isPopState) {
+              this._isPopState = false
+            } else {
+              history.pushState(null, '', href)
+            }
+          } catch (e) {
+            console.error('[Telescope SPA]', e)
+            window.location.href = href
+          }
+        },
+
+        onPopState() {
+          this.stopPageTimers()
+          // Fetch the page the browser navigated to
+          this._isPopState = true
+          this.navigate(location.href)
+        },
+
+        _isPopState: false,
+
+        stopPageTimers() {
+          // Clear any auto-refresh intervals from EntryList pages
+          const mainEl = document.getElementById('telescope-main')
+          if (mainEl) {
+            mainEl.querySelectorAll('[x-data]').forEach(el => {
+              if (el._x_dataStack) {
+                for (const data of el._x_dataStack) {
+                  if (data._refreshTimer) {
+                    clearInterval(data._refreshTimer)
+                    data._refreshTimer = null
+                  }
+                }
+              }
+            })
+          }
+        }
+      }
+    }
+  </script>
 </body>
 </html>`
 }

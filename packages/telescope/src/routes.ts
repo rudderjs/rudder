@@ -87,6 +87,13 @@ export async function registerTelescopeRoutes(
         return
       }
 
+      // Fetch related entries from the same batch (queries, cache, events, etc.)
+      let relatedEntries: import('./types.js').TelescopeEntry[] = []
+      if (entry.batchId) {
+        const all = await storage.list({ batchId: entry.batchId, perPage: 200 })
+        relatedEntries = all.filter(e => e.id !== entry.id)
+      }
+
       res.header('Content-Type', 'text/html').send(
         DetailLayout({
           basePath,
@@ -94,6 +101,7 @@ export async function registerTelescopeRoutes(
           pageTitle: config.title,
           entry,
           body:      viewFn(entry),
+          relatedEntries,
         }),
       )
     }, middleware)

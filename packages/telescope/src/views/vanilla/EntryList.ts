@@ -32,9 +32,10 @@ export interface EntryListProps {
 export function EntryList(props: EntryListProps): string {
   const { basePath, apiPrefix, type, pageKey, title, columns } = props
 
-  const colHeaders = columns.map(c =>
-    `<th class="px-4 py-3 text-left text-xs uppercase font-medium text-gray-500">${c.label}</th>`
-  ).join('\n              ')
+  const colHeaders = columns.map(c => {
+    const align = c.className?.includes('text-right') ? 'text-right' : 'text-left'
+    return `<th class="px-4 py-3 ${align} text-xs uppercase font-medium text-gray-500">${c.label}</th>`
+  }).join('\n              ')
 
   const colCells = columns.map(c => {
     if (c.badge) {
@@ -68,7 +69,7 @@ export function EntryList(props: EntryListProps): string {
       <!-- Active tag filter pill -->
       <div x-show="tag" class="mb-3 flex items-center gap-2 text-sm">
         <span class="text-gray-500">Filtering by tag:</span>
-        <a :href="window.location.pathname" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+        <a :href="window.location.pathname" @click.prevent="tag = ''; load()" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
           <span x-text="tag"></span>
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </a>
@@ -89,7 +90,7 @@ export function EntryList(props: EntryListProps): string {
                 ${colCells}
                 <td class="px-4 py-3">
                   <template x-for="t in (entry.tags || []).slice(0, 3)" :key="t">
-                    <a :href="window.location.pathname + '?tag=' + encodeURIComponent(t)" @click.stop class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 hover:bg-gray-200 mr-1">
+                    <a :href="window.location.pathname + '?tag=' + encodeURIComponent(t)" @click.stop.prevent="tag = t; page = 1; load()" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 hover:bg-gray-200 mr-1">
                       <span x-text="t"></span>
                     </a>
                   </template>
@@ -162,7 +163,7 @@ export function EntryList(props: EntryListProps): string {
           },
 
           goTo(id) {
-            window.location.href = '${basePath}/${pageKey}/' + id
+            window.dispatchEvent(new CustomEvent('telescope:navigate', { detail: '${basePath}/${pageKey}/' + id }))
           },
 
           badgeClass(value) {

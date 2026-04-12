@@ -67,7 +67,7 @@ export function BatchPage(props: BatchPageProps): string {
         <td class="px-4 py-2 w-24">${Badge(e.type)}</td>
         <td class="px-4 py-2 text-sm break-all">${summaryText}</td>
         <td class="px-4 py-2 text-right">
-          <a href="${detailUrl}" class="text-xs text-indigo-600 hover:text-indigo-700">View →</a>
+          <a href="${detailUrl}" @click.prevent="$dispatch('telescope:navigate', '${detailUrl}')" class="text-xs text-indigo-600 hover:text-indigo-700">View →</a>
         </td>
       </tr>
     `
@@ -92,7 +92,7 @@ export function BatchPage(props: BatchPageProps): string {
   `
 
   const backLink = html`
-    <a href="${basePath}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">
+    <a href="${basePath}" @click.prevent="$dispatch('telescope:navigate', '${basePath}')" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
       Back to Dashboard
     </a>

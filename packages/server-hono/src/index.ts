@@ -107,8 +107,10 @@ function normalizeResponse(c: Context): AppResponse {
 
   return {
     raw: c,
+    statusCode,
     status(code) {
       statusCode = code
+      ;(this as unknown as Record<string, unknown>)['statusCode'] = code
       return this
     },
     header(key, value) {

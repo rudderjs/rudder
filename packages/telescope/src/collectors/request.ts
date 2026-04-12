@@ -7,7 +7,8 @@ const DEFAULT_HIDE_HEADERS = ['authorization', 'cookie', 'set-cookie', 'x-csrf-t
 const DEFAULT_HIDE_FIELDS  = ['password', 'password_confirmation', 'token', 'secret']
 
 /**
- * Records HTTP requests — method, URL, status, duration, headers, payload.
+ * Records HTTP requests — method, URL, status, duration, headers, payload,
+ * response status, IP, user-agent.
  * Installs as global middleware via the router.
  */
 export class RequestCollector implements Collector {
@@ -49,15 +50,31 @@ export class RequestCollector implements Collector {
       const tags: string[] = []
       if (duration > (this.config.slowQueryThreshold ?? 100)) tags.push('slow')
 
+      // Extract response status from the res object
+      const status = (res as unknown as Record<string, unknown>)['statusCode'] as number | undefined
+      if (status && status >= 400) tags.push('error')
+
+      // Extract IP and user-agent from request headers
+      const headers = req.headers as Record<string, unknown>
+      const ip = (req as unknown as Record<string, unknown>)['ip'] as string | undefined
+        ?? headers['x-forwarded-for'] as string | undefined
+        ?? headers['x-real-ip'] as string | undefined
+      const userAgent = headers['user-agent'] as string | undefined
+      const hostname  = headers['host'] as string | undefined
+
       const entry = createEntry('request', {
-        method:   req.method,
-        url:      req.url,
-        path:     req.path,
-        query:    req.query,
-        headers:  redactHeaders(req.headers as Record<string, unknown>, hideHeaders),
-        body:     redactFields(req.body, hideFields),
+        method:    req.method,
+        url:       req.url,
+        path:      req.path,
+        query:     req.query,
+        headers:   redactHeaders(headers, hideHeaders),
+        body:      redactFields(req.body, hideFields),
         duration,
-        params:   req.params,
+        params:    req.params,
+        status,
+        ip,
+        userAgent,
+        hostname,
       }, { batchId, tags })
 
       storage.store(entry)

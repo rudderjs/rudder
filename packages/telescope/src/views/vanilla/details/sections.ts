@@ -1,4 +1,4 @@
-import { html, raw, type SafeString } from '../_html.js'
+import { html, raw, SafeString } from '../_html.js'
 
 /**
  * Reusable detail-page sections. Composed by per-watcher views in `views.ts`
@@ -43,6 +43,7 @@ export function KeyValueTable(rows: Record<string, unknown>): SafeString {
 
 function formatValue(v: unknown): SafeString | string {
   if (v === null || v === undefined || v === '') return raw('<span class="text-gray-300">—</span>')
+  if (v instanceof SafeString) return v
   if (typeof v === 'boolean') return raw(`<span class="font-mono text-xs">${v}</span>`)
   if (typeof v === 'number')  return raw(`<span class="font-mono text-xs">${v}</span>`)
   if (typeof v === 'object')  return JsonBlock(v)

@@ -17,7 +17,8 @@ export function Dashboard(props: DashboardProps): string {
       <h2 class="text-xl font-bold mb-6">Dashboard</h2>
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <template x-for="[type, count] of Object.entries(counts)" :key="type">
-          <a :href="'${basePath}/' + (type === 'query' ? 'queries' : type + 's')"
+          <a :href="'${basePath}/' + (type === 'query' ? 'queries' : type === 'http' ? 'http' : type + 's')"
+             @click.prevent="$dispatch('telescope:navigate', '${basePath}/' + (type === 'query' ? 'queries' : type === 'http' ? 'http' : type + 's'))"
              class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition">
             <div class="text-2xl font-bold" x-text="count"></div>
             <div class="text-sm text-gray-500 capitalize" x-text="type + 's'"></div>

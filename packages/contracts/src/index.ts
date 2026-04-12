@@ -216,6 +216,8 @@ export function attachInputAccessors(req: Record<string, unknown>): void {
 }
 
 export interface AppResponse {
+  /** Current response status code (read after middleware chain completes) */
+  statusCode: number
   status:  (code: number) => AppResponse
   header:  (key: string, value: string) => AppResponse
   json:    (data: unknown) => void
