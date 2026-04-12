@@ -235,7 +235,11 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 // ─── Prisma Adapter ────────────────────────────────────────
 
 class PrismaAdapter implements OrmAdapter {
-  private constructor(readonly prismaClient: PrismaClient) {}
+  private _driver: string
+
+  private constructor(readonly prismaClient: PrismaClient, driver?: string) {
+    this._driver = driver ?? 'sqlite'
+  }
   /** @internal — expose the raw PrismaClient for DI binding */
   get prisma(): PrismaClient { return this.prismaClient }
 
@@ -271,7 +275,7 @@ class PrismaAdapter implements OrmAdapter {
     }
     // Enable query event logging so telescope's QueryCollector can capture queries
     opts['log'] = [{ emit: 'event', level: 'query' }]
-    return new PrismaAdapter(new PC(opts))
+    return new PrismaAdapter(new PC(opts), config.driver)
   }
 
   query<T>(table: string): QueryBuilder<T> {
@@ -293,16 +297,22 @@ class PrismaAdapter implements OrmAdapter {
   onQuery(listener: (info: { sql: string; bindings: unknown[]; duration: number; connection?: string | undefined; model?: string | undefined }) => void): void {
     const client = this.prisma as Partial<PrismaClientWithEvents>
     if (!client.$on) return
+    const driver = this._driver
     client.$on('query', (event: unknown) => {
       const e = event as { query?: string; params?: string; duration?: number }
       let bindings: unknown[] = []
       if (e.params) {
         try { bindings = JSON.parse(e.params) as unknown[] } catch { /* ignore */ }
       }
+      // Try to extract model name from SQL (e.g. `main`.`User` → User)
+      const sql = e.query ?? ''
+      const modelMatch = sql.match(/`main`\.`(\w+)`/) ?? sql.match(/FROM\s+"?(\w+)"?/i)
       listener({
-        sql:      e.query ?? '',
+        sql,
         bindings,
         duration: e.duration ?? 0,
+        connection: driver,
+        model: modelMatch?.[1],
       })
     })
   }
