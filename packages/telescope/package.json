@@ -38,6 +38,7 @@
   },
   "peerDependencies": {
     "@rudderjs/router": "workspace:*",
+    "@rudderjs/rudder": "workspace:*",
     "@rudderjs/log": "workspace:*",
     "@rudderjs/orm": "workspace:*",
     "@rudderjs/cache": "workspace:*",
@@ -45,21 +46,26 @@
     "@rudderjs/mail": "workspace:*",
     "@rudderjs/notification": "workspace:*",
     "@rudderjs/schedule": "workspace:*",
-    "@rudderjs/middleware": "workspace:*"
+    "@rudderjs/middleware": "workspace:*",
+    "@rudderjs/broadcast": "workspace:*"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/rudder": { "optional": true },
     "@rudderjs/log": { "optional": true },
     "@rudderjs/orm": { "optional": true },
     "@rudderjs/cache": { "optional": true },
     "@rudderjs/queue": { "optional": true },
     "@rudderjs/mail": { "optional": true },
     "@rudderjs/notification": { "optional": true },
-    "@rudderjs/schedule": { "optional": true }
+    "@rudderjs/schedule": { "optional": true },
+    "@rudderjs/broadcast": { "optional": true }
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.0.0"
   },
   "devDependencies": {
+    "@rudderjs/rudder": "workspace:*",
+    "@rudderjs/broadcast": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "typescript": "^5.4.0"

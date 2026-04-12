@@ -112,7 +112,7 @@ function pluralUrlSegment(type: string): string {
   // Mirrors the URL segments declared in `columns.ts` `pages` map.
   if (type === 'mail' || type === 'cache' || type === 'schedule') return type
   if (type === 'query') return 'queries'
-  return `${type}s`
+  return `${type}s`  // request → requests, command → commands, etc.
 }
 
 function entrySummary(type: string, c: Record<string, unknown>): string {
@@ -128,6 +128,8 @@ function entrySummary(type: string, c: Record<string, unknown>): string {
     case 'cache':        return `${c['operation'] ?? ''} ${c['key'] ?? ''}`
     case 'schedule':     return String(c['description'] ?? '')
     case 'model':        return `${c['action'] ?? ''} ${c['model'] ?? ''}`
+    case 'command':      return `${c['name'] ?? ''} (exit ${c['exitCode'] ?? '?'})`
+    case 'broadcast':    return `${c['kind'] ?? ''}${c['channel'] ? ' ' + c['channel'] : ''}${c['event'] ? ' → ' + c['event'] : ''}`
     default:             return ''
   }
 }

@@ -11,6 +11,8 @@ import { EventCollector } from './collectors/event.js'
 import { CacheCollector } from './collectors/cache.js'
 import { ScheduleCollector } from './collectors/schedule.js'
 import { ModelCollector } from './collectors/model.js'
+import { CommandCollector } from './collectors/command.js'
+import { BroadcastCollector } from './collectors/broadcast.js'
 import { registerTelescopeRoutes } from './routes.js'
 import { defaultConfig, type TelescopeConfig, type TelescopeStorage, type TelescopeEntry, type EntryType, type Collector, type ListOptions } from './types.js'
 
@@ -29,6 +31,8 @@ export { EventCollector } from './collectors/event.js'
 export { CacheCollector } from './collectors/cache.js'
 export { ScheduleCollector } from './collectors/schedule.js'
 export { ModelCollector } from './collectors/model.js'
+export { CommandCollector } from './collectors/command.js'
+export { BroadcastCollector } from './collectors/broadcast.js'
 
 // ─── Telescope Registry ────────────────────────────────────
 
@@ -114,6 +118,8 @@ export class TelescopeProvider extends ServiceProvider {
     recordCache:         merged.recordCache         ?? defaultConfig.recordCache,
     recordSchedule:      merged.recordSchedule      ?? defaultConfig.recordSchedule,
     recordModels:        merged.recordModels        ?? defaultConfig.recordModels,
+    recordCommands:      merged.recordCommands      ?? defaultConfig.recordCommands,
+    recordBroadcasts:    merged.recordBroadcasts    ?? defaultConfig.recordBroadcasts,
     ignoreRequests:      merged.ignoreRequests      ?? defaultConfig.ignoreRequests,
     slowQueryThreshold:  merged.slowQueryThreshold  ?? defaultConfig.slowQueryThreshold,
     auth:                merged.auth                ?? defaultConfig.auth,
@@ -160,6 +166,8 @@ export class TelescopeProvider extends ServiceProvider {
       if (resolved.recordCache)          collectors.push(new CacheCollector(storage))
       if (resolved.recordSchedule)       collectors.push(new ScheduleCollector(storage))
       if (resolved.recordModels)         collectors.push(new ModelCollector(storage))
+      if (resolved.recordCommands)       collectors.push(new CommandCollector(storage))
+      if (resolved.recordBroadcasts)     collectors.push(new BroadcastCollector(storage))
 
       for (const collector of collectors) {
         await collector.register()

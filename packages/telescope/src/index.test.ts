@@ -1,6 +1,8 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryStorage, createEntry, TelescopeRegistry, Telescope } from './index.js'
+import { MemoryStorage, createEntry, TelescopeRegistry, Telescope, CommandCollector, BroadcastCollector } from './index.js'
+import { commandObservers } from '@rudderjs/rudder'
+import { broadcastObservers } from '@rudderjs/broadcast'
 import type { TelescopeEntry } from './types.js'
 
 // ─── createEntry helper ───────────────────────────────────
@@ -261,5 +263,177 @@ describe('Telescope facade', () => {
     Telescope.record(entry)
 
     assert.equal(Telescope.count() as number, 1)
+  })
+})
+
+// ─── CommandCollector ─────────────────────────────────────
+
+describe('CommandCollector', () => {
+  beforeEach(() => {
+    commandObservers.reset()
+  })
+
+  it('records a successful command observation', async () => {
+    const storage = new MemoryStorage()
+    const collector = new CommandCollector(storage)
+    await collector.register()
+
+    commandObservers.emit({
+      name:     'inspire',
+      args:     {},
+      opts:     {},
+      duration: 12,
+      exitCode: 0,
+      source:   'inline',
+    })
+
+    const entries = storage.list({ type: 'command' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['name'], 'inspire')
+    assert.equal(entry.content['exitCode'], 0)
+    assert.equal(entry.content['source'], 'inline')
+    assert.deepEqual(entry.tags.sort(), ['source:inline', 'status:success'].sort())
+  })
+
+  it('records a failed command observation with error', async () => {
+    const storage = new MemoryStorage()
+    const collector = new CommandCollector(storage)
+    await collector.register()
+
+    commandObservers.emit({
+      name:     'migrate',
+      args:     {},
+      opts:     {},
+      duration: 50,
+      exitCode: 1,
+      source:   'class',
+      error:    new Error('boom'),
+    })
+
+    const entries = storage.list({ type: 'command' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['exitCode'], 1)
+    const err = entry.content['error'] as { message: string; stack?: string }
+    assert.equal(err.message, 'boom')
+    assert.ok(err.stack)
+    assert.ok(entry.tags.includes('status:failed'))
+    assert.ok(entry.tags.includes('error'))
+  })
+
+  it('tags cancelled commands (exit 130)', async () => {
+    const storage = new MemoryStorage()
+    const collector = new CommandCollector(storage)
+    await collector.register()
+
+    commandObservers.emit({
+      name:     'mail:send',
+      args:     {},
+      opts:     {},
+      duration: 5,
+      exitCode: 130,
+      source:   'class',
+    })
+
+    const entries = storage.list({ type: 'command' }) as TelescopeEntry[]
+    assert.ok(entries[0]!.tags.includes('cancelled'))
+  })
+})
+
+// ─── BroadcastCollector ───────────────────────────────────
+
+describe('BroadcastCollector', () => {
+  beforeEach(() => {
+    broadcastObservers.reset()
+  })
+
+  it('records a connection.opened event with batchId set to connectionId', async () => {
+    const storage = new MemoryStorage()
+    const collector = new BroadcastCollector(storage)
+    await collector.register()
+
+    broadcastObservers.emit({
+      kind:         'connection.opened',
+      connectionId: 'bk123abc',
+      url:          '/ws',
+      ip:           '127.0.0.1',
+      userAgent:    'curl/8.7.1',
+    })
+
+    const entries = storage.list({ type: 'broadcast' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['kind'], 'connection.opened')
+    assert.equal(entry.content['connectionId'], 'bk123abc')
+    assert.equal(entry.content['ip'], '127.0.0.1')
+    assert.equal(entry.batchId, 'bk123abc')
+    assert.ok(entry.tags.includes('kind:connection.opened'))
+    assert.ok(entry.tags.includes('opened'))
+  })
+
+  it('records a denied subscribe with allowed/denied tag', async () => {
+    const storage = new MemoryStorage()
+    const collector = new BroadcastCollector(storage)
+    await collector.register()
+
+    broadcastObservers.emit({
+      kind:         'subscribe',
+      connectionId: 'bk1',
+      channel:      'private-orders.99',
+      channelType:  'private',
+      allowed:      false,
+      authMs:       12,
+      reason:       'Auth callback returned false',
+    })
+
+    const entries = storage.list({ type: 'broadcast' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['allowed'], false)
+    assert.equal(entry.content['authMs'], 12)
+    assert.ok(entry.tags.includes('denied'))
+    assert.ok(entry.tags.includes('channel:private'))
+  })
+
+  it('records a server-initiated broadcast with payloadSize and recipientCount', async () => {
+    const storage = new MemoryStorage()
+    const collector = new BroadcastCollector(storage)
+    await collector.register()
+
+    broadcastObservers.emit({
+      kind:           'broadcast',
+      channel:        'orders',
+      event:          'created',
+      recipientCount: 7,
+      payloadSize:    256,
+      source:         'server',
+    })
+
+    const entries = storage.list({ type: 'broadcast' }) as TelescopeEntry[]
+    const entry = entries[0]!
+    assert.equal(entry.content['source'], 'server')
+    assert.equal(entry.content['recipientCount'], 7)
+    assert.ok(entry.tags.includes('source:server'))
+    assert.equal(entry.batchId, null) // server broadcasts have no connectionId
+  })
+
+  it('records presence.join/leave with member info', async () => {
+    const storage = new MemoryStorage()
+    const collector = new BroadcastCollector(storage)
+    await collector.register()
+
+    broadcastObservers.emit({
+      kind:         'presence.join',
+      connectionId: 'bk2',
+      channel:      'presence-room.42',
+      member:       { id: 'user-1', name: 'Alice' },
+    })
+
+    const entries = storage.list({ type: 'broadcast' }) as TelescopeEntry[]
+    const entry = entries[0]!
+    const member = entry.content['member'] as { id: string; name: string }
+    assert.equal(member.name, 'Alice')
+    assert.equal(entry.batchId, 'bk2')
   })
 })

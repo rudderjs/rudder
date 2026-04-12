@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket as WsSocket } from 'ws'
 import type { IncomingMessage }                    from 'node:http'
 import type { Duplex }                             from 'node:stream'
+import { broadcastObservers } from './observers.js'
 
 // ─── Public types ───────────────────────────────────────────
 
@@ -127,6 +128,17 @@ async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage):
 
   send(ws, { type: 'connected', socketId: id })
 
+  // Notify observers (telescope, etc.)
+  const ip = extractIp(req)
+  const ua = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined
+  broadcastObservers.emit({
+    kind:         'connection.opened',
+    connectionId: id,
+    url:          req.url ?? '/',
+    ...(ip ? { ip } : {}),
+    ...(ua ? { userAgent: ua } : {}),
+  })
+
   ws.on('message', (raw) => {
     let msg: ClientMsg
     try { msg = JSON.parse(String(raw)) as ClientMsg }
@@ -135,6 +147,13 @@ async function onConnection(state: WsState, ws: WsSocket, req: IncomingMessage):
   })
 
   ws.on('close', () => { disconnect(state, id) })
+}
+
+function extractIp(req: IncomingMessage): string | undefined {
+  const fwd = req.headers['x-forwarded-for']
+  if (typeof fwd === 'string') return fwd.split(',')[0]?.trim()
+  if (Array.isArray(fwd))      return fwd[0]?.split(',')[0]?.trim()
+  return req.socket.remoteAddress ?? undefined
 }
 
 async function onMessage(
@@ -154,11 +173,17 @@ async function onMessage(
       const { channel, token } = msg
       const isPrivate  = channel.startsWith('private-')
       const isPresence = channel.startsWith('presence-')
+      const channelType: 'public' | 'private' | 'presence' =
+        isPresence ? 'presence' : isPrivate ? 'private' : 'public'
 
       if (isPrivate || isPresence) {
         const authFn = findAuth(channel)
         if (!authFn) {
           send(ws, { type: 'error', channel, message: 'Unauthorized' })
+          broadcastObservers.emit({
+            kind: 'subscribe', connectionId: id, channel, channelType,
+            allowed: false, reason: 'No auth callback registered',
+          })
           return
         }
         const authReq: BroadcastAuthRequest = {
@@ -166,15 +191,31 @@ async function onMessage(
           url:     req.url ?? '/',
           ...(token !== undefined ? { token } : {}),
         }
+        const authStart = Date.now()
         const result = await authFn(authReq, channel).catch(() => false as const)
+        const authMs  = Date.now() - authStart
         if (!result) {
           send(ws, { type: 'error', channel, message: 'Unauthorized' })
+          broadcastObservers.emit({
+            kind: 'subscribe', connectionId: id, channel, channelType,
+            allowed: false, authMs, reason: 'Auth callback returned false',
+          })
           return
         }
         if (isPresence && typeof result === 'object') {
           if (!state.presence.has(channel)) state.presence.set(channel, new Map())
           state.presence.get(channel)?.set(id, result)
         }
+
+        broadcastObservers.emit({
+          kind: 'subscribe', connectionId: id, channel, channelType,
+          allowed: true, authMs,
+        })
+      } else {
+        broadcastObservers.emit({
+          kind: 'subscribe', connectionId: id, channel, channelType: 'public',
+          allowed: true,
+        })
       }
 
       if (!state.channels.has(channel)) state.channels.set(channel, new Set())
@@ -187,7 +228,12 @@ async function onMessage(
         const members = [...(state.presence.get(channel)?.values() ?? [])]
         send(ws, { type: 'presence.members', channel, members })
         const me = state.presence.get(channel)?.get(id)
-        broadcastTo(state, channel, { type: 'presence.joined', channel, user: me }, id)
+        if (me) {
+          broadcastTo(state, channel, { type: 'presence.joined', channel, user: me }, id)
+          broadcastObservers.emit({
+            kind: 'presence.join', connectionId: id, channel, member: me,
+          })
+        }
       }
       break
     }
@@ -195,6 +241,7 @@ async function onMessage(
     case 'unsubscribe':
       leaveChannel(state, id, msg.channel)
       send(ws, { type: 'unsubscribed', channel: msg.channel })
+      broadcastObservers.emit({ kind: 'unsubscribe', connectionId: id, channel: msg.channel })
       break
 
     case 'client-event': {
@@ -203,10 +250,22 @@ async function onMessage(
         send(ws, { type: 'error', message: 'Not subscribed to channel' })
         return
       }
+      const recipientCount = (state.channels.get(channel)?.size ?? 0) - 1 // exclude sender
       broadcastTo(state, channel, { type: 'event', channel, event, data }, id)
+      broadcastObservers.emit({
+        kind: 'broadcast', channel, event, recipientCount: Math.max(recipientCount, 0),
+        payloadSize: jsonByteSize(data),
+        source: 'client', sourceConnectionId: id,
+      })
       break
     }
   }
+}
+
+/** Approximate JSON byte size of a value. Best-effort, swallows errors. */
+function jsonByteSize(value: unknown): number {
+  try { return Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8') }
+  catch { return 0 }
 }
 
 function leaveChannel(state: WsState, id: string, channel: string): void {
@@ -220,6 +279,9 @@ function leaveChannel(state: WsState, id: string, channel: string): void {
     if ((state.presence.get(channel)?.size ?? 0) === 0) state.presence.delete(channel)
     if (memberInfo) {
       broadcastTo(state, channel, { type: 'presence.left', channel, user: memberInfo })
+      broadcastObservers.emit({
+        kind: 'presence.leave', connectionId: id, channel, member: memberInfo,
+      })
     }
   }
 }
@@ -231,6 +293,7 @@ function disconnect(state: WsState, id: string): void {
   state.subscriptions.delete(id)
   state.sockets.delete(id)
   state.upgradeReqs.delete(id)
+  broadcastObservers.emit({ kind: 'connection.closed', connectionId: id })
 }
 
 // ─── Test helpers ───────────────────────────────────────────
@@ -255,7 +318,13 @@ export function resetBroadcast(): void {
 export function broadcast(channel: string, event: string, data: unknown): void {
   const state = g[KEY] as WsState | undefined
   if (!state) return
+  const recipientCount = state.channels.get(channel)?.size ?? 0
   broadcastTo(state, channel, { type: 'event', channel, event, data })
+  broadcastObservers.emit({
+    kind: 'broadcast', channel, event, recipientCount,
+    payloadSize: jsonByteSize(data),
+    source: 'server',
+  })
 }
 
 /** Current connection stats. */

@@ -12,6 +12,8 @@ export type EntryType =
   | 'cache'
   | 'schedule'
   | 'model'
+  | 'command'
+  | 'broadcast'
 
 export interface TelescopeEntry {
   id:         string
@@ -81,6 +83,8 @@ export interface TelescopeConfig {
   recordCache?:          boolean | undefined
   recordSchedule?:       boolean | undefined
   recordModels?:         boolean | undefined
+  recordCommands?:       boolean | undefined
+  recordBroadcasts?:     boolean | undefined
   ignoreRequests?:       string[] | undefined
   slowQueryThreshold?:   number | undefined
   /**
@@ -116,6 +120,8 @@ export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'
   recordCache:          true,
   recordSchedule:       true,
   recordModels:         true,
+  recordCommands:       true,
+  recordBroadcasts:     true,
   ignoreRequests:       ['/telescope*', '/health'],
   slowQueryThreshold:   100,
   hideRequestHeaders:   ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key'],

@@ -275,3 +275,50 @@ export const rudder = _g['__rudderjs_rudder__'] as CommandRegistry
 
 /** Alias for rudder — Laravel-style capitalised name */
 export const Rudder = rudder
+
+// ─── Command observers ─────────────────────────────────────
+//
+// Lightweight publish/subscribe used by `@rudderjs/cli` to notify any
+// interested party that a command has finished running. Used today by
+// `@rudderjs/telescope`'s CommandCollector to record every CLI invocation
+// into the dashboard. Any package can subscribe — telescope is the
+// reference consumer.
+
+export interface CommandObservation {
+  name:     string
+  args:     Record<string, unknown>
+  opts:     Record<string, unknown>
+  duration: number
+  exitCode: number
+  /** Source of the command — class-based via `register()` or inline via `command()` */
+  source:   'class' | 'inline'
+  /** Error thrown by the command action, if any */
+  error?:   Error
+}
+
+export type CommandObserver = (obs: CommandObservation) => void
+
+export class CommandObserverRegistry {
+  private observers: CommandObserver[] = []
+
+  /** Subscribe; returns an unsubscribe function. */
+  subscribe(fn: CommandObserver): () => void {
+    this.observers.push(fn)
+    return () => { this.observers = this.observers.filter(o => o !== fn) }
+  }
+
+  /** Called by `@rudderjs/cli` after each command runs. Errors in observers are swallowed. */
+  emit(obs: CommandObservation): void {
+    for (const o of this.observers) {
+      try { o(obs) } catch { /* observer errors must not break the CLI */ }
+    }
+  }
+
+  /** @internal — used in tests */
+  reset(): void { this.observers = [] }
+}
+
+if (!_g['__rudderjs_command_observers__']) _g['__rudderjs_command_observers__'] = new CommandObserverRegistry()
+
+/** Global command observer registry — process-wide singleton like `rudder`. */
+export const commandObservers = _g['__rudderjs_command_observers__'] as CommandObserverRegistry

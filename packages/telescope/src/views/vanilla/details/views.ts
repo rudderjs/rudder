@@ -184,6 +184,81 @@ const ModelView: ViewFn = (entry) => {
   `
 }
 
+const CommandView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const error = c['error'] as { message?: string; stack?: string } | undefined
+  const exitCode = c['exitCode'] as number ?? 0
+  return html`
+    ${Card(null, KeyValueTable({
+      Name:     raw(`<span class="font-mono text-xs">${escape(c['name'] as string ?? '')}</span>`),
+      Source:   Badge(c['source'] as string),
+      Status:   Badge(exitCode === 0 ? 'success' : 'failed'),
+      'Exit Code': raw(`<span class="font-mono text-xs">${exitCode}</span>`),
+      Duration: c['duration'] != null ? `${c['duration']}ms` : '—',
+    }))}
+    ${c['args'] && Object.keys(c['args'] as object).length > 0 ? Card('Arguments', JsonBlock(c['args'])) : ''}
+    ${c['opts'] && Object.keys(c['opts'] as object).length > 0 ? Card('Options', JsonBlock(c['opts'])) : ''}
+    ${error?.message ? Card('Error', html`
+      <div class="text-sm text-red-600 mb-2">${error.message}</div>
+      ${error.stack ? CodeBlock(error.stack, { maxHeight: '[600px]' }) : ''}
+    `) : ''}
+  `
+}
+
+const BroadcastView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const kind = String(c['kind'] ?? '')
+
+  // Render kind-specific fields. The shared fields (kind, connectionId)
+  // appear in the top KeyValueTable; everything else goes in a JSON dump.
+  const baseRows: Record<string, unknown> = {
+    Kind:         Badge(kind),
+    'Connection': c['connectionId'] != null
+      ? raw(`<a href="../batches/${escape(c['connectionId'] as string)}" class="font-mono text-xs text-indigo-600 hover:text-indigo-700">${escape((c['connectionId'] as string).slice(0, 12))}…</a>`)
+      : raw('<span class="text-gray-300">—</span>'),
+  }
+
+  switch (kind) {
+    case 'connection.opened':
+      baseRows['IP']         = c['ip']
+      baseRows['User-Agent'] = c['userAgent']
+      baseRows['URL']        = c['url']
+      break
+    case 'connection.closed':
+      baseRows['Reason']     = c['reason']
+      break
+    case 'subscribe':
+      baseRows['Channel']      = raw(`<span class="font-mono text-xs">${escape(c['channel'] as string ?? '')}</span>`)
+      baseRows['Channel Type'] = Badge(c['channelType'] as string)
+      baseRows['Allowed']      = Badge(c['allowed'] ? 'allowed' : 'denied')
+      if (c['authMs'] != null) baseRows['Auth Time'] = `${c['authMs']}ms`
+      if (c['reason'])         baseRows['Reason']    = c['reason']
+      break
+    case 'unsubscribe':
+      baseRows['Channel'] = raw(`<span class="font-mono text-xs">${escape(c['channel'] as string ?? '')}</span>`)
+      break
+    case 'broadcast':
+      baseRows['Channel']        = raw(`<span class="font-mono text-xs">${escape(c['channel'] as string ?? '')}</span>`)
+      baseRows['Event']          = raw(`<span class="font-mono text-xs">${escape(c['event'] as string ?? '')}</span>`)
+      baseRows['Source']         = Badge(c['source'] as string)
+      baseRows['Recipients']     = c['recipientCount']
+      baseRows['Payload Size']   = c['payloadSize'] != null ? `${c['payloadSize']} bytes` : '—'
+      if (c['sourceConnectionId']) baseRows['From'] = raw(`<span class="font-mono text-xs">${escape(c['sourceConnectionId'] as string)}</span>`)
+      break
+    case 'presence.join':
+    case 'presence.leave':
+      baseRows['Channel'] = raw(`<span class="font-mono text-xs">${escape(c['channel'] as string ?? '')}</span>`)
+      break
+  }
+
+  return html`
+    ${Card(null, KeyValueTable(baseRows))}
+    ${(kind === 'presence.join' || kind === 'presence.leave') && c['member']
+      ? Card('Member', JsonBlock(c['member']))
+      : ''}
+  `
+}
+
 /** Map of EntryType → detail view function. Used by the dispatcher. */
 export const detailViews: Record<string, ViewFn> = {
   request:      RequestView,
@@ -197,6 +272,8 @@ export const detailViews: Record<string, ViewFn> = {
   cache:        CacheView,
   schedule:     ScheduleView,
   model:        ModelView,
+  command:      CommandView,
+  broadcast:    BroadcastView,
 }
 
 /** Internal escape helper — used inside `raw()` blocks for safety. */

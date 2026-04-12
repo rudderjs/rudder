@@ -9,7 +9,7 @@ import { migrateCommands } from './commands/migrate.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
 import { routeListCommand } from './commands/route-list.js'
 import { commandListCommand } from './commands/command-list.js'
-import { rudder, parseSignature, CancelledError } from '@rudderjs/rudder'
+import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/rudder'
 import { CliError } from './errors.js'
 
 const C = {
@@ -79,6 +79,38 @@ async function bootApp(): Promise<void> {
     // Restore console so command handlers can print normally
     console.log = saved.log; console.warn = saved.warn
     console.info = saved.info; console.error = saved.error
+  }
+}
+
+/**
+ * Run a command action and emit a CommandObservation to any subscribed
+ * observers (e.g. telescope's CommandCollector). The observation fires
+ * even when the action throws — telescope wants to record failures too.
+ */
+async function observeCommand(
+  name:   string,
+  args:   Record<string, unknown>,
+  opts:   Record<string, unknown>,
+  source: CommandObservation['source'],
+  fn:     () => Promise<void> | void,
+): Promise<void> {
+  const start = Date.now()
+  let exitCode = 0
+  let error: Error | undefined
+  try {
+    await fn()
+  } catch (e) {
+    exitCode = e instanceof CancelledError ? 130 : 1
+    error    = e instanceof Error ? e : new Error(String(e))
+    throw e
+  } finally {
+    const obs: CommandObservation = {
+      name, args, opts, source,
+      duration: Date.now() - start,
+      exitCode,
+    }
+    if (error) obs.error = error
+    commandObservers.emit(obs)
   }
 }
 
@@ -192,7 +224,8 @@ async function main(): Promise<void> {
       .allowUnknownOption()
       .action(async (...comArgs: unknown[]) => {
         const commanderCmd = comArgs[comArgs.length - 1] as { args: string[]; opts: () => Record<string, unknown> }
-        await cmd.handler(commanderCmd.args, commanderCmd.opts())
+        await observeCommand(cmd.name, { args: commanderCmd.args }, commanderCmd.opts(), 'inline',
+          () => cmd.handler(commanderCmd.args, commanderCmd.opts()))
       })
   }
 
@@ -226,7 +259,8 @@ async function main(): Promise<void> {
       args.forEach((a, i) => { parsedArgs[a.name] = comArgs[i] })
       const fresh = new CommandClass()
       fresh._setContext(parsedArgs, commanderCmd.opts())
-      await fresh.handle()
+      await observeCommand(name, parsedArgs, commanderCmd.opts(), 'class',
+        () => fresh.handle())
     })
   }
 

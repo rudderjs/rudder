@@ -125,4 +125,26 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Action', key: 'entry.content.action', badge: true },
     ],
   },
+
+  commands: {
+    type:  'command',
+    title: 'Commands',
+    columns: [
+      { label: 'Name',     key: 'entry.content.name',                    mono: true },
+      { label: 'Source',   key: 'entry.content.source',                  badge: true },
+      { label: 'Exit',     key: 'entry.content.exitCode',                className: 'text-right font-mono text-xs' },
+      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"', className: 'text-right' },
+    ],
+  },
+
+  broadcasts: {
+    type:  'broadcast',
+    title: 'WebSockets',
+    columns: [
+      { label: 'Kind',    key: 'entry.content.kind',                                       badge: true },
+      { label: 'Channel', key: 'entry.content.channel || "—"',                             mono: true, className: 'truncate max-w-md' },
+      { label: 'Event',   key: 'entry.content.event || "—"' },
+      { label: 'Conn',    key: '(entry.content.connectionId || "").slice(0, 8) || "—"',   mono: true, className: 'text-xs' },
+    ],
+  },
 }
