@@ -17,7 +17,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **npm scope**: `@rudderjs/*`
 - **GitHub**: https://github.com/rudderjs/rudder
 - **Status**: Early development
-- **Open-core**: Panels/media/lexical extracted to [pilotiq](https://github.com/pilotiq/pilotiq); AI agents/collab to pilotiq-pro
+- **Open-core**: Panels/media/lexical extracted to [pilotiq](https://github.com/pilotiq-io/pilotiq); AI agents/collab to pilotiq-pro
 
 ---
 

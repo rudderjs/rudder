@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./logo.png" alt="RudderJS — Boost Your Node App" width="480" />
+  <img src="./logo.png" alt="RudderJS — Boost Your Node App" width="240" />
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 
 ---
 
-RudderJS is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, an Rudder CLI, queues, scheduling, and more — without the PHP runtime.
+RudderJS is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). **44 packages** across 10 categories — covering everything from DI and routing to AI agents, real-time CRDT, and production monitoring. It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, Rudder CLI, queues, scheduling, and more — without the PHP runtime.
 
 ## Why RudderJS?
 
@@ -435,9 +435,11 @@ const svc = resolve<UserService>(UserService)
 
 ---
 
-## Packages
+## Packages (44)
 
-### Foundation
+> **44 first-party packages** across 10 categories — more than Laravel's official ecosystem, all under one monorepo.
+
+### Foundation (7)
 | Package | Description |
 |---|---|
 | `@rudderjs/core` | Application bootstrap, DI container, Events, ServiceProvider lifecycle |
@@ -448,7 +450,7 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/support` | Env, Collection, ConfigRepository, helpers |
 | `@rudderjs/contracts` | Shared TypeScript types (no runtime) |
 
-### HTTP & Frontend
+### HTTP & Frontend (4)
 | Package | Description |
 |---|---|
 | `@rudderjs/server-hono` | Hono HTTP adapter |
@@ -456,14 +458,14 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/view` | Laravel-style `view('id', props)` controller responses via Vike SSR |
 | `@rudderjs/vite` | Vite + Vike plugin with SSR externals and RudderJS integration |
 
-### Database
+### Database (3)
 | Package | Description |
 |---|---|
 | `@rudderjs/orm` | Model base class, ModelRegistry, QueryBuilder |
 | `@rudderjs/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
 | `@rudderjs/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
 
-### Auth
+### Auth & Security (5)
 | Package | Description |
 |---|---|
 | `@rudderjs/hash` | Password hashing (bcrypt, argon2) |
@@ -472,7 +474,7 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/sanctum` | API token authentication with abilities |
 | `@rudderjs/socialite` | OAuth providers (GitHub, Google, Facebook, Apple) |
 
-### Infrastructure
+### Infrastructure (11)
 | Package | Description |
 |---|---|
 | `@rudderjs/queue` | Job base class, queue contract |
@@ -485,8 +487,9 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/schedule` | Task scheduler, cron-based |
 | `@rudderjs/broadcast` | WebSocket channels — pub/sub, private, presence |
 | `@rudderjs/live` | Yjs CRDT real-time document sync |
+| `@rudderjs/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
-### Developer Experience
+### Developer Experience (7)
 | Package | Description |
 |---|---|
 | `@rudderjs/log` | Structured logging — channels (console, file, daily, stack), RFC 5424 levels, formatters, context |
@@ -497,25 +500,24 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/concurrency` | Parallel execution via worker threads, deferred fire-and-forget, sync driver for testing |
 | `@rudderjs/testing` | TestCase, TestResponse assertions, RefreshDatabase, WithFaker, HTTP request helpers |
 
-### Media & Image
+### Media (1)
 | Package | Description |
 |---|---|
 | `@rudderjs/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
-### Monitoring
+### Monitoring (3)
 | Package | Description |
 |---|---|
 | `@rudderjs/telescope` | Development inspector — 17 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, dumps, WebSocket lifecycle, Yjs CRDT events |
 | `@rudderjs/pulse` | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
 | `@rudderjs/horizon` | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
 
-### AI
+### AI & Tooling (3)
 | Package | Description |
 |---|---|
 | `@rudderjs/ai` | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware |
 | `@rudderjs/boost` | AI dev tools — MCP server for Claude Code, Cursor, Copilot |
 | `@rudderjs/mcp` | MCP server framework — build custom MCP servers with decorators and testing utilities |
-| `@rudderjs/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
 ---
 
@@ -561,7 +563,7 @@ RudderJS is the framework layer. Two sibling projects build on it:
 
 | Project | Packages | Description |
 |---|---|---|
-| **[Pilotiq](https://github.com/pilotiq/pilotiq)** | `@pilotiq/{panels,lexical,media}` | Open-source admin panel builder (MIT) |
+| **[Pilotiq](https://github.com/pilotiq-io/pilotiq)** | `@pilotiq/{panels,lexical,media}` | Open-source admin panel builder (MIT) |
 | **Pilotiq Pro** | `@pilotiq-pro/{ai,collab,workspaces}` | Commercial extensions — AI agents, real-time collab |
 
 ---
