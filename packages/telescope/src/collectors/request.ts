@@ -1,6 +1,10 @@
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import type { Collector, TelescopeStorage, TelescopeConfig } from '../types.js'
 import { createEntry } from '../storage.js'
+import { redactHeaders, redactFields } from '../redact.js'
+
+const DEFAULT_HIDE_HEADERS = ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key']
+const DEFAULT_HIDE_FIELDS  = ['password', 'password_confirmation', 'token', 'secret']
 
 /**
  * Records HTTP requests — method, URL, status, duration, headers, payload.
@@ -21,8 +25,10 @@ export class RequestCollector implements Collector {
 
   /** Returns a middleware handler that records requests */
   middleware() {
-    const storage  = this.storage
-    const ignore   = this.config.ignoreRequests ?? []
+    const storage     = this.storage
+    const ignore      = this.config.ignoreRequests ?? []
+    const hideHeaders = this.config.hideRequestHeaders ?? DEFAULT_HIDE_HEADERS
+    const hideFields  = this.config.hideRequestFields  ?? DEFAULT_HIDE_FIELDS
 
     return async (req: AppRequest, res: AppResponse, next: () => Promise<void>) => {
       // Skip Vite internals, static assets, and source files
@@ -48,8 +54,8 @@ export class RequestCollector implements Collector {
         url:      req.url,
         path:     req.path,
         query:    req.query,
-        headers:  req.headers,
-        body:     req.body,
+        headers:  redactHeaders(req.headers as Record<string, unknown>, hideHeaders),
+        body:     redactFields(req.body, hideFields),
         duration,
         params:   req.params,
       }, { batchId, tags })

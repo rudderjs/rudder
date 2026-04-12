@@ -58,6 +58,16 @@ export async function showEntry(
   res.json({ data: entry, related })
 }
 
+export async function listBatch(
+  storage: TelescopeStorage,
+  req:     AppRequest,
+  res:     AppResponse,
+): Promise<void> {
+  const batchId = req.params['batchId'] ?? ''
+  const entries = await storage.list({ batchId, perPage: 500 })
+  res.json({ data: entries })
+}
+
 export async function overview(
   storage: TelescopeStorage,
   res:     AppResponse,

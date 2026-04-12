@@ -14,20 +14,23 @@ export interface EntryListProps {
   apiPrefix: string
   /** Entry type — used in the API path. Special-cased: `query` → `/queries`. */
   type:      string
+  /** URL segment used in the detail-page links. Same as the page key in `columns.ts`. */
+  pageKey:   string
   title:     string
   columns:   Column[]
 }
 
 /**
  * Generic master/list page for any watcher type. Renders a table with
- * search + pagination + a JSON-dump detail modal. Composed by each
- * per-watcher route in `routes.ts` with a column config.
+ * search + tag filter + pagination. Each row links to the detail page
+ * at `/{basePath}/{pageKey}/{id}`.
  *
- * Phase 2 of the telescope refresh will replace the JSON modal with
- * dedicated detail views per watcher type.
+ * Phase 2a removed the inline JSON-dump modal in favour of dedicated
+ * detail pages per watcher (see `details/views.ts`).
+ * Phase 2b added the `?tag=` filter and tag pill column.
  */
 export function EntryList(props: EntryListProps): string {
-  const { basePath, apiPrefix, type, title, columns } = props
+  const { basePath, apiPrefix, type, pageKey, title, columns } = props
 
   const colHeaders = columns.map(c =>
     `<th class="px-4 py-3 text-left text-xs uppercase font-medium text-gray-500">${c.label}</th>`
@@ -43,17 +46,32 @@ export function EntryList(props: EntryListProps): string {
     return `<td class="px-4 py-3 ${c.className ?? ''}" x-text="${c.key}"></td>`
   }).join('\n                ')
 
-  const activePath = type === 'query' ? '/queries' : `/${type}s`
-  const apiPath    = type === 'query' ? 'queries'  : `${type}s`
+  const activePath = `/${pageKey}`
+  const apiPath    = type === 'query' ? 'queries' : `${type}s`
 
   const body = `
     <div x-data="entryList()" x-init="load()" x-cloak>
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <h2 class="text-xl font-bold">${title}</h2>
-        <div class="flex gap-2">
+        <div class="flex gap-2 items-center">
+          <button @click="toggleAutoRefresh()" :title="autoRefresh ? 'Auto-refresh on (click to disable)' : 'Auto-refresh off (click to enable)'"
+                  class="text-xs border rounded-lg px-3 py-1.5 transition flex items-center gap-1.5"
+                  :class="autoRefresh ? 'border-green-300 bg-green-50 text-green-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'">
+            <span class="w-2 h-2 rounded-full" :class="autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'"></span>
+            <span x-text="autoRefresh ? 'Live' : 'Live'"></span>
+          </button>
           <input type="text" x-model="search" @input.debounce.300ms="load()"
                  placeholder="Search..." class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
         </div>
+      </div>
+
+      <!-- Active tag filter pill -->
+      <div x-show="tag" class="mb-3 flex items-center gap-2 text-sm">
+        <span class="text-gray-500">Filtering by tag:</span>
+        <a :href="window.location.pathname" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+          <span x-text="tag"></span>
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </a>
       </div>
 
       <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -61,18 +79,27 @@ export function EntryList(props: EntryListProps): string {
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               ${colHeaders}
+              <th class="px-4 py-3 text-left text-xs uppercase font-medium text-gray-500">Tags</th>
               <th class="px-4 py-3 text-right text-xs uppercase font-medium text-gray-500">Time</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <template x-for="entry in entries" :key="entry.id">
-              <tr class="hover:bg-gray-50 cursor-pointer" @click="selected = entry">
+              <tr class="hover:bg-gray-50 cursor-pointer" @click="goTo(entry.id)">
                 ${colCells}
+                <td class="px-4 py-3">
+                  <template x-for="t in (entry.tags || []).slice(0, 3)" :key="t">
+                    <a :href="window.location.pathname + '?tag=' + encodeURIComponent(t)" @click.stop class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 hover:bg-gray-200 mr-1">
+                      <span x-text="t"></span>
+                    </a>
+                  </template>
+                  <span x-show="(entry.tags || []).length > 3" class="text-xs text-gray-400" x-text="'+' + ((entry.tags || []).length - 3)"></span>
+                </td>
                 <td class="px-4 py-3 text-right text-gray-400 text-xs" x-text="ago(entry.createdAt)"></td>
               </tr>
             </template>
             <tr x-show="entries.length === 0">
-              <td colspan="${columns.length + 1}" class="px-4 py-12 text-center text-gray-400">No entries found.</td>
+              <td colspan="${columns.length + 2}" class="px-4 py-12 text-center text-gray-400">No entries found.</td>
             </tr>
           </tbody>
         </table>
@@ -89,25 +116,6 @@ export function EntryList(props: EntryListProps): string {
           </div>
         </div>
       </div>
-
-      <!-- Detail Modal -->
-      <div x-show="selected" @click.self="selected = null" x-transition
-           class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-8">
-        <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-auto" @click.stop>
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h3 class="font-semibold">Entry Detail</h3>
-            <button @click="selected = null" class="text-gray-400 hover:text-gray-600">&times;</button>
-          </div>
-          <div class="px-6 py-4">
-            <pre class="text-xs bg-gray-50 rounded-lg p-4 overflow-auto" x-text="JSON.stringify(selected?.content, null, 2)"></pre>
-            <div class="mt-3 flex flex-wrap gap-1">
-              <template x-for="tag in (selected?.tags || [])" :key="tag">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600" x-text="tag"></span>
-              </template>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <script>
@@ -117,14 +125,44 @@ export function EntryList(props: EntryListProps): string {
           meta: { total: 0, last_page: 1 },
           page: 1,
           search: '',
-          selected: null,
+          tag: new URLSearchParams(window.location.search).get('tag') || '',
+          autoRefresh: localStorage.getItem('telescope.autoRefresh') === 'true',
+          _refreshTimer: null,
+
+          init() {
+            if (this.autoRefresh) this.startAutoRefresh()
+          },
 
           async load() {
             const params = new URLSearchParams({ page: this.page, per_page: 50 })
             if (this.search) params.set('search', this.search)
+            if (this.tag)    params.set('tag', this.tag)
             const data = await fetch('${apiPrefix}/${apiPath}?' + params).then(r => r.json())
             this.entries = data.data || []
             this.meta = data.meta || { total: 0, last_page: 1 }
+          },
+
+          toggleAutoRefresh() {
+            this.autoRefresh = !this.autoRefresh
+            localStorage.setItem('telescope.autoRefresh', String(this.autoRefresh))
+            if (this.autoRefresh) this.startAutoRefresh()
+            else                  this.stopAutoRefresh()
+          },
+
+          startAutoRefresh() {
+            if (this._refreshTimer) return
+            this._refreshTimer = setInterval(() => this.load(), 2000)
+          },
+
+          stopAutoRefresh() {
+            if (this._refreshTimer) {
+              clearInterval(this._refreshTimer)
+              this._refreshTimer = null
+            }
+          },
+
+          goTo(id) {
+            window.location.href = '${basePath}/${pageKey}/' + id
           },
 
           badgeClass(value) {

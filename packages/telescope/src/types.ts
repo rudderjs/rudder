@@ -83,6 +83,18 @@ export interface TelescopeConfig {
   recordModels?:         boolean | undefined
   ignoreRequests?:       string[] | undefined
   slowQueryThreshold?:   number | undefined
+  /**
+   * Header names (lower-case) to redact from recorded request entries.
+   * Values are replaced with `[REDACTED]` before being stored — they
+   * never reach the dashboard or the storage backend. Defaults to
+   * `['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key']`.
+   */
+  hideRequestHeaders?:   string[] | undefined
+  /**
+   * Body field names to redact from recorded request entries (looked up
+   * case-insensitively at any depth). Defaults to `['password', 'password_confirmation', 'token', 'secret']`.
+   */
+  hideRequestFields?:    string[] | undefined
   auth?:                 null | ((req: unknown) => boolean | Promise<boolean>) | undefined
 }
 
@@ -106,5 +118,7 @@ export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'
   recordModels:         true,
   ignoreRequests:       ['/telescope*', '/health'],
   slowQueryThreshold:   100,
+  hideRequestHeaders:   ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key'],
+  hideRequestFields:    ['password', 'password_confirmation', 'token', 'secret'],
   auth:                 null,
 }
