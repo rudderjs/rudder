@@ -12,6 +12,7 @@ import {
   runOnAbort,
   runOnError,
 } from './middleware.js'
+import type { AiObserverRegistry, AiEvent, AiObserverStep } from './observers.js'
 import type {
   AgentPromptOptions,
   AiMessage,
@@ -38,6 +39,33 @@ import type {
   TokenUsage,
   ToolChoice,
 } from './types.js'
+
+// ─── AI Observer (lazy accessor) ─────────────────────────
+
+let _aiObs: AiObserverRegistry | null | undefined
+function _getAiObservers(): AiObserverRegistry | null {
+  if (_aiObs === undefined) {
+    _aiObs = (globalThis as Record<string, unknown>)['__rudderjs_ai_observers__'] as AiObserverRegistry | undefined ?? null
+  }
+  return _aiObs
+}
+
+function _buildObserverSteps(steps: AgentStep[], modelString: string): AiObserverStep[] {
+  return steps.map((step, i) => ({
+    iteration:    i + 1,
+    model:        modelString,
+    tokens:       { prompt: step.usage.promptTokens, completion: step.usage.completionTokens, total: step.usage.totalTokens },
+    finishReason: step.finishReason,
+    toolCalls:    step.toolCalls.map(tc => ({
+      id:            tc.id,
+      name:          tc.name,
+      args:          tc.arguments,
+      result:        step.toolResults.find(r => r.toolCallId === tc.id)?.result,
+      duration:      0,
+      needsApproval: false,
+    })),
+  }))
+}
 
 // ─── Stop Condition Combinators ──────────────────────────
 
@@ -369,11 +397,14 @@ function buildMiddlewareConfig(messages: AiMessage[], a: Agent): import('./types
 // ─── Agent Loop (non-streaming) ──────────────────────────
 
 async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+  const loopStart = performance.now()
   const modelString = a.model() ?? AiRegistry.getDefault()
+  const [providerName] = AiRegistry.parseModelString(modelString)
   const tools = getTools(a)
   const middlewares = getMiddleware(a)
   const toolSchemas = buildToolSchemas(tools)
   const toolMap = buildToolMap(tools)
+  let failoverAttempts = 0
 
   const messages: AiMessage[] = options?.messages
     ? [{ role: 'system', content: a.instructions() }, ...options.messages]
@@ -471,6 +502,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
           break
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err))
+          failoverAttempts++
           if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
         }
       }
@@ -620,6 +652,29 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   } catch (err) {
     // onError
     if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
+
+    // Emit observer event on failure
+    const obs = _getAiObservers()
+    if (obs) {
+      const inputText = options?.messages ? '' : input
+      obs.emit({
+        kind:             'agent.failed',
+        agentName:        a.constructor.name,
+        model:            modelString,
+        provider:         providerName,
+        input:            inputText,
+        output:           '',
+        steps:            _buildObserverSteps(steps, modelString),
+        tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
+        duration:         Math.round(performance.now() - loopStart),
+        finishReason:     'error',
+        streaming:        false,
+        conversationId:   null,
+        failoverAttempts,
+        error:            err instanceof Error ? err.message : String(err),
+      })
+    }
+
     throw err
   }
 
@@ -636,6 +691,28 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
   if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
   if (resumedToolMessages.length > 0) result.resumedToolMessages = resumedToolMessages
+
+  // Emit observer event on success
+  const obs = _getAiObservers()
+  if (obs) {
+    const inputText = options?.messages ? '' : input
+    obs.emit({
+      kind:             'agent.completed',
+      agentName:        a.constructor.name,
+      model:            modelString,
+      provider:         providerName,
+      input:            inputText,
+      output:           result.text,
+      steps:            _buildObserverSteps(steps, modelString),
+      tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
+      duration:         Math.round(performance.now() - loopStart),
+      finishReason:     result.finishReason ?? lastStep?.finishReason ?? 'stop',
+      streaming:        false,
+      conversationId:   null,
+      failoverAttempts,
+    })
+  }
+
   return result
 }
 
@@ -646,11 +723,14 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
   const responsePromise = new Promise<AgentResponse>((resolve) => { resolveResponse = resolve })
 
   async function* generateStream(): AsyncIterable<StreamChunk> {
+    const loopStart = performance.now()
     const modelString = a.model() ?? AiRegistry.getDefault()
+    const [providerName] = AiRegistry.parseModelString(modelString)
     const tools = getTools(a)
     const middlewares = getMiddleware(a)
     const toolSchemas = buildToolSchemas(tools)
     const toolMap = buildToolMap(tools)
+    let failoverAttempts = 0
 
     const messages: AiMessage[] = options?.messages
       ? [{ role: 'system', content: a.instructions() }, ...options.messages]
@@ -746,6 +826,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
             break
           } catch (err) {
             lastError = err instanceof Error ? err : new Error(String(err))
+            failoverAttempts++
             if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
           }
         }
@@ -973,6 +1054,29 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     } catch (err) {
       // onError
       if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
+
+      // Emit observer event on failure
+      const obs = _getAiObservers()
+      if (obs) {
+        const inputText = options?.messages ? '' : input
+        obs.emit({
+          kind:             'agent.failed',
+          agentName:        a.constructor.name,
+          model:            modelString,
+          provider:         providerName,
+          input:            inputText,
+          output:           '',
+          steps:            _buildObserverSteps(steps, modelString),
+          tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
+          duration:         Math.round(performance.now() - loopStart),
+          finishReason:     'error',
+          streaming:        true,
+          conversationId:   null,
+          failoverAttempts,
+          error:            err instanceof Error ? err.message : String(err),
+        })
+      }
+
       throw err
     }
 
@@ -997,6 +1101,28 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
     if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
     if (resumedToolMessages.length > 0) result.resumedToolMessages = resumedToolMessages
+
+    // Emit observer event on success
+    const obs = _getAiObservers()
+    if (obs) {
+      const inputText = options?.messages ? '' : input
+      obs.emit({
+        kind:             'agent.completed',
+        agentName:        a.constructor.name,
+        model:            modelString,
+        provider:         providerName,
+        input:            inputText,
+        output:           result.text,
+        steps:            _buildObserverSteps(steps, modelString),
+        tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
+        duration:         Math.round(performance.now() - loopStart),
+        finishReason:     result.finishReason ?? lastStep?.finishReason ?? 'stop',
+        streaming:        true,
+        conversationId:   null,
+        failoverAttempts,
+      })
+    }
+
     resolveResponse!(result)
   }
 
