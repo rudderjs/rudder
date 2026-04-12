@@ -1,10 +1,27 @@
 import type { Authenticatable } from './contracts.js'
 import { currentAuth } from './auth-manager.js'
+import type { GateObserverRegistry } from './gate-observers.js'
+
+// Lazy accessor — reads the process-wide singleton set by gate-observers.ts.
+let _gateObs: GateObserverRegistry | null | undefined
+function _getGateObservers(): GateObserverRegistry | null {
+  if (_gateObs === undefined) {
+    _gateObs = (globalThis as Record<string, unknown>)['__rudderjs_gate_observers__'] as GateObserverRegistry | undefined ?? null
+  }
+  return _gateObs
+}
 
 // ─── Types ────────────────────────────────────────────────
 
 type AbilityCallback = (user: Authenticatable, ...args: unknown[]) => boolean | Promise<boolean>
 type BeforeCallback = (user: Authenticatable, ability: string) => boolean | null | undefined | Promise<boolean | null | undefined>
+
+/** Internal result with resolution metadata for observers. */
+interface CheckResult {
+  allowed:     boolean
+  resolvedVia: 'ability' | 'policy' | 'before' | 'default'
+  policy?:     string
+}
 
 // ─── Policy Base Class ────────────────────────────────────
 
@@ -45,8 +62,15 @@ export class Gate {
 
   static async allows(ability: string, ...args: unknown[]): Promise<boolean> {
     const user = await this.resolveUser()
-    if (!user) return false
-    return this._check(user, ability, ...args)
+    if (!user) {
+      this._emitObservation(ability, null, { allowed: false, resolvedVia: 'default' }, args, 0)
+      return false
+    }
+    const start = performance.now()
+    const result = await this._check(user, ability, ...args)
+    const duration = Math.round(performance.now() - start)
+    this._emitObservation(ability, user, result, args, duration)
+    return result.allowed
   }
 
   static async denies(ability: string, ...args: unknown[]): Promise<boolean> {
@@ -79,12 +103,12 @@ export class Gate {
     }
   }
 
-  private static async _check(user: Authenticatable, ability: string, ...args: unknown[]): Promise<boolean> {
+  private static async _check(user: Authenticatable, ability: string, ...args: unknown[]): Promise<CheckResult> {
     // Run before callbacks
     for (const cb of this._beforeCallbacks) {
       const result = await cb(user, ability)
-      if (result === true) return true
-      if (result === false) return false
+      if (result === true)  return { allowed: true,  resolvedVia: 'before' }
+      if (result === false) return { allowed: false, resolvedVia: 'before' }
     }
 
     // Check if the first arg is a model instance with a registered policy
@@ -92,14 +116,15 @@ export class Gate {
     if (model && typeof model === 'object') {
       const policyClass = this.findPolicy(model)
       if (policyClass) {
-        return this.callPolicy(policyClass, user, ability, ...args)
+        const allowed = await this.callPolicy(policyClass, user, ability, ...args)
+        return { allowed, resolvedVia: 'policy', policy: policyClass.name }
       }
     }
 
     // Fall back to defined abilities
     const callback = this._abilities.get(ability)
-    if (!callback) return false
-    return callback(user, ...args)
+    if (!callback) return { allowed: false, resolvedVia: 'default' }
+    return { allowed: await callback(user, ...args), resolvedVia: 'ability' }
   }
 
   private static findPolicy(model: unknown): PolicyClass | undefined {
@@ -140,6 +165,33 @@ export class Gate {
     return (method as (...a: unknown[]) => boolean | Promise<boolean>).call(policy, user, ...args)
   }
 
+  /** Emit an observation event to the gate observer registry (if present). */
+  private static _emitObservation(
+    ability: string,
+    user: Authenticatable | null,
+    result: CheckResult,
+    args: unknown[],
+    duration: number,
+  ): void {
+    const obs = _getGateObservers()
+    if (!obs) return
+
+    const model = args[0]
+    const modelName = model && typeof model === 'object' && 'constructor' in model
+      ? (model.constructor as { name?: string }).name
+      : undefined
+
+    obs.emit({
+      ability,
+      userId:      user ? user.getAuthIdentifier() : null,
+      allowed:     result.allowed,
+      resolvedVia: result.resolvedVia,
+      policy:      result.policy,
+      model:       modelName,
+      duration,
+    })
+  }
+
   /** @internal — reset all definitions. Used for testing. */
   static reset(): void {
     this._abilities.clear()
@@ -159,11 +211,35 @@ class GateForUser {
   ) {}
 
   async allows(ability: string, ...args: unknown[]): Promise<boolean> {
+    const start = performance.now()
+    const result = await this._check(ability, ...args)
+    const duration = Math.round(performance.now() - start)
+
+    const obs = _getGateObservers()
+    if (obs) {
+      const model = args[0]
+      const modelName = model && typeof model === 'object' && 'constructor' in model
+        ? (model.constructor as { name?: string }).name
+        : undefined
+      obs.emit({
+        ability,
+        userId:      this.user.getAuthIdentifier(),
+        allowed:     result.allowed,
+        resolvedVia: result.resolvedVia,
+        policy:      result.policy,
+        model:       modelName,
+        duration,
+      })
+    }
+    return result.allowed
+  }
+
+  private async _check(ability: string, ...args: unknown[]): Promise<CheckResult> {
     // Before callbacks
     for (const cb of this.beforeCallbacks) {
       const result = await cb(this.user, ability)
-      if (result === true) return true
-      if (result === false) return false
+      if (result === true)  return { allowed: true,  resolvedVia: 'before' }
+      if (result === false) return { allowed: false, resolvedVia: 'before' }
     }
 
     // Policy check
@@ -176,20 +252,21 @@ class GateForUser {
           const policy = new PolicyCtor()
           if (policy.before) {
             const result = await policy.before(this.user)
-            if (result === true) return true
-            if (result === false) return false
+            if (result === true)  return { allowed: true,  resolvedVia: 'before' }
+            if (result === false) return { allowed: false, resolvedVia: 'before' }
           }
           const method = (policy as Record<string, unknown>)[ability]
-          if (typeof method !== 'function') return false
-          return (method as (...a: unknown[]) => boolean | Promise<boolean>).call(policy, this.user, ...args)
+          if (typeof method !== 'function') return { allowed: false, resolvedVia: 'default' }
+          const allowed = await (method as (...a: unknown[]) => boolean | Promise<boolean>).call(policy, this.user, ...args)
+          return { allowed, resolvedVia: 'policy', policy: PolicyCtor.name }
         }
       }
     }
 
     // Ability check
     const callback = this.abilities.get(ability)
-    if (!callback) return false
-    return callback(this.user, ...args)
+    if (!callback) return { allowed: false, resolvedVia: 'default' }
+    return { allowed: await callback(this.user, ...args), resolvedVia: 'ability' }
   }
 
   async denies(ability: string, ...args: unknown[]): Promise<boolean> {

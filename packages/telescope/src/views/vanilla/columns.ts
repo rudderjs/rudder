@@ -137,6 +137,38 @@ export const pages: Record<string, PageConfig> = {
     ],
   },
 
+  http: {
+    type:  'http',
+    title: 'HTTP Client',
+    columns: [
+      { label: 'Method',   key: 'entry.content.method',                      badge: true },
+      { label: 'URL',      key: 'entry.content.url',                         mono: true, className: 'truncate max-w-md' },
+      { label: 'Status',   key: 'entry.content.status || "ERR"',            badge: true },
+      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"',     className: 'text-right' },
+    ],
+  },
+
+  gates: {
+    type:  'gate',
+    title: 'Gates',
+    columns: [
+      { label: 'Ability',  key: 'entry.content.ability',                              mono: true },
+      { label: 'Result',   key: 'entry.content.allowed ? "Allowed" : "Denied"',      badge: true },
+      { label: 'Via',      key: 'entry.content.resolvedVia',                          badge: true },
+      { label: 'Duration', key: '(entry.content.duration || 0) + "ms"',              className: 'text-right' },
+    ],
+  },
+
+  dumps: {
+    type:  'dump',
+    title: 'Dumps',
+    columns: [
+      { label: 'Method', key: 'entry.content.method',                badge: true },
+      { label: 'Args',   key: 'entry.content.count + " value(s)"' },
+      { label: 'Caller', key: 'entry.content.caller || "—"',        mono: true, className: 'truncate max-w-md text-xs' },
+    ],
+  },
+
   broadcasts: {
     type:  'broadcast',
     title: 'WebSockets',

@@ -1,9 +1,12 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { MemoryStorage, createEntry, TelescopeRegistry, Telescope, CommandCollector, BroadcastCollector, LiveCollector } from './index.js'
+import { MemoryStorage, createEntry, TelescopeRegistry, Telescope, CommandCollector, BroadcastCollector, LiveCollector, HttpCollector, GateCollector, DumpCollector } from './index.js'
 import { commandObservers } from '@rudderjs/rudder'
 import { broadcastObservers } from '@rudderjs/broadcast'
 import { liveObservers } from '@rudderjs/live'
+import { httpObservers } from '@rudderjs/http/observers'
+import { gateObservers } from '@rudderjs/auth/gate-observers'
+import { dumpObservers } from '@rudderjs/support/dump-observers'
 import type { TelescopeEntry } from './types.js'
 
 // ─── createEntry helper ───────────────────────────────────
@@ -541,5 +544,231 @@ describe('LiveCollector', () => {
     assert.equal(entries.length, 2)
     const errorEntry = entries.find(e => e.content['kind'] === 'sync.error')!
     assert.ok(errorEntry.tags.includes('error'))
+  })
+})
+
+// ─── HttpCollector ────────────────────────────────────────
+
+describe('HttpCollector', () => {
+  beforeEach(() => {
+    httpObservers.reset()
+  })
+
+  it('records a completed HTTP request', async () => {
+    const storage = new MemoryStorage()
+    const collector = new HttpCollector(storage)
+    await collector.register()
+
+    httpObservers.emit({
+      kind:       'request.completed',
+      method:     'GET',
+      url:        'https://api.example.com/users',
+      status:     200,
+      duration:   42,
+      reqHeaders: { 'accept': 'application/json' },
+      reqBody:    undefined,
+      resHeaders: { 'content-type': 'application/json' },
+      resBody:    '{"users":[]}',
+      resSize:    13,
+    })
+
+    const entries = storage.list({ type: 'http' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['method'], 'GET')
+    assert.equal(entry.content['url'], 'https://api.example.com/users')
+    assert.equal(entry.content['status'], 200)
+    assert.equal(entry.content['duration'], 42)
+    assert.ok(entry.tags.includes('kind:request.completed'))
+    assert.ok(entry.tags.includes('status:200'))
+  })
+
+  it('records a failed HTTP request with error tag', async () => {
+    const storage = new MemoryStorage()
+    const collector = new HttpCollector(storage)
+    await collector.register()
+
+    httpObservers.emit({
+      kind:       'request.failed',
+      method:     'POST',
+      url:        'https://api.example.com/timeout',
+      duration:   5000,
+      reqHeaders: { 'content-type': 'application/json' },
+      reqBody:    { name: 'test' },
+      error:      'Request timed out after 5000ms',
+    })
+
+    const entries = storage.list({ type: 'http' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['error'], 'Request timed out after 5000ms')
+    assert.ok(entry.tags.includes('error'))
+    assert.ok(entry.tags.includes('slow'))
+  })
+
+  it('tags 4xx/5xx responses as error', async () => {
+    const storage = new MemoryStorage()
+    const collector = new HttpCollector(storage)
+    await collector.register()
+
+    httpObservers.emit({
+      kind:       'request.completed',
+      method:     'GET',
+      url:        'https://api.example.com/not-found',
+      status:     404,
+      duration:   10,
+      reqHeaders: {},
+      reqBody:    undefined,
+      resHeaders: {},
+      resBody:    'Not Found',
+      resSize:    9,
+    })
+
+    const entries = storage.list({ type: 'http' }) as TelescopeEntry[]
+    assert.ok(entries[0]!.tags.includes('error'))
+    assert.ok(entries[0]!.tags.includes('status:404'))
+  })
+
+  it('redacts sensitive request headers', async () => {
+    const storage = new MemoryStorage()
+    const collector = new HttpCollector(storage, ['authorization'])
+    await collector.register()
+
+    httpObservers.emit({
+      kind:       'request.completed',
+      method:     'GET',
+      url:        'https://api.example.com/secret',
+      status:     200,
+      duration:   10,
+      reqHeaders: { 'authorization': 'Bearer secret123', 'accept': 'text/html' },
+      reqBody:    undefined,
+      resHeaders: {},
+      resBody:    'ok',
+      resSize:    2,
+    })
+
+    const entries = storage.list({ type: 'http' }) as TelescopeEntry[]
+    const headers = entries[0]!.content['reqHeaders'] as Record<string, string>
+    assert.equal(headers['authorization'], '[REDACTED]')
+    assert.equal(headers['accept'], 'text/html')
+  })
+})
+
+// ─── GateCollector ────────────────────────────────────────
+
+describe('GateCollector', () => {
+  beforeEach(() => {
+    gateObservers.reset()
+  })
+
+  it('records an allowed gate check', async () => {
+    const storage = new MemoryStorage()
+    const collector = new GateCollector(storage)
+    await collector.register()
+
+    gateObservers.emit({
+      ability:     'view-dashboard',
+      userId:      'user-1',
+      allowed:     true,
+      resolvedVia: 'ability',
+      duration:    2,
+    })
+
+    const entries = storage.list({ type: 'gate' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['ability'], 'view-dashboard')
+    assert.equal(entry.content['allowed'], true)
+    assert.equal(entry.content['resolvedVia'], 'ability')
+    assert.ok(entry.tags.includes('allowed'))
+    assert.ok(entry.tags.includes('via:ability'))
+  })
+
+  it('records a denied gate check with policy tag', async () => {
+    const storage = new MemoryStorage()
+    const collector = new GateCollector(storage)
+    await collector.register()
+
+    gateObservers.emit({
+      ability:     'delete',
+      userId:      'user-2',
+      allowed:     false,
+      resolvedVia: 'policy',
+      policy:      'PostPolicy',
+      model:       'Post',
+      duration:    5,
+    })
+
+    const entries = storage.list({ type: 'gate' }) as TelescopeEntry[]
+    const entry = entries[0]!
+    assert.ok(entry.tags.includes('denied'))
+    assert.ok(entry.tags.includes('via:policy'))
+    assert.ok(entry.tags.includes('policy:PostPolicy'))
+    assert.ok(entry.tags.includes('model:Post'))
+  })
+
+  it('tags slow gate checks', async () => {
+    const storage = new MemoryStorage()
+    const collector = new GateCollector(storage)
+    await collector.register()
+
+    gateObservers.emit({
+      ability:     'approve',
+      userId:      'user-3',
+      allowed:     true,
+      resolvedVia: 'before',
+      duration:    100,
+    })
+
+    const entries = storage.list({ type: 'gate' }) as TelescopeEntry[]
+    assert.ok(entries[0]!.tags.includes('slow'))
+  })
+})
+
+// ─── DumpCollector ────────────────────────────────────────
+
+describe('DumpCollector', () => {
+  beforeEach(() => {
+    dumpObservers.reset()
+  })
+
+  it('records a dump() call', async () => {
+    const storage = new MemoryStorage()
+    const collector = new DumpCollector(storage)
+    await collector.register()
+
+    dumpObservers.emit({
+      args:   [{ user: 'alice' }, 42],
+      method: 'dump',
+      caller: '/app/controllers/UserController.ts:25',
+    })
+
+    const entries = storage.list({ type: 'dump' }) as TelescopeEntry[]
+    assert.equal(entries.length, 1)
+    const entry = entries[0]!
+    assert.equal(entry.content['method'], 'dump')
+    assert.equal(entry.content['count'], 2)
+    assert.equal(entry.content['caller'], '/app/controllers/UserController.ts:25')
+    const args = entry.content['args'] as unknown[]
+    assert.deepEqual(args[0], { user: 'alice' })
+    assert.equal(args[1], 42)
+    assert.ok(entry.tags.includes('method:dump'))
+  })
+
+  it('records a dd() call with fatal tag', async () => {
+    const storage = new MemoryStorage()
+    const collector = new DumpCollector(storage)
+    await collector.register()
+
+    dumpObservers.emit({
+      args:   ['debug value'],
+      method: 'dd',
+    })
+
+    const entries = storage.list({ type: 'dump' }) as TelescopeEntry[]
+    const entry = entries[0]!
+    assert.equal(entry.content['method'], 'dd')
+    assert.ok(entry.tags.includes('method:dd'))
+    assert.ok(entry.tags.includes('fatal'))
   })
 })

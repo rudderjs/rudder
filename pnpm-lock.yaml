@@ -903,15 +903,24 @@ importers:
         specifier: workspace:*
         version: link:../schedule
     devDependencies:
+      '@rudderjs/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@rudderjs/broadcast':
         specifier: workspace:*
         version: link:../broadcast
+      '@rudderjs/http':
+        specifier: workspace:*
+        version: link:../http
       '@rudderjs/live':
         specifier: workspace:*
         version: link:../live
       '@rudderjs/rudder':
         specifier: workspace:*
         version: link:../rudder
+      '@rudderjs/support':
+        specifier: workspace:*
+        version: link:../support
       '@types/better-sqlite3':
         specifier: ^7.6.0
         version: 7.6.13

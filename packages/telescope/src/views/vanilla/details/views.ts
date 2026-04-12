@@ -205,6 +205,56 @@ const CommandView: ViewFn = (entry) => {
   `
 }
 
+const HttpView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const reqHeaders  = c['reqHeaders']  as Record<string, string> | undefined
+  const resHeaders  = c['resHeaders']  as Record<string, string> | undefined
+  const isFailure   = c['kind'] === 'request.failed'
+
+  return html`
+    ${Card(null, KeyValueTable({
+      Method:        Badge(c['method'] as string),
+      URL:           raw(`<span class="font-mono text-xs break-all">${escape(c['url'] as string ?? '')}</span>`),
+      Status:        isFailure ? Badge('FAILED') : Badge(String(c['status'] ?? '')),
+      Duration:      c['duration'] != null ? `${c['duration']}ms` : '—',
+      'Resp Size':   c['resSize'] != null ? `${c['resSize']} bytes` : '—',
+    }))}
+    ${reqHeaders ? Card('Request Headers', KeyValueTable(reqHeaders)) : ''}
+    ${c['reqBody'] !== undefined && c['reqBody'] !== null ? Card('Request Body', JsonBlock(c['reqBody'])) : ''}
+    ${resHeaders ? Card('Response Headers', KeyValueTable(resHeaders)) : ''}
+    ${c['resBody'] ? Card('Response Body', CodeBlock(String(c['resBody']), { maxHeight: '[400px]' })) : ''}
+    ${isFailure && c['error'] ? Card('Error', raw(`<div class="text-sm text-red-600">${escape(c['error'] as string)}</div>`)) : ''}
+  `
+}
+
+const GateView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  return html`
+    ${Card(null, KeyValueTable({
+      Ability:      raw(`<span class="font-mono text-xs">${escape(c['ability'] as string ?? '')}</span>`),
+      Result:       Badge(c['allowed'] ? 'Allowed' : 'Denied'),
+      'Resolved Via': Badge(c['resolvedVia'] as string),
+      'User ID':    c['userId'] ?? '—',
+      Duration:     c['duration'] != null ? `${c['duration']}ms` : '—',
+      Policy:       c['policy'] ?? '—',
+      Model:        c['model'] ?? '—',
+    }))}
+  `
+}
+
+const DumpView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const args = c['args'] as unknown[] | undefined
+  return html`
+    ${Card(null, KeyValueTable({
+      Method:   Badge(c['method'] as string),
+      Caller:   c['caller'] ? raw(`<span class="font-mono text-xs">${escape(c['caller'] as string)}</span>`) : '—',
+      'Arg Count': c['count'],
+    }))}
+    ${args ? args.map((arg, i) => Card(`Argument ${i + 1}`, JsonBlock(arg))).join('') : ''}
+  `
+}
+
 const BroadcastView: ViewFn = (entry) => {
   const c = entry.content as Record<string, unknown>
   const kind = String(c['kind'] ?? '')
@@ -314,6 +364,9 @@ export const detailViews: Record<string, ViewFn> = {
   schedule:     ScheduleView,
   model:        ModelView,
   command:      CommandView,
+  http:         HttpView,
+  gate:         GateView,
+  dump:         DumpView,
   broadcast:    BroadcastView,
   live:         LiveView,
 }

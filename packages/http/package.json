@@ -18,6 +18,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./observers": {
+      "import": "./dist/observers.js",
+      "types": "./dist/observers.d.ts"
     }
   },
   "scripts": {

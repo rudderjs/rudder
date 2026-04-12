@@ -14,6 +14,9 @@ import { ModelCollector } from './collectors/model.js'
 import { CommandCollector } from './collectors/command.js'
 import { BroadcastCollector } from './collectors/broadcast.js'
 import { LiveCollector } from './collectors/live.js'
+import { HttpCollector } from './collectors/http.js'
+import { GateCollector } from './collectors/gate.js'
+import { DumpCollector } from './collectors/dump.js'
 import { registerTelescopeRoutes } from './routes.js'
 import { defaultConfig, type TelescopeConfig, type TelescopeStorage, type TelescopeEntry, type EntryType, type Collector, type ListOptions } from './types.js'
 
@@ -35,6 +38,9 @@ export { ModelCollector } from './collectors/model.js'
 export { CommandCollector } from './collectors/command.js'
 export { BroadcastCollector } from './collectors/broadcast.js'
 export { LiveCollector } from './collectors/live.js'
+export { HttpCollector } from './collectors/http.js'
+export { GateCollector } from './collectors/gate.js'
+export { DumpCollector } from './collectors/dump.js'
 
 // ─── Telescope Registry ────────────────────────────────────
 
@@ -123,9 +129,14 @@ export class TelescopeProvider extends ServiceProvider {
     recordCommands:      merged.recordCommands      ?? defaultConfig.recordCommands,
     recordBroadcasts:    merged.recordBroadcasts    ?? defaultConfig.recordBroadcasts,
     recordLive:          merged.recordLive          ?? defaultConfig.recordLive,
+    recordHttp:          merged.recordHttp          ?? defaultConfig.recordHttp,
+    recordGate:          merged.recordGate          ?? defaultConfig.recordGate,
+    recordDumps:         merged.recordDumps         ?? defaultConfig.recordDumps,
     liveAwarenessSampleMs: merged.liveAwarenessSampleMs ?? defaultConfig.liveAwarenessSampleMs,
     ignoreRequests:      merged.ignoreRequests      ?? defaultConfig.ignoreRequests,
     slowQueryThreshold:  merged.slowQueryThreshold  ?? defaultConfig.slowQueryThreshold,
+    hideRequestHeaders:  merged.hideRequestHeaders  ?? defaultConfig.hideRequestHeaders,
+    hideRequestFields:   merged.hideRequestFields   ?? defaultConfig.hideRequestFields,
     auth:                merged.auth                ?? defaultConfig.auth,
     }
 
@@ -173,6 +184,9 @@ export class TelescopeProvider extends ServiceProvider {
       if (resolved.recordCommands)       collectors.push(new CommandCollector(storage))
       if (resolved.recordBroadcasts)     collectors.push(new BroadcastCollector(storage))
       if (resolved.recordLive)           collectors.push(new LiveCollector(storage, resolved.liveAwarenessSampleMs))
+      if (resolved.recordHttp)           collectors.push(new HttpCollector(storage, resolved.hideRequestHeaders))
+      if (resolved.recordGate)           collectors.push(new GateCollector(storage))
+      if (resolved.recordDumps)          collectors.push(new DumpCollector(storage))
 
       for (const collector of collectors) {
         await collector.register()

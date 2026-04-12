@@ -1,3 +1,15 @@
+import type { HttpObserverRegistry } from './observers.js'
+
+// Lazy accessor — reads the process-wide singleton set by observers.ts.
+// Avoids importing observers.ts at module load (no cost when telescope is off).
+let _httpObs: HttpObserverRegistry | null | undefined
+function _getHttpObservers(): HttpObserverRegistry | null {
+  if (_httpObs === undefined) {
+    _httpObs = (globalThis as Record<string, unknown>)['__rudderjs_http_observers__'] as HttpObserverRegistry | undefined ?? null
+  }
+  return _httpObs
+}
+
 // ─── Types ─────────────────────────────────────────────────
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
@@ -236,6 +248,7 @@ export class PendingRequest {
     // Real fetch with retries
     let attempt = 0
     const maxAttempts = pending._retries + 1
+    const start = performance.now()
 
     while (true) {
       try {
@@ -243,10 +256,45 @@ export class PendingRequest {
         for (const interceptor of pending._resInterceptors) {
           res = await interceptor(res)
         }
+
+        // Emit to observer registry (telescope) if present
+        const obs = _getHttpObservers()
+        if (obs) {
+          const duration = Math.round(performance.now() - start)
+          obs.emit({
+            kind:       'request.completed',
+            method,
+            url:        fullUrl,
+            status:     res.status,
+            duration,
+            reqHeaders: (init.headers ?? {}) as Record<string, string>,
+            reqBody:    pending._body,
+            resHeaders: res.headers,
+            resBody:    res.body.slice(0, 65_536),
+            resSize:    res.body.length,
+          })
+        }
+
         return res
       } catch (err) {
         attempt++
-        if (attempt >= maxAttempts) throw err
+        if (attempt >= maxAttempts) {
+          // Emit failure to observer registry
+          const obs = _getHttpObservers()
+          if (obs) {
+            const duration = Math.round(performance.now() - start)
+            obs.emit({
+              kind:       'request.failed',
+              method,
+              url:        fullUrl,
+              duration,
+              reqHeaders: (init.headers ?? {}) as Record<string, string>,
+              reqBody:    pending._body,
+              error:      err instanceof Error ? err.message : String(err),
+            })
+          }
+          throw err
+        }
         await _sleep(pending._retryDelay * attempt)
       }
     }

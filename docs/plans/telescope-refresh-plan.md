@@ -1,9 +1,35 @@
 ---
-status: draft
+status: done
 created: 2026-04-12
+completed: 2026-04-12
 ---
 
 # Plan: Telescope Refresh — Architecture Migration + Laravel Parity + Real-Time Differentiators
+
+## Status — DONE (All phases), 2026-04-12
+
+Phases 1–3.2 shipped in session 1. Phase 3.3 (HttpClient, Gate, Dump) shipped in session 2.
+
+| Phase | What shipped |
+|---|---|
+| **Phase 1** | Architecture migration to `src/views/vanilla/` + `registerTelescopeRoutes()`. `src/ui/` deleted. Pure refactor. |
+| **Phase 2a** | Per-watcher detail pages at `/telescope/{type}/{id}` — 11 type-specific views using reusable sections (Card, KeyValueTable, JsonBlock, CodeBlock, Badge). Modal removed. |
+| **Phase 2b** | Tag pills with click-to-filter (`?tag=X`), batch grouping page at `/telescope/batches/{batchId}` with chronological timeline and ms offsets. |
+| **Phase 2c** | Auto-refresh toggle (2s polling, localStorage-persisted). Sensitive data redaction at collection time (`hideRequestHeaders`, `hideRequestFields`). |
+| **Phase 3.1** | **CommandCollector** — records every CLI invocation via `commandObservers` registry in `@rudderjs/rudder`. |
+| **Phase 3.2** | **BroadcastCollector** — full WebSocket lifecycle via `broadcastObservers` in `@rudderjs/broadcast`. 7-variant `BroadcastEvent` union. connectionId as batchId. UI labelled "WebSockets". |
+| **Phase 3.2** | **LiveCollector** — Yjs CRDT debugging via `liveObservers` in `@rudderjs/live`. 7-variant `LiveEvent` union. Awareness throttled per-(docName, clientId) at 500ms window (configurable). |
+
+**Deviations from original plan:**
+- Phase 1 did NOT introduce `html\`\`` from `@rudderjs/view` — the embedded Alpine.js `<script>` blocks have HTML-escape semantics that are wrong for JS. Phase 2 introduced a tiny inlined `_html.ts` helper instead, keeping telescope free of the Vike peer dep.
+- View files live at `src/views/vanilla/` (inside `src/`) instead of `views/vanilla/` (package root) because they're compiled as part of telescope's build, unlike auth's vendored views which are raw source files for consumers.
+- Phase 3.1 "Batches index page" (top-level batch list) was deferred — the per-batch detail page from Phase 2b covers the main use case.
+
+**Final entry type count: 14** (request, query, job, exception, log, mail, notification, event, cache, schedule, model, command, broadcast, live)
+
+**Final test count: 37/37** telescope, 26/26 broadcast, 45/45 live, 89/89 CLI — no regressions.
+
+---
 
 ## Overview
 

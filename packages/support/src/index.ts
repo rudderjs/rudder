@@ -43,14 +43,43 @@ export function env(key: string, fallback?: string): string {
 
 // ─── Debug Helpers ─────────────────────────────────────────
 
+import type { DumpObserverRegistry } from './dump-observers.js'
+
+// Lazy accessor — reads the process-wide singleton set by dump-observers.ts.
+let _dumpObs: DumpObserverRegistry | null | undefined
+function _getDumpObservers(): DumpObserverRegistry | null {
+  if (_dumpObs === undefined) {
+    _dumpObs = (globalThis as Record<string, unknown>)['__rudderjs_dump_observers__'] as DumpObserverRegistry | undefined ?? null
+  }
+  return _dumpObs
+}
+
+/** Extract caller file:line from stack trace (best-effort). */
+function _getCaller(): string | undefined {
+  const stack = new Error().stack
+  if (!stack) return undefined
+  // Skip frames: Error, _getCaller, dump/dd
+  const lines = stack.split('\n')
+  const frame = lines[3]
+  if (!frame) return undefined
+  const match = frame.match(/\((.+)\)/) ?? frame.match(/at\s+(.+)/)
+  return match?.[1]?.trim()
+}
+
 export function dump(...args: unknown[]): void {
+  const obs = _getDumpObservers()
+  if (obs) obs.emit({ args, method: 'dump', caller: _getCaller() })
   for (const arg of args) {
     console.log(JSON.stringify(arg, null, 2))
   }
 }
 
 export function dd(...args: unknown[]): never {
-  dump(...args)
+  const obs = _getDumpObservers()
+  if (obs) obs.emit({ args, method: 'dd', caller: _getCaller() })
+  for (const arg of args) {
+    console.log(JSON.stringify(arg, null, 2))
+  }
   process.exit(1)
 }
 
