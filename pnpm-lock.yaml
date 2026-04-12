@@ -1031,6 +1031,9 @@ importers:
       '@rudderjs/horizon':
         specifier: workspace:*
         version: link:../packages/horizon
+      '@rudderjs/http':
+        specifier: workspace:*
+        version: link:../packages/http
       '@rudderjs/image':
         specifier: workspace:*
         version: link:../packages/image

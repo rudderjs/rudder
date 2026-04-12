@@ -20,27 +20,42 @@ const RequestView: ViewFn = (entry) => {
   const body            = c['body']
   const session         = c['session']         as Record<string, unknown> | undefined
   const user            = c['user']            as Record<string, unknown> | undefined
+  const controller      = c['controller']      as string | undefined
+  const middlewareList   = c['middleware']       as string[] | undefined
+  const view            = c['view']            as { id: string; props: string[] } | undefined
   // Status badge with color based on status code
   const status = c['status'] as number | undefined
   const statusBadge = status
     ? raw(`<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor(status)}">${status}</span>`)
     : raw('<span class="text-gray-300">—</span>')
 
+  // Build the details table — only include fields that have values
+  const details: Record<string, unknown> = {
+    Method:         Badge(c['method'] as string),
+    Path:           raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
+  }
+  if (controller) details['Controller Action'] = controller
+  if (middlewareList && middlewareList.length > 0) details['Middleware'] = middlewareList.join(', ')
+  Object.assign(details, {
+    Status:         statusBadge,
+    Duration:       c['duration'] != null ? `${c['duration']}ms` : '—',
+    Hostname:       c['hostname'],
+    'IP Address':   c['ip'],
+    'User-Agent':   c['userAgent'],
+  })
+
   return html`
-    ${Card('Request Details', KeyValueTable({
-      Method:         Badge(c['method'] as string),
-      Path:           raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
-      Status:         statusBadge,
-      Duration:       c['duration'] != null ? `${c['duration']}ms` : '—',
-      Hostname:       c['hostname'],
-      'IP Address':   c['ip'],
-      'User-Agent':   c['userAgent'],
-    }))}
+    ${Card('Request Details', KeyValueTable(details))}
 
     ${user ? Card('Authenticated User', KeyValueTable({
       ID:              user['id'],
       Name:            user['name'],
       'Email Address': user['email'],
+    })) : ''}
+
+    ${view ? Card('View', KeyValueTable({
+      ID:    view.id,
+      Props: view.props.length > 0 ? view.props.join(', ') : '(none)',
     })) : ''}
 
     ${headers ? Card('Request Headers', KeyValueTable(headers)) : ''}
