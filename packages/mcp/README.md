@@ -88,6 +88,70 @@ export class DescribeWeatherPrompt extends McpPrompt {
 }
 ```
 
+## Output Schemas
+
+Tools can declare an output schema to advertise the structure of their response:
+
+```ts
+@Description('Get current weather data.')
+export class CurrentWeatherTool extends McpTool {
+  schema() {
+    return z.object({ location: z.string() })
+  }
+
+  outputSchema() {
+    return z.object({
+      temperature: z.number(),
+      conditions: z.string(),
+      humidity: z.number(),
+    })
+  }
+
+  async handle(input: Record<string, unknown>) {
+    return McpResponse.json({ temperature: 22, conditions: 'sunny', humidity: 45 })
+  }
+}
+```
+
+## Resource URI Templates
+
+Resources can use `{param}` placeholders for dynamic data:
+
+```ts
+@Description('Weather data for a specific city')
+export class CityWeatherResource extends McpResource {
+  uri() { return 'weather://city/{name}' }
+
+  async handle(params?: Record<string, string>) {
+    const city = params?.name ?? 'unknown'
+    return `Weather in ${city}: sunny, 22°C`
+  }
+}
+```
+
+Template resources are automatically registered via `ListResourceTemplates`. Parameters are extracted from the URI and passed to `handle()`.
+
+## Dependency Injection
+
+When running inside a RudderJS app, tool/resource/prompt classes are resolved via the DI container — constructor dependencies are auto-injected:
+
+```ts
+@Injectable()
+@Description('Query the database')
+export class DbQueryTool extends McpTool {
+  constructor(private db: DatabaseService) { super() }
+
+  schema() { return z.object({ query: z.string() }) }
+
+  async handle(input: Record<string, unknown>) {
+    const result = await this.db.query(input.query as string)
+    return McpResponse.json(result)
+  }
+}
+```
+
+Falls back to plain `new T()` when the DI container is not available.
+
 ## Registration
 
 ```ts
@@ -97,6 +161,10 @@ import { WeatherServer } from '../app/Mcp/Servers/WeatherServer.js'
 
 // HTTP endpoint (Streamable HTTP transport)
 Mcp.web('/mcp/weather', WeatherServer)
+
+// With middleware (auth, rate limiting, etc.)
+Mcp.web('/mcp/weather', WeatherServer)
+  .middleware([authMiddleware])
 
 // Local CLI command (stdio transport)
 Mcp.local('weather', WeatherServer)
