@@ -166,6 +166,24 @@ lsof -ti :24678 -ti :3000 | xargs kill -9
 cd playground && pnpm dev
 ```
 
+### Dev Hot Reloading
+
+`@rudderjs/vite` includes three plugins that handle dev-time reloading:
+
+| Plugin | Watches | Mechanism |
+|---|---|---|
+| `rudderjs:routes` | `routes/`, `bootstrap/` | Clears `__rudderjs_instance__` + `__rudderjs_app__` singletons, invalidates all SSR modules, sends `full-reload` to browser |
+| `views-scanner` | `app/Views/` | Regenerates Vike page stubs (`pages/__view/`) and triggers Vike HMR |
+| `rudderjs:ws` | — | Patches WebSocket upgrade on Vite's HTTP server for broadcast/live |
+
+**Why route files need special handling:** `withRouting({ web: () => import('../routes/web.ts') })` uses lazy dynamic imports stored in closures — Vite never adds them to its SSR module graph, so changes are invisible to HMR. The `rudderjs:routes` plugin explicitly watches these directories and triggers a clean re-bootstrap.
+
+**Why `server.restart()` doesn't work:** it closes the Vite module runner, breaking any in-flight SSR request that references the old RudderJS instance. SSR module graph invalidation is the correct approach — the runner stays alive, and the next request re-executes `bootstrap/app.ts` which creates a fresh instance.
+
+**What auto-reloads vs. what doesn't:**
+- **Auto-reloads:** Views (`app/Views/`), route files (`routes/`), bootstrap files (`bootstrap/`), controllers/models/middleware (tracked by Vite's SSR module graph)
+- **Requires `pnpm build`:** Changes to framework packages in `packages/` (they compile to `dist/`)
+
 ---
 
 ## Application Folder Structure (User's App)
@@ -314,7 +332,7 @@ RudderJS Framework
 │    └── create-rudder-app          Interactive project scaffolder
 │
 └─── Build
-     └── @rudderjs/vite               Vike integration, SSR externals, WS patch
+     └── @rudderjs/vite               Vike integration, SSR externals, WS patch, route watcher
 ```
 
 **Clean DAG — no cycles**: `@rudderjs/contracts` holds all shared types. `@rudderjs/router` and `@rudderjs/server-hono` depend only on contracts, not on core. `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer`. Never add `@rudderjs/core` to router's dependencies.

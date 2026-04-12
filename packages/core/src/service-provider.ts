@@ -23,10 +23,10 @@ export interface PublishGroup {
 
 const _g = globalThis as Record<string, unknown>
 const _key = '__rudderjs_publish_registry__'
-if (!_g[_key]) _g[_key] = new Map<string, PublishGroup[]>()
 
 /** @internal — read by the vendor:publish rudder command */
 export function getPublishGroups(): Map<string, PublishGroup[]> {
+  if (!_g[_key]) _g[_key] = new Map<string, PublishGroup[]>()
   return _g[_key] as Map<string, PublishGroup[]>
 }
 
