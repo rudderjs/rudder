@@ -1,6 +1,7 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
 import { redactHeaders } from '../redact.js'
+import { batchOpts } from '../batch-context.js'
 
 interface HttpEvent {
   kind: string
@@ -76,6 +77,6 @@ export class HttpCollector implements Collector {
       content['error'] = event.error
     }
 
-    this.storage.store(createEntry('http', content, { tags }))
+    this.storage.store(createEntry('http', content, { tags, ...batchOpts() }))
   }
 }

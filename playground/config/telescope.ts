@@ -2,7 +2,7 @@ import { Env } from '@rudderjs/core'
 import type { TelescopeConfig } from '@rudderjs/telescope'
 
 export default {
-  enabled:            Env.getBool('TELESCOPE_ENABLED', true),
+  enabled:            true,
   path:               'telescope',
   storage:            'memory',
   pruneAfterHours:    24,

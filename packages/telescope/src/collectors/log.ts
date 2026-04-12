@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records log entries by hooking into @rudderjs/log's listener API.
@@ -33,7 +34,7 @@ export class LogCollector implements Collector {
       context:   entry.context,
       channel:   entry.channel,
       timestamp: entry.timestamp.toISOString(),
-    }, { tags }))
+    }, { tags, ...batchOpts() }))
   }
 }
 

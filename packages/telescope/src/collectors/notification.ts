@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records notification dispatches by wrapping the ChannelRegistry's get method.
@@ -33,7 +34,7 @@ export class NotificationCollector implements Collector {
               class:      notif.constructor.name,
               channel:    name,
               notifiable: n['id'] ?? (notifiable as { constructor: { name: string } }).constructor.name,
-            }, { tags: [`notification:${notif.constructor.name}`, `channel:${name}`] }))
+            }, { tags: [`notification:${notif.constructor.name}`, `channel:${name}`], ...batchOpts() }))
           },
         } as NotificationChannel
       }

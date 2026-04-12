@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records dispatched events by registering a wildcard ('*') listener.
@@ -37,6 +38,6 @@ export class EventCollector implements Collector {
       payload: event && typeof event === 'object'
         ? JSON.parse(JSON.stringify(event))
         : { value: event },
-    }, { tags: [`event:${name}`] }))
+    }, { tags: [`event:${name}`], ...batchOpts() }))
   }
 }

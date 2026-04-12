@@ -14,6 +14,9 @@ type PrismaClient = {
   $disconnect(): Promise<void>
   [table: string]: PrismaModelDelegate | ((...args: unknown[]) => unknown)
 }
+type PrismaClientWithEvents = PrismaClient & {
+  $on(event: string, listener: (e: unknown) => void): void
+}
 
 import type {
   OrmAdapter,
@@ -266,6 +269,8 @@ class PrismaAdapter implements OrmAdapter {
         ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
       ) as PrismaClientConstructor
     }
+    // Enable query event logging so telescope's QueryCollector can capture queries
+    opts['log'] = [{ emit: 'event', level: 'query' }]
     return new PrismaAdapter(new PC(opts))
   }
 
@@ -279,6 +284,27 @@ class PrismaAdapter implements OrmAdapter {
 
   async disconnect(): Promise<void> {
     await this.prisma.$disconnect()
+  }
+
+  /**
+   * Register a query listener. Used by telescope's QueryCollector.
+   * Hooks into Prisma's `$on('query', ...)` event if available.
+   */
+  onQuery(listener: (info: { sql: string; bindings: unknown[]; duration: number; connection?: string | undefined; model?: string | undefined }) => void): void {
+    const client = this.prisma as Partial<PrismaClientWithEvents>
+    if (!client.$on) return
+    client.$on('query', (event: unknown) => {
+      const e = event as { query?: string; params?: string; duration?: number }
+      let bindings: unknown[] = []
+      if (e.params) {
+        try { bindings = JSON.parse(e.params) as unknown[] } catch { /* ignore */ }
+      }
+      listener({
+        sql:      e.query ?? '',
+        bindings,
+        duration: e.duration ?? 0,
+      })
+    })
   }
 }
 

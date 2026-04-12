@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage, TelescopeConfig } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records database queries by hooking into the ORM's query logging.
@@ -28,17 +29,18 @@ export class QueryCollector implements Collector {
       const threshold = this.config.slowQueryThreshold ?? 100
 
       adapter.onQuery((info: QueryInfo) => {
+        const duration = Math.round(info.duration * 100) / 100
         const tags: string[] = []
-        if (info.duration > threshold) tags.push('slow')
+        if (duration > threshold) tags.push('slow')
         if (info.model) tags.push(`model:${info.model}`)
 
         storage.store(createEntry('query', {
           sql:        info.sql,
           bindings:   info.bindings,
-          duration:   info.duration,
+          duration,
           connection: info.connection,
           model:      info.model,
-        }, { tags }))
+        }, { tags, ...batchOpts() }))
       })
     } catch {
       // @rudderjs/orm not installed or adapter doesn't support onQuery — skip

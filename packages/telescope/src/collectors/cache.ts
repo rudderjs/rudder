@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records cache operations by wrapping the CacheRegistry adapter methods.
@@ -27,23 +28,23 @@ export class CacheCollector implements Collector {
       original.get = async <T = unknown>(key: string): Promise<T | null> => {
         const value = await (origGet as (key: string) => Promise<T | null>)(key)
         const op = value !== null ? 'hit' : 'miss'
-        storage.store(createEntry('cache', { key, operation: op }, { tags: [`cache:${op}`] }))
+        storage.store(createEntry('cache', { key, operation: op }, { tags: [`cache:${op}`], ...batchOpts() }))
         return value
       }
 
       original.set = async (key: string, value: unknown, ttl?: number): Promise<void> => {
         await (origSet as (key: string, value: unknown, ttl?: number) => Promise<void>)(key, value, ttl)
-        storage.store(createEntry('cache', { key, operation: 'set', ttl }, { tags: ['cache:set'] }))
+        storage.store(createEntry('cache', { key, operation: 'set', ttl }, { tags: ['cache:set'], ...batchOpts() }))
       }
 
       original.forget = async (key: string): Promise<void> => {
         await (origForget as (key: string) => Promise<void>)(key)
-        storage.store(createEntry('cache', { key, operation: 'forget' }, { tags: ['cache:forget'] }))
+        storage.store(createEntry('cache', { key, operation: 'forget' }, { tags: ['cache:forget'], ...batchOpts() }))
       }
 
       original.flush = async (): Promise<void> => {
         await (origFlush as () => Promise<void>)()
-        storage.store(createEntry('cache', { operation: 'flush' }, { tags: ['cache:flush'] }))
+        storage.store(createEntry('cache', { operation: 'flush' }, { tags: ['cache:flush'], ...batchOpts() }))
       }
     } catch {
       // @rudderjs/cache not installed — skip

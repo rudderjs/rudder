@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records mail sends by wrapping the MailRegistry adapter's send method.
@@ -34,7 +35,7 @@ export class MailCollector implements Collector {
           to:      opt['to'] ?? [],
           subject: m['subject'] ?? '',
           queued:  false,
-        }, { tags: [`mail:${m.constructor.name}`] }))
+        }, { tags: [`mail:${m.constructor.name}`], ...batchOpts() }))
       }
     } catch {
       // @rudderjs/mail not installed — skip

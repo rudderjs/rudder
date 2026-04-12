@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 /**
  * Records queue job dispatches by wrapping the QueueRegistry adapter's dispatch method.
@@ -32,7 +33,7 @@ export class JobCollector implements Collector {
             status:   'dispatched',
             duration,
             payload:  JSON.parse(JSON.stringify(job)),
-          }, { tags: [`job:${j.constructor.name}`, 'status:dispatched'] }))
+          }, { tags: [`job:${j.constructor.name}`, 'status:dispatched'], ...batchOpts() }))
         } catch (err) {
           const duration = Date.now() - start
           storage.store(createEntry('job', {
@@ -41,7 +42,7 @@ export class JobCollector implements Collector {
             status:    'failed',
             duration,
             exception: err instanceof Error ? err.message : String(err),
-          }, { tags: [`job:${j.constructor.name}`, 'status:failed'] }))
+          }, { tags: [`job:${j.constructor.name}`, 'status:failed'], ...batchOpts() }))
           throw err
         }
       }

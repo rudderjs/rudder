@@ -46,3 +46,66 @@ Route.get('/session/demo', (req, res) => {
   req.session.put('visits', (req.session.get<number>('visits') ?? 0) + 1)
   res.json({ visits: req.session.get('visits') })
 }, webMw)
+
+// GET /test/queries — fires a few ORM queries for telescope testing
+Route.get('/test/queries', async (_req, res) => {
+  const { User } = await import('../app/Models/User.js')
+  const users = await User.all()
+  res.json({ total: users.length })
+})
+
+// GET /test/logs — fires log messages for telescope testing
+Route.get('/test/logs', async (_req, res) => {
+  const { Log } = await import('@rudderjs/log')
+  Log.info('User visited the test page')
+  Log.warning('Disk space running low', { usage: '89%' })
+  Log.error('Payment gateway timeout', { provider: 'stripe', duration: 5000 })
+  Log.debug('Cache key resolved', { key: 'users:all', hit: true })
+  res.json({ logged: 4 })
+})
+
+// GET /test/exception — throws an exception for telescope testing
+Route.get('/test/exception', async () => {
+  throw new Error('Test exception from /test/exception route')
+})
+
+// GET /test/mail — sends a test email for telescope testing
+Route.get('/test/mail', async (_req, res) => {
+  const { Mail } = await import('@rudderjs/mail')
+  const { Mailable } = await import('@rudderjs/mail')
+
+  class TestMail extends Mailable {
+    build() {
+      return this
+        .subject('Telescope Test Email')
+        .html('<h1>Hello from Telescope!</h1><p>This is a test email.</p>')
+        .text('Hello from Telescope! This is a test email.')
+    }
+  }
+
+  await Mail.to('test@example.com').send(new TestMail())
+  res.json({ sent: true })
+})
+
+// GET /test/notification — dispatches a test notification for telescope testing
+Route.get('/test/notification', async (_req, res) => {
+  const { Notification } = await import('@rudderjs/notification')
+  await Notification.send({ id: 'user-1', email: 'test@example.com' }, {
+    via: ['mail'],
+    toMail: () => ({
+      subject: 'Telescope Test Notification',
+      html: '<p>You have a new notification!</p>',
+    }),
+  })
+  res.json({ notified: true })
+})
+
+// GET /test/cache — fires cache operations for telescope testing
+Route.get('/test/cache', async (_req, res) => {
+  const { Cache } = await import('@rudderjs/cache')
+  await Cache.set('test:greeting', 'Hello from telescope!', 60)
+  const hit = await Cache.get<string>('test:greeting')
+  const miss = await Cache.get<string>('test:nonexistent')
+  await Cache.forget('test:greeting')
+  res.json({ hit, miss })
+})

@@ -2,6 +2,7 @@ import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import type { Collector, TelescopeStorage, TelescopeConfig } from '../types.js'
 import { createEntry } from '../storage.js'
 import { redactHeaders, redactFields } from '../redact.js'
+import { setBatchId } from '../batch-context.js'
 
 const DEFAULT_HIDE_HEADERS = ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key']
 const DEFAULT_HIDE_FIELDS  = ['password', 'password_confirmation', 'token', 'secret']
@@ -44,7 +45,13 @@ export class RequestCollector implements Collector {
       // Stash batchId on the raw request for other collectors to correlate
       ;(req as unknown as Record<string, unknown>)['__telescopeBatchId'] = batchId
 
-      await next()
+      // Set batch context so collectors (query, cache, model) can correlate
+      setBatchId(batchId)
+      try {
+        await next()
+      } finally {
+        setBatchId(null)
+      }
 
       const duration = Date.now() - start
       const tags: string[] = []

@@ -1,5 +1,6 @@
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
+import { batchOpts } from '../batch-context.js'
 
 interface GateEvent {
   ability:     string
@@ -53,6 +54,6 @@ export class GateCollector implements Collector {
       policy:      event.policy,
       model:       event.model,
       duration:    event.duration,
-    }, { tags }))
+    }, { tags, ...batchOpts() }))
   }
 }
