@@ -505,7 +505,7 @@ const svc = resolve<UserService>(UserService)
 ### Monitoring
 | Package | Description |
 |---|---|
-| `@rudderjs/telescope` | Development inspector — records requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, model changes |
+| `@rudderjs/telescope` | Development inspector — 17 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, dumps, WebSocket lifecycle, Yjs CRDT events |
 | `@rudderjs/pulse` | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
 | `@rudderjs/horizon` | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
 
