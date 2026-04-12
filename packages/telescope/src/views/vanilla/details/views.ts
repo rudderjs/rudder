@@ -15,8 +15,11 @@ type ViewFn = (entry: TelescopeEntry) => SafeString
 
 const RequestView: ViewFn = (entry) => {
   const c = entry.content as Record<string, unknown>
-  const headers   = c['headers']   as Record<string, string> | undefined
-  const body      = c['body']
+  const headers         = c['headers']         as Record<string, string> | undefined
+  const responseHeaders = c['responseHeaders'] as Record<string, string> | undefined
+  const body            = c['body']
+  const session         = c['session']         as Record<string, unknown> | undefined
+  const memory          = c['memory']          as number | undefined
 
   // Status badge with color based on status code
   const status = c['status'] as number | undefined
@@ -26,17 +29,20 @@ const RequestView: ViewFn = (entry) => {
 
   return html`
     ${Card('Request Details', KeyValueTable({
-      Method:       Badge(c['method'] as string),
-      Path:         raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
-      Status:       statusBadge,
-      Duration:     c['duration'] != null ? `${c['duration']}ms` : '—',
-      Hostname:     c['hostname'],
-      'IP Address': c['ip'],
-      'User-Agent': c['userAgent'],
+      Method:         Badge(c['method'] as string),
+      Path:           raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
+      Status:         statusBadge,
+      Duration:       c['duration'] != null ? `${c['duration']}ms` : '—',
+      Hostname:       c['hostname'],
+      'IP Address':   c['ip'],
+      'Memory Usage': memory != null ? `${memory} MB` : '—',
+      'User-Agent':   c['userAgent'],
     }))}
 
     ${headers ? Card('Request Headers', KeyValueTable(headers)) : ''}
     ${body !== undefined && body !== null && body !== '' ? Card('Request Body', JsonBlock(body)) : ''}
+    ${responseHeaders && Object.keys(responseHeaders).length > 0 ? Card('Response Headers', KeyValueTable(responseHeaders)) : ''}
+    ${session && Object.keys(session).length > 0 ? Card('Session', JsonBlock(session)) : ''}
   `
 }
 

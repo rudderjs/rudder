@@ -69,6 +69,28 @@ export class RequestCollector implements Collector {
       const userAgent = headers['user-agent'] as string | undefined
       const hostname  = headers['host'] as string | undefined
 
+      // Response headers — Hono stores the final Response on c.res after handler runs
+      let responseHeaders: Record<string, string> | undefined
+      try {
+        const c = res.raw as { res?: Response } | undefined
+        if (c?.res) {
+          responseHeaders = {}
+          c.res.headers.forEach((v, k) => { responseHeaders![k] = v })
+          responseHeaders = redactHeaders(responseHeaders, hideHeaders) as Record<string, string> | undefined
+        }
+      } catch { /* ignore — non-Hono adapters may not expose c.res */ }
+
+      // Session data — read from the SessionInstance if middleware attached one
+      let sessionData: Record<string, unknown> | undefined
+      try {
+        const rawReq = req.raw as Record<string, unknown> | undefined
+        const session = rawReq?.['__rjs_session'] as { all(): Record<string, unknown> } | undefined
+        if (session) sessionData = redactFields(session.all(), hideFields) as Record<string, unknown>
+      } catch { /* session middleware may not be installed */ }
+
+      // Memory usage
+      const memory = process.memoryUsage()
+
       const entry = createEntry('request', {
         method:    req.method,
         url:       req.url,
@@ -82,6 +104,9 @@ export class RequestCollector implements Collector {
         ip,
         userAgent,
         hostname,
+        responseHeaders,
+        session:   sessionData,
+        memory:    Math.round(memory.heapUsed / 1024 / 1024 * 100) / 100,
       }, { batchId, tags })
 
       storage.store(entry)
