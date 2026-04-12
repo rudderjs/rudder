@@ -88,9 +88,6 @@ export class RequestCollector implements Collector {
         if (session) sessionData = redactFields(session.all(), hideFields) as Record<string, unknown>
       } catch { /* session middleware may not be installed */ }
 
-      // Memory usage
-      const memory = process.memoryUsage()
-
       const entry = createEntry('request', {
         method:    req.method,
         url:       req.url,
@@ -106,7 +103,6 @@ export class RequestCollector implements Collector {
         hostname,
         responseHeaders,
         session:   sessionData,
-        memory:    Math.round(memory.heapUsed / 1024 / 1024 * 100) / 100,
       }, { batchId, tags })
 
       storage.store(entry)

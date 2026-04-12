@@ -19,8 +19,6 @@ const RequestView: ViewFn = (entry) => {
   const responseHeaders = c['responseHeaders'] as Record<string, string> | undefined
   const body            = c['body']
   const session         = c['session']         as Record<string, unknown> | undefined
-  const memory          = c['memory']          as number | undefined
-
   // Status badge with color based on status code
   const status = c['status'] as number | undefined
   const statusBadge = status
@@ -35,7 +33,6 @@ const RequestView: ViewFn = (entry) => {
       Duration:       c['duration'] != null ? `${c['duration']}ms` : '—',
       Hostname:       c['hostname'],
       'IP Address':   c['ip'],
-      'Memory Usage': memory != null ? `${memory} MB` : '—',
       'User-Agent':   c['userAgent'],
     }))}
 
