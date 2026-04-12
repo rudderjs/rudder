@@ -93,6 +93,23 @@ export async function prune(
   res.json({ message: 'Entries pruned.' })
 }
 
+// ─── Recording Toggle ─────────────────────────────────────
+
+export function getRecording(
+  res: AppResponse,
+): void {
+  const { TelescopeRegistry } = require('../index.js') as typeof import('../index.js')
+  res.json({ recording: TelescopeRegistry.recording })
+}
+
+export function toggleRecording(
+  res: AppResponse,
+): void {
+  const { TelescopeRegistry } = require('../index.js') as typeof import('../index.js')
+  const recording = TelescopeRegistry.toggleRecording()
+  res.json({ recording })
+}
+
 // ─── Auth Middleware ───────────────────────────────────────
 
 export function authMiddleware(config: Pick<TelescopeConfig, 'auth'>): MiddlewareHandler {

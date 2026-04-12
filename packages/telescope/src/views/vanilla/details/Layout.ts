@@ -174,8 +174,26 @@ function entrySummary(type: string, c: Record<string, unknown>): string {
 
 function formatAge(date: Date): string {
   const s = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (s < 60)    return `${s}s ago`
-  if (s < 3600)  return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return `${Math.floor(s / 86400)}d ago`
+  const relative = s < 60 ? `${s}s ago`
+    : s < 3600  ? `${Math.floor(s / 60)}m ago`
+    : s < 86400 ? `${Math.floor(s / 3600)}h ago`
+    : `${Math.floor(s / 86400)}d ago`
+
+  return `${formatFullDate(date)} (${relative})`
+}
+
+function formatFullDate(date: Date): string {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December']
+  const month = months[date.getMonth()]
+  const day = date.getDate()
+  const year = date.getFullYear()
+  const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+    : day === 2 || day === 22 ? 'nd'
+    : day === 3 || day === 23 ? 'rd' : 'th'
+  const h = date.getHours()
+  const m = date.getMinutes().toString().padStart(2, '0')
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return `${month} ${day}${suffix} ${year}, ${h12}:${m} ${ampm}`
 }

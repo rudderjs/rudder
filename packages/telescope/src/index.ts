@@ -46,11 +46,16 @@ export { DumpCollector } from './collectors/dump.js'
 
 export class TelescopeRegistry {
   private static storage: TelescopeStorage | null = null
+  private static _recording = true
 
   static set(storage: TelescopeStorage): void { this.storage = storage }
   static get(): TelescopeStorage | null        { return this.storage }
   /** @internal — clears the registered storage. Used for testing. */
   static reset(): void                         { this.storage = null }
+
+  static get recording(): boolean       { return this._recording }
+  static set recording(v: boolean)      { this._recording = v }
+  static toggleRecording(): boolean     { this._recording = !this._recording; return this._recording }
 }
 
 // ─── Telescope Facade ──────────────────────────────────────
@@ -79,6 +84,7 @@ export class Telescope {
   }
 
   static record(entry: TelescopeEntry): Promise<void> | void {
+    if (!TelescopeRegistry.recording) return
     return this.store().store(entry)
   }
 }
