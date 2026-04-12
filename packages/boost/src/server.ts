@@ -11,6 +11,7 @@ import { executeDbQuery } from './tools/db-query.js'
 import { readLogs } from './tools/read-logs.js'
 import { readBrowserLogs } from './tools/browser-logs.js'
 import { getAbsoluteUrl } from './tools/get-absolute-url.js'
+import { searchDocs } from './tools/search-docs.js'
 
 export function createBoostServer(cwd: string): McpServer {
   const server = new McpServer(
@@ -152,7 +153,102 @@ export function createBoostServer(cwd: string): McpServer {
     return { content: [{ type: 'text' as const, text: result }] }
   })
 
+  // ── guidelines resources ───────────────────────────────
+
+  registerGuidelinesResources(server, cwd)
+
+  // ── search_docs ───────────────────────────────────────
+
+  server.registerTool('search_docs', {
+    title: 'Search Docs',
+    description: 'Search local @rudderjs/* package documentation (READMEs and docs/) by keyword. Returns ranked sections.',
+    inputSchema: {
+      query: z.string().describe('Search query — keywords or phrase to find in documentation'),
+      package: z.string().optional().describe('Filter to a specific package — e.g. "orm" or "@rudderjs/orm"'),
+      limit: z.number().optional().describe('Max results to return (default 10)'),
+    },
+  }, async ({ query, package: pkg, limit }) => {
+    const results = searchDocs(cwd, query, pkg, limit)
+    if (results.length === 0) {
+      return { content: [{ type: 'text' as const, text: 'No documentation matches found.' }] }
+    }
+    return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] }
+  })
+
   return server
+}
+
+// ── Guidelines resource registration ──────────────────
+
+interface GuidelineEntry {
+  shortName: string
+  filePath: string
+}
+
+function discoverGuidelines(cwd: string): GuidelineEntry[] {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+
+  const entries: GuidelineEntry[] = []
+  const scope = path.join(cwd, 'node_modules', '@rudderjs')
+
+  if (!fs.existsSync(scope)) return entries
+
+  for (const pkg of fs.readdirSync(scope)) {
+    const guidelinePath = path.join(scope, pkg, 'boost', 'guidelines.md')
+    if (fs.existsSync(guidelinePath)) {
+      entries.push({ shortName: pkg, filePath: guidelinePath })
+    }
+  }
+
+  return entries
+}
+
+function registerGuidelinesResources(server: McpServer, cwd: string): void {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const guidelines = discoverGuidelines(cwd)
+
+  for (const g of guidelines) {
+    server.registerResource(
+      `guidelines-${g.shortName}`,
+      `guidelines://${g.shortName}`,
+      {
+        description: `AI coding guidelines for @rudderjs/${g.shortName}`,
+        mimeType: 'text/markdown',
+      },
+      async () => ({
+        contents: [{
+          uri: `guidelines://${g.shortName}`,
+          mimeType: 'text/markdown',
+          text: fs.readFileSync(g.filePath, 'utf8'),
+        }],
+      }),
+    )
+  }
+
+  // guidelines://all — concatenate all guidelines
+  server.registerResource(
+    'guidelines-all',
+    'guidelines://all',
+    {
+      description: 'All AI coding guidelines from installed @rudderjs/* packages, concatenated.',
+      mimeType: 'text/markdown',
+    },
+    async () => {
+      const allGuidelines = discoverGuidelines(cwd)
+      const parts = allGuidelines.map(g => {
+        const content = fs.readFileSync(g.filePath, 'utf8')
+        return `# @rudderjs/${g.shortName}\n\n${content}`
+      })
+      return {
+        contents: [{
+          uri: 'guidelines://all',
+          mimeType: 'text/markdown',
+          text: parts.join('\n\n---\n\n'),
+        }],
+      }
+    },
+  )
 }
 
 /**

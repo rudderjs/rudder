@@ -7,11 +7,14 @@ export { getConfigValue } from './tools/config-get.js'
 export { getRouteList } from './tools/route-list.js'
 export { getModelList } from './tools/model-list.js'
 export { getLastError } from './tools/last-error.js'
+export { searchDocs } from './tools/search-docs.js'
+export type { SearchResult } from './tools/search-docs.js'
 export { boostInstall } from './commands/install.js'
 export type { BoostInstallOptions } from './commands/install.js'
 export { boostUpdate } from './commands/update.js'
 export type { BoostAgent, SkillEntry } from './agents/types.js'
 export { builtInAgents } from './agents/index.js'
+export { Boost } from './Boost.js'
 
 /**
  * Boost service provider — registers the `boost:mcp` rudder command.

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, cpSync } from 'node:fs'
 import { join } from 'node:path'
-import { builtInAgents } from '../agents/index.js'
+import { Boost } from '../Boost.js'
 import type { SkillEntry } from '../agents/types.js'
 
 interface BoostConfig {
@@ -144,7 +144,7 @@ export async function boostUpdate(cwd: string, options?: BoostUpdateOptions): Pr
 
   // Update per-agent guideline files
   const agentNames = existing.agents ?? ['claude-code']
-  const allAgents = builtInAgents()
+  const allAgents = Boost.getAllAgents()
   let agentCount = 0
 
   for (const name of agentNames) {

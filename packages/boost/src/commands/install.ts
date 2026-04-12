@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { builtInAgents } from '../agents/index.js'
+import { Boost } from '../Boost.js'
 import type { BoostAgent, SkillEntry } from '../agents/types.js'
 
 // ─── Package Manager Detection ──────────────────────────
@@ -194,7 +194,7 @@ export async function boostInstall(cwd: string, options?: BoostInstallOptions): 
   const guidelineContent = buildGuidelineContent(guidelines)
 
   // 3. Select agents
-  const allAgents = builtInAgents()
+  const allAgents = Boost.getAllAgents()
   const selectedAgents = selectAgents(cwd, parseAgentFlag(options?.args), allAgents)
 
   if (selectedAgents.length === 0) {

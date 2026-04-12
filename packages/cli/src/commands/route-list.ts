@@ -99,8 +99,29 @@ export function routeListCommand(program: Command): void {
   program
     .command('route:list')
     .description('List all registered routes')
-    .action(async () => {
+    .option('--json', 'Output routes as JSON')
+    .action(async (opts: { json?: boolean }) => {
       const [apiRoutes, vikeRoutes] = await Promise.all([loadApiRoutes(), scanVikeRoutes()])
+
+      if (opts.json) {
+        const output = {
+          api: apiRoutes.map(r => ({
+            method: r.method,
+            path: r.path,
+            middleware: r.middleware.map(fn =>
+              (typeof fn === 'function' && fn.name) ? fn.name : String(fn)
+            ),
+          })),
+          pages: vikeRoutes.map(r => ({
+            method: 'GET',
+            path: r.route,
+            source: `pages/${r.dir}`,
+          })),
+        }
+        console.log(JSON.stringify(output, null, 2))
+        return
+      }
+
       printRoutes(apiRoutes, vikeRoutes)
     })
 }
