@@ -14,7 +14,8 @@ Install the provider SDK(s) you need:
 pnpm add @anthropic-ai/sdk   # Anthropic (Claude)
 pnpm add openai               # OpenAI (GPT)
 pnpm add @google/genai        # Google (Gemini)
-# Ollama — no extra package needed (OpenAI-compatible)
+pnpm add cohere-ai            # Cohere (reranking + embeddings)
+# Ollama, Jina — no extra package needed
 ```
 
 ## Setup
@@ -28,6 +29,8 @@ export default {
     openai:    { driver: 'openai',    apiKey: process.env.OPENAI_API_KEY! },
     google:    { driver: 'google',    apiKey: process.env.GOOGLE_API_KEY! },
     ollama:    { driver: 'ollama',    baseUrl: 'http://localhost:11434' },
+    cohere:    { driver: 'cohere',    apiKey: process.env.COHERE_API_KEY! },
+    jina:      { driver: 'jina',      apiKey: process.env.JINA_API_KEY! },
   },
 }
 
@@ -332,6 +335,29 @@ const agent = AI.agent({
 })
 ```
 
+### Reranking
+
+Reorder documents by relevance to a query — useful for RAG pipelines:
+
+```ts
+import { AI } from '@rudderjs/ai'
+
+// One-shot
+const result = await AI.rerank('search query', documents, {
+  model: 'cohere/rerank-v3.5',
+  topK: 5,
+})
+// result.results → [{ index, relevanceScore, document }, ...]
+
+// Fluent builder
+const result = await AI.rerank('how to deploy', docs)
+  .model('jina/jina-reranker-v2-base-multilingual')
+  .topK(10)
+  .rank()
+```
+
+Supported providers: **Cohere** (`cohere-ai` SDK) and **Jina** (direct HTTP, no SDK).
+
 ### Embeddings
 
 ```ts
@@ -439,19 +465,39 @@ fake.assertPrompted(input => input.includes('Hello'))
 fake.restore()
 ```
 
+Fakes cover every modality:
+
+```ts
+fake.respondWith('text')                  // text generation
+fake.respondWithImage('base64...')        // image generation
+fake.respondWithAudio(Buffer.from(''))    // TTS
+fake.respondWithTranscription('text')     // STT
+fake.respondWithEmbedding([[0.1, 0.2]])   // embeddings
+fake.respondWithRanking([                 // reranking
+  { index: 0, relevanceScore: 0.95, document: 'most relevant' },
+])
+
+// Assertions
+fake.assertPrompted()          fake.assertImageGenerated()
+fake.assertAudioGenerated()    fake.assertTranscribed()
+fake.assertEmbedded()          fake.assertReranked()
+```
+
 ## Providers
 
-| Provider | SDK | Model String | Embeddings | Images | TTS/STT |
-|---|---|---|---|---|---|
-| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` | | | |
-| OpenAI | `openai` | `openai/gpt-4o` | ✓ | ✓ | ✓ |
-| Google | `@google/genai` | `google/gemini-2.5-pro` | ✓ | ✓ | |
-| Ollama | *(none)* | `ollama/llama3` | | | |
-| Groq | *(none)* | `groq/llama-3.3-70b` | | | |
-| DeepSeek | *(none)* | `deepseek/deepseek-chat` | | | |
-| xAI | *(none)* | `xai/grok-3` | | | |
-| Mistral | *(none)* | `mistral/mistral-large` | ✓ | | |
-| Azure OpenAI | `openai` | `azure/gpt-4o` | | | |
+| Provider | SDK | Model String | Text | Embeddings | Images | TTS/STT | Reranking |
+|---|---|---|:---:|:---:|:---:|:---:|:---:|
+| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` | ✓ | | | | |
+| OpenAI | `openai` | `openai/gpt-4o` | ✓ | ✓ | ✓ | ✓ | |
+| Google | `@google/genai` | `google/gemini-2.5-pro` | ✓ | ✓ | ✓ | | |
+| Cohere | `cohere-ai` | `cohere/rerank-v3.5` | | ✓ | | | ✓ |
+| Jina | *(none)* | `jina/jina-reranker-v2-base-multilingual` | | ✓ | | | ✓ |
+| Ollama | *(none)* | `ollama/llama3` | ✓ | | | | |
+| Groq | *(none)* | `groq/llama-3.3-70b` | ✓ | | | | |
+| DeepSeek | *(none)* | `deepseek/deepseek-chat` | ✓ | | | | |
+| xAI | *(none)* | `xai/grok-3` | ✓ | | | | |
+| Mistral | *(none)* | `mistral/mistral-large` | ✓ | ✓ | | | |
+| Azure OpenAI | `openai` | `azure/gpt-4o` | ✓ | | | | |
 
 ## Notes
 
@@ -459,3 +505,4 @@ fake.restore()
 - `exactOptionalPropertyTypes` compatible
 - All adapters lazy-load their SDK on first use
 - Ollama, Groq, DeepSeek, xAI, Mistral reuse the OpenAI adapter (OpenAI-compatible API)
+- Cohere requires `cohere-ai` SDK; Jina uses direct HTTP (no SDK needed)

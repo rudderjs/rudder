@@ -1,4 +1,4 @@
-import type { AiModelConfig, ProviderFactory, ProviderAdapter } from './types.js'
+import type { AiModelConfig, ProviderFactory, ProviderAdapter, RerankingAdapter } from './types.js'
 
 export class AiRegistry {
   private static readonly factories = new Map<string, ProviderFactory>()
@@ -40,6 +40,19 @@ export class AiRegistry {
     const [providerName, model] = this.parseModelString(modelString)
     const factory = this.getFactory(providerName)
     return factory.create(model)
+  }
+
+  /** Resolve a provider/model string to a RerankingAdapter */
+  static resolveReranking(modelString: string): RerankingAdapter {
+    const [providerName, model] = this.parseModelString(modelString)
+    const factory = this.getFactory(providerName)
+    if (!factory.createReranking) {
+      throw new Error(
+        `[RudderJS AI] Provider "${providerName}" does not support reranking. ` +
+        `Use a provider that implements createReranking() (e.g. cohere, jina).`,
+      )
+    }
+    return factory.createReranking(model)
   }
 
   /** Set available models for user selection */

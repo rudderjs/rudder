@@ -167,6 +167,30 @@ export interface ProviderFactory {
   createTts?(model: string): TextToSpeechAdapter
   /** Create a speech-to-text adapter (optional) */
   createStt?(model: string): SpeechToTextAdapter
+  /** Create a reranking adapter (optional) */
+  createReranking?(model: string): RerankingAdapter
+}
+
+// ─── Reranking ───────────────────────────────────────────
+
+export interface RerankingOptions {
+  query: string
+  documents: string[]
+  model?: string | undefined
+  topK?: number | undefined
+}
+
+export interface RerankingResult {
+  results: Array<{
+    index: number
+    relevanceScore: number
+    document: string
+  }>
+  usage?: { tokens?: number | undefined } | undefined
+}
+
+export interface RerankingAdapter {
+  rerank(options: RerankingOptions): Promise<RerankingResult>
 }
 
 // ─── Audio (TTS & STT) ──────────────────────────────────

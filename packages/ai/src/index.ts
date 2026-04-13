@@ -57,6 +57,9 @@ export type {
   SpeechToTextAdapter,
   SpeechToTextOptions,
   SpeechToTextResult,
+  RerankingAdapter,
+  RerankingOptions,
+  RerankingResult,
 } from './types.js'
 
 // Registry
@@ -72,6 +75,8 @@ export { XaiProvider, type XaiConfig } from './providers/xai.js'
 export { GroqProvider, type GroqConfig } from './providers/groq.js'
 export { MistralProvider, type MistralConfig } from './providers/mistral.js'
 export { AzureOpenAIProvider, type AzureOpenAIConfig } from './providers/azure.js'
+export { CohereProvider, type CohereConfig } from './providers/cohere.js'
+export { JinaProvider, type JinaConfig } from './providers/jina.js'
 
 // Tools
 export {
@@ -116,6 +121,9 @@ export { WebSearch, WebFetch, CodeExecution } from './provider-tools.js'
 
 // Vercel AI Protocol
 export { toVercelDataStream, toVercelResponse } from './vercel-protocol.js'
+
+// Reranking
+export { Reranker } from './rerank.js'
 
 // Cached Embeddings
 export { CachedEmbeddingAdapter } from './cached-embedding.js'

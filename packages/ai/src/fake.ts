@@ -5,6 +5,8 @@ import type {
   ProviderRequestOptions,
   ProviderResponse,
   StreamChunk,
+  EmbeddingAdapter,
+  EmbeddingResult,
   ImageGenerationAdapter,
   ImageGenerationOptions,
   ImageGenerationResult,
@@ -14,6 +16,9 @@ import type {
   SpeechToTextAdapter,
   SpeechToTextOptions,
   SpeechToTextResult,
+  RerankingAdapter,
+  RerankingOptions,
+  RerankingResult,
 } from './types.js'
 
 /**
@@ -34,10 +39,14 @@ export class AiFake {
   private readonly imageCalls: ImageGenerationOptions[] = []
   private readonly ttsCalls: TextToSpeechOptions[] = []
   private readonly sttCalls: SpeechToTextOptions[] = []
+  private readonly embedCalls: Array<{ input: string | string[]; model: string }> = []
+  private readonly rerankCalls: RerankingOptions[] = []
   private _response = 'fake response'
   private _imageResponse = 'ZmFrZS1pbWFnZQ=='  // base64 of 'fake-image'
   private _ttsResponse: Buffer = Buffer.from('fake-audio')
   private _sttResponse = 'fake transcription'
+  private _embedResponse: number[][] = [[0.1, 0.2, 0.3]]
+  private _rerankResponse: RerankingResult = { results: [] }
 
   /** Set the text response the fake will return */
   respondWith(text: string): void {
@@ -57,6 +66,16 @@ export class AiFake {
   /** Set the transcription text the STT fake will return */
   respondWithTranscription(text: string): void {
     this._sttResponse = text
+  }
+
+  /** Set the embeddings the fake will return */
+  respondWithEmbedding(embeddings: number[][]): void {
+    this._embedResponse = embeddings
+  }
+
+  /** Set the reranking results the fake will return */
+  respondWithRanking(results: RerankingResult['results']): void {
+    this._rerankResponse = { results }
   }
 
   /** Install the fake — replaces all registered providers with a mock */
@@ -111,12 +130,33 @@ export class AiFake {
       },
     }
 
+    const embeddingAdapter: EmbeddingAdapter = {
+      async embed(input: string | string[], model: string): Promise<EmbeddingResult> {
+        fake.embedCalls.push({ input, model })
+        const inputs = Array.isArray(input) ? input : [input]
+        const embeddings = inputs.map((_, i) => fake._embedResponse[i % fake._embedResponse.length]!)
+        return {
+          embeddings,
+          usage: { promptTokens: 0, totalTokens: 0 },
+        }
+      },
+    }
+
+    const rerankingAdapter: RerankingAdapter = {
+      async rerank(opts: RerankingOptions): Promise<RerankingResult> {
+        fake.rerankCalls.push(opts)
+        return fake._rerankResponse
+      },
+    }
+
     const factory: ProviderFactory = {
       name: '__fake__',
       create: () => adapter,
+      createEmbedding: () => embeddingAdapter,
       createImage: () => imageAdapter,
       createTts: () => ttsAdapter,
       createStt: () => sttAdapter,
+      createReranking: () => rerankingAdapter,
     }
 
     AiRegistry.reset()
@@ -191,6 +231,34 @@ export class AiFake {
   /** Get all recorded STT calls */
   getSttCalls(): SpeechToTextOptions[] {
     return [...this.sttCalls]
+  }
+
+  /** Assert at least one embedding was made */
+  assertEmbedded(predicate?: (input: string | string[]) => boolean): void {
+    if (this.embedCalls.length === 0) throw new Error('[RudderJS AI] Expected at least one embedding, but none were made.')
+    if (predicate) {
+      const match = this.embedCalls.some(c => predicate(c.input))
+      if (!match) throw new Error('[RudderJS AI] No embedding matched the predicate.')
+    }
+  }
+
+  /** Assert at least one reranking was made */
+  assertReranked(predicate?: (opts: RerankingOptions) => boolean): void {
+    if (this.rerankCalls.length === 0) throw new Error('[RudderJS AI] Expected at least one reranking, but none were made.')
+    if (predicate) {
+      const match = this.rerankCalls.some(c => predicate(c))
+      if (!match) throw new Error('[RudderJS AI] No reranking matched the predicate.')
+    }
+  }
+
+  /** Get all recorded embedding calls */
+  getEmbedCalls(): Array<{ input: string | string[]; model: string }> {
+    return [...this.embedCalls]
+  }
+
+  /** Get all recorded reranking calls */
+  getRerankCalls(): RerankingOptions[] {
+    return [...this.rerankCalls]
   }
 
   /** Restore — clears the fake (user must re-register real providers) */

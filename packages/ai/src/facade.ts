@@ -3,9 +3,10 @@ import { agent as agentHelper } from './agent.js'
 import { ImageGenerator } from './image.js'
 import { AudioGenerator } from './audio.js'
 import { Transcription } from './transcription.js'
+import { Reranker } from './rerank.js'
 import { CachedEmbeddingAdapter } from './cached-embedding.js'
 import type { Agent } from './agent.js'
-import type { AgentResponse, AnyTool, AiMiddleware, EmbeddingAdapter, EmbeddingResult } from './types.js'
+import type { AgentResponse, AnyTool, AiMiddleware, EmbeddingAdapter, EmbeddingResult, RerankingResult } from './types.js'
 
 /**
  * AI facade — static entry point for quick prompts, embeddings, and image generation.
@@ -53,6 +54,30 @@ export class AI {
     return typeof pathOrBuffer === 'string'
       ? Transcription.fromPath(pathOrBuffer)
       : Transcription.fromBuffer(pathOrBuffer)
+  }
+
+  /**
+   * Rerank documents by relevance to a query.
+   *
+   * Returns a fluent builder when called with just query + documents.
+   * Pass `options` for a one-shot call.
+   *
+   * @example
+   * const result = await AI.rerank('search query', documents)
+   * const result = await AI.rerank('query', docs, { model: 'cohere/rerank-v3.5', topK: 5 })
+   */
+  static rerank(query: string, documents: string[]): Reranker
+  static rerank(query: string, documents: string[], options: { model?: string | undefined; topK?: number | undefined }): Promise<RerankingResult>
+  static rerank(
+    query: string,
+    documents: string[],
+    options?: { model?: string | undefined; topK?: number | undefined },
+  ): Reranker | Promise<RerankingResult> {
+    const builder = Reranker.of(query, documents)
+    if (!options) return builder
+    if (options.model) builder.model(options.model)
+    if (options.topK) builder.topK(options.topK)
+    return builder.rank()
   }
 
   /**
