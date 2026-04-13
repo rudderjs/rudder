@@ -29,13 +29,13 @@
 | xAI (Grok) | ✅ | ✅ | ✅ | ✅ |
 | DeepSeek | ✅ | ✅ | ✅ | — |
 | Ollama | ✅ | ✅ | ✅ (community) | ✅ |
-| Cohere | — | ✅ (embed/rerank) | ✅ | — |
-| Jina | — | ✅ (embed/rerank) | — | — |
+| Cohere | ✅ (embed/rerank) | ✅ (embed/rerank) | ✅ | — |
+| Jina | ✅ (embed/rerank) | ✅ (embed/rerank) | — | — |
 | Amazon Bedrock | — | — | ✅ | — |
 | Together.ai | — | — | ✅ | — |
 | ElevenLabs | — | ✅ (TTS/STT) | ✅ (TTS) | — |
 | Fal | — | — | ✅ (image) | ✅ (image/video) |
-| **Total** | **9** | **~12** | **20+ official** | **~8** |
+| **Total** | **11** | **~12** | **20+ official** | **~8** |
 
 ---
 
@@ -52,8 +52,8 @@
 | Embeddings | ✅ `AI.embed()` + cache + batch | ✅ `AiEmbedding::make()` | ✅ `embed()` / `embedMany()` | — |
 | TTS | ✅ `AI.audio()` | ✅ `AiAudio::speak()` | ✅ `generateSpeech()` | — |
 | STT | ✅ `AI.transcribe()` | ✅ `AiTranscription::transcribe()` | ✅ transcription adapters | — |
-| Reranking | — | ✅ `AiRerank::rank()` | ✅ `rerank()` | — |
-| File management | — | ✅ `AiFile::upload/list/delete()` | — (via provider tools) | — |
+| Reranking | ✅ `AI.rerank()` + Cohere/Jina | ✅ `AiRerank::rank()` | ✅ `rerank()` | — |
+| File management | ✅ `AI.files()` + OpenAI/Anthropic/Google | ✅ `AiFile::upload/list/delete()` | — (via provider tools) | — |
 | Vector stores | — | ✅ `AiVectorStore` | — (via provider tools) | — |
 | Video generation | — | — | ✅ experimental | ✅ via fal |
 | Multimodal input | ✅ `DocumentAttachment` / `ImageAttachment` | ✅ attachments | ✅ images/audio/video | ✅ content types |
@@ -149,20 +149,20 @@ Features in `@rudderjs/ai` not found in the other three:
 
 ## Remaining Gaps (RudderJS vs Field)
 
-| Gap | Laravel | Vercel | Priority | Plan |
+| Gap | Laravel | Vercel | Status | Notes |
 |---|:---:|:---:|---|---|
-| **Reranking** | ✅ | ✅ | High | `ai-events-reranking-files-plan.md` Phase 2 |
-| **File management** | ✅ | — | High | `ai-events-reranking-files-plan.md` Phase 3 |
-| **Embedding fake** | ✅ | — | Medium | Add to `AiFake` |
-| **Vector stores** | ✅ | — | Low | Not planned (provider-specific) |
-| **Stream backpressure** | — | ✅ | Low | Not planned |
-| **Stream resume** | — | ✅ | Low | Not planned |
-| **Durable agents** | — | ✅ | Low | Not planned (different execution model) |
-| **Generative UI** | — | ✅ | — | Already have tool renderer registry (different approach) |
-| **Image editing** | — | ✅ | Low | Not planned |
-| **Video generation** | — | ✅ | — | Not planned |
-| **Cohere provider** | ✅ | ✅ | Medium | Comes with reranking |
-| **Jina provider** | ✅ | — | Medium | Comes with reranking |
+| ~~Reranking~~ | ✅ | ✅ | **DONE** | `AI.rerank()` + Cohere + Jina providers |
+| ~~File management~~ | ✅ | — | **DONE** | `AI.files()` + OpenAI/Anthropic/Google adapters |
+| ~~Embedding fake~~ | ✅ | — | **DONE** | `respondWithEmbedding()` + `assertEmbedded()` |
+| ~~Cohere provider~~ | ✅ | ✅ | **DONE** | Reranking + embeddings |
+| ~~Jina provider~~ | ✅ | — | **DONE** | Reranking + embeddings (direct HTTP) |
+| **Vector stores** | ✅ | — | Not planned | Provider-specific, low abstraction value |
+| **Stream backpressure** | — | ✅ | Not planned | — |
+| **Stream resume** | — | ✅ | Not planned | — |
+| **Durable agents** | — | ✅ | Not planned | Different execution model |
+| **Generative UI** | — | ✅ | — | Tool renderer registry (different approach) |
+| **Image editing** | — | ✅ | Not planned | — |
+| **Video generation** | — | ✅ | Not planned | — |
 | **DevTools (standalone)** | — | ✅ | — | Telescope fills this role |
 
 ### Intentional Non-Goals
