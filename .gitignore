@@ -9,3 +9,8 @@ dist-test/
 !.env.example
 .forge-cli-state.json
 .worktrees/
+
+# Claude Code harness state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/worktrees/

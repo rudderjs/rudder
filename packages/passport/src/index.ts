@@ -117,12 +117,15 @@ export class PassportProvider extends ServiceProvider {
         const isPublic = args.includes('--public')
         const isDevice = args.includes('--device')
         const isPersonal = args.includes('--personal')
+        const isM2M = args.includes('--client-credentials')
 
         const grantTypes = isDevice
           ? ['urn:ietf:params:oauth:grant-type:device_code']
           : isPersonal
             ? ['personal_access']
-            : ['authorization_code']
+            : isM2M
+              ? ['client_credentials']
+              : ['authorization_code', 'refresh_token']
 
         const { createClient } = await import('./commands/client.js')
         const { client, secret } = await createClient({

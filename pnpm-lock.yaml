@@ -1098,6 +1098,9 @@ importers:
       '@rudderjs/orm-prisma':
         specifier: workspace:*
         version: link:../packages/orm-prisma
+      '@rudderjs/passport':
+        specifier: workspace:*
+        version: link:../packages/passport
       '@rudderjs/pulse':
         specifier: workspace:*
         version: link:../packages/pulse

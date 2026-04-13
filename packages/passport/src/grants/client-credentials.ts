@@ -1,4 +1,5 @@
 import { OAuthClient } from '../models/OAuthClient.js'
+import { clientHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
 
@@ -23,7 +24,7 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
     throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
 
-  if (!client.hasGrantType('client_credentials')) {
+  if (!clientHelpers.hasGrantType(client as any, 'client_credentials')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for client_credentials grant.')
   }
 

@@ -333,5 +333,31 @@ Route.post('/api/ai/stream', async (req) => {
   })
 })
 
+// ── Passport OAuth 2 routes ──────────────────────────────
+//
+// Registers /oauth/authorize, /oauth/token, /oauth/tokens/:id,
+// /oauth/scopes, /oauth/device/code, /oauth/device/approve.
+//
+// Requires: RSA keys generated via `pnpm rudder passport:keys` and
+// an OAuth client created via `pnpm rudder passport:client <name>`.
+import { registerPassportRoutes, RequireBearer, scope } from '@rudderjs/passport'
+
+// Adapter: Passport expects a router with .get/.post/.delete taking (path, handler)
+// but our Route uses the inverse signature. Wrap it.
+const passportRouter = {
+  get:    (path: string, handler: any) => Route.get(path, handler),
+  post:   (path: string, handler: any) => Route.post(path, handler),
+  delete: (path: string, handler: any) => Route.delete(path, handler),
+}
+registerPassportRoutes(passportRouter as any)
+
+// Example: protected route requiring a Bearer token with 'read' scope
+Route.get('/api/passport/me', async (req, res) => {
+  return res.json({
+    user: req.user ?? null,
+    scopes: (req.raw as any)?.__passport_scopes ?? [],
+  })
+}, [RequireBearer(), scope('read')])
+
 // Catch-all: any unmatched /api/* route returns 404 instead of falling through to Vike
 Route.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))

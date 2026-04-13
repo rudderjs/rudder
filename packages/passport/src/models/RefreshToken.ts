@@ -1,7 +1,7 @@
 import { Model } from '@rudderjs/orm'
 
 export class RefreshToken extends Model {
-  static override table = 'oauth_refresh_tokens'
+  static override table = 'oAuthRefreshToken'
 
   static override fillable = ['accessTokenId', 'revoked', 'expiresAt']
 

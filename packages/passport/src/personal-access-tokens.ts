@@ -1,5 +1,6 @@
 import { Passport } from './Passport.js'
 import { AccessToken } from './models/AccessToken.js'
+import { accessTokenHelpers } from './models/helpers.js'
 import { createToken } from './token.js'
 
 // ─── Types ────────────────────────────────────────────────
@@ -72,7 +73,7 @@ export function HasApiTokens<T extends new (...args: any[]) => any>(Base: T) {
     async revokeAllTokens(): Promise<number> {
       const tokens = await this.tokens()
       for (const t of tokens) {
-        await t.revoke()
+        await AccessToken.update((t as any).id, { revoked: true } as any)
       }
       return tokens.length
     }
@@ -84,7 +85,7 @@ export function HasApiTokens<T extends new (...args: any[]) => any>(Base: T) {
     tokenCan(scope: string): boolean {
       const token = (this as any).__currentToken as AccessToken | undefined
       if (!token) return false
-      return token.can(scope)
+      return accessTokenHelpers.can(token as any, scope)
     }
   }
 }

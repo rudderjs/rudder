@@ -1,5 +1,6 @@
 import { OAuthClient } from '../models/OAuthClient.js'
 import { DeviceCode } from '../models/DeviceCode.js'
+import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
 
@@ -28,13 +29,13 @@ export async function requestDeviceCode(params: {
     throw new OAuthError('invalid_client', 'Client not found.')
   }
 
-  if (!client.hasGrantType('urn:ietf:params:oauth:grant-type:device_code')) {
+  if (!clientHelpers.hasGrantType(client as any, 'urn:ietf:params:oauth:grant-type:device_code')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for device authorization grant.')
   }
 
   const { randomBytes } = await import('node:crypto')
   const deviceCode = randomBytes(32).toString('hex')
-  const userCode   = generateUserCode()
+  const userCode   = await generateUserCode()
   const scopes     = params.scope ? params.scope.split(' ').filter(Boolean) : []
   const expiresAt  = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
@@ -69,10 +70,10 @@ export async function approveDeviceCode(userCode: string, userId: string, approv
   if (!device) {
     throw new OAuthError('invalid_request', 'Device code not found.')
   }
-  if (device.isExpired()) {
+  if (deviceCodeHelpers.isExpired(device as any)) {
     throw new OAuthError('expired_token', 'Device code has expired.')
   }
-  if (!device.isPending()) {
+  if (!deviceCodeHelpers.isPending(device as any)) {
     throw new OAuthError('invalid_request', 'Device code has already been used.')
   }
 
@@ -110,7 +111,7 @@ export async function pollDeviceCode(params: {
   if (device.clientId !== params.clientId) {
     throw new OAuthError('invalid_grant', 'Device code was not issued to this client.')
   }
-  if (device.isExpired()) {
+  if (deviceCodeHelpers.isExpired(device as any)) {
     return { status: 'expired_token' }
   }
 
@@ -127,11 +128,11 @@ export async function pollDeviceCode(params: {
     lastPolledAt: new Date(),
   } as any)
 
-  if (device.isPending()) {
+  if (deviceCodeHelpers.isPending(device as any)) {
     return { status: 'authorization_pending' }
   }
 
-  if (device.isDenied()) {
+  if (deviceCodeHelpers.isDenied(device as any)) {
     return { status: 'access_denied' }
   }
 
@@ -139,7 +140,7 @@ export async function pollDeviceCode(params: {
   const tokens = await issueTokens({
     userId:   device.userId,
     clientId: params.clientId,
-    scopes:   device.getScopes(),
+    scopes:   deviceCodeHelpers.getScopes(device as any),
     includeRefresh: true,
   })
 
@@ -152,9 +153,9 @@ export async function pollDeviceCode(params: {
 // ─── Helpers ──────────────────────────────────────────────
 
 /** Generate a human-readable user code (8 chars, uppercase, no ambiguous chars). */
-function generateUserCode(): string {
+async function generateUserCode(): Promise<string> {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no I, O, 0, 1
-  const { randomInt } = require('node:crypto') as typeof import('node:crypto')
+  const { randomInt } = await import('node:crypto')
   let code = ''
   for (let i = 0; i < 8; i++) {
     if (i === 4) code += '-' // XXXX-XXXX format

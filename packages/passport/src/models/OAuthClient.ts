@@ -1,7 +1,7 @@
 import { Model, Hidden } from '@rudderjs/orm'
 
 export class OAuthClient extends Model {
-  static override table = 'oauth_clients'
+  static override table = 'oAuthClient'
 
   static override fillable = ['name', 'secret', 'redirectUris', 'grantTypes', 'scopes', 'confidential']
 

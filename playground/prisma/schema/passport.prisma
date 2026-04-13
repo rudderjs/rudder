@@ -1,0 +1,65 @@
+model OAuthClient {
+  id            String   @id @default(cuid())
+  name          String
+  secret        String?
+  redirectUris  String   @default("[]")
+  grantTypes    String   @default("[\"authorization_code\"]")
+  scopes        String   @default("[]")
+  confidential  Boolean  @default(true)
+  revoked       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("oauth_clients")
+}
+
+model OAuthAccessToken {
+  id        String    @id @default(cuid())
+  userId    String?
+  clientId  String
+  name      String?
+  scopes    String    @default("[]")
+  revoked   Boolean   @default(false)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("oauth_access_tokens")
+}
+
+model OAuthRefreshToken {
+  id            String   @id @default(cuid())
+  accessTokenId String   @unique
+  revoked       Boolean  @default(false)
+  expiresAt     DateTime
+
+  @@map("oauth_refresh_tokens")
+}
+
+model OAuthAuthCode {
+  id                  String   @id @default(cuid())
+  userId              String
+  clientId            String
+  scopes              String   @default("[]")
+  revoked             Boolean  @default(false)
+  expiresAt           DateTime
+  codeChallenge       String?
+  codeChallengeMethod String?
+
+  @@map("oauth_auth_codes")
+}
+
+model OAuthDeviceCode {
+  id           String    @id @default(cuid())
+  clientId     String
+  userCode     String    @unique
+  deviceCode   String    @unique
+  scopes       String    @default("[]")
+  userId       String?
+  approved     Boolean?
+  expiresAt    DateTime
+  lastPolledAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@map("oauth_device_codes")
+}

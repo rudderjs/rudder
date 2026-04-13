@@ -1,6 +1,7 @@
 import { OAuthClient } from '../models/OAuthClient.js'
 import { AccessToken } from '../models/AccessToken.js'
 import { RefreshToken } from '../models/RefreshToken.js'
+import { accessTokenHelpers, refreshTokenHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
 
@@ -47,7 +48,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   if (refreshToken.revoked) {
     throw new OAuthError('invalid_grant', 'Refresh token has been revoked.')
   }
-  if (refreshToken.isExpired()) {
+  if (refreshTokenHelpers.isExpired(refreshToken as any)) {
     throw new OAuthError('invalid_grant', 'Refresh token has expired.')
   }
 
@@ -61,7 +62,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   }
 
   // Determine scopes — can only narrow, not widen
-  const originalScopes = accessToken.getScopes()
+  const originalScopes = accessTokenHelpers.getScopes(accessToken as any)
   let scopes = originalScopes
   if (params.scope) {
     const requested = params.scope.split(' ').filter(Boolean)
@@ -73,8 +74,8 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   }
 
   // Revoke old tokens
-  await refreshToken.revoke()
-  await accessToken.revoke()
+  await RefreshToken.update((refreshToken as any).id, { revoked: true } as any)
+  await AccessToken.update((accessToken as any).id, { revoked: true } as any)
 
   // Issue new pair
   return issueTokens({

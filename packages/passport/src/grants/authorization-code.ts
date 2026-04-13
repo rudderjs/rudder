@@ -1,5 +1,6 @@
 import { OAuthClient } from '../models/OAuthClient.js'
 import { AuthCode } from '../models/AuthCode.js'
+import { clientHelpers, authCodeHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 
 // ─── Authorization Request Validation ─────────────────────
@@ -37,11 +38,11 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     throw new OAuthError('invalid_client', 'Client not found.')
   }
 
-  if (!client.hasGrantType('authorization_code')) {
+  if (!clientHelpers.hasGrantType(client as any, 'authorization_code')) {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for authorization_code grant.')
   }
 
-  if (!client.hasRedirectUri(params.redirectUri)) {
+  if (!clientHelpers.hasRedirectUri(client as any, params.redirectUri)) {
     throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
   }
 
@@ -50,7 +51,7 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     if (params.codeChallengeMethod && params.codeChallengeMethod !== 'S256' && params.codeChallengeMethod !== 'plain') {
       throw new OAuthError('invalid_request', 'Unsupported code_challenge_method. Use S256 or plain.')
     }
-  } else if (client.isPublic()) {
+  } else if (clientHelpers.isPublic(client as any)) {
     // Public clients MUST use PKCE
     throw new OAuthError('invalid_request', 'Public clients must use PKCE (code_challenge required).')
   }
@@ -144,7 +145,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   if (authCode.revoked) {
     throw new OAuthError('invalid_grant', 'Authorization code has been revoked.')
   }
-  if (authCode.isExpired()) {
+  if (authCodeHelpers.isExpired(authCode as any)) {
     throw new OAuthError('invalid_grant', 'Authorization code has expired.')
   }
   if (authCode.clientId !== params.clientId) {
@@ -181,7 +182,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   return issueTokens({
     userId:   authCode.userId,
     clientId: params.clientId,
-    scopes:   authCode.getScopes(),
+    scopes:   authCodeHelpers.getScopes(authCode as any),
     includeRefresh: true,
   })
 }

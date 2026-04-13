@@ -1,7 +1,7 @@
 import { Model } from '@rudderjs/orm'
 
 export class DeviceCode extends Model {
-  static override table = 'oauth_device_codes'
+  static override table = 'oAuthDeviceCode'
 
   static override fillable = ['clientId', 'userCode', 'deviceCode', 'scopes', 'userId', 'approved', 'expiresAt', 'lastPolledAt']
 
