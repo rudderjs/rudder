@@ -1,6 +1,11 @@
 import type {
   ProviderFactory,
   ProviderAdapter,
+  FileAdapter,
+  FileUploadOptions,
+  FileUploadResult,
+  FileListResult,
+  FileContent,
   ProviderRequestOptions,
   ProviderResponse,
   StreamChunk,
@@ -25,6 +30,10 @@ export class AnthropicProvider implements ProviderFactory {
 
   create(model: string): ProviderAdapter {
     return new AnthropicAdapter(this.config, model)
+  }
+
+  createFiles(): FileAdapter {
+    return new AnthropicFileAdapter(this.config)
   }
 }
 
@@ -228,5 +237,71 @@ function fromAnthropicResponse(response: any): ProviderResponse {
       totalTokens: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
     },
     finishReason: response.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
+  }
+}
+
+// ─── Files ──────────────────────────────────────────────
+
+class AnthropicFileAdapter implements FileAdapter {
+  private client: any = null
+
+  constructor(private readonly config: AnthropicConfig) {}
+
+  private async getClient(): Promise<any> {
+    if (this.client) return this.client
+    const sdk = await import(/* @vite-ignore */ '@anthropic-ai/sdk')
+    const Anthropic = sdk.default ?? sdk.Anthropic
+    this.client = new Anthropic({
+      apiKey: this.config.apiKey,
+      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
+    })
+    return this.client
+  }
+
+  async upload(options: FileUploadOptions): Promise<FileUploadResult> {
+    const client = await this.getClient()
+    const { readFile } = await import(/* @vite-ignore */ 'node:fs/promises' as string)
+    const { basename } = await import(/* @vite-ignore */ 'node:path' as string)
+    const data = await readFile(options.filePath)
+    const filename = basename(options.filePath)
+
+    const response = await client.files.upload({
+      file: new Blob([data]),
+      purpose: options.purpose ?? 'assistants',
+    })
+
+    return {
+      id: response.id,
+      filename,
+      bytes: data.byteLength,
+      purpose: options.purpose,
+    }
+  }
+
+  async list(): Promise<FileListResult> {
+    const client = await this.getClient()
+    const response = await client.files.list()
+    const files: FileUploadResult[] = []
+    for await (const f of response) {
+      files.push({
+        id: f.id,
+        filename: f.filename ?? f.id,
+        bytes: f.size ?? 0,
+        purpose: f.purpose,
+      })
+    }
+    return { files }
+  }
+
+  async delete(fileId: string): Promise<void> {
+    const client = await this.getClient()
+    await client.files.delete(fileId)
+  }
+
+  async retrieve(fileId: string): Promise<FileContent> {
+    const client = await this.getClient()
+    const response = await client.files.content(fileId)
+    const buffer = Buffer.from(await response.arrayBuffer())
+    return { data: buffer, mimeType: 'application/octet-stream' }
   }
 }

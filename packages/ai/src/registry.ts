@@ -1,4 +1,4 @@
-import type { AiModelConfig, ProviderFactory, ProviderAdapter, RerankingAdapter } from './types.js'
+import type { AiModelConfig, ProviderFactory, ProviderAdapter, RerankingAdapter, FileAdapter } from './types.js'
 
 export class AiRegistry {
   private static readonly factories = new Map<string, ProviderFactory>()
@@ -53,6 +53,18 @@ export class AiRegistry {
       )
     }
     return factory.createReranking(model)
+  }
+
+  /** Resolve a file adapter for a provider name */
+  static resolveFiles(providerName: string): FileAdapter {
+    const factory = this.getFactory(providerName)
+    if (!factory.createFiles) {
+      throw new Error(
+        `[RudderJS AI] Provider "${providerName}" does not support file management. ` +
+        `Use a provider that implements createFiles() (e.g. openai, anthropic, google).`,
+      )
+    }
+    return factory.createFiles()
   }
 
   /** Set available models for user selection */

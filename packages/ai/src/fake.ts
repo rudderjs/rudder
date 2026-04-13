@@ -19,6 +19,11 @@ import type {
   RerankingAdapter,
   RerankingOptions,
   RerankingResult,
+  FileAdapter,
+  FileUploadOptions,
+  FileUploadResult,
+  FileListResult,
+  FileContent,
 } from './types.js'
 
 /**
@@ -41,12 +46,14 @@ export class AiFake {
   private readonly sttCalls: SpeechToTextOptions[] = []
   private readonly embedCalls: Array<{ input: string | string[]; model: string }> = []
   private readonly rerankCalls: RerankingOptions[] = []
+  private readonly fileCalls: Array<{ method: string; args: unknown }> = []
   private _response = 'fake response'
   private _imageResponse = 'ZmFrZS1pbWFnZQ=='  // base64 of 'fake-image'
   private _ttsResponse: Buffer = Buffer.from('fake-audio')
   private _sttResponse = 'fake transcription'
   private _embedResponse: number[][] = [[0.1, 0.2, 0.3]]
   private _rerankResponse: RerankingResult = { results: [] }
+  private _fileUploadResponse: FileUploadResult = { id: 'fake-file-id', filename: 'fake.txt', bytes: 0 }
 
   /** Set the text response the fake will return */
   respondWith(text: string): void {
@@ -76,6 +83,11 @@ export class AiFake {
   /** Set the reranking results the fake will return */
   respondWithRanking(results: RerankingResult['results']): void {
     this._rerankResponse = { results }
+  }
+
+  /** Set the file upload result the fake will return */
+  respondWithFileUpload(result: FileUploadResult): void {
+    this._fileUploadResponse = result
   }
 
   /** Install the fake — replaces all registered providers with a mock */
@@ -149,6 +161,24 @@ export class AiFake {
       },
     }
 
+    const fileAdapter: FileAdapter = {
+      async upload(opts: FileUploadOptions): Promise<FileUploadResult> {
+        fake.fileCalls.push({ method: 'upload', args: opts })
+        return { ...fake._fileUploadResponse, filename: opts.filePath.split('/').pop() ?? fake._fileUploadResponse.filename }
+      },
+      async list(): Promise<FileListResult> {
+        fake.fileCalls.push({ method: 'list', args: {} })
+        return { files: [fake._fileUploadResponse] }
+      },
+      async delete(fileId: string): Promise<void> {
+        fake.fileCalls.push({ method: 'delete', args: fileId })
+      },
+      async retrieve(fileId: string): Promise<FileContent> {
+        fake.fileCalls.push({ method: 'retrieve', args: fileId })
+        return { data: Buffer.from('fake-content'), mimeType: 'application/octet-stream' }
+      },
+    }
+
     const factory: ProviderFactory = {
       name: '__fake__',
       create: () => adapter,
@@ -157,6 +187,7 @@ export class AiFake {
       createTts: () => ttsAdapter,
       createStt: () => sttAdapter,
       createReranking: () => rerankingAdapter,
+      createFiles: () => fileAdapter,
     }
 
     AiRegistry.reset()
@@ -259,6 +290,21 @@ export class AiFake {
   /** Get all recorded reranking calls */
   getRerankCalls(): RerankingOptions[] {
     return [...this.rerankCalls]
+  }
+
+  /** Assert at least one file upload was made */
+  assertFileUploaded(predicate?: (filePath: string) => boolean): void {
+    const uploads = this.fileCalls.filter(c => c.method === 'upload')
+    if (uploads.length === 0) throw new Error('[RudderJS AI] Expected at least one file upload, but none were made.')
+    if (predicate) {
+      const match = uploads.some(c => predicate((c.args as FileUploadOptions).filePath))
+      if (!match) throw new Error('[RudderJS AI] No file upload matched the predicate.')
+    }
+  }
+
+  /** Get all recorded file operation calls */
+  getFileCalls(): Array<{ method: string; args: unknown }> {
+    return [...this.fileCalls]
   }
 
   /** Restore — clears the fake (user must re-register real providers) */

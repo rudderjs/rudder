@@ -169,6 +169,38 @@ export interface ProviderFactory {
   createStt?(model: string): SpeechToTextAdapter
   /** Create a reranking adapter (optional) */
   createReranking?(model: string): RerankingAdapter
+  /** Create a file management adapter (optional) */
+  createFiles?(): FileAdapter
+}
+
+// ─── File Management ─────────────────────────────────────
+
+export interface FileUploadOptions {
+  filePath: string
+  purpose?: string | undefined
+}
+
+export interface FileUploadResult {
+  id: string
+  filename: string
+  bytes: number
+  purpose?: string | undefined
+}
+
+export interface FileListResult {
+  files: FileUploadResult[]
+}
+
+export interface FileContent {
+  data: Buffer
+  mimeType: string
+}
+
+export interface FileAdapter {
+  upload(options: FileUploadOptions): Promise<FileUploadResult>
+  list(): Promise<FileListResult>
+  delete(fileId: string): Promise<void>
+  retrieve?(fileId: string): Promise<FileContent>
 }
 
 // ─── Reranking ───────────────────────────────────────────

@@ -4,6 +4,7 @@ import { ImageGenerator } from './image.js'
 import { AudioGenerator } from './audio.js'
 import { Transcription } from './transcription.js'
 import { Reranker } from './rerank.js'
+import { FileManager } from './files.js'
 import { CachedEmbeddingAdapter } from './cached-embedding.js'
 import type { Agent } from './agent.js'
 import type { AgentResponse, AnyTool, AiMiddleware, EmbeddingAdapter, EmbeddingResult, RerankingResult } from './types.js'
@@ -78,6 +79,20 @@ export class AI {
     if (options.model) builder.model(options.model)
     if (options.topK) builder.topK(options.topK)
     return builder.rank()
+  }
+
+  /**
+   * Get a file manager for a provider.
+   *
+   * @example
+   * const files = AI.files('openai')
+   * const uploaded = await files.upload('./report.pdf', { purpose: 'assistants' })
+   * const list = await files.list()
+   * await files.delete(uploaded.id)
+   */
+  static files(provider?: string): FileManager {
+    const providerName = provider ?? AiRegistry.parseModelString(AiRegistry.getDefault())[0]
+    return FileManager.for(providerName)
   }
 
   /**

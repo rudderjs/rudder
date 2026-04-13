@@ -60,6 +60,11 @@ export type {
   RerankingAdapter,
   RerankingOptions,
   RerankingResult,
+  FileAdapter,
+  FileUploadOptions,
+  FileUploadResult,
+  FileListResult,
+  FileContent,
 } from './types.js'
 
 // Registry
@@ -124,6 +129,9 @@ export { toVercelDataStream, toVercelResponse } from './vercel-protocol.js'
 
 // Reranking
 export { Reranker } from './rerank.js'
+
+// File Management
+export { FileManager } from './files.js'
 
 // Cached Embeddings
 export { CachedEmbeddingAdapter } from './cached-embedding.js'

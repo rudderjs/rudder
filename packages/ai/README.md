@@ -358,6 +358,32 @@ const result = await AI.rerank('how to deploy', docs)
 
 Supported providers: **Cohere** (`cohere-ai` SDK) and **Jina** (direct HTTP, no SDK).
 
+### File Management
+
+Upload, list, and delete files on provider platforms — needed for large document context and assistant APIs:
+
+```ts
+import { AI } from '@rudderjs/ai'
+
+const files = AI.files('openai')
+
+// Upload
+const uploaded = await files.upload('./report.pdf', { purpose: 'assistants' })
+// uploaded → { id, filename, bytes, purpose }
+
+// List
+const { files: allFiles } = await files.list()
+
+// Delete
+await files.delete(uploaded.id)
+
+// Retrieve content (OpenAI, Anthropic)
+const content = await files.retrieve(uploaded.id)
+// content → { data: Buffer, mimeType }
+```
+
+Supported providers: **OpenAI** (full CRUD + retrieve), **Anthropic** (full CRUD + retrieve), **Google** (upload, list, delete — no retrieve).
+
 ### Embeddings
 
 ```ts
@@ -476,28 +502,32 @@ fake.respondWithEmbedding([[0.1, 0.2]])   // embeddings
 fake.respondWithRanking([                 // reranking
   { index: 0, relevanceScore: 0.95, document: 'most relevant' },
 ])
+fake.respondWithFileUpload({             // file upload
+  id: 'file-123', filename: 'report.pdf', bytes: 1024,
+})
 
 // Assertions
 fake.assertPrompted()          fake.assertImageGenerated()
 fake.assertAudioGenerated()    fake.assertTranscribed()
 fake.assertEmbedded()          fake.assertReranked()
+fake.assertFileUploaded()
 ```
 
 ## Providers
 
-| Provider | SDK | Model String | Text | Embeddings | Images | TTS/STT | Reranking |
-|---|---|---|:---:|:---:|:---:|:---:|:---:|
-| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` | ✓ | | | | |
-| OpenAI | `openai` | `openai/gpt-4o` | ✓ | ✓ | ✓ | ✓ | |
-| Google | `@google/genai` | `google/gemini-2.5-pro` | ✓ | ✓ | ✓ | | |
-| Cohere | `cohere-ai` | `cohere/rerank-v3.5` | | ✓ | | | ✓ |
-| Jina | *(none)* | `jina/jina-reranker-v2-base-multilingual` | | ✓ | | | ✓ |
-| Ollama | *(none)* | `ollama/llama3` | ✓ | | | | |
-| Groq | *(none)* | `groq/llama-3.3-70b` | ✓ | | | | |
-| DeepSeek | *(none)* | `deepseek/deepseek-chat` | ✓ | | | | |
-| xAI | *(none)* | `xai/grok-3` | ✓ | | | | |
-| Mistral | *(none)* | `mistral/mistral-large` | ✓ | ✓ | | | |
-| Azure OpenAI | `openai` | `azure/gpt-4o` | ✓ | | | | |
+| Provider | SDK | Model String | Text | Embeddings | Images | TTS/STT | Reranking | Files |
+|---|---|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` | ✓ | | | | | ✓ |
+| OpenAI | `openai` | `openai/gpt-4o` | ✓ | ✓ | ✓ | ✓ | | ✓ |
+| Google | `@google/genai` | `google/gemini-2.5-pro` | ✓ | ✓ | ✓ | | | ✓ |
+| Cohere | `cohere-ai` | `cohere/rerank-v3.5` | | ✓ | | | ✓ | |
+| Jina | *(none)* | `jina/jina-reranker-v2-base-multilingual` | | ✓ | | | ✓ | |
+| Ollama | *(none)* | `ollama/llama3` | ✓ | | | | | |
+| Groq | *(none)* | `groq/llama-3.3-70b` | ✓ | | | | | |
+| DeepSeek | *(none)* | `deepseek/deepseek-chat` | ✓ | | | | | |
+| xAI | *(none)* | `xai/grok-3` | ✓ | | | | | |
+| Mistral | *(none)* | `mistral/mistral-large` | ✓ | ✓ | | | | |
+| Azure OpenAI | `openai` | `azure/gpt-4o` | ✓ | | | | | |
 
 ## Notes
 
