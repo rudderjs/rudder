@@ -46,6 +46,10 @@ export type {
   DevicePollResult,
 } from './grants/index.js'
 
+// Personal access tokens
+export { HasApiTokens, resetPersonalAccessClient } from './personal-access-tokens.js'
+export type { NewPersonalAccessToken } from './personal-access-tokens.js'
+
 // Routes
 export { registerPassportRoutes } from './routes.js'
 export type { PassportRouteOptions } from './routes.js'
