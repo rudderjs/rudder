@@ -1,6 +1,7 @@
 ---
-status: draft
+status: done
 created: 2026-04-11
+completed: 2026-04-11
 ---
 
 # Plan: Laravel-style `auth()` ergonomics
