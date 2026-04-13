@@ -22,6 +22,34 @@ export { createClient } from './commands/client.js'
 export type { CreateClientOpts } from './commands/client.js'
 export { purgeTokens } from './commands/purge.js'
 
+// Grants
+export {
+  issueTokens,
+  validateAuthorizationRequest,
+  issueAuthCode,
+  exchangeAuthCode,
+  OAuthError,
+  clientCredentialsGrant,
+  refreshTokenGrant,
+  requestDeviceCode,
+  approveDeviceCode,
+  pollDeviceCode,
+} from './grants/index.js'
+export type {
+  IssuedTokens,
+  AuthorizationRequest,
+  ValidatedAuthRequest,
+  TokenExchangeRequest,
+  ClientCredentialsRequest,
+  RefreshTokenRequest,
+  DeviceAuthorizationResponse,
+  DevicePollResult,
+} from './grants/index.js'
+
+// Routes
+export { registerPassportRoutes } from './routes.js'
+export type { PassportRouteOptions } from './routes.js'
+
 // ─── Config ───────────────────────────────────────────────
 
 export interface PassportConfig {
