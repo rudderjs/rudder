@@ -21,6 +21,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./commands/make-agent": {
+      "import": "./dist/commands/make-agent.js",
+      "types": "./dist/commands/make-agent.d.ts"
+    },
     "./observers": {
       "import": "./dist/observers.js",
       "types": "./dist/observers.d.ts"
@@ -44,6 +48,7 @@
     "cohere-ai": ">=7.0.0"
   },
   "devDependencies": {
+    "@rudderjs/rudder": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

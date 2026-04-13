@@ -5,9 +5,7 @@ import fs from 'node:fs/promises'
 import { makeCommand } from './commands/make.js'
 import { moduleCommand } from './commands/module.js'
 import { vendorPublishCommand } from './commands/vendor-publish.js'
-import { migrateCommands } from './commands/migrate.js'
 import { providersDiscoverCommand } from './commands/providers-discover.js'
-import { routeListCommand } from './commands/route-list.js'
 import { commandListCommand } from './commands/command-list.js'
 import { rudder, parseSignature, CancelledError, commandObservers, type CommandObservation } from '@rudderjs/rudder'
 import { CliError } from './errors.js'
@@ -114,6 +112,59 @@ async function observeCommand(
   }
 }
 
+/**
+ * Eagerly import commands from installed packages.
+ * Packages register make specs (scaffolders) and runtime commands here so
+ * they work both with and without full app boot.
+ *
+ * Dynamic import paths are built at runtime so TypeScript doesn't try to
+ * resolve them at compile time (these packages are optional).
+ */
+async function loadPackageCommands(): Promise<void> {
+  const { registerMakeSpecs, rudder } = await import('@rudderjs/rudder')
+
+  // Helper: import a subpath from a package, swallow if not installed
+  const tryImport = (pkg: string, subpath: string): Promise<Record<string, unknown>> =>
+    import(/* @vite-ignore */ `${pkg}/${subpath}`) as Promise<Record<string, unknown>>
+
+  const loaders = [
+    // @rudderjs/ai → make:agent
+    async () => {
+      const mod = await tryImport('@rudderjs/ai', 'commands/make-agent')
+      registerMakeSpecs(mod['makeAgentSpec'] as import('@rudderjs/rudder').MakeSpec)
+    },
+    // @rudderjs/mcp → make:mcp-*
+    async () => {
+      const [server, tool, resource, prompt] = await Promise.all([
+        tryImport('@rudderjs/mcp', 'commands/make-mcp-server'),
+        tryImport('@rudderjs/mcp', 'commands/make-mcp-tool'),
+        tryImport('@rudderjs/mcp', 'commands/make-mcp-resource'),
+        tryImport('@rudderjs/mcp', 'commands/make-mcp-prompt'),
+      ])
+      registerMakeSpecs(
+        server['makeMcpServerSpec'] as import('@rudderjs/rudder').MakeSpec,
+        tool['makeMcpToolSpec'] as import('@rudderjs/rudder').MakeSpec,
+        resource['makeMcpResourceSpec'] as import('@rudderjs/rudder').MakeSpec,
+        prompt['makeMcpPromptSpec'] as import('@rudderjs/rudder').MakeSpec,
+      )
+    },
+    // @rudderjs/orm → migrate, migrate:fresh, migrate:status, make:migration, db:push, db:generate
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/migrate')
+      const register = mod['registerMigrateCommands'] as (r: typeof rudder) => void
+      register(rudder)
+    },
+    // @rudderjs/router → route:list
+    async () => {
+      const mod = await tryImport('@rudderjs/router', 'commands/route-list')
+      const register = mod['registerRouteListCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
+  ]
+
+  await Promise.all(loaders.map(fn => fn().catch(() => { /* package not installed */ })))
+}
+
 async function main(): Promise<void> {
   program
     .name('rudder')
@@ -187,10 +238,8 @@ async function main(): Promise<void> {
     },
   })
 
-  makeCommand(program)
   moduleCommand(program)
   vendorPublishCommand(program)
-  migrateCommands(program)
   providersDiscoverCommand(program)
 
   // Commands that scan files / manage tooling state must work even when the
@@ -208,12 +257,18 @@ async function main(): Promise<void> {
     NO_BOOT_EXACT.has(arg) || NO_BOOT_PREFIX.some(p => arg.startsWith(p)),
   )
 
+  // Eagerly load make specs from installed packages so make:* works without boot.
+  // Each package exports its MakeSpec objects from a known subpath.
+  await loadPackageCommands()
+
+  // Register all make:* commands (CLI-owned + package-contributed)
+  makeCommand(program)
+
   // Boot the app (providers + route files) so commands can use DB, etc.
   if (!skipBoot) await bootApp()
 
   // ── Built-in framework commands ───────────────────────────
 
-  routeListCommand(program)
   commandListCommand(program)
 
   // Inline commands (rudder.command())

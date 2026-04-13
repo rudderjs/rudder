@@ -18,6 +18,10 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./commands/route-list": {
+      "import": "./dist/commands/route-list.js",
+      "types": "./dist/commands/route-list.d.ts"
     }
   },
   "scripts": {

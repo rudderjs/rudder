@@ -16,6 +16,22 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./commands/make-mcp-server": {
+      "import": "./dist/commands/make-mcp-server.js",
+      "types": "./dist/commands/make-mcp-server.d.ts"
+    },
+    "./commands/make-mcp-tool": {
+      "import": "./dist/commands/make-mcp-tool.js",
+      "types": "./dist/commands/make-mcp-tool.d.ts"
+    },
+    "./commands/make-mcp-resource": {
+      "import": "./dist/commands/make-mcp-resource.js",
+      "types": "./dist/commands/make-mcp-resource.d.ts"
+    },
+    "./commands/make-mcp-prompt": {
+      "import": "./dist/commands/make-mcp-prompt.js",
+      "types": "./dist/commands/make-mcp-prompt.d.ts"
     }
   },
   "scripts": {
@@ -32,6 +48,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@rudderjs/rudder": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

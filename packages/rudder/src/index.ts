@@ -322,3 +322,8 @@ if (!_g['__rudderjs_command_observers__']) _g['__rudderjs_command_observers__'] 
 
 /** Global command observer registry — process-wide singleton like `rudder`. */
 export const commandObservers = _g['__rudderjs_command_observers__'] as CommandObserverRegistry
+
+// ─── Make scaffolding ──────────────────────────────────────
+
+export type { MakeSpec, MakeResult } from './make.js'
+export { registerMakeSpecs, getMakeSpecs, executeMakeSpec } from './make.js'

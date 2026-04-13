@@ -1,4 +1,6 @@
 import type { Command } from 'commander'
+import chalk from 'chalk'
+import { getMakeSpecs, executeMakeSpec } from '@rudderjs/rudder'
 import { makeController } from './make/controller.js'
 import { makeModel } from './make/model.js'
 import { makeJob } from './make/job.js'
@@ -9,13 +11,9 @@ import { makeCommandCmd } from './make/command.js'
 import { makeEvent } from './make/event.js'
 import { makeListener } from './make/listener.js'
 import { makeMail } from './make/mail.js'
-import { makeAgent } from './make/agent.js'
-import { makeMcpServer } from './make/mcp-server.js'
-import { makeMcpTool } from './make/mcp-tool.js'
-import { makeMcpResource } from './make/mcp-resource.js'
-import { makeMcpPrompt } from './make/mcp-prompt.js'
 
 export function makeCommand(program: Command): void {
+  // CLI-owned generic scaffolders
   makeController(program)
   makeModel(program)
   makeJob(program)
@@ -26,9 +24,21 @@ export function makeCommand(program: Command): void {
   makeEvent(program)
   makeListener(program)
   makeMail(program)
-  makeAgent(program)
-  makeMcpServer(program)
-  makeMcpTool(program)
-  makeMcpResource(program)
-  makeMcpPrompt(program)
+
+  // Package-contributed scaffolders (registered via registerMakeSpecs)
+  for (const spec of getMakeSpecs()) {
+    program
+      .command(`${spec.command} <name>`)
+      .description(spec.description)
+      .option('-f, --force', 'Overwrite if file already exists')
+      .action(async (name: string, opts: { force?: boolean }) => {
+        const result = await executeMakeSpec(spec, name, opts)
+        if (!result.created) {
+          console.error(chalk.red(`  ✗ Already exists: ${result.relPath}`))
+          console.error(chalk.dim('    Use --force to overwrite.'))
+          return
+        }
+        console.log(chalk.green(`  ✔ ${spec.label}:`), chalk.cyan(result.relPath))
+      })
+  }
 }

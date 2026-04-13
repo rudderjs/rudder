@@ -18,6 +18,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./commands/migrate": {
+      "import": "./dist/commands/migrate.js",
+      "types": "./dist/commands/migrate.d.ts"
     }
   },
   "scripts": {

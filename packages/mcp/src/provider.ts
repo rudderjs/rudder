@@ -25,6 +25,16 @@ export function mcp(): new (app: Application) => ServiceProvider {
         }
       }
 
+      // Register make:mcp-* scaffolders
+      try {
+        const { registerMakeSpecs } = await import('@rudderjs/rudder')
+        const { makeMcpServerSpec } = await import('./commands/make-mcp-server.js')
+        const { makeMcpToolSpec } = await import('./commands/make-mcp-tool.js')
+        const { makeMcpResourceSpec } = await import('./commands/make-mcp-resource.js')
+        const { makeMcpPromptSpec } = await import('./commands/make-mcp-prompt.js')
+        registerMakeSpecs(makeMcpServerSpec, makeMcpToolSpec, makeMcpResourceSpec, makeMcpPromptSpec)
+      } catch { /* rudder not available */ }
+
       // Register CLI commands
       try {
         const { rudder } = await import('@rudderjs/core')

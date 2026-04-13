@@ -1,6 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import type { Command } from 'commander'
+
+// ─── Types ────────────────────────────────────────────────
 
 interface ApiRoute {
   method:     string
@@ -12,6 +13,8 @@ interface VikeRoute {
   route: string
   dir:   string
 }
+
+// ─── Route Collection ─────────────────────────────────────
 
 async function loadApiRoutes(): Promise<ApiRoute[]> {
   try {
@@ -46,6 +49,8 @@ async function scanVikeRoutes(): Promise<VikeRoute[]> {
   try { await walk(pagesDir) } catch { /* no pages dir */ }
   return routes
 }
+
+// ─── Formatting ───────────────────────────────────────────
 
 function methodColor(method: string): string {
   const colors: Record<string, string> = {
@@ -95,33 +100,37 @@ function printRoutes(apiRoutes: ApiRoute[], vikeRoutes: VikeRoute[]): void {
   console.log()
 }
 
-export function routeListCommand(program: Command): void {
-  program
-    .command('route:list')
-    .description('List all registered routes')
-    .option('--json', 'Output routes as JSON')
-    .action(async (opts: { json?: boolean }) => {
-      const [apiRoutes, vikeRoutes] = await Promise.all([loadApiRoutes(), scanVikeRoutes()])
+// ─── Command Registration ─────────────────────────────────
 
-      if (opts.json) {
-        const output = {
-          api: apiRoutes.map(r => ({
-            method: r.method,
-            path: r.path,
-            middleware: r.middleware.map(fn =>
-              (typeof fn === 'function' && fn.name) ? fn.name : String(fn)
-            ),
-          })),
-          pages: vikeRoutes.map(r => ({
-            method: 'GET',
-            path: r.route,
-            source: `pages/${r.dir}`,
-          })),
-        }
-        console.log(JSON.stringify(output, null, 2))
-        return
+/**
+ * Register the route:list command with the rudder CLI.
+ */
+export function registerRouteListCommand(
+  rudder: { command(name: string, handler: (args: string[]) => void | Promise<void>): { description(text: string): unknown } },
+): void {
+  rudder.command('route:list', async (args: string[]) => {
+    const jsonFlag = args.includes('--json')
+    const [apiRoutes, vikeRoutes] = await Promise.all([loadApiRoutes(), scanVikeRoutes()])
+
+    if (jsonFlag) {
+      const output = {
+        api: apiRoutes.map(r => ({
+          method: r.method,
+          path: r.path,
+          middleware: r.middleware.map(fn =>
+            (typeof fn === 'function' && fn.name) ? fn.name : String(fn)
+          ),
+        })),
+        pages: vikeRoutes.map(r => ({
+          method: 'GET',
+          path: r.route,
+          source: `pages/${r.dir}`,
+        })),
       }
+      console.log(JSON.stringify(output, null, 2))
+      return
+    }
 
-      printRoutes(apiRoutes, vikeRoutes)
-    })
+    printRoutes(apiRoutes, vikeRoutes)
+  }).description('List all registered routes')
 }

@@ -85,5 +85,12 @@ export class AiProvider extends ServiceProvider {
       setConversationStore(store)
       this.app.instance('ai.conversations', store)
     }
+
+    // Register make:agent scaffolder
+    try {
+      const { registerMakeSpecs } = await import('@rudderjs/rudder')
+      const { makeAgentSpec } = await import('./commands/make-agent.js')
+      registerMakeSpecs(makeAgentSpec)
+    } catch { /* rudder not available */ }
   }
 }

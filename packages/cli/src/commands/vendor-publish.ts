@@ -3,7 +3,21 @@ import { readFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import type { Command } from 'commander'
 import { intro, outro, log, spinner } from '@clack/prompts'
-import { detectORM } from './migrate.js'
+
+type ORM = 'prisma' | 'drizzle'
+
+/** Detect which ORM is installed by checking package.json dependencies. */
+function detectORM(cwd: string = process.cwd()): ORM | null {
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'))
+    const deps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies }
+    if ('@rudderjs/orm-prisma' in deps) return 'prisma'
+    if ('@rudderjs/orm-drizzle' in deps) return 'drizzle'
+    return null
+  } catch {
+    return null
+  }
+}
 
 interface PublishGroup {
   from:    string
