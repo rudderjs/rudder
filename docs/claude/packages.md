@@ -9,7 +9,7 @@
 
 ```
 rudderjs/
-├── packages/           # 47 published packages (@rudderjs/*)
+├── packages/           # 48 published packages (@rudderjs/*)
 │   ├── contracts/      # Pure TypeScript types: ForgeRequest, ServerAdapter, MiddlewareHandler, etc.
 │   ├── support/        # Utilities: Env, Collection, ConfigRepository, resolveOptionalPeer, helpers
 │   ├── di/             # DI container: Container, @Injectable, @Inject
@@ -34,6 +34,9 @@ rudderjs/
 │   │                   #   Depends on @rudderjs/hash + @rudderjs/session
 │   ├── sanctum/        # API tokens — Sanctum class, TokenGuard, SanctumMiddleware(), RequireToken(),
 │   │                   #   SHA-256 hashed tokens with abilities
+│   ├── passport/       # OAuth 2 server — JWT (RS256), 5 grant types (auth code + PKCE, client credentials,
+│   │                   #   refresh token, device authorization), BearerMiddleware, scope() enforcement,
+│   │                   #   HasApiTokens mixin, passport:keys/client/purge CLI commands
 │   ├── socialite/      # OAuth — Socialite facade, SocialUser, 4 built-in providers (GitHub, Google,
 │   │                   #   Facebook, Apple), extensible
 │   ├── storage/        # Storage facade, LocalAdapter + S3Adapter (built-in)
@@ -102,6 +105,7 @@ rudderjs/
 | `@rudderjs/crypt` | 0.0.1 | Symmetric encryption — Crypt facade, AES-256-CBC, parseKey(), crypt() factory |
 | `@rudderjs/auth` | 0.2.0 | Native auth: Guards (SessionGuard), Providers (EloquentUserProvider), Auth facade, Gate/Policy, PasswordBroker, AuthMiddleware(), RequireAuth(), `MustVerifyEmail` interface, `EnsureEmailIsVerified()` middleware, `verificationUrl()`, `handleEmailVerification()`. Depends on hash + session |
 | `@rudderjs/sanctum` | 0.0.1 | API tokens — Sanctum class, TokenGuard, SanctumMiddleware(), RequireToken(), SHA-256 hashed tokens with abilities |
+| `@rudderjs/passport` | 0.0.1 | OAuth 2 server (Laravel Passport equivalent) — JWT (RS256), authorization code + PKCE, client credentials, refresh token, device authorization grants; `registerPassportRoutes()` for 8 `/oauth/*` endpoints; `BearerMiddleware`/`RequireBearer`/`scope()` middleware; `HasApiTokens` mixin for personal access tokens; `passport:keys`/`passport:client`/`passport:purge` CLI commands |
 | `@rudderjs/socialite` | 0.0.1 | OAuth — Socialite facade, SocialUser, 4 built-in providers (GitHub, Google, Facebook, Apple), extensible |
 | `@rudderjs/storage` | 0.0.2 | Storage facade, LocalAdapter + S3Adapter built-in (needs `@aws-sdk/client-s3`) |
 | `@rudderjs/schedule` | 0.0.6 | Task scheduler, schedule:run/work/list, sub-minute (`everyFiveSeconds`..`everyThirtySeconds`), hooks (`before`/`after`/`onSuccess`/`onFailure`), `withoutOverlapping(expiresAt)`, `evenInMaintenanceMode()`, `onOneServer()` (cache-backed distributed lock) |

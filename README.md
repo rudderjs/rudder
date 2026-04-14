@@ -472,6 +472,7 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/crypt` | Symmetric encryption (AES-256-CBC) |
 | `@rudderjs/auth` | Authentication (guards, providers), Authorization (gates, policies), Password resets |
 | `@rudderjs/sanctum` | API token authentication with abilities |
+| `@rudderjs/passport` | OAuth 2 server (JWT RS256) — auth code + PKCE, client credentials, refresh, device code |
 | `@rudderjs/socialite` | OAuth providers (GitHub, Google, Facebook, Apple) |
 
 ### Infrastructure (11)
