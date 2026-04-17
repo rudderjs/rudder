@@ -1,2 +1,0 @@
-# Standalone project — prevents pnpm from merging with a parent workspace
-packages: []
