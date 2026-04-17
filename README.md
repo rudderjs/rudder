@@ -80,6 +80,8 @@ pnpm dev
 
 ## How It Works
 
+> **Coming from Laravel?** Read [the mental-model guide](docs/guide/mental-model.md) first. RudderJS's container is process-scoped, not request-scoped — the one-page explanation prevents the whole class of ghost-user / stale-state bugs.
+
 ### 1. Bootstrap — one file wires everything
 
 ```ts
