@@ -11,8 +11,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: Build, Typecheck & Test
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+  build-test:
+    name: Build & Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -32,14 +56,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Cache turbo artifacts
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Build
-        run: pnpm build
-
-      - name: Typecheck
-        run: pnpm turbo run typecheck --filter='./packages/*' --filter='./create-rudder-app'
-
-      - name: Lint
-        run: pnpm lint
+        run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
 
       - name: Test
-        run: pnpm test
+        run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
