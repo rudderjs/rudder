@@ -186,6 +186,8 @@ The scanner reads the constant and writes it into the generated Vike `+route.ts`
 
 Middleware (auth, rate limiting, CSRF, form validation) runs **before** the view renders — same router chain as JSON routes. Client-side navigation between views and between views and regular Vike pages is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike's native `pageContext.json` fetches (~400 bytes per nav).
 
+> **Why not Inertia?** Inertia ships a ~30kb client runtime, a page-object JSON protocol on every navigation, and an adapter layer between your controller and the renderer. With Laravel you also run a *second* Node SSR process and pay an intra-server HTTP hop on every request. RudderJS is pure Vike in a single Node process: props are JS objects passed by reference, client hydration uses Vike's native path, no protocol, no adapter, no second daemon to run or monitor in production.
+
 **Framework support**: React (`vike-react`), Vue (`vike-vue`), Solid (`vike-solid`), and a vanilla HTML-string mode — zero client JS, perfect for admin reports, email bodies, webhook responses. The scanner auto-detects which renderer is installed. Vanilla views use `@rudderjs/view`'s `html\`\`` tagged template, which auto-escapes interpolations and composes via `SafeString`.
 
 **Packages that ship views** follow a consistent shape: `views/<framework>/<Name>.{tsx,vue}` + a `registerXRoutes(router, opts)` helper. `@rudderjs/auth` is the reference implementation — `registerAuthRoutes(Route, { middleware })` wires `/login`, `/register`, `/forgot-password`, `/reset-password` in one line, with the views vendored into `app/Views/Auth/` for the consumer to customize.
