@@ -325,7 +325,7 @@ function packageJson(ctx: TemplateContext): string {
       start:        'node ./dist/server/index.mjs',
       preview:      'node ./dist/server/index.mjs',
       typecheck:    'tsc --noEmit',
-      rudder:      'tsx node_modules/@rudderjs/cli/src/index.ts',
+      rudder:      'tsx node_modules/@rudderjs/cli/dist/index.js',
     },
     ...pmField,
     dependencies:    deps,
