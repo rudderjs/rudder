@@ -1,3 +1,12 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "rudderjs-boost": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "node_modules/@rudderjs/cli/src/index.ts",
+        "boost:mcp"
+      ]
+    }
+  }
 }
