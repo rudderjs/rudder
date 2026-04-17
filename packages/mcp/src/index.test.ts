@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { z } from 'zod'
 import {
   Mcp, McpServer, McpTool, McpResource, McpPrompt, McpResponse,
-  Name, Version, Instructions, Description,
+  Name, Version, Instructions, Description, Handle,
   McpTestClient,
 } from './index.js'
 import { toKebabCase } from './utils.js'
@@ -98,6 +98,50 @@ describe('zodToJsonSchema', () => {
 
     const prop = (result.properties as Record<string, Record<string, unknown>>)['query']
     assert.equal(prop!['description'], 'Search query')
+  })
+
+  // Zod v4 moved `.describe()` storage off `_def.description` and onto the schema
+  // instance. The converter has to fall back to `schema.description` when v4 is
+  // in use. Simulate by building the v4-shaped schema object directly — this
+  // passes regardless of which Zod version the workspace installs.
+  it('reads description from instance (Zod v4 shape)', () => {
+    const fakeV4Field = {
+      _def: { type: 'string' },
+      description: 'The name to greet',
+    }
+    const fakeSchema = {
+      shape: { name: fakeV4Field },
+    } as unknown as z.ZodObject<z.ZodRawShape>
+    const result = zodToJsonSchema(fakeSchema)
+    const prop = (result.properties as Record<string, Record<string, unknown>>)['name']
+    assert.equal(prop!['type'], 'string')
+    assert.equal(prop!['description'], 'The name to greet')
+  })
+
+  it('handles v4-shape arrays (element field, not type)', () => {
+    const fakeV4Array = {
+      _def: { type: 'array', element: { _def: { type: 'string' } } },
+    }
+    const fakeSchema = {
+      shape: { tags: fakeV4Array },
+    } as unknown as z.ZodObject<z.ZodRawShape>
+    const result = zodToJsonSchema(fakeSchema)
+    const prop = (result.properties as Record<string, Record<string, unknown>>)['tags']
+    assert.equal(prop!['type'], 'array')
+    assert.deepStrictEqual(prop!['items'], { type: 'string' })
+  })
+
+  it('handles v4-shape enums (entries record)', () => {
+    const fakeV4Enum = {
+      _def: { type: 'enum', entries: { admin: 'admin', user: 'user' } },
+    }
+    const fakeSchema = {
+      shape: { role: fakeV4Enum },
+    } as unknown as z.ZodObject<z.ZodRawShape>
+    const result = zodToJsonSchema(fakeSchema)
+    const prop = (result.properties as Record<string, Record<string, unknown>>)['role']
+    assert.equal(prop!['type'], 'string')
+    assert.deepStrictEqual(prop!['enum'], ['admin', 'user'])
   })
 })
 
@@ -252,6 +296,72 @@ describe('Mcp', () => {
     assert.ok(entry)
     assert.equal(entry.middleware.length, 1)
   })
+
+  it('.oauth2() stores options on the entry', () => {
+    class TestServer extends McpServer {}
+    Mcp.web('/mcp', TestServer).oauth2({ scopes: ['mcp.read'] })
+
+    const entry = Mcp.getWebServers().get('/mcp')
+    assert.ok(entry)
+    assert.ok(entry.oauth2)
+    assert.deepStrictEqual(entry.oauth2.scopes, ['mcp.read'])
+  })
+
+  it('.oauth2() defaults to empty options when called without args', () => {
+    class TestServer extends McpServer {}
+    Mcp.web('/mcp', TestServer).oauth2()
+
+    const entry = Mcp.getWebServers().get('/mcp')
+    assert.ok(entry?.oauth2)
+    assert.deepStrictEqual(entry.oauth2, {})
+  })
+})
+
+// ─── oauth2McpMiddleware ──────────────────────────────────
+
+describe('oauth2McpMiddleware', () => {
+  function mockRes() {
+    const calls: { status?: number; body?: unknown; headers: Record<string, string> } = { headers: {} }
+    const res = {
+      status(code: number) { calls.status = code; return res },
+      header(key: string, value: string) { calls.headers[key.toLowerCase()] = value; return res },
+      json(data: unknown) { calls.body = data },
+      raw: {},
+    }
+    return { res, calls }
+  }
+
+  function mockReq(authHeader?: string) {
+    return {
+      headers: { ...(authHeader ? { authorization: authHeader } : {}), host: 'app.test' },
+      raw: {},
+    }
+  }
+
+  it('returns 401 with WWW-Authenticate when no bearer token', async () => {
+    const { oauth2McpMiddleware } = await import('./auth/oauth2.js')
+    const mw = oauth2McpMiddleware('/mcp/secure')
+    const { res, calls } = mockRes()
+    let nextCalled = false
+    await mw(mockReq() as never, res as never, async () => { nextCalled = true })
+
+    assert.equal(calls.status, 401)
+    assert.ok(calls.headers['www-authenticate']?.includes('Bearer'))
+    assert.ok(calls.headers['www-authenticate']?.includes('resource_metadata='))
+    assert.ok(calls.headers['www-authenticate']?.includes('/.well-known/oauth-protected-resource/mcp/secure'))
+    assert.equal(nextCalled, false)
+  })
+
+  it('returns 401 when passport is not installed', async () => {
+    const { oauth2McpMiddleware } = await import('./auth/oauth2.js')
+    const mw = oauth2McpMiddleware('/mcp/secure')
+    const { res, calls } = mockRes()
+    await mw(mockReq('Bearer does-not-matter') as never, res as never, async () => {})
+
+    // @rudderjs/passport isn't installed in this test environment — expect 401
+    assert.equal(calls.status, 401)
+    assert.ok(calls.headers['www-authenticate'])
+  })
 })
 
 // ─── McpTestClient ────────────────────────────────────────
@@ -348,5 +458,74 @@ describe('McpTestClient', () => {
     assert.throws(() => client.assertToolCount(99), /Expected 99/)
     assert.throws(() => client.assertResourceExists('missing://x'), /not found/)
     assert.throws(() => client.assertPromptExists('missing'), /not found/)
+  })
+})
+
+// ─── @Handle DI injection ─────────────────────────────────
+
+describe('@Handle DI injection', () => {
+  class Logger {
+    entries: string[] = []
+    info(msg: string) { this.entries.push(msg) }
+  }
+
+  const logger = new Logger()
+
+  beforeEach(() => {
+    logger.entries.length = 0
+    ;(globalThis as Record<string, unknown>)['__rudderjs_instance__'] = {
+      make: <T>(Ctor: new (...args: unknown[]) => T): T => {
+        if (Ctor === (Logger as unknown)) return logger as unknown as T
+        return new Ctor()
+      },
+    }
+  })
+
+  it('resolves extra method params from the container', async () => {
+    class LogTool extends McpTool {
+      schema() { return z.object({ message: z.string() }) }
+      @Handle(Logger)
+      async handle(input: Record<string, unknown>, log: Logger) {
+        log.info(String(input['message']))
+        return McpResponse.text('logged')
+      }
+    }
+    class LogServer extends McpServer { protected tools = [LogTool] }
+
+    const client = new McpTestClient(LogServer)
+    const result = await client.callTool('log', { message: 'hi' })
+    assert.equal((result.content[0] as { text: string }).text, 'logged')
+    assert.deepStrictEqual(logger.entries, ['hi'])
+  })
+
+  it('supports implicit token resolution via design:paramtypes (plain tsc)', async () => {
+    class PingTool extends McpTool {
+      schema() { return z.object({}) }
+      @Handle()
+      async handle(_input: Record<string, unknown>, log: Logger) {
+        log.info('ping')
+        return McpResponse.text('pong')
+      }
+    }
+    class PingServer extends McpServer { protected tools = [PingTool] }
+
+    const client = new McpTestClient(PingServer)
+    const result = await client.callTool('ping', {})
+    assert.equal((result.content[0] as { text: string }).text, 'pong')
+    assert.deepStrictEqual(logger.entries, ['ping'])
+  })
+
+  it('still calls handle(input) when the method is not decorated', async () => {
+    class PlainTool extends McpTool {
+      schema() { return z.object({ n: z.number() }) }
+      async handle(input: Record<string, unknown>) {
+        return McpResponse.text(`got ${input['n']}`)
+      }
+    }
+    class PlainServer extends McpServer { protected tools = [PlainTool] }
+
+    const client = new McpTestClient(PlainServer)
+    const result = await client.callTool('plain', { n: 7 })
+    assert.equal((result.content[0] as { text: string }).text, 'got 7')
   })
 })

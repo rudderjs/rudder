@@ -35,6 +35,7 @@
     "@rudderjs/localization": "workspace:*",
     "@rudderjs/log": "workspace:*",
     "@rudderjs/mail": "workspace:*",
+    "@rudderjs/mcp": "workspace:*",
     "@rudderjs/middleware": "workspace:*",
     "@rudderjs/notification": "workspace:*",
     "@rudderjs/orm": "workspace:*",

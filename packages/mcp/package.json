@@ -2,6 +2,10 @@
   "name": "@rudderjs/mcp",
   "version": "0.0.1",
   "description": "MCP (Model Context Protocol) server framework for RudderJS",
+  "rudderjs": {
+    "provider": "McpProvider",
+    "stage": "feature"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -47,7 +51,16 @@
     "reflect-metadata": "^0.2.0",
     "zod": "^3.23.0"
   },
+  "peerDependencies": {
+    "@rudderjs/router": "workspace:*",
+    "@rudderjs/rudder": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/router": { "optional": true },
+    "@rudderjs/rudder": { "optional": true }
+  },
   "devDependencies": {
+    "@rudderjs/router": "workspace:*",
     "@rudderjs/rudder": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"

@@ -2,6 +2,7 @@ import type { McpServer } from './McpServer.js'
 import type { McpTool, McpToolResult } from './McpTool.js'
 import type { McpResource } from './McpResource.js'
 import type { McpPrompt, McpPromptMessage } from './McpPrompt.js'
+import { resolveHandleDeps } from './runtime.js'
 
 export class McpTestClient {
   private tools: McpTool[]
@@ -28,7 +29,8 @@ export class McpTestClient {
   async callTool(name: string, input: Record<string, unknown> = {}): Promise<McpToolResult> {
     const tool = this.tools.find((t) => t.name() === name)
     if (!tool) throw new Error(`Tool "${name}" not found`)
-    return tool.handle(input)
+    const extras = resolveHandleDeps(tool, 'handle')
+    return tool.handle(input, ...extras as [])
   }
 
   async listTools(): Promise<Array<{ name: string; description: string }>> {

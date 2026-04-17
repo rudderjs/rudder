@@ -1,12 +1,20 @@
 import { ServiceProvider } from '@rudderjs/core'
+import { Mcp } from '@rudderjs/mcp'
 import { UserService } from '../Services/UserService.js'
 import { GreetingService } from '../Services/GreetingService.js'
 import { TodoServiceProvider } from '../Modules/Todo/TodoServiceProvider.js'
+import { EchoServer } from '../Mcp/EchoServer.js'
 
 export class AppServiceProvider extends ServiceProvider {
   register(): void {
     this.app.singleton(UserService, () => new UserService())
     this.app.singleton(GreetingService, () => new GreetingService())
+
+    Mcp.web('/mcp/echo', EchoServer)
+    Mcp.web('/mcp/secure', EchoServer).oauth2({
+      scopes: ['mcp.read'],
+      scopesSupported: ['mcp.read', 'mcp.write'],
+    })
   }
 
   async boot(): Promise<void> {

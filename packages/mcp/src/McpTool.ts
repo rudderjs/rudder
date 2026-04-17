@@ -24,6 +24,17 @@ export abstract class McpTool {
   /** Optional output schema using Zod — advertises the structure of the tool's response */
   outputSchema?(): z.ZodObject<z.ZodRawShape>
 
-  /** Handle the tool call */
-  abstract handle(input: Record<string, unknown>): Promise<McpToolResult>
+  /**
+   * Handle the tool call.
+   *
+   * Extra parameters beyond `input` are resolved from the DI container when
+   * the method is decorated with `@Handle()` (required for TypeScript to
+   * emit parameter-type metadata). Example:
+   *
+   * ```ts
+   * @Handle()
+   * async handle(input, logger: Logger) { ... }
+   * ```
+   */
+  abstract handle(input: Record<string, unknown>, ...deps: unknown[]): Promise<McpToolResult>
 }

@@ -19,6 +19,10 @@ export abstract class McpResource {
     return this.uri().includes('{')
   }
 
-  /** Handle resource read. Receives extracted params if this is a template resource. */
-  abstract handle(params?: Record<string, string>): Promise<string>
+  /**
+   * Handle resource read. Receives extracted params if this is a template
+   * resource. Extra parameters beyond `params` are resolved from the DI
+   * container when the method is decorated with `@Handle()`.
+   */
+  abstract handle(params?: Record<string, string>, ...deps: unknown[]): Promise<string>
 }

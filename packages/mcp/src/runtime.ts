@@ -14,6 +14,7 @@ import type { McpTool } from './McpTool.js'
 import type { McpResource } from './McpResource.js'
 import type { McpPrompt } from './McpPrompt.js'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
+import { getInjectTokens, type InjectToken } from './decorators.js'
 
 /**
  * Match a URI against a template pattern like `weather://location/{city}`.
@@ -39,15 +40,27 @@ function getProtected<T>(server: McpServer, key: string, fallback: T): T {
   return ((server as unknown as Record<string, T>)[key]) ?? fallback
 }
 
+type Ctor<T = unknown> = new (...args: any[]) => T
+type RudderContainer = {
+  make?: <U>(target: Ctor<U> | string | symbol) => U
+}
+
+function getContainer(): RudderContainer | undefined {
+  const g = globalThis as Record<string, unknown>
+  // `__rudderjs_app__` is the Application singleton (exposes `.make()`).
+  // `__rudderjs_instance__` is the RudderJS wrapper (does not).
+  return (g['__rudderjs_app__'] as RudderContainer | undefined)
+      ?? (g['__rudderjs_instance__'] as RudderContainer | undefined)
+}
+
 /**
  * Try to resolve a class via the framework's DI container (auto-injects
  * constructor dependencies). Falls back to plain `new T()` if the container
  * is not available or resolution fails.
  */
-function resolveOrConstruct<T>(Ctor: new (...args: any[]) => T): T {
+function resolveOrConstruct<T>(Ctor: Ctor<T>): T {
   try {
-    const container = (globalThis as Record<string, unknown>)['__rudderjs_instance__'] as
-      { make?: <U>(target: new (...args: any[]) => U) => U } | undefined
+    const container = getContainer()
     if (container?.make) {
       return container.make(Ctor)
     }
@@ -55,6 +68,53 @@ function resolveOrConstruct<T>(Ctor: new (...args: any[]) => T): T {
     // DI resolution failed — fall back to plain constructor
   }
   return new Ctor()
+}
+
+/**
+ * Read `design:paramtypes` for the given method and resolve all parameters
+ * beyond index 0 from the DI container. Index 0 is reserved for the tool
+ * input (or resource params / prompt arguments).
+ *
+ * Returns an empty array if:
+ *   - the method wasn't decorated (no metadata emitted by TS)
+ *   - the framework container isn't available
+ *   - no extra parameters were declared
+ */
+export function resolveHandleDeps(instance: object, propertyKey: string): unknown[] {
+  // 1) Preferred: explicit tokens from @Handle(Type1, Type2, …). Always works,
+  //    no reliance on emitDecoratorMetadata.
+  const explicit = getInjectTokens(instance, propertyKey)
+  const container = getContainer()
+
+  if (explicit && explicit.length > 0) {
+    if (!container?.make) return []
+    return explicit.map((token) => {
+      try {
+        return container.make!(token as Ctor)
+      } catch {
+        return undefined
+      }
+    })
+  }
+
+  // 2) Fallback: design:paramtypes (requires tsc or a bundler that emits
+  //    decorator metadata — notably esbuild/Vite do not).
+  const paramTypes = Reflect.getMetadata('design:paramtypes', instance, propertyKey) as
+    Ctor[] | undefined
+  if (!paramTypes || paramTypes.length <= 1) return []
+  if (!container?.make) return []
+
+  const extras: unknown[] = []
+  for (let i = 1; i < paramTypes.length; i++) {
+    const Type = paramTypes[i]
+    if (!Type) { extras.push(undefined); continue }
+    try {
+      extras.push(container.make(Type))
+    } catch {
+      extras.push(undefined)
+    }
+  }
+  return extras
 }
 
 export function createSdkServer(server: McpServer): Server {
@@ -93,7 +153,9 @@ export function createSdkServer(server: McpServer): Server {
       return { content: [{ type: 'text' as const, text: `Unknown tool: ${request.params.name}` }], isError: true }
     }
     try {
-      const result = await tool.handle((request.params.arguments ?? {}) as Record<string, unknown>)
+      const input = (request.params.arguments ?? {}) as Record<string, unknown>
+      const extras = resolveHandleDeps(tool, 'handle')
+      const result = await tool.handle(input, ...extras as [])
       return { ...result }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -147,10 +209,11 @@ export function createSdkServer(server: McpServer): Server {
     if (!resource) {
       throw new Error(`Unknown resource: ${uri}`)
     }
+    const extras = resolveHandleDeps(resource, 'handle')
     return {
       contents: [{
         uri,
-        text: await resource.handle(params),
+        text: await resource.handle(params, ...extras as []),
         mimeType: resource.mimeType(),
       }],
     }
@@ -170,7 +233,9 @@ export function createSdkServer(server: McpServer): Server {
     if (!prompt) {
       throw new Error(`Unknown prompt: ${request.params.name}`)
     }
-    return { messages: await prompt.handle((request.params.arguments ?? {}) as Record<string, unknown>) }
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>
+    const extras = resolveHandleDeps(prompt, 'handle')
+    return { messages: await prompt.handle(args, ...extras as []) }
   })
 
   return sdk
@@ -221,15 +286,12 @@ export async function mountHttpTransport(
     ? options.sessionIdGenerator
     : () => crypto.randomUUID()
 
-  // Import the router at runtime (same pattern as Telescope).
-  // Dynamic import avoids a hard dependency on @rudderjs/router.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const routerMod = await import(/* webpackIgnore: true */ '@rudderjs/router' as any) as {
+  const { resolveOptionalPeer } = await import('@rudderjs/core')
+  const { router } = await resolveOptionalPeer<{
     router: {
       all: (path: string, handler: (req: unknown, res: unknown) => unknown, middleware?: unknown[]) => unknown
     }
-  }
-  const { router } = routerMod
+  }>('@rudderjs/router')
 
   const middleware = options?.middleware as ((req: unknown, res: unknown, next: () => Promise<void>) => void | Promise<void>)[] | undefined
 

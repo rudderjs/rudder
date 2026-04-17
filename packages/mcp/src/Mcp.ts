@@ -1,15 +1,26 @@
 import type { McpServer } from './McpServer.js'
+import type { OAuth2McpOptions } from './auth/oauth2.js'
 
 type ServerClass = new () => McpServer
 
 export interface McpWebEntry {
   server: ServerClass
   middleware: unknown[]
+  /** Set when `.oauth2()` was chained on the builder. */
+  oauth2?: OAuth2McpOptions
 }
 
 export interface McpWebBuilder {
-  /** Add middleware to this web MCP endpoint */
+  /** Add middleware to this web MCP endpoint. */
   middleware(mw: unknown[]): McpWebBuilder
+  /**
+   * Protect this endpoint with OAuth 2.1 bearer tokens. Registers an RFC 9728
+   * Protected Resource Metadata endpoint alongside it.
+   *
+   * Requires `@rudderjs/passport` to be installed (used as the authorization
+   * server and token validator).
+   */
+  oauth2(options?: OAuth2McpOptions): McpWebBuilder
 }
 
 export class Mcp {
@@ -23,6 +34,10 @@ export class Mcp {
     const builder: McpWebBuilder = {
       middleware(mw: unknown[]) {
         entry.middleware.push(...mw)
+        return builder
+      },
+      oauth2(options: OAuth2McpOptions = {}) {
+        entry.oauth2 = options
         return builder
       },
     }

@@ -458,6 +458,9 @@ importers:
         specifier: ^3.23.0
         version: 3.25.76
     devDependencies:
+      '@rudderjs/router':
+        specifier: workspace:*
+        version: link:../router
       '@rudderjs/rudder':
         specifier: workspace:*
         version: link:../rudder
@@ -1086,6 +1089,9 @@ importers:
       '@rudderjs/mail':
         specifier: workspace:*
         version: link:../packages/mail
+      '@rudderjs/mcp':
+        specifier: workspace:*
+        version: link:../packages/mcp
       '@rudderjs/middleware':
         specifier: workspace:*
         version: link:../packages/middleware
