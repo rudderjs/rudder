@@ -31,7 +31,7 @@ Skip `[name]` to be prompted for one.
 
 With the **default choices** (Prisma + SQLite + Auth + Cache + React + Tailwind + shadcn/ui), you get a working fullstack app you can register into, log into, and sign out of — without writing any code:
 
-- **Welcome page at `/`** — Laravel-style controller-returned view, Tailwind + shadcn styled, with Log in / Register links or a signed-in user + Sign out button.
+- **Welcome page at `/`** — controller-returned view, Tailwind + shadcn styled, with Log in / Register links or a signed-in user + Sign out button.
 - **Auth flow that works** — `/login`, `/register`, `/forgot-password`, `/reset-password` pages vendored into `app/Views/Auth/` (so you can customize them freely) and wired to `POST /api/auth/sign-in/email` / `sign-up/email` / `sign-out` / `request-password-reset` / `reset-password` endpoints.
 - **Database ready** — Prisma schema with a `User` + `PasswordResetToken` model, SQLite by default, a `User` ORM model.
 - **Session-based auth** — cookie sessions via `@rudderjs/session`, `AuthMiddleware` applied globally, ghost-user-safe (see the [mental model guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/mental-model.md)).

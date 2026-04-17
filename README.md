@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>Laravel's developer experience, reimagined for the Node.js ecosystem.</strong>
+  <strong>The fullstack Node.js framework with structure, speed, and AI built in.</strong>
 </p>
 
 <p align="center">
@@ -17,9 +17,9 @@
 
 ---
 
-RudderJS is the **fullstack Node.js framework for teams who miss Laravel**. Controller-returned SSR views render React / Vue / Solid through [Vike](https://vike.dev) + [Vite](https://vitejs.dev) with real SPA navigation — no Inertia adapter, no JSON envelope, no page reloads. Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent from one monorepo, using the patterns that made Laravel famous — service providers, DI, an Eloquent-style ORM, Rudder CLI, gates & policies — minus the PHP runtime.
+RudderJS is a **batteries-included, modular TypeScript framework for Node.js**. Controller-returned SSR views render React / Vue / Solid through [Vike](https://vike.dev) + [Vite](https://vitejs.dev) with real SPA navigation — no Inertia adapter, no JSON envelope, no page reloads. Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent from **one monorepo**, built on a service-oriented architecture (DI container, service providers, active-record ORM, a single `rudder` CLI for every task).
 
-> **Three things we think no one else gets right at once:** Laravel's ergonomics, Inertia's UX without Inertia's tax, and a first-class AI/agent engine.
+> **What no one else gets right at once:** structured fullstack DX, native SSR views without the Inertia tax, and a first-class AI/agent engine.
 
 ## Why RudderJS?
 
@@ -29,7 +29,7 @@ RudderJS is the middle ground — **batteries-included, modular, UI-agnostic, fu
 
 | | Next.js | NestJS | AdonisJS | RudderJS |
 |---|---|---|---|---|
-| **Philosophy** | Component-first | Angular-style DI | Laravel port | Laravel DX, Node-native |
+| **Philosophy** | Component-first | Angular-style DI | Full MVC port | Service-oriented, modular |
 | **Build tool** | Webpack / Turbopack | Webpack / esbuild | Webpack (stencil) | **Vite** |
 | **UI framework** | React only | API only | Edge templates / Inertia | React, Vue, Solid, or none |
 | **SSR views from controllers** | N/A | ✗ | Inertia adapter | ✓ **native — no Inertia, no JSON envelope** |
@@ -42,10 +42,10 @@ RudderJS is the middle ground — **batteries-included, modular, UI-agnostic, fu
 
 ## Key Features
 
-- **Controller-returned views** — `return view('dashboard', { users })` renders a typed React/Vue/Solid component through Vike SSR with full SPA navigation. No Inertia adapter, no JSON envelope, ~400 bytes per nav. The Blade ergonomics you miss, without the tradeoffs.
+- **Controller-returned views** — `return view('dashboard', { users })` renders a typed React/Vue/Solid component through Vike SSR with full SPA navigation. No Inertia adapter, no JSON envelope, ~400 bytes per nav.
 - **AI-native from day one** — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), agents with tools, streaming, middleware, conversations, attachments, MCP server support, queue integration.
 - **Real-time on one port** — WebSocket channels (`@rudderjs/broadcast`), Yjs CRDT collab (`@rudderjs/live`), and HTTP all share the same server. No separate process, no proxy.
-- **Laravel DX that ports cleanly to Node** — service providers, DI, gates & policies, an Eloquent-style ORM (Prisma or Drizzle), a Rudder CLI you'd recognize, scheduling, queues, notifications, Telescope-style inspector.
+- **Service-oriented architecture** — DI container, service providers, gates & policies, an active-record ORM (Prisma or Drizzle), scheduling, queues, notifications, and a built-in inspector — all wired through one bootstrap file and one `rudder` CLI.
 - **Pay-as-you-go modularity** — 45 first-party `@rudderjs/*` packages. Start with 3 (core, router, server-hono), bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3).
 - **TypeScript-first, strict by default** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime.
 
@@ -125,7 +125,7 @@ Run `pnpm rudder providers:discover` after installing or removing packages to re
 
 ### 2. Routes
 
-Routes can return JSON (API endpoints) or a `view()` (Laravel-style SSR pages rendered through Vike). Both coexist in the same file, run the same middleware chain, and support full SPA navigation between them.
+Routes can return JSON (API endpoints) or a `view()` (SSR pages rendered through Vike). Both coexist in the same file, run the same middleware chain, and support full SPA navigation between them.
 
 ```ts
 // routes/api.ts
@@ -143,7 +143,7 @@ Route.post('/api/users', async (req, res) => {
   return res.status(201).json({ data: user })
 })
 
-// Laravel-style view — render a typed React/Vue/Solid component
+// Controller-returned view — render a typed React/Vue/Solid component
 // from app/Views/Dashboard.tsx with controller-supplied props
 Route.get('/dashboard', async () => {
   const users = await User.all()
@@ -186,7 +186,7 @@ The scanner reads the constant and writes it into the generated Vike `+route.ts`
 
 Middleware (auth, rate limiting, CSRF, form validation) runs **before** the view renders — same router chain as JSON routes. Client-side navigation between views and between views and regular Vike pages is full SPA — no full page reloads, no Inertia adapter, no JSON envelope. Just Vike's native `pageContext.json` fetches (~400 bytes per nav).
 
-**Framework support**: React (`vike-react`), Vue (`vike-vue`), Solid (`vike-solid`), and vanilla HTML-string mode for the Blade equivalent — zero client JS, perfect for admin reports, email bodies, webhook responses. The scanner auto-detects which renderer is installed. Vanilla views use `@rudderjs/view`'s `html\`\`` tagged template, which auto-escapes interpolations and composes via `SafeString`.
+**Framework support**: React (`vike-react`), Vue (`vike-vue`), Solid (`vike-solid`), and a vanilla HTML-string mode — zero client JS, perfect for admin reports, email bodies, webhook responses. The scanner auto-detects which renderer is installed. Vanilla views use `@rudderjs/view`'s `html\`\`` tagged template, which auto-escapes interpolations and composes via `SafeString`.
 
 **Packages that ship views** follow a consistent shape: `views/<framework>/<Name>.{tsx,vue}` + a `registerXRoutes(router, opts)` helper. `@rudderjs/auth` is the reference implementation — `registerAuthRoutes(Route, { middleware })` wires `/login`, `/register`, `/forgot-password`, `/reset-password` in one line, with the views vendored into `app/Views/Auth/` for the consumer to customize.
 
@@ -416,7 +416,7 @@ provider.awareness.on('change', () => {
 
 HTTP, WebSocket channels, and CRDT sync all share the same port — no separate process or proxy needed.
 
-### 11. Debug helpers (the ones every Laravel dev misses)
+### 11. Debug helpers
 
 ```ts
 import { config, dump, dd, app, resolve } from '@rudderjs/core'
@@ -425,7 +425,7 @@ config('app.name')       // → 'my-app'
 config('cache.ttl', 60)  // → 60 (with fallback)
 
 dump({ user, session })  // pretty-prints, server keeps running
-dd(req.body)             // pretty-prints then stops (like Laravel's dd())
+dd(req.body)             // pretty-prints then stops the request
 
 const svc = resolve<UserService>(UserService)
 ```
@@ -434,7 +434,7 @@ const svc = resolve<UserService>(UserService)
 
 ## Packages (45)
 
-> **45 first-party packages** across 9 categories — more than Laravel's official ecosystem, all under one monorepo.
+> **45 first-party packages** across 9 categories — everything from DI and routing to AI agents, real-time CRDT, and production monitoring. All under one monorepo, all opt-in.
 
 ### Foundation (7)
 | Package | Description |
@@ -452,7 +452,7 @@ const svc = resolve<UserService>(UserService)
 |---|---|
 | `@rudderjs/server-hono` | Hono HTTP adapter |
 | `@rudderjs/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
-| `@rudderjs/view` | Laravel-style `view('id', props)` controller responses via Vike SSR |
+| `@rudderjs/view` | `view('id', props)` controller responses via Vike SSR |
 | `@rudderjs/vite` | Vite + Vike plugin with SSR externals and RudderJS integration |
 
 ### Database (3)
