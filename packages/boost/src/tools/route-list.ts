@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { execSync } from 'node:child_process'
 
 interface RouteInfo {
   method: string
@@ -19,7 +20,6 @@ export function getRouteList(cwd: string): RouteInfo[] {
 
 function tryRuntimeRouteList(cwd: string): RouteInfo[] | null {
   try {
-    const { execSync } = require('node:child_process') as typeof import('node:child_process')
     const pm = detectPM(cwd)
     const cmd = `${pm} rudder route:list --json`
     const result = execSync(cmd, { cwd, timeout: 15_000, stdio: ['pipe', 'pipe', 'pipe'] })

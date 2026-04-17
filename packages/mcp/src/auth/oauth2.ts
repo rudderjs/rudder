@@ -79,7 +79,7 @@ export function oauth2McpMiddleware(mcpPath: string, options: OAuth2McpOptions =
       return
     }
 
-    let token: { id: string; revoked: boolean } | null = null
+    let token: { id: string; revoked: boolean } | null
     try {
       token = await passport.AccessToken.query().where('id', payload.jti).first()
     } catch {

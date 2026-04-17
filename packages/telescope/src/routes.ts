@@ -33,9 +33,10 @@ export async function registerTelescopeRoutes(
   storage: TelescopeStorage,
   opts:    RegisterTelescopeRoutesOptions = {},
 ): Promise<void> {
-  let router: { get: Function; post: Function; patch: Function; delete: Function }
+  type Router = typeof import('@rudderjs/router')['router']
+  let router: Pick<Router, 'get' | 'post' | 'patch' | 'delete'>
   try {
-    router = (await import('@rudderjs/router')).router as never
+    router = (await import('@rudderjs/router')).router
   } catch {
     return // @rudderjs/router not installed — telescope routes disabled
   }

@@ -1,3 +1,5 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -186,9 +188,6 @@ interface GuidelineEntry {
 }
 
 function discoverGuidelines(cwd: string): GuidelineEntry[] {
-  const fs = require('node:fs') as typeof import('node:fs')
-  const path = require('node:path') as typeof import('node:path')
-
   const entries: GuidelineEntry[] = []
   const scope = path.join(cwd, 'node_modules', '@rudderjs')
 
@@ -205,7 +204,6 @@ function discoverGuidelines(cwd: string): GuidelineEntry[] {
 }
 
 function registerGuidelinesResources(server: McpServer, cwd: string): void {
-  const fs = require('node:fs') as typeof import('node:fs')
   const guidelines = discoverGuidelines(cwd)
 
   for (const g of guidelines) {

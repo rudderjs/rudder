@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
 export interface DocSection {
   package: string
   file: string
@@ -15,22 +18,11 @@ export interface SearchResult {
 
 let cachedIndex: DocSection[] | undefined
 
-function lazyFs(): typeof import('node:fs') {
-  return require('node:fs')
-}
-
-function lazyPath(): typeof import('node:path') {
-  return require('node:path')
-}
-
 /**
  * Build the documentation index by scanning @rudderjs/* packages
  * for README.md and docs/**\/*.md files.
  */
 function buildIndex(cwd: string): DocSection[] {
-  const fs = lazyFs()
-  const path = lazyPath()
-
   const sections: DocSection[] = []
   const nodeModules = path.join(cwd, 'node_modules', '@rudderjs')
 
@@ -51,7 +43,7 @@ function buildIndex(cwd: string): DocSection[] {
     // docs/**/*.md
     const docsDir = path.join(pkgDir, 'docs')
     if (fs.existsSync(docsDir) && fs.statSync(docsDir).isDirectory()) {
-      collectMdFiles(fs, path, docsDir, mdFiles)
+      collectMdFiles(docsDir, mdFiles)
     }
 
     for (const filePath of mdFiles) {
@@ -73,17 +65,12 @@ function buildIndex(cwd: string): DocSection[] {
   return sections
 }
 
-function collectMdFiles(
-  fs: typeof import('node:fs'),
-  path: typeof import('node:path'),
-  dir: string,
-  out: string[],
-): void {
+function collectMdFiles(dir: string, out: string[]): void {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      collectMdFiles(fs, path, full, out)
+      collectMdFiles(full, out)
     } else if (entry.name.endsWith('.md')) {
       out.push(full)
     }
