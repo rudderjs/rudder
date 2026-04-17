@@ -1,6 +1,6 @@
-import type { z } from 'zod'
 import { toKebabCase } from './utils.js'
 import { getDescription } from './decorators.js'
+import type { ZodLikeObject } from './types.js'
 
 export interface McpToolResult {
   content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>
@@ -18,21 +18,20 @@ export abstract class McpTool {
     return getDescription(this.constructor) ?? ''
   }
 
-  /** Input schema using Zod */
-  abstract schema(): z.ZodObject<z.ZodRawShape>
+  /** Input schema — a Zod object (v3 or v4). */
+  abstract schema(): ZodLikeObject
 
-  /** Optional output schema using Zod — advertises the structure of the tool's response */
-  outputSchema?(): z.ZodObject<z.ZodRawShape>
+  /** Optional output schema — advertises the structure of the tool's response. */
+  outputSchema?(): ZodLikeObject
 
   /**
    * Handle the tool call.
    *
    * Extra parameters beyond `input` are resolved from the DI container when
-   * the method is decorated with `@Handle()` (required for TypeScript to
-   * emit parameter-type metadata). Example:
+   * the method is decorated with `@Handle(Token1, …)`. Example:
    *
    * ```ts
-   * @Handle()
+   * @Handle(Logger)
    * async handle(input, logger: Logger) { ... }
    * ```
    */

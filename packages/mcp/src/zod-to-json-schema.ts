@@ -1,17 +1,17 @@
-import type { z } from 'zod'
+import type { ZodLikeObject } from './types.js'
 
 /**
  * Minimal Zod-to-JSON-Schema converter for MCP tool input schemas.
  * Handles the primitive types commonly used in tool parameters, with
  * support for both Zod v3 and Zod v4 internal representations.
  */
-export function zodToJsonSchema(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
+export function zodToJsonSchema(schema: ZodLikeObject): Record<string, unknown> {
   const shape = schema.shape
   const properties: Record<string, unknown> = {}
   const required: string[] = []
 
   for (const [key, value] of Object.entries(shape)) {
-    const field = value as z.ZodTypeAny
+    const field = value as ZodField
     properties[key] = zodTypeToJson(field)
 
     if (!isOptional(field)) {
@@ -26,7 +26,9 @@ export function zodToJsonSchema(schema: z.ZodObject<z.ZodRawShape>): Record<stri
   }
 }
 
-function zodTypeToJson(field: z.ZodTypeAny): Record<string, unknown> {
+type ZodField = { _def?: Record<string, unknown>; description?: unknown }
+
+function zodTypeToJson(field: ZodField): Record<string, unknown> {
   const def = (field as unknown as { _def: Record<string, unknown> })._def ?? {}
 
   // Zod v3 uses `def.typeName` (e.g. "ZodString").
@@ -48,12 +50,12 @@ function zodTypeToJson(field: z.ZodTypeAny): Record<string, unknown> {
       return withDesc({ type: 'boolean' })
     case 'array': {
       // v3: def.type is the element; v4: def.element
-      const elem = (def['element'] ?? def['type']) as z.ZodTypeAny
+      const elem = (def['element'] ?? def['type']) as ZodField
       return withDesc({ type: 'array', items: elem ? zodTypeToJson(elem) : {} })
     }
     case 'optional':
     case 'default':
-      return zodTypeToJson(def['innerType'] as z.ZodTypeAny)
+      return zodTypeToJson(def['innerType'] as ZodField)
     case 'enum': {
       // v3: def.values is an array; v4: def.entries is a record { key: key }
       const values = Array.isArray(def['values'])
@@ -76,15 +78,15 @@ function normalizeKind(typeName: string | undefined, typeTag: string | undefined
 }
 
 /** Zod v3 stores `.describe()` in `_def.description`; v4 stores it on the instance. */
-function getDescription(field: z.ZodTypeAny, def: Record<string, unknown>): string | undefined {
+function getDescription(field: ZodField, def: Record<string, unknown>): string | undefined {
   const fromDef = def['description']
   if (typeof fromDef === 'string') return fromDef
-  const fromInstance = (field as unknown as { description?: unknown }).description
+  const fromInstance = field.description
   if (typeof fromInstance === 'string') return fromInstance
   return undefined
 }
 
-function isOptional(field: z.ZodTypeAny): boolean {
+function isOptional(field: ZodField): boolean {
   const def = (field as unknown as { _def: Record<string, unknown> })._def ?? {}
   const typeName = def['typeName'] as string | undefined
   const typeTag  = def['type']     as string | undefined

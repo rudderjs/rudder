@@ -300,7 +300,11 @@ Route.get('/api/ai/tools', async (_req, res) => {
   res.json({
     text: response.text,
     steps: response.steps.length,
-    toolCalls: response.steps.flatMap(s => s.toolCalls ?? []).map(tc => ({ name: tc.name, input: tc.input, result: tc.result })),
+    toolCalls: response.steps.flatMap(s => s.toolCalls.map(tc => ({
+      name:   tc.name,
+      input:  tc.arguments,
+      result: s.toolResults.find(r => r.toolCallId === tc.id)?.result,
+    }))),
     usage: response.usage,
   })
 })

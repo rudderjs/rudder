@@ -3,4 +3,4 @@ import vikeReact from 'vike-react/config'
 
 export default {
   extends: [vikeReact],
-} satisfies Config
+} as unknown as Config

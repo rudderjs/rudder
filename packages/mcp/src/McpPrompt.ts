@@ -1,6 +1,6 @@
-import type { z } from 'zod'
 import { toKebabCase } from './utils.js'
 import { getDescription } from './decorators.js'
+import type { ZodLikeObject } from './types.js'
 
 export interface McpPromptMessage {
   role: 'user' | 'assistant'
@@ -18,8 +18,8 @@ export abstract class McpPrompt {
     return getDescription(this.constructor) ?? ''
   }
 
-  /** Arguments schema */
-  arguments?(): z.ZodObject<z.ZodRawShape>
+  /** Arguments schema — a Zod object (v3 or v4). */
+  arguments?(): ZodLikeObject
 
   /**
    * Generate prompt messages. Extra parameters beyond `args` are resolved

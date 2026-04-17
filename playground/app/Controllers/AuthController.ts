@@ -99,7 +99,7 @@ export class AuthController {
       { email: userEmail, token, password: newPassword },
       async (user, password) => {
         const hashed = await Hash.make(password)
-        await User.query().where('id', user.getAuthIdentifier()).update({ password: hashed })
+        await User.update(user.getAuthIdentifier(), { password: hashed } as Partial<User>)
       },
     )
 

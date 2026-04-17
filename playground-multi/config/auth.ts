@@ -1,8 +1,14 @@
-import { Env } from '@rudderjs/support'
-import type { BetterAuthConfig } from '@rudderjs/auth'
+import type { AuthConfig } from '@rudderjs/auth'
+import { User } from '../app/Models/User.js'
 
 export default {
-  secret:           Env.get('AUTH_SECRET', 'please-set-AUTH_SECRET-min-32-chars!!'),
-  baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthConfig
+  defaults: {
+    guard: 'web',
+  },
+  guards: {
+    web: { driver: 'session', provider: 'users' },
+  },
+  providers: {
+    users: { driver: 'eloquent', model: User },
+  },
+} satisfies AuthConfig

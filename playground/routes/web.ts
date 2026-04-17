@@ -147,7 +147,7 @@ Route.get('/test/model', async (_req, res) => {
 // GET /test/gate — fires gate authorization checks for telescope testing
 Route.get('/test/gate', async (_req, res) => {
   const { Gate } = await import('@rudderjs/auth')
-  Gate.define('edit-post', (user: Record<string, unknown>) => user['role'] === 'admin')
+  Gate.define('edit-post', (user) => (user as unknown as { role?: string }).role === 'admin')
   const allowed = await Gate.allows('edit-post', { id: 1, role: 'admin' })
   const denied  = await Gate.allows('edit-post', { id: 2, role: 'user' })
   res.json({ allowed, denied })
