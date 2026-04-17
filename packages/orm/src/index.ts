@@ -13,6 +13,8 @@ export { ModelFactory, sequence }                  from './factory.js'
 
 export class ModelRegistry {
   private static adapter: OrmAdapter | null = null
+  private static models: Map<string, typeof Model> = new Map()
+  private static listeners: Set<(name: string, ModelClass: typeof Model) => void> = new Set()
 
   static set(adapter: OrmAdapter): void {
     this.adapter = adapter
@@ -29,8 +31,45 @@ export class ModelRegistry {
     return this.adapter
   }
 
+  /**
+   * Register a Model class so consumers (e.g. Telescope's model collector)
+   * can discover it and attach lifecycle listeners.
+   *
+   * Keyed by `ModelClass.name`. Idempotent — registering the same class twice
+   * is a no-op; late listeners only fire on the first registration.
+   *
+   * Models are also registered lazily on first query (`query()` / `find()` /
+   * `all()` / etc), but eager registration in an `AppServiceProvider` lets
+   * observers attach before the first request hits.
+   */
+  static register(ModelClass: typeof Model): void {
+    const name = ModelClass.name
+    if (!name || this.models.has(name)) return
+    this.models.set(name, ModelClass)
+    for (const listener of this.listeners) listener(name, ModelClass)
+  }
+
+  /**
+   * All registered model classes, keyed by class name. Used by Telescope's
+   * model collector and any code that needs to iterate discovered models.
+   */
+  static all(): Map<string, typeof Model> {
+    return this.models
+  }
+
+  /**
+   * Subscribe to model registrations. Fires once per newly registered
+   * class. Returns an unsubscribe function.
+   */
+  static onRegister(listener: (name: string, ModelClass: typeof Model) => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
   static reset(): void {
     this.adapter = null
+    this.models.clear()
+    this.listeners.clear()
   }
 }
 
@@ -275,6 +314,7 @@ export abstract class Model {
   }
 
   static query<T extends typeof Model>(this: T): QueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): QueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): QueryBuilder<InstanceType<T>> } {
+    ModelRegistry.register(this as unknown as typeof Model)
     let q = ModelRegistry.getAdapter().query<InstanceType<T>>(
       (this as typeof Model).getTable()
     )
@@ -323,6 +363,7 @@ export abstract class Model {
   }
 
   private static _q<T extends typeof Model>(self: T): QueryBuilder<InstanceType<T>> {
+    ModelRegistry.register(self as unknown as typeof Model)
     const q = ModelRegistry.getAdapter().query<InstanceType<T>>((self as typeof Model).getTable())
     if ((self as typeof Model).softDeletes) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

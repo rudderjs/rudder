@@ -16,14 +16,23 @@ export class ModelCollector implements Collector {
   async register(): Promise<void> {
     try {
       const orm = await import('@rudderjs/orm')
+      type Observable = { on(event: string, handler: (...args: unknown[]) => void): void }
       const registry = orm.ModelRegistry as unknown as {
-        all(): Map<string, { on(event: string, handler: (...args: unknown[]) => void): void }>
+        all(): Map<string, Observable>
+        onRegister?(listener: (name: string, ModelClass: Observable) => void): () => void
       }
       if (!registry.all) return
 
       for (const [name, ModelClass] of registry.all()) {
         this.observeModel(name, ModelClass)
       }
+
+      // Also pick up models registered after Telescope boots — e.g. models
+      // that aren't eagerly registered in a service provider and only show
+      // up on first query during request handling.
+      registry.onRegister?.((name, ModelClass) => {
+        this.observeModel(name, ModelClass)
+      })
     } catch {
       // @rudderjs/orm not installed — skip
     }

@@ -77,6 +77,102 @@ describe('ModelRegistry', () => {
     ModelRegistry.set(second)
     assert.strictEqual(ModelRegistry.get(), second)
   })
+
+  // ─── Model class registration ───────────────────────────────────────────────
+
+  it('all() returns an empty Map before any models are registered', () => {
+    assert.strictEqual(ModelRegistry.all().size, 0)
+  })
+
+  it('register() adds a model class keyed by its name', () => {
+    class Widget extends Model {}
+    ModelRegistry.register(Widget)
+    const all = ModelRegistry.all()
+    assert.strictEqual(all.size, 1)
+    assert.strictEqual(all.get('Widget'), Widget)
+  })
+
+  it('register() is idempotent — registering the same class twice is a no-op', () => {
+    class Widget extends Model {}
+    ModelRegistry.register(Widget)
+    ModelRegistry.register(Widget)
+    assert.strictEqual(ModelRegistry.all().size, 1)
+  })
+
+  it('register() ignores anonymous classes', () => {
+    const anon = class extends Model {}
+    Object.defineProperty(anon, 'name', { value: '' })
+    ModelRegistry.register(anon)
+    assert.strictEqual(ModelRegistry.all().size, 0)
+  })
+
+  it('onRegister() fires when a new class is registered', () => {
+    const events: Array<[string, typeof Model]> = []
+    ModelRegistry.onRegister((name, cls) => { events.push([name, cls]) })
+
+    class Widget extends Model {}
+    class Gadget extends Model {}
+    ModelRegistry.register(Widget)
+    ModelRegistry.register(Gadget)
+    ModelRegistry.register(Widget) // no-op — listener does not re-fire
+
+    assert.strictEqual(events.length, 2)
+    assert.deepStrictEqual(events[0], ['Widget', Widget])
+    assert.deepStrictEqual(events[1], ['Gadget', Gadget])
+  })
+
+  it('onRegister() returns an unsubscribe function', () => {
+    const events: string[] = []
+    const unsubscribe = ModelRegistry.onRegister((name) => { events.push(name) })
+
+    class Widget extends Model {}
+    ModelRegistry.register(Widget)
+    unsubscribe()
+    class Gadget extends Model {}
+    ModelRegistry.register(Gadget)
+
+    assert.deepStrictEqual(events, ['Widget'])
+  })
+
+  it('reset() clears registered models and listeners', () => {
+    const events: string[] = []
+    ModelRegistry.onRegister((name) => { events.push(name) })
+
+    class Widget extends Model {}
+    ModelRegistry.register(Widget)
+    assert.strictEqual(ModelRegistry.all().size, 1)
+
+    ModelRegistry.reset()
+    assert.strictEqual(ModelRegistry.all().size, 0)
+
+    // The previous listener was cleared by reset()
+    class Gadget extends Model {}
+    ModelRegistry.register(Gadget)
+    assert.deepStrictEqual(events, ['Widget'])
+  })
+
+  it('auto-registers the model when query() is called', () => {
+    ModelRegistry.set(makeAdapter())
+    class AutoQuery extends Model {}
+    AutoQuery.query()
+    assert.strictEqual(ModelRegistry.all().get('AutoQuery'), AutoQuery)
+  })
+
+  it('auto-registers the model when find()/all()/first()/where() are called', async () => {
+    ModelRegistry.set(makeAdapter())
+    class AutoFind extends Model {}
+    class AutoAll extends Model {}
+    class AutoFirst extends Model {}
+    class AutoWhere extends Model {}
+    await AutoFind.find(1)
+    await AutoAll.all()
+    await AutoFirst.first()
+    AutoWhere.where('id', 1)
+    assert.strictEqual(ModelRegistry.all().get('AutoFind'), AutoFind)
+    assert.strictEqual(ModelRegistry.all().get('AutoAll'), AutoAll)
+    assert.strictEqual(ModelRegistry.all().get('AutoFirst'), AutoFirst)
+    assert.strictEqual(ModelRegistry.all().get('AutoWhere'), AutoWhere)
+  })
 })
 
 // ─── Model.getTable() ──────────────────────────────────────────────────────────

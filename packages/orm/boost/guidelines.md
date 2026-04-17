@@ -197,6 +197,32 @@ User.observe(UserObserver)
 User.on('updating', (id, data) => { data['updatedAt'] = new Date() ; return data })
 ```
 
+### ModelRegistry
+
+Tracks registered Model classes for discovery by framework components (Telescope's model collector, etc).
+
+```ts
+import { ModelRegistry } from '@rudderjs/orm'
+
+// Adapter registration (done by the database provider)
+ModelRegistry.set(adapter)
+
+// Eager model registration — preferred for models you want observed before
+// the first query fires. Do this in AppServiceProvider.boot().
+ModelRegistry.register(User)
+ModelRegistry.register(Post)
+
+// Lazy auto-registration — models are also registered on first query()
+// or first find()/all()/first()/where()/count()/paginate() call.
+
+// Iteration
+for (const [name, ModelClass] of ModelRegistry.all()) { /* ... */ }
+
+// Subscribe to future registrations (returns unsubscribe fn)
+const stop = ModelRegistry.onRegister((name, cls) => { /* ... */ })
+stop()
+```
+
 ## Common Pitfalls
 
 - **No adapter registered**: You must call `ModelRegistry.set(adapter)` in a service provider before using any Model. The `DatabaseServiceProvider` must come before providers that query models.
