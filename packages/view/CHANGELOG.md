@@ -1,5 +1,11 @@
 # @rudderjs/view
 
+## 0.0.3
+
+### Patch Changes
+
+- dc37411: Ship `boost/guidelines.md` in the published npm tarball. Adds `"boost"` to the `files` field so downstream `boost:install` in consumer projects finds the per-package AI coding guidelines.
+
 ## 0.0.2
 
 ### Patch Changes

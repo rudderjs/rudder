@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/auth",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "rudderjs": {
     "provider": "AuthProvider",
     "stage": "infrastructure",

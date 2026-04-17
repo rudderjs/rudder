@@ -1,5 +1,15 @@
 # @rudderjs/horizon
 
+## 2.0.1
+
+### Patch Changes
+
+- Updated dependencies [dc37411]
+  - @rudderjs/router@0.2.1
+  - @rudderjs/queue@2.0.1
+  - @rudderjs/core@0.0.12
+  - @rudderjs/middleware@0.0.11
+
 ## 2.0.0
 
 ### Patch Changes

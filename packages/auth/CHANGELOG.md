@@ -1,5 +1,16 @@
 # @rudderjs/auth
 
+## 2.0.1
+
+### Patch Changes
+
+- Updated dependencies [dc37411]
+  - @rudderjs/router@0.2.1
+  - @rudderjs/view@0.0.3
+  - @rudderjs/core@0.0.12
+  - @rudderjs/hash@0.0.5
+  - @rudderjs/session@0.0.9
+
 ## 2.0.0
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @rudderjs/queue
 
+## 2.0.1
+
+### Patch Changes
+
+- dc37411: Ship `boost/guidelines.md` in the published npm tarball. Adds `"boost"` to the `files` field so downstream `boost:install` in consumer projects finds the per-package AI coding guidelines.
+- Updated dependencies [dc37411]
+  - @rudderjs/router@0.2.1
+  - @rudderjs/core@0.0.12
+
 ## 2.0.0
 
 ### Patch Changes

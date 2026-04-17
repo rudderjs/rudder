@@ -1,5 +1,11 @@
 # @rudderjs/broadcast
 
+## 0.0.5
+
+### Patch Changes
+
+- @rudderjs/core@0.0.12
+
 ## 0.0.4
 
 ### Patch Changes

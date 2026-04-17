@@ -1,5 +1,25 @@
 # @rudderjs/telescope
 
+## 2.0.1
+
+### Patch Changes
+
+- Updated dependencies [dc37411]
+  - @rudderjs/router@0.2.1
+  - @rudderjs/queue@2.0.1
+  - @rudderjs/auth@2.0.1
+  - @rudderjs/core@0.0.12
+  - @rudderjs/mcp@2.0.1
+  - @rudderjs/ai@0.0.5
+  - @rudderjs/broadcast@0.0.5
+  - @rudderjs/cache@0.0.10
+  - @rudderjs/live@0.0.5
+  - @rudderjs/log@0.0.5
+  - @rudderjs/mail@0.0.9
+  - @rudderjs/notification@0.0.9
+  - @rudderjs/schedule@0.0.10
+  - @rudderjs/middleware@0.0.11
+
 ## 2.0.0
 
 ### Patch Changes

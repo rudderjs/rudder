@@ -1,5 +1,12 @@
 # @rudderjs/notification
 
+## 0.0.9
+
+### Patch Changes
+
+- @rudderjs/core@0.0.12
+- @rudderjs/mail@0.0.9
+
 ## 0.0.8
 
 ### Patch Changes

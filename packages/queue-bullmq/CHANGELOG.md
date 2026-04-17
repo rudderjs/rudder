@@ -1,5 +1,12 @@
 # @rudderjs/queue-bullmq
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [dc37411]
+  - @rudderjs/queue@2.0.1
+
 ## 0.0.8
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @rudderjs/sanctum
 
+## 2.0.1
+
+### Patch Changes
+
+- @rudderjs/auth@2.0.1
+- @rudderjs/core@0.0.12
+
 ## 2.0.0
 
 ### Patch Changes
