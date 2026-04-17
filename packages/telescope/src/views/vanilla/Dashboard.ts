@@ -33,10 +33,11 @@ export function Dashboard(props: DashboardProps): string {
           log: 'Logs', mail: 'Mail', notification: 'Notifications', event: 'Events',
           cache: 'Cache', schedule: 'Schedule', model: 'Models', command: 'Commands',
           http: 'HTTP Client', gate: 'Gates', dump: 'Dumps', broadcast: 'WebSockets',
-          live: 'Live (Yjs)',
+          live: 'Live (Yjs)', ai: 'AI', mcp: 'MCP',
         }
         const urls = {
           query: 'queries', http: 'http', mail: 'mail', cache: 'cache', schedule: 'schedule',
+          ai: 'ai', mcp: 'mcp',
         }
         return {
           counts: {},

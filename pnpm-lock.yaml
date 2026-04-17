@@ -955,6 +955,9 @@ importers:
       '@rudderjs/live':
         specifier: workspace:*
         version: link:../live
+      '@rudderjs/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@rudderjs/rudder':
         specifier: workspace:*
         version: link:../rudder

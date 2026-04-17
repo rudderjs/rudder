@@ -15,6 +15,17 @@ import type { McpResource } from './McpResource.js'
 import type { McpPrompt } from './McpPrompt.js'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
 import { getInjectTokens, type InjectToken } from './decorators.js'
+import type { McpObserverRegistry } from './observers.js'
+
+// Lazy accessor — avoids importing the registry eagerly so the global
+// singleton is always the one on `globalThis`, even across SSR re-eval.
+let _mcpObs: McpObserverRegistry | null | undefined
+function getMcpObservers(): McpObserverRegistry | null {
+  if (_mcpObs === undefined) {
+    _mcpObs = (globalThis as Record<string, unknown>)['__rudderjs_mcp_observers__'] as McpObserverRegistry | undefined ?? null
+  }
+  return _mcpObs
+}
 
 /**
  * Match a URI against a template pattern like `weather://location/{city}`.
@@ -152,13 +163,22 @@ export function createSdkServer(server: McpServer): Server {
     if (!tool) {
       return { content: [{ type: 'text' as const, text: `Unknown tool: ${request.params.name}` }], isError: true }
     }
+    const input = (request.params.arguments ?? {}) as Record<string, unknown>
+    const start = performance.now()
     try {
-      const input = (request.params.arguments ?? {}) as Record<string, unknown>
       const extras = resolveHandleDeps(tool, 'handle')
       const result = await tool.handle(input, ...extras as [])
+      getMcpObservers()?.emit({
+        kind: 'tool.called', serverName: meta.name, name: tool.name(),
+        input, output: result, duration: performance.now() - start,
+      })
       return { ...result }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      getMcpObservers()?.emit({
+        kind: 'tool.failed', serverName: meta.name, name: tool.name(),
+        input, output: null, duration: performance.now() - start, error: msg,
+      })
       return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true }
     }
   })
@@ -209,13 +229,24 @@ export function createSdkServer(server: McpServer): Server {
     if (!resource) {
       throw new Error(`Unknown resource: ${uri}`)
     }
-    const extras = resolveHandleDeps(resource, 'handle')
-    return {
-      contents: [{
-        uri,
-        text: await resource.handle(params, ...extras as []),
-        mimeType: resource.mimeType(),
-      }],
+    const start = performance.now()
+    try {
+      const extras = resolveHandleDeps(resource, 'handle')
+      const text = await resource.handle(params, ...extras as [])
+      getMcpObservers()?.emit({
+        kind: 'resource.read', serverName: meta.name, name: resource.uri(),
+        input: params ?? { uri }, output: text, duration: performance.now() - start,
+      })
+      return {
+        contents: [{ uri, text, mimeType: resource.mimeType() }],
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      getMcpObservers()?.emit({
+        kind: 'resource.failed', serverName: meta.name, name: resource.uri(),
+        input: params ?? { uri }, output: null, duration: performance.now() - start, error: msg,
+      })
+      throw err
     }
   })
 
@@ -234,8 +265,23 @@ export function createSdkServer(server: McpServer): Server {
       throw new Error(`Unknown prompt: ${request.params.name}`)
     }
     const args = (request.params.arguments ?? {}) as Record<string, unknown>
-    const extras = resolveHandleDeps(prompt, 'handle')
-    return { messages: await prompt.handle(args, ...extras as []) }
+    const start = performance.now()
+    try {
+      const extras = resolveHandleDeps(prompt, 'handle')
+      const messages = await prompt.handle(args, ...extras as [])
+      getMcpObservers()?.emit({
+        kind: 'prompt.rendered', serverName: meta.name, name: prompt.name(),
+        input: args, output: messages, duration: performance.now() - start,
+      })
+      return { messages }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      getMcpObservers()?.emit({
+        kind: 'prompt.failed', serverName: meta.name, name: prompt.name(),
+        input: args, output: null, duration: performance.now() - start, error: msg,
+      })
+      throw err
+    }
   })
 
   return sdk

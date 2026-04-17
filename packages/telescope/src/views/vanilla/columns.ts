@@ -203,4 +203,16 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Duration', key: "entry.content.duration + 'ms'" },
     ],
   },
+
+  mcp: {
+    type:  'mcp',
+    title: 'MCP',
+    columns: [
+      { label: 'Server',   key: 'entry.content.serverName',                                                  badge: true },
+      { label: 'Type',     key: "entry.content.kind ? entry.content.kind.split('.')[0] : '—'",               badge: true },
+      { label: 'Name',     key: 'entry.content.name',                                                        mono: true, className: 'truncate max-w-xs' },
+      { label: 'Duration', key: "entry.content.duration != null ? Math.round(entry.content.duration) + 'ms' : '—'", className: 'text-right font-mono text-xs' },
+      { label: 'Status',   key: "entry.content.error ? 'Failed' : 'OK'",                                     badge: true },
+    ],
+  },
 }

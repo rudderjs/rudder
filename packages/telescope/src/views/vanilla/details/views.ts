@@ -521,6 +521,32 @@ const LiveView: ViewFn = (entry) => {
   `
 }
 
+const McpView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const kind = String(c['kind'] ?? '')
+  const subject = kind.split('.')[0] ?? ''
+  const errored = Boolean(c['error'])
+
+  const rows: Record<string, unknown> = {
+    Server:   c['serverName'],
+    Type:     Badge(subject),
+    Name:     raw(`<span class="font-mono text-xs">${escape(String(c['name'] ?? ''))}</span>`),
+    Duration: c['duration'] != null ? `${Math.round(c['duration'] as number)}ms` : '—',
+    Status:   errored ? Badge('Failed') : Badge('OK'),
+  }
+
+  return html`
+    ${Card('MCP Operation', KeyValueTable(rows))}
+    ${c['input'] !== undefined && c['input'] !== null
+      ? Card('Input', JsonBlock(c['input']))
+      : raw('')}
+    ${c['output'] !== undefined && c['output'] !== null && !errored
+      ? Card('Output', JsonBlock(c['output']))
+      : raw('')}
+    ${errored ? Card('Error', CodeBlock(String(c['error']))) : raw('')}
+  `
+}
+
 /** Map of EntryType → detail view function. Used by the dispatcher. */
 export const detailViews: Record<string, ViewFn> = {
   request:      RequestView,
@@ -541,6 +567,7 @@ export const detailViews: Record<string, ViewFn> = {
   broadcast:    BroadcastView,
   live:         LiveView,
   ai:           AiView,
+  mcp:          McpView,
 }
 
 /** Internal escape helper — used inside `raw()` blocks for safety. */

@@ -19,6 +19,7 @@ export type EntryType =
   | 'gate'
   | 'dump'
   | 'ai'
+  | 'mcp'
 
 export interface TelescopeEntry {
   id:         string
@@ -95,6 +96,7 @@ export interface TelescopeConfig {
   recordGate?:           boolean | undefined
   recordDumps?:          boolean | undefined
   recordAi?:             boolean | undefined
+  recordMcp?:            boolean | undefined
   /**
    * Throttle window in ms for Yjs awareness events (cursor / selection /
    * presence diffs). One entry per `(docName, clientId)` is recorded per
@@ -106,6 +108,8 @@ export interface TelescopeConfig {
   slowQueryThreshold?:   number | undefined
   /** Duration threshold in ms above which an AI agent run is tagged `slow`. Default `5000`. */
   slowAiThreshold?:      number | undefined
+  /** Duration threshold in ms above which an MCP operation is tagged `slow`. Default `1000`. */
+  slowMcpThreshold?:     number | undefined
   /**
    * Header names (lower-case) to redact from recorded request entries.
    * Values are replaced with `[REDACTED]` before being stored — they
@@ -146,10 +150,12 @@ export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'
   recordGate:           true,
   recordDumps:          true,
   recordAi:             true,
+  recordMcp:            true,
   liveAwarenessSampleMs: 500,
   ignoreRequests:       ['/telescope*', '/health'],
   slowQueryThreshold:   100,
   slowAiThreshold:      5000,
+  slowMcpThreshold:     1000,
   hideRequestHeaders:   ['authorization', 'cookie', 'set-cookie', 'x-csrf-token', 'x-api-key', 'x-real-ip'],
   hideRequestFields:    ['password', 'password_confirmation', 'token', 'secret'],
   auth:                 null,

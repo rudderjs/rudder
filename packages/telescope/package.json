@@ -51,7 +51,8 @@
     "@rudderjs/live": "workspace:*",
     "@rudderjs/http": "workspace:*",
     "@rudderjs/auth": "workspace:*",
-    "@rudderjs/ai": "workspace:*"
+    "@rudderjs/ai": "workspace:*",
+    "@rudderjs/mcp": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@rudderjs/rudder": { "optional": true },
@@ -66,7 +67,8 @@
     "@rudderjs/live": { "optional": true },
     "@rudderjs/http": { "optional": true },
     "@rudderjs/auth": { "optional": true },
-    "@rudderjs/ai": { "optional": true }
+    "@rudderjs/ai": { "optional": true },
+    "@rudderjs/mcp": { "optional": true }
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.0.0"
@@ -78,6 +80,7 @@
     "@rudderjs/http": "workspace:*",
     "@rudderjs/auth": "workspace:*",
     "@rudderjs/ai": "workspace:*",
+    "@rudderjs/mcp": "workspace:*",
     "@rudderjs/support": "workspace:*",
     "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.6.0",

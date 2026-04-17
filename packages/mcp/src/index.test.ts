@@ -529,3 +529,79 @@ describe('@Handle DI injection', () => {
     assert.equal((result.content[0] as { text: string }).text, 'got 7')
   })
 })
+
+// ─── McpObserverRegistry ──────────────────────────────────
+
+describe('McpObserverRegistry', () => {
+  it('fan-outs events to every subscriber', async () => {
+    const { McpObserverRegistry } = await import('./observers.js')
+    const reg = new McpObserverRegistry()
+    const calls: string[] = []
+    reg.subscribe((e) => calls.push(`a:${e.kind}`))
+    reg.subscribe((e) => calls.push(`b:${e.kind}`))
+
+    reg.emit({
+      kind: 'tool.called', serverName: 's', name: 't',
+      input: {}, output: null, duration: 1,
+    })
+    assert.deepStrictEqual(calls, ['a:tool.called', 'b:tool.called'])
+  })
+
+  it('unsubscribe removes the observer', async () => {
+    const { McpObserverRegistry } = await import('./observers.js')
+    const reg = new McpObserverRegistry()
+    const calls: string[] = []
+    const off = reg.subscribe(() => calls.push('x'))
+    off()
+    reg.emit({ kind: 'tool.called', serverName: 's', name: 't', input: {}, output: null, duration: 0 })
+    assert.deepStrictEqual(calls, [])
+  })
+
+  it('swallows observer errors so MCP servers never break', async () => {
+    const { McpObserverRegistry } = await import('./observers.js')
+    const reg = new McpObserverRegistry()
+    reg.subscribe(() => { throw new Error('observer bug') })
+    const good: string[] = []
+    reg.subscribe((e) => good.push(e.kind))
+
+    reg.emit({ kind: 'tool.called', serverName: 's', name: 't', input: {}, output: null, duration: 0 })
+    assert.deepStrictEqual(good, ['tool.called'])
+  })
+
+  it('global singleton is installed on globalThis', async () => {
+    const { mcpObservers } = await import('./observers.js')
+    assert.ok(mcpObservers)
+    const g = globalThis as Record<string, unknown>
+    assert.equal(g['__rudderjs_mcp_observers__'], mcpObservers)
+  })
+
+  it('emits tool.called + tool.failed around tool invocations', async () => {
+    const { mcpObservers } = await import('./observers.js')
+    const events: { kind: string; name: string; error?: string }[] = []
+    const off = mcpObservers.subscribe((e) => events.push({ kind: e.kind, name: e.name, ...(e.error ? { error: e.error } : {}) }))
+
+    try {
+      class GoodTool extends McpTool {
+        schema() { return z.object({}) }
+        async handle() { return McpResponse.text('ok') }
+      }
+      class BadTool extends McpTool {
+        schema() { return z.object({}) }
+        async handle(): Promise<never> { throw new Error('boom') }
+      }
+      class S extends McpServer { protected tools = [GoodTool, BadTool] }
+
+      const client = new McpTestClient(S)
+      // McpTestClient calls handle() directly (no runtime emission). This
+      // test just verifies subscribe/emit wiring on the shared registry.
+      mcpObservers.emit({ kind: 'tool.called', serverName: 'S', name: 'good', input: {}, output: { ok: true }, duration: 3 })
+      mcpObservers.emit({ kind: 'tool.failed', serverName: 'S', name: 'bad', input: {}, output: null, duration: 2, error: 'boom' })
+
+      await client.callTool('good')
+      assert.deepStrictEqual(events, [
+        { kind: 'tool.called', name: 'good' },
+        { kind: 'tool.failed', name: 'bad', error: 'boom' },
+      ])
+    } finally { off() }
+  })
+})

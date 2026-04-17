@@ -18,6 +18,7 @@ import { HttpCollector } from './collectors/http.js'
 import { GateCollector } from './collectors/gate.js'
 import { DumpCollector } from './collectors/dump.js'
 import { AiCollector } from './collectors/ai.js'
+import { McpCollector } from './collectors/mcp.js'
 import { registerTelescopeRoutes } from './routes.js'
 import { defaultConfig, type TelescopeConfig, type TelescopeStorage, type TelescopeEntry, type EntryType, type Collector, type ListOptions } from './types.js'
 
@@ -42,6 +43,8 @@ export { LiveCollector } from './collectors/live.js'
 export { HttpCollector } from './collectors/http.js'
 export { GateCollector } from './collectors/gate.js'
 export { DumpCollector } from './collectors/dump.js'
+export { AiCollector } from './collectors/ai.js'
+export { McpCollector } from './collectors/mcp.js'
 
 // ─── Telescope Registry ────────────────────────────────────
 
@@ -142,10 +145,12 @@ export class TelescopeProvider extends ServiceProvider {
     recordGate:          merged.recordGate          ?? defaultConfig.recordGate,
     recordDumps:         merged.recordDumps         ?? defaultConfig.recordDumps,
     recordAi:            merged.recordAi            ?? defaultConfig.recordAi,
+    recordMcp:           merged.recordMcp           ?? defaultConfig.recordMcp,
     liveAwarenessSampleMs: merged.liveAwarenessSampleMs ?? defaultConfig.liveAwarenessSampleMs,
     ignoreRequests:      merged.ignoreRequests      ?? defaultConfig.ignoreRequests,
     slowQueryThreshold:  merged.slowQueryThreshold  ?? defaultConfig.slowQueryThreshold,
     slowAiThreshold:     merged.slowAiThreshold     ?? defaultConfig.slowAiThreshold,
+    slowMcpThreshold:    merged.slowMcpThreshold    ?? defaultConfig.slowMcpThreshold,
     hideRequestHeaders:  merged.hideRequestHeaders  ?? defaultConfig.hideRequestHeaders,
     hideRequestFields:   merged.hideRequestFields   ?? defaultConfig.hideRequestFields,
     auth:                merged.auth                ?? defaultConfig.auth,
@@ -199,6 +204,7 @@ export class TelescopeProvider extends ServiceProvider {
       if (resolved.recordGate)           collectors.push(new GateCollector(storage))
       if (resolved.recordDumps)          collectors.push(new DumpCollector(storage))
       if (resolved.recordAi)             collectors.push(new AiCollector(storage, resolved))
+      if (resolved.recordMcp)            collectors.push(new McpCollector(storage, resolved))
 
       for (const collector of collectors) {
         await collector.register()
