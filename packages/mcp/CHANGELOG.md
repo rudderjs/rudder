@@ -1,5 +1,13 @@
 # @rudderjs/mcp
 
+## 1.0.0
+
+### Patch Changes
+
+- Updated dependencies [9fa37c7]
+  - @rudderjs/router@0.1.0
+  - @rudderjs/core@0.0.10
+
 ## 0.0.2
 
 ### Patch Changes

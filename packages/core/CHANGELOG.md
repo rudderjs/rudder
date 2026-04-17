@@ -1,5 +1,12 @@
 # @rudderjs/core
 
+## 0.0.10
+
+### Patch Changes
+
+- Updated dependencies [9fa37c7]
+  - @rudderjs/router@0.1.0
+
 ## 0.0.9
 
 ### Patch Changes

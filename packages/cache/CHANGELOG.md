@@ -1,5 +1,11 @@
 # @rudderjs/cache
 
+## 0.0.8
+
+### Patch Changes
+
+- @rudderjs/core@0.0.10
+
 ## 0.0.7
 
 ### Patch Changes

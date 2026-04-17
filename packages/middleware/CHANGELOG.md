@@ -1,5 +1,11 @@
 # @rudderjs/middleware
 
+## 0.0.9
+
+### Patch Changes
+
+- @rudderjs/cache@0.0.8
+
 ## 0.0.8
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @rudderjs/router
 
+## 0.1.0
+
+### Minor Changes
+
+- 9fa37c7: Add `Router.has(name): boolean` — convenience alias for `getNamedRoute(name) !== undefined`. Matches Laravel's `Route::has('login')` idiom for rendering nav links conditionally on whether the route is registered.
+
 ## 0.0.4
 
 ### Patch Changes

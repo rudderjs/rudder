@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/integration-tests",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "test": "tsc -p tsconfig.json && node --test dist/orm-drizzle.test.js dist/cache.test.js dist/events.test.js dist/session.test.js; rm -rf dist",

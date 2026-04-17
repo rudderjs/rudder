@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/context",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Request-scoped context for RudderJS — ALS-backed data bag with log/queue propagation",
   "rudderjs": {
     "provider": "ContextProvider",
