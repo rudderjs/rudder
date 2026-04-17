@@ -46,10 +46,17 @@ The installer walks you through up to 10 prompts (several are conditional):
 | WebSocket | Real-time channels | `@rudderjs/broadcast` |
 | Real-time Collab | Yjs CRDT sync | `@rudderjs/live` |
 | AI | LLM providers (Anthropic, OpenAI, Google, Ollama) | `@rudderjs/ai` |
+| MCP | Model Context Protocol servers — expose tools/resources to LLMs | `@rudderjs/mcp` |
+| Passport (OAuth2) | OAuth 2 server with JWT — **requires Auth + Prisma** | `@rudderjs/passport` |
+| Localization | i18n — `trans()`, `setLocale()` | `@rudderjs/localization` |
 
 When **ai** is selected, generates `config/ai.ts`, `ai()` provider, an AI chat demo page at `/ai-chat`, and `POST /api/ai/chat` route.
 
-Only selected packages get their dependencies, providers, config files, and schema files added to the generated project. Base packages (`core`, `router`, `server-hono`, `middleware`, `vite`, `rudder`, `cli`) are always included.
+When **mcp** is selected, generates `app/Mcp/EchoServer.ts` and wires a `POST /mcp/echo` route.
+
+When **passport** is selected, generates `config/passport.ts`, OAuth 2 routes (`/oauth/authorize`, `/oauth/token`, etc.), and the `OAuthClient` + `OAuthAccessToken` Prisma models. Selecting this option fails fast if Auth or Prisma isn't also selected.
+
+Only selected packages get their dependencies, providers, config files, and schema files added to the generated project. Base packages (`core`, `router`, `server-hono`, `middleware`, `vite`, `rudder`, `cli`, `log`) are always included. `session` + `hash` are pulled in automatically when **Authentication** is selected.
 
 ## What gets generated
 
@@ -57,30 +64,34 @@ Only selected packages get their dependencies, providers, config files, and sche
 my-app/
 ├── bootstrap/
 │   ├── app.ts          # Application.configure()...create()
-│   └── providers.ts    # Ordered provider array (only selected packages)
-├── config/             # app, server + per-package configs (database, auth, cache, etc.)
+│   └── providers.ts    # [...(await defaultProviders()), ...app providers]
+├── config/             # app, server, log + per-package configs (auth, cache, session, …)
 ├── app/
-│   ├── Models/User.ts              # (if Auth selected)
+│   ├── Models/User.ts              # (if Auth)
+│   ├── Views/                      # (if Auth) Welcome + Auth/{Login,Register,...} vendored
+│   ├── Mcp/EchoServer.ts           # (if MCP)
 │   ├── Providers/AppServiceProvider.ts
 │   └── Middleware/RequestIdMiddleware.ts
 ├── routes/
-│   ├── api.ts          # JSON API routes
-│   ├── web.ts          # Web/redirect routes
+│   ├── api.ts          # JSON API routes (+ auth endpoints if Auth, + OAuth2 if Passport)
+│   ├── web.ts          # Vike page routes + registerAuthRoutes() (if Auth)
 │   ├── console.ts      # Rudder commands
-│   └── channels.ts     # (if WebSocket selected) Channel auth
+│   └── channels.ts     # (if WebSocket) channel auth
 ├── pages/
 │   ├── +config.ts              # Root config — includes renderer when single framework
 │   ├── index/+config.ts        # (multi-framework only) per-page renderer config
-│   ├── index/+data.ts          # SSR data loader
 │   ├── index/+Page.tsx|.vue    # Home page (primary framework)
-│   ├── _error/+Page.tsx|.vue   # Error page (primary framework)
-│   └── {fw}-demo/+Page.*       # Demo pages for secondary frameworks (with own +config.ts)
-├── app/Modules/Todo/           # (if Todo selected)
+│   ├── _error/+Page.tsx|.vue   # Error page
+│   └── {fw}-demo/+Page.*       # Demo pages for secondary frameworks
+├── app/Modules/Todo/           # (if Todo) self-contained module with .prisma + test
 ├── prisma/schema/              # (if Prisma) multi-file schema directory
 │   ├── base.prisma             #   datasource + generator
-│   └── user.prisma             #   (if Auth) User model
+│   ├── auth.prisma             #   (if Auth) User + PasswordResetToken
+│   ├── passport.prisma         #   (if Passport) OAuthClient + OAuthAccessToken
+│   ├── notification.prisma     #   (if Notifications)
+│   └── modules.prisma          #   Todo + future modules
 ├── drizzle/                    # (if Drizzle) schema directory
-├── src/index.css               # (if Tailwind selected)
+├── src/index.css               # (if Tailwind)
 ├── vite.config.ts
 ├── tsconfig.json
 ├── .env + .env.example
@@ -125,10 +136,14 @@ The installer prints the exact commands for your package manager. For reference:
 | Step | pnpm | npm | yarn | bun |
 |------|------|-----|------|-----|
 | Install (if skipped) | `pnpm install` | `npm install` | `yarn install` | `bun install` |
+| Discover providers (if install skipped) | `pnpm rudder providers:discover` | `npm run rudder providers:discover` | `yarn rudder providers:discover` | `bun rudder providers:discover` |
 | Prisma generate (if Prisma) | `pnpm exec prisma generate` | `npx prisma generate` | `yarn dlx prisma generate` | `bunx prisma generate` |
 | Prisma db push (if Prisma) | `pnpm exec prisma db push` | `npx prisma db push` | `yarn dlx prisma db push` | `bunx prisma db push` |
 | Drizzle push (if Drizzle) | `pnpm exec drizzle-kit push` | `npx drizzle-kit push` | `yarn dlx drizzle-kit push` | `bunx drizzle-kit push` |
+| Passport keys (if Passport) | `pnpm rudder passport:keys` | `npm run rudder passport:keys` | `yarn rudder passport:keys` | `bun rudder passport:keys` |
 | Start dev server | `pnpm dev` | `npm run dev` | `yarn dev` | `bun dev` |
+
+When you let the installer run `Install dependencies`, it also runs `rudder providers:discover` automatically so the app boots on first `dev`. If you skipped install, run both manually before `dev`.
 
 ## Package manager differences in generated files
 

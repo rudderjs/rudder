@@ -572,51 +572,19 @@ function prismaAuth(): string {
   id            String    @id @default(cuid())
   name          String
   email         String    @unique
+  password      String?
   emailVerified Boolean   @default(false)
   image         String?
   role          String    @default("user")
+  rememberToken String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
 }
 
-model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime
-  updatedAt DateTime
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Account {
-  id                    String    @id
-  accountId             String
-  providerId            String
-  userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
-  createdAt             DateTime
-  updatedAt             DateTime
-}
-
-model Verification {
-  id         String    @id
-  identifier String
-  value      String
-  expiresAt  DateTime
-  createdAt  DateTime?
-  updatedAt  DateTime?
+model PasswordResetToken {
+  email     String   @id
+  token     String
+  createdAt DateTime @default(now())
 }
 `
 }
@@ -1159,6 +1127,7 @@ export default {
 
 function configAuth(_ctx: TemplateContext): string {
   return `import type { AuthConfig } from '@rudderjs/auth'
+import { User } from '../app/Models/User.js'
 
 export default {
   defaults: { guard: 'web' },
@@ -1166,7 +1135,7 @@ export default {
     web: { driver: 'session', provider: 'users' },
   },
   providers: {
-    users: { driver: 'eloquent', model: 'User' },
+    users: { driver: 'eloquent', model: User },
   },
 } satisfies AuthConfig
 `
@@ -1357,6 +1326,7 @@ export class User extends Model {
   id!:            string
   name!:          string
   email!:         string
+  password?:      string | null
   emailVerified!: boolean
   role!:          string
   createdAt!:     Date

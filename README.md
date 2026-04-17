@@ -17,7 +17,7 @@
 
 ---
 
-RudderJS is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). **44 packages** across 10 categories — covering everything from DI and routing to AI agents, real-time CRDT, and production monitoring. It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, Rudder CLI, queues, scheduling, and more — without the PHP runtime.
+RudderJS is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). **45 packages** across 9 categories — covering everything from DI and routing to AI agents, real-time CRDT, and production monitoring. It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, Rudder CLI, queues, scheduling, and more — without the PHP runtime.
 
 ## Why RudderJS?
 
@@ -435,9 +435,9 @@ const svc = resolve<UserService>(UserService)
 
 ---
 
-## Packages (44)
+## Packages (45)
 
-> **44 first-party packages** across 10 categories — more than Laravel's official ecosystem, all under one monorepo.
+> **45 first-party packages** across 9 categories — more than Laravel's official ecosystem, all under one monorepo.
 
 ### Foundation (7)
 | Package | Description |
@@ -465,7 +465,7 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
 | `@rudderjs/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
 
-### Auth & Security (5)
+### Auth & Security (6)
 | Package | Description |
 |---|---|
 | `@rudderjs/hash` | Password hashing (bcrypt, argon2) |

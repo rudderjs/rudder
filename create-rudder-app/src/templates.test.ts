@@ -395,12 +395,12 @@ describe('getTemplates() — prisma schema', () => {
     assert.ok(files['prisma/schema/base.prisma']!.includes('provider = "mysql"'))
   })
 
-  it('includes User, Session, Account, Verification models when auth selected', () => {
+  it('includes User + PasswordResetToken models when auth selected', () => {
     const schema = getTemplates(ctx())['prisma/schema/auth.prisma']!
     assert.ok(schema.includes('model User {'))
-    assert.ok(schema.includes('model Session {'))
-    assert.ok(schema.includes('model Account {'))
-    assert.ok(schema.includes('model Verification {'))
+    assert.ok(schema.includes('password      String?'))
+    assert.ok(schema.includes('rememberToken String?'))
+    assert.ok(schema.includes('model PasswordResetToken {'))
   })
 
   it('includes module markers', () => {
