@@ -66,8 +66,8 @@ export function registerAuthRoutes(
     ...(opts.allowAuthenticated ? [] : [RequireGuest(homeUrl)]),
   ]
 
-  router.get(paths.login,          async () => view(views.login,          { registerUrl: paths.register, forgotPasswordUrl: paths.forgotPassword, homeUrl }), guestOnly)
-  router.get(paths.register,       async () => view(views.register,       { loginUrl: paths.login, homeUrl }), guestOnly)
-  router.get(paths.forgotPassword, async () => view(views.forgotPassword, { loginUrl: paths.login, resetPasswordUrl: paths.resetPassword }), guestOnly)
-  router.get(paths.resetPassword,  async () => view(views.resetPassword,  { loginUrl: paths.login, forgotPasswordUrl: paths.forgotPassword }), guestOnly)
+  router.get(paths.login,          async () => view(views.login,          { registerUrl: paths.register, forgotPasswordUrl: paths.forgotPassword, homeUrl }), guestOnly).name('login')
+  router.get(paths.register,       async () => view(views.register,       { loginUrl: paths.login, homeUrl }), guestOnly).name('register')
+  router.get(paths.forgotPassword, async () => view(views.forgotPassword, { loginUrl: paths.login, resetPasswordUrl: paths.resetPassword }), guestOnly).name('password.forgot')
+  router.get(paths.resetPassword,  async () => view(views.resetPassword,  { loginUrl: paths.login, forgotPasswordUrl: paths.forgotPassword }), guestOnly).name('password.reset')
 }

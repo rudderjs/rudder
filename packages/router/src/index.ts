@@ -125,6 +125,20 @@ export class Router {
     return this.namedRoutes.get(name)
   }
 
+  /**
+   * Check whether a named route is registered.
+   *
+   * Laravel equivalent: `Route::has('login')`. Useful for rendering nav links
+   * conditionally in views — e.g. hide "Log in" when the auth package isn't
+   * installed.
+   *
+   * @example
+   * const loginUrl = Route.has('login') ? '/login' : null
+   */
+  has(name: string): boolean {
+    return this.namedRoutes.has(name)
+  }
+
   /** All registered named routes. */
   listNamed(): Record<string, string> {
     return Object.fromEntries(this.namedRoutes)

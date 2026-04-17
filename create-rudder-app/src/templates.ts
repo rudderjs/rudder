@@ -1632,6 +1632,12 @@ Route.get('/', async () => {${hasAuth ? `
     nodeVersion:   process.version.replace(/^v/, ''),
     env:           config<string>('app.env', 'development'),
     user,
+    // Laravel's Route::has() — the welcome nav renders Log in / Register links
+    // only when the auth package registered these named routes. Install
+    // @rudderjs/auth + call registerAuthRoutes() and they appear automatically;
+    // uninstall and they vanish. No scaffold-time flag.
+    loginUrl:    Route.getNamedRoute('login')    ?? null,
+    registerUrl: Route.getNamedRoute('register') ?? null,
   })
 }${hasAuth ? ', webMw' : ''})
 `
@@ -2085,8 +2091,9 @@ export interface WelcomeProps {
   nodeVersion:   string
   env:           string
   user:          { name: string; email: string } | null
-  loginUrl?:     string
-  registerUrl?:  string
+  // null when the auth package isn't installed (Laravel's Route::has() idiom).
+  loginUrl:      string | null
+  registerUrl:   string | null
   signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
@@ -2101,8 +2108,6 @@ interface Feature {
 ${WELCOME_FEATURES}
 
 export default function Welcome(props: WelcomeProps) {
-  const loginUrl    = props.loginUrl    ?? '/login'
-  const registerUrl = props.registerUrl ?? '/register'
   const signOutUrl  = props.signOutUrl  ?? '/api/auth/sign-out'
   const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
   const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
@@ -2125,7 +2130,7 @@ export default function Welcome(props: WelcomeProps) {
           RudderJS
         </div>
         <div className="flex items-center gap-4 text-sm">
-          {props.user ? (
+          {props.loginUrl && (props.user ? (
             <>
               <span className="text-zinc-500 dark:text-zinc-400">
                 Signed in as{' '}
@@ -2141,10 +2146,12 @@ export default function Welcome(props: WelcomeProps) {
             </>
           ) : (
             <>
-              <a href={loginUrl} className="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
-              <a href={registerUrl} className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+              <a href={props.loginUrl} className="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+              {props.registerUrl && (
+                <a href={props.registerUrl} className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+              )}
             </>
-          )}
+          ))}
         </div>
       </nav>
 
@@ -2217,8 +2224,9 @@ export interface WelcomeProps {
   nodeVersion:   string
   env:           string
   user:          { name: string; email: string } | null
-  loginUrl?:     string
-  registerUrl?:  string
+  // null when the auth package isn't installed (Laravel's Route::has() idiom).
+  loginUrl:      string | null
+  registerUrl:   string | null
   signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
@@ -2234,8 +2242,6 @@ interface Feature {
 
 ${WELCOME_FEATURES}
 
-const loginUrl    = props.loginUrl    ?? '/login'
-const registerUrl = props.registerUrl ?? '/register'
 const signOutUrl  = props.signOutUrl  ?? '/api/auth/sign-out'
 const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
 const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
@@ -2258,7 +2264,7 @@ async function handleSignOut() {
         <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
         RudderJS
       </div>
-      <div class="flex items-center gap-4 text-sm">
+      <div v-if="props.loginUrl" class="flex items-center gap-4 text-sm">
         <template v-if="props.user">
           <span class="text-zinc-500 dark:text-zinc-400">
             Signed in as
@@ -2273,8 +2279,8 @@ async function handleSignOut() {
           </button>
         </template>
         <template v-else>
-          <a :href="loginUrl" class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
-          <a :href="registerUrl" class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+          <a :href="props.loginUrl" class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+          <a v-if="props.registerUrl" :href="props.registerUrl" class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
         </template>
       </div>
     </nav>
@@ -2339,8 +2345,9 @@ export interface WelcomeProps {
   nodeVersion:   string
   env:           string
   user:          { name: string; email: string } | null
-  loginUrl?:     string
-  registerUrl?:  string
+  // null when the auth package isn't installed (Laravel's Route::has() idiom).
+  loginUrl:      string | null
+  registerUrl:   string | null
   signOutUrl?:   string
   docsUrl?:      string
   githubUrl?:    string
@@ -2355,8 +2362,6 @@ interface Feature {
 ${WELCOME_FEATURES}
 
 export default function Welcome(props: WelcomeProps) {
-  const loginUrl    = () => props.loginUrl    ?? '/login'
-  const registerUrl = () => props.registerUrl ?? '/register'
   const signOutUrl  = () => props.signOutUrl  ?? '/api/auth/sign-out'
   const docsUrl     = () => props.docsUrl     ?? DEFAULT_DOCS
   const githubUrl   = () => props.githubUrl   ?? DEFAULT_GITHUB
@@ -2378,32 +2383,40 @@ export default function Welcome(props: WelcomeProps) {
           <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
           RudderJS
         </div>
-        <div class="flex items-center gap-4 text-sm">
-          <Show
-            when={props.user}
-            fallback={
-              <>
-                <a href={loginUrl()} class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
-                <a href={registerUrl()} class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
-              </>
-            }
-          >
-            {(user) => (
-              <>
-                <span class="text-zinc-500 dark:text-zinc-400">
-                  Signed in as <span class="font-medium text-zinc-900 dark:text-zinc-100">{user().name}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                >
-                  Sign out
-                </button>
-              </>
-            )}
-          </Show>
-        </div>
+        <Show when={props.loginUrl}>
+          {(loginUrl) => (
+            <div class="flex items-center gap-4 text-sm">
+              <Show
+                when={props.user}
+                fallback={
+                  <>
+                    <a href={loginUrl()} class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+                    <Show when={props.registerUrl}>
+                      {(registerUrl) => (
+                        <a href={registerUrl()} class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+                      )}
+                    </Show>
+                  </>
+                }
+              >
+                {(user) => (
+                  <>
+                    <span class="text-zinc-500 dark:text-zinc-400">
+                      Signed in as <span class="font-medium text-zinc-900 dark:text-zinc-100">{user().name}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                      Sign out
+                    </button>
+                  </>
+                )}
+              </Show>
+            </div>
+          )}
+        </Show>
       </nav>
 
       <section class="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
