@@ -17,42 +17,37 @@
 
 ---
 
-RudderJS is a modular, TypeScript-first Node.js meta-framework built on [Vike](https://vike.dev) + [Vite](https://vitejs.dev). **45 packages** across 9 categories — covering everything from DI and routing to AI agents, real-time CRDT, and production monitoring. It brings the patterns that make Laravel productive — service providers, dependency injection, an Eloquent-style ORM, Rudder CLI, queues, scheduling, and more — without the PHP runtime.
+RudderJS is the **fullstack Node.js framework for teams who miss Laravel**. Controller-returned SSR views render React / Vue / Solid through [Vike](https://vike.dev) + [Vite](https://vitejs.dev) with real SPA navigation — no Inertia adapter, no JSON envelope, no page reloads. Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent from one monorepo, using the patterns that made Laravel famous — service providers, DI, an Eloquent-style ORM, Rudder CLI, gates & policies — minus the PHP runtime.
+
+> **Three things we think no one else gets right at once:** Laravel's ergonomics, Inertia's UX without Inertia's tax, and a first-class AI/agent engine.
 
 ## Why RudderJS?
 
-Modern web development forces a choice between **developer experience** and **architectural freedom**.
+Modern Node.js forces a choice: **great DX in a framework-locked box** (Next.js), **freedom with weeks of wiring** (Express/Hono), **structure without fullstack views** (NestJS/Adonis API-first).
 
-- **Next.js** gives you great DX but locks you into React and a black-box architecture
-- **Express/Hono** gives you freedom but you spend weeks wiring up auth, ORMs, queues, and DI from scratch
-- **NestJS** is structured but heavy, Angular-style, and API-only
+RudderJS is the middle ground — **batteries-included, modular, UI-agnostic, fullstack-first**.
 
-RudderJS is the middle ground: a **batteries-included architecture that stays entirely modular and UI-agnostic**.
-
-| | Next.js | NestJS | RudderJS |
-|---|---|---|---|
-| **Philosophy** | Component-first | Angular-style DI | Laravel-style DX |
-| **Build tool** | Webpack / Turbopack | Webpack / esbuild | **Vite** |
-| **UI framework** | React only | API only | React, Vue, Solid, or none |
-| **DI container** | None | Class-based IoC | Service Providers |
-| **Backend pattern** | File-based API routes | Controllers + Modules | Routes + Service Providers |
-| **Modularity** | All-in | All-in | Pay-as-you-go |
+| | Next.js | NestJS | AdonisJS | RudderJS |
+|---|---|---|---|---|
+| **Philosophy** | Component-first | Angular-style DI | Laravel port | Laravel DX, Node-native |
+| **Build tool** | Webpack / Turbopack | Webpack / esbuild | Webpack (stencil) | **Vite** |
+| **UI framework** | React only | API only | Edge templates / Inertia | React, Vue, Solid, or none |
+| **SSR views from controllers** | N/A | ✗ | Inertia adapter | ✓ **native — no Inertia, no JSON envelope** |
+| **DI container** | None | Class-based IoC | IoC | Service Providers + ALS request scope |
+| **AI-native** | ✗ | ✗ | ✗ | ✓ 9 providers, agents, streaming, MCP |
+| **Real-time collab** | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
+| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 45 opt-in packages |
 
 ---
 
 ## Key Features
 
-- **Laravel-inspired DX** — service providers, fluent bootstrap, Rudder CLI, FormRequest validation
-- **Pay-as-you-go** — modular `@rudderjs/*` packages; use only what you need
-- **AI-native** — 9-provider AI engine (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), agents with tools, streaming, middleware, attachments, conversations, queue integration
-- **Native auth** — session guards, API tokens (Sanctum), OAuth (Socialite), gates & policies, password hashing & encryption
-- **Pluggable adapters** — swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3, SMTP ↔ any mailer
-- **UI-agnostic** — pair with React, Vue, Solid, or run as a pure API server
-- **Laravel-style views** — return `view('dashboard', { users })` from controllers and render typed React/Vue/Solid components (or vanilla HTML strings for the Blade equivalent) with full Vike SSR + SPA navigation, no Inertia adapter
-- **TypeScript-first** — strict TypeScript with incremental builds (~10s for single-package changes)
-- **Test-friendly** — TestCase, fluent assertions, fakes for HTTP, queue, cache, events, notifications
-- **CI/CD ready** — automated testing, linting, and npm publishing via Changesets
-- **WinterCG compatible** — runs on Node.js, Cloudflare Workers, Deno, and Bun
+- **Controller-returned views** — `return view('dashboard', { users })` renders a typed React/Vue/Solid component through Vike SSR with full SPA navigation. No Inertia adapter, no JSON envelope, ~400 bytes per nav. The Blade ergonomics you miss, without the tradeoffs.
+- **AI-native from day one** — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), agents with tools, streaming, middleware, conversations, attachments, MCP server support, queue integration.
+- **Real-time on one port** — WebSocket channels (`@rudderjs/broadcast`), Yjs CRDT collab (`@rudderjs/live`), and HTTP all share the same server. No separate process, no proxy.
+- **Laravel DX that ports cleanly to Node** — service providers, DI, gates & policies, an Eloquent-style ORM (Prisma or Drizzle), a Rudder CLI you'd recognize, scheduling, queues, notifications, Telescope-style inspector.
+- **Pay-as-you-go modularity** — 45 first-party `@rudderjs/*` packages. Start with 3 (core, router, server-hono), bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3).
+- **TypeScript-first, strict by default** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime.
 
 ---
 
@@ -70,7 +65,7 @@ yarn create rudder-app my-app
 bunx create-rudder-app my-app
 ```
 
-The interactive installer asks you to choose your database, frontend framework (React / Vue / Solid), Tailwind, shadcn/ui, and authentication pages — then scaffolds a production-ready project.
+The interactive installer asks you to pick a database (Prisma or Drizzle), a frontend framework (React / Vue / Solid), optional packages (Auth, Cache, Queue, Mail, AI, MCP, Passport, …), Tailwind, and shadcn/ui — then scaffolds a production-ready project.
 
 After scaffolding (pnpm example — the CLI prints the exact commands for your PM):
 
@@ -565,7 +560,6 @@ RudderJS is the framework layer. Two sibling projects build on it:
 | Project | Packages | Description |
 |---|---|---|
 | **[Pilotiq](https://github.com/pilotiq-io/pilotiq)** | `@pilotiq/{panels,lexical,media}` | Open-source admin panel builder (MIT) |
-| **Pilotiq Pro** | `@pilotiq-pro/{ai,collab,workspaces}` | Commercial extensions — AI agents, real-time collab |
 
 ---
 
