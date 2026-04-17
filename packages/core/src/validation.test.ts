@@ -23,6 +23,7 @@ function makeReq(overrides: Partial<AppRequest> = {}): AppRequest {
 }
 
 const res: AppResponse = {
+  statusCode: 200,
   status()   { return res },
   header()   { return res },
   json()     {},

@@ -38,6 +38,7 @@ function makeRes() {
   let statusCode = 200
   let jsonBody: unknown
   const res: AppResponse = {
+    get statusCode()    { return statusCode },
     status(code)        { statusCode = code; return res },
     header(key, value)  { headers.set(key.toLowerCase(), value); return res },
     json(data)          { jsonBody = data },
