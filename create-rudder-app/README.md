@@ -17,7 +17,7 @@ All four package managers are fully supported — generated files, install comma
 
 ## Prompts
 
-The installer walks you through up to 10 prompts (several are conditional):
+The installer walks you through up to 9 prompts (several are conditional):
 
 | # | Prompt | Options | Default | Condition |
 |---|--------|---------|---------|-----------|
@@ -25,12 +25,11 @@ The installer walks you through up to 10 prompts (several are conditional):
 | 2 | Database ORM | Prisma · Drizzle · None | Prisma | always |
 | 3 | Database driver | SQLite · PostgreSQL · MySQL | SQLite | only if ORM selected |
 | 4 | Package checklist | multiselect (see below) | Auth + Cache | always |
-| 5 | Include Todo module? | yes / no | yes | only if database selected |
-| 6 | Frontend frameworks | React · Vue · Solid (multiselect) | React | always |
-| 7 | Primary framework | single select from chosen frameworks | — | only if >1 framework selected |
-| 8 | Add Tailwind CSS? | yes / no | yes | always |
-| 9 | Add shadcn/ui? | yes / no | yes | only if React + Tailwind |
-| 10 | Install dependencies? | yes / no | yes | always |
+| 5 | Frontend frameworks | React · Vue · Solid (multiselect) | React | always |
+| 6 | Primary framework | single select from chosen frameworks | — | only if >1 framework selected |
+| 7 | Add Tailwind CSS? | yes / no | yes | always |
+| 8 | Add shadcn/ui? | yes / no | yes | only if React + Tailwind |
+| 9 | Install dependencies? | yes / no | yes | always |
 
 ### Package checklist (prompt 4)
 
@@ -83,13 +82,12 @@ my-app/
 │   ├── index/+Page.tsx|.vue    # Home page (primary framework)
 │   ├── _error/+Page.tsx|.vue   # Error page
 │   └── {fw}-demo/+Page.*       # Demo pages for secondary frameworks
-├── app/Modules/Todo/           # (if Todo) self-contained module with .prisma + test
 ├── prisma/schema/              # (if Prisma) multi-file schema directory
 │   ├── base.prisma             #   datasource + generator
 │   ├── auth.prisma             #   (if Auth) User + PasswordResetToken
 │   ├── passport.prisma         #   (if Passport) OAuthClient + OAuthAccessToken
 │   ├── notification.prisma     #   (if Notifications)
-│   └── modules.prisma          #   Todo + future modules
+│   └── modules.prisma          #   placeholder for per-feature modules
 ├── drizzle/                    # (if Drizzle) schema directory
 ├── src/index.css               # (if Tailwind)
 ├── vite.config.ts

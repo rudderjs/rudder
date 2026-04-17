@@ -38,9 +38,9 @@ async function main(): Promise<void> {
   const ormAnswer = await select({
     message: 'Database ORM',
     options: [
-      { value: 'prisma',  label: 'Prisma',  hint: 'recommended' },
+      { value: 'prisma',  label: 'Prisma' },
       { value: 'drizzle', label: 'Drizzle' },
-      { value: 'none',    label: 'None',     hint: 'no database' },
+      { value: 'none',    label: 'None',    hint: 'no database' },
     ],
   })
   if (isCancel(ormAnswer)) { cancel('Cancelled.'); process.exit(0) }
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     const dbAnswer = await select({
       message: 'Database driver',
       options: [
-        { value: 'sqlite',       label: 'SQLite',             hint: 'recommended for development' },
+        { value: 'sqlite',       label: 'SQLite' },
         { value: 'postgresql',   label: 'PostgreSQL' },
         { value: 'mysql',        label: 'MySQL / MariaDB' },
       ],
@@ -109,24 +109,14 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  // ── Todo module ────────────────────────────────────────
-
-  let withTodo = false
-  if (orm) {
-    const withTodoAnswer = await confirm({
-      message:      'Include example Todo module?',
-      initialValue: true,
-    })
-    if (isCancel(withTodoAnswer)) { cancel('Cancelled.'); process.exit(0) }
-    withTodo = withTodoAnswer as boolean
-  }
+  const withTodo = false
 
   // ── Frontend frameworks ────────────────────────────────
 
   const frameworksAnswer = await multiselect({
     message:       'Frontend frameworks',
     options: [
-      { value: 'react', label: 'React',   hint: 'recommended' },
+      { value: 'react', label: 'React' },
       { value: 'vue',   label: 'Vue' },
       { value: 'solid', label: 'Solid' },
     ],
