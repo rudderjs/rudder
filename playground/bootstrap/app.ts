@@ -24,8 +24,8 @@ export default Application.configure({
     m.use(requestIdMiddleware)
 
     // Per-group middleware
-    m.web(RateLimit.perMinute(120).toHandler())
-    m.api(RateLimit.perMinute(60).toHandler())
+    m.web(RateLimit.perMinute(120))
+    m.api(RateLimit.perMinute(60))
 
     // Session + AuthMiddleware are auto-installed on the web group by the
     // session/auth providers — no manual wiring needed.

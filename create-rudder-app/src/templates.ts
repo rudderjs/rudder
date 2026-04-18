@@ -833,19 +833,17 @@ function bootstrapApp(ctx: TemplateContext): string {
     "import { Application } from '@rudderjs/core'",
     "import { hono } from '@rudderjs/server-hono'",
     "import { RateLimit, fromClass } from '@rudderjs/middleware'",
+    "import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'",
+    "import configs from '../config/index.ts'",
+    "import providers from './providers.ts'",
   ]
-  if (ctx.packages.auth) {
-    imports.push("import { sessionMiddleware } from '@rudderjs/session'")
-  }
-  imports.push("import { RequestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'")
-  imports.push("import configs from '../config/index.ts'")
-  imports.push("import providers from './providers.ts'")
+  void ctx
 
-  const middlewareLines = ['    m.use(RateLimit.perMinute(60))']
-  if (ctx.packages.auth) {
-    middlewareLines.push('    m.use(sessionMiddleware(configs.session))')
-  }
-  middlewareLines.push('    m.use(fromClass(RequestIdMiddleware))')
+  // Note (middleware groups):
+  //   - m.use(...) runs on every request regardless of route group
+  //   - m.web(...) / m.api(...) run only on routes loaded via withRouting({ web }) / { api }
+  //   - sessionMiddleware + AuthMiddleware are auto-installed on the web group
+  //     by @rudderjs/session and @rudderjs/auth — no manual wiring needed
 
   return `${imports.join('\n')}
 
@@ -860,7 +858,16 @@ export default Application.configure({
     commands: () => import('../routes/console.ts'),
   })
   .withMiddleware((m) => {
-${middlewareLines.join('\n')}
+    // Global — runs on every request
+    m.use(fromClass(RequestIdMiddleware))
+
+    // Per-group — separate rate-limit budgets for web pages and api calls
+    m.web(RateLimit.perMinute(120))
+    m.api(RateLimit.perMinute(60))
+
+    // sessionMiddleware + AuthMiddleware are auto-installed on the web group
+    // by @rudderjs/session and @rudderjs/auth. Api routes are stateless by
+    // default — opt into bearer auth with RequireBearer() from @rudderjs/passport.
   })
   .create()
 `
@@ -1434,6 +1441,7 @@ function routesApi(ctx: TemplateContext): string {
     imports.push("import { Hash } from '@rudderjs/hash'")
     imports.push("import { User } from '../app/Models/User.ts'")
     imports.push("import { RateLimit } from '@rudderjs/middleware'")
+    imports.push("import { SessionMiddleware } from '@rudderjs/session'")
     lines.push('')
     lines.push("const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')")
   }
@@ -1446,7 +1454,9 @@ function routesApi(ctx: TemplateContext): string {
 
   if (ctx.packages.auth) {
     lines.push('')
-    lines.push(`// GET /api/me — returns current user or null
+    lines.push(`// GET /api/me — returns current user or null (Laravel Sanctum SPA-style).
+// Api routes are stateless by default, so session + auth are opted in per-route.
+// Alternative: move this to routes/web.ts and the per-route middleware isn't needed.
 router.get('/api/me', async (req, res) => {
   const manager = app().make<AuthManager>('auth.manager')
   let user: Record<string, unknown> | null = null
@@ -1457,7 +1467,7 @@ router.get('/api/me', async (req, res) => {
     }
   })
   res.json({ user })
-})`)
+}, [SessionMiddleware()])`)
   }
 
   if (ctx.withTodo) {
@@ -1573,7 +1583,6 @@ function routesWeb(ctx: TemplateContext): string {
     imports.push(`import { app, config } from '@rudderjs/core'`)
   }
   if (hasAuth) {
-    imports.push(`import { SessionMiddleware } from '@rudderjs/session'`)
     imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
     imports.push(`import { registerAuthRoutes } from '@rudderjs/auth/routes'`)
     if (hasWelcome) {
@@ -1582,10 +1591,13 @@ function routesWeb(ctx: TemplateContext): string {
   }
 
   // ── middleware chain shared with auth routes + welcome ─
+  // SessionMiddleware + AuthMiddleware are auto-installed on the web group by
+  // their providers. Only CSRF stays per-route so specific endpoints (webhooks,
+  // server-to-server callbacks) can opt out.
   const webMwBlock = hasAuth
     ? `
-// Web middleware — session + CSRF apply to web routes (not API)
-const webMw = [SessionMiddleware(), CsrfMiddleware()]
+// Per-route web middleware — session + auth are auto-applied on the web group.
+const webMw = [CsrfMiddleware()]
 `
     : ''
 
