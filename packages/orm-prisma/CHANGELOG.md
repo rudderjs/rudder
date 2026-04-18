@@ -1,5 +1,12 @@
 # @rudderjs/orm-prisma
 
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [8b0400f]
+  - @rudderjs/orm@0.1.0
+
 ## 0.0.15
 
 ### Patch Changes

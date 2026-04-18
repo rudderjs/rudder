@@ -1,5 +1,18 @@
 # rudderjs-playground
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [8b0400f]
+- Updated dependencies [8ab284a]
+  - @rudderjs/orm@0.1.0
+  - @rudderjs/telescope@3.0.0
+  - @rudderjs/passport@0.1.0
+  - @rudderjs/notification@0.0.10
+  - @rudderjs/orm-prisma@0.0.16
+  - @rudderjs/pulse@3.0.0
+
 ## 0.0.11
 
 ### Patch Changes
