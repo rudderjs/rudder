@@ -363,5 +363,35 @@ Route.get('/api/passport/me', async (req, res) => {
   })
 }, [RequireBearer(), scope('read')])
 
+// ── Personal access tokens (HasApiTokens on User) ────────
+// POST /api/tokens  body: { name, scopes? } — create a personal access token
+// GET  /api/tokens                           — list current user's tokens
+// DELETE /api/tokens                         — revoke all of the user's tokens
+import { RequireAuth } from '@rudderjs/auth'
+import { User } from '../app/Models/User.js'
+
+Route.post('/api/tokens', async (req, res) => {
+  const { name, scopes } = req.body as { name?: string; scopes?: string[] }
+  if (!name) return res.status(422).json({ message: 'name is required.' })
+  const user = await User.find((req.user as { id: string }).id) as User | null
+  if (!user) return res.status(404).json({ message: 'User not found.' })
+  const { token, plainTextToken } = await user.createToken(name, scopes ?? ['*'])
+  return res.status(201).json({ id: (token as any).id, plainTextToken })
+}, [RequireAuth()])
+
+Route.get('/api/tokens', async (req, res) => {
+  const user = await User.find((req.user as { id: string }).id) as User | null
+  if (!user) return res.status(404).json({ message: 'User not found.' })
+  const tokens = await user.tokens()
+  return res.json({ tokens: tokens.map(t => ({ id: (t as any).id, name: (t as any).name, revoked: t.revoked, expiresAt: t.expiresAt })) })
+}, [RequireAuth()])
+
+Route.delete('/api/tokens', async (req, res) => {
+  const user = await User.find((req.user as { id: string }).id) as User | null
+  if (!user) return res.status(404).json({ message: 'User not found.' })
+  const revoked = await user.revokeAllTokens()
+  return res.json({ revoked })
+}, [RequireAuth()])
+
 // Catch-all: any unmatched /api/* route returns 404 instead of falling through to Vike
 Route.all('/api/*', (_req, res) => res.status(404).json({ message: 'Route not found.' }))

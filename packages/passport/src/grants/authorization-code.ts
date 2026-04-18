@@ -1,5 +1,6 @@
-import { OAuthClient } from '../models/OAuthClient.js'
-import { AuthCode } from '../models/AuthCode.js'
+import { Passport } from '../Passport.js'
+import type { OAuthClient } from '../models/OAuthClient.js'
+import type { AuthCode }    from '../models/AuthCode.js'
 import { clientHelpers, authCodeHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 
@@ -33,7 +34,8 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
     throw new OAuthError('unsupported_response_type', 'Only response_type=code is supported.')
   }
 
-  const client = await OAuthClient.where('id', params.clientId).first() as OAuthClient | null
+  const ClientCls = await Passport.clientModel()
+  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.')
   }
@@ -87,7 +89,8 @@ export async function issueAuthCode(opts: {
 }): Promise<string> {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
-  const code = await AuthCode.create({
+  const AuthCodeCls = await Passport.authCodeModel()
+  const code = await AuthCodeCls.create({
     userId:              opts.userId,
     clientId:            opts.clientId,
     scopes:              JSON.stringify(opts.scopes),
@@ -119,8 +122,11 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     throw new OAuthError('unsupported_grant_type', 'Expected grant_type=authorization_code.')
   }
 
+  const ClientCls   = await Passport.clientModel()
+  const AuthCodeCls = await Passport.authCodeModel()
+
   // Validate client
-  const client = await OAuthClient.where('id', params.clientId).first() as OAuthClient | null
+  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.')
   }
@@ -138,7 +144,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   }
 
   // Validate auth code
-  const authCode = await AuthCode.where('id', params.code).first() as AuthCode | null
+  const authCode = await AuthCodeCls.where('id', params.code).first() as AuthCode | null
   if (!authCode) {
     throw new OAuthError('invalid_grant', 'Authorization code not found.')
   }
@@ -176,7 +182,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   }
 
   // Revoke the auth code (single-use)
-  await AuthCode.update((authCode as any).id as string, { revoked: true } as any)
+  await AuthCodeCls.update((authCode as any).id as string, { revoked: true } as any)
 
   // Issue tokens
   return issueTokens({

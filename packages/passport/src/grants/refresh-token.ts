@@ -1,6 +1,7 @@
-import { OAuthClient } from '../models/OAuthClient.js'
-import { AccessToken } from '../models/AccessToken.js'
-import { RefreshToken } from '../models/RefreshToken.js'
+import { Passport } from '../Passport.js'
+import type { OAuthClient }  from '../models/OAuthClient.js'
+import type { AccessToken }  from '../models/AccessToken.js'
+import type { RefreshToken } from '../models/RefreshToken.js'
 import { accessTokenHelpers, refreshTokenHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
@@ -22,8 +23,12 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     throw new OAuthError('unsupported_grant_type', 'Expected grant_type=refresh_token.')
   }
 
+  const ClientCls       = await Passport.clientModel()
+  const RefreshTokenCls = await Passport.refreshTokenModel()
+  const AccessTokenCls  = await Passport.tokenModel()
+
   // Validate client
-  const client = await OAuthClient.where('id', params.clientId).first() as OAuthClient | null
+  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
@@ -41,7 +46,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   }
 
   // Find refresh token
-  const refreshToken = await RefreshToken.where('id', params.refreshToken).first() as RefreshToken | null
+  const refreshToken = await RefreshTokenCls.where('id', params.refreshToken).first() as RefreshToken | null
   if (!refreshToken) {
     throw new OAuthError('invalid_grant', 'Refresh token not found.')
   }
@@ -53,7 +58,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   }
 
   // Find the access token this refresh token belongs to
-  const accessToken = await AccessToken.where('id', refreshToken.accessTokenId).first() as AccessToken | null
+  const accessToken = await AccessTokenCls.where('id', refreshToken.accessTokenId).first() as AccessToken | null
   if (!accessToken) {
     throw new OAuthError('invalid_grant', 'Associated access token not found.')
   }
@@ -74,8 +79,8 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   }
 
   // Revoke old tokens
-  await RefreshToken.update((refreshToken as any).id, { revoked: true } as any)
-  await AccessToken.update((accessToken as any).id, { revoked: true } as any)
+  await RefreshTokenCls.update((refreshToken as any).id, { revoked: true } as any)
+  await AccessTokenCls.update((accessToken as any).id, { revoked: true } as any)
 
   // Issue new pair
   return issueTokens({

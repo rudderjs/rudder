@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { verifyToken } from '../token.js'
-import { AccessToken } from '../models/AccessToken.js'
+import { Passport } from '../Passport.js'
+import type { AccessToken } from '../models/AccessToken.js'
 
 /**
  * Middleware that authenticates via Bearer token (JWT).
@@ -20,7 +21,8 @@ export function BearerMiddleware(): MiddlewareHandler {
       const payload = await verifyToken(jwt)
 
       // Check revocation in DB
-      const token = await AccessToken.query()
+      const AccessTokenCls = await Passport.tokenModel()
+      const token = await AccessTokenCls.query()
         .where('id', payload.jti)
         .first() as AccessToken | null
 
@@ -75,7 +77,8 @@ export function RequireBearer(): MiddlewareHandler {
       const payload = await verifyToken(jwt)
 
       // Check revocation
-      const token = await AccessToken.query()
+      const AccessTokenCls = await Passport.tokenModel()
+      const token = await AccessTokenCls.query()
         .where('id', payload.jti)
         .first() as AccessToken | null
 

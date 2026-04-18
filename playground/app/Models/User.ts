@@ -1,6 +1,7 @@
 import { Model } from '@rudderjs/orm'
+import { HasApiTokens } from '@rudderjs/passport'
 
-export class User extends Model {
+export class User extends HasApiTokens(Model) {
   static table = 'user'
   static hidden = ['password', 'rememberToken']
 

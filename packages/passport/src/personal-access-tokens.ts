@@ -1,5 +1,6 @@
 import { Passport } from './Passport.js'
-import { AccessToken } from './models/AccessToken.js'
+import type { AccessToken } from './models/AccessToken.js'
+import type { OAuthClient } from './models/OAuthClient.js'
 import { accessTokenHelpers } from './models/helpers.js'
 import { createToken } from './token.js'
 
@@ -27,8 +28,17 @@ export interface NewPersonalAccessToken {
  *
  * const { plainTextToken } = await user.createToken('my-app', ['read', 'write'])
  */
-export function HasApiTokens<T extends new (...args: any[]) => any>(Base: T) {
-  return class extends Base {
+export interface HasApiTokensInstance {
+  createToken(name: string, scopes?: string[], expiresInMs?: number): Promise<NewPersonalAccessToken>
+  tokens(): Promise<AccessToken[]>
+  revokeAllTokens(): Promise<number>
+  tokenCan(scope: string): boolean
+}
+
+export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
+  Base: T,
+): T & (new (...args: any[]) => HasApiTokensInstance) {
+  abstract class _HasApiTokens extends Base {
     /**
      * Create a personal access token for this user.
      * Returns the JWT (shown once) and the persisted record.
@@ -41,7 +51,8 @@ export function HasApiTokens<T extends new (...args: any[]) => any>(Base: T) {
       // Find or use a dedicated "personal access" client
       const clientId = await getPersonalAccessClientId()
 
-      const tokenRecord = await AccessToken.create({
+      const AccessTokenCls = await Passport.tokenModel()
+      const tokenRecord = await AccessTokenCls.create({
         userId,
         clientId,
         name,
@@ -66,14 +77,16 @@ export function HasApiTokens<T extends new (...args: any[]) => any>(Base: T) {
     /** Get all personal access tokens for this user. */
     async tokens(): Promise<AccessToken[]> {
       const userId = (this as any).id as string
-      return AccessToken.where('userId', userId).get() as Promise<AccessToken[]>
+      const AccessTokenCls = await Passport.tokenModel()
+      return AccessTokenCls.where('userId', userId).get() as Promise<AccessToken[]>
     }
 
     /** Revoke all personal access tokens for this user. */
     async revokeAllTokens(): Promise<number> {
+      const AccessTokenCls = await Passport.tokenModel()
       const tokens = await this.tokens()
       for (const t of tokens) {
-        await AccessToken.update((t as any).id, { revoked: true } as any)
+        await AccessTokenCls.update((t as any).id, { revoked: true } as any)
       }
       return tokens.length
     }
@@ -88,6 +101,8 @@ export function HasApiTokens<T extends new (...args: any[]) => any>(Base: T) {
       return accessTokenHelpers.can(token as any, scope)
     }
   }
+
+  return _HasApiTokens as unknown as T & (new (...args: any[]) => HasApiTokensInstance)
 }
 
 // ─── Personal Access Client ───────────────────────────────
@@ -101,24 +116,24 @@ let _personalClientId: string | null = null
 async function getPersonalAccessClientId(): Promise<string> {
   if (_personalClientId) return _personalClientId
 
-  const { OAuthClient } = await import('./models/OAuthClient.js')
+  const ClientCls = await Passport.clientModel()
 
   // Look for existing personal access client
-  const existing = await OAuthClient.where('name', '__personal_access__').first() as import('./models/OAuthClient.js').OAuthClient | null
+  const existing = await ClientCls.where('name', '__personal_access__').first() as OAuthClient | null
   if (existing) {
     _personalClientId = (existing as any).id as string
     return _personalClientId
   }
 
   // Create one
-  const client = await OAuthClient.create({
+  const client = await ClientCls.create({
     name:         '__personal_access__',
     secret:       null,
     redirectUris: JSON.stringify([]),
     grantTypes:   JSON.stringify(['personal_access']),
     scopes:       JSON.stringify([]),
     confidential: false,
-  } as Record<string, unknown>) as import('./models/OAuthClient.js').OAuthClient
+  } as Record<string, unknown>) as OAuthClient
 
   _personalClientId = (client as any).id as string
   return _personalClientId

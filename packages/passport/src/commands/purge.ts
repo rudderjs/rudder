@@ -1,7 +1,8 @@
-import { AccessToken } from '../models/AccessToken.js'
-import { RefreshToken } from '../models/RefreshToken.js'
-import { AuthCode } from '../models/AuthCode.js'
-import { DeviceCode } from '../models/DeviceCode.js'
+import { Passport } from '../Passport.js'
+import type { AccessToken }  from '../models/AccessToken.js'
+import type { RefreshToken } from '../models/RefreshToken.js'
+import type { AuthCode }     from '../models/AuthCode.js'
+import type { DeviceCode }   from '../models/DeviceCode.js'
 
 /**
  * Remove expired and revoked tokens from the database.
@@ -15,38 +16,43 @@ export async function purgeTokens(): Promise<{
 }> {
   const now = new Date()
 
+  const AccessTokenCls  = await Passport.tokenModel()
+  const RefreshTokenCls = await Passport.refreshTokenModel()
+  const AuthCodeCls     = await Passport.authCodeModel()
+  const DeviceCodeCls   = await Passport.deviceCodeModel()
+
   // Purge expired/revoked access tokens
-  const expiredAccess = await AccessToken.query()
+  const expiredAccess = await AccessTokenCls.query()
     .where('expiresAt', '<', now)
     .orWhere('revoked', true)
     .get() as AccessToken[]
   for (const t of expiredAccess) {
-    await AccessToken.delete((t as any).id as string)
+    await AccessTokenCls.delete((t as any).id as string)
   }
 
   // Purge expired/revoked refresh tokens
-  const expiredRefresh = await RefreshToken.query()
+  const expiredRefresh = await RefreshTokenCls.query()
     .where('expiresAt', '<', now)
     .orWhere('revoked', true)
     .get() as RefreshToken[]
   for (const t of expiredRefresh) {
-    await RefreshToken.delete((t as any).id as string)
+    await RefreshTokenCls.delete((t as any).id as string)
   }
 
   // Purge expired auth codes
-  const expiredCodes = await AuthCode.query()
+  const expiredCodes = await AuthCodeCls.query()
     .where('expiresAt', '<', now)
     .get() as AuthCode[]
   for (const c of expiredCodes) {
-    await AuthCode.delete((c as any).id as string)
+    await AuthCodeCls.delete((c as any).id as string)
   }
 
   // Purge expired device codes
-  const expiredDevices = await DeviceCode.query()
+  const expiredDevices = await DeviceCodeCls.query()
     .where('expiresAt', '<', now)
     .get() as DeviceCode[]
   for (const d of expiredDevices) {
-    await DeviceCode.delete((d as any).id as string)
+    await DeviceCodeCls.delete((d as any).id as string)
   }
 
   return {

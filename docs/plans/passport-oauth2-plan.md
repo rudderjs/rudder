@@ -2,7 +2,7 @@
 
 Full OAuth 2 server for RudderJS, equivalent to Laravel Passport. Turns your application into an OAuth 2 provider so third-party apps, machine-to-machine services, and remote AI agents can authenticate against your API.
 
-**Status:** Not started (parked — future initiative)
+**Status:** All 6 phases shipped 2026-04-18 (Phase 5 landed with MCP HTTP transport 2026-04-17; Phase 6 customization hooks + playground `HasApiTokens` wiring shipped 2026-04-18).
 
 **Package:** `@rudderjs/passport` (new)
 
