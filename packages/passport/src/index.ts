@@ -3,7 +3,7 @@ import { ServiceProvider, config } from '@rudderjs/core'
 // ─── Re-exports ───────────────────────────────────────────
 
 export { Passport } from './Passport.js'
-export type { PassportScope } from './Passport.js'
+export type { PassportScope, AuthorizationViewContext, AuthorizationViewFn } from './Passport.js'
 
 export { createToken, verifyToken, decodeToken } from './token.js'
 export type { JwtHeader, JwtPayload } from './token.js'
@@ -52,7 +52,7 @@ export type { NewPersonalAccessToken } from './personal-access-tokens.js'
 
 // Routes
 export { registerPassportRoutes } from './routes.js'
-export type { PassportRouteOptions } from './routes.js'
+export type { PassportRouteOptions, PassportRouteGroup } from './routes.js'
 
 // ─── Config ───────────────────────────────────────────────
 

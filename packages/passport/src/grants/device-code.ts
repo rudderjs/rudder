@@ -1,5 +1,6 @@
-import { OAuthClient } from '../models/OAuthClient.js'
-import { DeviceCode } from '../models/DeviceCode.js'
+import { Passport } from '../Passport.js'
+import type { OAuthClient } from '../models/OAuthClient.js'
+import type { DeviceCode }  from '../models/DeviceCode.js'
 import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
@@ -24,7 +25,10 @@ export async function requestDeviceCode(params: {
   scope?:   string
   verificationUri: string
 }): Promise<DeviceAuthorizationResponse> {
-  const client = await OAuthClient.where('id', params.clientId).first() as OAuthClient | null
+  const ClientCls     = await Passport.clientModel()
+  const DeviceCodeCls = await Passport.deviceCodeModel()
+
+  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.')
   }
@@ -39,7 +43,7 @@ export async function requestDeviceCode(params: {
   const scopes     = params.scope ? params.scope.split(' ').filter(Boolean) : []
   const expiresAt  = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
-  await DeviceCode.create({
+  await DeviceCodeCls.create({
     clientId:   params.clientId,
     deviceCode,
     userCode,
@@ -66,7 +70,8 @@ export async function requestDeviceCode(params: {
  * Step 2: User approves or denies the device (on the verification page).
  */
 export async function approveDeviceCode(userCode: string, userId: string, approved: boolean): Promise<void> {
-  const device = await DeviceCode.where('userCode', userCode).first() as DeviceCode | null
+  const DeviceCodeCls = await Passport.deviceCodeModel()
+  const device = await DeviceCodeCls.where('userCode', userCode).first() as DeviceCode | null
   if (!device) {
     throw new OAuthError('invalid_request', 'Device code not found.')
   }
@@ -77,7 +82,7 @@ export async function approveDeviceCode(userCode: string, userId: string, approv
     throw new OAuthError('invalid_request', 'Device code has already been used.')
   }
 
-  await DeviceCode.update((device as any).id as string, {
+  await DeviceCodeCls.update((device as any).id as string, {
     userId,
     approved,
   } as any)
@@ -104,7 +109,8 @@ export async function pollDeviceCode(params: {
     throw new OAuthError('unsupported_grant_type', 'Expected grant_type=urn:ietf:params:oauth:grant-type:device_code.')
   }
 
-  const device = await DeviceCode.where('deviceCode', params.deviceCode).first() as DeviceCode | null
+  const DeviceCodeCls = await Passport.deviceCodeModel()
+  const device = await DeviceCodeCls.where('deviceCode', params.deviceCode).first() as DeviceCode | null
   if (!device) {
     throw new OAuthError('invalid_grant', 'Device code not found.')
   }
@@ -124,7 +130,7 @@ export async function pollDeviceCode(params: {
   }
 
   // Update last polled time
-  await DeviceCode.update((device as any).id as string, {
+  await DeviceCodeCls.update((device as any).id as string, {
     lastPolledAt: new Date(),
   } as any)
 
@@ -145,7 +151,7 @@ export async function pollDeviceCode(params: {
   })
 
   // Clean up the device code
-  await DeviceCode.delete((device as any).id as string)
+  await DeviceCodeCls.delete((device as any).id as string)
 
   return { status: 'authorized', tokens }
 }

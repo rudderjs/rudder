@@ -99,3 +99,100 @@ describe('@rudderjs/passport exports', () => {
     assert.equal(typeof registerPassportRoutes, 'function')
   })
 })
+
+describe('Passport Phase 6 customization hooks', () => {
+  test('useClientModel / clientModel — override wins, defaults to OAuthClient', async () => {
+    Passport.reset()
+    assert.equal(await Passport.clientModel(), OAuthClient)
+
+    class CustomClient extends OAuthClient {}
+    Passport.useClientModel(CustomClient)
+    assert.equal(await Passport.clientModel(), CustomClient)
+
+    Passport.reset()
+    assert.equal(await Passport.clientModel(), OAuthClient)
+  })
+
+  test('useTokenModel / tokenModel — override wins, defaults to AccessToken', async () => {
+    Passport.reset()
+    assert.equal(await Passport.tokenModel(), AccessToken)
+
+    class CustomToken extends AccessToken {}
+    Passport.useTokenModel(CustomToken)
+    assert.equal(await Passport.tokenModel(), CustomToken)
+
+    Passport.reset()
+  })
+
+  test('useRefreshTokenModel / useAuthCodeModel / useDeviceCodeModel defaults', async () => {
+    Passport.reset()
+    assert.equal(await Passport.refreshTokenModel(), RefreshToken)
+    assert.equal(await Passport.authCodeModel(),     AuthCode)
+    assert.equal(await Passport.deviceCodeModel(),   DeviceCode)
+  })
+
+  test('authorizationView stores a custom consent renderer', () => {
+    Passport.reset()
+    assert.equal(Passport.authorizationViewFn(), null)
+
+    const fn = (_ctx: unknown) => ({ kind: 'view', name: 'consent' })
+    Passport.authorizationView(fn)
+    assert.equal(Passport.authorizationViewFn(), fn)
+
+    Passport.reset()
+    assert.equal(Passport.authorizationViewFn(), null)
+  })
+
+  test('ignoreRoutes toggles routesIgnored and short-circuits registerPassportRoutes', () => {
+    Passport.reset()
+    assert.equal(Passport.routesIgnored(), false)
+
+    Passport.ignoreRoutes()
+    assert.equal(Passport.routesIgnored(), true)
+
+    let called = 0
+    const fakeRouter = {
+      get:    () => { called++ },
+      post:   () => { called++ },
+      delete: () => { called++ },
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.equal(called, 0, 'no routes registered when ignoreRoutes is set')
+
+    Passport.reset()
+  })
+
+  test('registerPassportRoutes honors opts.except to skip route groups', () => {
+    Passport.reset()
+    const registered: Array<[string, string]> = []
+    const fakeRouter = {
+      get:    (p: string) => { registered.push(['GET',    p]) },
+      post:   (p: string) => { registered.push(['POST',   p]) },
+      delete: (p: string) => { registered.push(['DELETE', p]) },
+    }
+
+    registerPassportRoutes(fakeRouter, { except: ['device', 'scopes'] })
+
+    const paths = registered.map(r => r[1])
+    assert.ok(!paths.some(p => p.includes('/device')),  'device routes skipped')
+    assert.ok(!paths.some(p => p.endsWith('/scopes')),   'scopes route skipped')
+    assert.ok(paths.some(p => p.endsWith('/authorize')), 'authorize route still registered')
+    assert.ok(paths.some(p => p.endsWith('/token')),     'token route still registered')
+
+    Passport.reset()
+  })
+
+  test('registerPassportRoutes with empty opts registers all route groups', () => {
+    Passport.reset()
+    const registered: string[] = []
+    const fakeRouter = {
+      get:    (p: string) => { registered.push(`GET ${p}`) },
+      post:   (p: string) => { registered.push(`POST ${p}`) },
+      delete: (p: string) => { registered.push(`DELETE ${p}`) },
+    }
+    registerPassportRoutes(fakeRouter)
+    // authorize (GET/POST/DELETE) + token + tokens/:id + scopes + device/code + device/approve
+    assert.equal(registered.length, 8)
+  })
+})
+

@@ -1,4 +1,5 @@
-import { OAuthClient } from '../models/OAuthClient.js'
+import { Passport } from '../Passport.js'
+import type { OAuthClient } from '../models/OAuthClient.js'
 
 export interface CreateClientOpts {
   name:         string
@@ -26,7 +27,8 @@ export async function createClient(opts: CreateClientOpts): Promise<{
     hashedSecret = createHash('sha256').update(plainSecret).digest('hex')
   }
 
-  const client = await OAuthClient.create({
+  const ClientCls = await Passport.clientModel()
+  const client = await ClientCls.create({
     name:         opts.name,
     secret:       hashedSecret,
     redirectUris: JSON.stringify(opts.redirectUri ? [opts.redirectUri] : []),

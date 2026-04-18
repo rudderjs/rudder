@@ -1,6 +1,6 @@
 import { Passport } from '../Passport.js'
-import { AccessToken } from '../models/AccessToken.js'
-import { RefreshToken } from '../models/RefreshToken.js'
+import type { AccessToken }  from '../models/AccessToken.js'
+import type { RefreshToken } from '../models/RefreshToken.js'
 import { createToken } from '../token.js'
 
 export interface IssuedTokens {
@@ -24,8 +24,11 @@ export async function issueTokens(opts: {
   const lifetime = opts.lifetime ?? Passport.tokenLifetime()
   const expiresAt = new Date(Date.now() + lifetime)
 
+  const AccessTokenCls  = await Passport.tokenModel()
+  const RefreshTokenCls = await Passport.refreshTokenModel()
+
   // Create DB record
-  const tokenRecord = await AccessToken.create({
+  const tokenRecord = await AccessTokenCls.create({
     userId:    opts.userId,
     clientId:  opts.clientId,
     scopes:    JSON.stringify(opts.scopes),
@@ -53,7 +56,7 @@ export async function issueTokens(opts: {
   // Issue refresh token
   if (opts.includeRefresh !== false) {
     const refreshExpiresAt = new Date(Date.now() + Passport.refreshTokenLifetime())
-    const refreshRecord = await RefreshToken.create({
+    const refreshRecord = await RefreshTokenCls.create({
       accessTokenId: tokenId,
       revoked:       false,
       expiresAt:     refreshExpiresAt,

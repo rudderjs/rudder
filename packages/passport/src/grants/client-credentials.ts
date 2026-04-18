@@ -1,4 +1,5 @@
-import { OAuthClient } from '../models/OAuthClient.js'
+import { Passport } from '../Passport.js'
+import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
@@ -19,7 +20,8 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
     throw new OAuthError('unsupported_grant_type', 'Expected grant_type=client_credentials.')
   }
 
-  const client = await OAuthClient.where('id', params.clientId).first() as OAuthClient | null
+  const ClientCls = await Passport.clientModel()
+  const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
     throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
