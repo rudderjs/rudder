@@ -1,7 +1,3 @@
-// Auth routes (Laravel Breeze-style) — imported first so its POST handlers
-// register before this file's /api/* catch-all at the bottom.
-import './auth.ts'
-
 import { Route } from '@rudderjs/router'
 import { view } from '@rudderjs/view'
 import { resolve, dd, dump, config, validate } from '@rudderjs/core'

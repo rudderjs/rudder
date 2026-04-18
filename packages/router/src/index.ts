@@ -14,8 +14,45 @@ import type {
   RouteHandler,
   MiddlewareHandler,
   HttpMethod,
+  RouteGroup,
   AppRequest,
 } from '@rudderjs/contracts'
+
+// ─── Route Group Context ──────────────────────────────────
+//
+// `runWithGroup(group, fn)` sets the current group for the duration of `fn`.
+// Any `Route.get/post/...` / `registerController()` call inside `fn` tags its
+// routes with `group`. The server adapter prepends the matching group's
+// middleware stack before per-route middleware. Outside any `runWithGroup`
+// scope, `currentGroup()` returns `undefined` and routes stay ungrouped
+// (only plain global `m.use(...)` middleware applies).
+//
+// Route loaders (`routes/web.ts`, `routes/api.ts`) run synchronously at module
+// evaluation time — all `Route.get()` calls happen before the loader promise
+// resolves. A plain module-level variable is sufficient; no AsyncLocalStorage
+// needed, and nothing node-specific leaks into the browser bundle.
+
+let _currentGroup: RouteGroup | undefined
+
+export function runWithGroup<R>(group: RouteGroup, fn: () => R | Promise<R>): R | Promise<R> {
+  const prev = _currentGroup
+  _currentGroup = group
+  try {
+    const out = fn()
+    if (out instanceof Promise) {
+      return out.finally(() => { _currentGroup = prev })
+    }
+    _currentGroup = prev
+    return out
+  } catch (e) {
+    _currentGroup = prev
+    throw e
+  }
+}
+
+export function currentGroup(): RouteGroup | undefined {
+  return _currentGroup
+}
 
 // ─── Metadata Keys ─────────────────────────────────────────
 
@@ -165,7 +202,10 @@ export class Router {
     handler: RouteHandler,
     middleware: MiddlewareHandler[] = [],
   ): this {
-    this.routes.push({ method, path, handler, middleware })
+    const def: RouteDefinition = { method, path, handler, middleware }
+    const group = currentGroup()
+    if (group) def.group = group
+    this.routes.push(def)
     return this
   }
 
@@ -180,6 +220,8 @@ export class Router {
 
   private _rb(method: HttpMethod, path: string, handler: RouteHandler, middleware: MiddlewareHandler[] = []): RouteBuilder {
     const def: RouteDefinition = { method, path, handler, middleware }
+    const group = currentGroup()
+    if (group) def.group = group
     this.routes.push(def)
     return new RouteBuilder(def, this)
   }
@@ -193,15 +235,18 @@ export class Router {
     const routes: RouteMeta[] =
       Reflect.getMetadata(ROUTE_DEFINITIONS, ControllerClass.prototype) as RouteMeta[] ?? []
 
+    const group = currentGroup()
     for (const route of routes) {
       const fullPath = `${prefix}${route.path}`.replace(/\/+/g, '/')
       const handler  = (instance[route.handlerKey as string] as RouteHandler).bind(instance)
-      this.routes.push({
+      const def: RouteDefinition = {
         method:     route.method,
         path:       fullPath,
         handler,
         middleware: [...ctrlMw, ...route.middleware],
-      })
+      }
+      if (group) def.group = group
+      this.routes.push(def)
     }
 
     return this

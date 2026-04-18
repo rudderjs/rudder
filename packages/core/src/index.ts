@@ -6,6 +6,8 @@ export {
   AppBuilder,
   MiddlewareConfigurator,
   ExceptionConfigurator,
+  appendToGroup,
+  resetGroupMiddleware,
   app,
   resolve,
   defineConfig,

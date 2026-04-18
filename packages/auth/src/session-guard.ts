@@ -21,7 +21,17 @@ export class SessionGuard implements Guard {
   async user(): Promise<Authenticatable | null> {
     if (this._user !== undefined) return this._user
 
-    const id = this.session.get<string>('auth_user_id')
+    // Soft-fail when no session is in context (e.g. api route without
+    // session middleware, or a CLI / worker call). Matches Laravel's
+    // Auth::user() semantics — unauthenticated, not a hard error.
+    let id: string | undefined
+    try {
+      id = this.session.get<string>('auth_user_id')
+    } catch {
+      this._user = null
+      return null
+    }
+
     if (id) {
       this._user = await this.provider.retrieveById(id)
     } else {

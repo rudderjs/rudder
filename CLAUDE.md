@@ -87,6 +87,19 @@ Foundation (contracts, support) → Core (middleware, validation, router, server
 
 > **Cycle resolution**: `@rudderjs/core` loads `@rudderjs/router` at runtime via `resolveOptionalPeer('@rudderjs/router')`. Never add `@rudderjs/core` to router's `dependencies` or `devDependencies`.
 
+### Middleware Groups (web / api)
+
+Routes loaded via `withRouting({ web })` are tagged `'web'`; via `withRouting({ api })` tagged `'api'`. The server adapter prepends the matching group's middleware stack before per-route middleware, Laravel-style.
+
+- **`m.web(...)` / `m.api(...)`** in `withMiddleware((m) => ...)` — append to a named group's stack.
+- **`m.use(...)`** — global, runs on every request regardless of group (order: `m.use` → group → per-route → handler).
+- **`appendToGroup('web' | 'api', handler)`** (core export) — provider-facing helper. Framework packages install into a group during `boot()` instead of calling `router.use()` globally.
+- **`@rudderjs/session`** auto-installs `sessionMiddleware` on the `web` group.
+- **`@rudderjs/auth`** auto-installs `AuthMiddleware` on the `web` group.
+- **API routes are stateless by default** — no `req.user`, no session. Opt into bearer auth per-route with `RequireBearer()` + `scope(...)` from `@rudderjs/passport`, or `RequireAuth('api')` with a token guard.
+- **`SessionGuard.user()` soft-fails** when no session ALS context — matches Laravel's `Auth::user()` semantics (returns `null`, never throws).
+- Route loaders run **serially**, not via `Promise.all`, because group tagging uses a module-level variable in `@rudderjs/router` that concurrent loaders would clobber. Sequential execution is negligibly slower for ≤4 loaders.
+
 ### Dynamic Provider Registration
 
 Providers can be registered at runtime via `app().register(ProviderClass)`:
@@ -276,6 +289,8 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **Port in use**: `lsof -ti :24678 -ti :3000 | xargs kill -9`
 - **`rudder` commands not appearing**: Run from `playground/` (needs `bootstrap/app.ts`)
 - **RateLimit not working**: Requires a cache provider registered before middleware runs
+- **`No session in context` on api routes**: Don't add `sessionMiddleware` to `m.use(...)` (global) — it's auto-installed on the `web` group by `SessionProvider.boot()`. If you need session on a specific api route, add `SessionMiddleware()` per-route (stateless API default is intentional).
+- **`req.user` undefined on api routes**: Expected — `AuthMiddleware` runs only on the `web` group. For api auth, use `RequireBearer()` + `scope(...)` (passport) or mount `AuthMiddleware()` per-route.
 - **S3 disk errors**: Install `@aws-sdk/client-s3` — it's an optional dep of `@rudderjs/storage`
 - **SPA nav falling back to full reloads between view() routes**: the controller URL must match the URL in the view's generated `+route.ts`. Add `export const route = '/...'` at the top of the view file so the scanner picks it up instead of using the id-derived default.
 - **Ghost signed-in user across requests**: `AuthManager` must not cache `SessionGuard` instances — the manager is a process-wide DI singleton and a cached guard's `_user` field leaks across requests. Fixed; don't re-introduce the `_guards` Map.

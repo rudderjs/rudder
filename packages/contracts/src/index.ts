@@ -243,6 +243,15 @@ export type MiddlewareHandler = (
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'ALL'
 
+// ─── Route Groups ──────────────────────────────────────────
+
+/**
+ * Route group — Laravel-style middleware scoping.
+ * Routes loaded via `withRouting({ web })` are tagged 'web'; via `withRouting({ api })` tagged 'api'.
+ * The server adapter prepends the matching group's middleware stack before per-route middleware.
+ */
+export type RouteGroup = 'web' | 'api'
+
 // ─── Route Definition ──────────────────────────────────────
 
 export interface RouteDefinition {
@@ -250,6 +259,8 @@ export interface RouteDefinition {
   path:       string
   handler:    RouteHandler
   middleware: MiddlewareHandler[]
+  /** Middleware group this route belongs to. Undefined = no group middleware applied. */
+  group?:     RouteGroup
 }
 
 // ─── Server Adapter Contract ───────────────────────────────
@@ -258,8 +269,15 @@ export interface ServerAdapter {
   /** Register a single route */
   registerRoute(route: RouteDefinition): void
 
-  /** Apply a global middleware */
+  /** Apply a global middleware — runs on every request regardless of route group */
   applyMiddleware(middleware: MiddlewareHandler): void
+
+  /**
+   * Apply middleware to a named route group. Routes tagged with this group get
+   * these handlers prepended to their per-route middleware chain. Optional —
+   * adapters without group support ignore group tags entirely.
+   */
+  applyGroupMiddleware?(group: RouteGroup, middleware: MiddlewareHandler): void
 
   /** Register a global error handler — called for any unhandled error thrown by a route */
   setErrorHandler?(handler: (err: unknown, req: AppRequest) => Response | Promise<Response>): void

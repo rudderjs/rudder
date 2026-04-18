@@ -166,6 +166,16 @@ export class Session {
     return s
   }
 
+  /** Non-throwing accessor — returns null when no session is in context. */
+  static maybeCurrent(): SessionInstance | null {
+    return _als.getStore() ?? null
+  }
+
+  /** Whether a session is currently in context. */
+  static active(): boolean {
+    return _als.getStore() !== undefined
+  }
+
   static get<T>(key: string, fallback?: T): T | undefined {
     return this.current().get<T>(key, fallback)
   }
@@ -394,17 +404,31 @@ export function SessionMiddleware(): MiddlewareHandler {
  *   import configs from '../config/index.js'
  *   export default [..., session(configs.session), ...]
  *
- * Usage in bootstrap/app.ts:
- *   import { sessionMiddleware } from '@rudderjs/session'
- *   .withMiddleware((m) => { m.use(sessionMiddleware(configs.session)) })
+ * `sessionMiddleware(cfg)` is automatically appended to the `web` route group —
+ * it runs on every web route but NOT on api routes (which are stateless by default).
+ * API routes that need session can opt in explicitly by adding SessionMiddleware()
+ * to their route's middleware array.
  */
 export class SessionProvider extends ServiceProvider {
   register(): void {}
 
-  boot(): void {
+  async boot(): Promise<void> {
     const cfg = config<SessionConfig>('session')
     this.app.instance('session.config', cfg)
-    this.app.instance('session.middleware', sessionMiddleware(cfg))
+    const mw = sessionMiddleware(cfg)
+    this.app.instance('session.middleware', mw)
     this.app.instance('session.facade', Session)
+
+    // Auto-install on the web route group. Web routes (Vike pages, forms, auth
+    // flow) need session; api routes are stateless. Apps that want session on
+    // api routes can call SessionMiddleware() per-route.
+    try {
+      const { appendToGroup } = await import('@rudderjs/core') as {
+        appendToGroup: (g: 'web' | 'api', m: import('@rudderjs/contracts').MiddlewareHandler) => void
+      }
+      appendToGroup('web', mw)
+    } catch {
+      // Core peer not available — shouldn't happen since session depends on core.
+    }
   }
 }

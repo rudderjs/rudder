@@ -1,19 +1,20 @@
 import { Route } from '@rudderjs/router'
 import { view } from '@rudderjs/view'
-import { SessionMiddleware } from '@rudderjs/session'
 import { CsrfMiddleware } from '@rudderjs/middleware'
 import { RequireGuest } from '@rudderjs/auth'
 import { AuthController } from '../app/Controllers/AuthController.js'
 
-// Auth routes — Laravel Breeze-style: loaded from routes/api.ts via side-effect
-// import so its POST handlers register before api.ts's /api/* catch-all.
+// Auth routes — Laravel Breeze-style. Loaded from routes/web.ts via side-effect
+// import so they're tagged with the `web` group and inherit session + auth
+// middleware. The POST endpoints live at /api/auth/... but still need session
+// for Auth.attempt / Auth.login to persist state.
 //
-// Note: `@rudderjs/auth` also ships a `registerAuthRoutes(Route, { … })` helper
-// for one-line wiring. We inline the routes here for visibility — the playground
-// is a framework demo and should show what's actually happening.
+// `@rudderjs/auth` also ships a `registerAuthRoutes(Route, { … })` helper for
+// one-line wiring — inlined here for visibility.
 
-// Session + CSRF + RequireGuest — signed-in users visiting /login get bounced to '/'
-const guestOnly = [SessionMiddleware(), CsrfMiddleware(), RequireGuest('/')]
+// CSRF + RequireGuest — signed-in users visiting /login get bounced to '/'.
+// SessionMiddleware + AuthMiddleware are auto-installed on the web group.
+const guestOnly = [CsrfMiddleware(), RequireGuest('/')]
 
 // ── GET view pages ─────────────────────────────────────────
 Route.get('/login', async () =>

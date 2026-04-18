@@ -277,15 +277,62 @@ export interface RoutingOptions {
 
 // ─── Middleware Configurator ───────────────────────────────
 
+type RouteGroupName = 'web' | 'api'
+
 export class MiddlewareConfigurator {
   private _handlers: MiddlewareHandler[] = []
+  private _groupHandlers: Record<RouteGroupName, MiddlewareHandler[]> = { web: [], api: [] }
 
+  /** Global middleware — runs on every request, regardless of route group. */
   use(handler: MiddlewareHandler): this {
     this._handlers.push(handler)
     return this
   }
 
+  /** Append middleware to the `web` route group (routes loaded via withRouting({ web })). */
+  web(...handlers: MiddlewareHandler[]): this {
+    this._groupHandlers.web.push(...handlers)
+    return this
+  }
+
+  /** Append middleware to the `api` route group (routes loaded via withRouting({ api })). */
+  api(...handlers: MiddlewareHandler[]): this {
+    this._groupHandlers.api.push(...handlers)
+    return this
+  }
+
   getHandlers(): MiddlewareHandler[] { return this._handlers }
+
+  /** Combined group stack — user-config + any provider-registered group middleware. */
+  getGroupHandlers(group: RouteGroupName): MiddlewareHandler[] {
+    return [...groupMiddlewareStore[group], ...this._groupHandlers[group]]
+  }
+}
+
+// ─── Provider-facing group-middleware registry ────────────
+//
+// Providers can't reach `MiddlewareConfigurator` directly (it's constructed per
+// RudderJS instance). Instead they call `appendToGroup('web', mw)` during their
+// `boot()` — handlers accumulate in this module-level store and are combined
+// with user-config group handlers inside `_createHandler()`.
+//
+// The store is drained on reset() so HMR-style boot cycles don't double-register.
+
+const groupMiddlewareStore: Record<RouteGroupName, MiddlewareHandler[]> = { web: [], api: [] }
+
+/**
+ * Register middleware for a named route group (`'web'` | `'api'`). Called
+ * by framework providers during `boot()` — e.g. `@rudderjs/auth` appends
+ * `AuthMiddleware()` to the `web` group so it only runs on web routes.
+ */
+export function appendToGroup(group: RouteGroupName, handler: MiddlewareHandler): void {
+  groupMiddlewareStore[group].push(handler)
+}
+
+/** @internal — drain provider-registered group middleware (HMR dev reloads). */
+export function resetGroupMiddleware(): void {
+  groupMiddlewareStore.web.length = 0
+  groupMiddlewareStore.api.length = 0
 }
 
 // ─── Exception Configurator ────────────────────────────────
@@ -384,11 +431,19 @@ export class AppBuilder {
   constructor(private readonly _options: ConfigureOptions) {}
 
   withRouting(routes: RoutingOptions): this {
-    if (routes.web)      this._loaders.push(routes.web)
-    if (routes.api)      this._loaders.push(routes.api)
+    if (routes.web)      this._loaders.push(this._taggedLoader('web', routes.web))
+    if (routes.api)      this._loaders.push(this._taggedLoader('api', routes.api))
     if (routes.commands) this._loaders.push(routes.commands)
     if (routes.channels) this._loaders.push(routes.channels)
     return this
+  }
+
+  /** Wrap a route loader so routes registered inside it get tagged with `group`. */
+  private _taggedLoader(group: 'web' | 'api', loader: () => Promise<unknown>): () => Promise<unknown> {
+    return async () => {
+      const { runWithGroup } = await import('@rudderjs/router')
+      return runWithGroup(group, loader)
+    }
   }
 
   withMiddleware(fn: (m: MiddlewareConfigurator) => void): this {
@@ -456,9 +511,15 @@ export class RudderJS {
       rudder.reset()
       const { router } = await import('@rudderjs/router') as { router: { reset(): void } }
       router.reset()
+      resetGroupMiddleware()
     }
     await this._app.bootstrap()
-    await Promise.all(this._loaders.map(l => l()))
+    // Serial loader execution — required for per-loader group tagging in
+    // @rudderjs/router's runWithGroup(). Parallel execution would set the
+    // module-level currentGroup to whichever loader was invoked last before
+    // any module bodies evaluated in microtasks. Sequential is negligibly
+    // slower for ≤4 loaders and keeps the group context correct.
+    for (const loader of this._loaders) await loader()
     if (this._app.isDevelopment()) this._printDevBootLog()
     console.log('[RudderJS] ready')
   }
@@ -559,6 +620,10 @@ export class RudderJS {
     const { router } = await import('@rudderjs/router') as { router: { mount(adapter: ServerAdapter): void } }
     this._handler = await this._server.createFetchHandler((adapter: ServerAdapter) => {
       for (const h of mw.getHandlers()) adapter.applyMiddleware(h)
+      if (adapter.applyGroupMiddleware) {
+        for (const h of mw.getGroupHandlers('web')) adapter.applyGroupMiddleware('web', h)
+        for (const h of mw.getGroupHandlers('api')) adapter.applyGroupMiddleware('api', h)
+      }
       router.mount(adapter)
       adapter.setErrorHandler?.(errorHandler)
     })

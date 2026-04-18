@@ -151,17 +151,15 @@ export class AuthProvider extends ServiceProvider {
     this.app.instance('auth.manager', manager)
     this.app.instance('auth', Auth)
 
-    // Install AuthMiddleware as a global router middleware so every request
-    // runs inside `runWithAuth(manager, …)`. User code can then call
-    // `auth().user()`, `Auth.user()`, or read `req.user` without manual
-    // context wrapping — matching Laravel's `auth()->user()` ergonomics.
+    // Install AuthMiddleware on the `web` group only — it needs session
+    // context (SessionGuard) and is irrelevant to stateless API routes.
+    // API routes opt into bearer auth with `RequireBearer()` from @rudderjs/passport
+    // or `RequireAuth('api')` with a token-based guard.
     try {
-      const { router } = await import('@rudderjs/router') as { router: { use(m: MiddlewareHandler): unknown } }
-      router.use(AuthMiddleware())
+      const { appendToGroup } = await import('@rudderjs/core') as { appendToGroup: (g: 'web' | 'api', m: MiddlewareHandler) => void }
+      appendToGroup('web', AuthMiddleware())
     } catch {
-      // Router peer not installed — skip global registration. Callers can
-      // still wrap manually with runWithAuth if they're running in a
-      // non-HTTP context (CLI, worker).
+      // Core peer not available (shouldn't happen — it's a required dep).
     }
   }
 }

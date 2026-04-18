@@ -243,6 +243,7 @@ function logPath(path: string): string | null {
 class HonoAdapter implements ServerAdapter {
   private app: Hono
   private _errorHandler?: (err: unknown, req: AppRequest) => Response | Promise<Response>
+  private _groupMiddleware: Record<'web' | 'api', MiddlewareHandler[]> = { web: [], api: [] }
   /**
    * Set of GET route paths registered via the router. Used by the outer fetch
    * handler to decide whether a `.pageContext.json` request should be rewritten
@@ -256,6 +257,10 @@ class HonoAdapter implements ServerAdapter {
 
   constructor(app?: Hono) {
     this.app = app ?? new Hono()
+  }
+
+  applyGroupMiddleware(group: 'web' | 'api', middleware: MiddlewareHandler): void {
+    this._groupMiddleware[group].push(middleware)
   }
 
   setErrorHandler(fn: (err: unknown, req: AppRequest) => Response | Promise<Response>): void {
@@ -281,6 +286,11 @@ class HonoAdapter implements ServerAdapter {
       const req = normalizeRequest(c)
       const res = normalizeResponse(c)
 
+      // Compose group middleware (e.g. session, auth on the web group) before
+      // per-route middleware. Routes without a group tag get no group middleware.
+      const groupMw = route.group ? this._groupMiddleware[route.group] : []
+      const chain   = [...groupMw, ...route.middleware]
+
       // Stash route metadata on the raw request for observability (Telescope).
       // Middleware names are extracted from function.name — named functions
       // (e.g. `async function SessionMiddleware(…)`) produce readable names,
@@ -290,7 +300,8 @@ class HonoAdapter implements ServerAdapter {
         method:     route.method,
         path:       route.path,
         handler:    route.handler.name || '(closure)',
-        middleware: route.middleware
+        group:      route.group,
+        middleware: chain
           .map(fn => fn.name || (fn as unknown as { _name?: string })['_name'])
           .filter(Boolean),
       }
@@ -308,11 +319,10 @@ class HonoAdapter implements ServerAdapter {
       // (e.g. Set-Cookie from SessionMiddleware) are included in the final response.
       // We always return `c.res` at the end — middleware that runs after the handler
       // (like session.save()) can modify `c.res` and their changes will be included.
-      const middleware = [...route.middleware]
       let idx = 0
 
       const next = async (): Promise<void> => {
-        const fn = middleware[idx++]
+        const fn = chain[idx++]
         if (fn) {
           await fn(req, res, next)
         } else {
