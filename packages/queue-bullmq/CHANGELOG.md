@@ -1,5 +1,11 @@
 # @rudderjs/queue-bullmq
 
+## 0.0.10
+
+### Patch Changes
+
+- @rudderjs/queue@3.0.0
+
 ## 0.0.9
 
 ### Patch Changes

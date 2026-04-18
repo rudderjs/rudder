@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/localization",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "rudderjs": {
     "provider": "LocalizationProvider",
     "stage": "feature"

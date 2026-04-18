@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/hash",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "rudderjs": {
     "provider": "HashProvider",
     "stage": "infrastructure"

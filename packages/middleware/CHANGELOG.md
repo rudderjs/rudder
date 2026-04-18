@@ -1,5 +1,13 @@
 # @rudderjs/middleware
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [ba543c9]
+  - @rudderjs/contracts@0.1.0
+  - @rudderjs/cache@0.0.11
+
 ## 0.0.11
 
 ### Patch Changes

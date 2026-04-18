@@ -1,5 +1,13 @@
 # @rudderjs/cli
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [ba543c9]
+  - @rudderjs/router@0.3.0
+  - @rudderjs/core@0.1.0
+
 ## 2.0.1
 
 ### Patch Changes

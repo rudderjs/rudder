@@ -1,5 +1,14 @@
 # @rudderjs/notification
 
+## 0.0.11
+
+### Patch Changes
+
+- Updated dependencies [ba543c9]
+  - @rudderjs/core@0.1.0
+  - @rudderjs/orm@0.1.1
+  - @rudderjs/mail@0.0.10
+
 ## 0.0.10
 
 ### Patch Changes

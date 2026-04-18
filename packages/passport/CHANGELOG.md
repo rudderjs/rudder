@@ -1,5 +1,14 @@
 # @rudderjs/passport
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [ba543c9]
+  - @rudderjs/contracts@0.1.0
+  - @rudderjs/core@0.1.0
+  - @rudderjs/orm@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

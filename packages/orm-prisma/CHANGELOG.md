@@ -1,5 +1,14 @@
 # @rudderjs/orm-prisma
 
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [ba543c9]
+  - @rudderjs/contracts@0.1.0
+  - @rudderjs/core@0.1.0
+  - @rudderjs/orm@0.1.1
+
 ## 0.0.16
 
 ### Patch Changes

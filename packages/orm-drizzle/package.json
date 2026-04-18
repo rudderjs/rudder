@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/orm-drizzle",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Drizzle ORM adapter for RudderJS. Implements OrmAdapterProvider / OrmAdapter / QueryBuilder<T> using Drizzle's SQL-like fluent API.",
   "license": "MIT",
   "repository": {
