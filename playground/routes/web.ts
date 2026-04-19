@@ -146,10 +146,12 @@ Route.get('/test/model', async (_req, res) => {
   res.json({ created: todo.id })
 })
 
-// GET /test/gate — fires gate authorization checks for telescope testing
+// GET /test/gate — fires gate authorization checks for telescope testing.
+// The gate decides based on the post's role so we get a real allow + deny
+// regardless of whether anyone is signed in.
 Route.get('/test/gate', async (_req, res) => {
   const { Gate } = await import('@rudderjs/auth')
-  Gate.define('edit-post', (user) => (user as unknown as { role?: string }).role === 'admin')
+  Gate.define('edit-post', (_user, post: { role?: string }) => post?.role === 'admin')
   const allowed = await Gate.allows('edit-post', { id: 1, role: 'admin' })
   const denied  = await Gate.allows('edit-post', { id: 2, role: 'user' })
   res.json({ allowed, denied })

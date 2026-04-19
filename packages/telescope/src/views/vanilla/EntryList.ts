@@ -191,6 +191,9 @@ export function EntryList(props: EntryListProps): string {
               set: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300', forget: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
               created: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300', updated: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
               deleted: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300',
+              Allowed: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
+              Denied:  'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300',
+              success: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
             }
             return colors[value] || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
           },

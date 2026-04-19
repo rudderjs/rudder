@@ -131,10 +131,11 @@ export const pages: Record<string, PageConfig> = {
     type:  'command',
     title: 'Commands',
     columns: [
-      { label: 'Name',     key: 'entry.content.name',                    mono: true },
-      { label: 'Source',   key: 'entry.content.source',                  badge: true },
-      { label: 'Exit',     key: 'entry.content.exitCode',                className: 'text-right font-mono text-xs' },
-      { label: 'Duration', key: "(entry.content.duration || 0) + 'ms'", className: 'text-right' },
+      { label: 'Name',     key: 'entry.content.name',                                  mono: true },
+      { label: 'Source',   key: 'entry.content.source',                                badge: true },
+      { label: 'Status',   key: "entry.content.exitCode === 0 ? 'success' : 'failed'", badge: true },
+      { label: 'Exit',     key: 'entry.content.exitCode',                              className: 'text-right font-mono text-xs' },
+      { label: 'Duration', key: "(entry.content.duration || 0) + 'ms'",                className: 'text-right' },
     ],
   },
 

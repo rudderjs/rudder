@@ -354,16 +354,20 @@ const HttpView: ViewFn = (entry) => {
 
 const GateView: ViewFn = (entry) => {
   const c = entry.content as Record<string, unknown>
+  const args = c['args'] as unknown[] | undefined
+  const hasArgs = Array.isArray(args) && args.length > 0
+  const rows: Record<string, unknown> = {
+    Ability:        raw(`<span class="font-mono text-xs">${escape(c['ability'] as string ?? '')}</span>`),
+    Result:         Badge(c['allowed'] ? 'Allowed' : 'Denied'),
+    'Resolved Via': Badge(c['resolvedVia'] as string),
+    'User ID':      c['userId'] ?? '—',
+    Duration:       c['duration'] != null ? `${c['duration']}ms` : '—',
+  }
+  if (c['policy']) rows['Policy'] = c['policy']
+  if (c['model'])  rows['Model']  = raw(`<span class="font-mono text-xs">${escape(c['model'] as string)}</span>`)
   return html`
-    ${Card(null, KeyValueTable({
-      Ability:      raw(`<span class="font-mono text-xs">${escape(c['ability'] as string ?? '')}</span>`),
-      Result:       Badge(c['allowed'] ? 'Allowed' : 'Denied'),
-      'Resolved Via': Badge(c['resolvedVia'] as string),
-      'User ID':    c['userId'] ?? '—',
-      Duration:     c['duration'] != null ? `${c['duration']}ms` : '—',
-      Policy:       c['policy'] ?? '—',
-      Model:        c['model'] ?? '—',
-    }))}
+    ${Card(null, KeyValueTable(rows))}
+    ${hasArgs ? Card('Arguments', JsonBlock(args.length === 1 ? args[0] : args)) : ''}
   `
 }
 
@@ -376,7 +380,7 @@ const DumpView: ViewFn = (entry) => {
       Caller:   c['caller'] ? raw(`<span class="font-mono text-xs">${escape(c['caller'] as string)}</span>`) : '—',
       'Arg Count': c['count'],
     }))}
-    ${args ? args.map((arg, i) => Card(`Argument ${i + 1}`, JsonBlock(arg))).join('') : ''}
+    ${args ? args.map((arg, i) => Card(`Argument ${i + 1}`, JsonBlock(arg))) : ''}
   `
 }
 
@@ -513,7 +517,7 @@ const AiView: ViewFn = (entry) => {
 
   const requestRows: Record<string, unknown> = {
     Status:        statusBadge,
-    Agent:         c['agent'] ?? '—',
+    Agent:         c['agentName'] ?? c['agent'] ?? '—',
     Model:         c['model'] ? Badge(String(c['model'])) : raw('<span class="text-gray-300 dark:text-gray-600">—</span>'),
     Provider:      c['provider'] ?? '—',
     Duration:      c['duration'] != null ? `${c['duration']}ms` : '—',
@@ -546,21 +550,31 @@ const AiView: ViewFn = (entry) => {
       Total:      usage['totalTokens']      ?? usage['total_tokens']      ?? '—',
     })) : ''}
 
-    ${inputValue !== undefined && inputValue !== null
-      ? Card('Input', CodeBlock(inputStr, { maxHeight: '[200px]' }))
-      : ''}
-
-    ${outputValue !== undefined && outputValue !== null
-      ? Card('Output', CodeBlock(outputStr, { maxHeight: '[400px]' }))
-      : ''}
+    ${(() => {
+      const conversationTabs: { label: string; content: SafeString | string }[] = []
+      if (outputValue !== undefined && outputValue !== null) {
+        conversationTabs.push({ label: 'Output', content: CodeBlock(outputStr, { maxHeight: '[400px]' }) })
+      }
+      if (inputValue !== undefined && inputValue !== null) {
+        conversationTabs.push({ label: 'Input', content: CodeBlock(inputStr, { maxHeight: '[200px]' }) })
+      }
+      return conversationTabs.length > 0 ? Tabs(conversationTabs) : ''
+    })()}
 
     ${errorValue
       ? Card('Error', raw(`<pre class="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">${escape(typeof errorValue === 'string' ? errorValue : JSON.stringify(errorValue, null, 2))}</pre>`))
       : ''}
 
-    ${toolCalls.length > 0 ? Card('Tool Calls', renderToolCalls(toolCalls)) : ''}
-
-    ${steps.length > 1 ? Card('Steps', renderSteps(steps)) : ''}
+    ${(() => {
+      const executionTabs: { label: string; content: SafeString | string }[] = []
+      if (toolCalls.length > 0) {
+        executionTabs.push({ label: `Tool Calls (${toolCalls.length})`, content: renderToolCalls(toolCalls) })
+      }
+      if (steps.length > 1) {
+        executionTabs.push({ label: `Steps (${steps.length})`, content: renderSteps(steps) })
+      }
+      return executionTabs.length > 0 ? Tabs(executionTabs) : ''
+    })()}
   `
 }
 

@@ -176,10 +176,8 @@ export class Gate {
     const obs = _getGateObservers()
     if (!obs) return
 
-    const model = args[0]
-    const modelName = model && typeof model === 'object' && 'constructor' in model
-      ? (model.constructor as { name?: string }).name
-      : undefined
+    const modelName = _modelName(args[0])
+    const safeArgs  = _safeSerializeArgs(args)
 
     obs.emit({
       ability,
@@ -188,6 +186,7 @@ export class Gate {
       resolvedVia: result.resolvedVia,
       policy:      result.policy,
       model:       modelName,
+      args:        safeArgs,
       duration,
     })
   }
@@ -217,17 +216,14 @@ class GateForUser {
 
     const obs = _getGateObservers()
     if (obs) {
-      const model = args[0]
-      const modelName = model && typeof model === 'object' && 'constructor' in model
-        ? (model.constructor as { name?: string }).name
-        : undefined
       obs.emit({
         ability,
         userId:      this.user.getAuthIdentifier(),
         allowed:     result.allowed,
         resolvedVia: result.resolvedVia,
         policy:      result.policy,
-        model:       modelName,
+        model:       _modelName(args[0]),
+        args:        _safeSerializeArgs(args),
         duration,
       })
     }
@@ -278,6 +274,45 @@ class GateForUser {
       throw new AuthorizationError(`This action is unauthorized. [${ability}]`)
     }
   }
+}
+
+// ─── Observation helpers ──────────────────────────────────
+
+/**
+ * Returns the constructor name of `value` if it's a class instance with a
+ * meaningful name. `Object` (plain object literals) and `Array` are filtered
+ * out as noise — they don't tell the reader anything useful in Telescope.
+ */
+function _modelName(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || !('constructor' in value)) return undefined
+  const name = (value.constructor as { name?: string }).name
+  if (!name || name === 'Object' || name === 'Array') return undefined
+  return name
+}
+
+/**
+ * JSON-safe snapshot of the gate args so the observer can serialize them
+ * for storage. Strips functions, handles circular references, falls back to
+ * `String(value)` for anything that can't be serialized.
+ */
+function _safeSerializeArgs(args: unknown[]): unknown[] {
+  return args.map(a => {
+    if (a === null || a === undefined) return a
+    if (typeof a !== 'object') return a
+    try {
+      const seen = new WeakSet()
+      return JSON.parse(JSON.stringify(a, (_k, v) => {
+        if (typeof v === 'object' && v !== null) {
+          if (seen.has(v)) return '[Circular]'
+          seen.add(v)
+        }
+        if (typeof v === 'function') return undefined
+        return v
+      }))
+    } catch {
+      return String(a)
+    }
+  })
 }
 
 // ─── Authorization Error ──────────────────────────────────

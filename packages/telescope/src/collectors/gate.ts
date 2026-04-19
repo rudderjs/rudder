@@ -9,6 +9,7 @@ interface GateEvent {
   resolvedVia: 'ability' | 'policy' | 'before' | 'default'
   policy?:     string
   model?:      string
+  args?:       unknown[]
   duration:    number
 }
 
@@ -53,6 +54,7 @@ export class GateCollector implements Collector {
       resolvedVia: event.resolvedVia,
       policy:      event.policy,
       model:       event.model,
+      args:        event.args,
       duration:    event.duration,
     }, { tags, ...batchOpts() }))
   }

@@ -111,6 +111,9 @@ export function Badge(value: string | undefined): SafeString {
     created: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
     updated: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
     deleted: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+    Allowed: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
+    Denied:  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+    success: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
   }
   const cls = colors[value] ?? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
   return html`<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}">${value}</span>`

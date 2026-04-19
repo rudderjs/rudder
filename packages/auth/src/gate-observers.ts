@@ -17,6 +17,8 @@ export interface GateEvent {
   policy?:     string | undefined
   /** Model class name (if a model was passed) */
   model?:      string | undefined
+  /** Arguments passed to the check (excluding the user) — JSON-safe snapshot */
+  args?:       unknown[] | undefined
   /** Duration of the check in ms */
   duration:    number
 }
