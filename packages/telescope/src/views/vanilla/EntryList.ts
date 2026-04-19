@@ -48,7 +48,11 @@ export function EntryList(props: EntryListProps): string {
   }).join('\n                ')
 
   const activePath = `/${pageKey}`
-  const apiPath    = type === 'query' ? 'queries' : `${type}s`
+  // Must match the slug logic in routes.ts:apiPath
+  const apiPath = type === 'query' ? 'queries'
+    : type === 'http' || type === 'ai' || type === 'mcp' ? type
+    : type === 'view' ? 'views'
+    : `${type}s`
 
   const body = `
     <div x-data="entryList()" x-init="load()" x-cloak>

@@ -305,20 +305,49 @@ const HttpView: ViewFn = (entry) => {
   const c = entry.content as Record<string, unknown>
   const reqHeaders  = c['reqHeaders']  as Record<string, string> | undefined
   const resHeaders  = c['resHeaders']  as Record<string, string> | undefined
+  const reqBody     = c['reqBody']
+  const resBody     = c['resBody']
   const isFailure   = c['kind'] === 'request.failed'
+
+  const status = c['status'] as number | undefined
+  const statusBadge = isFailure
+    ? Badge('FAILED')
+    : (status != null
+        ? raw(`<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor(status)}">${status}</span>`)
+        : Badge('—'))
+
+  // Always show a Payload tab — matches the Request entry's behavior
+  const hasReqBody = reqBody !== undefined && reqBody !== null && reqBody !== ''
+                     && !(typeof reqBody === 'object' && Object.keys(reqBody as object).length === 0)
+  const payloadContent = hasReqBody ? JsonBlock(reqBody) : JsonBlock([])
+
+  const requestTabs = Tabs([
+    { label: 'Payload', content: payloadContent },
+    { label: 'Headers', content: reqHeaders && Object.keys(reqHeaders).length > 0
+        ? JsonBlock(reqHeaders)
+        : raw('<p class="text-sm text-gray-400 dark:text-gray-500">No request headers.</p>') },
+  ])
+
+  const hasResBody    = resBody !== undefined && resBody !== null && resBody !== ''
+  const hasResHeaders = !!resHeaders && Object.keys(resHeaders).length > 0
+  const responseBodyContent = hasResBody
+    ? (typeof resBody === 'string' ? CodeBlock(resBody, { maxHeight: '[400px]' }) : JsonBlock(resBody))
+    : ''
+  const responseTabs = Tabs([
+    ...(hasResBody    ? [{ label: 'Body',    content: responseBodyContent     }] : []),
+    ...(hasResHeaders ? [{ label: 'Headers', content: JsonBlock(resHeaders!) }] : []),
+  ])
 
   return html`
     ${Card(null, KeyValueTable({
-      Method:        Badge(c['method'] as string),
-      URL:           raw(`<span class="font-mono text-xs break-all">${escape(c['url'] as string ?? '')}</span>`),
-      Status:        isFailure ? Badge('FAILED') : Badge(String(c['status'] ?? '')),
-      Duration:      c['duration'] != null ? `${c['duration']}ms` : '—',
-      'Resp Size':   c['resSize'] != null ? `${c['resSize']} bytes` : '—',
+      Method:      Badge(c['method'] as string),
+      URL:         raw(`<span class="font-mono text-xs break-all">${escape(c['url'] as string ?? '')}</span>`),
+      Status:      statusBadge,
+      Duration:    c['duration'] != null ? `${c['duration']}ms` : '—',
+      'Resp Size': c['resSize'] != null ? `${c['resSize']} bytes` : '—',
     }))}
-    ${reqHeaders ? Card('Request Headers', KeyValueTable(reqHeaders)) : ''}
-    ${c['reqBody'] !== undefined && c['reqBody'] !== null ? Card('Request Body', JsonBlock(c['reqBody'])) : ''}
-    ${resHeaders ? Card('Response Headers', KeyValueTable(resHeaders)) : ''}
-    ${c['resBody'] ? Card('Response Body', CodeBlock(String(c['resBody']), { maxHeight: '[400px]' })) : ''}
+    ${requestTabs}
+    ${responseTabs}
     ${isFailure && c['error'] ? Card('Error', raw(`<div class="text-sm text-red-600 dark:text-red-400">${escape(c['error'] as string)}</div>`)) : ''}
   `
 }
