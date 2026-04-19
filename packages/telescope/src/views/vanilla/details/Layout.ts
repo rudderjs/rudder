@@ -1,6 +1,6 @@
 import { Layout as BaseLayout } from '../Layout.js'
 import { html, raw, type SafeString } from '../_html.js'
-import { Card, Badge } from './sections.js'
+import { Card, Badge, Tabs } from './sections.js'
 import type { TelescopeEntry } from '../../../types.js'
 
 export interface DetailLayoutProps {
@@ -92,11 +92,11 @@ function renderRelatedEntries(
     list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }
 
-  // Render each group as a section
+  // Render each group as a tab (Laravel-style Related Entries tab block)
   const parentTime = new Date(parentEntry.createdAt).getTime()
 
-  const sections = [...groups.entries()].map(([type, list]) => {
-    const title = `${typeLabel(type)} (${list.length})`
+  const tabs = [...groups.entries()].map(([type, list]) => {
+    const label = `${typeLabel(type)} (${list.length})`
     const rows = list.map(e => {
       const c = e.content as Record<string, unknown>
       const summary = entrySummary(type, c)
@@ -115,19 +115,20 @@ function renderRelatedEntries(
       `
     })
 
-    return Card(title, html`
-      <table class="w-full">
+    const content = html`
+      <table class="w-full -m-5">
         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
           ${rows}
         </tbody>
       </table>
-    `)
+    `
+    return { label, content }
   })
 
   return html`
     <div class="mt-6">
       <h3 class="text-sm uppercase tracking-wide font-medium text-gray-500 dark:text-gray-400 mb-3">Related Entries</h3>
-      ${sections}
+      ${Tabs(tabs)}
     </div>
   `
 }
@@ -138,7 +139,7 @@ function typeLabel(type: string): string {
     log: 'Logs', mail: 'Mail', notification: 'Notifications', event: 'Events',
     cache: 'Cache', schedule: 'Scheduled Tasks', model: 'Model Changes',
     command: 'Commands', http: 'HTTP Client', gate: 'Gates', dump: 'Dumps',
-    broadcast: 'WebSockets', live: 'Live (Yjs)',
+    broadcast: 'WebSockets', live: 'Live (Yjs)', view: 'Views',
   }
   return labels[type] ?? type
 }
@@ -146,6 +147,7 @@ function typeLabel(type: string): string {
 function pluralUrlSegment(type: string): string {
   if (type === 'mail' || type === 'cache' || type === 'schedule' || type === 'http') return type
   if (type === 'query') return 'queries'
+  if (type === 'view') return 'views'
   return `${type}s`
 }
 
@@ -168,6 +170,7 @@ function entrySummary(type: string, c: Record<string, unknown>): string {
     case 'dump':         return `${c['method'] ?? ''}(${c['count'] ?? 0} args)`
     case 'broadcast':    return `${c['kind'] ?? ''}${c['channel'] ? ' ' + c['channel'] : ''}`
     case 'live':         return `${c['kind'] ?? ''}${c['docName'] ? ' ' + c['docName'] : ''}`
+    case 'view':         return `${c['id'] ?? ''} (${Array.isArray(c['propKeys']) ? (c['propKeys'] as unknown[]).length : 0} props)`
     default:             return ''
   }
 }

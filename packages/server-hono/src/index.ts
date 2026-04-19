@@ -91,7 +91,6 @@ function normalizeRequest(c: Context): AppRequest {
     headers: Object.fromEntries(
       Object.entries(c.req.header() ?? {}).map(([k, v]) => [k, String(v)])
     ),
-    body:    null, // populated lazily per route
     raw:     c,
     ip:      extractIp(c),
   }
@@ -99,6 +98,14 @@ function normalizeRequest(c: Context): AppRequest {
   // Both applyMiddleware and registerRoute call normalizeRequest(c) with the same
   // Hono context, so getters ensure the route handler always sees what was set.
   const ctx = c as unknown as Record<string, unknown>
+  // Body lives on ctx so the outer applyMiddleware req (e.g. telescope's
+  // request collector) sees the same parsed body as the route handler req.
+  Object.defineProperty(req, 'body', {
+    get: () => ctx['__rjs_body'] ?? null,
+    set: (v: unknown) => { ctx['__rjs_body'] = v },
+    enumerable: true,
+    configurable: true,
+  })
   Object.defineProperty(req, 'session', {
     get: () => ctx['__rjs_session'],
     enumerable: true,
@@ -135,6 +142,9 @@ function normalizeResponse(c: Context): AppResponse {
       c.header('Content-Type', 'application/json')
       Object.entries(headers).forEach(([k, v]) => c.header(k, v))
       c.status(statusCode as StatusCode)
+      // Stash parsed body for observability (telescope) — avoids having to
+      // re-read the Response stream after finalization.
+      ;(c as unknown as Record<string, unknown>)['__rjs_response_body'] = data
       // Hono v4: c.json() returns a Response but does NOT set c.res automatically.
       // We must set c.res explicitly so Hono/srvx always has a valid response to send.
       c.res = c.json(data)
@@ -296,10 +306,17 @@ class HonoAdapter implements ServerAdapter {
       // (e.g. `async function SessionMiddleware(…)`) produce readable names,
       // anonymous arrows produce '' (filtered out).
       const meta = req.raw as Record<string, unknown>
+      // Named handlers (controllers via Router.registerController set
+      // `ControllerClass@method` on fn.name) keep their name. Anonymous
+      // arrows / closures show as "Closure" (Laravel parity — method + path
+      // are already shown elsewhere in the telescope entry).
+      const handlerName = route.handler.name && route.handler.name !== 'anonymous'
+        ? route.handler.name
+        : 'Closure'
       meta['__rjs_route'] = {
         method:     route.method,
         path:       route.path,
-        handler:    route.handler.name || '(closure)',
+        handler:    handlerName,
         group:      route.group,
         middleware: chain
           .map(fn => fn.name || (fn as unknown as { _name?: string })['_name'])
@@ -340,6 +357,12 @@ class HonoAdapter implements ServerAdapter {
             // Stash view info for Telescope
             const v = result as unknown as { id?: string; props?: Record<string, unknown> }
             meta['__rjs_view'] = { id: v.id, props: Object.keys(v.props ?? {}) }
+            // Stash response envelope for the Response tab (full prop values,
+            // not just keys — matches Laravel Telescope's Inertia rendering).
+            ;(c as unknown as Record<string, unknown>)['__rjs_response_body'] = {
+              view:  v.id,
+              props: v.props ?? {},
+            }
           } else if (result instanceof Response) {
             c.res = result
           } else if (result !== undefined && result !== null) {

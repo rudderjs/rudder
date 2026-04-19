@@ -20,6 +20,7 @@ export type EntryType =
   | 'dump'
   | 'ai'
   | 'mcp'
+  | 'view'
 
 export interface TelescopeEntry {
   id:         string
@@ -97,6 +98,7 @@ export interface TelescopeConfig {
   recordDumps?:          boolean | undefined
   recordAi?:             boolean | undefined
   recordMcp?:            boolean | undefined
+  recordViews?:          boolean | undefined
   /**
    * Throttle window in ms for Yjs awareness events (cursor / selection /
    * presence diffs). One entry per `(docName, clientId)` is recorded per
@@ -151,6 +153,7 @@ export const defaultConfig: Required<Omit<TelescopeConfig, 'auth' | 'sqlitePath'
   recordDumps:          true,
   recordAi:             true,
   recordMcp:            true,
+  recordViews:          true,
   liveAwarenessSampleMs: 500,
   ignoreRequests:       ['/telescope*', '/health'],
   slowQueryThreshold:   100,

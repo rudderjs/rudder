@@ -56,18 +56,40 @@ function userToPlain(user: unknown): AuthUser {
 export function AuthMiddleware(guardName?: string): MiddlewareHandler {
   return async function AuthMiddleware(req, res, next) {
     const manager = app().make<AuthManager>('auth.manager')
+    const resolvedGuard = guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard
 
-    await runWithAuth(manager, async () => {
-      const guard = Auth.guard(guardName ?? (manager as unknown as { config: AuthConfig }).config.defaults.guard)
-      const user = await guard.user()
+    const rawReq = req.raw as Record<string, unknown>
+    const session = rawReq['__rjs_session'] as { get(k: string): unknown } | undefined
 
+    const syncUser = async () => {
+      const user = await Auth.guard(resolvedGuard).user()
       if (user) {
         const plain = userToPlain(user)
-        ;(req.raw as Record<string, unknown>)['__rjs_user'] = plain
+        rawReq['__rjs_user'] = plain
         try { (req as unknown as Record<string, unknown>)['user'] = plain } catch { /* read-only */ }
+      } else {
+        delete rawReq['__rjs_user']
+        try { delete (req as unknown as Record<string, unknown>)['user'] } catch { /* read-only */ }
       }
+    }
+
+    await runWithAuth(manager, async () => {
+      // Initial sync so the handler sees req.user (fetches only if session has auth_user_id).
+      const initialUid = session?.get('auth_user_id') as string | undefined
+      if (initialUid) await syncUser()
 
       await next()
+
+      // Re-sync only if auth_user_id changed during the handler (sign-in / sign-out).
+      // Avoids a duplicate User SELECT on every authenticated page load.
+      const finalUid = session?.get('auth_user_id') as string | undefined
+      if (finalUid !== initialUid) {
+        if (finalUid) await syncUser()
+        else {
+          delete rawReq['__rjs_user']
+          try { delete (req as unknown as Record<string, unknown>)['user'] } catch { /* read-only */ }
+        }
+      }
     })
   }
 }

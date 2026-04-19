@@ -57,8 +57,12 @@ export class RequestCollector implements Collector {
       const tags: string[] = []
       if (duration > (this.config.slowQueryThreshold ?? 100)) tags.push('slow')
 
-      // Extract response status from the res object
-      const status = (res as unknown as Record<string, unknown>)['statusCode'] as number | undefined
+      // Extract response status — prefer the actual final Response's status
+      // (so redirect() calls that bypass res.status() still report accurately)
+      // and fall back to the normalized res.statusCode.
+      const finalRes = (res.raw as { res?: Response } | undefined)?.res
+      const status = (finalRes?.status
+        ?? ((res as unknown as Record<string, unknown>)['statusCode'] as number | undefined))
       if (status && status >= 400) tags.push('error')
 
       // Extract IP and user-agent from request headers
@@ -79,6 +83,27 @@ export class RequestCollector implements Collector {
         }
       } catch { /* ignore — non-Hono adapters may not expose c.res */ }
 
+      // Response body — populated by server-hono's res.json() and ViewResponse
+      // branch. For redirects (3xx + Location) we synthesize a readable label
+      // since the underlying Response has no meaningful body for users.
+      let responseBody: unknown
+      try {
+        const c = res.raw as Record<string, unknown> | undefined
+        const stashed = c?.['__rjs_response_body']
+        if (stashed !== undefined) {
+          responseBody = redactFields(stashed, hideFields)
+        } else if (status != null && status >= 300 && status < 400 && responseHeaders?.['location']) {
+          responseBody = `Redirected to ${responseHeaders['location']}`
+        }
+        // Size cap (~100KB serialized) to keep storage bounded.
+        if (responseBody !== undefined && typeof responseBody !== 'string') {
+          const serialized = JSON.stringify(responseBody)
+          if (serialized.length > 100_000) {
+            responseBody = { _truncated: true, _size: serialized.length, _preview: serialized.slice(0, 100_000) }
+          }
+        }
+      } catch { /* ignore */ }
+
       // Session data — read from the SessionInstance if middleware attached one
       let sessionData: Record<string, unknown> | undefined
       try {
@@ -96,22 +121,21 @@ export class RequestCollector implements Collector {
         id: string; props: string[]
       } | undefined
 
-      // Authenticated user — read from @rudderjs/auth's AsyncLocalStorage context
+      // Authenticated user — read from __rjs_user (populated by AuthMiddleware).
+      // Can't call `auth().user()` here: the collector runs OUTSIDE the AuthMiddleware
+      // ALS scope (global middleware wraps group middleware), so ALS is already gone.
+      // AuthMiddleware writes __rjs_user both pre- and post-next(), so sign-in/sign-out
+      // during the handler is reflected.
       let user: Record<string, unknown> | undefined
-      try {
-        const { auth } = await import('@rudderjs/auth') as {
-          auth(): { user(): Promise<Record<string, unknown> | null> }
+      const cachedUser = rawReqMeta?.['__rjs_user'] as Record<string, unknown> | undefined
+      if (cachedUser) {
+        user = {
+          id:    cachedUser['id'],
+          name:  cachedUser['name'],
+          email: cachedUser['email'],
         }
-        const current = await auth().user()
-        if (current) {
-          user = {
-            id:    current['id'],
-            name:  current['name'],
-            email: current['email'],
-          }
-          tags.push(`user:${current['id']}`)
-        }
-      } catch { /* @rudderjs/auth may not be installed */ }
+        tags.push(`user:${cachedUser['id']}`)
+      }
 
       const entry = createEntry('request', {
         method:    req.method,
@@ -126,7 +150,9 @@ export class RequestCollector implements Collector {
         ip,
         userAgent,
         hostname,
+        memoryUsage: process.memoryUsage().heapUsed,
         responseHeaders,
+        responseBody,
         session:    sessionData,
         user,
         controller: routeMeta?.handler,
@@ -136,6 +162,30 @@ export class RequestCollector implements Collector {
       }, { batchId, tags })
 
       storage.store(entry)
+
+      // Emit a sibling 'view' entry when the handler rendered a view — gives
+      // the Views sidebar page a browsable history, keyed to this request
+      // via the shared batchId.
+      if (viewMeta && this.config.recordViews !== false) {
+        const viewEnvelope = (res.raw as Record<string, unknown> | undefined)?.['__rjs_response_body'] as
+          | { view?: string; props?: Record<string, unknown> }
+          | undefined
+        const fullProps = viewEnvelope?.props ?? {}
+        const propsSize = (() => {
+          try { return JSON.stringify(fullProps).length } catch { return 0 }
+        })()
+        const viewEntry = createEntry('view', {
+          id:         viewMeta.id,
+          props:      redactFields(fullProps, hideFields),
+          propKeys:   viewMeta.props,
+          propsSize,
+          method:     req.method,
+          path:       req.path,
+          status,
+          duration,
+        }, { batchId, tags: [...tags, `view:${viewMeta.id}`] })
+        storage.store(viewEntry)
+      }
     }
   }
 

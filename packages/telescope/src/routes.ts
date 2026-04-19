@@ -7,7 +7,7 @@ import { listEntries, showEntry, overview, prune, listBatch, getRecording, toggl
 const ENTRY_TYPES: EntryType[] = [
   'request', 'query', 'job', 'exception', 'log',
   'mail', 'notification', 'event', 'cache', 'schedule', 'model', 'command', 'broadcast', 'live',
-  'http', 'gate', 'dump', 'ai', 'mcp',
+  'http', 'gate', 'dump', 'ai', 'mcp', 'view',
 ]
 
 export interface RegisterTelescopeRoutesOptions {
@@ -127,6 +127,7 @@ export async function registerTelescopeRoutes(
       : type === 'http' ? 'http'
       : type === 'ai'  ? 'ai'
       : type === 'mcp' ? 'mcp'
+      : type === 'view' ? 'views'
       : `${type}s`
     router.get(
       `${apiPrefix}/${apiPath}`,

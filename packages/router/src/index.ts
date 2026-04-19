@@ -239,6 +239,12 @@ export class Router {
     for (const route of routes) {
       const fullPath = `${prefix}${route.path}`.replace(/\/+/g, '/')
       const handler  = (instance[route.handlerKey as string] as RouteHandler).bind(instance)
+      // Native bound fns get name "bound <method>" — overwrite with
+      // "Controller@method" for telescope / observability.
+      Object.defineProperty(handler, 'name', {
+        value:        `${ControllerClass.name}@${String(route.handlerKey)}`,
+        configurable: true,
+      })
       const def: RouteDefinition = {
         method:     route.method,
         path:       fullPath,

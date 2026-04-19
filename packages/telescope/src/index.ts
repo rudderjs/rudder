@@ -146,6 +146,7 @@ export class TelescopeProvider extends ServiceProvider {
     recordDumps:         merged.recordDumps         ?? defaultConfig.recordDumps,
     recordAi:            merged.recordAi            ?? defaultConfig.recordAi,
     recordMcp:           merged.recordMcp           ?? defaultConfig.recordMcp,
+    recordViews:         merged.recordViews         ?? defaultConfig.recordViews,
     liveAwarenessSampleMs: merged.liveAwarenessSampleMs ?? defaultConfig.liveAwarenessSampleMs,
     ignoreRequests:      merged.ignoreRequests      ?? defaultConfig.ignoreRequests,
     slowQueryThreshold:  merged.slowQueryThreshold  ?? defaultConfig.slowQueryThreshold,

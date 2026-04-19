@@ -215,4 +215,16 @@ export const pages: Record<string, PageConfig> = {
       { label: 'Status',   key: "entry.content.error ? 'Failed' : 'OK'",                                     badge: true },
     ],
   },
+
+  views: {
+    type:  'view',
+    title: 'Views',
+    columns: [
+      { label: 'View',     key: 'entry.content.id',                                                          badge: true },
+      { label: 'Request',  key: "(entry.content.method || '') + ' ' + (entry.content.path || '')",          mono: true, className: 'truncate max-w-xs' },
+      { label: 'Props',    key: "(entry.content.propKeys && entry.content.propKeys.length) || 0",           className: 'text-right font-mono text-xs' },
+      { label: 'Size',     key: "entry.content.propsSize != null ? entry.content.propsSize + ' B' : '—'",   className: 'text-right font-mono text-xs' },
+      { label: 'Status',   key: "entry.content.status || '—'",                                              badge: true },
+    ],
+  },
 }

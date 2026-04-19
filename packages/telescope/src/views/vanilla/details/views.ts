@@ -18,11 +18,13 @@ const RequestView: ViewFn = (entry) => {
   const headers         = c['headers']         as Record<string, string> | undefined
   const responseHeaders = c['responseHeaders'] as Record<string, string> | undefined
   const body            = c['body']
+  const query           = c['query']           as Record<string, unknown> | undefined
+  const params          = c['params']          as Record<string, unknown> | undefined
   const session         = c['session']         as Record<string, unknown> | undefined
   const user            = c['user']            as Record<string, unknown> | undefined
   const controller      = c['controller']      as string | undefined
   const middlewareList   = c['middleware']       as string[] | undefined
-  const view            = c['view']            as { id: string; props: string[] } | undefined
+  const memoryUsage     = c['memoryUsage']     as number | undefined
   // Status badge with color based on status code
   const status = c['status'] as number | undefined
   const statusBadge = status
@@ -31,6 +33,7 @@ const RequestView: ViewFn = (entry) => {
 
   // Build the details table — only include fields that have values
   const details: Record<string, unknown> = {
+    Time:           formatTimestamp(entry.createdAt),
     Method:         Badge(c['method'] as string),
     Path:           raw(`<span class="font-mono text-xs">${escape(c['path'] as string)}</span>`),
   }
@@ -41,11 +44,51 @@ const RequestView: ViewFn = (entry) => {
     Duration:       c['duration'] != null ? `${c['duration']}ms` : '—',
     Hostname:       c['hostname'],
     'IP Address':   c['ip'],
-    'User-Agent':   c['userAgent'],
   })
+  if (memoryUsage != null) details['Memory Usage'] = formatBytes(memoryUsage)
+  if (entry.tags.length > 0) {
+    details['Tags'] = raw(entry.tags.map(t => `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-mono">${escape(t)}</span>`).join(' '))
+  }
 
-  const hasBody = body !== undefined && body !== null && body !== ''
-  const hasResHeaders = responseHeaders && Object.keys(responseHeaders).length > 0
+  const responseBody  = c['responseBody']
+  const hasQuery      = !!query   && Object.keys(query).length  > 0
+  const hasParams     = !!params  && Object.keys(params).length > 0
+  const hasBody       = body !== undefined && body !== null && body !== '' && !(typeof body === 'object' && Object.keys(body as object).length === 0)
+  const hasPayload    = hasQuery || hasParams || hasBody
+  const hasSession    = !!session && Object.keys(session).length > 0
+  const hasResHeaders = !!responseHeaders && Object.keys(responseHeaders).length > 0
+  const hasResBody    = responseBody !== undefined && responseBody !== null && responseBody !== ''
+
+  const subheading = (label: string): SafeString =>
+    raw(`<h4 class="text-xs uppercase tracking-wide font-medium text-gray-500 dark:text-gray-400 mb-2">${escape(label)}</h4>`)
+
+  // Always show a Payload tab — matches Laravel Telescope, which renders `[]`
+  // for GET requests with no query/body/params.
+  const payloadContent = hasPayload
+    ? html`
+        ${hasQuery  ? html`<div class="mb-4">${subheading('Query String')}${JsonBlock(query)}</div>` : ''}
+        ${hasBody   ? html`<div class="mb-4">${subheading('Body')}${JsonBlock(body)}</div>` : ''}
+        ${hasParams ? html`<div class="mb-4">${subheading('Route Parameters')}${JsonBlock(params)}</div>` : ''}
+      `
+    : JsonBlock([])
+
+  // Two separate tab groups (Laravel-style):
+  //   Request  — Payload + Headers
+  //   Response — Headers + Session (session is scoped to the resolved response)
+  const requestTabs = Tabs([
+    { label: 'Payload', content: payloadContent },
+    ...(headers ? [{ label: 'Headers', content: JsonBlock(headers) }] : []),
+  ])
+  const responseBodyContent = hasResBody
+    ? (typeof responseBody === 'string'
+        ? CodeBlock(responseBody)
+        : JsonBlock(responseBody))
+    : ''
+  const responseTabs = Tabs([
+    ...(hasResBody    ? [{ label: 'Response', content: responseBodyContent        }] : []),
+    ...(hasResHeaders ? [{ label: 'Headers',  content: JsonBlock(responseHeaders) }] : []),
+    ...(hasSession    ? [{ label: 'Session',  content: JsonBlock(session)         }] : []),
+  ])
 
   return html`
     ${Card('Request Details', KeyValueTable(details))}
@@ -56,19 +99,23 @@ const RequestView: ViewFn = (entry) => {
       'Email Address': user['email'],
     })) : ''}
 
-    ${view ? Card('View', KeyValueTable({
-      ID:    view.id,
-      Props: view.props.length > 0 ? view.props.join(', ') : '(none)',
-    })) : ''}
-
-    ${headers || hasBody || hasResHeaders ? Tabs([
-      ...(headers ? [{ label: 'Headers', content: KeyValueTable(headers) }] : []),
-      ...(hasBody ? [{ label: 'Body', content: JsonBlock(body) }] : []),
-      ...(hasResHeaders ? [{ label: 'Response Headers', content: KeyValueTable(responseHeaders!) }] : []),
-    ]) : ''}
-
-    ${session && Object.keys(session).length > 0 ? Card('Session', JsonBlock(session)) : ''}
+    ${requestTabs}
+    ${responseTabs}
   `
+}
+
+function formatTimestamp(d: Date | string): string {
+  const date = d instanceof Date ? d : new Date(d)
+  return date.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function statusColor(status: number): string {
@@ -547,6 +594,29 @@ const McpView: ViewFn = (entry) => {
   `
 }
 
+const ViewRenderView: ViewFn = (entry) => {
+  const c = entry.content as Record<string, unknown>
+  const propsVal = c['props']
+  const propKeys = (c['propKeys'] as string[] | undefined) ?? []
+
+  return html`
+    ${Card(null, KeyValueTable({
+      'View ID':    raw(`<span class="font-mono text-xs">${escape(c['id'] as string ?? '')}</span>`),
+      Request:      raw(`<span class="font-mono text-xs">${escape(String(c['method'] ?? ''))} ${escape(String(c['path'] ?? ''))}</span>`),
+      Status:       c['status'] != null ? Badge(String(c['status'])) : '—',
+      Duration:     c['duration'] != null ? `${c['duration']}ms` : '—',
+      'Prop Count': propKeys.length,
+      'Props Size': c['propsSize'] != null ? `${c['propsSize']} bytes` : '—',
+    }))}
+    ${propKeys.length > 0
+      ? Card('Prop Names', raw(propKeys.map(k => `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 font-mono">${escape(k)}</span>`).join(' ')))
+      : ''}
+    ${propsVal !== undefined && propsVal !== null
+      ? Card('Props', JsonBlock(propsVal))
+      : ''}
+  `
+}
+
 /** Map of EntryType → detail view function. Used by the dispatcher. */
 export const detailViews: Record<string, ViewFn> = {
   request:      RequestView,
@@ -568,6 +638,7 @@ export const detailViews: Record<string, ViewFn> = {
   live:         LiveView,
   ai:           AiView,
   mcp:          McpView,
+  view:         ViewRenderView,
 }
 
 /** Internal escape helper — used inside `raw()` blocks for safety. */

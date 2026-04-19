@@ -80,6 +80,16 @@ export function CodeBlock(text: string, opts: { language?: string; maxHeight?: s
  */
 export function Badge(value: string | undefined): SafeString {
   if (!value) return html`<span class="text-gray-300 dark:text-gray-600">—</span>`
+  // HTTP status codes — range-based coloring (2xx/3xx/4xx/5xx)
+  const n = Number(value)
+  if (Number.isInteger(n) && n >= 100 && n < 600) {
+    const cls = n >= 500 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+      : n >= 400 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+      : n >= 300 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'
+      : n >= 200 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+    return html`<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}">${value}</span>`
+  }
   const colors: Record<string, string> = {
     GET: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
     POST: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
@@ -116,7 +126,6 @@ export function Tabs(tabs: { label: string; content: SafeString | string }[]): S
     return s.trim().length > 0
   })
   if (visible.length === 0) return html``
-  if (visible.length === 1) return html`${visible[0]!.content}`
 
   const id = `tabs_${Math.random().toString(36).slice(2, 8)}`
   return html`

@@ -95,6 +95,11 @@ Route.get('/test/exception', async () => {
   throw new Error('Test exception from /test/exception route')
 })
 
+// GET /test/redirect — 302 redirect for telescope Response tab testing
+Route.get('/test/redirect', (_req, res) => {
+  res.redirect('/', 302)
+})
+
 // GET /test/mail — sends a test email for telescope testing
 Route.get('/test/mail', async (_req, res) => {
   const { Mail } = await import('@rudderjs/mail')

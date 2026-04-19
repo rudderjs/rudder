@@ -167,6 +167,15 @@ export function EntryList(props: EntryListProps): string {
           },
 
           badgeClass(value) {
+            // HTTP status codes — range-based coloring (2xx/3xx/4xx/5xx)
+            const n = Number(value)
+            if (Number.isInteger(n) && n >= 100 && n < 600) {
+              if (n >= 500) return 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+              if (n >= 400) return 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300'
+              if (n >= 300) return 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+              if (n >= 200) return 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+              return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+            }
             const colors = {
               GET: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300', POST: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
               PUT: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300', DELETE: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300',
