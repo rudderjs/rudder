@@ -223,9 +223,12 @@ describe('DatabaseChannel', () => {
     assert.strictEqual((created[0] as Record<string, unknown>).data, '{"async":true}')
   })
 
-  it('uses "notifications" as the default table name', () => {
+  it('uses "notification" as the default table name (Prisma delegate convention)', () => {
+    // The default matches Prisma's client delegate (camelCase singular of the
+    // Notification model), not the SQL table name. Apps using a non-Prisma
+    // adapter that needs the plural SQL name should subclass and override.
     const ch = new DatabaseChannel()
-    assert.strictEqual((ch as any).table, 'notifications')
+    assert.strictEqual((ch as any).table, 'notification')
   })
 })
 

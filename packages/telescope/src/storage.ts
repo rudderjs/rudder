@@ -118,6 +118,7 @@ export class SqliteStorage implements TelescopeStorage {
           throw new Error(
             '[RudderJS Telescope] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3 ' +
             `(load error: ${err instanceof Error ? err.message : String(err)})`,
+            { cause: err },
           )
         }
       }
