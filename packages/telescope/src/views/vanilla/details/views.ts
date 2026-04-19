@@ -160,6 +160,17 @@ const MailView: ViewFn = (entry) => {
   const textBody = c['text']
   const to = Array.isArray(c['to']) ? (c['to'] as string[]).join(', ') : c['to']
 
+  const bodyTabs: { label: string; content: SafeString | string }[] = []
+  if (htmlBody) {
+    bodyTabs.push({
+      label: 'HTML Preview',
+      content: html`<iframe srcdoc="${String(htmlBody)}" class="w-full h-96 bg-white border border-gray-200 dark:border-gray-700 rounded-lg" sandbox=""></iframe>`,
+    })
+  }
+  if (textBody) {
+    bodyTabs.push({ label: 'Plain Text', content: CodeBlock(String(textBody)) })
+  }
+
   return html`
     ${Card(null, KeyValueTable({
       Class:   raw(`<span class="font-mono text-xs">${escape(c['class'] as string ?? '')}</span>`),
@@ -169,10 +180,7 @@ const MailView: ViewFn = (entry) => {
       CC:      Array.isArray(c['cc']) ? (c['cc'] as string[]).join(', ') : c['cc'],
       BCC:     Array.isArray(c['bcc']) ? (c['bcc'] as string[]).join(', ') : c['bcc'],
     }))}
-    ${htmlBody ? Card('HTML Preview', html`
-      <iframe srcdoc="${String(htmlBody)}" class="w-full h-96 bg-white border border-gray-200 dark:border-gray-700 rounded-lg" sandbox=""></iframe>
-    `) : ''}
-    ${textBody ? Card('Plain Text', CodeBlock(String(textBody))) : ''}
+    ${bodyTabs.length > 0 ? Tabs(bodyTabs) : ''}
   `
 }
 

@@ -118,26 +118,16 @@ Route.get('/test/mail', async (_req, res) => {
   res.json({ sent: true })
 })
 
-// GET /test/notification — dispatches a test notification for telescope testing
+// GET /test/notification — dispatches the real WelcomeNotification (mail + database channels)
 Route.get('/test/notification', async (_req, res) => {
-  const { notify, Notification } = await import('@rudderjs/notification')
-  const { Mailable } = await import('@rudderjs/mail')
+  const { notify } = await import('@rudderjs/notification')
+  const { WelcomeNotification } = await import('../app/Notifications/WelcomeNotification.js')
 
-  class TestNotification extends Notification {
-    via() { return ['mail'] }
-    toMail() {
-      return new (class extends Mailable {
-        build() {
-          return this.subject('Telescope Test Notification')
-            .html('<p>You have a new notification!</p>')
-            .text('You have a new notification!')
-        }
-      })()
-    }
-  }
-
-  await notify({ id: 'user-1', email: 'test@example.com' }, new TestNotification())
-  res.json({ notified: true })
+  await notify(
+    { id: 'user-1', name: 'Telescope Tester', email: 'test@example.com' },
+    new WelcomeNotification(),
+  )
+  res.json({ notified: true, channels: ['mail', 'database'] })
 })
 
 // GET /test/http — fires outgoing HTTP requests for telescope testing
@@ -173,15 +163,27 @@ Route.get('/test/dump', async (_req, res) => {
   res.json({ dumped: 2 })
 })
 
-// GET /test/event — fires event dispatches for telescope testing
+// GET /test/event — dispatches the real UserRegistered event,
+// which fires SendWelcomeEmailListener → Mail.send(WelcomeEmail)
 Route.get('/test/event', async (_req, res) => {
   const { dispatch } = await import('@rudderjs/core')
+  const { UserRegistered } = await import('../app/Events/UserRegistered.js')
 
-  class UserRegistered { constructor(public id: number, public name: string) {} }
+  // Also dispatch a no-listener event to verify the collector still records it
   class OrderCompleted { constructor(public orderId: number, public total: number) {} }
 
-  await dispatch(new UserRegistered(1, 'Test User'))
+  await dispatch(new UserRegistered('user-1', 'Telescope Tester', 'test@example.com'))
   await dispatch(new OrderCompleted(42, 99.99))
+  res.json({ dispatched: 2 })
+})
+
+// GET /test/job — dispatches a queue job for telescope testing
+Route.get('/test/job', async (_req, res) => {
+  const { WelcomeUserJob } = await import('../app/Jobs/WelcomeUserJob.js')
+  await WelcomeUserJob.dispatch('Test User', 'test@example.com').send()
+  await WelcomeUserJob.dispatch('Priority User', 'priority@example.com')
+    .onQueue('priority')
+    .send()
   res.json({ dispatched: 2 })
 })
 

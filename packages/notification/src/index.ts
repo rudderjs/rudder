@@ -171,8 +171,12 @@ export class MailChannel implements NotificationChannel {
 // ─── Database Channel ──────────────────────────────────────
 
 export class DatabaseChannel implements NotificationChannel {
-  /** Override to use a different table name */
-  protected table = 'notifications'
+  /**
+   * Override to use a different table. For Prisma users this must be the
+   * client delegate name (camelCase of the Prisma model), e.g. `notification`,
+   * NOT the SQL table name (`notifications`).
+   */
+  protected table = 'notification'
 
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
     if (!notification.toDatabase) {

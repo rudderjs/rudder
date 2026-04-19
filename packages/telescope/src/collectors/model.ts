@@ -50,27 +50,65 @@ export class ModelCollector implements Collector {
   ): void {
     const storage = this.storage
 
-    for (const event of ['created', 'updated', 'deleted'] as const) {
-      ModelClass.on(event, (...args: unknown[]) => {
-        const content: Record<string, unknown> = {
-          model:  modelName,
-          action: event,
-        }
+    // Track in-flight update payloads by id so we can pair `updating` (which
+    // has the diff) with `updated` (which confirms the row was actually
+    // written). Only the latter fires the entry, so failed updates don't
+    // produce phantom entries.
+    const pendingUpdates = new Map<unknown, Record<string, unknown>>()
 
-        if (event === 'created' || event === 'updated') {
-          // Safely extract plain attributes — model instances may have
-          // circular references (e.g. Prisma relations) that blow the stack.
-          content['attributes'] = safeSerialize(args[0])
-        } else if (event === 'deleted') {
-          content['id'] = args[0]
-        }
+    ModelClass.on('updating', (...args: unknown[]) => {
+      const id      = args[0]
+      const payload = args[1] as Record<string, unknown> | undefined
+      if (id !== undefined && payload && typeof payload === 'object') {
+        pendingUpdates.set(id, safeSerialize(payload) as Record<string, unknown>)
+      }
+    })
 
-        storage.store(createEntry('model', content, {
-          tags: [`model:${modelName}`, `action:${event}`],
-          ...batchOpts(),
-        }))
-      })
-    }
+    ModelClass.on('created', (...args: unknown[]) => {
+      const attributes = safeSerialize(args[0])
+      const content: Record<string, unknown> = {
+        model:  modelName,
+        action: 'created',
+        after:  attributes,
+      }
+      if (attributes && typeof attributes === 'object') {
+        const idValue = (attributes as Record<string, unknown>)['id']
+        if (idValue !== undefined) content['modelId'] = idValue
+      }
+      storage.store(createEntry('model', content, {
+        tags: [`model:${modelName}`, 'action:created'],
+        ...batchOpts(),
+      }))
+    })
+
+    ModelClass.on('updated', (...args: unknown[]) => {
+      const record = safeSerialize(args[0]) as Record<string, unknown> | undefined
+      const id     = record && typeof record === 'object' ? record['id'] : undefined
+      const changes = id !== undefined ? pendingUpdates.get(id) : undefined
+      if (id !== undefined) pendingUpdates.delete(id)
+
+      const content: Record<string, unknown> = {
+        model:  modelName,
+        action: 'updated',
+      }
+      if (id !== undefined) content['modelId'] = id
+      if (changes) content['changes'] = changes
+      storage.store(createEntry('model', content, {
+        tags: [`model:${modelName}`, 'action:updated'],
+        ...batchOpts(),
+      }))
+    })
+
+    ModelClass.on('deleted', (...args: unknown[]) => {
+      storage.store(createEntry('model', {
+        model:   modelName,
+        action:  'deleted',
+        modelId: args[0],
+      }, {
+        tags: [`model:${modelName}`, 'action:deleted'],
+        ...batchOpts(),
+      }))
+    })
   }
 }
 

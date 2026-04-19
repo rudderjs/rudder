@@ -1,6 +1,6 @@
 import { Layout as BaseLayout } from '../Layout.js'
 import { html, raw, type SafeString } from '../_html.js'
-import { Card, Badge, Tabs } from './sections.js'
+import { Card, Badge, Tabs, KeyValueTable } from './sections.js'
 import type { TelescopeEntry } from '../../../types.js'
 
 export interface DetailLayoutProps {
@@ -31,6 +31,7 @@ export function DetailLayout(props: DetailLayoutProps): string {
       </div>`
     : ''
 
+  const requestEntry = (relatedEntries ?? []).find(e => e.type === 'request')
   const batchLink = entry.batchId
     ? html`<a href="${basePath}/batches/${entry.batchId}" @click.prevent="$dispatch('telescope:navigate', '${basePath}/batches/${entry.batchId}')" class="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 ml-3">
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
@@ -57,10 +58,13 @@ export function DetailLayout(props: DetailLayoutProps): string {
     </div>
   `
 
+  // Context panel — sourced from the related Request entry (User, hostname, link)
+  const contextHtml = renderRequestContext(requestEntry, basePath, entry)
+
   // Render inline related entries grouped by type
   const relatedHtml = renderRelatedEntries(relatedEntries ?? [], basePath, entry)
 
-  const fullBody = html`${headerHtml}${body}${relatedHtml}`.toString()
+  const fullBody = html`${headerHtml}${body}${contextHtml}${relatedHtml}`.toString()
 
   return BaseLayout({
     title:      `${pageTitle.replace(/s$/, '')} ${entry.id.slice(0, 8)}`,
@@ -131,6 +135,42 @@ function renderRelatedEntries(
       ${Tabs(tabs)}
     </div>
   `
+}
+
+/**
+ * Renders a Context card showing hostname, "View Request" link, and the
+ * authenticated user — sourced from the related Request entry. Hidden when
+ * the parent entry is itself a Request (it already shows these fields).
+ */
+function renderRequestContext(
+  requestEntry: TelescopeEntry | undefined,
+  basePath: string,
+  parentEntry: TelescopeEntry,
+): SafeString {
+  if (!requestEntry || parentEntry.type === 'request') return html``
+
+  const c = requestEntry.content as Record<string, unknown>
+  const user = c['user'] as { id?: unknown; name?: unknown; email?: unknown } | undefined
+  const hostname = c['hostname'] as string | undefined
+  const requestUrl = `${basePath}/requests/${requestEntry.id}`
+
+  const requestLink = raw(`<a href="${requestUrl}" @click.prevent="$dispatch('telescope:navigate', '${requestUrl}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">View Request</a>`)
+
+  const contextRows: Record<string, unknown> = {}
+  if (hostname) contextRows['Hostname'] = hostname
+  contextRows['Request'] = requestLink
+
+  const cards: SafeString[] = [Card('Context', KeyValueTable(contextRows))]
+
+  if (user && (user.id != null || user.name || user.email)) {
+    cards.push(Card('Authenticated User', KeyValueTable({
+      ID:              user.id,
+      Name:            user.name,
+      'Email Address': user.email,
+    })))
+  }
+
+  return html`<div class="mt-6">${cards}</div>`
 }
 
 function typeLabel(type: string): string {

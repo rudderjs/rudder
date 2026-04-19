@@ -21,11 +21,17 @@ export interface CacheAdapterProvider {
 
 export class CacheRegistry {
   private static adapter: CacheAdapter | null = null
+  private static defaultName: string | null = null
 
   static set(adapter: CacheAdapter): void    { this.adapter = adapter }
   static get(): CacheAdapter | null          { return this.adapter }
+  static setDefaultName(name: string): void  { this.defaultName = name }
+  static getDefaultName(): string | null     { return this.defaultName }
   /** @internal — clears the registered adapter. Used for testing. */
-  static reset(): void                       { this.adapter = null }
+  static reset(): void {
+    this.adapter = null
+    this.defaultName = null
+  }
 }
 
 // ─── Cache Facade ──────────────────────────────────────────
@@ -271,6 +277,7 @@ export class CacheProvider extends ServiceProvider {
     }
 
     CacheRegistry.set(adapter)
+    CacheRegistry.setDefaultName(storeName)
     this.app.instance('cache', adapter)
   }
 }

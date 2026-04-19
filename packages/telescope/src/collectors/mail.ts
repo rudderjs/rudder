@@ -29,11 +29,29 @@ export class MailCollector implements Collector {
       ): Promise<void> {
         await (originalSend as (...args: unknown[]) => Promise<void>)(mailable, options)
         const m   = mailable as Record<string, unknown> & { constructor: { name: string } }
-        const opt = options as Record<string, unknown>
+        const opt = (options ?? {}) as {
+          to?:   string[]
+          from?: { address: string; name?: string }
+          cc?:   string[]
+          bcc?:  string[]
+        }
+        // Adapter has already called mailable.compile() which sets these private
+        // fields — read them directly to avoid re-running build()
+        const subject = (m['_subject'] as string | undefined) ?? ''
+        const htmlBody = m['_html'] as string | undefined
+        const textBody = m['_text'] as string | undefined
+        const from = opt.from
+          ? (opt.from.name ? `${opt.from.name} <${opt.from.address}>` : opt.from.address)
+          : null
         storage.store(createEntry('mail', {
           class:   m.constructor.name,
-          to:      opt['to'] ?? [],
-          subject: m['subject'] ?? '',
+          to:      opt.to ?? [],
+          from,
+          ...(opt.cc  && opt.cc.length  ? { cc:  opt.cc  } : undefined),
+          ...(opt.bcc && opt.bcc.length ? { bcc: opt.bcc } : undefined),
+          subject,
+          ...(htmlBody !== undefined ? { html: htmlBody } : undefined),
+          ...(textBody !== undefined ? { text: textBody } : undefined),
           queued:  false,
         }, { tags: [`mail:${m.constructor.name}`], ...batchOpts() }))
       }

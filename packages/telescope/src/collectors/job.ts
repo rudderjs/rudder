@@ -21,28 +21,32 @@ export class JobCollector implements Collector {
       const originalDispatch = original.dispatch.bind(original)
 
       original.dispatch = async (job: unknown, options?: unknown): Promise<void> => {
-        const j    = job as Record<string, unknown> & { constructor: { name: string } }
-        const ctor = j.constructor as unknown as Record<string, unknown>
+        const j     = job as Record<string, unknown> & { constructor: { name: string } }
+        const ctor  = j.constructor as unknown as Record<string, unknown>
+        const opts  = (options ?? {}) as { queue?: string; delay?: number }
+        const queue = opts.queue ?? (ctor['queue'] as string | undefined) ?? 'default'
+        const delay = opts.delay ?? (ctor['delay'] as number | undefined) ?? 0
         const start = Date.now()
         try {
           await (originalDispatch as (job: unknown, options?: unknown) => Promise<void>)(job, options)
           const duration = Date.now() - start
           storage.store(createEntry('job', {
             class:    j.constructor.name,
-            queue:    ctor['queue'] ?? 'default',
+            queue,
             status:   'dispatched',
             duration,
+            ...(delay > 0 ? { delay } : undefined),
             payload:  JSON.parse(JSON.stringify(job)),
-          }, { tags: [`job:${j.constructor.name}`, 'status:dispatched'], ...batchOpts() }))
+          }, { tags: [`job:${j.constructor.name}`, `queue:${queue}`, 'status:dispatched'], ...batchOpts() }))
         } catch (err) {
           const duration = Date.now() - start
           storage.store(createEntry('job', {
             class:     j.constructor.name,
-            queue:     ctor['queue'] ?? 'default',
+            queue,
             status:    'failed',
             duration,
             exception: err instanceof Error ? err.message : String(err),
-          }, { tags: [`job:${j.constructor.name}`, 'status:failed'], ...batchOpts() }))
+          }, { tags: [`job:${j.constructor.name}`, `queue:${queue}`, 'status:failed'], ...batchOpts() }))
           throw err
         }
       }

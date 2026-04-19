@@ -24,26 +24,34 @@ export class ScheduleCollector implements Collector {
 
       sched.call = function (fn: () => unknown, ...args: unknown[]) {
         const task = originalCall(fn, ...args)
-        const desc = (task as unknown as Record<string, unknown>)['description'] ?? fn.name ?? 'anonymous'
+        const t = task as unknown as { getDescription?(): string; getCron?(): string }
         let start: number
+
+        // Resolve lazily so .description()/.cron() chained AFTER schedule.call() are picked up
+        const resolveMeta = (): { description: string; expression: string } => ({
+          description: (t.getDescription?.() || fn.name || 'anonymous'),
+          expression:  (t.getCron?.() ?? ''),
+        })
 
         task.before(() => { start = Date.now() })
         task.onSuccess(() => {
+          const { description, expression } = resolveMeta()
           storage.store(createEntry('schedule', {
-            description: desc,
-            expression:  (task as unknown as Record<string, unknown>)['expression'] ?? '',
-            status:      'success',
-            duration:    Date.now() - start,
-          }, { tags: ['status:success'] }))
+            description,
+            expression,
+            status:   'success',
+            duration: Date.now() - start,
+          }, { tags: ['status:success', `task:${description}`] }))
         })
         task.onFailure((error: unknown) => {
+          const { description, expression } = resolveMeta()
           storage.store(createEntry('schedule', {
-            description: desc,
-            expression:  (task as unknown as Record<string, unknown>)['expression'] ?? '',
-            status:      'failed',
-            duration:    Date.now() - start,
-            exception:   error instanceof Error ? error.message : String(error),
-          }, { tags: ['status:failed'] }))
+            description,
+            expression,
+            status:    'failed',
+            duration:  Date.now() - start,
+            exception: error instanceof Error ? error.message : String(error),
+          }, { tags: ['status:failed', `task:${description}`] }))
         })
 
         return task

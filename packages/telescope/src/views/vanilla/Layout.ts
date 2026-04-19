@@ -88,8 +88,8 @@ export function Layout(props: LayoutProps): string {
 <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans antialiased">
   <div x-data="telescopeSpa()" @popstate.window="onPopState()" class="flex min-h-screen">
     <!-- Sidebar -->
-    <aside class="w-56 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col">
-      <div class="px-4 py-5 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
+    <aside class="border-gray-200 border-r dark:border-gray-800 flex flex-col w-56">
+      <div class="border-gray-100 dark:border-gray-800 flex gap-2 items-center px-4 py-5">
         <a href="${basePath}" @click.prevent="navigate('${basePath}')" class="flex items-center gap-2">
           <div class="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center">
             <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +108,7 @@ export function Layout(props: LayoutProps): string {
     <!-- Main content -->
     <main id="telescope-main" class="flex-1 overflow-auto" @telescope:navigate.window="navigate($event.detail)">
       <!-- Toolbar -->
-      <div class="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-2 flex items-center justify-end gap-2"
+      <div class="flex gap-2 items-center justify-end px-6 py-2"
            x-data="telescopeToolbar('${basePath}/api')">
         <button @click="toggleRecording()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition"
                 :class="recording ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-red-50 text-red-700 hover:bg-red-100'">

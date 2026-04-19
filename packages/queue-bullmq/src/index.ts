@@ -155,15 +155,16 @@ class BullMQAdapter implements QueueAdapter {
 
   async work(queues = 'default'): Promise<void> {
     const names   = queues.split(',').map(q => q.trim()).filter(Boolean)
-    const workers = names.map(name =>
-      new Worker(name, this.processor.bind(this), {
+    const workers = names.map(name => ({
+      queue: name,
+      worker: new Worker(name, this.processor.bind(this), {
         connection:  this.connection as never,
         prefix:      this.prefix,
         concurrency: this.concurrency,
       }),
-    )
+    }))
 
-    for (const worker of workers) {
+    for (const { queue, worker } of workers) {
       worker.on('error', (err) => {
         const code = (err as NodeJS.ErrnoException).code
         if (code === 'ECONNREFUSED') {
@@ -177,7 +178,7 @@ class BullMQAdapter implements QueueAdapter {
       })
 
       worker.on('completed', (bullJob) => {
-        console.log(`[BullMQ] ✓ "${bullJob.name}" completed (id: ${bullJob.id})`)
+        console.log(`[BullMQ] ✓ "${bullJob.name}" completed (queue: ${queue}, id: ${bullJob.id})`)
       })
 
       worker.on('failed', async (bullJob, error) => {
@@ -199,7 +200,7 @@ class BullMQAdapter implements QueueAdapter {
     await new Promise<void>((resolve) => {
       const shutdown = () => {
         console.log(`[BullMQ] Shutting down ${workers.length} worker(s)...`)
-        void Promise.all(workers.map(w => w.close())).then(() => resolve())
+        void Promise.all(workers.map(w => w.worker.close())).then(() => resolve())
       }
       process.once('SIGTERM', shutdown)
       process.once('SIGINT',  shutdown)

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
 import type { TelescopeEntry, TelescopeStorage, ListOptions, EntryType } from './types.js'
 
 const _g = globalThis as Record<string, unknown>
@@ -105,12 +106,20 @@ export class SqliteStorage implements TelescopeStorage {
 
   private getDb(): import('better-sqlite3').Database {
     if (!this.db) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const Database = (globalThis as Record<string, unknown>).__betterSqlite3 as typeof import('better-sqlite3') | undefined
+      // Load better-sqlite3 via createRequire so native bindings work under
+      // ESM + Vite SSR. Allow consumers to pre-stash the module on globalThis
+      // (e.g. when bundling) as an escape hatch.
+      let Database = (globalThis as Record<string, unknown>).__betterSqlite3 as typeof import('better-sqlite3') | undefined
       if (!Database) {
-        throw new Error(
-          '[RudderJS Telescope] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3',
-        )
+        try {
+          const req = createRequire(import.meta.url)
+          Database = req('better-sqlite3') as typeof import('better-sqlite3')
+        } catch (err) {
+          throw new Error(
+            '[RudderJS Telescope] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3 ' +
+            `(load error: ${err instanceof Error ? err.message : String(err)})`,
+          )
+        }
       }
       this.db = new (Database as unknown as new (path: string) => import('better-sqlite3').Database)(this.dbPath)
       this.migrate()
@@ -120,6 +129,10 @@ export class SqliteStorage implements TelescopeStorage {
 
   private migrate(): void {
     const db = this.db!
+    // WAL mode lets the dev server + CLI processes read/write the same file
+    // concurrently without "database is locked" errors.
+    db.pragma('journal_mode = WAL')
+    db.pragma('synchronous = NORMAL')
     db.exec(`
       CREATE TABLE IF NOT EXISTS telescope_entries (
         id          TEXT PRIMARY KEY,
