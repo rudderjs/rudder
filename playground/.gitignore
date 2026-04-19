@@ -16,6 +16,9 @@ node_modules/
 .turbo/
 *.log
 dev.db
+.telescope.db
+.telescope.db-shm
+.telescope.db-wal
 bootstrap/cache/
 
 # Storage uploads
