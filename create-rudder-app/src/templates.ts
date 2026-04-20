@@ -27,6 +27,7 @@ export interface TemplateContext {
     mcp:           boolean
     passport:      boolean
     localization:  boolean
+    telescope:     boolean
     boost:         boolean
   }
 }
@@ -125,6 +126,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (ctx.packages.live)         files['config/live.ts']     = configLive(ctx)
   if (ctx.packages.passport)     files['config/passport.ts'] = configPassport()
   if (ctx.packages.localization) files['config/localization.ts'] = configLocalization()
+  if (ctx.packages.telescope)    files['config/telescope.ts'] = configTelescope()
 
   files['config/index.ts']    = configIndex(ctx)
   files['env.d.ts']           = envDts()
@@ -290,6 +292,7 @@ function packageJson(ctx: TemplateContext): string {
   if (ctx.packages.mcp)           deps['@rudderjs/mcp']          = 'latest'
   if (ctx.packages.passport)      deps['@rudderjs/passport']     = 'latest'
   if (ctx.packages.localization)  deps['@rudderjs/localization'] = 'latest'
+  if (ctx.packages.telescope)     deps['@rudderjs/telescope']    = 'latest'
   const devDeps: Record<string, string> = {
     '@rudderjs/cli': 'latest',
     '@types/node':   '^20.0.0',
@@ -1201,6 +1204,10 @@ function configIndex(ctx: TemplateContext): string {
     imports.push("import localization from './localization.js'")
     keys.push('localization')
   }
+  if (ctx.packages.telescope) {
+    imports.push("import telescope from './telescope.js'")
+    keys.push('telescope')
+  }
   return `${imports.join('\n')}
 
 const configs = { ${keys.join(', ')} }
@@ -1321,6 +1328,31 @@ export default {
   fallback: Env.get('APP_FALLBACK_LOCALE', 'en'),
   path:     resolve(process.cwd(), 'lang'),
 } satisfies LocalizationConfig
+`
+}
+
+function configTelescope(): string {
+  return `import type { TelescopeConfig } from '@rudderjs/telescope'
+
+// Debug dashboard mounted at /telescope. 18 collectors record requests, queries,
+// jobs, exceptions, logs, mail, events, cache, schedule, models, commands,
+// broadcasts, live, HTTP client, gate checks, dumps, AI runs, and MCP calls.
+//
+// Storage defaults to in-memory (bounded, no extra deps). Switch to 'sqlite'
+// for persistence across restarts — install better-sqlite3 first:
+//   pnpm add -D better-sqlite3
+//
+// In production, gate access by returning \`false\` from \`auth(req)\` or simply
+// disable by setting \`enabled: false\` via an env var.
+export default {
+  enabled:            true,
+  path:               'telescope',
+  storage:            'memory',
+  maxEntries:         1000,
+  pruneAfterHours:    24,
+  slowQueryThreshold: 100,
+  ignoreRequests:     ['/telescope*', '/health', '/@*'],
+} satisfies TelescopeConfig
 `
 }
 

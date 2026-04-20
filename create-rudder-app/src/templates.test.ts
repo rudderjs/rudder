@@ -7,25 +7,25 @@ import { getTemplates, pmExec, pmRun, pmInstall, type TemplateContext } from './
 const defaultPkgs: TemplateContext['packages'] = {
   auth: true, cache: true, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
-  broadcast: false, live: false, ai: false, mcp: false, passport: false, localization: false, boost: false,
+  broadcast: false, live: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
   auth: false, cache: false, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
-  broadcast: false, live: false, ai: false, mcp: false, passport: false, localization: false, boost: false,
+  broadcast: false, live: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false,
 }
 
 const noAuth: TemplateContext['packages'] = {
   auth: false, cache: true, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
-  broadcast: false, live: false, ai: false, mcp: false, passport: false, localization: false, boost: false,
+  broadcast: false, live: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false,
 }
 
 const allPkgs: TemplateContext['packages'] = {
   auth: true, cache: true, queue: true, storage: true,
   mail: true, notifications: true, scheduler: true,
-  broadcast: true, live: true, ai: true, mcp: true, passport: true, localization: true, boost: true,
+  broadcast: true, live: true, ai: true, mcp: true, passport: true, localization: true, telescope: true, boost: true,
 }
 
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
@@ -734,6 +734,34 @@ describe('getTemplates() — passport package', () => {
     const pkg = JSON.parse(files['package.json']!)
     assert.ok(!('@rudderjs/passport' in pkg.dependencies))
     assert.ok(!files['routes/api.ts']!.includes('@rudderjs/passport'))
+  })
+})
+
+// ─── telescope package ───────────────────────────────────
+
+describe('getTemplates() — telescope package', () => {
+  it('telescope selected → @rudderjs/telescope in deps + config/telescope.ts generated', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, telescope: true } }))
+    assert.ok('config/telescope.ts' in files)
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok('@rudderjs/telescope' in pkg.dependencies)
+    assert.ok(files['config/telescope.ts']!.includes('TelescopeConfig'))
+    assert.ok(files['config/telescope.ts']!.includes("storage:            'memory'"))
+  })
+
+  it('telescope selected → config/index.ts imports + exports telescope', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, telescope: true } }))
+    const idx = files['config/index.ts']!
+    assert.ok(idx.includes("from './telescope.js'"))
+    assert.ok(idx.includes('telescope'))
+  })
+
+  it('telescope not selected → no config/telescope.ts, no dep', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
+    assert.ok(!('config/telescope.ts' in files))
+    const pkg = JSON.parse(files['package.json']!)
+    assert.ok(!('@rudderjs/telescope' in pkg.dependencies))
+    assert.ok(!files['config/index.ts']!.includes("from './telescope.js'"))
   })
 })
 
