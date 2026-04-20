@@ -313,12 +313,28 @@ export class MiddlewareConfigurator {
 //
 // Providers can't reach `MiddlewareConfigurator` directly (it's constructed per
 // RudderJS instance). Instead they call `appendToGroup('web', mw)` during their
-// `boot()` — handlers accumulate in this module-level store and are combined
+// `boot()` — handlers accumulate in this globally-scoped store and are combined
 // with user-config group handlers inside `_createHandler()`.
+//
+// The store lives on `globalThis` (not at module scope) so provider boot and
+// server request handling see the same array even when two `@rudderjs/core`
+// module instances are loaded — which happens any time a consumer app mixes
+// pnpm-linked workspace packages with installed npm packages. A module-level
+// const there splits into independent stores: provider writes to one, server
+// reads from the other, middleware silently vanishes. Matches the pattern
+// used by ai/mcp/http/gate/live observer registries.
 //
 // The store is drained on reset() so HMR-style boot cycles don't double-register.
 
-const groupMiddlewareStore: Record<RouteGroupName, MiddlewareHandler[]> = { web: [], api: [] }
+const GROUP_MIDDLEWARE_KEY = '__rudderjs_group_middleware__'
+const groupMiddlewareStore = (() => {
+  const g = globalThis as Record<string, unknown>
+  const existing = g[GROUP_MIDDLEWARE_KEY] as Record<RouteGroupName, MiddlewareHandler[]> | undefined
+  if (existing) return existing
+  const store: Record<RouteGroupName, MiddlewareHandler[]> = { web: [], api: [] }
+  g[GROUP_MIDDLEWARE_KEY] = store
+  return store
+})()
 
 /**
  * Register middleware for a named route group (`'web'` | `'api'`). Called

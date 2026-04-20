@@ -1,6 +1,7 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import type { MiddlewareHandler } from '@rudderjs/contracts'
 import {
   Application,
   AppBuilder,
@@ -20,6 +21,8 @@ import {
   app,
   resolve,
   container,
+  appendToGroup,
+  resetGroupMiddleware,
 } from './index.js'
 
 function reset(): void {
@@ -711,5 +714,44 @@ describe('Core contract baseline', () => {
     const err = new CancelledError()
     assert.ok(err instanceof Error)
     assert.strictEqual(err.name, 'CancelledError')
+  })
+})
+
+// ─── Group middleware store (globalThis-backed) ───────────
+
+describe('appendToGroup / resetGroupMiddleware', () => {
+  const GROUP_KEY = '__rudderjs_group_middleware__'
+
+  beforeEach(() => { resetGroupMiddleware() })
+
+  it('store is backed by globalThis, not module scope', () => {
+    // Providers register on the group store during boot(). If a consumer
+    // app loads two @rudderjs/core instances (e.g. linked workspace package
+    // + installed npm copy), module-scoped state splits — provider writes
+    // to one store, server reads the other, middleware silently vanishes.
+    // Pinning the store on globalThis makes every core instance share it.
+    const store = (globalThis as Record<string, unknown>)[GROUP_KEY]
+    assert.ok(store, 'group middleware store is not attached to globalThis')
+    assert.ok(typeof store === 'object' && store !== null)
+    assert.ok(Array.isArray((store as Record<string, unknown>)['web']))
+    assert.ok(Array.isArray((store as Record<string, unknown>)['api']))
+  })
+
+  it('appendToGroup writes through to the globalThis store', () => {
+    const handler: MiddlewareHandler = async (_req, _res, next) => next()
+    appendToGroup('web', handler)
+    const store = (globalThis as Record<string, unknown>)[GROUP_KEY] as Record<string, MiddlewareHandler[]>
+    assert.strictEqual(store['web']?.length, 1)
+    assert.strictEqual(store['web']?.[0], handler)
+  })
+
+  it('resetGroupMiddleware drains both groups', () => {
+    const handler: MiddlewareHandler = async (_req, _res, next) => next()
+    appendToGroup('web', handler)
+    appendToGroup('api', handler)
+    resetGroupMiddleware()
+    const store = (globalThis as Record<string, unknown>)[GROUP_KEY] as Record<string, MiddlewareHandler[]>
+    assert.strictEqual(store['web']?.length, 0)
+    assert.strictEqual(store['api']?.length, 0)
   })
 })
