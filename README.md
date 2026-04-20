@@ -34,7 +34,7 @@ RudderJS is the middle ground — **batteries-included, modular, UI-agnostic, fu
 | **UI framework** | React only | API only | Edge templates / Inertia | React, Vue, Solid, or none |
 | **SSR views from controllers** | N/A | ✗ | Inertia adapter | ✓ **native — no Inertia, no JSON envelope** |
 | **DI container** | None | Class-based IoC | IoC | Service Providers + ALS request scope |
-| **AI-native** | ✗ | ✗ | ✗ | ✓ 9 providers, agents, streaming, MCP |
+| **AI-native** | ✗ | ✗ | ✗ | ✓ 11 providers, agents, streaming, MCP |
 | **Real-time collab** | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
 | **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 45 opt-in packages |
 
@@ -43,7 +43,7 @@ RudderJS is the middle ground — **batteries-included, modular, UI-agnostic, fu
 ## Key Features
 
 - **Controller-returned views** — `return view('dashboard', { users })` renders a typed React/Vue/Solid component through Vike SSR with full SPA navigation. No Inertia adapter, no JSON envelope, ~400 bytes per nav.
-- **AI-native from day one** — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), agents with tools, streaming, middleware, conversations, attachments, MCP server support, queue integration.
+- **AI-native from day one** — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure for text; Cohere, Jina for reranking + embeddings), agents with tools, streaming, middleware, conversations, attachments, MCP server support, queue integration.
 - **Real-time on one port** — WebSocket channels (`@rudderjs/broadcast`), Yjs CRDT collab (`@rudderjs/live`), and HTTP all share the same server. No separate process, no proxy.
 - **Service-oriented architecture** — DI container, service providers, gates & policies, an active-record ORM (Prisma or Drizzle), scheduling, queues, notifications, and a built-in inspector — all wired through one bootstrap file and one `rudder` CLI.
 - **Pay-as-you-go modularity** — 45 first-party `@rudderjs/*` packages. Start with 3 (core, router, server-hono), bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3).
@@ -445,7 +445,7 @@ const svc = resolve<UserService>(UserService)
 | `@rudderjs/router` | Fluent + decorator-based HTTP routing |
 | `@rudderjs/middleware` | Pipeline, CORS, logger, CSRF, rate limiting |
 | `@rudderjs/rudder` | Rudder CLI registry, Command base class |
-| `@rudderjs/cli` | `make:*` generators — controller, model, job, middleware, module |
+| `@rudderjs/cli` | CLI runner — dispatches `make:*` and domain commands (`queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, …) shipped by their owning packages |
 | `@rudderjs/support` | Env, Collection, ConfigRepository, helpers |
 | `@rudderjs/contracts` | Shared TypeScript types (no runtime) |
 
@@ -453,7 +453,7 @@ const svc = resolve<UserService>(UserService)
 | Package | Description |
 |---|---|
 | `@rudderjs/server-hono` | Hono HTTP adapter |
-| `@rudderjs/session` | Cookie + Redis session drivers, `SessionMiddleware()`, `Session` facade |
+| `@rudderjs/session` | Cookie + Redis session drivers, `Session` facade — auto-installs on the `web` route group |
 | `@rudderjs/view` | `view('id', props)` controller responses via Vike SSR |
 | `@rudderjs/vite` | Vite + Vike plugin with SSR externals and RudderJS integration |
 
@@ -508,14 +508,14 @@ const svc = resolve<UserService>(UserService)
 ### Monitoring (3)
 | Package | Description |
 |---|---|
-| `@rudderjs/telescope` | Development inspector — 17 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, dumps, WebSocket lifecycle, Yjs CRDT events |
+| `@rudderjs/telescope` | Development inspector — 19 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, AI agent runs, MCP server activity, dumps, WebSocket lifecycle, Yjs CRDT events |
 | `@rudderjs/pulse` | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
 | `@rudderjs/horizon` | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
 
 ### AI & Tooling (3)
 | Package | Description |
 |---|---|
-| `@rudderjs/ai` | AI engine — 9 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure), Agent class, tool system, streaming, middleware |
+| `@rudderjs/ai` | AI engine — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure for text; Cohere, Jina for reranking + embeddings), Agent class, tool system, streaming, middleware |
 | `@rudderjs/boost` | AI dev tools — MCP server for Claude Code, Cursor, Copilot |
 | `@rudderjs/mcp` | MCP server framework — build custom MCP servers with decorators and testing utilities |
 
@@ -564,6 +564,7 @@ RudderJS is the framework layer. Two sibling projects build on it:
 | Project | Packages | Description |
 |---|---|---|
 | **[Pilotiq](https://github.com/pilotiq-io/pilotiq)** | `@pilotiq/{panels,lexical,media}` | Open-source admin panel builder (MIT) |
+| **[Pilotiq Pro](https://github.com/pilotiq-io/pilotiq-pro)** | `@pilotiq-pro/{ai,collab}` | Commercial tier — AI chat sidebar, sub-agents, collaborative editing |
 
 ---
 

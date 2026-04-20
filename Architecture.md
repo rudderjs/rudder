@@ -101,7 +101,8 @@ rudderjs/
 │   │                       #   AnonymousNotifiable, Notification.route() (on-demand)
 │   ├── broadcast/          # WebSocket broadcasting — public, private, presence channels
 │   ├── live/               # Real-time collaborative sync via Yjs CRDT — /ws-live endpoint
-│   ├── ai/                 # AI engine — 4 providers (Anthropic, OpenAI, Google, Ollama), Agent class,
+│   ├── ai/                 # AI engine — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek,
+│   │                       #   xAI, Mistral, Azure text; Cohere, Jina reranking+embeddings), Agent class,
 │   │                       #   tool system, streaming, middleware, structured output, model registry
 │   ├── image/              # Fluent image processing — resize, crop, convert, optimize (wraps sharp)
 │   ├── log/                # Structured logging — channels (console, single, daily, stack, null),
@@ -318,7 +319,7 @@ RudderJS Framework
 │    └── @rudderjs/storage            Local + S3 file storage
 │
 ├─── AI
-│    ├── @rudderjs/ai                 4 providers, Agent, tools, streaming, AiFake
+│    ├── @rudderjs/ai                 11 providers, Agent, tools, streaming, AiFake
 │    └── @rudderjs/boost              MCP server for AI coding assistants
 │
 ├─── Testing
@@ -326,7 +327,7 @@ RudderJS Framework
 │
 ├─── CLI
 │    ├── @rudderjs/rudder             Command registry, base class
-│    └── @rudderjs/cli                make:*, module:*, vendor:publish
+│    └── @rudderjs/cli                CLI runner — dispatches make:*, queue:*, mail:*, mcp:*, passport:*, db:*, etc.
 │
 ├─── Scaffolding
 │    └── create-rudder-app          Interactive project scaffolder
@@ -929,7 +930,7 @@ All optional peer packages **must** include `"default": "./dist/index.js"` in th
 | Phase 3 | Plan 4: Auth & Mail (email verification, queued mail, markdown, failover, queued notifications) | ✅ Complete |
 | Phase 4 | Plan 5: Advanced Features (context, pennant, scoped/deferred/contextual bindings, process, concurrency) | ✅ Complete |
 | Phase 4 | Plan 6: Testing Infrastructure (TestCase, Queue.fake, Mail.fake, Notification.fake, Event.fake, Cache.fake) | ✅ Complete |
-| Phase 5 | Plan 7: Monitoring & Observability — Telescope ✅ verified end-to-end (17 collectors), Pulse ⬜ untested, Horizon ⬜ untested | ◐ Partial |
+| Phase 5 | Plan 7: Monitoring & Observability — Telescope ✅ verified end-to-end (19 collectors), Pulse ⬜ untested, Horizon ⬜ untested | ◐ Partial |
 | Phase 5 | Plan 8: AI, Boost & MCP — AI loop parity, MCP HTTP transport + DI, Boost guidelines & tools, Passport OAuth2 all shipped | ✅ Complete |
 | — | Production Build Fixes (node:crypto, WS upgrade, vite externals) | ✅ Complete |
 | — | Open-core extraction (pilotiq + pilotiq-pro repos) | ✅ Complete |
