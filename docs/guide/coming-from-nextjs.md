@@ -214,7 +214,7 @@ dd(req.body)   // pretty-prints then stops (you've missed this)
 ## Getting Started
 
 ```bash
-pnpm create rudderjs-app my-app
+pnpm create rudder-app my-app
 cd my-app
 pnpm install
 pnpm exec prisma generate

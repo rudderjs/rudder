@@ -10,11 +10,11 @@
 The fastest way to start a new RudderJS project is with the official scaffolder. Use whichever package manager you prefer — the installer auto-detects it and adapts all generated files and next-step instructions accordingly:
 
 ```bash
-pnpm create rudderjs-app my-app
+pnpm create rudder-app my-app
 # or
-npm create rudderjs-app@latest my-app
+npm create rudder-app@latest my-app
 # or
-yarn create rudderjs-app my-app
+yarn create rudder-app my-app
 # or
 bunx create-rudder-app my-app
 ```
@@ -26,7 +26,7 @@ The CLI walks you through a series of prompts, adapting follow-up questions base
 | 1 | **Project name** | any string | — | always |
 | 2 | **Database ORM** | Prisma · Drizzle · None | Prisma | always |
 | 3 | **Database driver** | SQLite · PostgreSQL · MySQL | SQLite | only when ORM selected |
-| 4 | **Packages** | Auth · Cache · Queue · Storage · Mail · Notifications · Scheduler · WebSocket · Real-time · Admin Panel *(multiselect)* | — | always |
+| 4 | **Packages** | Auth · Cache · Queue · Storage · Mail · Notifications · Scheduler · WebSocket · Real-time Collab · AI · MCP · Passport · Localization · Telescope · Boost *(multiselect)* | — | always |
 | 5 | **Include Todo module?** | yes / no | yes | only when a database ORM is selected |
 | 6 | **Frontend frameworks** | React · Vue · Solid *(multiselect)* | React | always |
 | 7 | **Primary framework** | one of the selected | — | only when >1 framework selected |

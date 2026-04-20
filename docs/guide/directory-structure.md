@@ -28,6 +28,10 @@ my-app/
 │   │   └── SendWelcomeEmail.ts         # Queue jobs — extends Job
 │   ├── Notifications/
 │   │   └── WelcomeNotification.ts      # Notifications — extends Notification
+│   ├── Views/
+│   │   ├── Welcome.tsx                 # Controller-returned views — served via view('welcome', props)
+│   │   └── Auth/
+│   │       └── Login.tsx               # Nested views — id is 'auth.login'; override path with `export const route`
 │   └── Http/
 │       └── Requests/
 │           └── CreateUserRequest.ts    # Form requests — extends FormRequest
@@ -49,7 +53,10 @@ my-app/
 ├── src/
 │   └── index.css           # Global stylesheet — only generated when Tailwind is selected
 ├── prisma/
-│   └── schema.prisma       # Prisma schema — models, relations, datasource
+│   └── schema/             # Multi-file Prisma schema — one file per domain
+│       ├── base.prisma     #   datasource + generator config
+│       ├── auth.prisma     #   published by `@rudderjs/auth` via vendor:publish
+│       └── app.prisma      #   app-specific models (Todo, etc.)
 ├── .env                    # Secrets and environment-specific values
 ├── .env.example            # Template for team members
 ├── package.json
@@ -91,6 +98,7 @@ Your application code. Structured by concern:
 - **`Providers/`** — service provider classes that wire up dependencies
 - **`Jobs/`** — queue job classes
 - **`Notifications/`** — notification classes
+- **`Views/`** — controller-returned view components, rendered via `view('id', props)` from route handlers. Scanned by `@rudderjs/vite` and auto-wired to Vike pages. PascalCase file name → kebab-case id (`AdminUsers.tsx` → `admin-users`); nested directories map to dotted ids (`Auth/Login.tsx` → `auth.login`). Override the URL with `export const route = '/...'` when the id-derived path doesn't match. See [@rudderjs/view](https://github.com/rudderjs/rudder/tree/main/packages/view).
 - **`Http/Requests/`** — form request validation classes
 
 ### `routes/`
@@ -111,7 +119,7 @@ When multiple frameworks are selected via the scaffolder, secondary frameworks g
 
 ### `prisma/`
 
-Contains `schema.prisma`. Run `pnpm exec prisma generate` after any schema change. SQLite is the default datasource in development.
+Uses Prisma's multi-file schema layout under `prisma/schema/`. Each `@rudderjs/*` package that ships models (e.g. `@rudderjs/auth`) publishes its own `<name>.prisma` file via `pnpm rudder vendor:publish`; your app-specific models live in `app.prisma`. The `datasource` + `generator` blocks live in `base.prisma`. Run `pnpm exec prisma generate` after any schema change. SQLite is the default datasource in development.
 
 ### `bootstrap/app.ts` — The Entry Point
 
