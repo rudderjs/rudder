@@ -1,0 +1,44 @@
+# Docs-only CI sibling. Fires when the real CI workflow's `paths-ignore` filters
+# it out — reports green for the required status checks so branch protection
+# stays satisfied without booting a full build + test pipeline.
+#
+# Job names here MUST match ci.yml exactly (`Lint`, `Build & Test`) — the
+# branch protection ruleset matches checks by name.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '**/*.mdx'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/CODEOWNERS'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '**/*.mdx'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/CODEOWNERS'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "Docs-only change — skipping lint."
+
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "Docs-only change — skipping build & test."

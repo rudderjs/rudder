@@ -3,105 +3,76 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/CODEOWNERS'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/CODEOWNERS'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: Detect changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      code: ${{ steps.filter.outputs.code }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Filter paths
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            code:
-              - '**'
-              - '!**/*.md'
-              - '!**/*.mdx'
-              - '!docs/**'
-              - '!LICENSE'
-              - '!.gitignore'
-              - '!.github/ISSUE_TEMPLATE/**'
-              - '!.github/CODEOWNERS'
-
   lint:
     name: Lint
-    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Skip (docs-only change)
-        if: needs.changes.outputs.code != 'true'
-        run: echo "No code changes detected; skipping lint."
-
       - name: Checkout
-        if: needs.changes.outputs.code == 'true'
         uses: actions/checkout@v4
 
       - name: Install pnpm
-        if: needs.changes.outputs.code == 'true'
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        if: needs.changes.outputs.code == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
-        if: needs.changes.outputs.code == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        if: needs.changes.outputs.code == 'true'
         run: pnpm lint
 
   build-test:
     name: Build & Test
-    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Skip (docs-only change)
-        if: needs.changes.outputs.code != 'true'
-        run: echo "No code changes detected; skipping build & test."
-
       - name: Checkout
-        if: needs.changes.outputs.code == 'true'
         uses: actions/checkout@v4
 
       - name: Install pnpm
-        if: needs.changes.outputs.code == 'true'
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        if: needs.changes.outputs.code == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
-        if: needs.changes.outputs.code == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Cache turbo artifacts
-        if: needs.changes.outputs.code == 'true'
         uses: actions/cache@v4
         with:
           path: node_modules/.cache/turbo
@@ -110,9 +81,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Build
-        if: needs.changes.outputs.code == 'true'
         run: pnpm turbo run build --filter='./packages/*' --filter='./create-rudder-app'
 
       - name: Test
-        if: needs.changes.outputs.code == 'true'
         run: pnpm turbo run test --filter='./packages/*' --filter='./create-rudder-app'
