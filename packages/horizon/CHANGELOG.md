@@ -1,5 +1,14 @@
 # @rudderjs/horizon
 
+## 3.0.1
+
+### Patch Changes
+
+- Updated dependencies [e720923]
+  - @rudderjs/core@0.1.1
+  - @rudderjs/queue@3.0.1
+  - @rudderjs/middleware@0.0.13
+
 ## 3.0.0
 
 ### Patch Changes
