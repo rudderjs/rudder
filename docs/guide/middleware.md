@@ -68,23 +68,69 @@ Application.configure({ ... })
 
 ---
 
+## Middleware Groups (web / api)
+
+Routes loaded via `withRouting({ web })` are tagged `web`; via `withRouting({ api })` tagged `api`. Use `m.web(...)` and `m.api(...)` to scope middleware to a single group — Laravel-style:
+
+```ts
+import { CsrfMiddleware, RateLimit } from '@rudderjs/middleware'
+
+.withMiddleware((m) => {
+  m.use(RateLimit.perMinute(60))    // global — every request
+  m.web(CsrfMiddleware())            // web routes only
+  m.api(RateLimit.perMinute(120))   // api routes only
+})
+```
+
+**Execution order** is `m.use` → group (`m.web` / `m.api`) → per-route middleware → handler.
+
+**Framework packages auto-install into the `web` group:**
+
+- `@rudderjs/session` — session middleware on every web route
+- `@rudderjs/auth` — `AuthMiddleware` on every web route
+
+Api routes stay stateless by default — `req.user` is undefined, no session is read. For token-based api auth use `@rudderjs/passport`:
+
+```ts
+// routes/api.ts
+import { RequireBearer, scope } from '@rudderjs/passport'
+
+Route.get('/api/posts', [RequireBearer(), scope('read')], handler)
+```
+
+**Provider-facing helper** — packages install their own group middleware via `appendToGroup`:
+
+```ts
+import { appendToGroup } from '@rudderjs/core'
+
+class MyProvider extends ServiceProvider {
+  async boot() {
+    appendToGroup('web', myWebOnlyMiddleware)
+  }
+}
+```
+
+---
+
 ## Route-Level Middleware
 
-Pass middleware as the third argument to any route:
+Pass middleware as the third argument to any route. Use this for auth guards on specific routes, tighter rate limits, or anything that only applies to one or two endpoints:
 
 ```ts
 import { Route } from '@rudderjs/router'
-import { CsrfMiddleware } from '@rudderjs/middleware'
-import { SessionMiddleware } from '@rudderjs/session'
+import { RequireAuth } from '@rudderjs/auth'
+import { RateLimit } from '@rudderjs/middleware'
 
-const webMw = [
-  SessionMiddleware(),
-  CsrfMiddleware(),
-]
+// Auth on a specific route (web routes already have AuthMiddleware; this just enforces 401)
+Route.post('/posts', handler, [RequireAuth()])
 
-Route.get('/dashboard', handler, webMw)
-Route.post('/contact',  handler, webMw)
+// Tight rate limit on login
+Route.post('/api/auth/sign-in', handler, [
+  RateLimit.perMinute(5).message('Too many login attempts.'),
+])
 ```
+
+Group-level middleware (`m.web`, `m.api`) covers the bulk of cases — per-route middleware is for the exceptions.
 
 ---
 

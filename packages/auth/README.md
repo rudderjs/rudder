@@ -65,9 +65,16 @@ Route.get('/profile', async (req) => {
 })
 ```
 
-None of these require attaching any middleware per-route. The `authProvider()`
-service provider installs `AuthMiddleware` as a global router middleware at
-boot, so every request has the auth context ready before your handler runs.
+**No per-route wiring needed on web routes.** `authProvider()` auto-installs
+`AuthMiddleware` on the `web` route group during `boot()`, so every request
+matched by `withRouting({ web })` has the auth context populated before your
+handler runs.
+
+**API routes stay stateless.** `AuthMiddleware` does not run on the `api` group
+by default — `req.user` will be `undefined`, and `Auth.user()` returns `null`.
+For token-based API auth, reach for [`@rudderjs/passport`](../passport):
+`[RequireBearer(), scope('read')]`. Or mount `AuthMiddleware('api')` per-route
+with a token guard if you've wired one.
 
 ### Login / logout
 
@@ -100,21 +107,32 @@ Route.get('/login', showLoginPage, [RequireGuest('/')])
 import { AuthMiddleware } from '@rudderjs/auth'
 ```
 
-**You don't normally attach this.** The `authProvider()` service provider
-already installs `AuthMiddleware()` globally, so `req.user` and `auth()` work
-on every route without wiring. The only time to reach for it manually is to
-run a **non-default guard** on a specific route — the RudderJS equivalent of
-Laravel's `->middleware('auth:api')`:
+**You don't normally attach this on web routes.** `authProvider()` already
+installs `AuthMiddleware()` on the `web` route group, so `req.user` and `auth()`
+work automatically on every web request. Reach for it manually in two cases:
+
+**1. A non-default guard on a specific web route** — the RudderJS equivalent
+of Laravel's `->middleware('auth:api')`:
 
 ```ts
-Route.get('/api/admin/stats', handler, [
+Route.get('/admin/stats', handler, [
   AuthMiddleware('api'),   // populate req.user using the 'api' guard
   RequireAuth('api'),      // 401 if not authenticated against 'api'
 ])
 ```
 
-In normal app code you can forget `AuthMiddleware` exists — use `auth()`,
-`Auth`, or `req.user` directly.
+**2. Opting an API route into a token-backed guard** — API routes are
+stateless by default, so wire the guard per-route:
+
+```ts
+Route.get('/api/admin/stats', handler, [
+  AuthMiddleware('api'),
+  RequireAuth('api'),
+])
+```
+
+On web routes, you can forget `AuthMiddleware` exists — use `auth()`, `Auth`,
+or `req.user` directly.
 
 ### Authenticatable Contract
 

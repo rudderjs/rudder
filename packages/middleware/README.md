@@ -72,6 +72,28 @@ await Pipeline.make()
 
 ---
 
+## Where to Register
+
+Three registration layers, each running in this order:
+
+```ts
+// bootstrap/app.ts
+.withMiddleware((m) => {
+  m.use(RateLimit.perMinute(60))    // 1. global — every request
+  m.web(CsrfMiddleware())            // 2. web group — routes from withRouting({ web })
+  m.api(RateLimit.perMinute(120))   // 2. api group — routes from withRouting({ api })
+})
+
+// routes/web.ts
+Route.post('/contact', handler, [CsrfMiddleware()])  // 3. per-route
+```
+
+**Execution order:** `m.use` → group → per-route → handler.
+
+Group middleware is the right place for anything that shouldn't run on the other group — `CsrfMiddleware()` on `web`, heavier rate limits on `api`, and so on. Framework packages (`@rudderjs/session`, `@rudderjs/auth`) auto-install into the `web` group so api routes stay stateless by default.
+
+---
+
 ## Built-in Middleware
 
 All built-in middleware are **callable factory functions** — no `new`, no `.toHandler()`.
@@ -83,11 +105,16 @@ Double-submit cookie CSRF protection. Sets a `csrf_token` cookie on GET requests
 ```ts
 import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
 
-// Apply to web routes only (not API routes)
+// Install on the web group — covers every web route, skips api
+.withMiddleware((m) => {
+  m.web(CsrfMiddleware())
+})
+
+// Or per-route:
 Route.post('/contact', handler, [CsrfMiddleware()])
 
-// Exclude API webhook paths
-CsrfMiddleware({ exclude: ['/api/*'] })
+// Exclude specific paths
+CsrfMiddleware({ exclude: ['/webhooks/*'] })
 
 // Client-side: read the token from the cookie
 const token = getCsrfToken()

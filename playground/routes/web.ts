@@ -2,18 +2,14 @@ import { createRequire } from 'node:module'
 import { Route } from '@rudderjs/router'
 import { view } from '@rudderjs/view'
 import { config } from '@rudderjs/core'
-import { CsrfMiddleware } from '@rudderjs/middleware'
 import { auth } from '@rudderjs/auth'
 import { registerAuthRoutes } from '@rudderjs/auth/routes'
 import { AuthController } from '../app/Controllers/AuthController.js'
 
-// Web middleware — session + AuthMiddleware are auto-installed on the `web`
-// group by their providers (see @rudderjs/session, @rudderjs/auth). Only CSRF
-// is opt-in per route because some endpoints may need to skip it (webhooks,
-// server-to-server callbacks, etc.).
-const webMw = [
-  CsrfMiddleware(),
-]
+// Web middleware — session, AuthMiddleware, and CsrfMiddleware are all
+// installed on the `web` group in bootstrap/app.ts and by the
+// session/auth providers. Routes here get them automatically. Skip CSRF
+// for specific paths via `CsrfMiddleware({ exclude: [...] })` in bootstrap.
 
 // Auth routes (Laravel Breeze-style) — live in the `web` group because
 // sign-in / sign-up / sign-out need session (Auth.attempt / Auth.login call
@@ -21,7 +17,7 @@ const webMw = [
 // is cosmetic; group membership is determined by the loader file.
 //
 // GET view pages — /login, /register, /forgot-password, /reset-password
-registerAuthRoutes(Route, { middleware: webMw })
+registerAuthRoutes(Route)
 
 // POST handlers — sign-in/email, sign-up/email, sign-out, password reset.
 // Edit app/Controllers/AuthController.ts to customize.
@@ -46,7 +42,7 @@ Route.get('/', async () => {
     env:           config<string>('app.env', 'development'),
     user,
   })
-}, webMw)
+})
 
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
@@ -54,13 +50,13 @@ Route.get('/', async () => {
 
 Route.get('/test-get-route', (_req, res) => {
   res.send('test response')
-}, webMw)
+})
 
 // GET /session/demo — increments a visit counter across requests
 Route.get('/session/demo', (req, res) => {
   req.session.put('visits', (req.session.get<number>('visits') ?? 0) + 1)
   res.json({ visits: req.session.get('visits') })
-}, webMw)
+})
 
 // GET /test/queries — fires a few ORM queries for telescope testing
 Route.get('/test/queries', async (_req, res) => {

@@ -26,7 +26,12 @@ export default Application.configure({
     commands: () => import('../routes/console.js'),
   })
   .withMiddleware((m) => {
+    // Global — runs on every request
     m.use(RateLimit.perMinute(60))
+
+    // Group-scoped — only runs on routes loaded via withRouting({ web } / { api })
+    m.web(CsrfMiddleware())
+    m.api(RateLimit.perMinute(120))
   })
   .withExceptions((e) => {
     // Custom error type → custom response
@@ -53,6 +58,7 @@ export default Application.configure({
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
+- `appendToGroup(group, handler)` — provider-facing helper to install middleware into the `web` or `api` group
 - `AppBuilder`, `RudderJS`
 - `app()`, `resolve()`
 - `defineConfig()`
@@ -73,6 +79,32 @@ export default Application.configure({
   - `config?` (config object bound into the container)
 - `ConfigureOptions`
   - `server`, `config?`, `providers?`
+
+## Middleware Groups
+
+Routes loaded via `withRouting({ web })` are tagged `web`; via `withRouting({ api })` tagged `api`. The server adapter prepends the matching group's middleware stack before per-route middleware — Laravel-style.
+
+```ts
+.withMiddleware((m) => {
+  m.use(RateLimit.perMinute(60))   // global — every request
+  m.web(CsrfMiddleware())           // only on web routes
+  m.api(RateLimit.perMinute(120))   // only on api routes
+})
+```
+
+**Execution order:** `m.use(...)` → group (`m.web` / `m.api`) → per-route middleware → handler.
+
+Framework packages install into a group during `boot()` via `appendToGroup('web', handler)` from `@rudderjs/core` — this is how `@rudderjs/session` and `@rudderjs/auth` keep session + user resolution on web routes only, leaving api routes stateless by default.
+
+```ts
+import { ServiceProvider, appendToGroup } from '@rudderjs/core'
+
+export class MyPackageProvider extends ServiceProvider {
+  async boot() {
+    appendToGroup('web', myWebOnlyMiddleware)
+  }
+}
+```
 
 ## Dynamic Provider Registration
 

@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import 'dotenv/config'
 import { Application } from '@rudderjs/core'
 import { hono } from '@rudderjs/server-hono'
-import { RateLimit } from '@rudderjs/middleware'
+import { RateLimit, CsrfMiddleware } from '@rudderjs/middleware'
 import { requestIdMiddleware } from '../app/Middleware/RequestIdMiddleware.ts'
 import { AppError } from '../app/Exceptions/AppError.ts'
 import configs from '../config/index.ts'
@@ -25,6 +25,7 @@ export default Application.configure({
 
     // Per-group middleware
     m.web(RateLimit.perMinute(120))
+    m.web(CsrfMiddleware())
     m.api(RateLimit.perMinute(60))
 
     // Session + AuthMiddleware are auto-installed on the web group by the

@@ -49,17 +49,21 @@ export default [
 ]
 ```
 
-### 3. Add middleware to routes
+### 3. That's it — the `web` group is auto-wired
+
+`SessionProvider` installs the session middleware on the `web` route group
+during `boot()` via `appendToGroup('web', sessionMiddleware(cfg))`. Every
+route loaded through `withRouting({ web })` gets session support automatically —
+you don't need to list it in `bootstrap/app.ts` or attach it per-route.
+
+**API routes are stateless by default.** If a specific api route needs session,
+mount `SessionMiddleware()` on just that route:
 
 ```ts
-// routes/web.ts
-import { Route } from '@rudderjs/router'
+// routes/api.ts
 import { SessionMiddleware } from '@rudderjs/session'
 
-const webMw = [SessionMiddleware()]
-
-Route.get('/dashboard', handler, webMw)
-Route.post('/contact',  handler, webMw)
+Route.post('/api/preferences', handler, [SessionMiddleware()])
 ```
 
 ---
@@ -69,11 +73,12 @@ Route.post('/contact',  handler, webMw)
 ### `req.session`
 
 ```ts
+// routes/web.ts — session is already on the web group, no per-route wiring
 Route.get('/profile', (req, res) => {
   const visits = (req.session.get<number>('visits') ?? 0) + 1
   req.session.put('visits', visits)
   res.json({ visits })
-}, webMw)
+})
 ```
 
 ### `Session` facade
@@ -155,7 +160,8 @@ Session ID is stored in the cookie; data lives in Redis under `{prefix}{id}`. Re
 
 ## Notes
 
-- Apply `SessionMiddleware()` to web routes only — API routes should use stateless auth.
+- The provider auto-installs on the `web` route group. API routes stay stateless — opt in per-route with `SessionMiddleware()` if you really need session on an api endpoint.
+- **Don't call `m.use(sessionMiddleware(cfg))` globally.** It doubles up with the auto-install, leaves api routes with an unwanted session, and consumers like `SessionGuard` will read from a different `SessionInstance`. Symptom: session data set in the handler doesn't persist across requests.
 - Session is saved automatically after the route handler returns; no manual `save()` needed.
 - The cookie driver stores all data client-side — keep values small. Use Redis for larger payloads.
 - `SessionMiddleware()` reads config from the DI container. Use `sessionMiddleware(config)` for manual wiring without a provider.
