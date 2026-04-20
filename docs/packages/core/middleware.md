@@ -36,6 +36,39 @@ Or per-route in `routes/api.ts`:
 Route.get('/api/me', handler, [requestIdMiddleware])
 ```
 
+### Middleware Groups (web / api)
+
+Routes loaded via `withRouting({ web })` are tagged `web`; via `withRouting({ api })` tagged `api`. Use `m.web(...)` and `m.api(...)` to scope middleware to one group — Laravel-style:
+
+```ts
+.withMiddleware((m) => {
+  m.use(RateLimit.perMinute(60))    // global — every request
+  m.web(CsrfMiddleware())            // only on web routes
+  m.api(RateLimit.perMinute(120))   // only on api routes
+})
+```
+
+**Execution order**: `m.use` → group (`m.web` / `m.api`) → per-route → handler.
+
+**Framework packages auto-install into the `web` group** during `boot()`:
+
+- `@rudderjs/session` installs the session middleware
+- `@rudderjs/auth` installs `AuthMiddleware` so `req.user` is populated before your handlers
+
+API routes stay stateless by default — `req.user` is `undefined`, no session is read. For token-based API auth, use `@rudderjs/passport`'s `RequireBearer()` + `scope(...)` per-route.
+
+Package authors who need to install middleware into a group from their own provider should use the `appendToGroup` helper from `@rudderjs/core`:
+
+```ts
+import { ServiceProvider, appendToGroup } from '@rudderjs/core'
+
+export class MyPackageProvider extends ServiceProvider {
+  async boot() {
+    appendToGroup('web', myWebOnlyMiddleware)
+  }
+}
+```
+
 ### Class-Based Middleware
 
 For more complex middleware, extend the `Middleware` base class:
@@ -70,10 +103,16 @@ Apply to **web routes only** — not API routes.
 ```ts
 import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
 
+// Install on the web group — covers every web route, skips api
+.withMiddleware((m) => {
+  m.web(CsrfMiddleware())
+})
+
+// Or per-route for finer control
 Route.post('/contact', handler, [CsrfMiddleware()])
 
-// Exclude API webhook paths
-CsrfMiddleware({ exclude: ['/api/*'] })
+// Exclude specific paths (webhooks, server-to-server callbacks)
+CsrfMiddleware({ exclude: ['/webhooks/*'] })
 ```
 
 | Option | Default | Description |

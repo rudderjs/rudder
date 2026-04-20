@@ -6,21 +6,11 @@ import { auth } from '@rudderjs/auth'
 import { registerAuthRoutes } from '@rudderjs/auth/routes'
 import { AuthController } from '../app/Controllers/AuthController.js'
 
-// Web middleware — session, AuthMiddleware, and CsrfMiddleware are all
-// installed on the `web` group in bootstrap/app.ts and by the
-// session/auth providers. Routes here get them automatically. Skip CSRF
-// for specific paths via `CsrfMiddleware({ exclude: [...] })` in bootstrap.
 
-// Auth routes (Laravel Breeze-style) — live in the `web` group because
-// sign-in / sign-up / sign-out need session (Auth.attempt / Auth.login call
-// session.regenerate). The `/api/auth/...` URL prefix on the POST handlers
-// is cosmetic; group membership is determined by the loader file.
-//
 // GET view pages — /login, /register, /forgot-password, /reset-password
 registerAuthRoutes(Route)
 
 // POST handlers — sign-in/email, sign-up/email, sign-out, password reset.
-// Edit app/Controllers/AuthController.ts to customize.
 Route.registerController(AuthController)
 
 // Read RudderJS version from @rudderjs/core's package.json at boot time.

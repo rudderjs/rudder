@@ -29,8 +29,28 @@ export default defineConfig({
 | Feature | Details |
 |---|---|
 | **Vike** | Registers `vike/plugin` from the app's own `node_modules` — guaranteed single instance, no double-registration |
-| **`@/` alias** | Resolves `@/` to `<root>/src` in both client and SSR builds |
+| **View scanner** | Scans `app/Views/**` and generates virtual Vike pages under `pages/__view/` for `@rudderjs/view` |
+| **HMR route reload** | Watches `routes/`, `bootstrap/`, and `app/` so edits invalidate the SSR module graph without restarting the dev server |
+| **`@/` / `App/` aliases** | Resolves `@/` and `App/` to the app directory in both client and SSR builds |
 | **SSR externals** | Keeps optional RudderJS peers and Node-only drivers out of the SSR bundle — see list below |
+| **WebSocket upgrade** | Intercepts `http.createServer` to attach `__rudderjs_ws_upgrade__` for `@rudderjs/broadcast` and `@rudderjs/live` |
+| **`x-real-ip` injection (dev)** | Populates the header from the Node socket so `req.ip` works through Vike's universal middleware |
+
+### Plugins produced
+
+| Plugin | Purpose |
+|---|---|
+| `rudderjs:config` | SSR externals, path alias, warning suppression |
+| `rudderjs:ws` | WebSocket upgrade handler via `configureServer` |
+| `rudderjs:ip` | Dev-only `x-real-ip` injection from Node socket |
+| `rudderjs:routes` | HMR watcher for `routes/` + `bootstrap/` + `app/`; invalidates SSR modules + clears `__rudderjs_instance__` and `__rudderjs_app__` globals so the next request re-bootstraps cleanly |
+| `rudderjs:views` | View scanner — generates virtual Vike pages from `app/Views/**` |
+| *(vike plugins)* | SSR rendering, file-based routing (auto-registered) |
+
+### HMR notes
+
+- `rudderjs:routes` never calls `server.restart()` — doing so closes Vite's module runner and breaks in-flight SSR requests. Module invalidation + globalThis cleanup is enough to force a full re-bootstrap on the next request.
+- Changes under `app/` require the full cleanup (not just invalidation) because models, controllers, and resources are captured in provider closures during boot.
 
 ## UI frameworks
 

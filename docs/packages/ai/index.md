@@ -49,19 +49,42 @@ export default [ai(configs.ai), ...]
 
 ## Providers
 
-| Provider | SDK | Model String |
-|---|---|---|
-| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` |
-| OpenAI | `openai` | `openai/gpt-4o` |
-| Google | `@google/genai` | `google/gemini-2.5-pro` |
-| Ollama | `openai` | `ollama/llama3` |
-| Groq | `openai` | `groq/llama-3.3-70b` |
-| DeepSeek | `openai` | `deepseek/deepseek-chat` |
-| xAI (Grok) | `openai` | `xai/grok-3` |
-| Mistral | `openai` | `mistral/mistral-large-latest` |
-| Azure OpenAI | `openai` | `azure/gpt-4o` |
+| Provider | SDK | Model String | Capabilities |
+|---|---|---|---|
+| Anthropic | `@anthropic-ai/sdk` | `anthropic/claude-sonnet-4-5` | text, files |
+| OpenAI | `openai` | `openai/gpt-4o` | text, embeddings, images, tts/stt, files |
+| Google | `@google/genai` | `google/gemini-2.5-pro` | text, embeddings, images, files |
+| Cohere | `cohere-ai` | `cohere/rerank-v3.5` | embeddings, reranking |
+| Jina | *(none — HTTP)* | `jina/jina-reranker-v2-base-multilingual` | embeddings, reranking |
+| Ollama | *(none)* | `ollama/llama3` | text |
+| Groq | *(none)* | `groq/llama-3.3-70b` | text |
+| DeepSeek | *(none)* | `deepseek/deepseek-chat` | text |
+| xAI (Grok) | *(none)* | `xai/grok-3` | text |
+| Mistral | *(none)* | `mistral/mistral-large-latest` | text, embeddings |
+| Azure OpenAI | `openai` | `azure/gpt-4o` | text |
 
-Provider SDKs are optional dependencies — install only what you use. OpenAI-compatible providers (Groq, DeepSeek, xAI, Mistral, Azure, Ollama) all use the `openai` SDK. All adapters lazy-load their SDK on first use.
+Provider SDKs are optional dependencies — install only what you use. OpenAI-compatible providers (Groq, DeepSeek, xAI, Mistral, Azure, Ollama) reuse the `openai` SDK under the hood. Cohere requires `cohere-ai`; Jina uses direct HTTP (no SDK). All adapters lazy-load their SDK on first use.
+
+## Modalities
+
+Beyond text chat, `@rudderjs/ai` covers every major generative modality. See the individual sub-pages for details:
+
+- **[Agents](./agents)** — `Agent` class, anonymous `agent()`, the `AI` facade
+- **[Tools](./tools)** — server tools, client tools, `.modelOutput()`, streaming tools, approval gates
+- **[Streaming](./streaming)** — `.stream()` + Vercel AI Protocol adapter
+- **[Middleware & Testing](./middleware)** — lifecycle hooks, `AiFake` stub adapter
+
+Additional APIs covered in the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai):
+
+- **Image generation** — `AI.image(prompt).model('openai/dall-e-3').generate()`
+- **Text-to-speech** — `AI.audio(text).voice('nova').generate()`
+- **Speech-to-text** — `AI.transcribe('./audio.mp3').generate()`
+- **Embeddings** — `AI.embed(text)` (single or batch; auto-chunks arrays > 100)
+- **Reranking** — `AI.rerank(query, docs).topK(5).rank()` (Cohere, Jina)
+- **File management** — `AI.files('openai').upload(...)` (OpenAI, Anthropic, Google)
+- **Provider tools** — `WebSearch.make().toTool()`, `WebFetch.make().toTool()`
+- **Failover** — `failover()` returning fallback `provider/model` strings
+- **Conversations** — `ConversationStore` + `setConversationStore()` for multi-turn memory
 
 ## Attachments
 

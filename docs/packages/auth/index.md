@@ -1,274 +1,244 @@
 # @rudderjs/auth
 
-Authentication types, service provider factory, and middleware for RudderJS applications — powered by [better-auth](https://better-auth.com).
+Laravel-style authentication for RudderJS — guards, user providers, the `Auth` facade, password reset, email verification, and a Gate/Policy authorization system. Ships with session-based auth out of the box; token-based API auth lives in [`@rudderjs/passport`](../passport).
 
 ## Installation
 
 ```bash
-pnpm add @rudderjs/auth better-auth
+pnpm add @rudderjs/auth @rudderjs/hash @rudderjs/session
 ```
 
-## Quick Setup
+## Setup
 
-### 1. Add the config
+### 1. Config
 
 ```ts
 // config/auth.ts
-import { Env } from '@rudderjs/support'
-import type { BetterAuthConfig } from '@rudderjs/auth'
+import { User } from '../app/Models/User.js'
+import type { AuthConfig } from '@rudderjs/auth'
 
 export default {
-  secret:           Env.get('AUTH_SECRET', 'change-me-32-chars-min'),
-  baseUrl:          Env.get('APP_URL', 'http://localhost:3000'),
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthConfig
+  defaults: {
+    guard: 'web',
+  },
+  guards: {
+    web: { driver: 'session', provider: 'users' },
+  },
+  providers: {
+    users: { driver: 'eloquent', model: User },
+  },
+} satisfies AuthConfig
 ```
 
 ### 2. Register the provider
 
-Register `database()` first — `auth()` will auto-discover the Prisma client from the DI container:
+`hash()` must come before `authProvider()`, and `session()` must be installed — both are peer dependencies.
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@rudderjs/orm-prisma'
-import { auth } from '@rudderjs/auth'
+import { session }       from '@rudderjs/session'
+import { hash }          from '@rudderjs/hash'
+import { authProvider }  from '@rudderjs/auth'
 import configs from '../config/index.js'
 
 export default [
-  database(configs.database),  // binds PrismaClient to DI as 'prisma'
-  auth(configs.auth),          // auto-discovers 'prisma' — no DB config needed
-  // ...
+  session(configs.session),
+  hash(configs.hash),
+  authProvider(configs.auth),
 ]
 ```
 
-> If you are not using `@rudderjs/orm-prisma`, pass database config as the second argument:
-> `auth(configs.auth, { driver: 'sqlite', url: 'file:./dev.db' })`
+> `authProvider()` is the **service provider factory**. `auth()` (lowercase) is the **per-request helper** — see below.
 
-### 3. Protect routes
-
-```ts
-import { AuthMiddleware } from '@rudderjs/auth'
-
-const authMw = AuthMiddleware()
-
-Route.get('/api/me', (req, res) => {
-  res.json({ user: req.user })
-}, [authMw])
-```
-
-For a full setup guide including Prisma schema, social providers, and auth routes see the [better-auth setup guide](./better-auth).
+The provider auto-installs `AuthMiddleware` on the `web` route group, so every web request has `req.user` populated before your handler runs. API routes stay stateless — opt into token auth per-route with `@rudderjs/passport`.
 
 ---
 
-## API
+## Reading the current user
 
-### `auth(config, dbConfig?)`
-
-Returns a `ServiceProvider` class that initialises better-auth and binds the auth instance to the DI container as `'auth'`.
+Three equivalent shapes, pick whichever reads best at the call site:
 
 ```ts
-import { auth } from '@rudderjs/auth'
+import { auth, Auth } from '@rudderjs/auth'
 
-export default [
-  auth(configs.auth),
-]
-```
+// 1. `auth()` helper — Laravel's `auth()->user()`
+const user = await auth().user()
+const ok   = await auth().check()
+const admin = await auth().guard('api').user()  // non-default guard
 
-The provider:
-1. Tries `app().make('prisma')` first — works automatically when `database()` runs before it.
-2. Falls back to creating its own `PrismaClient` using `dbConfig` if no `'prisma'` binding exists.
-3. Binds the better-auth instance to DI as `'auth'`.
+// 2. `Auth` facade — same thing, static methods
+const user = await Auth.user()
+const ok   = await Auth.check()
 
-`dbConfig` is optional but required when `database()` is not registered:
-
-```ts
-auth(configs.auth, {
-  driver: 'postgresql',
-  url:    'postgresql://user:pass@localhost:5432/mydb',
+// 3. `req.user` — populated on every web request, zero await
+Route.get('/profile', async (req) => {
+  return { user: req.user ?? null }
 })
 ```
 
-| `AuthDbConfig` | Type | Description |
-|---|---|---|
-| `driver` | `'sqlite' \| 'postgresql' \| 'libsql' \| 'mysql'` | Database driver. Auto-detected from `DATABASE_URL` if omitted. |
-| `url` | `string` | Connection string. Falls back to `DATABASE_URL`. |
+On API routes `req.user` is `undefined` by default — `AuthMiddleware` only runs on the `web` group. For token-based API auth see [`@rudderjs/passport`](../passport).
 
-### `AuthMiddleware()`
+---
 
-Zero-config factory that validates the better-auth session on each request and attaches the authenticated user to `req.user`. Returns `401` if no valid session exists.
+## Login and logout
+
+```ts
+// Attempt with credentials
+const success = await Auth.attempt({ email, password })
+
+// Manual login (after a sign-up flow, social login, etc.)
+await Auth.login(user)
+
+// Logout
+await Auth.logout()
+```
+
+`attempt()` calls `hashCheck()` via `@rudderjs/hash` to verify the password. `login()` regenerates the session ID to prevent session fixation.
+
+---
+
+## Route protection
+
+```ts
+import { RequireAuth, RequireGuest, EnsureEmailIsVerified } from '@rudderjs/auth'
+
+// 401 if not logged in
+Route.post('/posts', handler, [RequireAuth()])
+
+// Bounce already-logged-in users away (e.g. /login, /register)
+Route.get('/login', showLogin, [RequireGuest('/')])
+
+// Require verified email (403 if unverified)
+Route.get('/dashboard', handler, [RequireAuth(), EnsureEmailIsVerified()])
+```
+
+### `AuthMiddleware` — advanced only
+
+You don't normally attach `AuthMiddleware` manually — the provider installs it on the `web` group. Reach for it when you need a non-default guard on a specific route:
 
 ```ts
 import { AuthMiddleware } from '@rudderjs/auth'
 
-const authMw = AuthMiddleware()
-
-Route.get('/api/dashboard', handler, [authMw])
+// The RudderJS equivalent of Laravel's ->middleware('auth:api')
+Route.get('/admin/stats', handler, [
+  AuthMiddleware('api'),
+  RequireAuth('api'),
+])
 ```
 
-`req.user` is typed as `AuthUser | undefined` via module augmentation on `AppRequest`.
+---
 
-### `BetterAuthConfig`
+## Guards & User Providers
 
-| Option | Type | Description |
+**Guards** determine *how* users are authenticated (session cookies, API tokens). **User providers** determine *where* users are retrieved from (an ORM model, a raw DB query, a remote service).
+
+### Built-in guards
+
+| Guard | Driver | Description |
 |---|---|---|
-| `secret` | `string?` | Auth secret (min 32 chars). Falls back to `AUTH_SECRET` env var. |
-| `baseUrl` | `string?` | Base URL. Falls back to `APP_URL` env var. |
-| `emailAndPassword` | `{ enabled?: boolean; requireEmailVerification?: boolean }?` | Email/password auth. |
-| `socialProviders` | `Record<string, { clientId: string; clientSecret: string }>?` | OAuth providers. |
-| `trustedOrigins` | `string[]?` | Origins trusted for CSRF validation. |
-| `onUserCreated` | `(user: { id, name, email }) => void \| Promise<void>?` | Hook called after a new user registers. |
+| Session | `session` | Cookie-based auth via `@rudderjs/session` |
 
----
+Token-based guards ship in `@rudderjs/passport` (bearer tokens with OAuth 2 scopes).
 
-## Types
+### Built-in providers
 
-### `AuthUser`
+| Provider | Driver | Description |
+|---|---|---|
+| Eloquent | `eloquent` | Retrieves users from an `@rudderjs/orm` Model |
+
+### Authenticatable contract
+
+Your User model must implement:
 
 ```ts
-interface AuthUser {
-  id:            string
-  name:          string
-  email:         string
-  emailVerified: boolean
-  image?:        string
-  createdAt:     Date
-  updatedAt:     Date
+interface Authenticatable {
+  getAuthIdentifier(): string
+  getAuthPassword():   string
+  getRememberToken():  string | null
+  setRememberToken(token: string): void
 }
 ```
 
-### `AuthSession`
+The `EloquentUserProvider` auto-wraps ORM model records with these methods — you only implement the interface if you need custom behavior.
+
+---
+
+## Authorization (Gates & Policies)
+
+Define abilities globally, or bundle them into policy classes per model.
+
+### Gates
 
 ```ts
-interface AuthSession {
-  id:          string
-  userId:      string
-  token:       string
-  expiresAt:   Date
-  ipAddress?:  string
-  userAgent?:  string
-  createdAt:   Date
-  updatedAt:   Date
+import { Gate } from '@rudderjs/auth'
+
+// In a provider's boot()
+Gate.define('edit-post', (user, post) => user.id === post.authorId)
+Gate.before((user) => user.isAdmin ? true : undefined)   // admin override
+
+// In a handler
+await Gate.authorize('edit-post', post)            // throws AuthorizationError (403)
+if (await Gate.allows('edit-post', post)) { ... }
+if (await Gate.denies('edit-post', post)) { ... }
+
+// Scoped to a specific user
+await Gate.forUser(someUser).allows('edit-post', post)
+```
+
+### Policies
+
+Policies are classes with method names matching ability names — cleaner for models with many abilities:
+
+```ts
+import { Policy } from '@rudderjs/auth'
+
+class PostPolicy extends Policy {
+  before(user: Authenticatable) { return user.isAdmin ? true : undefined }
+
+  update(user: Authenticatable, post: Post) { return user.id === post.authorId }
+  delete(user: Authenticatable, post: Post) { return user.id === post.authorId }
 }
-```
 
-### `AuthResult`
+// Register in a provider
+Gate.policy(Post, PostPolicy)
 
-```ts
-interface AuthResult {
-  user:    AuthUser
-  session: AuthSession
-}
-```
-
-### `BetterAuthInstance`
-
-The raw better-auth instance type — use when calling better-auth APIs directly:
-
-```ts
-import { app } from '@rudderjs/core'
-import type { BetterAuthInstance } from '@rudderjs/auth'
-
-const auth = app().make<BetterAuthInstance>('auth')
-
-// Verify a session
-const session = await auth.api.getSession({ headers: request.headers })
+// Use the same way as gates
+await Gate.authorize('update', post)
 ```
 
 ---
 
-## Schema Publishing
+## Password reset
 
-The auth package provides its own Prisma schema file containing the `User`, `Session`, `Account`, and `Verification` models. Publish it into your project's multi-file schema directory:
-
-```bash
-pnpm rudder vendor:publish --tag=auth-schema
-```
-
-This creates `prisma/schema/auth.prisma`. Then push the schema:
-
-```bash
-pnpm rudder db:push
-```
-
-If you are using Drizzle instead of Prisma, the auth package auto-detects the ORM at runtime and works with the Drizzle adapter directly — no schema publishing needed. Define the auth tables in your Drizzle schema file as described in the [better-auth Drizzle documentation](https://www.better-auth.com/docs/adapters/drizzle).
-
----
-
-## Auth Views
-
-The auth package ships pure presentational view components under `@rudderjs/auth/views/<framework>/`. Publish them into your project's `app/Views/Auth/` directory:
-
-```bash
-pnpm rudder vendor:publish --tag=auth-views
-```
-
-Then wire the routes in `routes/web.ts` with a single call:
+Uses the `PasswordBroker` with a token repository:
 
 ```ts
-import { Route } from '@rudderjs/router'
-import { SessionMiddleware } from '@rudderjs/session'
-import { CsrfMiddleware } from '@rudderjs/middleware'
-import { registerAuthRoutes } from '@rudderjs/auth/routes'
+import { PasswordBroker, MemoryTokenRepository } from '@rudderjs/auth'
 
-registerAuthRoutes(Route, { middleware: [SessionMiddleware(), CsrfMiddleware()] })
+// Send reset link
+const ok = await PasswordBroker.sendResetLink({ email }, (user, token) => {
+  const url = `https://app.example.com/reset-password?token=${token}&email=${user.email}`
+  return Mail.to(user.email).send(new PasswordResetMail(url))
+})
+
+// Reset password on the receiving end
+await PasswordBroker.reset({ email, token, password }, async (user, password) => {
+  await User.update(user.id, { password: await hash(password) })
+})
 ```
 
-`registerAuthRoutes` registers these routes, each guarded by `RequireGuest`:
-
-| View | Path | Description |
-|------|------|-------------|
-| Login | `/login` | Email/password sign-in form |
-| Register | `/register` | New user registration form |
-| Forgot Password | `/forgot-password` | Request a password reset email |
-| Reset Password | `/reset-password?token=...` | Set a new password using a reset token |
-
-The POST submit handlers (`/api/auth/sign-in/email`, `/api/auth/sign-up/email`, etc.) are registered separately in `routes/api.ts` — `registerAuthRoutes` only owns the GET pages.
-
-Customize any view by editing `app/Views/Auth/Login.tsx` (or the other files). The package no longer cares — the file is yours.
-
-### Password Reset
-
-Password reset requires the `sendResetPassword` callback in your auth config to send the reset email:
-
-```ts
-// config/auth.ts
-export default {
-  // ...
-  emailAndPassword: {
-    enabled: true,
-    sendResetPassword: async ({ user, url }) => {
-      // Send the password reset email
-      // `url` contains the full reset link with token
-      await mail.send(new PasswordResetMail(user, url))
-    },
-  },
-} satisfies BetterAuthConfig
-```
-
-### Login Redirect
-
-The login page supports a `redirect` query parameter. After successful authentication, the user is redirected to the specified path:
-
-```
-/login?redirect=/dashboard
-```
+The default token repository is `MemoryTokenRepository` — fine for dev, not for production. Implement `TokenRepository` over Redis or a DB table for real use.
 
 ---
 
-## Drizzle Support
+## Email verification
 
-`@rudderjs/auth` auto-detects which ORM is in use at runtime. When `@rudderjs/orm-drizzle` is registered instead of `@rudderjs/orm-prisma`, the auth provider automatically uses better-auth's Drizzle adapter. No additional configuration is needed beyond having the auth tables defined in your Drizzle schema.
-
----
-
-## Email Verification
-
-Implement `MustVerifyEmail` on your User model to enable email verification:
+Implement `MustVerifyEmail` on your User model:
 
 ```ts
 import type { MustVerifyEmail } from '@rudderjs/auth'
 
-class User extends Model implements MustVerifyEmail {
+class User extends Model implements Authenticatable, MustVerifyEmail {
   hasVerifiedEmail() { return this.emailVerifiedAt !== null }
   async markEmailAsVerified() {
     await User.update(this.id, { emailVerifiedAt: new Date().toISOString() })
@@ -277,49 +247,105 @@ class User extends Model implements MustVerifyEmail {
 }
 ```
 
-### Verification URL
-
-Generate a signed verification URL (expires in 1 hour):
+Generate a signed verification URL (1-hour expiry) and handle it on the receiving route:
 
 ```ts
-import { verificationUrl } from '@rudderjs/auth'
-
-const url = verificationUrl(user)
-// → '/email/verify/42/abc123?expires=...&signature=...'
-```
-
-### Verification Route
-
-```ts
-import { handleEmailVerification } from '@rudderjs/auth'
+import { verificationUrl, handleEmailVerification } from '@rudderjs/auth'
 import { ValidateSignature } from '@rudderjs/router'
 
-router.get('/email/verify/:id/:hash', async (req, res) => {
+const url = verificationUrl(user)
+
+Route.get('/email/verify/:id/:hash', async (req, res) => {
   const verified = await handleEmailVerification(
     req.params.id,
     req.params.hash,
-    async (id) => User.find(id),
+    (id) => User.find(id),
   )
-  if (verified) res.json({ message: 'Email verified.' })
-  else res.status(400).json({ message: 'Invalid verification link.' })
+  verified
+    ? res.json({ message: 'Email verified.' })
+    : res.status(400).json({ message: 'Invalid verification link.' })
 }, [ValidateSignature()]).name('verification.verify')
-```
-
-### `EnsureEmailIsVerified()` Middleware
-
-Require a verified email — returns 403 if unverified:
-
-```ts
-import { RequireAuth, EnsureEmailIsVerified } from '@rudderjs/auth'
-
-router.get('/dashboard', handler, [RequireAuth(), EnsureEmailIsVerified()])
 ```
 
 ---
 
-## Notes
+## Auth views & routes
 
-- `@rudderjs/auth` depends on `@rudderjs/hash` (password verification) and `@rudderjs/session` (session storage).
-- `AUTH_SECRET` / `APP_KEY` must be set for signed verification URLs.
-- Auth middleware should be ordered: `AuthMiddleware()` → `RequireAuth()` → `EnsureEmailIsVerified()`.
-- `Gate.authorize()` throws a 403 `AuthorizationError` — catch it in your exception handler or let the default handler render a JSON 403.
+`@rudderjs/auth` ships presentational view components under `views/react/` and `views/vue/`. Publish them into your project, then wire the routes:
+
+```bash
+pnpm rudder vendor:publish --tag=auth-views
+# → app/Views/Auth/{Login,Register,ForgotPassword,ResetPassword}.tsx
+```
+
+```ts
+// routes/web.ts — middleware groups cover session + CSRF globally on the web group
+import { registerAuthRoutes } from '@rudderjs/auth/routes'
+
+registerAuthRoutes(Route)
+```
+
+`registerAuthRoutes` registers these GET pages, each guarded by `RequireGuest`:
+
+| View | Path | Description |
+|------|------|-------------|
+| Login | `/login` | Email/password sign-in form |
+| Register | `/register` | New user registration form |
+| Forgot Password | `/forgot-password` | Request a password reset email |
+| Reset Password | `/reset-password?token=...` | Set a new password with a token |
+
+POST submit handlers (`/api/auth/sign-in/email`, `/api/auth/sign-up/email`, sign-out, etc.) live with your `AuthController`. Customize any view by editing `app/Views/Auth/Login.tsx` — the package doesn't own them after publish.
+
+The login page supports a `?redirect=/dashboard` query parameter — the user is sent there after successful authentication.
+
+---
+
+## API Reference
+
+### `authProvider(config)`
+
+Service provider factory. Installs `AuthMiddleware` on the `web` group, resolves the configured guard and user provider, binds `AuthManager` as `'auth.manager'` in the container.
+
+### `auth()` / `Auth`
+
+Request-scoped helpers via `AsyncLocalStorage`. Available inside any handler or middleware wrapped by `AuthMiddleware`. Both return the same underlying guard — pick whichever reads best.
+
+### `AuthMiddleware(guard?)` / `RequireAuth(guard?)` / `RequireGuest(redirectTo?)`
+
+Middleware factories. `AuthMiddleware` populates `req.user` without blocking; `RequireAuth` returns 401 when unauthenticated; `RequireGuest` redirects logged-in users away from auth-only routes.
+
+### `Gate` / `Policy` / `AuthorizationError`
+
+Static Gate facade. `Gate.define()`, `Gate.policy()`, `Gate.before()` register; `Gate.authorize()`, `Gate.allows()`, `Gate.denies()` check; `Gate.forUser()` scopes to a specific user. `AuthorizationError` is thrown as a 403.
+
+### Types
+
+```ts
+import type {
+  Authenticatable,
+  AuthUser,
+  Guard,
+  UserProvider,
+  AuthConfig,
+  MustVerifyEmail,
+} from '@rudderjs/auth'
+```
+
+---
+
+## Common pitfalls
+
+- **Provider order**: `hash()` must come before `authProvider()` or boot throws.
+- **Missing session**: `@rudderjs/session` is a required peer. Provider boot installs session on the `web` group; don't duplicate it via `m.use(sessionMiddleware(...))` — you'll end up with two `SessionInstance`s and lose your data between requests.
+- **`Auth.user()` outside a request**: `auth()` and `Auth` read from `AsyncLocalStorage` — they throw outside the `AuthMiddleware` scope. `SessionGuard.user()` soft-fails with `null` instead (matches Laravel's `Auth::user()` semantics), which is what the facade uses.
+- **`req.user` is `undefined` on api routes**: expected. `AuthMiddleware` runs only on the `web` group. For api auth reach for `@rudderjs/passport` (`RequireBearer()` + `scope(...)`).
+- **Ghost signed-in user across requests**: `AuthManager` must NOT cache `SessionGuard` instances — the manager is process-wide, and a cached guard's `_user` field leaks between requests. Don't reintroduce the `_guards` Map.
+- **Password field in `req.user`**: `userToPlain()` removes `password` automatically — you never see it on the request.
+
+---
+
+## Related
+
+- [`@rudderjs/passport`](../passport) — OAuth 2 server + bearer token middleware for API auth
+- [`@rudderjs/session`](../session) — session store (cookie or Redis)
+- [`@rudderjs/hash`](../hash) — password hashing

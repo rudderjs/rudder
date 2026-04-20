@@ -6,7 +6,7 @@ Step-by-step guides for connecting RudderJS to common infrastructure.
 
 ### [Authentication](/integrations/auth)
 
-Full walkthrough of email/password and OAuth authentication using `@rudderjs/auth` and [better-auth](https://better-auth.com). Covers database schema, provider registration, session middleware, and social providers.
+Full walkthrough of email/password auth with `@rudderjs/auth` (session-based) and OAuth 2 API auth with `@rudderjs/passport`. Covers database schema, provider registration, session middleware, and social OAuth providers.
 
 ### [Notifications](/integrations/notifications)
 

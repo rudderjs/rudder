@@ -99,6 +99,12 @@ new PrivateChannel('orders').name // 'private-orders'
 new PresenceChannel('room').name  // 'presence-room'
 ```
 
+## Observability
+
+If `@rudderjs/telescope` is installed, every connection, subscribe, unsubscribe, broadcast, and auth failure is recorded automatically under the **Broadcasts** tab. Entries are grouped by `connectionId` so you can see the full lifecycle of a single WebSocket session — from upgrade to disconnect — on one screen.
+
+Nothing to configure on this side; the broadcast observer registry ships with the package and Telescope's `BroadcastCollector` subscribes at boot.
+
 ## Rudder Commands
 
 | Command | Description |

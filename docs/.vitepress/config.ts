@@ -97,6 +97,7 @@ export default defineConfig({
           text: 'Build',
           items: [
             { text: '@rudderjs/vite', link: '/packages/vite/' },
+            { text: '@rudderjs/view', link: '/packages/view' },
             { text: '@rudderjs/image', link: '/packages/image/' },
           ],
         },
@@ -127,7 +128,7 @@ export default defineConfig({
           text: 'Auth',
           items: [
             { text: '@rudderjs/auth', link: '/packages/auth/' },
-            { text: 'Setup with better-auth', link: '/packages/auth/better-auth' },
+            { text: '@rudderjs/passport', link: '/packages/passport' },
           ],
         },
         {
@@ -181,6 +182,14 @@ export default defineConfig({
             { text: 'Tools', link: '/packages/ai/tools' },
             { text: 'Streaming', link: '/packages/ai/streaming' },
             { text: 'Middleware & Testing', link: '/packages/ai/middleware' },
+            { text: '@rudderjs/mcp', link: '/packages/mcp' },
+          ],
+        },
+        {
+          text: 'Tooling',
+          items: [
+            { text: '@rudderjs/cli', link: '/packages/cli' },
+            { text: '@rudderjs/telescope', link: '/packages/telescope' },
           ],
         },
       ],

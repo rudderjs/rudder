@@ -59,20 +59,25 @@ export default [
 ]
 ```
 
-### 3. Add session middleware to routes
+### 3. That's it — the `web` group is auto-wired
 
-Session middleware should be applied to web routes only — not API routes (those use stateless auth tokens).
+`SessionProvider` installs the session middleware on the `web` route group during `boot()` via `appendToGroup('web', sessionMiddleware(cfg))`. Every route loaded through `withRouting({ web })` gets session support automatically — you don't need to list it in `bootstrap/app.ts` or attach it per-route.
 
 ```ts
-// routes/web.ts
-import { Route } from '@rudderjs/router'
+// routes/web.ts — session is already on the web group, no per-route wiring
+Route.get('/dashboard', (req) => {
+  req.session.put('visits', (req.session.get<number>('visits') ?? 0) + 1)
+  return { visits: req.session.get('visits') }
+})
+```
+
+**API routes are stateless by default.** If a specific api route needs session, mount `SessionMiddleware()` on just that route:
+
+```ts
+// routes/api.ts
 import { SessionMiddleware } from '@rudderjs/session'
-import { CsrfMiddleware } from '@rudderjs/middleware'
 
-const webMw = [SessionMiddleware(), CsrfMiddleware()]
-
-Route.get('/dashboard', handler, webMw)
-Route.post('/contact',  handler, webMw)
+Route.post('/api/preferences', handler, [SessionMiddleware()])
 ```
 
 ---
@@ -255,7 +260,8 @@ Provider factory for `bootstrap/providers.ts`. Binds `session.config` to the DI 
 
 ## Notes
 
-- Apply `SessionMiddleware()` to **web routes only** — API routes should use stateless auth (tokens/cookies managed by `@rudderjs/auth`).
+- The provider auto-installs on the `web` route group. API routes stay stateless — opt in per-route with `SessionMiddleware()` if you really need session on an api endpoint.
+- **Don't call `m.use(sessionMiddleware(cfg))` globally.** It doubles up with the auto-install, leaves api routes with an unwanted session, and consumers like `SessionGuard` will read from a different `SessionInstance`. Symptom: session data set in the handler doesn't persist across requests.
 - `SessionMiddleware()` and `CsrfMiddleware()` are typically combined for web routes since CSRF validation depends on an established session.
 - The cookie driver stores all data in the cookie — keep values small. Use the Redis driver for larger payloads.
 - Session data is saved automatically after the route handler returns. Manual `save()` calls are not needed.

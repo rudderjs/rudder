@@ -203,6 +203,12 @@ The facade resolves the persistence adapter from:
 1. DI container (`'live.persistence'` binding) — set by `live()` provider
 2. Global key (`__rudderjs_live_persistence__`) — fallback
 
+## Observability
+
+If `@rudderjs/telescope` is installed, document open/close events, updates applied, awareness changes (throttled by `liveAwarenessSampleMs` on the telescope config), persistence writes, and sync errors are all recorded under the **Live** tab. Awareness throttling keeps the entry count bounded even on high-traffic collaborative sessions — default is one awareness sample per 500ms per document.
+
+Nothing to wire up; the live observer registry ships with the package and Telescope's `LiveCollector` subscribes at boot.
+
 ## Rudder Commands
 
 | Command | Description |

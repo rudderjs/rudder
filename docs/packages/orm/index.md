@@ -41,10 +41,15 @@ All query methods are available directly on the Model class. These delegate to t
 |---|---|---|
 | `query()` | `query(): QueryBuilder<T>` | Return a raw query builder for full chaining |
 | `all()` | `all(): Promise<T[]>` | Fetch every row in the table |
+| `first()` | `first(): Promise<T \| null>` | First row (no conditions) |
+| `count()` | `count(): Promise<number>` | Total row count |
+| `paginate()` | `paginate(page: number, perPage?: number): Promise<PaginatedResult<T>>` | Paginated result — `{ data, total, page, perPage, lastPage }` |
 | `find()` | `find(id: string \| number): Promise<T \| null>` | Find a single record by primary key |
 | `where()` | `where(col: string, value: unknown): QueryBuilder<T>` | Equality filter — returns a chainable QueryBuilder |
 | `create()` | `create(data: Partial<T>): Promise<T>` | Insert a new record and return it |
 | `with()` | `with(...relations: string[]): QueryBuilder<T>` | Eager-load relations — returns a chainable QueryBuilder |
+
+`first()`, `count()`, and `paginate()` are static shortcuts for the common "no conditions" case — equivalent to `Model.query().first()` etc. Shorter + typed.
 
 ## QueryBuilder Chaining
 
@@ -289,6 +294,7 @@ console.log(result.to)          // 40
 ```ts
 import { ModelRegistry } from '@rudderjs/orm'
 
+// ── Adapter surface ────────────────────────────────────
 // Register the adapter (called inside DatabaseServiceProvider.boot())
 ModelRegistry.set(adapter)
 
@@ -300,9 +306,23 @@ const adapter = ModelRegistry.get()
 
 // Clear the adapter — useful in tests
 ModelRegistry.reset()
+
+// ── Model discovery ────────────────────────────────────
+// Models self-register on first query. You can also register manually:
+ModelRegistry.register(User)
+
+// Enumerate every registered model — Map<name, ModelClass>
+const models = ModelRegistry.all()
+
+// Subscribe to registrations (returns unsubscribe)
+const unsub = ModelRegistry.onRegister((name, cls) => {
+  console.log(`Registered: ${name}`)
+})
 ```
 
 The registry stores a single active adapter. Calling `ModelRegistry.set()` a second time replaces the previous one.
+
+`ModelRegistry.all()` + `onRegister()` are how downstream packages (factories, telescope, CLI introspection) enumerate models without needing explicit imports.
 
 ## OrmAdapter Interface
 
