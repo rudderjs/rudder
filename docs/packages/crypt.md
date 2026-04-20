@@ -23,7 +23,7 @@ console.log(Crypt.generateKey())
 
 Add the generated key to your `.env` file:
 
-```env
+```bash
 APP_KEY=base64:A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v=
 ```
 

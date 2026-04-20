@@ -205,7 +205,7 @@ The dashboard UI is built on a JSON API you can query directly:
 
 ## Related
 
-- [`@rudderjs/pulse`](./pulse) — application metrics + aggregates (complements Telescope's per-entry detail)
-- [`@rudderjs/horizon`](./horizon) — queue-specific monitoring with lifecycle tracking + failed-job retry
+- [`@rudderjs/pulse`](https://github.com/rudderjs/rudder/tree/main/packages/pulse) — application metrics + aggregates (complements Telescope's per-entry detail)
+- [`@rudderjs/horizon`](https://github.com/rudderjs/rudder/tree/main/packages/horizon) — queue-specific monitoring with lifecycle tracking + failed-job retry
 - [`@rudderjs/ai`](./ai/) — AI agent runs appear under the AI tab
 - [`@rudderjs/mcp`](./mcp) — MCP activity appears under the MCP tab

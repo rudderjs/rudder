@@ -32,7 +32,7 @@ That's it. The server starts on the configured port (default `3000`).
 
 Create a `.env` file in your project root (or set variables in your hosting platform):
 
-```env
+```bash
 # App
 APP_NAME=MyApp
 APP_ENV=production
