@@ -1,5 +1,11 @@
 # create-rudder-app
 
+## 0.0.29
+
+### Patch Changes
+
+- d5b7150: Add `@rudderjs/telescope` to the package multiselect. Selecting it scaffolds `config/telescope.ts` (defaults to in-memory storage — no extra deps), wires it into `config/index.ts`, and surfaces a post-install hint pointing to the `/telescope` dashboard. Provider auto-discovery handles the rest.
+
 ## 0.0.28
 
 ### Patch Changes
