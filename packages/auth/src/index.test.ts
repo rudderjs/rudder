@@ -472,6 +472,17 @@ describe('Gate', () => {
     assert.strictEqual(await Gate.forUser(user).allows('update-post', { authorId: '2' }), false)
   })
 
+  it('Gate.define accepts a callback with typed args (no cast)', async () => {
+    // Regression: an `(user, ...args: unknown[])` callback type rejected
+    // every narrowed callable via contravariance. The generic TArgs overload
+    // lets callers declare their own shape without `as unknown as …`.
+    interface Post { authorId: string; role?: string }
+    Gate.define<[Post]>('edit-post', (_user, post) => post.role === 'admin')
+    const user = authUser()
+    assert.strictEqual(await Gate.forUser(user).allows('edit-post', { authorId: '1', role: 'admin' }), true)
+    assert.strictEqual(await Gate.forUser(user).allows('edit-post', { authorId: '2', role: 'user' }),  false)
+  })
+
   it('reset clears all definitions', () => {
     Gate.define('x', () => true)
     Gate.before(() => true)

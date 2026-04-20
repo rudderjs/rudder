@@ -23,8 +23,13 @@ export abstract class Job {
   failed?(error: unknown): void | Promise<void>
 
   /** Dispatch this job via the global dispatcher */
+  // Uses `any[]` for the `this` constraint so subclasses with typed
+  // constructors (e.g. `constructor(public name: string)`) remain assignable.
+  // `unknown[]` would force contravariance and reject every typed constructor.
+  // Arg-level type safety is still preserved via `ConstructorParameters<typeof this>`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static dispatch<T extends Job>(
-    this: new (...args: unknown[]) => T,
+    this: new (...args: any[]) => T,
     ...args: ConstructorParameters<typeof this>
   ): DispatchBuilder<T> {
     const instance = new this(...args)

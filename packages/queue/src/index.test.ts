@@ -57,6 +57,19 @@ describe('Job', () => {
     assert.ok(builder instanceof DispatchBuilder)
   })
 
+  it('dispatch() accepts a subclass with a typed constructor', () => {
+    // Regression: `this: new (...args: unknown[]) => T` rejected typed
+    // constructors via contravariance. Relaxing to `any[]` lets subclasses
+    // declare their own parameter shape and still get ConstructorParameters
+    // type safety at the call site.
+    class TypedJob extends Job {
+      constructor(public readonly name: string, public readonly count: number) { super() }
+      async handle(): Promise<void> { /* noop */ }
+    }
+    const builder = TypedJob.dispatch('hello', 42)
+    assert.ok(builder instanceof DispatchBuilder)
+  })
+
   it('subclass can override static properties', () => {
     assert.strictEqual(SlowJob.queue,  'slow')
     assert.strictEqual(SlowJob.delay,  500)

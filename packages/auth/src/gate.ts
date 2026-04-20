@@ -46,8 +46,22 @@ export class Gate {
 
   // ── Define abilities ──────────────────────────────────
 
-  static define(ability: string, callback: AbilityCallback): void {
-    this._abilities.set(ability, callback)
+  /**
+   * Register an ability callback. The args tuple is generic so callers can
+   * narrow parameter types without casting:
+   *
+   * ```ts
+   * Gate.define('edit-post', (user, post: Post) => user.id === post.authorId)
+   * ```
+   *
+   * The stored callback is widened to `AbilityCallback` (unknown args) for
+   * the Map; narrowing only matters at the call site.
+   */
+  static define<TArgs extends unknown[] = unknown[]>(
+    ability: string,
+    callback: (user: Authenticatable, ...args: TArgs) => boolean | Promise<boolean>,
+  ): void {
+    this._abilities.set(ability, callback as AbilityCallback)
   }
 
   static before(callback: BeforeCallback): void {
