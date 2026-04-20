@@ -53,6 +53,7 @@ export default defineConfig({
             { text: 'Validation', link: '/guide/validation' },
             { text: 'Database & Models', link: '/guide/database' },
             { text: 'Frontend Pages & SSR', link: '/guide/frontend-pages' },
+            { text: 'Controller Views', link: '/guide/views' },
             { text: 'Rudder Console', link: '/guide/rudder' },
           ],
         },
