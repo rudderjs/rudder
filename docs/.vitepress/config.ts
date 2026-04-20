@@ -64,6 +64,13 @@ export default defineConfig({
           ],
         },
         {
+          text: 'AI & MCP',
+          items: [
+            { text: 'AI', link: '/guide/ai' },
+            { text: 'MCP', link: '/guide/mcp' },
+          ],
+        },
+        {
           text: 'Production',
           items: [
             { text: 'Testing', link: '/guide/testing' },
