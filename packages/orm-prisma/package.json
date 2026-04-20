@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/orm-prisma",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "rudderjs": {
     "provider": "DatabaseProvider",
     "stage": "infrastructure",

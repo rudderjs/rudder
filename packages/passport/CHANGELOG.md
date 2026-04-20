@@ -1,5 +1,12 @@
 # @rudderjs/passport
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [e720923]
+  - @rudderjs/core@0.1.1
+
 ## 0.1.1
 
 ### Patch Changes

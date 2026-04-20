@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/mcp",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "MCP (Model Context Protocol) server framework for RudderJS",
   "rudderjs": {
     "provider": "McpProvider",

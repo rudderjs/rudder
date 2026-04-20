@@ -1,5 +1,16 @@
 # @rudderjs/pulse
 
+## 4.0.1
+
+### Patch Changes
+
+- Updated dependencies [e720923]
+  - @rudderjs/core@0.1.1
+  - @rudderjs/cache@0.0.12
+  - @rudderjs/log@0.0.7
+  - @rudderjs/queue@3.0.1
+  - @rudderjs/middleware@0.0.13
+
 ## 4.0.0
 
 ### Patch Changes

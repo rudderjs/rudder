@@ -1,5 +1,12 @@
 # @rudderjs/session
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [e720923]
+  - @rudderjs/core@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
