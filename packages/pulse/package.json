@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/pulse",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "rudderjs": {
     "provider": "PulseProvider",
     "stage": "monitoring"

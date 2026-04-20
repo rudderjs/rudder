@@ -1,5 +1,12 @@
 # @rudderjs/sanctum
 
+## 4.0.1
+
+### Patch Changes
+
+- Updated dependencies [5ca3e29]
+  - @rudderjs/auth@3.1.1
+
 ## 4.0.0
 
 ### Patch Changes

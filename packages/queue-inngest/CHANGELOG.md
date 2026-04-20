@@ -1,5 +1,12 @@
 # @rudderjs/queue-inngest
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [5ca3e29]
+  - @rudderjs/queue@3.0.2
+
 ## 0.0.11
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @rudderjs/telescope
 
+## 5.0.1
+
+### Patch Changes
+
+- Updated dependencies [5ca3e29]
+  - @rudderjs/queue@3.0.2
+  - @rudderjs/auth@3.1.1
+
 ## 5.0.0
 
 ### Patch Changes
