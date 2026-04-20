@@ -22,6 +22,8 @@ export { Gate, Policy, AuthorizationError } from './gate.js'
 export { PasswordBroker, MemoryTokenRepository } from './password-reset.js'
 export { EnsureEmailIsVerified, verificationUrl, handleEmailVerification, mustVerifyEmail } from './verification.js'
 export { RequireGuest } from './require-guest.js'
+export { BaseAuthController } from './base-auth-controller.js'
+export type { AuthUserModelLike, AuthHashLike } from './base-auth-controller.js'
 
 export type { Authenticatable, AuthUser, Guard, UserProvider } from './contracts.js'
 export type { MustVerifyEmail } from './verification.js'

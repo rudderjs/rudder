@@ -129,6 +129,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['env.d.ts']           = envDts()
 
   if (ctx.packages.auth && ctx.orm) files['app/Models/User.ts'] = userModel()
+  if (ctx.packages.auth) files['app/Controllers/AuthController.ts'] = authController()
   files['app/Providers/AppServiceProvider.ts']  = appServiceProvider(ctx)
   files['app/Middleware/RequestIdMiddleware.ts'] = requestIdMiddleware()
 
@@ -1404,6 +1405,57 @@ export class EchoTool extends McpTool {
 `
 }
 
+function authController(): string {
+  return `import { Middleware } from '@rudderjs/router'
+import { RateLimit } from '@rudderjs/middleware'
+import {
+  BaseAuthController,
+  PasswordBroker,
+  MemoryTokenRepository,
+  EloquentUserProvider,
+  type AuthUserModelLike,
+} from '@rudderjs/auth'
+import { Hash } from '@rudderjs/hash'
+import { User } from '../Models/User.ts'
+
+// Per-IP + per-path rate limit — sign-in attempts don't exhaust the sign-up
+// or password-reset budget for the same client.
+const authLimit = RateLimit.perMinute(10)
+  .by(req => {
+    const ip = (req as unknown as Record<string, unknown>)['ip'] as string ?? '127.0.0.1'
+    return \`\${ip}:\${req.path}\`
+  })
+  .message('Too many auth attempts. Try again later.')
+
+// Swap MemoryTokenRepository for a persistent one (Prisma/Redis) in production.
+const broker = new PasswordBroker(
+  new MemoryTokenRepository(),
+  new EloquentUserProvider(User as unknown as never, (plain, hashed) => Hash.check(plain, hashed)),
+  { expire: 60, throttle: 60 },
+)
+
+/**
+ * Auth POST handlers — Laravel Breeze-style.
+ *
+ * Extends \`BaseAuthController\` from @rudderjs/auth which provides the five
+ * standard endpoints (\`sign-in/email\`, \`sign-up/email\`, \`sign-out\`,
+ * \`request-password-reset\`, \`reset-password\`). Override any method to
+ * customize behavior — the base uses \`this.userModel\` / \`this.hash\` /
+ * \`this.passwordBroker\` for its defaults, so replacing those fields is
+ * usually all you need.
+ *
+ * Registered from \`routes/web.ts\` via \`Route.registerController(AuthController)\`
+ * so the handlers inherit SessionMiddleware + AuthMiddleware from the web group.
+ */
+@Middleware([authLimit])
+export class AuthController extends BaseAuthController {
+  protected userModel      = User as unknown as AuthUserModelLike
+  protected hash           = Hash
+  protected passwordBroker = broker
+}
+`
+}
+
 function requestIdMiddleware(): string {
   return `import { Middleware } from '@rudderjs/middleware'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
@@ -1437,13 +1489,8 @@ function routesApi(ctx: TemplateContext): string {
     imports.push("import { app } from '@rudderjs/core'")
   }
   if (ctx.packages.auth) {
-    imports.push("import { Auth, AuthManager, runWithAuth, toAuthenticatable } from '@rudderjs/auth'")
-    imports.push("import { Hash } from '@rudderjs/hash'")
-    imports.push("import { User } from '../app/Models/User.ts'")
-    imports.push("import { RateLimit } from '@rudderjs/middleware'")
+    imports.push("import { Auth, AuthManager, runWithAuth } from '@rudderjs/auth'")
     imports.push("import { SessionMiddleware } from '@rudderjs/session'")
-    lines.push('')
-    lines.push("const authLimit = RateLimit.perMinute(10).message('Too many auth attempts. Try again later.')")
   }
   if (ctx.packages.ai) {
     imports.push("import { AI } from '@rudderjs/ai'")
@@ -1455,8 +1502,9 @@ function routesApi(ctx: TemplateContext): string {
   if (ctx.packages.auth) {
     lines.push('')
     lines.push(`// GET /api/me — returns current user or null (Laravel Sanctum SPA-style).
-// Api routes are stateless by default, so session + auth are opted in per-route.
-// Alternative: move this to routes/web.ts and the per-route middleware isn't needed.
+// Api routes are stateless by default, so session is opted in per-route.
+// Session-mutating handlers (sign-in, sign-up, sign-out, password reset)
+// live in routes/web.ts so they inherit SessionMiddleware from the web group.
 router.get('/api/me', async (req, res) => {
   const manager = app().make<AuthManager>('auth.manager')
   let user: Record<string, unknown> | null = null
@@ -1473,58 +1521,6 @@ router.get('/api/me', async (req, res) => {
   if (ctx.withTodo) {
     lines.push('')
     lines.push('// Todo routes are registered by TodoServiceProvider — see app/Modules/Todo/TodoServiceProvider.ts')
-  }
-
-  if (ctx.packages.auth) {
-    lines.push('')
-    lines.push(`// POST /api/auth/sign-in/email
-router.post('/api/auth/sign-in/email', async (req, res) => {
-  const { email, password } = req.body as { email: string; password: string }
-  const manager = app().make<AuthManager>('auth.manager')
-  let success = false
-  await runWithAuth(manager, async () => {
-    success = await Auth.attempt({ email, password })
-  })
-  if (!success) return res.status(401).json({ message: 'Invalid email or password.' })
-  res.json({ ok: true })
-}, [authLimit])
-
-// POST /api/auth/sign-up/email
-router.post('/api/auth/sign-up/email', async (req, res) => {
-  const { name, email, password } = req.body as { name: string; email: string; password: string }
-  if (!email || !password) return res.status(422).json({ message: 'Email and password are required.' })
-
-  const existing = await User.query().where('email', email).first()
-  if (existing) return res.status(422).json({ message: 'An account with this email already exists.' })
-
-  const hashed = await Hash.make(password)
-  const user   = await User.create({ name: name ?? '', email, password: hashed })
-
-  const manager = app().make<AuthManager>('auth.manager')
-  await runWithAuth(manager, async () => {
-    await Auth.login(toAuthenticatable(user as unknown as Record<string, unknown>))
-  })
-  res.json({ ok: true })
-}, [authLimit])
-
-// POST /api/auth/sign-out
-router.post('/api/auth/sign-out', async (_req, res) => {
-  const manager = app().make<AuthManager>('auth.manager')
-  await runWithAuth(manager, async () => { await Auth.logout() })
-  res.json({ ok: true })
-})
-
-// POST /api/auth/request-password-reset — stub (implement email sending)
-router.post('/api/auth/request-password-reset', async (_req, res) => {
-  // TODO: integrate @rudderjs/mail to send reset link
-  res.json({ ok: true })
-}, [authLimit])
-
-// POST /api/auth/reset-password — stub (implement token verification)
-router.post('/api/auth/reset-password', async (_req, res) => {
-  // TODO: verify token and update password
-  res.json({ ok: true })
-}, [authLimit])`)
   }
 
   if (ctx.packages.ai) {
@@ -1580,14 +1576,13 @@ function routesWeb(ctx: TemplateContext): string {
   if (hasWelcome) {
     imports.push(`import { createRequire } from 'node:module'`)
     imports.push(`import { view } from '@rudderjs/view'`)
-    imports.push(`import { app, config } from '@rudderjs/core'`)
+    imports.push(`import { config } from '@rudderjs/core'`)
   }
   if (hasAuth) {
     imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
     imports.push(`import { registerAuthRoutes } from '@rudderjs/auth/routes'`)
-    if (hasWelcome) {
-      imports.push(`import { AuthManager, Auth, runWithAuth } from '@rudderjs/auth'`)
-    }
+    imports.push(`import { auth } from '@rudderjs/auth'`)
+    imports.push(`import { AuthController } from '../app/Controllers/AuthController.ts'`)
   }
 
   // ── middleware chain shared with auth routes + welcome ─
@@ -1602,11 +1597,19 @@ const webMw = [CsrfMiddleware()]
     : ''
 
   // ── auth UI wiring ──────────────────────────────────────
+  // GET view pages come from `registerAuthRoutes`; the POST submit handlers
+  // come from `AuthController` (extends @rudderjs/auth's BaseAuthController).
+  // Both live in routes/web.ts so they inherit SessionMiddleware + AuthMiddleware
+  // from the web group. Customize the flow by editing app/Controllers/AuthController.ts.
   const authBlock = hasAuth
     ? `
-// Auth UI routes — login/register/forgot-password/reset-password
+// GET pages — login/register/forgot-password/reset-password
 // Views live in app/Views/Auth/ (vendored from @rudderjs/auth/views/${ctx.primary}/)
 registerAuthRoutes(Route, { middleware: webMw })
+
+// POST handlers — sign-in/email, sign-up/email, sign-out, password reset.
+// Edit app/Controllers/AuthController.ts to customize.
+Route.registerController(AuthController)
 `
     : ''
 
@@ -1619,23 +1622,12 @@ const rudderCorePkg = _require('@rudderjs/core/package.json') as { version: stri
 
 // Welcome page — delete this route and app/Views/Welcome.${welcomeExt(ctx.primary)} to replace it.
 Route.get('/', async () => {${hasAuth ? `
-  // Resolve the current user (if signed in) so the welcome page can show it.
-  let user: { name: string; email: string } | null = null
-  try {
-    const manager = app().make<AuthManager>('auth.manager')
-    await runWithAuth(manager, async () => {
-      const authUser = await Auth.user()
-      if (authUser) {
-        const record = authUser as unknown as Record<string, unknown>
-        user = {
-          name:  String(record['name']  ?? ''),
-          email: String(record['email'] ?? ''),
-        }
-      }
-    })
-  } catch {
-    // auth provider not registered — welcome page just won't show user info
-  }` : `
+  // Resolve the current user (if signed in) — AuthMiddleware auto-installs on
+  // the web group, so auth() has a populated ALS context here.
+  const current = await auth().user() as Record<string, unknown> | null
+  const user    = current
+    ? { name: String(current['name'] ?? ''), email: String(current['email'] ?? '') }
+    : null` : `
   // Auth is not installed, so the welcome page never shows a signed-in user.
   const user = null`}
   return view('welcome', {

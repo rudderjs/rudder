@@ -81,6 +81,7 @@
     "@rudderjs/session": "workspace:*",
     "@rudderjs/view": "workspace:*",
     "@types/node": "^20.0.0",
+    "reflect-metadata": "^0.2.2",
     "typescript": "^5.4.0"
   },
   "author": "Suleiman Shahbari"

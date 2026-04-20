@@ -1,3 +1,4 @@
+import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -16,9 +17,11 @@ import {
   MemoryTokenRepository,
   runWithAuth,
   toAuthenticatable,
+  BaseAuthController,
   type AuthConfig,
   type Authenticatable,
 } from './index.js'
+import { Router } from '@rudderjs/router'
 
 // ─── Test Fixtures ────────────────────────────────────────
 
@@ -777,5 +780,64 @@ describe('MemoryTokenRepository', () => {
     await repo.deleteExpired()
     assert.strictEqual(await repo.find('old@x.com'), null)
     assert.ok(await repo.find('new@x.com'))
+  })
+})
+
+// ─── BaseAuthController ───────────────────────────────────
+
+describe('BaseAuthController', () => {
+  it('subclass inherits @Controller prefix and @Post routes from the base', () => {
+    class AuthController extends BaseAuthController {
+      protected userModel = {
+        query: () => ({ where: () => ({ first: async () => null }) }),
+        create: async (attrs: Record<string, unknown>) => ({ id: '1', ...attrs }),
+        update: async () => ({}),
+      }
+      protected hash = {
+        make:  async (p: string) => `hashed:${p}`,
+        check: async () => true,
+      }
+    }
+
+    const router = new Router()
+    router.registerController(AuthController)
+
+    const paths = router.list().map(r => `${r.method} ${r.path}`).sort()
+    assert.deepStrictEqual(paths, [
+      'POST /api/auth/request-password-reset',
+      'POST /api/auth/reset-password',
+      'POST /api/auth/sign-in/email',
+      'POST /api/auth/sign-out',
+      'POST /api/auth/sign-up/email',
+    ])
+  })
+
+  it('subclass method overrides win over inherited handlers', async () => {
+    class AuthController extends BaseAuthController {
+      protected userModel = {
+        query: () => ({ where: () => ({ first: async () => null }) }),
+        create: async (attrs: Record<string, unknown>) => ({ id: '1', ...attrs }),
+        update: async () => ({}),
+      }
+      protected hash = {
+        make:  async (p: string) => `hashed:${p}`,
+        check: async () => true,
+      }
+
+      override async signOut(_req: unknown, res: { json: (b: unknown) => void }): Promise<void> {
+        res.json({ custom: true })
+      }
+    }
+
+    const router = new Router()
+    router.registerController(AuthController)
+    const signOut = router.list().find(r => r.path === '/api/auth/sign-out')!
+
+    let body: unknown = null
+    await signOut.handler(
+      {} as never,
+      { json: (b: unknown) => { body = b }, status: () => ({ json: () => {} }) } as never,
+    )
+    assert.deepStrictEqual(body, { custom: true })
   })
 })
