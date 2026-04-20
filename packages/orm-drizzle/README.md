@@ -104,7 +104,7 @@ export class User extends Model {
 
 ## Using a Pre-built Drizzle Instance
 
-If you already have a Drizzle `db` instance (e.g. from better-auth or custom setup), pass it directly:
+If you already have a Drizzle `db` instance (e.g. from a custom setup), pass it directly:
 
 ```ts
 import { drizzle as dzCreate } from 'drizzle-orm/better-sqlite3'

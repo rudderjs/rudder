@@ -349,4 +349,3 @@ import type {
 - [`@rudderjs/passport`](../passport) — OAuth 2 server + bearer token middleware for API auth
 - [`@rudderjs/session`](../session) — session store (cookie or Redis)
 - [`@rudderjs/hash`](../hash) — password hashing
-- [better-auth setup guide](./better-auth) — optional OAuth social providers via better-auth

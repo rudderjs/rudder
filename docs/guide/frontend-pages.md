@@ -175,22 +175,19 @@ const { users } = useData<Data>()
 // pages/dashboard/+guard.ts
 import { redirect } from 'vike/abort'
 import type { GuardAsync } from 'vike/types'
-import type { BetterAuthInstance } from '@rudderjs/auth'
 
-export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
+export const guard: GuardAsync = async (): ReturnType<GuardAsync> => {
   // Guards run on both server and client — skip the check client-side
   if (!import.meta.env.SSR) return
 
-  const { app } = await import('@rudderjs/core')
-  const auth = app().make<BetterAuthInstance>('auth')
+  const { auth } = await import('@rudderjs/auth')
+  const user = await auth().user()
 
-  const session = await auth.api.getSession({
-    headers: new Headers(pageContext.headers ?? {}),
-  })
-
-  if (!session?.user) throw redirect('/login')
+  if (!user) throw redirect('/login')
 }
 ```
+
+For server-rendered dashboards with auth, consider [controller views](/guide/views) instead — middleware on the route handles the auth check, and you skip `+guard.ts` entirely.
 
 ### Guard options
 

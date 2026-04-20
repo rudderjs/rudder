@@ -110,18 +110,16 @@ export const config = { matcher: ['/dashboard/:path*'] }
 // pages/dashboard/+guard.ts
 import { redirect } from 'vike/abort'
 import type { GuardAsync } from 'vike/types'
-import type { BetterAuthInstance } from '@rudderjs/auth'
 
-export const guard: GuardAsync = async (pageContext): ReturnType<GuardAsync> => {
+export const guard: GuardAsync = async (): ReturnType<GuardAsync> => {
   if (!import.meta.env.SSR) return
-  const { app } = await import('@rudderjs/core')
-  const auth = app().make<BetterAuthInstance>('auth')
-  const session = await auth.api.getSession({
-    headers: new Headers(pageContext.headers ?? {}),
-  })
-  if (!session?.user) throw redirect('/login')
+  const { auth } = await import('@rudderjs/auth')
+  const user = await auth().user()
+  if (!user) throw redirect('/login')
 }
 ```
+
+For most dashboard-style pages you don't need `+guard.ts` at all — return `view('dashboard', props)` from a controller route and put `RequireAuth()` in the middleware chain. See [Controller Views](/guide/views).
 
 ---
 
@@ -205,7 +203,7 @@ dd(req.body)   // pretty-prints then stops (you've missed this)
 | Backend DX | API Routes (simple) | Service Providers + DI + Rudder |
 | Build tool | Webpack / Turbopack | **Vite** (fast) |
 | Modularity | All-in | Pay-as-you-go |
-| Auth | NextAuth / Clerk | better-auth (built-in) |
+| Auth | NextAuth / Clerk | `@rudderjs/auth` (native, Laravel-style) + `@rudderjs/passport` (OAuth 2) |
 | CLI | None | Rudder (`make:*`, `db:seed`, custom commands) |
 | Deployment | Vercel-optimized | Node.js, Bun, Deno, Cloudflare Workers |
 

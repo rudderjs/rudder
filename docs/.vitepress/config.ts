@@ -129,7 +129,6 @@ export default defineConfig({
           items: [
             { text: '@rudderjs/auth', link: '/packages/auth/' },
             { text: '@rudderjs/passport', link: '/packages/passport' },
-            { text: 'Setup with better-auth', link: '/packages/auth/better-auth' },
           ],
         },
         {

@@ -46,7 +46,7 @@ RudderJS exposes a standard [WinterCG Fetch handler](https://wintercg.org/) thro
 | Validation | `@rudderjs/core` | Zod-powered, `FormRequest`, `validate()`, `validateWith()` |
 | DI container | `@rudderjs/core` | `Container`, `@Injectable`, `@Inject` |
 | ORM | `@rudderjs/orm-prisma` / `orm-drizzle` | Prisma or Drizzle adapters |
-| Auth | `@rudderjs/auth` | better-auth integration + `AuthMiddleware` |
+| Auth | `@rudderjs/auth` | Laravel-style guards, `Auth` facade, Gate/Policy, password reset, email verification |
 | Sessions | `@rudderjs/session` | Cookie (HMAC) or Redis driver |
 | Queue | `@rudderjs/queue-bullmq` / `queue-inngest` | BullMQ (Redis) or Inngest |
 | Cache | `@rudderjs/cache` | In-memory or Redis |

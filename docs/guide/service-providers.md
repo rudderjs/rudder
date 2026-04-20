@@ -77,9 +77,9 @@ export default [
 Some packages export **provider factories** (functions that return a provider class) rather than plain classes. The factory takes config and returns a class:
 
 ```ts
-// auth(config) returns a class extending ServiceProvider
-const AuthProvider = auth(configs.auth)
-// → class BetterAuthProvider extends ServiceProvider { ... }
+// authProvider(config) returns a class extending ServiceProvider
+const AuthProvider = authProvider(configs.auth)
+// → class AuthServiceProvider extends ServiceProvider { ... }
 ```
 
 You can use them directly in the array — both class references and instantiated-via-factory classes are valid.
