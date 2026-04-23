@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'RudderJS',
   description: 'Laravel-inspired Node.js full-stack framework built on Vike + Vite',
   lang: 'en-US',
+  ignoreDeadLinks: 'localhostLinks',
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }],
