@@ -535,7 +535,7 @@ rm packages/ai/src/provider.ts
 **Step 3: Build the whole monorepo to find broken imports**
 
 ```bash
-cd /Users/sleman/Projects/rudderjs && pnpm build
+cd /Users/sleman/Projects/rudder && pnpm build
 ```
 
 Expected: **this will fail** in `playground/` (and anywhere else importing `AiProvider`). That's what we're fixing next.
@@ -543,7 +543,7 @@ Expected: **this will fail** in `playground/` (and anywhere else importing `AiPr
 **Step 4: Find all consumers**
 
 ```bash
-cd /Users/sleman/Projects/rudderjs
+cd /Users/sleman/Projects/rudder
 grep -rn "from '@rudderjs/ai'" --include="*.ts" | grep -i "AiProvider"
 ```
 
@@ -608,7 +608,7 @@ Check the output — `ai` should still appear. Inspect `bootstrap/cache/provider
 **Step 8: Full build**
 
 ```bash
-cd /Users/sleman/Projects/rudderjs && pnpm build
+cd /Users/sleman/Projects/rudder && pnpm build
 ```
 
 Expected: clean.
@@ -698,7 +698,7 @@ Keep `@rudderjs/core` as a devDep so typecheck + `/server` build work.
 **Step 3: Re-install and rebuild**
 
 ```bash
-cd /Users/sleman/Projects/rudderjs && pnpm install && pnpm build
+cd /Users/sleman/Projects/rudder && pnpm install && pnpm build
 ```
 
 Expected: clean.

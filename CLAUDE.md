@@ -213,7 +213,7 @@ Three playgrounds exist across three repos, one per tier of the open-core stack.
 ### Running
 
 ```bash
-cd ~/Projects/rudderjs/playground  && pnpm dev   # :3000
+cd ~/Projects/rudder/playground    && pnpm dev   # :3000
 cd ~/Projects/pilotiq/playground   && pnpm dev   # :3001
 cd ~/Projects/pilotiq-pro/playground && pnpm dev # :3002
 ```
@@ -222,7 +222,7 @@ cd ~/Projects/pilotiq-pro/playground && pnpm dev # :3002
 
 ### Cross-repo wiring
 
-All three resolve `@rudderjs/*` to `link:../rudderjs/packages/<name>` via `pnpm.overrides` in each repo's root `package.json`. `pilotiq-pro` also overrides `@pilotiq/*` to `link:../pilotiq/packages/<name>`. No git submodules; just sibling clones on disk.
+All three resolve `@rudderjs/*` to `link:../rudder/packages/<name>` via `pnpm.overrides` in each repo's root `package.json`. `pilotiq-pro` also overrides `@pilotiq/*` to `link:../pilotiq/packages/<name>`. No git submodules; just sibling clones on disk.
 
 ### rudderjs/playground structure
 
