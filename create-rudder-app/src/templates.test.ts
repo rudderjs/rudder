@@ -104,14 +104,22 @@ describe('getTemplates() — tailwind + shadcn', () => {
 
   it('tailwind=false index.css contains semantic class selectors', () => {
     const css = getTemplates(ctx({ tailwind: false, shadcn: false }))['src/index.css']!
-    for (const selector of ['.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap']) {
+    for (const selector of [
+      '.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap',
+      '.empty-state', '.form-inline', '.todo-list', '.todo-item', '.link-danger',
+      '.chat-wrap', '.chat-column', '.chat-log', '.chat-bubble',
+    ]) {
       assert.ok(css.includes(selector), `plain CSS missing selector ${selector}`)
     }
   })
 
   it('tailwind=true index.css contains the same semantic class selectors', () => {
     const css = getTemplates(ctx({ tailwind: true, shadcn: false }))['src/index.css']!
-    for (const selector of ['.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap']) {
+    for (const selector of [
+      '.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap',
+      '.empty-state', '.form-inline', '.todo-list', '.todo-item', '.link-danger',
+      '.chat-wrap', '.chat-column', '.chat-log', '.chat-bubble',
+    ]) {
       assert.ok(css.includes(selector), `tailwind CSS missing selector ${selector}`)
     }
   })
@@ -141,6 +149,42 @@ describe('getTemplates() — tailwind + shadcn', () => {
     assert.ok(pkg.includes('"tailwindcss"'))
     assert.ok(pkg.includes('"@tailwindcss/vite"'))
     assert.ok(vite.includes('@tailwindcss/vite'))
+  })
+
+  it('opt-in pages (todo / ai-chat) use semantic classes, no shadcn-flavored leaks', () => {
+    const files = getTemplates(ctx({
+      tailwind: false, shadcn: false,
+      withTodo: true, packages: { ...allPkgs, ai: true },
+      frameworks: ['react'], primary: 'react',
+    }))
+    const todo   = files['pages/todos/+Page.tsx']!
+    const aiChat = files['pages/ai-chat/+Page.tsx']!
+
+    // No shadcn-flavored utility classes should leak through in non-shadcn mode
+    for (const leak of ['text-muted-foreground', 'bg-primary', 'text-primary-foreground', 'border-input', 'bg-background', 'bg-muted', 'text-destructive']) {
+      assert.ok(!todo.includes(leak),   `todo page leaks shadcn class: ${leak}`)
+      assert.ok(!aiChat.includes(leak), `ai-chat page leaks shadcn class: ${leak}`)
+    }
+
+    // And the new semantic classes ARE present
+    assert.ok(todo.includes('todo-list'))
+    assert.ok(todo.includes('todo-item'))
+    assert.ok(todo.includes('form-inline'))
+    assert.ok(aiChat.includes('chat-column'))
+    assert.ok(aiChat.includes('chat-bubble'))
+  })
+
+  it('multi-framework pagesIndexPage uses semantic classes, no shadcn leaks', () => {
+    const files = getTemplates(ctx({
+      tailwind: false, shadcn: false,
+      frameworks: ['react', 'vue'], primary: 'react',
+    }))
+    const index = files['pages/index/+Page.tsx']!
+    for (const leak of ['text-muted-foreground', 'bg-primary', 'text-primary-foreground', 'hover:bg-accent']) {
+      assert.ok(!index.includes(leak), `pagesIndexPage leaks shadcn class: ${leak}`)
+    }
+    assert.ok(index.includes('error-wrap'))
+    assert.ok(index.includes('heading-lg'))
   })
 })
 
