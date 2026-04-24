@@ -42,7 +42,7 @@ Helpers: `detectPackageManager()`, `pmExec(pm, bin)`, `pmRun(pm, script)`, `pmIn
 - Native-build field in `package.json` is PM-specific (see table above)
 - Use `database(configs.database)` from `@rudderjs/orm-prisma` not `DatabaseServiceProvider` in providers.ts
 - `shadcn` dep only added when React + Tailwind are both selected
-- `src/index.css` not generated at all when Tailwind is not selected
+- `src/index.css` is always generated; contents differ by `ctx.tailwind` — Tailwind variant uses `@import "tailwindcss"` + `@apply` rules from `semanticRulesApply()`, plain variant uses hand-authored CSS from `indexCssPlain()`. Same semantic class selectors in both (`.page`, `.feature-card`, `.auth-card`, `.todo-list`, `.chat-bubble`, …) so JSX never branches on the flag
 - React + Solid together: Vite plugins use `include`/`exclude` to disambiguate `.tsx` files
 - Secondary frameworks get demo pages at `pages/{fw}-demo/` (each with its own `+config.ts`)
 - `@rudderjs/session` is in deps (providers.ts imports it)
