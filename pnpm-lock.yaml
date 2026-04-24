@@ -61,14 +61,14 @@ importers:
   packages/ai:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       zod:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
       '@rudderjs/rudder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../rudder
       '@types/node':
         specifier: ^20.0.0
@@ -93,23 +93,23 @@ importers:
   packages/auth:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@rudderjs/hash':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../hash
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
       '@rudderjs/session':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../session
       '@rudderjs/view':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../view
       '@types/node':
         specifier: ^20.0.0
@@ -127,7 +127,7 @@ importers:
         specifier: ^1.13.0
         version: 1.27.1(zod@3.25.76)
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       zod:
         specifier: ^3.23.0
@@ -143,7 +143,7 @@ importers:
   packages/broadcast:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       ws:
         specifier: ^8.0.0
@@ -162,7 +162,7 @@ importers:
   packages/cache:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -185,10 +185,10 @@ importers:
         specifier: ^1.0.0
         version: 1.0.1
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/rudder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../rudder
       chalk:
         specifier: ^5.0.0
@@ -198,7 +198,7 @@ importers:
         version: 12.1.0
     devDependencies:
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
       '@types/node':
         specifier: ^20.0.0
@@ -222,7 +222,7 @@ importers:
   packages/context:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -244,16 +244,16 @@ importers:
   packages/core:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
       '@rudderjs/rudder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../rudder
       '@rudderjs/support':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../support
       reflect-metadata:
         specifier: ^0.2.2
@@ -275,7 +275,7 @@ importers:
   packages/crypt:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -291,7 +291,7 @@ importers:
   packages/hash:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       bcryptjs:
         specifier: ^2.4.3
@@ -317,19 +317,19 @@ importers:
   packages/horizon:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@rudderjs/queue':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../queue
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
     devDependencies:
       '@types/better-sqlite3':
@@ -358,7 +358,7 @@ importers:
   packages/image:
     devDependencies:
       '@rudderjs/storage':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../storage
       '@types/node':
         specifier: ^20.0.0
@@ -374,7 +374,7 @@ importers:
   packages/live:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       lib0:
         specifier: ^0.2.0
@@ -406,7 +406,7 @@ importers:
   packages/localization:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -419,7 +419,7 @@ importers:
   packages/log:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -432,7 +432,7 @@ importers:
   packages/mail:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -452,7 +452,7 @@ importers:
         specifier: ^1.13.0
         version: 1.27.1(zod@3.25.76)
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       reflect-metadata:
         specifier: ^0.2.0
@@ -462,10 +462,10 @@ importers:
         version: 3.25.76
     devDependencies:
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
       '@rudderjs/rudder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../rudder
       '@types/node':
         specifier: ^20.0.0
@@ -477,10 +477,10 @@ importers:
   packages/middleware:
     dependencies:
       '@rudderjs/cache':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../cache
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
     devDependencies:
       '@types/node':
@@ -496,13 +496,13 @@ importers:
   packages/notification:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/mail':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mail
       '@rudderjs/orm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orm
     devDependencies:
       '@types/node':
@@ -515,7 +515,7 @@ importers:
   packages/orm:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
     devDependencies:
       '@types/node':
@@ -528,7 +528,7 @@ importers:
   packages/orm-drizzle:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       drizzle-orm:
         specifier: ^0.38.0
@@ -560,13 +560,13 @@ importers:
         specifier: ^7.0.0
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/orm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orm
     devDependencies:
       '@types/better-sqlite3':
@@ -607,17 +607,17 @@ importers:
   packages/passport:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/orm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orm
     devDependencies:
       '@rudderjs/rudder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../rudder
       '@types/node':
         specifier: ^20.0.0
@@ -632,7 +632,7 @@ importers:
   packages/pennant:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       reflect-metadata:
         specifier: ^0.2.2
@@ -657,28 +657,28 @@ importers:
   packages/pulse:
     dependencies:
       '@rudderjs/cache':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../cache
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/log':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../log
       '@rudderjs/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@rudderjs/orm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orm
       '@rudderjs/queue':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../queue
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
     devDependencies:
       '@types/better-sqlite3':
@@ -698,11 +698,11 @@ importers:
   packages/queue:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
       '@types/node':
         specifier: ^20.0.0
@@ -714,7 +714,7 @@ importers:
   packages/queue-bullmq:
     dependencies:
       '@rudderjs/queue':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../queue
       bullmq:
         specifier: ^5.0.0
@@ -730,7 +730,7 @@ importers:
   packages/queue-inngest:
     dependencies:
       '@rudderjs/queue':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../queue
       inngest:
         specifier: ^3.0.0
@@ -746,7 +746,7 @@ importers:
   packages/router:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       reflect-metadata:
         specifier: ^0.2.2
@@ -784,14 +784,14 @@ importers:
   packages/sanctum:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@rudderjs/auth':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../auth
       '@types/node':
         specifier: ^20.0.0
@@ -803,7 +803,7 @@ importers:
   packages/schedule:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       croner:
         specifier: ^9.0.0
@@ -825,7 +825,7 @@ importers:
         specifier: ^1.19.9
         version: 1.19.9(hono@4.12.3)
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@vikejs/hono':
         specifier: ^0.2.0
@@ -844,10 +844,10 @@ importers:
   packages/session:
     dependencies:
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -864,7 +864,7 @@ importers:
   packages/socialite:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -877,7 +877,7 @@ importers:
   packages/storage:
     dependencies:
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -910,62 +910,62 @@ importers:
   packages/telescope:
     dependencies:
       '@rudderjs/cache':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../cache
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@rudderjs/log':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../log
       '@rudderjs/mail':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mail
       '@rudderjs/middleware':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../middleware
       '@rudderjs/notification':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../notification
       '@rudderjs/orm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../orm
       '@rudderjs/queue':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../queue
       '@rudderjs/router':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../router
       '@rudderjs/schedule':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../schedule
     devDependencies:
       '@rudderjs/ai':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../ai
       '@rudderjs/auth':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../auth
       '@rudderjs/broadcast':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../broadcast
       '@rudderjs/http':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../http
       '@rudderjs/live':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../live
       '@rudderjs/mcp':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mcp
       '@rudderjs/rudder':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../rudder
       '@rudderjs/support':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../support
       '@types/better-sqlite3':
         specifier: ^7.6.0
@@ -987,10 +987,10 @@ importers:
         specifier: '>=8.0.0'
         version: 10.4.0
       '@rudderjs/contracts':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../contracts
       '@rudderjs/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':

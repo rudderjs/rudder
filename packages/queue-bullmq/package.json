@@ -29,7 +29,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/queue": "workspace:*",
+    "@rudderjs/queue": "workspace:^",
     "bullmq": "^5.0.0"
   },
   "devDependencies": {

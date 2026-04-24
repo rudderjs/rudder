@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
-    "@rudderjs/core": "workspace:*",
+    "@rudderjs/core": "workspace:^",
     "zod": "^3.23.0"
   },
   "devDependencies": {

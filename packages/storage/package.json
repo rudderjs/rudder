@@ -33,7 +33,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*"
+    "@rudderjs/core": "workspace:^"
   },
   "optionalDependencies": {
     "@aws-sdk/client-s3": "^3.0.0"

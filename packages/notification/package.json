@@ -33,9 +33,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
-    "@rudderjs/mail": "workspace:*",
-    "@rudderjs/orm": "workspace:*"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/mail": "workspace:^",
+    "@rudderjs/orm": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

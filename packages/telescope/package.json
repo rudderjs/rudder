@@ -33,26 +33,26 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
-    "@rudderjs/contracts": "workspace:*"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/contracts": "workspace:^"
   },
   "peerDependencies": {
-    "@rudderjs/router": "workspace:*",
-    "@rudderjs/rudder": "workspace:*",
-    "@rudderjs/log": "workspace:*",
-    "@rudderjs/orm": "workspace:*",
-    "@rudderjs/cache": "workspace:*",
-    "@rudderjs/queue": "workspace:*",
-    "@rudderjs/mail": "workspace:*",
-    "@rudderjs/notification": "workspace:*",
-    "@rudderjs/schedule": "workspace:*",
-    "@rudderjs/middleware": "workspace:*",
-    "@rudderjs/broadcast": "workspace:*",
-    "@rudderjs/live": "workspace:*",
-    "@rudderjs/http": "workspace:*",
-    "@rudderjs/auth": "workspace:*",
-    "@rudderjs/ai": "workspace:*",
-    "@rudderjs/mcp": "workspace:*"
+    "@rudderjs/router": "workspace:^",
+    "@rudderjs/rudder": "workspace:^",
+    "@rudderjs/log": "workspace:^",
+    "@rudderjs/orm": "workspace:^",
+    "@rudderjs/cache": "workspace:^",
+    "@rudderjs/queue": "workspace:^",
+    "@rudderjs/mail": "workspace:^",
+    "@rudderjs/notification": "workspace:^",
+    "@rudderjs/schedule": "workspace:^",
+    "@rudderjs/middleware": "workspace:^",
+    "@rudderjs/broadcast": "workspace:^",
+    "@rudderjs/live": "workspace:^",
+    "@rudderjs/http": "workspace:^",
+    "@rudderjs/auth": "workspace:^",
+    "@rudderjs/ai": "workspace:^",
+    "@rudderjs/mcp": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/rudder": {
@@ -102,14 +102,14 @@
     "better-sqlite3": "^11.0.0"
   },
   "devDependencies": {
-    "@rudderjs/rudder": "workspace:*",
-    "@rudderjs/broadcast": "workspace:*",
-    "@rudderjs/live": "workspace:*",
-    "@rudderjs/http": "workspace:*",
-    "@rudderjs/auth": "workspace:*",
-    "@rudderjs/ai": "workspace:*",
-    "@rudderjs/mcp": "workspace:*",
-    "@rudderjs/support": "workspace:*",
+    "@rudderjs/rudder": "workspace:^",
+    "@rudderjs/broadcast": "workspace:^",
+    "@rudderjs/live": "workspace:^",
+    "@rudderjs/http": "workspace:^",
+    "@rudderjs/auth": "workspace:^",
+    "@rudderjs/ai": "workspace:^",
+    "@rudderjs/mcp": "workspace:^",
+    "@rudderjs/support": "workspace:^",
     "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "typescript": "^5.4.0"

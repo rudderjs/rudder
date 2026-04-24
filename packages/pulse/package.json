@@ -33,16 +33,16 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
-    "@rudderjs/contracts": "workspace:*"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/contracts": "workspace:^"
   },
   "peerDependencies": {
-    "@rudderjs/router": "workspace:*",
-    "@rudderjs/middleware": "workspace:*",
-    "@rudderjs/log": "workspace:*",
-    "@rudderjs/orm": "workspace:*",
-    "@rudderjs/cache": "workspace:*",
-    "@rudderjs/queue": "workspace:*"
+    "@rudderjs/router": "workspace:^",
+    "@rudderjs/middleware": "workspace:^",
+    "@rudderjs/log": "workspace:^",
+    "@rudderjs/orm": "workspace:^",
+    "@rudderjs/cache": "workspace:^",
+    "@rudderjs/queue": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/log": {

@@ -53,13 +53,13 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
-    "@rudderjs/core": "workspace:*",
+    "@rudderjs/core": "workspace:^",
     "reflect-metadata": "^0.2.0",
     "zod": "^3.23.0"
   },
   "peerDependencies": {
-    "@rudderjs/router": "workspace:*",
-    "@rudderjs/rudder": "workspace:*"
+    "@rudderjs/router": "workspace:^",
+    "@rudderjs/rudder": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/router": {
@@ -70,8 +70,8 @@
     }
   },
   "devDependencies": {
-    "@rudderjs/router": "workspace:*",
-    "@rudderjs/rudder": "workspace:*",
+    "@rudderjs/router": "workspace:^",
+    "@rudderjs/rudder": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

@@ -28,7 +28,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/contracts": "workspace:*",
+    "@rudderjs/contracts": "workspace:^",
     "@hono/node-server": "^1.19.9",
     "@vikejs/hono": "^0.2.0",
     "hono": "^4.12.0"

@@ -41,7 +41,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
+    "@rudderjs/core": "workspace:^",
     "zod": "^4.0.0"
   },
   "optionalDependencies": {
@@ -51,7 +51,7 @@
     "cohere-ai": ">=7.0.0"
   },
   "devDependencies": {
-    "@rudderjs/rudder": "workspace:*",
+    "@rudderjs/rudder": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

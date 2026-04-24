@@ -35,7 +35,7 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*"
+    "@rudderjs/core": "workspace:^"
   },
   "optionalDependencies": {
     "ioredis": "^5.3.0"

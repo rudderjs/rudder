@@ -33,7 +33,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/contracts": "workspace:*"
+    "@rudderjs/contracts": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

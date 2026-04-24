@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.38.0",
-    "@rudderjs/contracts": "workspace:*"
+    "@rudderjs/contracts": "workspace:^"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.0.0",

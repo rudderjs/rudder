@@ -32,7 +32,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*"
+    "@rudderjs/core": "workspace:^"
   },
   "optionalDependencies": {
     "nodemailer": "^6.9.0"

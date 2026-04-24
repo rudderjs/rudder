@@ -33,10 +33,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*"
+    "@rudderjs/core": "workspace:^"
   },
   "peerDependencies": {
-    "@rudderjs/router": "workspace:*"
+    "@rudderjs/router": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@rudderjs/router": {
@@ -44,7 +44,7 @@
     }
   },
   "devDependencies": {
-    "@rudderjs/router": "workspace:*",
+    "@rudderjs/router": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

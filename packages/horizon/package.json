@@ -33,13 +33,13 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
-    "@rudderjs/contracts": "workspace:*",
-    "@rudderjs/queue": "workspace:*"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/contracts": "workspace:^",
+    "@rudderjs/queue": "workspace:^"
   },
   "peerDependencies": {
-    "@rudderjs/router": "workspace:*",
-    "@rudderjs/middleware": "workspace:*"
+    "@rudderjs/router": "workspace:^",
+    "@rudderjs/middleware": "workspace:^"
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.0.0"

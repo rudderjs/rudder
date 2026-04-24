@@ -41,12 +41,12 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
-    "@rudderjs/contracts": "workspace:*",
-    "@rudderjs/orm": "workspace:*"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/contracts": "workspace:^",
+    "@rudderjs/orm": "workspace:^"
   },
   "devDependencies": {
-    "@rudderjs/rudder": "workspace:*",
+    "@rudderjs/rudder": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0",
     "tsx": "^4.0.0"

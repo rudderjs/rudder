@@ -28,8 +28,8 @@
     "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
   },
   "dependencies": {
-    "@rudderjs/core": "workspace:*",
-    "@rudderjs/contracts": "workspace:*"
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/contracts": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.19.0"
