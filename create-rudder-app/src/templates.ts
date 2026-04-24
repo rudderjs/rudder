@@ -959,10 +959,72 @@ function semanticRulesApply(): string {
 }
 
 .error-wrap {
-  @apply flex min-h-svh flex-col items-center justify-center gap-2;
+  @apply flex min-h-svh flex-col items-center justify-center gap-4 p-4;
 }
 .error-link {
   @apply mt-4 text-sm underline transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}
+.empty-state {
+  @apply py-8 text-center text-sm text-zinc-500 dark:text-zinc-400;
+}
+
+/* Todo list */
+.form-inline {
+  @apply flex w-full max-w-md gap-2;
+}
+.todo-list {
+  @apply flex w-full max-w-md flex-col gap-2;
+}
+.todo-item {
+  @apply flex items-center gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800;
+}
+.todo-item.is-done span {
+  @apply line-through text-zinc-500 dark:text-zinc-400;
+}
+.todo-item span {
+  @apply flex-1;
+}
+.todo-item input[type="checkbox"] {
+  @apply h-4 w-4 cursor-pointer;
+}
+.link-danger {
+  @apply text-xs text-red-600 hover:underline dark:text-red-400;
+}
+
+/* AI chat */
+.chat-wrap {
+  @apply flex min-h-svh flex-col items-center p-4;
+}
+.chat-column {
+  @apply flex w-full max-w-2xl flex-1 flex-col;
+}
+.chat-header {
+  @apply mb-4 flex items-center justify-between;
+}
+.chat-log {
+  @apply flex-1 space-y-3 overflow-y-auto rounded-lg border border-zinc-200 p-4 dark:border-zinc-800;
+  max-height: calc(100svh - 180px);
+}
+.chat-row {
+  @apply flex;
+}
+.chat-row.is-user {
+  @apply justify-end;
+}
+.chat-row.is-assistant {
+  @apply justify-start;
+}
+.chat-bubble {
+  @apply max-w-[80%] rounded-lg px-3 py-2 text-sm;
+}
+.chat-bubble.is-user {
+  @apply bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900;
+}
+.chat-bubble.is-assistant {
+  @apply bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100;
+}
+.chat-input {
+  @apply mt-3;
 }
 `
 }
@@ -1259,7 +1321,7 @@ a { color: inherit; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 1rem;
   padding: 1rem;
   text-align: center;
 }
@@ -1270,6 +1332,114 @@ a { color: inherit; }
   transition: color 150ms;
 }
 .error-link:hover { color: var(--fg-strong); }
+.empty-state {
+  padding: 2rem 0;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+}
+
+/* Todo list */
+.form-inline {
+  display: flex;
+  width: 100%;
+  max-width: 28rem;
+  gap: 0.5rem;
+}
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 28rem;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  background: var(--surface);
+}
+.todo-item span { flex: 1; }
+.todo-item input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+.todo-item.is-done span {
+  text-decoration: line-through;
+  color: var(--fg-muted);
+}
+.link-danger {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--danger-fg);
+  text-decoration: none;
+}
+.link-danger:hover { text-decoration: underline; }
+
+/* AI chat */
+.chat-wrap {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+}
+.chat-column {
+  display: flex;
+  width: 100%;
+  max-width: 42rem;
+  flex: 1;
+  flex-direction: column;
+}
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.chat-log {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: var(--surface);
+  max-height: calc(100svh - 180px);
+}
+.chat-row { display: flex; }
+.chat-row.is-user { justify-content: flex-end; }
+.chat-row.is-assistant { justify-content: flex-start; }
+.chat-bubble {
+  max-width: 80%;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+.chat-bubble.is-user {
+  background: var(--fg-strong);
+  color: var(--bg-start);
+}
+.chat-bubble.is-assistant {
+  background: var(--surface-muted);
+  color: var(--fg);
+}
+.chat-input {
+  margin-top: 0.75rem;
+}
 `
 }
 
@@ -2265,8 +2435,8 @@ function pagesIndexPage(ctx: TemplateContext): string {
 function pagesIndexPageReact(ctx: TemplateContext): string {
   const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
-  if (ctx.withTodo) extraLinks.push('        <a href="/todos" className="underline hover:text-foreground">Todos</a>')
-  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="underline hover:text-foreground">AI Chat</a>')
+  if (ctx.withTodo) extraLinks.push('        <a href="/todos" className="auth-link">Todos</a>')
+  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="auth-link">AI Chat</a>')
   const extraLinksStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
   if (!ctx.packages.auth) {
@@ -2277,12 +2447,12 @@ export default function Page() {
   const data = useData<Data>()
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 className="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p className="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+    <div className="error-wrap">
+      <h1 className="heading-lg">${ctx.name}</h1>
+      <p className="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
-      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <a href="/api/health" className="underline hover:text-foreground">API Health</a>${extraLinksStr}
+      <div className="footer-links muted">
+        <a href="/api/health" className="auth-link">API Health</a>${extraLinksStr}
       </div>
     </div>
   )
@@ -2291,7 +2461,7 @@ export default function Page() {
   }
 
   const todosLink = ctx.withTodo
-    ? `          <a href="/todos" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    ? `          <a href="/todos" className="nav-button">View Todos</a>`
     : ''
 
   return `${cssImport}import { useState } from 'react'
@@ -2312,36 +2482,31 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 className="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p className="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+    <div className="error-wrap">
+      <h1 className="heading-lg">${ctx.name}</h1>
+      <p className="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
       {user ? (
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-sm text-muted-foreground">
-            Signed in as <span className="font-medium text-foreground">{user.name}</span>
+        <>
+          <p className="nav-badge">
+            Signed in as <strong>{user.name}</strong>
           </p>
-          <div className="flex gap-2">
+          <div className="footer-links">
 ${todosLink}
-            <button
-              onClick={signOut}
-              className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent"
-            >
-              Sign out
-            </button>
+            <button onClick={signOut} className="nav-button">Sign out</button>
           </div>
-        </div>
+        </>
       ) : (
-        <div className="flex gap-2">
+        <div className="footer-links">
 ${todosLink}
-          <a href="/register" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
-          <a href="/login" className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>
+          <a href="/register" className="nav-button">Register</a>
+          <a href="/login" className="nav-button">Login</a>
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <a href="/api/health" className="underline hover:text-foreground">API Health</a>
-        <a href="/api/me" className="underline hover:text-foreground">Session Info</a>${extraLinksStr}
+      <div className="footer-links muted">
+        <a href="/api/health" className="auth-link">API Health</a>
+        <a href="/api/me" className="auth-link">Session Info</a>${extraLinksStr}
       </div>
     </div>
   )
@@ -2352,8 +2517,8 @@ ${todosLink}
 function pagesIndexPageVue(ctx: TemplateContext): string {
   const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
-  if (ctx.withTodo) extraLinks.push('      <a href="/todos" class="underline hover:text-foreground">Todos</a>')
-  if (ctx.packages.ai) extraLinks.push('      <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
+  if (ctx.withTodo) extraLinks.push('      <a href="/todos" class="auth-link">Todos</a>')
+  if (ctx.packages.ai) extraLinks.push('      <a href="/ai-chat" class="auth-link">AI Chat</a>')
   const extraStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
   if (!ctx.packages.auth) {
@@ -2365,12 +2530,12 @@ const data = useData<Data>()
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-    <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-    <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+  <div class="error-wrap">
+    <h1 class="heading-lg">${ctx.name}</h1>
+    <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
-    <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-      <a href="/api/health" class="underline hover:text-foreground">API Health</a>${extraStr}
+    <div class="footer-links muted">
+      <a href="/api/health" class="auth-link">API Health</a>${extraStr}
     </div>
   </div>
 </template>
@@ -2378,7 +2543,7 @@ const data = useData<Data>()
   }
 
   const todosLink = ctx.withTodo
-    ? `\n      <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    ? `\n      <a href="/todos" class="nav-button">View Todos</a>`
     : ''
 
   return `<script setup lang="ts">
@@ -2400,28 +2565,26 @@ async function signOut() {
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-    <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-    <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+  <div class="error-wrap">
+    <h1 class="heading-lg">${ctx.name}</h1>
+    <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
-    <div v-if="user" class="flex flex-col items-center gap-3">
-      <p class="text-sm text-muted-foreground">
-        Signed in as <span class="font-medium text-foreground">{{ user.name }}</span>
+    <template v-if="user">
+      <p class="nav-badge">
+        Signed in as <strong>{{ user.name }}</strong>
       </p>
-      <div class="flex gap-2">${todosLink}
-        <button @click="signOut" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">
-          Sign out
-        </button>
+      <div class="footer-links">${todosLink}
+        <button @click="signOut" class="nav-button">Sign out</button>
       </div>
-    </div>
-    <div v-else class="flex gap-2">${todosLink}
-      <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
-      <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>
+    </template>
+    <div v-else class="footer-links">${todosLink}
+      <a href="/register" class="nav-button">Register</a>
+      <a href="/login" class="nav-button">Login</a>
     </div>
 
-    <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-      <a href="/api/health" class="underline hover:text-foreground">API Health</a>
-      <a href="/api/me" class="underline hover:text-foreground">Session Info</a>${extraStr}
+    <div class="footer-links muted">
+      <a href="/api/health" class="auth-link">API Health</a>
+      <a href="/api/me" class="auth-link">Session Info</a>${extraStr}
     </div>
   </div>
 </template>
@@ -2431,8 +2594,8 @@ async function signOut() {
 function pagesIndexPageSolid(ctx: TemplateContext): string {
   const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
-  if (ctx.withTodo) extraLinks.push('        <a href="/todos" class="underline hover:text-foreground">Todos</a>')
-  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
+  if (ctx.withTodo) extraLinks.push('        <a href="/todos" class="auth-link">Todos</a>')
+  if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" class="auth-link">AI Chat</a>')
   const extraStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
   if (!ctx.packages.auth) {
@@ -2443,12 +2606,12 @@ export default function Page() {
   const data = useData<Data>()
 
   return (
-    <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+    <div class="error-wrap">
+      <h1 class="heading-lg">${ctx.name}</h1>
+      <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
-      <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <a href="/api/health" class="underline hover:text-foreground">API Health</a>${extraStr}
+      <div class="footer-links muted">
+        <a href="/api/health" class="auth-link">API Health</a>${extraStr}
       </div>
     </div>
   )
@@ -2457,10 +2620,10 @@ export default function Page() {
   }
 
   const todosLink = ctx.withTodo
-    ? `\n        <a href="/todos" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Todos</a>`
+    ? `\n            <a href="/todos" class="nav-button">View Todos</a>`
     : ''
 
-  return `${cssImport}import { createSignal } from 'solid-js'
+  return `${cssImport}import { createSignal, Show } from 'solid-js'
 import { useData } from 'vike-solid/useData'
 import type { Data } from './+data.js'
 
@@ -2478,34 +2641,30 @@ export default function Page() {
   }
 
   return (
-    <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 class="text-4xl font-bold tracking-tight">${ctx.name}</h1>
-      <p class="text-muted-foreground">Built with RudderJS — Laravel-inspired Node.js framework.</p>
+    <div class="error-wrap">
+      <h1 class="heading-lg">${ctx.name}</h1>
+      <p class="muted">Built with RudderJS — Laravel-inspired Node.js framework.</p>
 
-      {user() ? (
-        <div class="flex flex-col items-center gap-3">
-          <p class="text-sm text-muted-foreground">
-            Signed in as <span class="font-medium text-foreground">{user()!.name}</span>
-          </p>
-          <div class="flex gap-2">${todosLink}
-            <button
-              onClick={signOut}
-              class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent"
-            >
-              Sign out
-            </button>
+      <Show
+        when={user()}
+        fallback={
+          <div class="footer-links">${todosLink}
+            <a href="/register" class="nav-button">Register</a>
+            <a href="/login" class="nav-button">Login</a>
           </div>
+        }
+      >
+        <p class="nav-badge">
+          Signed in as <strong>{user()!.name}</strong>
+        </p>
+        <div class="footer-links">${todosLink}
+          <button onClick={signOut} class="nav-button">Sign out</button>
         </div>
-      ) : (
-        <div class="flex gap-2">${todosLink}
-          <a href="/register" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Register</a>
-          <a href="/login" class="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium hover:bg-accent">Login</a>
-        </div>
-      )}
+      </Show>
 
-      <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <a href="/api/health" class="underline hover:text-foreground">API Health</a>
-        <a href="/api/me" class="underline hover:text-foreground">Session Info</a>${extraStr}
+      <div class="footer-links muted">
+        <a href="/api/health" class="auth-link">API Health</a>
+        <a href="/api/me" class="auth-link">Session Info</a>${extraStr}
       </div>
     </div>
   )
@@ -3268,54 +3427,39 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
-      <h1 className="text-3xl font-bold">Todos</h1>
+    <div className="error-wrap">
+      <h1 className="heading-lg">Todos</h1>
 
-      <form onSubmit={addTodo} className="flex w-full max-w-md gap-2">
+      <form onSubmit={addTodo} className="form-inline">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           placeholder="Add a new todo..."
-          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="form-input"
         />
-        <button
-          type="submit"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Add
-        </button>
+        <button type="submit" className="form-submit">Add</button>
       </form>
 
-      <ul className="w-full max-w-md space-y-2">
+      <ul className="todo-list">
         {todos.map(todo => (
-          <li key={todo.id} className="flex items-center gap-3 rounded-lg border p-3">
+          <li key={todo.id} className={\`todo-item\${todo.completed ? ' is-done' : ''}\`}>
             <input
               type="checkbox"
               checked={todo.completed}
               onChange={() => toggleTodo(todo.id, todo.completed)}
-              className="h-4 w-4 cursor-pointer"
             />
-            <span className={\`flex-1 text-sm \${todo.completed ? 'line-through text-muted-foreground' : ''}\`}>
-              {todo.title}
-            </span>
-            <button
-              onClick={() => deleteTodo(todo.id)}
-              className="text-xs text-destructive hover:underline"
-            >
+            <span>{todo.title}</span>
+            <button onClick={() => deleteTodo(todo.id)} className="link-danger">
               Delete
             </button>
           </li>
         ))}
         {todos.length === 0 && (
-          <li className="py-8 text-center text-sm text-muted-foreground">
-            No todos yet. Add one above!
-          </li>
+          <li className="empty-state">No todos yet. Add one above!</li>
         )}
       </ul>
 
-      <a href="/" className="text-sm text-muted-foreground underline hover:text-foreground">
-        ← Back to home
-      </a>
+      <a href="/" className="auth-link muted">← Back to home</a>
     </div>
   )
 }
@@ -3363,46 +3507,24 @@ async function deleteTodo(id: string) {
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
-    <h1 class="text-3xl font-bold">Todos</h1>
+  <div class="error-wrap">
+    <h1 class="heading-lg">Todos</h1>
 
-    <form @submit="addTodo" class="flex w-full max-w-md gap-2">
-      <input
-        v-model="input"
-        placeholder="Add a new todo..."
-        class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-      />
-      <button
-        type="submit"
-        class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-      >
-        Add
-      </button>
+    <form @submit="addTodo" class="form-inline">
+      <input v-model="input" placeholder="Add a new todo..." class="form-input" />
+      <button type="submit" class="form-submit">Add</button>
     </form>
 
-    <ul class="w-full max-w-md space-y-2">
-      <li v-for="todo in todos" :key="todo.id" class="flex items-center gap-3 rounded-lg border p-3">
-        <input
-          type="checkbox"
-          :checked="todo.completed"
-          @change="toggleTodo(todo.id, todo.completed)"
-          class="h-4 w-4 cursor-pointer"
-        />
-        <span :class="['flex-1 text-sm', todo.completed ? 'line-through text-muted-foreground' : '']">
-          {{ todo.title }}
-        </span>
-        <button @click="deleteTodo(todo.id)" class="text-xs text-destructive hover:underline">
-          Delete
-        </button>
+    <ul class="todo-list">
+      <li v-for="todo in todos" :key="todo.id" :class="['todo-item', todo.completed ? 'is-done' : '']">
+        <input type="checkbox" :checked="todo.completed" @change="toggleTodo(todo.id, todo.completed)" />
+        <span>{{ todo.title }}</span>
+        <button @click="deleteTodo(todo.id)" class="link-danger">Delete</button>
       </li>
-      <li v-if="todos.length === 0" class="py-8 text-center text-sm text-muted-foreground">
-        No todos yet. Add one above!
-      </li>
+      <li v-if="todos.length === 0" class="empty-state">No todos yet. Add one above!</li>
     </ul>
 
-    <a href="/" class="text-sm text-muted-foreground underline hover:text-foreground">
-      ← Back to home
-    </a>
+    <a href="/" class="auth-link muted">← Back to home</a>
   </div>
 </template>
 `
@@ -3449,50 +3571,36 @@ export default function Page() {
   }
 
   return (
-    <div class="flex min-h-svh flex-col items-center justify-center gap-6 p-4">
-      <h1 class="text-3xl font-bold">Todos</h1>
+    <div class="error-wrap">
+      <h1 class="heading-lg">Todos</h1>
 
-      <form onSubmit={addTodo} class="flex w-full max-w-md gap-2">
+      <form onSubmit={addTodo} class="form-inline">
         <input
           value={input()}
           onInput={e => setInput(e.currentTarget.value)}
           placeholder="Add a new todo..."
-          class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          class="form-input"
         />
-        <button
-          type="submit"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Add
-        </button>
+        <button type="submit" class="form-submit">Add</button>
       </form>
 
-      <ul class="w-full max-w-md space-y-2">
-        <For each={todos()} fallback={
-          <li class="py-8 text-center text-sm text-muted-foreground">No todos yet. Add one above!</li>
-        }>
+      <ul class="todo-list">
+        <For each={todos()} fallback={<li class="empty-state">No todos yet. Add one above!</li>}>
           {(todo) => (
-            <li class="flex items-center gap-3 rounded-lg border p-3">
+            <li class={\`todo-item\${todo.completed ? ' is-done' : ''}\`}>
               <input
                 type="checkbox"
                 checked={todo.completed}
                 onChange={() => toggleTodo(todo.id, todo.completed)}
-                class="h-4 w-4 cursor-pointer"
               />
-              <span class={\`flex-1 text-sm \${todo.completed ? 'line-through text-muted-foreground' : ''}\`}>
-                {todo.title}
-              </span>
-              <button onClick={() => deleteTodo(todo.id)} class="text-xs text-destructive hover:underline">
-                Delete
-              </button>
+              <span>{todo.title}</span>
+              <button onClick={() => deleteTodo(todo.id)} class="link-danger">Delete</button>
             </li>
           )}
         </For>
       </ul>
 
-      <a href="/" class="text-sm text-muted-foreground underline hover:text-foreground">
-        ← Back to home
-      </a>
+      <a href="/" class="auth-link muted">← Back to home</a>
     </div>
   )
 }
@@ -3582,48 +3690,40 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center p-4">
-      <div className="flex w-full max-w-2xl flex-1 flex-col">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">AI Chat</h1>
-          <a href="/" className="text-sm text-muted-foreground underline hover:text-foreground">← Home</a>
+    <div className="chat-wrap">
+      <div className="chat-column">
+        <div className="chat-header">
+          <h1 className="heading-lg">AI Chat</h1>
+          <a href="/" className="auth-link muted">← Home</a>
         </div>
 
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto rounded-lg border p-4" style={{ maxHeight: 'calc(100svh - 180px)' }}>
+        <div ref={scrollRef} className="chat-log">
           {messages.length === 0 && (
-            <p className="py-12 text-center text-sm text-muted-foreground">Send a message to start chatting.</p>
+            <p className="empty-state">Send a message to start chatting.</p>
           )}
           {messages.map((msg, i) => (
-            <div key={i} className={\`flex \${msg.role === 'user' ? 'justify-end' : 'justify-start'}\`}>
-              <div className={\`max-w-[80%] rounded-lg px-3 py-2 text-sm \${
-                msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-foreground'
-              }\`}>
+            <div key={i} className={\`chat-row \${msg.role === 'user' ? 'is-user' : 'is-assistant'}\`}>
+              <div className={\`chat-bubble \${msg.role === 'user' ? 'is-user' : 'is-assistant'}\`}>
                 {msg.content}
               </div>
             </div>
           ))}
           {loading && (
-            <div className="flex justify-start">
-              <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Thinking...</div>
+            <div className="chat-row is-assistant">
+              <div className="chat-bubble is-assistant muted">Thinking...</div>
             </div>
           )}
         </div>
 
-        <form onSubmit={send} className="mt-3 flex gap-2">
+        <form onSubmit={send} className="form-inline chat-input">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Type a message..."
             disabled={loading}
-            className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            className="form-input"
           />
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className="form-submit">
             Send
           </button>
         </form>
@@ -3677,39 +3777,28 @@ async function send(e: Event) {
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center p-4">
-    <div class="flex w-full max-w-2xl flex-1 flex-col">
-      <div class="mb-4 flex items-center justify-between">
-        <h1 class="text-2xl font-bold">AI Chat</h1>
-        <a href="/" class="text-sm text-muted-foreground underline hover:text-foreground">← Home</a>
+  <div class="chat-wrap">
+    <div class="chat-column">
+      <div class="chat-header">
+        <h1 class="heading-lg">AI Chat</h1>
+        <a href="/" class="auth-link muted">← Home</a>
       </div>
 
-      <div ref="scrollEl" class="flex-1 space-y-3 overflow-y-auto rounded-lg border p-4" :style="{ maxHeight: 'calc(100svh - 180px)' }">
-        <p v-if="messages.length === 0" class="py-12 text-center text-sm text-muted-foreground">Send a message to start chatting.</p>
-        <div v-for="(msg, i) in messages" :key="i" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
-          <div :class="['max-w-[80%] rounded-lg px-3 py-2 text-sm', msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground']">
+      <div ref="scrollEl" class="chat-log">
+        <p v-if="messages.length === 0" class="empty-state">Send a message to start chatting.</p>
+        <div v-for="(msg, i) in messages" :key="i" :class="['chat-row', msg.role === 'user' ? 'is-user' : 'is-assistant']">
+          <div :class="['chat-bubble', msg.role === 'user' ? 'is-user' : 'is-assistant']">
             {{ msg.content }}
           </div>
         </div>
-        <div v-if="loading" class="flex justify-start">
-          <div class="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Thinking...</div>
+        <div v-if="loading" class="chat-row is-assistant">
+          <div class="chat-bubble is-assistant muted">Thinking...</div>
         </div>
       </div>
 
-      <form @submit="send" class="mt-3 flex gap-2">
-        <input
-          v-model="input"
-          placeholder="Type a message..."
-          :disabled="loading"
-          class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          :disabled="loading"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          Send
-        </button>
+      <form @submit="send" class="form-inline chat-input">
+        <input v-model="input" placeholder="Type a message..." :disabled="loading" class="form-input" />
+        <button type="submit" :disabled="loading" class="form-submit">Send</button>
       </form>
     </div>
   </div>
@@ -3763,50 +3852,42 @@ export default function Page() {
   }
 
   return (
-    <div class="flex min-h-svh flex-col items-center p-4">
-      <div class="flex w-full max-w-2xl flex-1 flex-col">
-        <div class="mb-4 flex items-center justify-between">
-          <h1 class="text-2xl font-bold">AI Chat</h1>
-          <a href="/" class="text-sm text-muted-foreground underline hover:text-foreground">← Home</a>
+    <div class="chat-wrap">
+      <div class="chat-column">
+        <div class="chat-header">
+          <h1 class="heading-lg">AI Chat</h1>
+          <a href="/" class="auth-link muted">← Home</a>
         </div>
 
-        <div ref={scrollEl} class="flex-1 space-y-3 overflow-y-auto rounded-lg border p-4" style={{ "max-height": 'calc(100svh - 180px)' }}>
+        <div ref={scrollEl} class="chat-log">
           <Show when={messages().length === 0}>
-            <p class="py-12 text-center text-sm text-muted-foreground">Send a message to start chatting.</p>
+            <p class="empty-state">Send a message to start chatting.</p>
           </Show>
           <For each={messages()}>
             {(msg) => (
-              <div class={\`flex \${msg.role === 'user' ? 'justify-end' : 'justify-start'}\`}>
-                <div class={\`max-w-[80%] rounded-lg px-3 py-2 text-sm \${
-                  msg.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-foreground'
-                }\`}>
+              <div class={\`chat-row \${msg.role === 'user' ? 'is-user' : 'is-assistant'}\`}>
+                <div class={\`chat-bubble \${msg.role === 'user' ? 'is-user' : 'is-assistant'}\`}>
                   {msg.content}
                 </div>
               </div>
             )}
           </For>
           <Show when={loading()}>
-            <div class="flex justify-start">
-              <div class="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Thinking...</div>
+            <div class="chat-row is-assistant">
+              <div class="chat-bubble is-assistant muted">Thinking...</div>
             </div>
           </Show>
         </div>
 
-        <form onSubmit={send} class="mt-3 flex gap-2">
+        <form onSubmit={send} class="form-inline chat-input">
           <input
             value={input()}
             onInput={e => setInput(e.currentTarget.value)}
             placeholder="Type a message..."
             disabled={loading()}
-            class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            class="form-input"
           />
-          <button
-            type="submit"
-            disabled={loading()}
-            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading()} class="form-submit">
             Send
           </button>
         </form>
@@ -3849,78 +3930,44 @@ export default {
 }
 
 function demoPage(fw: 'react' | 'vue' | 'solid', ctx: TemplateContext): string {
-  const { primary, tailwind } = ctx
+  const { primary } = ctx
 
   switch (fw) {
     case 'react':
-      if (tailwind) {
-        return `export default function Page() {
-  return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 className="text-2xl font-bold">Hello from React</h1>
-      <p className="text-muted-foreground">React demo page — running alongside ${primary}.</p>
-      <a href="/" className="text-sm underline">← Back to home</a>
-    </div>
-  )
-}
-`
-      }
       return `export default function Page() {
   return (
-    <div>
-      <h1>Hello from React</h1>
-      <p>React demo page — running alongside ${primary}.</p>
-      <a href="/">← Back to home</a>
+    <div className="error-wrap">
+      <h1 className="heading-lg">Hello from React</h1>
+      <p className="muted">React demo page — running alongside ${primary}.</p>
+      <a href="/" className="auth-link muted">← Back to home</a>
     </div>
   )
 }
 `
 
     case 'vue':
-      if (tailwind) {
-        return `<script setup lang="ts">
+      return `<script setup lang="ts">
 import '@/index.css'
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-    <h1 class="text-2xl font-bold">Hello from Vue</h1>
-    <p class="text-muted-foreground">Vue demo page — running alongside ${primary}.</p>
-    <a href="/" class="text-sm underline">← Back to home</a>
-  </div>
-</template>
-`
-      }
-      return `<template>
-  <div>
-    <h1>Hello from Vue</h1>
-    <p>Vue demo page — running alongside ${primary}.</p>
-    <a href="/">← Back to home</a>
+  <div class="error-wrap">
+    <h1 class="heading-lg">Hello from Vue</h1>
+    <p class="muted">Vue demo page — running alongside ${primary}.</p>
+    <a href="/" class="auth-link muted">← Back to home</a>
   </div>
 </template>
 `
 
     case 'solid':
-      if (tailwind) {
-        return `import '@/index.css'
+      return `import '@/index.css'
 
 export default function Page() {
   return (
-    <div class="flex min-h-svh flex-col items-center justify-center gap-4 p-4">
-      <h1 class="text-2xl font-bold">Hello from Solid</h1>
-      <p class="text-muted-foreground">Solid demo page — running alongside ${primary}.</p>
-      <a href="/" class="text-sm underline">← Back to home</a>
-    </div>
-  )
-}
-`
-      }
-      return `export default function Page() {
-  return (
-    <div>
-      <h1>Hello from Solid</h1>
-      <p>Solid demo page — running alongside ${primary}.</p>
-      <a href="/">← Back to home</a>
+    <div class="error-wrap">
+      <h1 class="heading-lg">Hello from Solid</h1>
+      <p class="muted">Solid demo page — running alongside ${primary}.</p>
+      <a href="/" class="auth-link muted">← Back to home</a>
     </div>
   )
 }
