@@ -71,24 +71,76 @@ describe('getTemplates() — core files always present', () => {
 // ─── Tailwind / shadcn ─────────────────────────────────────
 
 describe('getTemplates() — tailwind + shadcn', () => {
-  it('generates src/index.css when tailwind=true', () => {
-    const files = getTemplates(ctx({ tailwind: true }))
-    assert.ok('src/index.css' in files)
+  it('always generates src/index.css regardless of tailwind flag', () => {
+    // Both variants ship the same set of semantic class selectors;
+    // contents differ (Tailwind @apply vs plain CSS), existence does not.
+    assert.ok('src/index.css' in getTemplates(ctx({ tailwind: true })))
+    assert.ok('src/index.css' in getTemplates(ctx({ tailwind: false, shadcn: false })))
   })
 
-  it('does not generate src/index.css when tailwind=false', () => {
-    const files = getTemplates(ctx({ tailwind: false, shadcn: false }))
-    assert.ok(!('src/index.css' in files))
+  it('tailwind=true index.css contains @import "tailwindcss" + @apply rules', () => {
+    const css = getTemplates(ctx({ tailwind: true, shadcn: false }))['src/index.css']!
+    assert.ok(css.includes('@import "tailwindcss"'))
+    assert.ok(css.includes('@apply'))
   })
 
-  it('index.css contains shadcn import when shadcn=true', () => {
-    const files = getTemplates(ctx({ tailwind: true, shadcn: true }))
-    assert.ok(files['src/index.css']!.includes('shadcn/tailwind.css'))
+  it('tailwind=true index.css contains shadcn import when shadcn=true', () => {
+    const css = getTemplates(ctx({ tailwind: true, shadcn: true }))['src/index.css']!
+    assert.ok(css.includes('shadcn/tailwind.css'))
   })
 
-  it('index.css does not contain shadcn import when shadcn=false', () => {
-    const files = getTemplates(ctx({ tailwind: true, shadcn: false }))
-    assert.ok(!files['src/index.css']!.includes('shadcn/tailwind.css'))
+  it('tailwind=true index.css does not contain shadcn import when shadcn=false', () => {
+    const css = getTemplates(ctx({ tailwind: true, shadcn: false }))['src/index.css']!
+    assert.ok(!css.includes('shadcn/tailwind.css'))
+  })
+
+  it('tailwind=false index.css is hand-authored CSS with no Tailwind directives', () => {
+    const css = getTemplates(ctx({ tailwind: false, shadcn: false }))['src/index.css']!
+    assert.ok(!css.includes('@import "tailwindcss"'))
+    assert.ok(!css.includes('@apply'))
+    assert.ok(css.includes('@media (prefers-color-scheme: dark)'))
+    assert.ok(css.includes('--bg-start'))
+  })
+
+  it('tailwind=false index.css contains semantic class selectors', () => {
+    const css = getTemplates(ctx({ tailwind: false, shadcn: false }))['src/index.css']!
+    for (const selector of ['.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap']) {
+      assert.ok(css.includes(selector), `plain CSS missing selector ${selector}`)
+    }
+  })
+
+  it('tailwind=true index.css contains the same semantic class selectors', () => {
+    const css = getTemplates(ctx({ tailwind: true, shadcn: false }))['src/index.css']!
+    for (const selector of ['.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap']) {
+      assert.ok(css.includes(selector), `tailwind CSS missing selector ${selector}`)
+    }
+  })
+
+  it('Welcome view always imports index.css regardless of tailwind flag', () => {
+    const welcomePath = 'app/Views/Welcome.tsx'
+    assert.ok(getTemplates(ctx({ tailwind: true,  frameworks: ['react'], primary: 'react' }))[welcomePath]!.includes(`import '@/index.css'`))
+    assert.ok(getTemplates(ctx({ tailwind: false, shadcn: false, frameworks: ['react'], primary: 'react' }))[welcomePath]!.includes(`import '@/index.css'`))
+  })
+
+  it('tailwind=false omits tailwindcss deps from package.json', () => {
+    const pkg = getTemplates(ctx({ tailwind: false, shadcn: false }))['package.json']!
+    assert.ok(!pkg.includes('"tailwindcss"'))
+    assert.ok(!pkg.includes('"@tailwindcss/vite"'))
+    assert.ok(!pkg.includes('"tw-animate-css"'))
+  })
+
+  it('tailwind=false omits the tailwindcss() plugin from vite.config.ts', () => {
+    const vite = getTemplates(ctx({ tailwind: false, shadcn: false }))['vite.config.ts']!
+    assert.ok(!vite.includes('@tailwindcss/vite'))
+    assert.ok(!vite.includes('tailwindcss()'))
+  })
+
+  it('tailwind=true keeps the tailwindcss deps + vite plugin', () => {
+    const pkg  = getTemplates(ctx({ tailwind: true, shadcn: false }))['package.json']!
+    const vite = getTemplates(ctx({ tailwind: true, shadcn: false }))['vite.config.ts']!
+    assert.ok(pkg.includes('"tailwindcss"'))
+    assert.ok(pkg.includes('"@tailwindcss/vite"'))
+    assert.ok(vite.includes('@tailwindcss/vite'))
   })
 })
 

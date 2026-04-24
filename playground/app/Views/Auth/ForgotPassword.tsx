@@ -1,6 +1,7 @@
 import '@/index.css'
 import { useState } from 'react'
 
+// URL this view is served at — see Login.tsx for rationale.
 export const route = '/forgot-password'
 
 export interface ForgotPasswordProps {
@@ -43,31 +44,30 @@ export default function ForgotPassword(props: ForgotPasswordProps) {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Forgot password</h1>
-          <p className="text-sm text-gray-500 mt-1">Enter your email to receive a reset link</p>
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-head">
+          <h1 className="heading-lg">Forgot password</h1>
+          <p className="muted">Enter your email to receive a reset link</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border p-6 shadow-sm">
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-          {success && <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-600">{success}</p>}
+        <form onSubmit={handleSubmit} className="form-card">
+          {error && <p className="form-error">{error}</p>}
+          {success && <p className="form-success">{success}</p>}
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="email">Email</label>
+            <label className="form-label" htmlFor="email">Email</label>
             <input
               id="email" type="email" placeholder="you@example.com"
               value={email} onChange={e => setEmail(e.currentTarget.value)}
               required autoComplete="email"
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black"
+              className="form-input"
             />
           </div>
-          <button type="submit" disabled={loading}
-            className="w-full rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-black/90 disabled:opacity-50">
+          <button type="submit" disabled={loading} className="form-submit">
             {loading ? 'Sending...' : 'Send reset link'}
           </button>
-          <p className="text-center text-sm text-gray-500">
+          <p className="auth-head muted">
             Remember your password?{' '}
-            <a href={loginUrl} className="underline hover:text-black">Sign in</a>
+            <a href={loginUrl} className="auth-link">Sign in</a>
           </p>
         </form>
       </div>

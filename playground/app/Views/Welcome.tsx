@@ -78,55 +78,39 @@ export default function Welcome(props: WelcomeProps) {
   }
 
   return (
-    <div className="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+    <div className="page">
+      <nav className="page-nav">
+        <div className="brand">
+          <span className="brand-dot" />
           RudderJS
         </div>
-        <div className="flex items-center gap-4 text-sm">
+        <div className="nav-right">
           {props.user ? (
             <>
-              <span className="text-zinc-500 dark:text-zinc-400">
-                Signed in as{' '}
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">{props.user.name}</span>
+              <span className="nav-badge">
+                Signed in as <strong>{props.user.name}</strong>
               </span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-              >
+              <button type="button" onClick={handleSignOut} className="nav-button">
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <a
-                href={loginUrl}
-                className="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-              >
-                Log in
-              </a>
-              <a
-                href={registerUrl}
-                className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-              >
-                Register
-              </a>
+              <a href={loginUrl} className="nav-link">Log in</a>
+              <a href={registerUrl} className="nav-button">Register</a>
             </>
           )}
         </div>
       </nav>
 
-      <section className="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">{props.appName}</h1>
-        <p className="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+      <section className="hero">
+        <h1 className="hero-title">{props.appName}</h1>
+        <p className="hero-lead">
           Laravel&apos;s developer experience, Vike&apos;s performance, Node&apos;s ecosystem.
-          <br className="hidden sm:block" />
           This page is served by a controller, rendered through{' '}
-          <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view(&apos;welcome&apos;)</code>.
+          <code className="inline-code">view(&apos;welcome&apos;)</code>.
         </p>
-        <div className="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+        <div className="hero-meta">
           <span>RudderJS v{props.rudderVersion}</span>
           <span>•</span>
           <span>Node {props.nodeVersion}</span>
@@ -135,35 +119,25 @@ export default function Welcome(props: WelcomeProps) {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <section className="feature-section">
+        <div className="feature-grid">
           {features.map(f => (
-            <a
-              key={f.title}
-              href={f.href}
-              className="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
-            >
-              <h3 className="font-semibold">{f.title}</h3>
-              <p className="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
-                {f.description}
-              </p>
+            <a key={f.title} href={f.href} className="feature-card">
+              <h3 className="feature-title">{f.title}</h3>
+              <p className="feature-desc">{f.description}</p>
             </a>
           ))}
         </div>
       </section>
 
-      <footer className="border-t border-zinc-200 dark:border-zinc-900">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+      <footer className="page-footer">
+        <div className="footer-inner">
           <div>
             Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.
           </div>
-          <div className="flex gap-4">
-            <a href={docsUrl} className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">
-              Docs
-            </a>
-            <a href={githubUrl} className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">
-              GitHub
-            </a>
+          <div className="footer-links">
+            <a href={docsUrl} className="footer-link">Docs</a>
+            <a href={githubUrl} className="footer-link">GitHub</a>
           </div>
         </div>
       </footer>

@@ -2,6 +2,10 @@ import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
 
+// URL this view is served at — MUST match the controller route registered
+// by registerAuthRoutes() in the consumer project. If you override
+// `opts.paths.login` when calling registerAuthRoutes, update this too so
+// Vike's client router can SPA-navigate here instead of full-reloading.
 export const route = '/login'
 
 export interface LoginProps {
@@ -43,39 +47,38 @@ export default function Login(props: LoginProps) {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Welcome back</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-head">
+          <h1 className="heading-lg">Welcome back</h1>
+          <p className="muted">Sign in to your account</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border p-6 shadow-sm">
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        <form onSubmit={handleSubmit} className="form-card">
+          {error && <p className="form-error">{error}</p>}
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="email">Email</label>
+            <label className="form-label" htmlFor="email">Email</label>
             <input
               id="email" type="email" placeholder="you@example.com"
               value={email} onChange={e => setEmail(e.currentTarget.value)}
               required autoComplete="email"
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black"
+              className="form-input"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="password">Password</label>
+            <label className="form-label" htmlFor="password">Password</label>
             <input
               id="password" type="password" placeholder="••••••••"
               value={password} onChange={e => setPassword(e.currentTarget.value)}
               required autoComplete="current-password"
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black"
+              className="form-input"
             />
           </div>
-          <button type="submit" disabled={loading}
-            className="w-full rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-black/90 disabled:opacity-50">
+          <button type="submit" disabled={loading} className="form-submit">
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
-          <div className="flex items-center justify-between text-sm text-gray-500">
-            <a href={forgotPasswordUrl} className="underline hover:text-black">Forgot password?</a>
-            <a href={registerUrl} className="underline hover:text-black">Register</a>
+          <div className="form-link-row">
+            <a href={forgotPasswordUrl} className="auth-link">Forgot password?</a>
+            <a href={registerUrl} className="auth-link">Register</a>
           </div>
         </form>
       </div>

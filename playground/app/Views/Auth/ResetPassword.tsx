@@ -1,6 +1,7 @@
 import '@/index.css'
 import { useState, useEffect } from 'react'
 
+// URL this view is served at — see Login.tsx for rationale.
 export const route = '/reset-password'
 
 export interface ResetPasswordProps {
@@ -61,20 +62,20 @@ export default function ResetPassword(props: ResetPasswordProps) {
 
   if (!mounted) {
     return (
-      <div className="flex min-h-svh items-center justify-center p-4">
-        <div className="text-sm text-gray-500">Loading...</div>
+      <div className="auth-wrap">
+        <div className="muted">Loading...</div>
       </div>
     )
   }
 
   if (!token) {
     return (
-      <div className="flex min-h-svh items-center justify-center p-4">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="space-y-4 rounded-lg border p-6 shadow-sm">
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">Missing reset token.</p>
-            <p className="text-center text-sm text-gray-500">
-              <a href={forgotPasswordUrl} className="underline hover:text-black">Request a new reset link</a>
+      <div className="auth-wrap">
+        <div className="auth-card">
+          <div className="form-card">
+            <p className="form-error">Missing reset token.</p>
+            <p className="auth-head muted">
+              <a href={forgotPasswordUrl} className="auth-link">Request a new reset link</a>
             </p>
           </div>
         </div>
@@ -83,44 +84,43 @@ export default function ResetPassword(props: ResetPasswordProps) {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Reset password</h1>
-          <p className="text-sm text-gray-500 mt-1">Enter your new password</p>
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-head">
+          <h1 className="heading-lg">Reset password</h1>
+          <p className="muted">Enter your new password</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border p-6 shadow-sm">
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        <form onSubmit={handleSubmit} className="form-card">
+          {error && <p className="form-error">{error}</p>}
           {success && (
-            <div className="space-y-2">
-              <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-600">{success}</p>
-              <p className="text-center text-sm text-gray-500">
-                <a href={loginUrl} className="underline hover:text-black">Sign in</a>
+            <>
+              <p className="form-success">{success}</p>
+              <p className="auth-head muted">
+                <a href={loginUrl} className="auth-link">Sign in</a>
               </p>
-            </div>
+            </>
           )}
           {!success && (
             <>
               <div>
-                <label className="block text-sm font-medium mb-1" htmlFor="password">New password</label>
+                <label className="form-label" htmlFor="password">New password</label>
                 <input
                   id="password" type="password" placeholder="••••••••"
                   value={password} onChange={e => setPassword(e.currentTarget.value)}
                   required minLength={8} autoComplete="new-password"
-                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black"
+                  className="form-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" htmlFor="confirm-password">Confirm password</label>
+                <label className="form-label" htmlFor="confirm-password">Confirm password</label>
                 <input
                   id="confirm-password" type="password" placeholder="••••••••"
                   value={confirmPassword} onChange={e => setConfirm(e.currentTarget.value)}
                   required minLength={8} autoComplete="new-password"
-                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black"
+                  className="form-input"
                 />
               </div>
-              <button type="submit" disabled={loading}
-                className="w-full rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-black/90 disabled:opacity-50">
+              <button type="submit" disabled={loading} className="form-submit">
                 {loading ? 'Resetting...' : 'Reset password'}
               </button>
             </>

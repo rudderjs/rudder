@@ -101,9 +101,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files['prisma/schema/modules.prisma'] = '// <rudderjs:modules:start>\n// <rudderjs:modules:end>\n'
   }
 
-  if (ctx.tailwind) {
-    files['src/index.css'] = indexCss(ctx)
-  }
+  files['src/index.css'] = indexCss(ctx)
 
   files['bootstrap/app.ts']       = bootstrapApp(ctx)
   files['bootstrap/providers.ts'] = bootstrapProviders(ctx)
@@ -697,10 +695,15 @@ model Todo {
 // ─── src/index.css ─────────────────────────────────────────
 
 function indexCss(ctx: TemplateContext): string {
+  if (!ctx.tailwind) {
+    return indexCssPlain()
+  }
+
   if (!ctx.shadcn) {
     return `@import "tailwindcss";
 @import "tw-animate-css";
-`
+
+${semanticRulesApply()}`
   }
 
   return `@import "tailwindcss";
@@ -827,6 +830,446 @@ function indexCss(ctx: TemplateContext): string {
     @apply bg-background text-foreground;
     }
 }
+
+${semanticRulesApply()}`
+}
+
+function semanticRulesApply(): string {
+  return `/* ─── Scaffolded view classes ────────────────────────────────
+   Semantic classes shared by app/Views/Welcome and vendored
+   @rudderjs/auth views. The --no-tailwind variant of this
+   scaffolder emits equivalent hand-authored CSS under the
+   same selectors. */
+
+.page {
+  @apply min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100;
+}
+.page-nav {
+  @apply mx-auto flex max-w-6xl items-center justify-between px-6 py-5;
+}
+.page-footer {
+  @apply border-t border-zinc-200 dark:border-zinc-900;
+}
+.footer-inner {
+  @apply mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between;
+}
+.footer-links {
+  @apply flex gap-4;
+}
+.footer-link {
+  @apply transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}
+
+.brand {
+  @apply flex items-center gap-2 text-sm font-semibold tracking-tight;
+}
+.brand-dot {
+  @apply inline-block h-2 w-2 rounded-full bg-emerald-500;
+}
+.nav-right {
+  @apply flex items-center gap-4 text-sm;
+}
+.nav-badge {
+  @apply text-zinc-500 dark:text-zinc-400;
+}
+.nav-badge strong {
+  @apply font-medium text-zinc-900 dark:text-zinc-100;
+}
+.nav-button {
+  @apply rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900;
+}
+.nav-link {
+  @apply text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100;
+}
+
+.hero {
+  @apply mx-auto max-w-3xl px-6 pb-12 pt-20 text-center;
+}
+.hero-title {
+  @apply text-5xl font-bold tracking-tight sm:text-6xl;
+}
+.hero-lead {
+  @apply mt-6 text-lg text-zinc-600 dark:text-zinc-400;
+}
+.hero-meta {
+  @apply mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500;
+}
+.inline-code {
+  @apply rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900;
+}
+
+.feature-section {
+  @apply mx-auto max-w-6xl px-6 pb-20;
+}
+.feature-grid {
+  @apply grid gap-4 md:grid-cols-2 lg:grid-cols-3;
+}
+.feature-card {
+  @apply rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100;
+}
+.feature-title {
+  @apply font-semibold;
+}
+.feature-desc {
+  @apply mt-2 text-sm text-zinc-600 dark:text-zinc-400;
+}
+.feature-card:hover .feature-desc {
+  @apply text-zinc-900 dark:text-zinc-100;
+}
+
+/* Auth forms + error page (reused selectors) */
+.auth-wrap {
+  @apply flex min-h-svh items-center justify-center p-4;
+}
+.auth-card {
+  @apply w-full max-w-sm space-y-6;
+}
+.auth-head {
+  @apply text-center;
+}
+.heading-lg {
+  @apply text-2xl font-bold;
+}
+.muted {
+  @apply text-sm text-zinc-500 dark:text-zinc-400;
+}
+.form-card {
+  @apply space-y-4 rounded-lg border border-zinc-200 p-6 shadow-sm dark:border-zinc-800;
+}
+.form-error {
+  @apply rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950 dark:text-red-400;
+}
+.form-success {
+  @apply rounded-md bg-green-50 px-3 py-2 text-sm text-green-600 dark:bg-green-950 dark:text-green-400;
+}
+.form-label {
+  @apply block text-sm font-medium mb-1;
+}
+.form-input {
+  @apply w-full rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-100;
+}
+.form-submit {
+  @apply w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900;
+}
+.form-link-row {
+  @apply flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400;
+}
+.auth-link {
+  @apply underline transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}
+
+.error-wrap {
+  @apply flex min-h-svh flex-col items-center justify-center gap-2;
+}
+.error-link {
+  @apply mt-4 text-sm underline transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}
+`
+}
+
+function indexCssPlain(): string {
+  return `:root {
+  --bg-start: #ffffff;
+  --bg-end: #fafafa;
+  --fg: #18181b;
+  --fg-muted: #52525b;
+  --fg-strong: #09090b;
+  --border: #e4e4e7;
+  --surface: #ffffff;
+  --surface-muted: #f4f4f5;
+  --accent: #10b981;
+  --danger-bg: #fef2f2;
+  --danger-fg: #dc2626;
+  --success-bg: #f0fdf4;
+  --success-fg: #16a34a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-start: #09090b;
+    --bg-end: #000000;
+    --fg: #fafafa;
+    --fg-muted: #a1a1aa;
+    --fg-strong: #ffffff;
+    --border: #27272a;
+    --surface: #09090b;
+    --surface-muted: #18181b;
+    --danger-bg: #450a0a;
+    --danger-fg: #f87171;
+    --success-bg: #052e16;
+    --success-fg: #4ade80;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: linear-gradient(to bottom, var(--bg-start), var(--bg-end));
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+
+/* Layout */
+.page { min-height: 100svh; }
+.page-nav {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.page-footer {
+  border-top: 1px solid var(--border);
+}
+.footer-inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+@media (min-width: 640px) {
+  .footer-inner { flex-direction: row; justify-content: space-between; }
+}
+.footer-links { display: flex; gap: 1rem; }
+.footer-link {
+  text-decoration: none;
+  transition: color 150ms;
+}
+.footer-link:hover { color: var(--fg-strong); }
+
+/* Welcome */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--accent);
+}
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
+.nav-badge { color: var(--fg-muted); }
+.nav-badge strong { color: var(--fg-strong); font-weight: 500; }
+.nav-button {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg);
+  background: transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 150ms;
+}
+.nav-button:hover { background: var(--surface-muted); }
+.nav-link {
+  color: var(--fg-muted);
+  text-decoration: none;
+  transition: color 150ms;
+}
+.nav-link:hover { color: var(--fg-strong); }
+
+.hero {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 5rem 1.5rem 3rem;
+  text-align: center;
+}
+.hero-title {
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+@media (min-width: 640px) {
+  .hero-title { font-size: 3.75rem; }
+}
+.hero-lead {
+  margin: 1.5rem 0 0;
+  font-size: 1.125rem;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+.hero-meta {
+  margin-top: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+.inline-code {
+  background: var(--surface-muted);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.feature-section {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 5rem;
+}
+.feature-grid {
+  display: grid;
+  gap: 1rem;
+}
+@media (min-width: 768px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .feature-grid { grid-template-columns: repeat(3, 1fr); } }
+.feature-card {
+  display: block;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 150ms, color 150ms;
+}
+.feature-card:hover { border-color: var(--fg-strong); }
+.feature-title { font-weight: 600; margin: 0; }
+.feature-desc {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+}
+.feature-card:hover .feature-desc { color: var(--fg-strong); }
+
+/* Auth forms + error page */
+.auth-wrap {
+  display: flex;
+  min-height: 100svh;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.auth-card {
+  width: 100%;
+  max-width: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.auth-head { text-align: center; }
+.heading-lg { font-size: 1.5rem; font-weight: 700; margin: 0; }
+.muted { font-size: 0.875rem; color: var(--fg-muted); margin: 0; }
+.auth-head .muted { margin-top: 0.25rem; }
+
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.form-error {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  margin: 0;
+}
+.form-success {
+  background: var(--success-bg);
+  color: var(--success-fg);
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  margin: 0;
+}
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+.form-input {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: var(--surface);
+  color: var(--fg);
+  outline: none;
+  transition: box-shadow 150ms, border-color 150ms;
+}
+.form-input:focus {
+  border-color: var(--fg-strong);
+  box-shadow: 0 0 0 2px var(--fg-strong);
+}
+.form-submit {
+  width: 100%;
+  background: var(--fg-strong);
+  color: var(--bg-start);
+  border: 0;
+  border-radius: 0.375rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+.form-submit:hover { opacity: 0.9; }
+.form-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.form-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+}
+.auth-link {
+  text-decoration: underline;
+  transition: color 150ms;
+}
+.auth-link:hover { color: var(--fg-strong); }
+
+.error-wrap {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+}
+.error-link {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  transition: color 150ms;
+}
+.error-link:hover { color: var(--fg-strong); }
 `
 }
 
@@ -1820,7 +2263,7 @@ function pagesIndexPage(ctx: TemplateContext): string {
 }
 
 function pagesIndexPageReact(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
   if (ctx.withTodo) extraLinks.push('        <a href="/todos" className="underline hover:text-foreground">Todos</a>')
   if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="underline hover:text-foreground">AI Chat</a>')
@@ -1907,7 +2350,7 @@ ${todosLink}
 }
 
 function pagesIndexPageVue(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
   if (ctx.withTodo) extraLinks.push('      <a href="/todos" class="underline hover:text-foreground">Todos</a>')
   if (ctx.packages.ai) extraLinks.push('      <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
@@ -1986,7 +2429,7 @@ async function signOut() {
 }
 
 function pagesIndexPageSolid(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
   if (ctx.withTodo) extraLinks.push('        <a href="/todos" class="underline hover:text-foreground">Todos</a>')
   if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" class="underline hover:text-foreground">AI Chat</a>')
@@ -2117,7 +2560,7 @@ const features: Feature[] = [
 ]`
 
 function welcomeViewReact(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n\n` : ''
+  const cssImport = `import '@/index.css'\n\n`
   return `${cssImport}// URL this view is served at — MUST match the Route.get('/', ...) in routes/web.ts.
 // The scanner reads this constant and writes it into the generated +route.ts,
 // so Vike's client router can SPA-navigate here instead of doing full reloads.
@@ -2161,47 +2604,41 @@ export default function Welcome(props: WelcomeProps) {
   }
 
   return (
-    <div className="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+    <div className="page">
+      <nav className="page-nav">
+        <div className="brand">
+          <span className="brand-dot" />
           RudderJS
         </div>
-        <div className="flex items-center gap-4 text-sm">
+        <div className="nav-right">
           {props.loginUrl && (props.user ? (
             <>
-              <span className="text-zinc-500 dark:text-zinc-400">
-                Signed in as{' '}
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">{props.user.name}</span>
+              <span className="nav-badge">
+                Signed in as <strong>{props.user.name}</strong>
               </span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-              >
+              <button type="button" onClick={handleSignOut} className="nav-button">
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <a href={props.loginUrl} className="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+              <a href={props.loginUrl} className="nav-link">Log in</a>
               {props.registerUrl && (
-                <a href={props.registerUrl} className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+                <a href={props.registerUrl} className="nav-button">Register</a>
               )}
             </>
           ))}
         </div>
       </nav>
 
-      <section className="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">{props.appName}</h1>
-        <p className="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+      <section className="hero">
+        <h1 className="hero-title">{props.appName}</h1>
+        <p className="hero-lead">
           Laravel&apos;s developer experience, Vike&apos;s performance, Node&apos;s ecosystem.
-          <br className="hidden sm:block" />
           This page is served by a controller, rendered through{' '}
-          <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view(&apos;welcome&apos;)</code>.
+          <code className="inline-code">view(&apos;welcome&apos;)</code>.
         </p>
-        <div className="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+        <div className="hero-meta">
           <span>RudderJS v{props.rudderVersion}</span>
           <span>•</span>
           <span>Node {props.nodeVersion}</span>
@@ -2210,29 +2647,23 @@ export default function Welcome(props: WelcomeProps) {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <section className="feature-section">
+        <div className="feature-grid">
           {features.map(f => (
-            <a
-              key={f.title}
-              href={f.href}
-              className="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
-            >
-              <h3 className="font-semibold">{f.title}</h3>
-              <p className="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
-                {f.description}
-              </p>
+            <a key={f.title} href={f.href} className="feature-card">
+              <h3 className="feature-title">{f.title}</h3>
+              <p className="feature-desc">{f.description}</p>
             </a>
           ))}
         </div>
       </section>
 
-      <footer className="border-t border-zinc-200 dark:border-zinc-900">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+      <footer className="page-footer">
+        <div className="footer-inner">
           <div>Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.</div>
-          <div className="flex gap-4">
-            <a href={docsUrl} className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
-            <a href={githubUrl} className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">GitHub</a>
+          <div className="footer-links">
+            <a href={docsUrl} className="footer-link">Docs</a>
+            <a href={githubUrl} className="footer-link">GitHub</a>
           </div>
         </div>
       </footer>
@@ -2243,7 +2674,7 @@ export default function Welcome(props: WelcomeProps) {
 }
 
 function welcomeViewVue(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   // Vue SFC quirk: top-level `export` statements must live in a regular
   // <script> block, NOT <script setup> (the compiler rejects exports there).
   // The scanner reads both blocks as plain text, so the route override is
@@ -2296,42 +2727,36 @@ async function handleSignOut() {
 </script>
 
 <template>
-  <div class="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
-    <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-      <div class="flex items-center gap-2 text-sm font-semibold tracking-tight">
-        <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+  <div class="page">
+    <nav class="page-nav">
+      <div class="brand">
+        <span class="brand-dot"></span>
         RudderJS
       </div>
-      <div v-if="props.loginUrl" class="flex items-center gap-4 text-sm">
+      <div v-if="props.loginUrl" class="nav-right">
         <template v-if="props.user">
-          <span class="text-zinc-500 dark:text-zinc-400">
-            Signed in as
-            <span class="font-medium text-zinc-900 dark:text-zinc-100">{{ props.user.name }}</span>
+          <span class="nav-badge">
+            Signed in as <strong>{{ props.user.name }}</strong>
           </span>
-          <button
-            type="button"
-            @click="handleSignOut"
-            class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
+          <button type="button" @click="handleSignOut" class="nav-button">
             Sign out
           </button>
         </template>
         <template v-else>
-          <a :href="props.loginUrl" class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
-          <a v-if="props.registerUrl" :href="props.registerUrl" class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+          <a :href="props.loginUrl" class="nav-link">Log in</a>
+          <a v-if="props.registerUrl" :href="props.registerUrl" class="nav-button">Register</a>
         </template>
       </div>
     </nav>
 
-    <section class="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
-      <h1 class="text-5xl font-bold tracking-tight sm:text-6xl">{{ props.appName }}</h1>
-      <p class="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+    <section class="hero">
+      <h1 class="hero-title">{{ props.appName }}</h1>
+      <p class="hero-lead">
         Laravel's developer experience, Vike's performance, Node's ecosystem.
-        <br class="hidden sm:block" />
         This page is served by a controller, rendered through
-        <code class="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view('welcome')</code>.
+        <code class="inline-code">view('welcome')</code>.
       </p>
-      <div class="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+      <div class="hero-meta">
         <span>RudderJS v{{ props.rudderVersion }}</span>
         <span>•</span>
         <span>Node {{ props.nodeVersion }}</span>
@@ -2340,28 +2765,21 @@ async function handleSignOut() {
       </div>
     </section>
 
-    <section class="mx-auto max-w-6xl px-6 pb-20">
-      <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <a
-          v-for="f in features"
-          :key="f.title"
-          :href="f.href"
-          class="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
-        >
-          <h3 class="font-semibold">{{ f.title }}</h3>
-          <p class="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
-            {{ f.description }}
-          </p>
+    <section class="feature-section">
+      <div class="feature-grid">
+        <a v-for="f in features" :key="f.title" :href="f.href" class="feature-card">
+          <h3 class="feature-title">{{ f.title }}</h3>
+          <p class="feature-desc">{{ f.description }}</p>
         </a>
       </div>
     </section>
 
-    <footer class="border-t border-zinc-200 dark:border-zinc-900">
-      <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+    <footer class="page-footer">
+      <div class="footer-inner">
         <div>Built with RudderJS. Edit <code>app/Views/Welcome.vue</code> to customize this page.</div>
-        <div class="flex gap-4">
-          <a :href="docsUrl" class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
-          <a :href="githubUrl" class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">GitHub</a>
+        <div class="footer-links">
+          <a :href="docsUrl" class="footer-link">Docs</a>
+          <a :href="githubUrl" class="footer-link">GitHub</a>
         </div>
       </div>
     </footer>
@@ -2371,7 +2789,7 @@ async function handleSignOut() {
 }
 
 function welcomeViewSolid(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { For, Show } from 'solid-js'
 
 // URL this view is served at — see the React variant for rationale.
@@ -2415,23 +2833,23 @@ export default function Welcome(props: WelcomeProps) {
   }
 
   return (
-    <div class="min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <div class="flex items-center gap-2 text-sm font-semibold tracking-tight">
-          <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+    <div class="page">
+      <nav class="page-nav">
+        <div class="brand">
+          <span class="brand-dot" />
           RudderJS
         </div>
         <Show when={props.loginUrl}>
           {(loginUrl) => (
-            <div class="flex items-center gap-4 text-sm">
+            <div class="nav-right">
               <Show
                 when={props.user}
                 fallback={
                   <>
-                    <a href={loginUrl()} class="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Log in</a>
+                    <a href={loginUrl()} class="nav-link">Log in</a>
                     <Show when={props.registerUrl}>
                       {(registerUrl) => (
-                        <a href={registerUrl()} class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900">Register</a>
+                        <a href={registerUrl()} class="nav-button">Register</a>
                       )}
                     </Show>
                   </>
@@ -2439,14 +2857,10 @@ export default function Welcome(props: WelcomeProps) {
               >
                 {(user) => (
                   <>
-                    <span class="text-zinc-500 dark:text-zinc-400">
-                      Signed in as <span class="font-medium text-zinc-900 dark:text-zinc-100">{user().name}</span>
+                    <span class="nav-badge">
+                      Signed in as <strong>{user().name}</strong>
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleSignOut}
-                      class="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    >
+                    <button type="button" onClick={handleSignOut} class="nav-button">
                       Sign out
                     </button>
                   </>
@@ -2457,15 +2871,14 @@ export default function Welcome(props: WelcomeProps) {
         </Show>
       </nav>
 
-      <section class="mx-auto max-w-3xl px-6 pb-12 pt-20 text-center">
-        <h1 class="text-5xl font-bold tracking-tight sm:text-6xl">{props.appName}</h1>
-        <p class="mt-6 text-lg text-zinc-600 dark:text-zinc-400">
+      <section class="hero">
+        <h1 class="hero-title">{props.appName}</h1>
+        <p class="hero-lead">
           Laravel's developer experience, Vike's performance, Node's ecosystem.
-          <br class="hidden sm:block" />
           This page is served by a controller, rendered through{' '}
-          <code class="rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900">view('welcome')</code>.
+          <code class="inline-code">view('welcome')</code>.
         </p>
-        <div class="mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500">
+        <div class="hero-meta">
           <span>RudderJS v{props.rudderVersion}</span>
           <span>•</span>
           <span>Node {props.nodeVersion}</span>
@@ -2474,30 +2887,25 @@ export default function Welcome(props: WelcomeProps) {
         </div>
       </section>
 
-      <section class="mx-auto max-w-6xl px-6 pb-20">
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <section class="feature-section">
+        <div class="feature-grid">
           <For each={features}>
             {(f) => (
-              <a
-                href={f.href}
-                class="group rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100"
-              >
-                <h3 class="font-semibold">{f.title}</h3>
-                <p class="mt-2 text-sm text-zinc-600 group-hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-zinc-100">
-                  {f.description}
-                </p>
+              <a href={f.href} class="feature-card">
+                <h3 class="feature-title">{f.title}</h3>
+                <p class="feature-desc">{f.description}</p>
               </a>
             )}
           </For>
         </div>
       </section>
 
-      <footer class="border-t border-zinc-200 dark:border-zinc-900">
-        <div class="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between">
+      <footer class="page-footer">
+        <div class="footer-inner">
           <div>Built with RudderJS. Edit <code>app/Views/Welcome.tsx</code> to customize this page.</div>
-          <div class="flex gap-4">
-            <a href={docsUrl()} class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
-            <a href={githubUrl()} class="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">GitHub</a>
+          <div class="footer-links">
+            <a href={docsUrl()} class="footer-link">Docs</a>
+            <a href={githubUrl()} class="footer-link">GitHub</a>
           </div>
         </div>
       </footer>
@@ -2545,7 +2953,7 @@ function pagesErrorPage(ctx: TemplateContext): string {
 }
 
 function pagesErrorPageReact(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { usePageContext } from 'vike-react/usePageContext'
 
 export default function Page() {
@@ -2557,29 +2965,29 @@ export default function Page() {
 
   if (is404) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center gap-2">
-        <h1 className="text-2xl font-bold">404 — Page Not Found</h1>
-        <p className="text-muted-foreground">This page could not be found.</p>
-        <a href="/" className="mt-4 text-sm underline">Go home</a>
+      <div className="error-wrap">
+        <h1 className="heading-lg">404 — Page Not Found</h1>
+        <p className="muted">This page could not be found.</p>
+        <a href="/" className="error-link">Go home</a>
       </div>
     )
   }
 
   if (abortStatusCode === 401) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center gap-2">
-        <h1 className="text-2xl font-bold">401 — Unauthorized</h1>
-        <p className="text-muted-foreground">{abortReason ?? 'You must be logged in to view this page.'}</p>
-        <a href="/" className="mt-4 text-sm underline">Go home</a>
+      <div className="error-wrap">
+        <h1 className="heading-lg">401 — Unauthorized</h1>
+        <p className="muted">{abortReason ?? 'You must be logged in to view this page.'}</p>
+        <a href="/" className="error-link">Go home</a>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-2">
-      <h1 className="text-2xl font-bold">Something went wrong</h1>
-      <p className="text-muted-foreground">{abortReason ?? 'An unexpected error occurred.'}</p>
-      <a href="/" className="mt-4 text-sm underline">Go home</a>
+    <div className="error-wrap">
+      <h1 className="heading-lg">Something went wrong</h1>
+      <p className="muted">{abortReason ?? 'An unexpected error occurred.'}</p>
+      <a href="/" className="error-link">Go home</a>
     </div>
   )
 }
@@ -2587,7 +2995,7 @@ export default function Page() {
 }
 
 function pagesErrorPageVue(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `<script setup lang="ts">
 ${cssImport}import { usePageContext } from 'vike-vue/usePageContext'
 
@@ -2599,27 +3007,27 @@ const pageContext = usePageContext() as {
 </script>
 
 <template>
-  <div v-if="pageContext.is404" class="flex min-h-svh flex-col items-center justify-center gap-2">
-    <h1 class="text-2xl font-bold">404 — Page Not Found</h1>
-    <p class="text-muted-foreground">This page could not be found.</p>
-    <a href="/" class="mt-4 text-sm underline">Go home</a>
+  <div v-if="pageContext.is404" class="error-wrap">
+    <h1 class="heading-lg">404 — Page Not Found</h1>
+    <p class="muted">This page could not be found.</p>
+    <a href="/" class="error-link">Go home</a>
   </div>
-  <div v-else-if="pageContext.abortStatusCode === 401" class="flex min-h-svh flex-col items-center justify-center gap-2">
-    <h1 class="text-2xl font-bold">401 — Unauthorized</h1>
-    <p class="text-muted-foreground">{{ pageContext.abortReason ?? 'You must be logged in to view this page.' }}</p>
-    <a href="/" class="mt-4 text-sm underline">Go home</a>
+  <div v-else-if="pageContext.abortStatusCode === 401" class="error-wrap">
+    <h1 class="heading-lg">401 — Unauthorized</h1>
+    <p class="muted">{{ pageContext.abortReason ?? 'You must be logged in to view this page.' }}</p>
+    <a href="/" class="error-link">Go home</a>
   </div>
-  <div v-else class="flex min-h-svh flex-col items-center justify-center gap-2">
-    <h1 class="text-2xl font-bold">Something went wrong</h1>
-    <p class="text-muted-foreground">{{ pageContext.abortReason ?? 'An unexpected error occurred.' }}</p>
-    <a href="/" class="mt-4 text-sm underline">Go home</a>
+  <div v-else class="error-wrap">
+    <h1 class="heading-lg">Something went wrong</h1>
+    <p class="muted">{{ pageContext.abortReason ?? 'An unexpected error occurred.' }}</p>
+    <a href="/" class="error-link">Go home</a>
   </div>
 </template>
 `
 }
 
 function pagesErrorPageSolid(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { Switch, Match } from 'solid-js'
 import { usePageContext } from 'vike-solid/usePageContext'
 
@@ -2633,24 +3041,24 @@ export default function Page() {
   return (
     <Switch>
       <Match when={pageContext.is404}>
-        <div class="flex min-h-svh flex-col items-center justify-center gap-2">
-          <h1 class="text-2xl font-bold">404 — Page Not Found</h1>
-          <p class="text-muted-foreground">This page could not be found.</p>
-          <a href="/" class="mt-4 text-sm underline">Go home</a>
+        <div class="error-wrap">
+          <h1 class="heading-lg">404 — Page Not Found</h1>
+          <p class="muted">This page could not be found.</p>
+          <a href="/" class="error-link">Go home</a>
         </div>
       </Match>
       <Match when={pageContext.abortStatusCode === 401}>
-        <div class="flex min-h-svh flex-col items-center justify-center gap-2">
-          <h1 class="text-2xl font-bold">401 — Unauthorized</h1>
-          <p class="text-muted-foreground">{pageContext.abortReason ?? 'You must be logged in to view this page.'}</p>
-          <a href="/" class="mt-4 text-sm underline">Go home</a>
+        <div class="error-wrap">
+          <h1 class="heading-lg">401 — Unauthorized</h1>
+          <p class="muted">{pageContext.abortReason ?? 'You must be logged in to view this page.'}</p>
+          <a href="/" class="error-link">Go home</a>
         </div>
       </Match>
       <Match when={true}>
-        <div class="flex min-h-svh flex-col items-center justify-center gap-2">
-          <h1 class="text-2xl font-bold">Something went wrong</h1>
-          <p class="text-muted-foreground">{pageContext.abortReason ?? 'An unexpected error occurred.'}</p>
-          <a href="/" class="mt-4 text-sm underline">Go home</a>
+        <div class="error-wrap">
+          <h1 class="heading-lg">Something went wrong</h1>
+          <p class="muted">{pageContext.abortReason ?? 'An unexpected error occurred.'}</p>
+          <a href="/" class="error-link">Go home</a>
         </div>
       </Match>
     </Switch>
@@ -2821,7 +3229,7 @@ function todoPage(ctx: TemplateContext): string {
 }
 
 function todoPageReact(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
 import type { Data } from './+data.js'
@@ -2915,7 +3323,7 @@ export default function Page() {
 }
 
 function todoPageVue(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `<script setup lang="ts">
 ${cssImport}import { ref } from 'vue'
 import { useData } from 'vike-vue/useData'
@@ -3001,7 +3409,7 @@ async function deleteTodo(id: string) {
 }
 
 function todoPageSolid(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { createSignal } from 'solid-js'
 import { For, Show } from 'solid-js'
 import { useData } from 'vike-solid/useData'
@@ -3131,7 +3539,7 @@ function aiChatPage(ctx: TemplateContext): string {
 }
 
 function aiChatPageReact(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { useState, useRef, useEffect } from 'react'
 
 interface Message {
@@ -3227,7 +3635,7 @@ export default function Page() {
 }
 
 function aiChatPageVue(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `<script setup lang="ts">
 ${cssImport}import { ref, nextTick } from 'vue'
 
@@ -3310,7 +3718,7 @@ async function send(e: Event) {
 }
 
 function aiChatPageSolid(ctx: TemplateContext): string {
-  const cssImport = ctx.tailwind ? `import '@/index.css'\n` : ''
+  const cssImport = `import '@/index.css'\n`
   return `${cssImport}import { createSignal, For, Show, onCleanup } from 'solid-js'
 
 interface Message {
