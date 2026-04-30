@@ -126,6 +126,36 @@ export interface ModelObserver {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ScopeFn = (query: QueryBuilder<any>, ...args: any[]) => QueryBuilder<any>
 
+// ─── Relations ─────────────────────────────────────────────
+
+/**
+ * Thin relation declaration consumed by {@link Model.related}.
+ *
+ * Lazy `model: () => SomeModel` avoids circular imports — relation declarations
+ * sit on each side of the relationship and would otherwise need to reference
+ * each other at module evaluation time.
+ *
+ * - `hasMany` / `hasOne`: parent owns the foreign key on the related table.
+ *   `foreignKey` is the column on the *related* table pointing back to the
+ *   parent's primary key. Defaults to `<parentClassName>Id` (camelCased), e.g.
+ *   `userId` for a `User`.
+ * - `belongsTo`: this model carries the foreign key. `foreignKey` is the column
+ *   on *this* model holding the related row's primary key. Defaults to
+ *   `<relatedClassName>Id`, e.g. `teamId` for `team: belongsTo(Team)`.
+ *
+ * `localKey` lets you override the column resolved on the parent side (the
+ * primary key by default for has*, or the foreign key for belongsTo).
+ */
+export interface RelationDefinition {
+  type:        'hasOne' | 'hasMany' | 'belongsTo'
+  /** Lazy reference to the related model class — avoids circular imports. */
+  model:       () => typeof Model
+  /** Foreign-key column. Defaults are described in the interface comment. */
+  foreignKey?: string
+  /** Override the local column joined against `foreignKey`. */
+  localKey?:   string
+}
+
 // ─── Decorators ────────────────────────────────────────────
 
 /**
@@ -214,6 +244,80 @@ export abstract class Model {
 
   /** Primary key column */
   static primaryKey = 'id'
+
+  /**
+   * Column used to resolve a route parameter into a Model instance via
+   * {@link Model.findForRoute}. Defaults to the primary key. Override to
+   * resolve by slug, uuid, or any other unique column:
+   *
+   * ```ts
+   * class Post extends Model {
+   *   static override routeKey = 'slug'
+   * }
+   * ```
+   *
+   * Then in `routes/web.ts`:
+   *
+   * ```ts
+   * router.bind('post', Post)
+   * router.get('/posts/:post', (req) => req.bound['post'])
+   * ```
+   */
+  static routeKey = 'id'
+
+  /**
+   * Resolve a route parameter value into a Model instance.
+   *
+   * Default implementation runs `Model.where(routeKey, value).first()`. Override
+   * on a subclass to apply additional constraints (auth scope, soft-delete
+   * behavior, etc.):
+   *
+   * ```ts
+   * static override async findForRoute(value: string) {
+   *   return await this.where('slug', value)
+   *     .where('publishedAt', '!=', null)
+   *     .first()
+   * }
+   * ```
+   *
+   * Returns `null` when no record matches; the router translates that into a
+   * `RouteModelNotFoundError` (HTTP 404) for required bindings.
+   *
+   * The return type is `Model | null` rather than the generic `InstanceType<T>`
+   * so subclass overrides can narrow it without violating variance under
+   * `exactOptionalPropertyTypes`.
+   */
+  static async findForRoute(value: string): Promise<Model | null> {
+    return Model._q(this as unknown as typeof Model).where(this.routeKey, value).first() as Promise<Model | null>
+  }
+
+  /**
+   * Relation map — a thin declaration of how each named relation joins to the
+   * owner model. Used by {@link Model.related} (instance) and {@link Model.with}.
+   *
+   * **This is not a substitute for the adapter's relation engine.** Prisma's
+   * `include` and Drizzle's `with()` already handle eager loading, joins, and
+   * type inference. The relation map exists for the *fluent lazy-fetch* case —
+   * `await user.related('posts').where('published', true).get()` — where you
+   * want a chainable QueryBuilder scoped to the parent record.
+   *
+   * Supported types: `hasMany`, `hasOne`, `belongsTo`. Polymorphic and
+   * many-to-many relations are intentionally out of scope; reach for the
+   * adapter directly when you need them.
+   *
+   * @example
+   * class User extends Model {
+   *   static override relations = {
+   *     posts: { type: 'hasMany',   model: () => Post,    foreignKey: 'authorId' },
+   *     team:  { type: 'belongsTo', model: () => Team,    foreignKey: 'teamId' },
+   *     phone: { type: 'hasOne',    model: () => Phone,   foreignKey: 'userId' },
+   *   } as const
+   * }
+   *
+   * const user = await User.find(1)
+   * await user!.related('posts').where('published', true).get()
+   */
+  static relations: Record<string, RelationDefinition> = {}
 
   /** Columns to hide from JSON output */
   static hidden: string[] = []
@@ -971,6 +1075,57 @@ export abstract class Model {
   trashed(): boolean {
     const v = (this as unknown as Record<string, unknown>)['deletedAt']
     return v !== null && v !== undefined
+  }
+
+  // ── Relations ──────────────────────────────────────────
+
+  /**
+   * Lazy-fetch a related record (or set of records) as a chainable query.
+   *
+   * Looks up the relation declared on `static relations`, builds a
+   * {@link QueryBuilder} on the related model already filtered to this
+   * instance, and returns it. Call any builder method (`where`, `orderBy`,
+   * `first`, `get`, `paginate`, ...) to finalize the query.
+   *
+   * For eager loading, prefer the adapter's native `with()` / `include` /
+   * `select` — this method is for the deferred, fluent case.
+   *
+   * @example
+   * const user = await User.find(1)
+   * const recent = await user!.related('posts').orderBy('createdAt', 'desc').limit(5).get()
+   *
+   * @throws Error when the relation is not declared on `static relations`.
+   * @throws Error when `belongsTo` is used and this instance has no value for
+   *   the foreign-key column.
+   */
+  related(name: string): QueryBuilder<Model> {
+    const ctor = this.constructor as typeof Model
+    const def = ctor.relations[name]
+    if (!def) {
+      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
+    }
+    const Related = def.model() as typeof Model
+    const fkCamel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1)
+
+    if (def.type === 'belongsTo') {
+      // This model holds the FK; query the related model's PK.
+      const fk        = def.foreignKey ?? `${fkCamel(Related.name)}Id`
+      const localCol  = def.localKey   ?? fk
+      const localVal  = (this as unknown as Record<string, unknown>)[localCol]
+      if (localVal === undefined || localVal === null) {
+        throw new Error(`[RudderJS ORM] Cannot resolve belongsTo "${name}" — ${ctor.name}.${localCol} is unset.`)
+      }
+      return Related.where(Related.primaryKey, localVal) as QueryBuilder<Model>
+    }
+
+    // hasOne / hasMany — related model holds the FK pointing back to us.
+    const fk       = def.foreignKey ?? `${fkCamel(ctor.name)}Id`
+    const localCol = def.localKey   ?? ctor.primaryKey
+    const localVal = (this as unknown as Record<string, unknown>)[localCol]
+    if (localVal === undefined || localVal === null) {
+      throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
+    }
+    return Related.where(fk, localVal) as QueryBuilder<Model>
   }
 
   // ── Cast / Mutator helpers ─────────────────────────────

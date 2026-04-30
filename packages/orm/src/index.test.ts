@@ -1537,3 +1537,246 @@ describe('Model.increment / decrement', () => {
     Post.clearObservers()
   })
 })
+
+// ─── Route model binding helpers ──────────────────────────────────────────────
+
+describe('Model.findForRoute()', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('default implementation queries by primary key', async () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+      first: async () => ({ id: 7, name: 'A' }),
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number; name!: string }
+
+    const result = await User.findForRoute('7') as User | null
+    assert.deepStrictEqual(seen, [['id', '7']])
+    assert.ok(result instanceof User)
+    assert.equal(result?.id, 7)
+  })
+
+  it('honors a custom static routeKey', async () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+      first: async () => ({ id: 1, slug: 'hello-world' }),
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model {
+      static override routeKey = 'slug'
+      id!: number
+      slug!: string
+    }
+
+    await Post.findForRoute('hello-world')
+    assert.deepStrictEqual(seen, [['slug', 'hello-world']])
+  })
+
+  it('returns null when no record is found', async () => {
+    const qb = makeQb({ first: async () => null })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model {}
+    assert.strictEqual(await User.findForRoute('does-not-exist'), null)
+  })
+
+  it('hydrated result is an instance of the model class', async () => {
+    const qb = makeQb({ first: async () => ({ id: 1 }) })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number }
+    const u = await User.findForRoute('1')
+    assert.ok(u instanceof User)
+  })
+
+  it('subclass override can apply additional constraints', async () => {
+    const seen: unknown[][] = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, ...args: unknown[]) { seen.push(args); return this } as unknown as QueryBuilder<unknown>['where'],
+      first: async () => ({ id: 1, slug: 'x', publishedAt: 't0' }),
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model {
+      static override routeKey = 'slug'
+      static override async findForRoute(value: string): Promise<Post | null> {
+        // Only published posts.
+        return this.where('slug', value).where('publishedAt', '!=', null).first() as Promise<Post | null>
+      }
+    }
+
+    const p = await Post.findForRoute('x')
+    assert.deepStrictEqual(seen, [['slug', 'x'], ['publishedAt', '!=', null]])
+    assert.ok(p instanceof Post)
+  })
+})
+
+// ─── Relations ────────────────────────────────────────────────────────────────
+
+describe('Model.related()', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('hasMany builds a where(foreignKey, parentId) query on the related model', () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model {}
+    class User extends Model {
+      static override relations = {
+        posts: { type: 'hasMany' as const, model: () => Post, foreignKey: 'authorId' },
+      }
+      id!: number
+    }
+
+    const u = User.hydrate({ id: 5 })!
+    u.related('posts')
+    assert.deepStrictEqual(seen, [['authorId', 5]])
+  })
+
+  it('hasMany default foreign key is camelCase parent class + Id', () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model {}
+    class User extends Model {
+      static override relations = {
+        posts: { type: 'hasMany' as const, model: () => Post },
+      }
+      id!: number
+    }
+
+    const u = User.hydrate({ id: 9 })!
+    u.related('posts')
+    assert.deepStrictEqual(seen, [['userId', 9]])
+  })
+
+  it('hasOne uses the same query shape as hasMany', () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Phone extends Model {}
+    class User extends Model {
+      static override relations = {
+        phone: { type: 'hasOne' as const, model: () => Phone, foreignKey: 'userId' },
+      }
+      id!: number
+    }
+
+    const u = User.hydrate({ id: 3 })!
+    u.related('phone')
+    assert.deepStrictEqual(seen, [['userId', 3]])
+  })
+
+  it('belongsTo queries the related primaryKey using the local FK value', () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Team extends Model { id!: number }
+    class User extends Model {
+      static override relations = {
+        team: { type: 'belongsTo' as const, model: () => Team, foreignKey: 'teamId' },
+      }
+      teamId!: number
+    }
+
+    const u = User.hydrate({ teamId: 12 })!
+    u.related('team')
+    assert.deepStrictEqual(seen, [['id', 12]])
+  })
+
+  it('belongsTo defaults FK to camelCase relatedClass + Id', () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Team extends Model { id!: number }
+    class User extends Model {
+      static override relations = {
+        team: { type: 'belongsTo' as const, model: () => Team },
+      }
+      teamId!: number
+    }
+
+    const u = User.hydrate({ teamId: 22 })!
+    u.related('team')
+    assert.deepStrictEqual(seen, [['id', 22]])
+  })
+
+  it('throws when the relation is not declared', () => {
+    ModelRegistry.set(makeAdapter())
+    class User extends Model {}
+    const u = new User()
+    assert.throws(() => u.related('mystery'), /not defined on User/)
+  })
+
+  it('throws on hasMany when the parent local key is unset', () => {
+    ModelRegistry.set(makeAdapter())
+    class Post extends Model {}
+    class User extends Model {
+      static override relations = {
+        posts: { type: 'hasMany' as const, model: () => Post },
+      }
+      id?: number
+    }
+    const u = new User()
+    assert.throws(() => u.related('posts'), /id is unset/)
+  })
+
+  it('throws on belongsTo when the local FK is unset', () => {
+    ModelRegistry.set(makeAdapter())
+    class Team extends Model {}
+    class User extends Model {
+      static override relations = {
+        team: { type: 'belongsTo' as const, model: () => Team, foreignKey: 'teamId' },
+      }
+      teamId?: number
+    }
+    const u = new User()
+    assert.throws(() => u.related('team'), /teamId is unset/)
+  })
+
+  it('returned QueryBuilder is chainable to first/get/paginate', async () => {
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>) { return this },
+      first: async () => ({ id: 1, title: 'Hello', authorId: 5 }),
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model { id!: number; title!: string }
+    class User extends Model {
+      static override relations = {
+        posts: { type: 'hasMany' as const, model: () => Post, foreignKey: 'authorId' },
+      }
+      id!: number
+    }
+    const u = User.hydrate({ id: 5 })!
+    const post = await u.related('posts').first()
+    assert.ok(post instanceof Post)
+  })
+
+  it('localKey override changes the column resolved on the parent', () => {
+    const seen: Array<[string, unknown]> = []
+    const qb = makeQb({
+      where: function(this: QueryBuilder<unknown>, col: string, val: unknown) { seen.push([col, val]); return this },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model {}
+    class User extends Model {
+      static override relations = {
+        posts: { type: 'hasMany' as const, model: () => Post, foreignKey: 'ownerUuid', localKey: 'uuid' },
+      }
+      uuid!: string
+    }
+    const u = User.hydrate({ uuid: 'abc-123' })!
+    u.related('posts')
+    assert.deepStrictEqual(seen, [['ownerUuid', 'abc-123']])
+  })
+})

@@ -368,3 +368,212 @@ describe('Global router and Route alias', () => {
     assert.strictEqual(Route, router)
   })
 })
+
+// ─── Route model binding ───────────────────────────────────
+
+describe('Router.bind() — route model binding', () => {
+  let r: Router
+
+  beforeEach(() => { r = new Router() })
+
+  function makeReq(params: Record<string, string>): import('@rudderjs/contracts').AppRequest {
+    return {
+      method: 'GET', url: '/', path: '/',
+      query: {}, params, headers: {},
+      body: null, raw: null,
+      input: () => undefined as never,
+      string: () => '',
+      integer: () => 0,
+      float: () => 0,
+      boolean: () => false,
+      date: () => new Date(),
+      array: () => [],
+      has: () => false,
+      missing: () => true,
+      filled: () => false,
+    }
+  }
+
+  function makeRes(): import('@rudderjs/contracts').AppResponse {
+    return {
+      statusCode: 200,
+      status() { return this },
+      header() { return this },
+      json() {},
+      send() {},
+      redirect() {},
+      raw: null,
+    }
+  }
+
+  it('listBindings() reflects registered bindings', () => {
+    const User = { name: 'User', findForRoute: async () => null }
+    r.bind('user', User)
+    assert.ok('user' in r.listBindings())
+    assert.strictEqual(r.listBindings()['user'], User)
+  })
+
+  it('reset() clears bindings', () => {
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    assert.equal(Object.keys(r.listBindings()).length, 1)
+    r.reset()
+    assert.equal(Object.keys(r.listBindings()).length, 0)
+  })
+
+  it('routes without :name params get no binding middleware injected', () => {
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/health', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.equal(server.routes[0]?.middleware.length, 0)
+  })
+
+  it('routes with bound :name param get binding middleware prepended', () => {
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/users/:user', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.equal(server.routes[0]?.middleware.length, 1)
+  })
+
+  it('binding middleware resolves and populates req.bound', async () => {
+    let resolverArg: string | null = null
+    const User = {
+      name: 'User',
+      findForRoute: async (val: string) => { resolverArg = val; return { id: 7, name: 'Alice' } },
+    }
+    r.bind('user', User)
+    r.get('/users/:user', handler)
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ user: '7' })
+    let nextCalled = false
+    await mw(req, makeRes(), async () => { nextCalled = true })
+    assert.equal(resolverArg, '7')
+    assert.deepStrictEqual((req as unknown as { bound: Record<string, unknown> }).bound, {
+      user: { id: 7, name: 'Alice' },
+    })
+    assert.equal(nextCalled, true)
+  })
+
+  it('binding middleware throws RouteModelNotFoundError when resolver returns null', async () => {
+    const { RouteModelNotFoundError } = await import('./index.js')
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    r.get('/users/:user', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    await assert.rejects(
+      async () => { await mw(makeReq({ user: '99' }), makeRes(), async () => {}) },
+      (err: unknown) => err instanceof RouteModelNotFoundError
+        && err.model === 'User'
+        && err.param === 'user'
+        && err.value === '99',
+    )
+  })
+
+  it('optional binding sets bound[name] = null instead of throwing', async () => {
+    r.bind('user', { name: 'User', findForRoute: async () => null }, { optional: true })
+    r.get('/users/:user', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ user: '99' })
+    let nextCalled = false
+    await mw(req, makeRes(), async () => { nextCalled = true })
+    assert.equal((req as unknown as { bound: Record<string, unknown> }).bound['user'], null)
+    assert.equal(nextCalled, true)
+  })
+
+  it('throws when a required param value is empty', async () => {
+    const { RouteModelNotFoundError } = await import('./index.js')
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/users/:user', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    await assert.rejects(
+      async () => { await mw(makeReq({ user: '' }), makeRes(), async () => {}) },
+      (err: unknown) => err instanceof RouteModelNotFoundError && err.value === '',
+    )
+  })
+
+  it('preserves user-provided per-route middleware after binding mw', async () => {
+    const calls: string[] = []
+    const userMw: MiddlewareHandler = async (_req, _res, next) => { calls.push('user'); await next() }
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/users/:user', handler, [userMw])
+    const server = new FakeServer()
+    r.mount(server)
+    const route = server.routes[0]!
+    assert.equal(route.middleware.length, 2)
+    // Run them in order to confirm binding mw is first.
+    const req = makeReq({ user: '1' })
+    let bindingFirst = false
+    await route.middleware[0]!(req, makeRes(), async () => {
+      // After binding mw, req.bound is populated
+      bindingFirst = (req as unknown as { bound: Record<string, unknown> }).bound['user'] !== undefined
+      await route.middleware[1]!(req, makeRes(), async () => {})
+    })
+    assert.equal(bindingFirst, true)
+    assert.deepStrictEqual(calls, ['user'])
+  })
+
+  it('multiple bindings on one route are all resolved', async () => {
+    const Owner = { name: 'Owner', findForRoute: async (v: string) => ({ id: Number(v), kind: 'owner' }) }
+    const Pet   = { name: 'Pet',   findForRoute: async (v: string) => ({ id: Number(v), kind: 'pet' }) }
+    r.bind('owner', Owner)
+    r.bind('pet', Pet)
+    r.get('/owners/:owner/pets/:pet', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ owner: '1', pet: '2' })
+    await mw(req, makeRes(), async () => {})
+    const bound = (req as unknown as { bound: Record<string, unknown> }).bound
+    assert.deepStrictEqual(bound['owner'], { id: 1, kind: 'owner' })
+    assert.deepStrictEqual(bound['pet'],   { id: 2, kind: 'pet' })
+  })
+
+  it('unbound params on the same route are ignored', async () => {
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/users/:user/posts/:postId', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ user: '1', postId: '42' })
+    await mw(req, makeRes(), async () => {})
+    const bound = (req as unknown as { bound: Record<string, unknown> }).bound
+    assert.equal(bound['user'] !== undefined, true)
+    assert.equal('postId' in bound, false) // postId is not bound — stays a plain string in req.params
+    assert.equal(req.params['postId'], '42')
+  })
+
+  it('synchronous resolver is supported', async () => {
+    r.bind('user', { name: 'User', findForRoute: (v: string) => ({ id: Number(v) }) })
+    r.get('/users/:user', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ user: '5' })
+    await mw(req, makeRes(), async () => {})
+    assert.deepStrictEqual((req as unknown as { bound: Record<string, unknown> }).bound['user'], { id: 5 })
+  })
+
+  it('optional :param? syntax is recognized', async () => {
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/profile/:user?', handler)
+    const server = new FakeServer()
+    r.mount(server)
+    assert.equal(server.routes[0]?.middleware.length, 1)
+  })
+})

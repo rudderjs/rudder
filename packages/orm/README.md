@@ -109,6 +109,52 @@ const user = await User.create({ name: 'Alice', email: 'alice@example.com' })
 
 ---
 
+## Relations
+
+Eager loading is delegated to the adapter — Prisma's `include` / `select` and Drizzle's `with()` are already type-safe and support depth, ordering, and selective columns. The ORM ships a thin **lazy fluent fetch** API on top: declare the relation on `static relations` and call `instance.related(name)` to get a chainable QueryBuilder scoped to the parent record.
+
+```ts
+class User extends Model {
+  static override relations = {
+    posts: { type: 'hasMany',   model: () => Post, foreignKey: 'authorId' },
+    team:  { type: 'belongsTo', model: () => Team, foreignKey: 'teamId' },
+    phone: { type: 'hasOne',    model: () => Phone, foreignKey: 'userId' },
+  } as const
+}
+
+const user = await User.find(1)
+const recentPosts = await user!.related('posts').orderBy('createdAt', 'desc').limit(5).get()
+const team        = await user!.related('team').first()
+```
+
+Supported types: `hasOne`, `hasMany`, `belongsTo`. Polymorphic and many-to-many relations are out of scope. Defaults: `foreignKey` → `<parentClassName>Id` for `hasOne`/`hasMany`, `<relatedClassName>Id` for `belongsTo`. The `model: () => Class` thunk avoids circular-import issues.
+
+---
+
+## Route model binding
+
+Models opt into route binding by exposing `static routeKey` (defaults to `'id'`) and `static findForRoute(value)`. The router's `router.bind(name, ModelClass)` API picks them up:
+
+```ts
+// Model
+class Post extends Model {
+  static override routeKey = 'slug'
+
+  // Optional override — apply additional constraints.
+  static override async findForRoute(value: string) {
+    return await this.where('slug', value).where('publishedAt', '!=', null).first()
+  }
+}
+
+// routes/web.ts
+router.bind('post', Post)
+router.get('/posts/:post', (req) => req.bound!['post'])
+```
+
+Returns `null` when not found — the router translates that into a `RouteModelNotFoundError`. See the [routing guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/routing.md#route-model-binding) for the full router-side contract.
+
+---
+
 ## Attribute Casts
 
 Casts automatically transform attribute values when reading from and writing to the database.
