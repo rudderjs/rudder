@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 
 // ─── Types ────────────────────────────────────────────────
@@ -28,6 +29,31 @@ function run(cmd: string, args: string[], cwd: string): Promise<number> {
     proc.on('close', code => resolve(code ?? 1))
     proc.on('error', reject)
   })
+}
+
+/**
+ * Find a `database/seeders/DatabaseSeeder` file in the project root.
+ * Returns the absolute path, or null if not found. Exported for testing.
+ */
+export function findSeederFile(cwd: string = process.cwd()): string | null {
+  for (const ext of ['ts', 'js', 'mts', 'mjs']) {
+    const candidate = join(cwd, 'database', 'seeders', `DatabaseSeeder.${ext}`)
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/**
+ * Detect whether `package.json` has a `prisma.seed` field configured.
+ * Used as the fallback path for Prisma projects that don't ship a Seeder class.
+ */
+export function hasPrismaSeedConfig(cwd: string = process.cwd()): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'))
+    return typeof pkg?.prisma?.seed === 'string' && pkg.prisma.seed.length > 0
+  } catch {
+    return false
+  }
 }
 
 /** Build the args array for a given ORM and command. Exported for testing. */
@@ -154,4 +180,63 @@ export function registerMigrateCommands(
     await exec(orm, 'db:generate')
     console.log('  Client generated.')
   }).description('Regenerate the database client (Prisma only)')
+
+  // ── db:seed ───────────────────────────────────────────
+  rudder.command('db:seed', async () => {
+    await runSeeder(cwd)
+  }).description('Seed the database — runs database/seeders/DatabaseSeeder')
+}
+
+/**
+ * In-process seeder runner.
+ *
+ * Resolution order:
+ *   1. `database/seeders/DatabaseSeeder.{ts,js,mts,mjs}` — instantiate default
+ *      export and call `.run()` (or `await default()` if it's a function).
+ *   2. Prisma fallback — if `package.json#prisma.seed` is configured, shell out
+ *      to `prisma db seed`.
+ *   3. Otherwise — clear error pointing the user at option 1.
+ */
+export async function runSeeder(cwd: string = process.cwd()): Promise<void> {
+  const seederFile = findSeederFile(cwd)
+  if (seederFile) {
+    console.log(`  Seeding from ${seederFile.replace(cwd + '/', '')}…`)
+    const mod: unknown = await import(pathToFileURL(seederFile).href)
+    const exported = (mod as { default?: unknown }).default
+    if (!exported) {
+      throw new Error(`[RudderJS] ${seederFile} has no default export. Export a Seeder subclass or an async function.`)
+    }
+    if (typeof exported === 'function') {
+      // Class constructor → instantiate + run(); or plain function → invoke
+      const isClass = /^class\s/.test(Function.prototype.toString.call(exported))
+      if (isClass) {
+        const Cls = exported as new () => { run(): void | Promise<void> }
+        const instance = new Cls()
+        await instance.run()
+      } else {
+        await (exported as () => void | Promise<void>)()
+      }
+    } else {
+      throw new Error(`[RudderJS] ${seederFile} default export must be a Seeder class or function.`)
+    }
+    console.log('  Seeding complete.')
+    return
+  }
+
+  if (detectORM(cwd) === 'prisma' && hasPrismaSeedConfig(cwd)) {
+    console.log('  Running prisma db seed (configured in package.json)…')
+    const code = await run('pnpm', ['exec', 'prisma', 'db', 'seed'], cwd)
+    if (code !== 0) {
+      throw new Error(`prisma db seed failed (exit ${code})`)
+    }
+    return
+  }
+
+  throw new Error(
+    '[RudderJS] No seeder found. Create database/seeders/DatabaseSeeder.ts:\n\n' +
+    '  import { Seeder } from \'@rudderjs/orm\'\n' +
+    '  export default class DatabaseSeeder extends Seeder {\n' +
+    '    async run() { /* seed your data */ }\n' +
+    '  }\n',
+  )
 }

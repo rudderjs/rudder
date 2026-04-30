@@ -11,6 +11,10 @@
     "preview": "pids=$(lsof -ti :3000 2>/dev/null); if [ -n \"$pids\" ]; then kill -9 $pids; fi; node ./dist/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "rudder": "tsx node_modules/@rudderjs/cli/src/index.ts",
+    "migrate": "tsx node_modules/@rudderjs/cli/src/index.ts migrate",
+    "migrate:fresh": "tsx node_modules/@rudderjs/cli/src/index.ts migrate:fresh",
+    "migrate:status": "tsx node_modules/@rudderjs/cli/src/index.ts migrate:status",
+    "db:seed": "tsx node_modules/@rudderjs/cli/src/index.ts db:seed",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
