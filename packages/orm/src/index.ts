@@ -272,11 +272,15 @@ export abstract class Model {
   static softDeletes = false
 
   // ── Instance-level serialization overrides ─────────────
+  //
+  // True ECMAScript private fields (`#`) so they don't appear in
+  // `Object.entries(this)` / object spread / `JSON.stringify` — keeps
+  // hydrated instances clean wire-format equivalents of plain records.
 
   /** @internal */
-  private _instanceHidden?: string[]
+  #instanceHidden?: string[]
   /** @internal */
-  private _instanceVisible?: string[]
+  #instanceVisible?: string[]
 
   // ── Scopes ─────────────────────────────────────────────
 
@@ -356,67 +360,137 @@ export abstract class Model {
     return this.table ?? `${this.name.toLowerCase()}s`
   }
 
+  /**
+   * Build a Model instance from a plain database record.
+   *
+   * The returned object is `instanceof <ModelClass>`, has the model's
+   * prototype methods (`save`, `fill`, `refresh`, `delete`, etc.), and
+   * carries every column from `record` as an enumerable own property.
+   *
+   * Idempotent: passing an already-hydrated instance of the same class
+   * returns it unchanged. Passing `null`/`undefined` returns `null`.
+   *
+   * Most callers don't need to invoke this directly — query results
+   * (`find`, `first`, `all`, `paginate`, `where().get()`, etc.) are
+   * hydrated automatically. Use it when you have a raw record from
+   * outside the ORM (e.g. cached JSON, a fixture file) and want a
+   * working Model instance.
+   */
+  static hydrate<T extends typeof Model>(this: T, record: unknown): InstanceType<T> | null {
+    if (record === null || record === undefined) return null
+    if (record instanceof Model && record.constructor === this) return record as InstanceType<T>
+    const Ctor = this as unknown as new () => InstanceType<T>
+    const instance = new Ctor()
+    Object.assign(instance, record)
+    return instance
+  }
+
+  /** @internal — wrap a QueryBuilder so its read methods return Model instances. */
+  private static _hydratingQb<T extends typeof Model>(self: T, qb: QueryBuilder<InstanceType<T>>): QueryBuilder<InstanceType<T>> {
+    const ModelClass  = self as typeof Model
+    const wrap        = (r: unknown): InstanceType<T> => ModelClass.hydrate.call(self, r) as InstanceType<T>
+    const wrapMaybe   = (r: unknown): InstanceType<T> | null => r == null ? null : wrap(r)
+    const wrapMany    = (rs: unknown[]): InstanceType<T>[]  => rs.map(wrap)
+
+    const proxy: QueryBuilder<InstanceType<T>> = new Proxy(qb as object, {
+      get(target, prop, receiver): unknown {
+        const value = Reflect.get(target, prop, receiver) as unknown
+        if (typeof value !== 'function') return value
+
+        switch (prop) {
+          case 'find':
+            return async (id: number | string): Promise<InstanceType<T> | null> =>
+              wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).find(id))
+          case 'first':
+            return async (): Promise<InstanceType<T> | null> =>
+              wrapMaybe(await (target as QueryBuilder<InstanceType<T>>).first())
+          case 'get':
+            return async (): Promise<InstanceType<T>[]> =>
+              wrapMany(await (target as QueryBuilder<InstanceType<T>>).get())
+          case 'all':
+            return async (): Promise<InstanceType<T>[]> =>
+              wrapMany(await (target as QueryBuilder<InstanceType<T>>).all())
+          case 'paginate':
+            return async (page?: number, perPage?: number): Promise<PaginatedResult<InstanceType<T>>> => {
+              const r = await (target as QueryBuilder<InstanceType<T>>).paginate(page ?? 1, perPage)
+              return { ...r, data: wrapMany(r.data) }
+            }
+          case 'create':
+            return async (data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
+              wrap(await (target as QueryBuilder<InstanceType<T>>).create(data))
+          case 'update':
+            return async (id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> =>
+              wrap(await (target as QueryBuilder<InstanceType<T>>).update(id, data))
+          case 'restore':
+            return async (id: number | string): Promise<InstanceType<T>> =>
+              wrap(await (target as QueryBuilder<InstanceType<T>>).restore(id))
+          default:
+            // Chainable methods (where/orderBy/with/...) typically return `target` —
+            // re-wrap so `Model.where('a', 1).first()` keeps hydrating.
+            return (...args: unknown[]): unknown => {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+              const result = (value as (...a: unknown[]) => unknown).apply(target, args)
+              return result === target ? proxy : result
+            }
+        }
+      },
+    }) as QueryBuilder<InstanceType<T>>
+
+    return proxy
+  }
+
   static query<T extends typeof Model>(this: T): QueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): QueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): QueryBuilder<InstanceType<T>> } {
     ModelRegistry.register(this as unknown as typeof Model)
-    let q = ModelRegistry.getAdapter().query<InstanceType<T>>(
-      (this as typeof Model).getTable()
-    )
-    if ((this as typeof Model).softDeletes) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (q as any)._enableSoftDeletes?.()
-    }
-
-    const globalScopes = (this as typeof Model).globalScopes
-    const excludedScopes = new Set<string>()
-
-    for (const [, scopeFn] of Object.entries(globalScopes)) {
-      q = scopeFn(q) as QueryBuilder<InstanceType<T>>
-    }
-
     const modelClass = this as typeof Model
     const localScopes = modelClass.scopes
+    const globalScopes = modelClass.globalScopes
+    const excludedScopes = new Set<string>()
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const enhanced = q as any
-    enhanced.scope = (name: string, ...args: unknown[]) => {
-      const scopeFn = localScopes[name]
-      if (!scopeFn) throw new Error(`[RudderJS ORM] Scope "${name}" is not defined on ${modelClass.name}.`)
-      return scopeFn(enhanced, ...args)
-    }
-    enhanced.withoutGlobalScope = (name: string) => {
-      excludedScopes.add(name)
-      let rebuilt = ModelRegistry.getAdapter().query<InstanceType<T>>(modelClass.getTable())
+    const buildScoped = (): QueryBuilder<InstanceType<T>> => {
+      let raw = ModelRegistry.getAdapter().query<InstanceType<T>>(modelClass.getTable())
       if (modelClass.softDeletes) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rebuilt as any)._enableSoftDeletes?.()
+        (raw as any)._enableSoftDeletes?.()
       }
       for (const [scopeName, scopeFn] of Object.entries(globalScopes)) {
         if (!excludedScopes.has(scopeName)) {
-          rebuilt = scopeFn(rebuilt) as QueryBuilder<InstanceType<T>>
+          raw = scopeFn(raw) as QueryBuilder<InstanceType<T>>
         }
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(rebuilt as any).scope = enhanced.scope
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(rebuilt as any).withoutGlobalScope = enhanced.withoutGlobalScope
-      return rebuilt
+      return Model._hydratingQb(this, raw)
     }
 
-    return enhanced
+    const enhance = (q: QueryBuilder<InstanceType<T>>): QueryBuilder<InstanceType<T>> & { scope(name: string, ...args: unknown[]): QueryBuilder<InstanceType<T>>; withoutGlobalScope(name: string): QueryBuilder<InstanceType<T>> } => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const enhanced = q as any
+      enhanced.scope = (name: string, ...args: unknown[]) => {
+        const scopeFn = localScopes[name]
+        if (!scopeFn) throw new Error(`[RudderJS ORM] Scope "${name}" is not defined on ${modelClass.name}.`)
+        return scopeFn(enhanced, ...args)
+      }
+      enhanced.withoutGlobalScope = (name: string) => {
+        excludedScopes.add(name)
+        return enhance(buildScoped())
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      return enhanced
+    }
+
+    return enhance(buildScoped())
   }
 
   private static _q<T extends typeof Model>(self: T): QueryBuilder<InstanceType<T>> {
     ModelRegistry.register(self as unknown as typeof Model)
-    const q = ModelRegistry.getAdapter().query<InstanceType<T>>((self as typeof Model).getTable())
-    if ((self as typeof Model).softDeletes) {
+    const ModelClass = self as typeof Model
+    let q = ModelRegistry.getAdapter().query<InstanceType<T>>(ModelClass.getTable())
+    if (ModelClass.softDeletes) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (q as any)._enableSoftDeletes?.()
     }
-    let result = q
-    for (const [, scopeFn] of Object.entries((self as typeof Model).globalScopes)) {
-      result = scopeFn(result) as QueryBuilder<InstanceType<T>>
+    for (const [, scopeFn] of Object.entries(ModelClass.globalScopes)) {
+      q = scopeFn(q) as QueryBuilder<InstanceType<T>>
     }
-    return result
+    return Model._hydratingQb(self, q)
   }
 
   static async find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {
@@ -597,6 +671,152 @@ export abstract class Model {
     await self._fireEvent('deleted', id)
   }
 
+  // ── Instance persistence methods ───────────────────────
+
+  /** @internal — pull the primary-key value from this instance, or `undefined` if unset. */
+  private _getKey(): string | number | undefined {
+    const ctor = this.constructor as typeof Model
+    const value = (this as unknown as Record<string, unknown>)[ctor.primaryKey]
+    if (value === undefined || value === null) return undefined
+    return value as string | number
+  }
+
+  /**
+   * @internal — own enumerable data fields, with framework-internal `_` keys
+   * stripped and `undefined` values dropped so a class-declared but never-set
+   * field (`id!: number`) doesn't leak into a create/update payload.
+   */
+  private _toData(): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(this)) {
+      if (k.startsWith('_')) continue
+      if (v === undefined) continue
+      out[k] = v
+    }
+    return out
+  }
+
+  /**
+   * Persist this instance. Inserts when the primary key is unset; otherwise updates.
+   *
+   * Goes through the static `create()` / `update()` path so observers, casts,
+   * and mutators all fire. The instance is mutated in place with the canonical
+   * fields returned by the database (default values, generated ids, computed columns)
+   * and returned for chaining.
+   */
+  async save(): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    const data = this._toData()
+    const id   = this._getKey()
+    const persisted = id === undefined
+      ? await (ctor as typeof Model & { create(d: Record<string, unknown>): Promise<Model> }).create(data)
+      : await (ctor as typeof Model & { update(i: string | number, d: Record<string, unknown>): Promise<Model> }).update(id, data)
+    Object.assign(this, persisted)
+    return this
+  }
+
+  /**
+   * Mass-assign a partial set of attributes onto this instance. Does not persist —
+   * call `save()` afterwards. Returns `this` for chaining.
+   *
+   * Note: `static fillable` is currently a documentation hint and is not enforced
+   * at the framework level; filter user input with a `FormRequest` or explicit
+   * key picks before calling `fill()`.
+   */
+  fill(data: Partial<this>): this {
+    Object.assign(this, data)
+    return this
+  }
+
+  /**
+   * Re-read this instance from the database, replacing in-place with fresh
+   * column values. Throws `ModelNotFoundError` if the row no longer exists.
+   * Useful after triggers, generated columns, or a parallel update from another process.
+   */
+  async refresh(): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    const id = this._getKey()
+    if (id === undefined) {
+      throw new Error(`[RudderJS ORM] Cannot refresh a ${ctor.name} without a primary key.`)
+    }
+    const fresh = await (ctor as typeof Model & { find(i: string | number): Promise<Model | null> }).find(id)
+    if (!fresh) throw new ModelNotFoundError(ctor.name, id)
+    for (const k of Object.keys(this)) {
+      if (!k.startsWith('_')) delete (this as unknown as Record<string, unknown>)[k]
+    }
+    Object.assign(this, fresh)
+    return this
+  }
+
+  /**
+   * Delete this instance from the database. Soft-deletes when `static softDeletes`
+   * is enabled. Routes through the static `delete()` so observers fire.
+   */
+  async delete(): Promise<void> {
+    const ctor = this.constructor as typeof Model
+    const id = this._getKey()
+    if (id === undefined) {
+      throw new Error(`[RudderJS ORM] Cannot delete a ${ctor.name} without a primary key.`)
+    }
+    await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
+  }
+
+  /**
+   * Clone this instance into a new, unsaved copy — the primary key and the
+   * standard timestamp columns are dropped, and any keys passed in `except`
+   * are also stripped. Call `save()` on the returned instance to persist.
+   *
+   * @example
+   * const draft = post.replicate(['publishedAt'])
+   * draft.title = 'Copy: ' + draft.title
+   * await draft.save()
+   */
+  replicate(except: string[] = []): this {
+    const ctor = this.constructor as typeof Model
+    const exclude = new Set<string>([ctor.primaryKey, 'createdAt', 'updatedAt', 'deletedAt', ...except])
+    const Ctor = ctor as unknown as new () => this
+    const clone = new Ctor()
+    // Drop class-declared field defaults that fall under `exclude`, otherwise
+    // a subclass with `id!: number` ships an `id: undefined` own property.
+    // Then drop any other undefined defaults so the clone reads as a freshly-
+    // built record from the source instance, not a half-initialized template.
+    for (const k of Object.keys(clone)) {
+      if (exclude.has(k) || (clone as Record<string, unknown>)[k] === undefined) {
+        delete (clone as Record<string, unknown>)[k]
+      }
+    }
+    for (const [k, v] of Object.entries(this)) {
+      if (k.startsWith('_') || exclude.has(k) || v === undefined) continue
+      ;(clone as unknown as Record<string, unknown>)[k] = v
+    }
+    return clone
+  }
+
+  /**
+   * True when `other` represents the same record — same model class (by table)
+   * and same primary key.
+   */
+  is(other: Model | null | undefined): boolean {
+    if (!other || !(other instanceof Model)) return false
+    const here  = this.constructor as typeof Model
+    const there = other.constructor as typeof Model
+    if (here.getTable() !== there.getTable()) return false
+    const a = this._getKey()
+    const b = (other as unknown as { _getKey(): string | number | undefined })._getKey()
+    return a !== undefined && a === b
+  }
+
+  /** Inverse of `is()`. */
+  isNot(other: Model | null | undefined): boolean {
+    return !this.is(other)
+  }
+
+  /** True when this instance has been soft-deleted (its `deletedAt` is set). */
+  trashed(): boolean {
+    const v = (this as unknown as Record<string, unknown>)['deletedAt']
+    return v !== null && v !== undefined
+  }
+
   // ── Cast / Mutator helpers ─────────────────────────────
 
   /** @internal — apply cast setters and attribute mutators to an incoming data payload */
@@ -629,7 +849,7 @@ export abstract class Model {
    */
   makeVisible(keys: string | string[]): this {
     const k = Array.isArray(keys) ? keys : [keys]
-    this._instanceHidden = (this._instanceHidden ?? (this.constructor as typeof Model).hidden)
+    this.#instanceHidden = (this.#instanceHidden ?? (this.constructor as typeof Model).hidden)
       .filter(h => !k.includes(h))
     return this
   }
@@ -640,7 +860,7 @@ export abstract class Model {
    */
   makeHidden(keys: string | string[]): this {
     const k = Array.isArray(keys) ? keys : [keys]
-    this._instanceHidden = [...(this._instanceHidden ?? (this.constructor as typeof Model).hidden), ...k]
+    this.#instanceHidden = [...(this.#instanceHidden ?? (this.constructor as typeof Model).hidden), ...k]
     return this
   }
 
@@ -649,7 +869,7 @@ export abstract class Model {
    * Returns `this` for chaining.
    */
   setVisible(keys: string[]): this {
-    this._instanceVisible = keys
+    this.#instanceVisible = keys
     return this
   }
 
@@ -658,7 +878,7 @@ export abstract class Model {
    * Returns `this` for chaining.
    */
   setHidden(keys: string[]): this {
-    this._instanceHidden = keys
+    this.#instanceHidden = keys
     return this
   }
 
@@ -667,8 +887,8 @@ export abstract class Model {
    * Returns `this` for chaining.
    */
   mergeVisible(keys: string[]): this {
-    const base = this._instanceVisible ?? (this.constructor as typeof Model).visible
-    this._instanceVisible = [...base, ...keys]
+    const base = this.#instanceVisible ?? (this.constructor as typeof Model).visible
+    this.#instanceVisible = [...base, ...keys]
     return this
   }
 
@@ -677,19 +897,17 @@ export abstract class Model {
    * Returns `this` for chaining.
    */
   mergeHidden(keys: string[]): this {
-    const base = this._instanceHidden ?? (this.constructor as typeof Model).hidden
-    this._instanceHidden = [...base, ...keys]
+    const base = this.#instanceHidden ?? (this.constructor as typeof Model).hidden
+    this.#instanceHidden = [...base, ...keys]
     return this
   }
 
   // ── toJSON ─────────────────────────────────────────────
 
   toJSON(): Record<string, unknown> {
-    const ctor        = this.constructor as typeof Model
-    const rawEntries  = Object.entries(this).filter(([k]) => !k.startsWith('_instance'))
-
+    const ctor = this.constructor as typeof Model
     const raw: Record<string, unknown> = {}
-    for (const [k, v] of rawEntries) {
+    for (const [k, v] of Object.entries(this)) {
       raw[k] = v
     }
 
@@ -718,8 +936,8 @@ export abstract class Model {
     }
 
     // Determine effective visible / hidden lists
-    const effectiveVisible = this._instanceVisible ?? ctor.visible
-    const effectiveHidden  = this._instanceHidden  ?? ctor.hidden
+    const effectiveVisible = this.#instanceVisible ?? ctor.visible
+    const effectiveHidden  = this.#instanceHidden  ?? ctor.hidden
 
     // Apply visible (allowlist) — takes precedence
     if (effectiveVisible.length > 0) {
