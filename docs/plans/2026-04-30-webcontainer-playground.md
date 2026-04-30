@@ -120,14 +120,13 @@ Copy `playground/` to `playground-web/`, then modify:
 - Remove their demo views from `app/Views/Demos/`
 - Trim `routes/web.ts` to the WebContainer-safe demo subset
 
-### Phase 3 — DB bootstrap without migration engine (~2h)
+### Phase 3 — DB bootstrap without migration engine — **DONE 2026-05-01**
 
-Migration engine is a Rust binary — won't run. Pick one of:
+Shipped option (a): a pre-pushed `playground-web/prisma/dev.db` (200 KB, empty rows, all 6 schema files merged) committed to the repo. `playground-web/.gitignore` keeps the global `dev.db` ignore but adds `!prisma/dev.db` so only the canonical one tracks. README updated to drop the manual `prisma db push` step from the boot recipe — fresh clones run `pnpm dev` directly and the schema is already there.
 
-- **(a)** Ship a pre-pushed `prisma/dev.db` in the repo (a few KB; simple; can drift from schema)
-- **(b)** `bootstrap/db-init.ts` runs raw `CREATE TABLE` DDL via `client.execute(...)` on first boot if the file is missing (more robust, more code)
+Schema-change workflow documented in the README: re-run `prisma generate` + `prisma db push` locally + `git add prisma/dev.db`. Drift surfaces in PR diffs.
 
-Start with (a). Move to (b) only if drift becomes painful.
+Option (b) (raw DDL on first boot) deferred until drift becomes painful — premature for the MVP.
 
 Seeders run via `pnpm rudder db:seed` as today.
 

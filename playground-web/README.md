@@ -25,16 +25,22 @@ pnpm install
 pnpm build
 
 cd playground-web
-pnpm exec prisma generate    # one time, after install / schema changes
-pnpm exec prisma db push     # one time — sync schema → ./prisma/dev.db (host-side, before going to WebContainer)
 pnpm dev                     # vike dev on :3000
 ```
 
-> **Phase 3 deferred.** The DB schema is **not** yet pre-pushed into a committed `dev.db`. Run `pnpm exec prisma db push` once before the first `pnpm dev`. A future iteration will commit a pre-pushed `prisma/dev.db` so the WebContainer click-through-boot path works without invoking the Prisma migration engine (which is a Rust binary and won't run in the sandbox).
+The schema is pre-pushed into a committed `prisma/dev.db`, so no `prisma db push` step is needed for a fresh clone. If you change the Prisma schema, regenerate it:
+
+```bash
+pnpm exec prisma generate
+pnpm exec prisma db push     # re-materializes prisma/dev.db with the new schema
+git add prisma/dev.db        # commit it so WebContainer boots stay one-step
+```
 
 ## Booting in WebContainer (StackBlitz)
 
-The plan covers this in Phase 4 — not yet validated end-to-end. Once Phase 3 ships a pre-pushed `dev.db`, the WebContainer boot is `pnpm install && pnpm dev` with no extra steps.
+`pnpm install && pnpm dev`. No extra setup — the committed `prisma/dev.db` carries the schema, and the Prisma runtime uses the WASM query compiler via `@prisma/adapter-libsql`, so the Rust query engine is never loaded.
+
+End-to-end StackBlitz validation is Phase 4 of the plan, not yet executed.
 
 ## Dropped framework packages
 

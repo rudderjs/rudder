@@ -16,6 +16,10 @@ node_modules/
 .turbo/
 *.log
 dev.db
+# But DO commit prisma/dev.db — pre-pushed schema for the WebContainer boot path,
+# since the migration engine is a Rust binary that won't run in StackBlitz's
+# sandbox. Re-push and re-commit when the Prisma schema changes.
+!prisma/dev.db
 .telescope.db
 .telescope.db-shm
 .telescope.db-wal
