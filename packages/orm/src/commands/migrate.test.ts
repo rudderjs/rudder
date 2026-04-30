@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import nodePath from 'node:path'
 import os from 'node:os'
-import { detectORM, buildArgs } from './migrate.js'
+import { detectORM, buildArgs, findSeederFile, hasPrismaSeedConfig, runSeeder } from './migrate.js'
 
 describe('migrate — detectORM()', () => {
   let tmpDir: string
@@ -128,5 +128,112 @@ describe('migrate — buildArgs()', () => {
   it('drizzle db:generate returns empty (no-op)', () => {
     const args = buildArgs('drizzle', 'db:generate')
     assert.deepEqual(args, [])
+  })
+})
+
+describe('migrate — findSeederFile()', () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-seeder-'))
+  })
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns null when no seeder file exists', () => {
+    assert.equal(findSeederFile(tmpDir), null)
+  })
+
+  it('finds DatabaseSeeder.ts', async () => {
+    await fs.mkdir(nodePath.join(tmpDir, 'database/seeders'), { recursive: true })
+    const path = nodePath.join(tmpDir, 'database/seeders/DatabaseSeeder.ts')
+    await fs.writeFile(path, 'export default class {}')
+    assert.equal(findSeederFile(tmpDir), path)
+  })
+
+  it('finds DatabaseSeeder.js when .ts is absent', async () => {
+    await fs.mkdir(nodePath.join(tmpDir, 'database/seeders'), { recursive: true })
+    const path = nodePath.join(tmpDir, 'database/seeders/DatabaseSeeder.js')
+    await fs.writeFile(path, 'export default class {}')
+    assert.equal(findSeederFile(tmpDir), path)
+  })
+})
+
+describe('migrate — hasPrismaSeedConfig()', () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-seedcfg-'))
+  })
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns true when package.json#prisma.seed is set', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      prisma: { seed: 'tsx prisma/seed.ts' },
+    }))
+    assert.equal(hasPrismaSeedConfig(tmpDir), true)
+  })
+
+  it('returns false when package.json has no prisma.seed', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({
+      dependencies: {},
+    }))
+    assert.equal(hasPrismaSeedConfig(tmpDir), false)
+  })
+
+  it('returns false when package.json is missing', () => {
+    assert.equal(hasPrismaSeedConfig(nodePath.join(tmpDir, 'nope')), false)
+  })
+})
+
+describe('migrate — runSeeder()', () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'bk-runseed-'))
+  })
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('throws a clear error when no seeder + no prisma config', async () => {
+    await fs.writeFile(nodePath.join(tmpDir, 'package.json'), JSON.stringify({}))
+    await assert.rejects(() => runSeeder(tmpDir), /No seeder found/)
+  })
+
+  it('invokes a function-based seeder default export', async () => {
+    await fs.mkdir(nodePath.join(tmpDir, 'database/seeders'), { recursive: true })
+    const path = nodePath.join(tmpDir, 'database/seeders/DatabaseSeeder.mjs')
+    const sentinel = nodePath.join(tmpDir, '__ran__')
+    await fs.writeFile(path, `import { writeFile } from 'node:fs/promises'
+export default async function () { await writeFile(${JSON.stringify(sentinel)}, 'ok') }
+`)
+    await runSeeder(tmpDir)
+    const contents = await fs.readFile(sentinel, 'utf8')
+    assert.equal(contents, 'ok')
+  })
+
+  it('invokes a class-based seeder default export', async () => {
+    await fs.mkdir(nodePath.join(tmpDir, 'database/seeders'), { recursive: true })
+    const path = nodePath.join(tmpDir, 'database/seeders/DatabaseSeeder.mjs')
+    const sentinel = nodePath.join(tmpDir, '__ran__')
+    await fs.writeFile(path, `import { writeFile } from 'node:fs/promises'
+export default class DatabaseSeeder {
+  async run () { await writeFile(${JSON.stringify(sentinel)}, 'class') }
+}
+`)
+    await runSeeder(tmpDir)
+    const contents = await fs.readFile(sentinel, 'utf8')
+    assert.equal(contents, 'class')
+  })
+
+  it('throws when default export is not a class or function', async () => {
+    await fs.mkdir(nodePath.join(tmpDir, 'database/seeders'), { recursive: true })
+    const path = nodePath.join(tmpDir, 'database/seeders/DatabaseSeeder.mjs')
+    await fs.writeFile(path, 'export default { not: "callable" }\n')
+    await assert.rejects(() => runSeeder(tmpDir), /must be a Seeder class or function/)
   })
 })

@@ -4,6 +4,13 @@ import { resolve, dirname } from 'node:path'
 import type { Command } from 'commander'
 import chalk from 'chalk'
 
+export interface ExtraOption {
+  /** Flag string, e.g. `'-m, --migration'` */
+  flags:       string
+  /** Human description shown in --help */
+  description: string
+}
+
 export interface MakeSpec {
   /** Commander command name, e.g. `make:controller` */
   command:     string
@@ -17,23 +24,30 @@ export interface MakeSpec {
   directory:   string
   /** Stub generator — receives the normalized class name */
   stub:        (className: string) => string
-  /** Optional hook printed after the success line */
-  afterCreate?: (className: string, relPath: string) => void
+  /** Optional extra flags this command exposes (rendered in --help). */
+  extraOptions?: ExtraOption[]
+  /** Optional hook printed after the success line. Receives all parsed opts. */
+  afterCreate?: (className: string, relPath: string, opts: Record<string, unknown>) => void | Promise<void>
 }
 
 export function registerMake(program: Command, spec: MakeSpec): void {
-  program
+  let cmd = program
     .command(`${spec.command} <name>`)
     .description(spec.description)
     .option('-f, --force', 'Overwrite if file already exists')
-    .action(async (name: string, opts: { force?: boolean }) => {
+
+  for (const extra of spec.extraOptions ?? []) {
+    cmd = cmd.option(extra.flags, extra.description)
+  }
+
+  cmd.action(async (name: string, opts: Record<string, unknown>) => {
       const className = spec.suffix && !name.endsWith(spec.suffix)
         ? `${name}${spec.suffix}`
         : name
       const relPath = `${spec.directory}/${className}.ts`
       const outPath = resolve(process.cwd(), relPath)
 
-      if (existsSync(outPath) && !opts.force) {
+      if (existsSync(outPath) && !opts['force']) {
         console.error(chalk.red(`  ✗ Already exists: ${relPath}`))
         console.error(chalk.dim('    Use --force to overwrite.'))
         return
@@ -43,6 +57,6 @@ export function registerMake(program: Command, spec: MakeSpec): void {
       await writeFile(outPath, spec.stub(className))
 
       console.log(chalk.green(`  ✔ ${spec.label}:`), chalk.cyan(relPath))
-      spec.afterCreate?.(className, relPath)
+      await spec.afterCreate?.(className, relPath, opts)
     })
 }

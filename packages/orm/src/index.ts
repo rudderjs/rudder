@@ -8,6 +8,8 @@ export { Attribute }                               from './attribute.js'
 export { JsonResource, ResourceCollection }        from './resource.js'
 export { ModelCollection }                         from './collection.js'
 export { ModelFactory, sequence }                  from './factory.js'
+export { Seeder }                                  from './seeder.js'
+export type { SeederConstructor }                  from './seeder.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
