@@ -257,8 +257,28 @@ export abstract class Model {
    */
   static attributes: Record<string, Attribute> = {}
 
-  /** Columns that are mass-assignable */
+  /**
+   * Columns that are mass-assignable via `Model.create()`, `Model.update()`,
+   * and `instance.fill()`. When non-empty, this is an allowlist — any other
+   * key in the incoming payload is silently dropped.
+   *
+   * Empty `fillable` + empty `guarded` (the default) means no enforcement —
+   * every key is passed through. Setting either opts in to mass-assignment
+   * protection.
+   *
+   * `instance.forceFill(data)` and direct property assignment + `save()`
+   * bypass this allowlist.
+   */
   static fillable: string[] = []
+
+  /**
+   * Columns that are NOT mass-assignable. Pass `['*']` to forbid all keys
+   * (the most restrictive setting — combine with `fillable` to allow specific
+   * exceptions, or use `forceFill()` to bypass).
+   *
+   * `fillable` (when non-empty) takes precedence over `guarded`.
+   */
+  static guarded: string[] = []
 
   /**
    * Enable soft deletes for this model. When true:
@@ -601,9 +621,45 @@ export abstract class Model {
     }
   }
 
+  /**
+   * @internal — true when `key` is mass-assignable under this class's
+   * `fillable` / `guarded` configuration.
+   *
+   * Rules (mirrors Laravel Eloquent):
+   *   1. Both `fillable` and `guarded` empty → all keys pass (no enforcement).
+   *   2. `fillable` non-empty → allowlist; any key outside it is rejected.
+   *   3. Otherwise `guarded` applies; `['*']` rejects everything; specific keys reject only those.
+   */
+  private static _isFillable(key: string): boolean {
+    if (this.fillable.length === 0 && this.guarded.length === 0) return true
+    if (this.fillable.length > 0) return this.fillable.includes(key)
+    if (this.guarded.includes('*')) return false
+    return !this.guarded.includes(key)
+  }
+
+  /**
+   * @internal — drop keys that are not mass-assignable. When neither
+   * `fillable` nor `guarded` is set, the input is returned unchanged.
+   */
+  private static _filterFillable(data: Record<string, unknown>): Record<string, unknown> {
+    if (this.fillable.length === 0 && this.guarded.length === 0) return data
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(data)) {
+      if (this._isFillable(k)) out[k] = v
+    }
+    return out
+  }
+
   static async create<T extends typeof Model>(this: T, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
-    let payload = self._applyMutators(data as Record<string, unknown>)
+    const filtered = self._filterFillable(data as Record<string, unknown>)
+    return Model._doCreate.call(this, filtered) as Promise<InstanceType<T>>
+  }
+
+  /** @internal — create path that skips the fillable filter. Used by `save()`. */
+  private static async _doCreate<T extends typeof Model>(this: T, data: Record<string, unknown>): Promise<InstanceType<T>> {
+    const self = this as typeof Model
+    let payload = self._applyMutators(data)
 
     const creatingResult = await self._fireEvent('creating', payload)
     if (creatingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
@@ -626,7 +682,14 @@ export abstract class Model {
 
   static async update<T extends typeof Model>(this: T, id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
-    let payload = self._applyMutators(data as Record<string, unknown>)
+    const filtered = self._filterFillable(data as Record<string, unknown>)
+    return Model._doUpdate.call(this, id, filtered) as Promise<InstanceType<T>>
+  }
+
+  /** @internal — update path that skips the fillable filter. Used by `save()`. */
+  private static async _doUpdate<T extends typeof Model>(this: T, id: number | string, data: Record<string, unknown>): Promise<InstanceType<T>> {
+    const self = this as typeof Model
+    let payload = self._applyMutators(data)
 
     const updatingResult = await self._fireEvent('updating', id, payload)
     if (updatingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
@@ -708,9 +771,10 @@ export abstract class Model {
     const ctor = this.constructor as typeof Model
     const data = this._toData()
     const id   = this._getKey()
+    // Bypass fillable: data was set via property assignment, not mass-assignment.
     const persisted = id === undefined
-      ? await (ctor as typeof Model & { create(d: Record<string, unknown>): Promise<Model> }).create(data)
-      : await (ctor as typeof Model & { update(i: string | number, d: Record<string, unknown>): Promise<Model> }).update(id, data)
+      ? await Model._doCreate.call(ctor, data)
+      : await Model._doUpdate.call(ctor, id, data)
     Object.assign(this, persisted)
     return this
   }
@@ -719,11 +783,22 @@ export abstract class Model {
    * Mass-assign a partial set of attributes onto this instance. Does not persist —
    * call `save()` afterwards. Returns `this` for chaining.
    *
-   * Note: `static fillable` is currently a documentation hint and is not enforced
-   * at the framework level; filter user input with a `FormRequest` or explicit
-   * key picks before calling `fill()`.
+   * Drops keys that aren't mass-assignable under the class's `fillable` /
+   * `guarded` configuration. Use `forceFill()` to bypass.
    */
   fill(data: Partial<this>): this {
+    const ctor = this.constructor as typeof Model
+    const filtered = ctor._filterFillable(data as Record<string, unknown>)
+    Object.assign(this, filtered)
+    return this
+  }
+
+  /**
+   * Mass-assign attributes without applying the `fillable` / `guarded` filter.
+   * Use when you trust the source (factory output, internal sync, fixture data)
+   * and want every key on the instance regardless of mass-assignment protection.
+   */
+  forceFill(data: Partial<this>): this {
     Object.assign(this, data)
     return this
   }

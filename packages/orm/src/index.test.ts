@@ -1278,3 +1278,155 @@ describe('Model instance methods', () => {
     assert.equal(JSON.stringify(u), '{"id":1,"name":"A"}')
   })
 })
+
+describe('Mass assignment — fillable / guarded / forceFill', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('no fillable + no guarded passes every key through (back-compat default)', async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({ create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    await User.create({ name: 'A', isAdmin: true } as Partial<User>)
+    assert.deepEqual(createdWith, { name: 'A', isAdmin: true })
+  })
+
+  it('fillable allowlist drops keys outside the list on create()', async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({ create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['name', 'email']
+    }
+    await User.create({ name: 'A', email: 'a@x.com', isAdmin: true } as Partial<User>)
+    assert.deepEqual(createdWith, { name: 'A', email: 'a@x.com' })
+  })
+
+  it('fillable allowlist drops keys outside the list on update()', async () => {
+    let updatedWith: unknown = null
+    const qb = makeQb({ update: async (_id, data) => { updatedWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['name']
+    }
+    await User.update(1, { name: 'B', role: 'admin' } as Partial<User>)
+    assert.deepEqual(updatedWith, { name: 'B' })
+  })
+
+  it('guarded denylist drops listed keys', async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({ create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override guarded = ['isAdmin', 'role']
+    }
+    await User.create({ name: 'A', isAdmin: true, role: 'admin' } as Partial<User>)
+    assert.deepEqual(createdWith, { name: 'A' })
+  })
+
+  it("guarded ['*'] forbids every key", async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({ create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override guarded = ['*']
+    }
+    await User.create({ name: 'A', email: 'a@x.com' } as Partial<User>)
+    assert.deepEqual(createdWith, {})
+  })
+
+  it('fillable wins when both fillable and guarded are set', async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({ create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['name']
+      static override guarded = ['name'] // contradicts fillable; fillable takes precedence
+    }
+    await User.create({ name: 'A', email: 'a@x.com' } as Partial<User>)
+    assert.deepEqual(createdWith, { name: 'A' })
+  })
+
+  it('fill() drops keys outside fillable', () => {
+    class User extends Model {
+      static override fillable = ['name']
+      name?: string
+      role?: string
+    }
+    const u = new User()
+    u.fill({ name: 'A', role: 'admin' } as Partial<User>)
+    assert.equal(u.name, 'A')
+    assert.equal(u.role, undefined)
+  })
+
+  it('forceFill() bypasses the fillable filter', () => {
+    class User extends Model {
+      static override fillable = ['name']
+      name?: string
+      role?: string
+    }
+    const u = new User()
+    u.forceFill({ name: 'A', role: 'admin' } as Partial<User>)
+    assert.equal(u.name, 'A')
+    assert.equal(u.role, 'admin')
+  })
+
+  it('forceFill() returns this for chaining', () => {
+    class User extends Model { name!: string }
+    const u = new User()
+    assert.strictEqual(u.forceFill({ name: 'A' } as Partial<User>), u)
+  })
+
+  it("save() bypasses fillable — properties set directly persist regardless", async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({ create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['name']
+      name!: string
+      role!: string
+    }
+    const u = new User()
+    u.name = 'A'
+    u.role = 'admin'
+    await u.save()
+    assert.deepEqual(createdWith, { name: 'A', role: 'admin' })
+  })
+
+  it("save() update path also bypasses fillable", async () => {
+    let updatedWith: Record<string, unknown> = {}
+    const qb = makeQb({ update: async (_id, data) => { updatedWith = data as Record<string, unknown>; return { id: 1, ...(data as object) } as unknown } })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['name']
+      id!: number
+      name!: string
+      role!: string
+    }
+    const u = User.hydrate({ id: 1, name: 'A', role: 'admin' })!
+    u.role = 'super'
+    await u.save()
+    // role would be filtered if save() applied the fillable allowlist; assert it persists.
+    assert.equal(updatedWith['role'], 'super')
+    assert.equal(updatedWith['name'], 'A')
+  })
+
+  it('firstOrCreate routes through fillable — lookup attrs must be fillable', async () => {
+    type Shape = { id: number; email: string; name: string; role: string }
+    let createdWith: unknown = null
+    const qb = makeQb<Shape>({
+      first:  async () => null,
+      create: async (data) => { createdWith = data; return { id: 1, ...(data as Partial<Shape>) } as Shape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['email', 'name']
+      id!: number
+      email!: string
+      name!: string
+      role!: string
+    }
+    await User.firstOrCreate({ email: 'a@x.com' } as Partial<User>, { name: 'A', role: 'admin' } as Partial<User>)
+    assert.deepEqual(createdWith, { email: 'a@x.com', name: 'A' })
+  })
+})
