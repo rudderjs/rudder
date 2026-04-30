@@ -76,6 +76,87 @@ await Post.restore(id)
 await Post.forceDelete(id)
 ```
 
+### Hydrated instances
+
+Every read path (`find`/`first`/`all`/`paginate`/`where(...).first()`/`where(...).get()`/`create`/`update`/`restore`/`firstOrCreate`/`updateOrCreate`) returns Model instances — not plain records. Instance methods you define on the class work directly:
+
+```ts
+class User extends Model {
+  isAdmin() { return this.role === 'admin' }
+}
+
+const user = await User.find(id)
+if (user?.isAdmin()) { /* ... */ }
+```
+
+The base Model ships with persistence + identity instance methods:
+
+```ts
+const user = await User.find(id)
+
+user.fill({ name: 'New' })          // mass-assign without persisting (filtered by `fillable`)
+user.forceFill({ role: 'admin' })   // mass-assign WITHOUT the filter (trusted source)
+await user.save()                   // insert if no PK; otherwise update
+await user.refresh()                // re-read row + replace fields in place
+await user.delete()                 // soft-delete or hard-delete based on softDeletes
+const draft = user.replicate()      // unsaved clone (drops PK + timestamps)
+user.is(other)                      // identity by table + PK
+user.trashed()                      // true if deletedAt is set
+```
+
+`Model.hydrate(record)` wraps a plain record (cached JSON, fixture) into a Model instance.
+
+### Mass assignment
+
+`static fillable` (allowlist) and `static guarded` (denylist; `['*']` locks all) are enforced on `Model.create()`, `Model.update()`, and `instance.fill()` — keys outside the policy are silently dropped. Both default to `[]` (no enforcement). `fillable` wins when both set.
+
+```ts
+class User extends Model {
+  static fillable = ['name', 'email']
+}
+
+await User.create({ name: 'A', email: 'a@x.com', isAdmin: true })  // isAdmin dropped
+```
+
+Bypass paths:
+- `instance.forceFill(data)` — skip the filter (factories, internal sync, fixtures).
+- `instance.save()` after direct property assignment — `user.role = 'admin'; await user.save()` works regardless of `fillable`.
+
+**Heads-up for `firstOrCreate(attrs, values)`:** `attrs` go through `create()` so lookup keys must be in `fillable` too — otherwise the lookup column won't be set on the new row.
+
+### Counters: increment / decrement
+
+For counter columns, use the atomic `increment`/`decrement` instead of read-modify-write:
+
+```ts
+await Post.increment(postId, 'viewCount')                            // +1, atomic SQL
+await Post.increment(postId, 'viewCount', 5)                         // +5
+await User.decrement(userId, 'credits', 10, { lastSeen: new Date() }) // with extras
+
+// Instance variant — merges new value back so post.viewCount reflects it
+await post.increment('viewCount')
+```
+
+**Caveat:** `increment`/`decrement` deliberately do NOT fire `updating`/`updated`/`saving`/`saved` observers. Counter updates are a pure data-plane operation. If you need observer hooks, read the row, compute the resolved value, and call `Model.update()` instead.
+
+### firstOrCreate / updateOrCreate
+
+```ts
+// Find by email; if missing, create with attrs + values merged
+const user = await User.firstOrCreate(
+  { email: 'a@x.com' },
+  { name: 'Alice', role: 'user' },
+)
+
+// Find by email; if found update with values, else create with merge
+const user = await User.updateOrCreate(
+  { email: 'a@x.com' },
+  { name: 'Alice', role: 'admin' },
+)
+```
+
+`firstOrCreate` filters by all keys in the first argument; the second is only used on create. `updateOrCreate` always writes the second argument. Both go through `Model.create()`/`Model.update()`, so `fillable` applies (lookup attrs must be fillable).
+
 ### Scopes
 
 ```ts
@@ -195,6 +276,32 @@ User.observe(UserObserver)
 
 // Or inline event listeners
 User.on('updating', (id, data) => { data['updatedAt'] = new Date() ; return data })
+```
+
+### ModelRegistry
+
+Tracks registered Model classes for discovery by framework components (Telescope's model collector, etc).
+
+```ts
+import { ModelRegistry } from '@rudderjs/orm'
+
+// Adapter registration (done by the database provider)
+ModelRegistry.set(adapter)
+
+// Eager model registration — preferred for models you want observed before
+// the first query fires. Do this in AppServiceProvider.boot().
+ModelRegistry.register(User)
+ModelRegistry.register(Post)
+
+// Lazy auto-registration — models are also registered on first query()
+// or first find()/all()/first()/where()/count()/paginate() call.
+
+// Iteration
+for (const [name, ModelClass] of ModelRegistry.all()) { /* ... */ }
+
+// Subscribe to future registrations (returns unsubscribe fn)
+const stop = ModelRegistry.onRegister((name, cls) => { /* ... */ })
+stop()
 ```
 
 ## Common Pitfalls
