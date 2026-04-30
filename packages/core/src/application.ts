@@ -428,7 +428,17 @@ export class ExceptionConfigurator {
         return renderHttpException(err, req)
       }
 
-      // 5. Unhandled — report + render 500
+      // 5. Errors carrying a duck-typed `httpStatus` (e.g. ModelNotFoundError,
+      // RouteModelNotFoundError) — render with that status. Avoids a hard
+      // dependency on @rudderjs/orm or @rudderjs/router from here.
+      if (err instanceof Error) {
+        const status = (err as Error & { httpStatus?: unknown }).httpStatus
+        if (typeof status === 'number' && status >= 400 && status < 600) {
+          return renderHttpException(new HttpException(status, err.message), req)
+        }
+      }
+
+      // 6. Unhandled — report + render 500
       report(err)
       let debug = false
       try { debug = Application.getInstance().debug } catch { /* app not ready */ }
