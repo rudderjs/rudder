@@ -16,7 +16,7 @@
     "docs:preview": "cd docs && pnpm preview",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "release": "pnpm build && pnpm -r publish --access public --no-git-checks"
+    "release": "pnpm build && pnpm changeset publish"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
