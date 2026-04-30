@@ -145,12 +145,63 @@ export class RouteBuilder {
   }
 }
 
+// ─── Route Model Binding ───────────────────────────────────
+
+/**
+ * Duck-typed contract for any object that resolves a string route parameter
+ * into a value (typically a Model instance, but the router doesn't depend on
+ * `@rudderjs/orm` — anything with a static `findForRoute` method works).
+ *
+ * Returning `null` signals "not found" — the router maps that to a thrown
+ * `RouteModelNotFoundError`, which the framework's HTTP layer renders as a 404.
+ */
+export interface RouteResolver {
+  /** Owning class name — used for error messages only. */
+  name: string
+  /** Resolve the raw param value. Return `null` for not-found. */
+  findForRoute(value: string): Promise<unknown | null> | unknown | null
+}
+
+export interface RouteBindingOptions {
+  /**
+   * When `true`, an absent or unresolvable param value silently sets
+   * `req.bound[name] = null` instead of throwing. Useful for shared routes
+   * that may or may not have a logged-in subject.
+   */
+  optional?: boolean
+}
+
+interface RouteBinding {
+  resolver: RouteResolver
+  optional: boolean
+}
+
+/**
+ * Thrown by route binding middleware when a required `{param}` cannot be
+ * resolved into a model instance. The HTTP layer renders this as a 404; apps
+ * can catch it explicitly to render a custom not-found page.
+ */
+export class RouteModelNotFoundError extends Error {
+  readonly model: string
+  readonly param: string
+  readonly value: string
+
+  constructor(model: string, param: string, value: string) {
+    super(`[RudderJS] No ${model} matched route parameter "${param}" with value "${value}".`)
+    this.name = 'RouteModelNotFoundError'
+    this.model = model
+    this.param = param
+    this.value = value
+  }
+}
+
 // ─── Router ────────────────────────────────────────────────
 
 export class Router {
   private routes: RouteDefinition[] = []
   private globalMiddleware: MiddlewareHandler[] = []
   private namedRoutes = new Map<string, string>()
+  private bindings = new Map<string, RouteBinding>()
 
   /** @internal — called by RouteBuilder */
   _registerName(name: string, path: string): void {
@@ -181,11 +232,12 @@ export class Router {
     return Object.fromEntries(this.namedRoutes)
   }
 
-  /** Clear registered routes, middleware, and named routes. */
+  /** Clear registered routes, middleware, named routes, and route bindings. */
   reset(): this {
     this.routes = []
     this.globalMiddleware = []
     this.namedRoutes.clear()
+    this.bindings.clear()
     return this
   }
 
@@ -193,6 +245,80 @@ export class Router {
   use(middleware: MiddlewareHandler): this {
     this.globalMiddleware.push(middleware)
     return this
+  }
+
+  /**
+   * Bind a route parameter name to a resolver. When a route's path contains
+   * `:<name>`, the matching string param is resolved before the handler runs;
+   * the result is exposed as `req.bound[name]`. The raw string remains in
+   * `req.params[name]` so existing code keeps working.
+   *
+   * Resolvers are duck-typed — pass any class with a static `findForRoute(val)`
+   * method (`@rudderjs/orm` Model classes match by default). Bindings are
+   * opt-in: routes whose path does not include the bound `:name` are unaffected.
+   *
+   * @example
+   * import { router } from '@rudderjs/router'
+   * import { User } from '../app/Models/User.js'
+   *
+   * router.bind('user', User)
+   * router.get('/users/:user', (req) => req.bound!['user'])
+   *
+   * // Custom column → declare on the model:
+   * class Post extends Model {
+   *   static override routeKey = 'slug'
+   * }
+   * router.bind('post', Post)  // resolves /posts/:post by slug
+   *
+   * // Optional binding — null when missing instead of 404:
+   * router.bind('viewer', User, { optional: true })
+   */
+  bind(name: string, resolver: RouteResolver, options: RouteBindingOptions = {}): this {
+    this.bindings.set(name, { resolver, optional: options.optional ?? false })
+    return this
+  }
+
+  /** All registered route bindings, keyed by param name. */
+  listBindings(): Record<string, RouteResolver> {
+    const out: Record<string, RouteResolver> = {}
+    for (const [name, binding] of this.bindings) out[name] = binding.resolver
+    return out
+  }
+
+  /**
+   * Build the per-route binding middleware. Walks the route's `:param` segments,
+   * looks them up in the binding map, and resolves each in parallel before
+   * calling `next()`. No-op for routes whose path contains no bound params.
+   */
+  private _buildBindingMiddleware(path: string): MiddlewareHandler | null {
+    const paramNames = [...path.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)\??/g)].map(m => m[1] as string)
+    const matches: Array<[string, RouteBinding]> = []
+    for (const name of paramNames) {
+      const binding = this.bindings.get(name)
+      if (binding) matches.push([name, binding])
+    }
+    if (matches.length === 0) return null
+
+    return async (req, _res, next) => {
+      // Lazy-init bound bag so handlers always see an object.
+      const bound = (req as unknown as { bound?: Record<string, unknown> }).bound ?? {}
+      ;(req as unknown as { bound: Record<string, unknown> }).bound = bound
+
+      for (const [name, binding] of matches) {
+        const raw = req.params[name]
+        if (raw === undefined || raw === '') {
+          if (binding.optional) { bound[name] = null; continue }
+          throw new RouteModelNotFoundError(binding.resolver.name, name, '')
+        }
+        const resolved = await binding.resolver.findForRoute(raw)
+        if (resolved === null || resolved === undefined) {
+          if (binding.optional) { bound[name] = null; continue }
+          throw new RouteModelNotFoundError(binding.resolver.name, name, raw)
+        }
+        bound[name] = resolved
+      }
+      await next()
+    }
   }
 
   /** Manually register a route. Returns `this` for bulk registration. */
@@ -261,7 +387,17 @@ export class Router {
   /** Mount all routes onto a server adapter. */
   mount(server: ServerAdapter): void {
     for (const mw of this.globalMiddleware) server.applyMiddleware(mw)
-    for (const route of this.routes) server.registerRoute(route)
+    for (const route of this.routes) {
+      const bindingMw = this._buildBindingMiddleware(route.path)
+      if (bindingMw) {
+        server.registerRoute({
+          ...route,
+          middleware: [bindingMw, ...route.middleware],
+        })
+      } else {
+        server.registerRoute(route)
+      }
+    }
   }
 
   /** All registered routes — useful for `routes:list`. */

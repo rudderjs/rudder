@@ -119,6 +119,25 @@ The middleware rejects missing, invalid, or expired signatures with HTTP 403. Co
 | `Url.previous(req, fallback?)` | Referer header or fallback |
 | `Url.setKey(key)` | Override the signing key (for tests) |
 
+## Route model binding
+
+Bind a `:param` segment to a Model class so the router resolves it into an instance before your handler runs:
+
+```ts
+import { router } from '@rudderjs/router'
+import { User } from '../app/Models/User.js'
+
+router.bind('user', User)
+router.get('/users/:user', (req) => {
+  const user = req.bound!['user'] as User
+  return user.toJSON()
+})
+```
+
+The default resolver runs `User.findForRoute(value)` (which delegates to `Model.where(routeKey, value).first()`); override `static routeKey` on your model to resolve by slug or another unique column. Pass `{ optional: true }` to set `req.bound!.name = null` instead of throwing when no record matches.
+
+A non-resolving required binding throws `RouteModelNotFoundError`; the framework's HTTP layer renders that as a 404. See the [route binding section in Models](/guide/database/models#route-model-binding) for resolver overrides.
+
 ## Decorator controllers
 
 For routes that share a prefix or middleware, group them into a controller class. See [Controllers](/guide/controllers).

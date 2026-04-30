@@ -146,6 +146,31 @@ router.post('/admin', handler, [authMiddleware, adminMiddleware])
 
 ---
 
+## Route model binding
+
+Bind a `:param` segment to any class with a static `findForRoute(value)` method (a `@rudderjs/orm` Model is the canonical fit). Resolution runs as a prepended per-route middleware before your handler, exposing the result as `req.bound!.<name>`.
+
+```ts
+import { router } from '@rudderjs/router'
+import { User } from '../app/Models/User.js'
+
+router.bind('user', User)
+
+router.get('/users/:user', (req) => {
+  const user = req.bound!['user']  // a User instance, or 404 was thrown
+  return user
+})
+
+// Optional binding — null instead of 404 when missing
+router.bind('viewer', User, { optional: true })
+```
+
+Returning `null` from `findForRoute` triggers `RouteModelNotFoundError` (HTTP 404). The raw string remains in `req.params[name]` regardless. Routes whose path doesn't include a bound param are unaffected.
+
+The `RouteResolver` contract is duck-typed — `name: string` + `findForRoute(value): unknown | Promise<unknown | null>` — so the router doesn't depend on `@rudderjs/orm`.
+
+---
+
 ## Mounting onto a server adapter
 
 ```ts
@@ -169,12 +194,14 @@ router.mount(serverAdapter)
 | `all(path, handler, mw?)` | `RouteBuilder` | Register route matching any method |
 | `add(method, path, handler, mw?)` | `this` | Register route with explicit method |
 | `use(middleware)` | `this` | Register global middleware |
+| `bind(name, resolver, opts?)` | `this` | Bind a `:param` to a `RouteResolver` (e.g. an ORM Model) for auto-resolution |
+| `listBindings()` | `Record<string, RouteResolver>` | All registered route bindings |
 | `registerController(Class)` | `this` | Register decorator-based controller |
 | `mount(serverAdapter)` | `void` | Apply middleware + routes to adapter |
 | `list()` | `RouteDefinition[]` | All registered routes |
 | `listNamed()` | `Record<string, string>` | All named routes |
 | `getNamedRoute(name)` | `string \| undefined` | Path for a named route |
-| `reset()` | `this` | Clear routes, middleware, and named routes |
+| `reset()` | `this` | Clear routes, middleware, named routes, and bindings |
 
 ### `RouteBuilder`
 

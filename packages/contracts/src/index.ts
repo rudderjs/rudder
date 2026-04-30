@@ -138,6 +138,18 @@ export interface AppRequest {
   body:    unknown
   raw:     unknown  // the original server-specific request object
 
+  /**
+   * Resolved values for any route parameters bound via `router.bind(name, ...)`.
+   * Populated by the router's per-route binding middleware before the handler runs.
+   * Absent on routes that have no bound params; the raw string value remains in
+   * `req.params[name]` regardless.
+   *
+   * @example
+   * router.bind('user', User)
+   * router.get('/users/:user', (req) => req.bound!['user'])
+   */
+  bound?: Record<string, unknown>
+
   // ── Typed input accessors ─────────────────────────────────
   // Merge order: params > body > query (params take priority)
 

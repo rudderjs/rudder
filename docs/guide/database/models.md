@@ -143,6 +143,78 @@ await post.increment('viewCount')
 
 **Caveat — observers don't fire.** `increment` / `decrement` deliberately skip the `updating` / `updated` / `saving` / `saved` lifecycle. They're a pure data-plane operation: the observer payload would have to be either the delta (confusing) or the resolved value (would require a read, breaking atomicity). If you need observer hooks, read the row, set the resolved value, and call `Model.update()` instead.
 
+## Relations
+
+For eager loading, prefer your adapter's native relation engine — Prisma's `include` / `select`, Drizzle's `with()`. They're already type-safe and handle joins, depth, ordering, and selective columns out of the box.
+
+For the *lazy fluent fetch* case — "give me a chainable QueryBuilder scoped to this parent record" — declare the relation on `static relations` and call `instance.related(name)`:
+
+```ts
+class Post extends Model {}
+
+class User extends Model {
+  static override relations = {
+    posts: { type: 'hasMany',   model: () => Post, foreignKey: 'authorId' },
+    team:  { type: 'belongsTo', model: () => Team, foreignKey: 'teamId' },
+    phone: { type: 'hasOne',    model: () => Phone, foreignKey: 'userId' },
+  } as const
+}
+
+const user = await User.find(1)
+
+// Chainable QueryBuilder filtered to this user
+const recent = await user!.related('posts')
+  .orderBy('createdAt', 'desc')
+  .limit(5)
+  .get()
+
+// belongsTo fetches the single related row
+const team = await user!.related('team').first()
+```
+
+**Supported types:** `hasOne`, `hasMany`, `belongsTo`. Polymorphic and many-to-many are intentionally out of scope — reach for the adapter directly when you need them.
+
+**Defaults:** `foreignKey` defaults to `<parentClassName>Id` (camelCase) for `hasOne` / `hasMany`, and `<relatedClassName>Id` for `belongsTo`. `localKey` defaults to the parent's primary key (or the FK on `belongsTo`). Override either when your schema diverges.
+
+The `model: () => Post` thunk is mandatory — relation declarations sit on each side of the relationship, and a direct reference would create a circular import at module evaluation time.
+
+## Route model binding
+
+Routes that resolve a parameter into a Model instance (`/users/:user`, `/posts/:post`) can opt in to automatic resolution via `router.bind(name, ModelClass)`. The router's per-route binding middleware reads `req.params.user`, calls `User.findForRoute(value)`, and exposes the result as `req.bound!.user`. A 404-equivalent `RouteModelNotFoundError` is thrown when no record matches.
+
+```ts
+// routes/web.ts
+import { router } from '@rudderjs/router'
+import { User } from '../app/Models/User.js'
+import { Post } from '../app/Models/Post.js'
+
+router.bind('user', User)   // resolves /users/:user by id
+router.bind('post', Post)   // routeKey on Post determines the column
+
+router.get('/users/:user', (req) => {
+  const user = req.bound!['user'] as User
+  return user.toJSON()
+})
+```
+
+By default `findForRoute(value)` runs `Model.where('id', value).first()`. Override the column with `static routeKey`, or override the resolver entirely to apply additional constraints:
+
+```ts
+class Post extends Model {
+  // Resolve by slug instead of id.
+  static override routeKey = 'slug'
+
+  // Only published posts are bindable.
+  static override async findForRoute(value: string) {
+    return await this.where('slug', value)
+      .where('publishedAt', '!=', null)
+      .first()
+  }
+}
+```
+
+`router.bind(name, Model, { optional: true })` flips the missing-record behaviour — `req.bound!.name` is set to `null` instead of throwing. The raw string remains available at `req.params.name` regardless.
+
 ## Mass assignment
 
 `static fillable` is an allowlist of columns that may be set from `Model.create()`, `Model.update()`, or `instance.fill()`. Any other key in the payload is silently dropped before the data reaches the adapter — so attacker-controlled fields like `isAdmin` can't sneak in through a form post.
