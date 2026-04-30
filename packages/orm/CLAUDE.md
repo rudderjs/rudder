@@ -19,7 +19,9 @@ Eloquent-style ORM — Model base class, casts, attributes, scopes, observers, f
 - **Serialization order**: casts (get) → attributes (getter) → appends → visible/hidden filtering → `toJSON()`
 - **Mass assignment**: `static fillable` is a documentation hint, NOT enforced today. Filter user input with `FormRequest` or explicit key picks before `create()`/`update()`.
 - **Soft deletes**: `delete()` sets `deletedAt`; use `forceDelete()` for real removal
-- **Records aren't Model instances**: query results are plain objects (Prisma adapter doesn't hydrate). Instance methods (`.save()`, `.fill()` etc.) NOT available — use static methods only. Hydration is a planned change.
+- **Hydration**: every read path (`find`/`first`/`all`/`paginate`/`where(...).get()`/etc.) returns Model instances, not plain records. Instance methods (`save`/`fill`/`refresh`/`delete`/`replicate`/`is`/`isNot`/`trashed`) work directly on those instances. Use `Model.hydrate(record)` to wrap an external plain record (cached JSON, fixture). Adapters still return plain records — the hydrating QueryBuilder Proxy wraps them at the Model boundary.
+- **Internal fields are `#`-private**: serialization overrides (`#instanceHidden`/`#instanceVisible`) use ECMAScript private syntax so they never appear in `Object.entries`, object spread, or `JSON.stringify` — keeps hydrated instances wire-format clean for Prisma writes and Telescope serialization.
+- **`_toData()` filters `undefined`**: a class field declared `id!: number` becomes an enumerable `undefined` own property at construction time; `save()`/`replicate()` drop those so Prisma never sees `id: undefined` on inserts.
 
 ## Conventions
 

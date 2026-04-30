@@ -264,7 +264,8 @@ describe('Model static methods', () => {
 
     class User extends Model {}
     const result = await User.find(42)
-    assert.deepStrictEqual(result, expected)
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, expected)
   })
 
   it('find() returns null when not found', async () => {
@@ -283,7 +284,9 @@ describe('Model static methods', () => {
 
     class User extends Model {}
     const result = await User.all()
-    assert.deepStrictEqual(result, rows)
+    assert.equal(result.length, 2)
+    assert.ok(result[0] instanceof User)
+    assert.deepStrictEqual(result.map(r => ({ ...r })), rows)
   })
 
   it('all() returns empty array when table is empty', async () => {
@@ -326,7 +329,8 @@ describe('Model static methods', () => {
 
     class User extends Model {}
     const result = await User.create(payload as unknown as Partial<InstanceType<typeof User>>)
-    assert.deepStrictEqual(result, created)
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, created)
   })
 
   it('with() returns a QueryBuilder', () => {
@@ -403,7 +407,8 @@ describe('Model soft deletes', () => {
       static override softDeletes = true
     }
     const result = await Post.restore(1)
-    assert.deepStrictEqual(result, restored)
+    assert.ok(result instanceof Post)
+    assert.deepStrictEqual({ ...result }, restored)
   })
 
   it('forceDelete() delegates to query().forceDelete()', async () => {
@@ -746,7 +751,8 @@ describe('Model.findOrFail() / firstOrFail()', () => {
     ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
     class User extends Model {}
     const result = await User.findOrFail(1)
-    assert.deepStrictEqual(result, expected)
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, expected)
   })
 
   it('findOrFail throws ModelNotFoundError when missing', async () => {
@@ -766,7 +772,8 @@ describe('Model.findOrFail() / firstOrFail()', () => {
     ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
     class User extends Model {}
     const result = await User.firstOrFail()
-    assert.deepStrictEqual(result, expected)
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, expected)
   })
 
   it('firstOrFail throws ModelNotFoundError when missing', async () => {
@@ -801,7 +808,8 @@ describe('Model.firstOrCreate() / updateOrCreate()', () => {
     ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
     class User extends Model { id!: number; email!: string; name!: string }
     const result = await User.firstOrCreate({ email: 'a@x.com' }, { name: 'Bob' })
-    assert.deepStrictEqual(result, existing)
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, existing)
     assert.equal(createCalls, 0)
   })
 
@@ -815,7 +823,8 @@ describe('Model.firstOrCreate() / updateOrCreate()', () => {
     class User extends Model { id!: number; email!: string; name!: string }
     const result = await User.firstOrCreate({ email: 'b@x.com' }, { name: 'Bob' })
     assert.deepStrictEqual(createPayload, { email: 'b@x.com', name: 'Bob' })
-    assert.deepStrictEqual(result, { id: 2, email: 'b@x.com', name: 'Bob' })
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, { id: 2, email: 'b@x.com', name: 'Bob' })
   })
 
   it('updateOrCreate updates existing record', async () => {
@@ -835,7 +844,8 @@ describe('Model.firstOrCreate() / updateOrCreate()', () => {
     const result = await User.updateOrCreate({ email: 'a@x.com' }, { name: 'New' })
     assert.equal(updateId, 7)
     assert.deepStrictEqual(updatePayload, { name: 'New' })
-    assert.deepStrictEqual(result, { id: 7, email: 'a@x.com', name: 'New' })
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, { id: 7, email: 'a@x.com', name: 'New' })
   })
 
   it('updateOrCreate creates when no record matches', async () => {
@@ -848,7 +858,8 @@ describe('Model.firstOrCreate() / updateOrCreate()', () => {
     class User extends Model { id!: number; email!: string; name!: string }
     const result = await User.updateOrCreate({ email: 'c@x.com' }, { name: 'Cara' })
     assert.deepStrictEqual(createPayload, { email: 'c@x.com', name: 'Cara' })
-    assert.deepStrictEqual(result, { id: 9, email: 'c@x.com', name: 'Cara' })
+    assert.ok(result instanceof User)
+    assert.deepStrictEqual({ ...result }, { id: 9, email: 'c@x.com', name: 'Cara' })
   })
 })
 
@@ -864,7 +875,8 @@ describe('Model lifecycle — retrieved/saving/saved', () => {
     class User extends Model {}
     User.on('retrieved', (record) => { events.push(record) })
     await User.find(1)
-    assert.deepStrictEqual(events, [{ id: 1, name: 'A' }])
+    assert.equal(events.length, 1)
+    assert.deepStrictEqual({ ...(events[0] as object) }, { id: 1, name: 'A' })
     User.clearObservers()
   })
 
@@ -886,7 +898,8 @@ describe('Model lifecycle — retrieved/saving/saved', () => {
     class User extends Model {}
     User.on('retrieved', (record) => { events.push(record) })
     await User.all()
-    assert.deepStrictEqual(events, [{ id: 1 }, { id: 2 }])
+    assert.equal(events.length, 2)
+    assert.deepStrictEqual(events.map(r => ({ ...(r as object) })), [{ id: 1 }, { id: 2 }])
     User.clearObservers()
   })
 
@@ -997,5 +1010,271 @@ describe('Model.withoutEvents()', () => {
     await User.create({ name: 'A' } as Partial<User>)
     assert.deepStrictEqual(events, ['creating'])
     User.clearObservers()
+  })
+})
+
+// ─── Hydration ────────────────────────────────────────────────────────────────
+
+describe('Model.hydrate()', () => {
+  it('returns null for null/undefined input', () => {
+    class User extends Model {}
+    assert.strictEqual(User.hydrate(null), null)
+    assert.strictEqual(User.hydrate(undefined), null)
+  })
+
+  it('builds an instance carrying the record fields', () => {
+    class User extends Model { id!: number; name!: string }
+    const u = User.hydrate({ id: 1, name: 'A' })!
+    assert.ok(u instanceof User)
+    assert.equal(u.id, 1)
+    assert.equal(u.name, 'A')
+  })
+
+  it('hydrated instance only has data fields enumerable', () => {
+    class User extends Model { id!: number; name!: string }
+    const u = User.hydrate({ id: 1, name: 'A' })!
+    assert.deepStrictEqual(Object.keys(u).sort(), ['id', 'name'])
+  })
+
+  it('passes through an already-hydrated instance unchanged', () => {
+    class User extends Model {}
+    const u = User.hydrate({ id: 1 })!
+    assert.strictEqual(User.hydrate(u), u)
+  })
+})
+
+describe('Query results return Model instances', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('Model.where().first() returns an instance', async () => {
+    const qb = makeQb({ first: async () => ({ id: 1, name: 'A' }) })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id?: number }
+    const result = await User.where('id', 1).first()
+    assert.ok(result instanceof User)
+    assert.equal(result.id, 1)
+  })
+
+  it('Model.where().get() returns an array of instances', async () => {
+    const qb = makeQb({ get: async () => [{ id: 1 }, { id: 2 }] })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model {}
+    const result = await User.where('active', true).get()
+    assert.equal(result.length, 2)
+    assert.ok(result[0] instanceof User)
+    assert.ok(result[1] instanceof User)
+  })
+
+  it('Model.paginate() data is an array of instances', async () => {
+    const qb = makeQb({
+      paginate: async () => ({ data: [{ id: 1 }, { id: 2 }], total: 2, perPage: 15, currentPage: 1, lastPage: 1, from: 1, to: 2 }),
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model {}
+    const result = await User.paginate(1)
+    assert.equal(result.data.length, 2)
+    assert.ok(result.data[0] instanceof User)
+  })
+
+  it('chaining via with() preserves hydration', async () => {
+    const qb = makeQb({ first: async () => ({ id: 1 }) })
+    ModelRegistry.set(makeAdapter(qb))
+    class Post extends Model {}
+    const result = await Post.with('author').where('id', 1).first()
+    assert.ok(result instanceof Post)
+  })
+})
+
+// ─── Instance methods ─────────────────────────────────────────────────────────
+
+describe('Model instance methods', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('save() inserts when no primary key is set', async () => {
+    let createPayload: unknown = null
+    const qb = makeQb({
+      create: async (data) => { createPayload = data; return { id: 1, ...(data as object) } },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id?: number; name?: string }
+
+    const u = new User()
+    u.name = 'Alice'
+    await u.save()
+    assert.deepStrictEqual(createPayload, { name: 'Alice' })
+    assert.equal(u.id, 1)
+  })
+
+  it('save() updates when primary key is set', async () => {
+    let updateId: unknown = null
+    let updatePayload: unknown = null
+    const qb = makeQb({
+      update: async (id, data) => {
+        updateId = id
+        updatePayload = data
+        return { id, ...(data as object) }
+      },
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number; name!: string }
+
+    const u = User.hydrate({ id: 7, name: 'Old' })!
+    u.name = 'New'
+    await u.save()
+    assert.equal(updateId, 7)
+    assert.deepStrictEqual(updatePayload, { id: 7, name: 'New' })
+  })
+
+  it('save() merges server-side fields back into the instance', async () => {
+    const qb = makeQb({
+      create: async (data) => ({ id: 42, createdAt: 'now', ...(data as object) }),
+    })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id?: number; name?: string; createdAt?: string }
+
+    const u = new User()
+    u.name = 'Alice'
+    await u.save()
+    assert.equal(u.id, 42)
+    assert.equal(u.createdAt, 'now')
+  })
+
+  it('fill() merges fields without persisting', () => {
+    class User extends Model { name!: string; email!: string }
+    const u = new User()
+    u.fill({ name: 'A', email: 'a@x.com' } as Partial<User>)
+    assert.equal(u.name, 'A')
+    assert.equal(u.email, 'a@x.com')
+  })
+
+  it('fill() returns this for chaining', () => {
+    class User extends Model { name!: string }
+    const u = new User()
+    assert.strictEqual(u.fill({ name: 'A' } as Partial<User>), u)
+  })
+
+  it('refresh() re-reads from DB and replaces fields', async () => {
+    const qb = makeQb({ find: async () => ({ id: 1, name: 'Fresh' }) })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number; name!: string }
+
+    const u = User.hydrate({ id: 1, name: 'Stale' })!
+    await u.refresh()
+    assert.equal(u.name, 'Fresh')
+  })
+
+  it('refresh() throws ModelNotFoundError when row is gone', async () => {
+    const qb = makeQb({ find: async () => null })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number; name!: string }
+    const u = User.hydrate({ id: 99, name: 'Stale' })!
+    await assert.rejects(() => u.refresh(), ModelNotFoundError)
+  })
+
+  it('refresh() throws when no primary key is set', async () => {
+    ModelRegistry.set(makeAdapter())
+    class User extends Model { id?: number }
+    const u = new User()
+    await assert.rejects(() => u.refresh(), /without a primary key/)
+  })
+
+  it('delete() routes through the static and fires observers', async () => {
+    const events: string[] = []
+    let deletedId: unknown = null
+    const qb = makeQb({ delete: async (id) => { deletedId = id } })
+    ModelRegistry.set(makeAdapter(qb))
+    class User extends Model { id!: number }
+    User.on('deleting', (id) => { events.push(`deleting:${String(id)}`) })
+    User.on('deleted',  (id) => { events.push(`deleted:${String(id)}`) })
+
+    const u = User.hydrate({ id: 5 })!
+    await u.delete()
+    assert.equal(deletedId, 5)
+    assert.deepStrictEqual(events, ['deleting:5', 'deleted:5'])
+    User.clearObservers()
+  })
+
+  it('delete() throws when no primary key is set', async () => {
+    ModelRegistry.set(makeAdapter())
+    class User extends Model { id?: number }
+    const u = new User()
+    await assert.rejects(() => u.delete(), /without a primary key/)
+  })
+
+  it('replicate() returns a new unsaved instance without pk + timestamps', () => {
+    class Post extends Model { id!: number; title!: string; createdAt!: string; updatedAt!: string }
+    const original = Post.hydrate({ id: 7, title: 'Hello', createdAt: 't0', updatedAt: 't1' })!
+    const clone = original.replicate()
+    assert.ok(clone instanceof Post)
+    assert.notStrictEqual(clone, original)
+    assert.equal(clone.title, 'Hello')
+    assert.deepStrictEqual(Object.keys(clone), ['title'])
+  })
+
+  it('replicate(except) drops additional keys', () => {
+    class Post extends Model { id!: number; title!: string; publishedAt!: string }
+    const original = Post.hydrate({ id: 7, title: 'Hello', publishedAt: 't0' })!
+    const clone = original.replicate(['publishedAt'])
+    assert.deepStrictEqual(Object.keys(clone).sort(), ['title'])
+  })
+
+  it('is() compares by table + primary key', () => {
+    class User extends Model { id!: number }
+    const a = User.hydrate({ id: 1 })!
+    const b = User.hydrate({ id: 1 })!
+    const c = User.hydrate({ id: 2 })!
+    assert.ok(a.is(b))
+    assert.ok(!a.is(c))
+  })
+
+  it('is() returns false across different models', () => {
+    class User extends Model { id!: number; static override table = 'users' }
+    class Post extends Model { id!: number; static override table = 'posts' }
+    const u = User.hydrate({ id: 1 })!
+    const p = Post.hydrate({ id: 1 })!
+    assert.ok(!u.is(p))
+  })
+
+  it('is() returns false when one side has no primary key', () => {
+    class User extends Model { id?: number }
+    const a = new User()
+    const b = User.hydrate({ id: 1 })!
+    assert.ok(!a.is(b))
+    assert.ok(!b.is(a))
+  })
+
+  it('is() returns false for null/undefined', () => {
+    class User extends Model { id!: number }
+    const a = User.hydrate({ id: 1 })!
+    assert.ok(!a.is(null))
+    assert.ok(!a.is(undefined))
+  })
+
+  it('isNot() inverts is()', () => {
+    class User extends Model { id!: number }
+    const a = User.hydrate({ id: 1 })!
+    const b = User.hydrate({ id: 1 })!
+    const c = User.hydrate({ id: 2 })!
+    assert.ok(a.isNot(c))
+    assert.ok(!a.isNot(b))
+  })
+
+  it('trashed() returns true when deletedAt is set', () => {
+    class Post extends Model { id!: number; deletedAt!: string | null }
+    const live = Post.hydrate({ id: 1, deletedAt: null })!
+    const dead = Post.hydrate({ id: 2, deletedAt: '2024-01-01' })!
+    assert.ok(!live.trashed())
+    assert.ok(dead.trashed())
+  })
+
+  it('JSON.stringify on an instance produces clean wire-format', () => {
+    class User extends Model {
+      static override hidden = ['password']
+      id!: number
+      name!: string
+      password!: string
+    }
+    const u = User.hydrate({ id: 1, name: 'A', password: 'secret' })!
+    assert.equal(JSON.stringify(u), '{"id":1,"name":"A"}')
   })
 })
