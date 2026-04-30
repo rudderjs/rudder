@@ -79,12 +79,15 @@ export class ModelRegistry {
 
 /**
  * Thrown by `Model.findOrFail()` and `Model.firstOrFail()` when no record matches.
- * Apps can catch this to render a 404, or let it bubble — `@rudderjs/core` maps
- * it to an HTTP 404 by default.
+ * Apps can catch this to render a custom 404, or let it bubble — `@rudderjs/core`
+ * picks up the duck-typed `httpStatus` and renders an HTTP 404 by default.
  */
 export class ModelNotFoundError extends Error {
   readonly model: string
   readonly id?: string | number
+
+  /** Duck-typed signal to `@rudderjs/core`'s exception handler. */
+  readonly httpStatus = 404
 
   constructor(model: string, id?: string | number) {
     super(id !== undefined

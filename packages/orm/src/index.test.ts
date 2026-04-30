@@ -791,6 +791,11 @@ describe('Model.findOrFail() / firstOrFail()', () => {
     assert.equal(err.id, 'abc-123')
     assert.equal(err.name, 'ModelNotFoundError')
   })
+
+  it('ModelNotFoundError exposes httpStatus = 404 for the framework HTTP layer', () => {
+    const err = new ModelNotFoundError('Post', 'abc-123')
+    assert.equal(err.httpStatus, 404)
+  })
 })
 
 // ─── firstOrCreate / updateOrCreate ───────────────────────────────────────────

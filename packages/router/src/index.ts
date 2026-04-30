@@ -178,13 +178,17 @@ interface RouteBinding {
 
 /**
  * Thrown by route binding middleware when a required `{param}` cannot be
- * resolved into a model instance. The HTTP layer renders this as a 404; apps
- * can catch it explicitly to render a custom not-found page.
+ * resolved into a model instance. `@rudderjs/core` picks up the duck-typed
+ * `httpStatus` and renders this as an HTTP 404; apps can catch it explicitly
+ * to render a custom not-found page.
  */
 export class RouteModelNotFoundError extends Error {
   readonly model: string
   readonly param: string
   readonly value: string
+
+  /** Duck-typed signal to `@rudderjs/core`'s exception handler. */
+  readonly httpStatus = 404
 
   constructor(model: string, param: string, value: string) {
     super(`[RudderJS] No ${model} matched route parameter "${param}" with value "${value}".`)

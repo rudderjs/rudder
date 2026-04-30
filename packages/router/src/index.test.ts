@@ -504,6 +504,12 @@ describe('Router.bind() — route model binding', () => {
     )
   })
 
+  it('RouteModelNotFoundError exposes httpStatus = 404 for the framework HTTP layer', async () => {
+    const { RouteModelNotFoundError } = await import('./index.js')
+    const err = new RouteModelNotFoundError('User', 'user', 'missing')
+    assert.equal(err.httpStatus, 404)
+  })
+
   it('preserves user-provided per-route middleware after binding mw', async () => {
     const calls: string[] = []
     const userMw: MiddlewareHandler = async (_req, _res, next) => { calls.push('user'); await next() }

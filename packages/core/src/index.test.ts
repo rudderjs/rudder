@@ -451,6 +451,36 @@ describe('ExceptionConfigurator', () => {
     assert.strictEqual(res.status, 500)
   })
 
+  it('buildHandler() picks up duck-typed httpStatus from custom errors', async () => {
+    // Mirrors how @rudderjs/orm's ModelNotFoundError and @rudderjs/router's
+    // RouteModelNotFoundError opt into HTTP rendering without depending on core.
+    class NotFoundLike extends Error {
+      readonly httpStatus = 404
+      constructor(message: string) { super(message); this.name = 'NotFoundLike' }
+    }
+    const exc = new ExceptionConfigurator()
+    const handler = exc.buildHandler()
+    const res = await handler(new NotFoundLike('No User found for id 7'), makeReq())
+    assert.strictEqual(res.status, 404)
+    const body = await res.json() as { status: number; message: string }
+    assert.strictEqual(body.status, 404)
+    assert.strictEqual(body.message, 'No User found for id 7')
+  })
+
+  it('buildHandler() ignores non-numeric or out-of-range httpStatus', async () => {
+    const exc = new ExceptionConfigurator()
+    const handler = exc.buildHandler()
+    const err = new Error('weird')
+    ;(err as Error & { httpStatus: unknown }).httpStatus = 'oops'
+    const res1 = await handler(err, makeReq())
+    assert.strictEqual(res1.status, 500)
+
+    const err2 = new Error('also weird')
+    ;(err2 as Error & { httpStatus: unknown }).httpStatus = 200
+    const res2 = await handler(err2, makeReq())
+    assert.strictEqual(res2.status, 500)
+  })
+
   it('buildHandler() re-throws ignored error types', async () => {
     class IgnoredError extends Error {}
     const exc = new ExceptionConfigurator()
