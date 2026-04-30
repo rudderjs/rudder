@@ -5,6 +5,7 @@ import {
   Env,
   env,
   defineEnv,
+  isWebContainer,
   sleep,
   ucfirst,
   toSnakeCase,
@@ -522,5 +523,33 @@ describe('defineEnv()', () => {
       () => defineEnv(z.object({ [KEY1]: z.string() })),
       /Invalid environment configuration/
     )
+  })
+})
+
+// ─── isWebContainer ────────────────────────────────────────
+
+describe('isWebContainer', () => {
+  let original: string | undefined
+
+  beforeEach(() => {
+    original = (process.versions as Record<string, string | undefined>).webcontainer
+  })
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete (process.versions as Record<string, string | undefined>).webcontainer
+    } else {
+      ;(process.versions as Record<string, string | undefined>).webcontainer = original
+    }
+  })
+
+  it('returns false in a normal Node process', () => {
+    delete (process.versions as Record<string, string | undefined>).webcontainer
+    assert.strictEqual(isWebContainer(), false)
+  })
+
+  it('returns true when process.versions.webcontainer is set', () => {
+    ;(process.versions as Record<string, string | undefined>).webcontainer = '1.0.0'
+    assert.strictEqual(isWebContainer(), true)
   })
 })

@@ -362,6 +362,7 @@ import { z } from 'zod'
 
 export { Str } from './str.js'
 export { Num } from './num.js'
+export { isWebContainer } from './runtime.js'
 
 export function defineEnv<T extends z.ZodRawShape>(
   schema: z.ZodObject<T>
