@@ -1,0 +1,259 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+    --radius-2xl: calc(var(--radius) + 8px);
+    --radius-3xl: calc(var(--radius) + 12px);
+    --radius-4xl: calc(var(--radius) + 16px);
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --font-sans: 'Geist Variable', sans-serif;
+}
+
+:root {
+    --radius: 0.625rem;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.58 0.22 27);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.809 0.105 251.813);
+    --chart-2: oklch(0.623 0.214 259.815);
+    --chart-3: oklch(0.546 0.245 262.881);
+    --chart-4: oklch(0.488 0.243 264.376);
+    --chart-5: oklch(0.424 0.199 265.638);
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.87 0.00 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.371 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.809 0.105 251.813);
+    --chart-2: oklch(0.623 0.214 259.815);
+    --chart-3: oklch(0.546 0.245 262.881);
+    --chart-4: oklch(0.488 0.243 264.376);
+    --chart-5: oklch(0.424 0.199 265.638);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+/* ─── Scaffolded / vendored view classes ─────────────────────
+   Semantic classes shared by app/Views/Welcome.tsx and
+   vendored @rudderjs/auth views. Kept as a single block so the
+   --no-tailwind variant of create-rudder-app can ship an
+   equivalent hand-authored CSS file with identical selectors. */
+
+.page {
+  @apply min-h-svh bg-gradient-to-b from-white to-zinc-50 text-zinc-900 dark:from-zinc-950 dark:to-black dark:text-zinc-100;
+}
+.page-nav {
+  @apply mx-auto flex max-w-6xl items-center justify-between px-6 py-5;
+}
+.page-footer {
+  @apply border-t border-zinc-200 dark:border-zinc-900;
+}
+.footer-inner {
+  @apply mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-6 text-xs text-zinc-500 sm:flex-row sm:justify-between;
+}
+.footer-links {
+  @apply flex gap-4;
+}
+.footer-link {
+  @apply transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}
+
+.brand {
+  @apply flex items-center gap-2 text-sm font-semibold tracking-tight;
+}
+.brand-dot {
+  @apply inline-block h-2 w-2 rounded-full bg-emerald-500;
+}
+.nav-right {
+  @apply flex items-center gap-4 text-sm;
+}
+.nav-badge {
+  @apply text-zinc-500 dark:text-zinc-400;
+}
+.nav-badge strong {
+  @apply font-medium text-zinc-900 dark:text-zinc-100;
+}
+.nav-button {
+  @apply rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900;
+}
+.nav-link {
+  @apply text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100;
+}
+
+.hero {
+  @apply mx-auto max-w-3xl px-6 pb-12 pt-20 text-center;
+}
+.hero-title {
+  @apply text-5xl font-bold tracking-tight sm:text-6xl;
+}
+.hero-lead {
+  @apply mt-6 text-lg text-zinc-600 dark:text-zinc-400;
+}
+.hero-meta {
+  @apply mt-8 flex items-center justify-center gap-3 text-xs text-zinc-500;
+}
+.inline-code {
+  @apply rounded bg-zinc-100 px-1.5 py-0.5 text-sm dark:bg-zinc-900;
+}
+
+.feature-section {
+  @apply mx-auto max-w-6xl px-6 pb-20;
+}
+.feature-grid {
+  @apply grid gap-4 md:grid-cols-2 lg:grid-cols-3;
+}
+.feature-card {
+  @apply rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-100;
+}
+.feature-title {
+  @apply font-semibold;
+}
+.feature-desc {
+  @apply mt-2 text-sm text-zinc-600 dark:text-zinc-400;
+}
+.feature-card:hover .feature-desc {
+  @apply text-zinc-900 dark:text-zinc-100;
+}
+
+/* Auth forms + error page (reused selectors) */
+.auth-wrap {
+  @apply flex min-h-svh items-center justify-center p-4;
+}
+.auth-card {
+  @apply w-full max-w-sm space-y-6;
+}
+.auth-head {
+  @apply text-center;
+}
+.heading-lg {
+  @apply text-2xl font-bold;
+}
+.muted {
+  @apply text-sm text-zinc-500 dark:text-zinc-400;
+}
+.form-card {
+  @apply space-y-4 rounded-lg border border-zinc-200 p-6 shadow-sm dark:border-zinc-800;
+}
+.form-error {
+  @apply rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950 dark:text-red-400;
+}
+.form-success {
+  @apply rounded-md bg-green-50 px-3 py-2 text-sm text-green-600 dark:bg-green-950 dark:text-green-400;
+}
+.form-label {
+  @apply block text-sm font-medium mb-1;
+}
+.form-input {
+  @apply w-full rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-100;
+}
+.form-submit {
+  @apply w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900;
+}
+.form-link-row {
+  @apply flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400;
+}
+.auth-link {
+  @apply underline transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}
+
+.error-wrap {
+  @apply flex min-h-svh flex-col items-center justify-center gap-2;
+}
+.error-link {
+  @apply mt-4 text-sm underline transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
+}

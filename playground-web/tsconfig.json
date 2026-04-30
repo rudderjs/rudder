@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*":   ["./src/*"],
+      "App/*": ["./app/*"]
+    },
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*", "pages/**/*", "app/**/*", "bootstrap/**/*", "routes/**/*", "*.ts", "*.tsx"]
+}
