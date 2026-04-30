@@ -46,6 +46,16 @@ export interface QueryBuilder<T> {
   restore(id: number | string): Promise<T>
   /** Permanently delete a record, bypassing soft deletes. */
   forceDelete(id: number | string): Promise<void>
+  /**
+   * Atomically add `amount` to `column`. Optionally update other columns at the
+   * same time via `extra`. Returns the updated record. Throws if the row is missing.
+   */
+  increment(id: number | string, column: string, amount?: number, extra?: Record<string, unknown>): Promise<T>
+  /**
+   * Atomically subtract `amount` from `column`. Optionally update other columns
+   * at the same time via `extra`. Returns the updated record. Throws if the row is missing.
+   */
+  decrement(id: number | string, column: string, amount?: number, extra?: Record<string, unknown>): Promise<T>
   paginate(page: number, perPage?: number): Promise<PaginatedResult<T>>
 }
 

@@ -108,7 +108,7 @@ describe('DrizzleAdapter', () => {
 
     const methods = ['where', 'orWhere', 'orderBy', 'limit', 'offset', 'with',
                      'first', 'find', 'get', 'all', 'count', 'create', 'update',
-                     'delete', 'paginate']
+                     'delete', 'increment', 'decrement', 'paginate']
     for (const method of methods) {
       assert.strictEqual(typeof qb[method], 'function', `missing method: ${method}`)
     }

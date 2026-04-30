@@ -95,6 +95,48 @@ describe('PrismaQueryBuilder — other operators', () => {
   })
 })
 
+describe('PrismaQueryBuilder — increment / decrement', () => {
+  function makeCapturingUpdateClient() {
+    let lastArgs: Record<string, unknown> = {}
+    const delegate = {
+      findMany:   async () => [],
+      findFirst:  async () => null,
+      findUnique: async () => null,
+      count:      async () => 0,
+      create:     async () => ({}),
+      update:     async (args: Record<string, unknown>) => { lastArgs = args; return { id: 1 } },
+      delete:     async () => undefined,
+    }
+    const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
+    return { fakeClient, getLastArgs: () => lastArgs }
+  }
+
+  it('increment maps to Prisma { increment: n } with default amount of 1', async () => {
+    const { fakeClient, getLastArgs } = makeCapturingUpdateClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await adapter.query('user').increment(7, 'count')
+    const args = getLastArgs() as { where: { id: number }; data: Record<string, unknown> }
+    assert.deepEqual(args.where, { id: 7 })
+    assert.deepEqual(args.data, { count: { increment: 1 } })
+  })
+
+  it('increment passes amount + extra fields through', async () => {
+    const { fakeClient, getLastArgs } = makeCapturingUpdateClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await adapter.query('user').increment(7, 'balance', 25, { lastSeen: 'now' })
+    const args = getLastArgs() as { data: Record<string, unknown> }
+    assert.deepEqual(args.data, { balance: { increment: 25 }, lastSeen: 'now' })
+  })
+
+  it('decrement maps to Prisma { decrement: n }', async () => {
+    const { fakeClient, getLastArgs } = makeCapturingUpdateClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await adapter.query('user').decrement(7, 'count', 3)
+    const args = getLastArgs() as { data: Record<string, unknown> }
+    assert.deepEqual(args.data, { count: { decrement: 3 } })
+  })
+})
+
 describe('prisma() factory', () => {
   it('is a function', () => {
     assert.strictEqual(typeof prisma, 'function')

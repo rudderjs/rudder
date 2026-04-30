@@ -444,6 +444,12 @@ export abstract class Model {
           case 'restore':
             return async (id: number | string): Promise<InstanceType<T>> =>
               wrap(await (target as QueryBuilder<InstanceType<T>>).restore(id))
+          case 'increment':
+            return async (id: number | string, column: string, amount?: number, extra?: Record<string, unknown>): Promise<InstanceType<T>> =>
+              wrap(await (target as QueryBuilder<InstanceType<T>>).increment(id, column, amount, extra))
+          case 'decrement':
+            return async (id: number | string, column: string, amount?: number, extra?: Record<string, unknown>): Promise<InstanceType<T>> =>
+              wrap(await (target as QueryBuilder<InstanceType<T>>).decrement(id, column, amount, extra))
           default:
             // Chainable methods (where/orderBy/with/...) typically return `target` —
             // re-wrap so `Model.where('a', 1).first()` keeps hydrating.
@@ -734,6 +740,43 @@ export abstract class Model {
     await self._fireEvent('deleted', id)
   }
 
+  /**
+   * Atomically add `amount` to `column` for the row with the given primary key.
+   * Optionally update other columns at the same time via `extra`.
+   *
+   * The increment is performed as a single SQL `UPDATE col = col + amount`,
+   * so it's safe under concurrent writes — no read-modify-write race.
+   *
+   * Lifecycle observers (`updating`/`updated`/`saving`/`saved`) do NOT fire
+   * for `increment`/`decrement`. Counter updates are intentionally a pure
+   * data-plane operation; if you need observer hooks, read the row, set the
+   * resolved value, and call `update()` instead.
+   */
+  static async increment<T extends typeof Model>(
+    this: T,
+    id:     number | string,
+    column: string,
+    amount: number = 1,
+    extra:  Partial<InstanceType<T>> = {} as Partial<InstanceType<T>>,
+  ): Promise<InstanceType<T>> {
+    return Model._q(this).increment(id, column, amount, extra as Record<string, unknown>)
+  }
+
+  /**
+   * Atomically subtract `amount` from `column` for the row with the given
+   * primary key. Symmetric to {@link Model.increment} — see its docs for the
+   * observer-firing caveat.
+   */
+  static async decrement<T extends typeof Model>(
+    this: T,
+    id:     number | string,
+    column: string,
+    amount: number = 1,
+    extra:  Partial<InstanceType<T>> = {} as Partial<InstanceType<T>>,
+  ): Promise<InstanceType<T>> {
+    return Model._q(this).decrement(id, column, amount, extra as Record<string, unknown>)
+  }
+
   // ── Instance persistence methods ───────────────────────
 
   /** @internal — pull the primary-key value from this instance, or `undefined` if unset. */
@@ -834,6 +877,44 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] Cannot delete a ${ctor.name} without a primary key.`)
     }
     await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
+  }
+
+  /**
+   * Atomically add `amount` to `column` on this instance. The row is updated
+   * via SQL `UPDATE col = col + amount` and the new value is merged back into
+   * `this` for direct access. Returns `this` for chaining.
+   *
+   * See the static {@link Model.increment} for caveats — observer events do
+   * not fire for counter updates.
+   */
+  async increment(column: string, amount = 1, extra: Partial<this> = {}): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    const id = this._getKey()
+    if (id === undefined) {
+      throw new Error(`[RudderJS ORM] Cannot increment a ${ctor.name} without a primary key.`)
+    }
+    const updated = await (ctor as typeof Model & {
+      increment(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
+    }).increment(id, column, amount, extra as Record<string, unknown>)
+    Object.assign(this, updated)
+    return this
+  }
+
+  /**
+   * Atomically subtract `amount` from `column` on this instance. Symmetric to
+   * {@link increment}.
+   */
+  async decrement(column: string, amount = 1, extra: Partial<this> = {}): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    const id = this._getKey()
+    if (id === undefined) {
+      throw new Error(`[RudderJS ORM] Cannot decrement a ${ctor.name} without a primary key.`)
+    }
+    const updated = await (ctor as typeof Model & {
+      decrement(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
+    }).decrement(id, column, amount, extra as Record<string, unknown>)
+    Object.assign(this, updated)
+    return this
   }
 
   /**

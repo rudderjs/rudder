@@ -24,6 +24,8 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     onlyTrashed: function() { return qb },
     restore: async (_id) => ({} as T),
     forceDelete: async () => undefined,
+    increment: async (_id, _col, _amount, _extra) => ({} as T),
+    decrement: async (_id, _col, _amount, _extra) => ({} as T),
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     ...overrides,
   }
@@ -1428,5 +1430,110 @@ describe('Mass assignment — fillable / guarded / forceFill', () => {
     }
     await User.firstOrCreate({ email: 'a@x.com' } as Partial<User>, { name: 'A', role: 'admin' } as Partial<User>)
     assert.deepEqual(createdWith, { email: 'a@x.com', name: 'A' })
+  })
+})
+
+describe('Model.increment / decrement', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('static increment delegates to QueryBuilder.increment with default amount of 1', async () => {
+    let captured: { id: unknown; column: string; amount: number | undefined; extra: unknown } | null = null
+    const qb = makeQb({
+      increment: async (id, column, amount, extra) => {
+        captured = { id, column, amount, extra }
+        return { id: 1, count: 6 } as unknown
+      },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model { id!: number; count!: number }
+    await Post.increment(1, 'count')
+    assert.deepStrictEqual(captured, { id: 1, column: 'count', amount: 1, extra: {} })
+  })
+
+  it('static increment passes through amount + extra', async () => {
+    let captured: { amount: number | undefined; extra: unknown } | null = null
+    const qb = makeQb({
+      increment: async (_id, _col, amount, extra) => {
+        captured = { amount, extra }
+        return { id: 1, count: 10 } as unknown
+      },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model {}
+    await Post.increment(1, 'count', 5, { lastSeen: 'now' } as Partial<Post>)
+    assert.equal(captured!.amount, 5)
+    assert.deepEqual(captured!.extra, { lastSeen: 'now' })
+  })
+
+  it('static increment returns a hydrated Model instance', async () => {
+    const qb = makeQb({ increment: async () => ({ id: 1, count: 6 }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model { id!: number; count!: number }
+    const result = await Post.increment(1, 'count')
+    assert.ok(result instanceof Post)
+    assert.equal(result.count, 6)
+  })
+
+  it('static decrement delegates to QueryBuilder.decrement', async () => {
+    let captured: { column: string; amount: number | undefined } | null = null
+    const qb = makeQb({
+      decrement: async (_id, column, amount) => {
+        captured = { column, amount }
+        return { id: 1, count: 4 } as unknown
+      },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model {}
+    await Post.decrement(1, 'count', 2)
+    assert.deepEqual(captured, { column: 'count', amount: 2 })
+  })
+
+  it('instance.increment merges the returned record back into this', async () => {
+    const qb = makeQb({ increment: async () => ({ id: 1, count: 11 }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model { id!: number; count!: number }
+    const post = Post.hydrate({ id: 1, count: 10 })!
+    await post.increment('count')
+    assert.equal(post.count, 11)
+  })
+
+  it('instance.increment returns this for chaining', async () => {
+    const qb = makeQb({ increment: async () => ({ id: 1, count: 6 }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model { id!: number; count!: number }
+    const post = Post.hydrate({ id: 1, count: 5 })!
+    const result = await post.increment('count')
+    assert.strictEqual(result, post)
+  })
+
+  it('instance.increment throws without a primary key', async () => {
+    ModelRegistry.set(makeAdapter())
+    class Post extends Model { id?: number; count?: number }
+    const post = new Post()
+    await assert.rejects(() => post.increment('count'), /without a primary key/)
+  })
+
+  it('instance.decrement merges returned record + returns this', async () => {
+    const qb = makeQb({ decrement: async () => ({ id: 1, count: 3 }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model { id!: number; count!: number }
+    const post = Post.hydrate({ id: 1, count: 5 })!
+    const result = await post.decrement('count', 2)
+    assert.equal(post.count, 3)
+    assert.strictEqual(result, post)
+  })
+
+  it('does NOT fire updating/updated/saving/saved observers', async () => {
+    const events: string[] = []
+    const qb = makeQb({ increment: async () => ({ id: 1, count: 6 }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class Post extends Model { id!: number; count!: number }
+    Post.on('updating', () => { events.push('updating') })
+    Post.on('updated',  () => { events.push('updated') })
+    Post.on('saving',   () => { events.push('saving') })
+    Post.on('saved',    () => { events.push('saved') })
+    await Post.increment(1, 'count')
+    assert.deepEqual(events, [])
+    Post.clearObservers()
   })
 })
