@@ -124,17 +124,41 @@ The base `Model` ships with the persistence and identity methods you'd expect fr
 
 ## Mass assignment
 
-`static fillable` documents which fields are intended to be settable from request data. Use it as an explicit list when accepting `Model.create()` / `Model.update()` payloads from forms or APIs:
+`static fillable` is an allowlist of columns that may be set from `Model.create()`, `Model.update()`, or `instance.fill()`. Any other key in the payload is silently dropped before the data reaches the adapter — so attacker-controlled fields like `isAdmin` can't sneak in through a form post.
 
 ```ts
 class User extends Model {
-  static fillable = ['name', 'email', 'role']
+  static fillable = ['name', 'email']
 }
 
-await User.create({ name: 'Alice', email: 'a@b.com', role: 'user' })
+// `isAdmin` is silently dropped:
+await User.create({ name: 'Alice', email: 'a@b.com', isAdmin: true })
 ```
 
-Today `fillable` is a documentation hint — the ORM does not yet filter unfillable keys at the boundary. Filter request data yourself with a `FormRequest`'s `validated()` shape, or pick keys explicitly before calling `create()`/`update()`. A future release will enforce `fillable` at the model layer (and add a `static guarded` denylist + `forceCreate()` escape hatch); for now treat it as the contract you commit to in your own code.
+`static guarded` is the inverse — a denylist. Use `['*']` to forbid every key (the most restrictive setting). When both are set, `fillable` wins.
+
+```ts
+class User extends Model {
+  static guarded = ['isAdmin', 'role']
+}
+```
+
+Both empty (the default) means no enforcement — every key passes through. Setting either opts in.
+
+### Bypassing the filter
+
+- **`instance.forceFill(data)`** — mass-assign without the filter. Use for trusted sources (factories, internal sync, fixtures).
+- **Direct property assignment + `save()`** — `user.isAdmin = true; await user.save()` works regardless of `fillable`. The protection only applies to bulk-assignment paths; properties set one-by-one are intentional.
+
+```ts
+const u = new User()
+u.forceFill({ name: 'Alice', isAdmin: true })  // both fields set
+await u.save()
+```
+
+### Lookup attrs in `firstOrCreate`
+
+`firstOrCreate(attrs, values)` routes through `create()` for the create branch, so `attrs` keys must be fillable too — otherwise the lookup column won't be set on the new record. If `email` is your lookup attr, include it in `fillable`.
 
 ## Casts
 
@@ -258,6 +282,6 @@ The mute is class-scoped and restored even if `fn` throws.
 ## Pitfalls
 
 - **`assert.deepStrictEqual(result, plainObject)` after a query.** Query results are now Model instances — node's `deepStrictEqual` checks the prototype, so this assertion fails against a plain literal. Compare via `{ ...result }` or assert `result instanceof Model`. See [Hydrated instances](#hydrated-instances).
-- **`fillable` is a documentation hint, not an enforced filter** (today). The ORM doesn't yet drop keys outside the list — filter user input with a `FormRequest` or explicit picks before passing to `create()` / `update()`. See [Mass assignment](#mass-assignment).
+- **`firstOrCreate` lookup column missing on the created row.** The lookup attrs go through `create()`, which respects `fillable`. If your lookup column isn't in `fillable`, the new row will be missing it. Add it to `fillable`, or use `forceFill()` on a manual `new Model().forceFill(...).save()`. See [Mass assignment — Lookup attrs](#lookup-attrs-in-firstorcreate).
 - **Forgetting to register the adapter.** `Model.*` static methods throw `[RudderJS ORM] No adapter registered`. The database provider must boot before any model query runs — see [Database](/guide/database).
 - **`Model.query().create()` skipping observers.** Use `Model.create()` (and the other static methods) when you need observer hooks.
