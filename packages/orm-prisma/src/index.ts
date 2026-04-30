@@ -281,9 +281,27 @@ class PrismaAdapter implements OrmAdapter {
     if (config.PrismaClient) {
       PC = config.PrismaClient
     } else {
-      const mod = await import('@prisma/client') as unknown as { PrismaClient?: PrismaClientConstructor; default?: PrismaClientConstructor | { PrismaClient?: PrismaClientConstructor } }
-      const rawDefault = mod.default
-      PC = (mod.PrismaClient
+      // Apps using the new `prisma-client` generator (Prisma 7+) emit a
+      // self-contained client at a custom output path and don't install
+      // @prisma/client at all. Those apps must pass `PrismaClient` via config.
+      // The fallback below is only for the legacy `prisma-client-js` generator.
+      let mod: unknown
+      try {
+        mod = await import('@prisma/client')
+      } catch (err) {
+        throw new Error(
+          `[RudderJS ORM] Could not load @prisma/client. ` +
+          `If you're using Prisma's new "prisma-client" generator, pass ` +
+          `\`PrismaClient\` via the database config:\n\n` +
+          `  import { PrismaClient } from './prisma/generated/prisma/client.js'\n` +
+          `  export default { PrismaClient, default: '...', connections: { ... } }\n\n` +
+          `Otherwise install @prisma/client (legacy "prisma-client-js" generator). ` +
+          `Original error: ${(err as Error).message}`
+        )
+      }
+      const m = mod as { PrismaClient?: PrismaClientConstructor; default?: PrismaClientConstructor | { PrismaClient?: PrismaClientConstructor } }
+      const rawDefault = m.default
+      PC = (m.PrismaClient
         ?? (rawDefault && typeof rawDefault === 'object' && 'PrismaClient' in rawDefault ? rawDefault.PrismaClient : rawDefault)
       ) as PrismaClientConstructor
     }

@@ -9,6 +9,17 @@ pnpm add @rudderjs/orm @rudderjs/orm-prisma @prisma/client
 pnpm add -D prisma
 ```
 
+::: tip Prisma 7+ — pick a generator
+Prisma 7 ships two client generators. RudderJS supports both, but they're not interchangeable in browser-sandboxed environments:
+
+| Generator | Schema declaration | When to use |
+|---|---|---|
+| `prisma-client-js` (legacy default) | `provider = "prisma-client-js"` | Standard Node.js apps. The framework imports `PrismaClient` from `@prisma/client` automatically. |
+| `prisma-client` (Prisma 7+) | `provider = "prisma-client"` + custom `output` | Self-contained ESM client, **no engine binaries** downloaded by `prisma generate`. **Required** for WebContainer / StackBlitz / Bolt.new — the legacy generator's postinstall fails because `binaries.prisma.sh` doesn't ship CORS headers. |
+
+The new-generator setup is documented under [Browser-sandboxed runtimes (WebContainer)](#browser-sandboxed-runtimes-webcontainer) below.
+:::
+
 For SQLite (local development) also install:
 
 ```bash
@@ -137,6 +148,60 @@ database({
 ```
 
 This is the path the Pilotiq playgrounds use to consume their own generated client across pnpm-linked workspaces.
+
+## Browser-sandboxed runtimes (WebContainer)
+
+To boot a RudderJS app inside StackBlitz / Bolt.new / any WebContainer-backed environment, switch to Prisma 7's new `prisma-client` generator. The legacy `prisma-client-js` generator is incompatible with WebContainer because its `prisma generate` step downloads the schema-engine binary from `https://binaries.prisma.sh`, which doesn't ship CORS headers — the install hangs with `socket hang up`.
+
+The new generator emits a self-contained ESM client with no engine binary downloads at install time:
+
+```prisma
+// prisma/schema/base.prisma
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"   // relative to schema file → prisma/generated/prisma/
+  runtime      = "nodejs"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+```
+
+Pass the generated `PrismaClient` class via the database config (the framework can't find it at `@prisma/client` since the new generator emits to a custom path):
+
+```ts
+// config/database.ts
+import { Env } from '@rudderjs/support'
+import { PrismaClient } from '../prisma/generated/prisma/client.js'
+
+export default {
+  default: 'libsql',
+  PrismaClient,
+  connections: {
+    libsql: {
+      driver: 'libsql' as const,
+      url:    Env.get('DATABASE_URL', 'file:./prisma/dev.db'),
+    },
+  },
+}
+```
+
+```json
+// package.json
+{
+  "scripts": {
+    "postinstall": "prisma generate"
+  }
+}
+```
+
+Add `prisma/generated/` to `.gitignore` — the path is reproducible from the schema and regenerated on every `pnpm install`.
+
+Pair the new generator with a JS driver adapter (`@prisma/adapter-libsql` + `@libsql/client`) so SQL execution stays in pure JS. The Rust query engine is never loaded; the WASM query compiler shipped in `@prisma/client/runtime/client` handles query planning at request time.
+
+For the canonical reference, see the `playground-web/` variant in the framework repo — a sibling of `playground/` that runs end-to-end inside StackBlitz.
 
 ## Pitfalls
 

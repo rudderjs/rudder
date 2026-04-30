@@ -6,9 +6,29 @@ Prisma adapter for `@rudderjs/orm`.
 pnpm add @rudderjs/orm-prisma @prisma/client prisma
 ```
 
+> Picking a generator? RudderJS supports both Prisma generator paths:
+>
+> | Generator | Schema declaration | When to use |
+> |---|---|---|
+> | `prisma-client-js` (legacy default) | `provider = "prisma-client-js"` | Standard Node.js apps that don't care about the engine binary download |
+> | `prisma-client` (Prisma 7+, recommended) | `provider = "prisma-client"` + custom `output` path | Self-contained ESM client, no engine binaries downloaded at install time. **Required** for WebContainer / StackBlitz / Bolt.new and other browser-sandboxed runtimes — the legacy generator's `prisma generate` postinstall fails because `binaries.prisma.sh` doesn't ship CORS headers. See [Prisma's docs](https://www.prisma.io/docs/orm/prisma-schema/overview/generators) for the output structure. |
+
 ---
 
 ## Setup
+
+### Option A — Legacy `prisma-client-js` generator
+
+```prisma
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+```
 
 ```ts
 // config/database.ts
@@ -24,6 +44,55 @@ export default {
   },
 }
 ```
+
+The framework loads `PrismaClient` from `@prisma/client` automatically.
+
+### Option B — New `prisma-client` generator (Prisma 7+)
+
+```prisma
+// prisma/schema/base.prisma
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"   // relative to schema file → prisma/generated/prisma/
+  runtime      = "nodejs"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+```
+
+The new generator emits a self-contained ESM client at the configured `output` path. Pass the generated `PrismaClient` class explicitly so the adapter doesn't fall back to importing `@prisma/client`:
+
+```ts
+// config/database.ts
+import { Env } from '@rudderjs/support'
+import { PrismaClient } from '../prisma/generated/prisma/client.js'
+
+export default {
+  default: 'sqlite',
+  PrismaClient,
+  connections: {
+    sqlite: {
+      driver: 'sqlite',
+      url:    Env.get('DATABASE_URL', 'file:./dev.db'),
+    },
+  },
+}
+```
+
+Add a `postinstall` script so fresh clones generate the client automatically, and gitignore `prisma/generated/` — the path is reproducible from the schema:
+
+```json
+{
+  "scripts": {
+    "postinstall": "prisma generate"
+  }
+}
+```
+
+### Wiring the provider
 
 ```ts
 // bootstrap/providers.ts
@@ -77,8 +146,9 @@ ModelRegistry.set(adapter)
 
 | Option | Type | Description |
 |---|---|---|
-| `client` | `PrismaClient` | Pre-built Prisma client — bypasses all driver logic |
-| `driver` | `'sqlite' \| 'postgresql' \| 'libsql'` | Database driver |
+| `client` | `PrismaClient` | Pre-built Prisma client instance — bypasses all driver logic |
+| `PrismaClient` | `PrismaClient` class | Constructor reference — required for the new `prisma-client` generator since the adapter can't find the class via `import('@prisma/client')`. The adapter calls `new PrismaClient({ adapter, log })` internally. |
+| `driver` | `'sqlite' \| 'postgresql' \| 'libsql' \| 'mysql'` | Database driver |
 | `url` | `string` | Connection URL |
 
 ---
