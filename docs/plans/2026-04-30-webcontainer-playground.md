@@ -83,6 +83,24 @@ Local spike at `experiments/webcontainer-spike/` (in worktree branch `worktree-a
 
 **Footprint note:** Prisma CLI still bundles `@prisma/engines` (~200 MB with native + schema-engine binary) as a transitive dep. Fine in WebContainer because we never invoke the CLI for `db push` at runtime — Phase 3 ships the schema pre-pushed (option a) or applies raw DDL via `libsql.execute()` (option b).
 
+#### Prisma 7 update (2026-04-30, during Phase 2)
+
+The current playground (and `playground-web/`) is on **Prisma 7.x**, not the 6.x the Phase 0 spike used. The 6.x recipe still works, but several of the Phase 0 corrections are now optional/relaxed:
+
+1. **`engineType = "client"` is no longer required.** In Prisma 7, the WASM query compiler (`query_compiler_fast_bg.wasm`) is the default — `prisma generate` does **not** emit any `*.dylib.node` / `*.so` / `*.dll` files at all, even with no preview features and no `engineType` flag. Verified locally on `@prisma/client@7.8.0`. Setting `engineType = "client"` is harmless (no error, no warning) and we keep it in `playground-web/` for explicit documentation, but a stock Prisma 7 schema is already WebContainer-runtime-safe.
+
+2. **`previewFeatures = ["driverAdapters", "queryCompiler"]` are now stable in Prisma 7.** Listing them prints `warn Preview feature "X" is deprecated. The functionality can be used without specifying it as a preview feature.` but does not break anything. Keep them only for clarity; new schemas can omit them.
+
+3. **`PrismaLibSQL` is renamed to `PrismaLibSql` in Prisma 7.** The Phase 0 spike on Prisma 6 used `PrismaLibSQL` (uppercase SQL). In `@prisma/adapter-libsql@7.x` the class is `PrismaLibSqlAdapterFactory as PrismaLibSql` (camelCase Sql). `@rudderjs/orm-prisma`'s libsql branch already uses the correct Prisma 7 spelling, so swapping `connection.driver` from `'sqlite'` (better-sqlite3) to `'libsql'` is enough — no code changes in the adapter.
+
+4. **`url` is no longer allowed in `datasource db { ... }`** in Prisma 7. The CLI now requires the URL to live in `prisma.config.ts` (passed to the `PrismaClient` constructor via the adapter). The current playground schema already complies (`provider = "sqlite"`, no `url`), and `playground-web/` keeps the same structure.
+
+5. **`@prisma/adapter-libsql@7.8.0` peer requires `@libsql/client@^0.17.0`** — bumped from `^0.14.0` in the 6.x spike. The 7.x adapter has a stricter peer range; pin to `^0.17.0` in `package.json`.
+
+6. **`@prisma/engines` still ships a native `schema-engine-darwin-arm64` (~24 MB)** for migration commands (`migrate dev`, `db push`). These never run inside WebContainer — Phase 3 still applies (pre-push the dev.db host-side or run raw DDL on first boot). Runtime is binary-free.
+
+**Net effect for `playground-web/`:** the schema still uses the 6.x corrections (the deprecation warnings are harmless), `@rudderjs/orm-prisma` already wires the correct `PrismaLibSql` factory, and the only `package.json` change vs the 6.x recipe is `@libsql/client@^0.17.0`.
+
 ### Phase 1 — Detection helper (~30min) — **DONE 2026-04-30**
 
 Shipped `isWebContainer()` in `packages/support/src/runtime.ts`, re-exported from `@rudderjs/support`. Returns `true` when `process.versions.webcontainer` is set. Two tests in `packages/support/src/index.test.ts` cover both states (set / not set). Build + typecheck clean, 82/82 tests passing. Uncommitted on `main`.

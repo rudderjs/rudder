@@ -1,0 +1,95 @@
+// @rudderjs/cashier-paddle schema fragment.
+//
+// Published into the consuming app's `prisma/schema/` directory by
+// `pnpm rudder vendor:publish --tag=cashier-schema`.
+//
+// Tables mirror Laravel Cashier Paddle 13.x migrations 1:1.
+// Forward-compat columns: `billable_id` + `billable_type` reserved for
+// future polymorphic billables (v1 supports a single configured model).
+
+model PaddleCustomer {
+  id            String    @id @default(cuid())
+  paddleId      String?   @unique
+  billableId    String
+  billableType  String
+  name          String?
+  email         String?
+  trialEndsAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([billableType, billableId])
+  @@index([paddleId])
+  @@map("paddle_customers")
+}
+
+model PaddleSubscription {
+  id              String    @id @default(cuid())
+  billableId      String
+  billableType    String
+  type            String    @default("default")
+  paddleId        String    @unique
+  paddleStatus    String
+  paddleProductId String?
+  trialEndsAt     DateTime?
+  pausedAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  items         PaddleSubscriptionItem[]
+  transactions  PaddleTransaction[]
+
+  @@index([billableType, billableId])
+  @@index([paddleStatus])
+  @@map("paddle_subscriptions")
+}
+
+model PaddleSubscriptionItem {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  productId      String
+  priceId        String
+  status         String
+  quantity       Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscription PaddleSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, priceId])
+  @@map("paddle_subscription_items")
+}
+
+model PaddleTransaction {
+  id                   String    @id @default(cuid())
+  paddleId             String    @unique
+  paddleCustomerId     String?
+  paddleSubscriptionId String?
+  billableId           String
+  billableType         String
+  invoiceNumber        String?
+  status               String
+  total                String
+  tax                  String    @default("0")
+  currency             String
+  billedAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  subscription PaddleSubscription? @relation(fields: [paddleSubscriptionId], references: [paddleId])
+
+  @@index([billableType, billableId])
+  @@index([paddleCustomerId])
+  @@map("paddle_transactions")
+}
+
+model PaddleWebhookLog {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  eventType   String
+  processedAt DateTime @default(now())
+
+  @@index([eventType])
+  @@map("paddle_webhook_logs")
+}

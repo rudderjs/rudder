@@ -3,6 +3,7 @@ packages:
   - tests/*
   - create-rudder-app
   - playground
+  - playground-web
   - docs
 
 onlyBuiltDependencies: sharp

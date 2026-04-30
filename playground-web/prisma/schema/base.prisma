@@ -1,0 +1,9 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters", "queryCompiler"]
+  engineType      = "client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
