@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Model, ModelRegistry, type QueryBuilder, type OrmAdapter } from './index.js'
+import { Model, ModelRegistry, ModelNotFoundError, type QueryBuilder, type OrmAdapter } from './index.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -732,5 +732,270 @@ describe('Model observers', () => {
     await Post.restore('1')
     assert.deepStrictEqual(events, ['restoring:1', 'restored:1'])
     Post.clearObservers()
+  })
+})
+
+// ─── findOrFail / firstOrFail ─────────────────────────────────────────────────
+
+describe('Model.findOrFail() / firstOrFail()', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('findOrFail returns the record when found', async () => {
+    const expected = { id: 1, name: 'Alice' }
+    const qb = makeQb({ find: async () => expected as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    const result = await User.findOrFail(1)
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it('findOrFail throws ModelNotFoundError when missing', async () => {
+    const qb = makeQb({ find: async () => null })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    await assert.rejects(() => User.findOrFail(99), (err: Error) => {
+      assert.ok(err instanceof ModelNotFoundError)
+      assert.match(err.message, /No User found for id 99/)
+      return true
+    })
+  })
+
+  it('firstOrFail returns the record when found', async () => {
+    const expected = { id: 1, name: 'Alice' }
+    const qb = makeQb({ first: async () => expected as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    const result = await User.firstOrFail()
+    assert.deepStrictEqual(result, expected)
+  })
+
+  it('firstOrFail throws ModelNotFoundError when missing', async () => {
+    const qb = makeQb({ first: async () => null })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    await assert.rejects(() => User.firstOrFail(), /No User found/)
+  })
+
+  it('ModelNotFoundError carries model + id', () => {
+    const err = new ModelNotFoundError('Post', 'abc-123')
+    assert.equal(err.model, 'Post')
+    assert.equal(err.id, 'abc-123')
+    assert.equal(err.name, 'ModelNotFoundError')
+  })
+})
+
+// ─── firstOrCreate / updateOrCreate ───────────────────────────────────────────
+
+describe('Model.firstOrCreate() / updateOrCreate()', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  interface UserShape { id: number; email: string; name: string }
+
+  it('firstOrCreate returns existing record without creating', async () => {
+    const existing: UserShape = { id: 1, email: 'a@x.com', name: 'Alice' }
+    let createCalls = 0
+    const qb = makeQb<UserShape>({
+      first: async () => existing,
+      create: async (data) => { createCalls++; return data as UserShape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string }
+    const result = await User.firstOrCreate({ email: 'a@x.com' }, { name: 'Bob' })
+    assert.deepStrictEqual(result, existing)
+    assert.equal(createCalls, 0)
+  })
+
+  it('firstOrCreate creates with attrs+values when missing', async () => {
+    let createPayload: unknown = null
+    const qb = makeQb<UserShape>({
+      first: async () => null,
+      create: async (data) => { createPayload = data; return { id: 2, ...(data as Partial<UserShape>) } as UserShape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string }
+    const result = await User.firstOrCreate({ email: 'b@x.com' }, { name: 'Bob' })
+    assert.deepStrictEqual(createPayload, { email: 'b@x.com', name: 'Bob' })
+    assert.deepStrictEqual(result, { id: 2, email: 'b@x.com', name: 'Bob' })
+  })
+
+  it('updateOrCreate updates existing record', async () => {
+    const existing: UserShape = { id: 7, email: 'a@x.com', name: 'Old' }
+    let updatePayload: unknown = null
+    let updateId: unknown = null
+    const qb = makeQb<UserShape>({
+      first: async () => existing,
+      update: async (id, data) => {
+        updateId = id
+        updatePayload = data
+        return { ...existing, ...(data as Partial<UserShape>) } as UserShape
+      },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string }
+    const result = await User.updateOrCreate({ email: 'a@x.com' }, { name: 'New' })
+    assert.equal(updateId, 7)
+    assert.deepStrictEqual(updatePayload, { name: 'New' })
+    assert.deepStrictEqual(result, { id: 7, email: 'a@x.com', name: 'New' })
+  })
+
+  it('updateOrCreate creates when no record matches', async () => {
+    let createPayload: unknown = null
+    const qb = makeQb<UserShape>({
+      first: async () => null,
+      create: async (data) => { createPayload = data; return { id: 9, ...(data as Partial<UserShape>) } as UserShape },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; email!: string; name!: string }
+    const result = await User.updateOrCreate({ email: 'c@x.com' }, { name: 'Cara' })
+    assert.deepStrictEqual(createPayload, { email: 'c@x.com', name: 'Cara' })
+    assert.deepStrictEqual(result, { id: 9, email: 'c@x.com', name: 'Cara' })
+  })
+})
+
+// ─── retrieved / saving / saved events ────────────────────────────────────────
+
+describe('Model lifecycle — retrieved/saving/saved', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('retrieved fires after find()', async () => {
+    const events: unknown[] = []
+    const qb = makeQb({ find: async () => ({ id: 1, name: 'A' }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('retrieved', (record) => { events.push(record) })
+    await User.find(1)
+    assert.deepStrictEqual(events, [{ id: 1, name: 'A' }])
+    User.clearObservers()
+  })
+
+  it('retrieved does NOT fire when find returns null', async () => {
+    const events: unknown[] = []
+    const qb = makeQb({ find: async () => null })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('retrieved', (record) => { events.push(record) })
+    await User.find(99)
+    assert.deepStrictEqual(events, [])
+    User.clearObservers()
+  })
+
+  it('retrieved fires once per record from all()', async () => {
+    const events: unknown[] = []
+    const qb = makeQb({ all: async () => [{ id: 1 }, { id: 2 }] as unknown[] })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('retrieved', (record) => { events.push(record) })
+    await User.all()
+    assert.deepStrictEqual(events, [{ id: 1 }, { id: 2 }])
+    User.clearObservers()
+  })
+
+  it('saving fires before created on create()', async () => {
+    const events: string[] = []
+    const qb = makeQb({ create: async (data) => ({ id: 1, ...(data as object) }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {
+      static override fillable = ['name']
+    }
+    User.on('creating', () => { events.push('creating') })
+    User.on('saving',   () => { events.push('saving') })
+    User.on('created',  () => { events.push('created') })
+    User.on('saved',    () => { events.push('saved') })
+    await User.create({ name: 'A' } as Partial<User>)
+    assert.deepStrictEqual(events, ['creating', 'saving', 'created', 'saved'])
+    User.clearObservers()
+  })
+
+  it('saving fires before updated on update()', async () => {
+    const events: string[] = []
+    const qb = makeQb({ update: async (_id, data) => ({ id: 1, ...(data as object) }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('updating', () => { events.push('updating') })
+    User.on('saving',   () => { events.push('saving') })
+    User.on('updated',  () => { events.push('updated') })
+    User.on('saved',    () => { events.push('saved') })
+    await User.update(1, { name: 'B' } as Partial<User>)
+    assert.deepStrictEqual(events, ['updating', 'saving', 'updated', 'saved'])
+    User.clearObservers()
+  })
+
+  it('saving observer can mutate the payload', async () => {
+    let createdWith: unknown = null
+    const qb = makeQb({
+      create: async (data) => { createdWith = data; return { id: 1, ...(data as object) } as unknown },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('saving', (data: Record<string, unknown>) => ({ ...data, slug: 'auto' }))
+    await User.create({ name: 'A' } as Partial<User>)
+    assert.deepStrictEqual(createdWith, { name: 'A', slug: 'auto' })
+    User.clearObservers()
+  })
+})
+
+// ─── withoutEvents ────────────────────────────────────────────────────────────
+
+describe('Model.withoutEvents()', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('mutes all events for the duration of the block', async () => {
+    const events: string[] = []
+    const qb = makeQb({
+      create: async (data) => ({ id: 1, ...(data as object) }) as unknown,
+      find: async () => ({ id: 1 }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('creating',  () => { events.push('creating') })
+    User.on('saved',     () => { events.push('saved') })
+    User.on('retrieved', () => { events.push('retrieved') })
+
+    await User.withoutEvents(async () => {
+      await User.create({ name: 'A' } as Partial<User>)
+      await User.find(1)
+    })
+
+    assert.deepStrictEqual(events, [])
+    User.clearObservers()
+  })
+
+  it('events fire normally outside the block', async () => {
+    const events: string[] = []
+    const qb = makeQb({
+      create: async (data) => ({ id: 1, ...(data as object) }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model {}
+    User.on('creating', () => { events.push('creating') })
+
+    await User.withoutEvents(async () => {
+      await User.create({ name: 'inside' } as Partial<User>)
+    })
+    await User.create({ name: 'outside' } as Partial<User>)
+
+    assert.deepStrictEqual(events, ['creating'])
+    User.clearObservers()
+  })
+
+  it('returns the value from fn', async () => {
+    ModelRegistry.set(makeAdapter())
+    class User extends Model {}
+    const result = await User.withoutEvents(() => 'ok')
+    assert.equal(result, 'ok')
+  })
+
+  it('restores muted state after fn throws', async () => {
+    ModelRegistry.set(makeAdapter())
+    class User extends Model {}
+    await assert.rejects(() => User.withoutEvents(() => { throw new Error('boom') }))
+    // Subsequent events should fire again
+    const events: string[] = []
+    User.on('creating', () => { events.push('creating') })
+    const qb = makeQb({ create: async (data) => ({ id: 1, ...(data as object) }) as unknown })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    await User.create({ name: 'A' } as Partial<User>)
+    assert.deepStrictEqual(events, ['creating'])
+    User.clearObservers()
   })
 })

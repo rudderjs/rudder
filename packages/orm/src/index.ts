@@ -75,15 +75,48 @@ export class ModelRegistry {
   }
 }
 
+// ─── Errors ────────────────────────────────────────────────
+
+/**
+ * Thrown by `Model.findOrFail()` and `Model.firstOrFail()` when no record matches.
+ * Apps can catch this to render a 404, or let it bubble — `@rudderjs/core` maps
+ * it to an HTTP 404 by default.
+ */
+export class ModelNotFoundError extends Error {
+  readonly model: string
+  readonly id?: string | number
+
+  constructor(model: string, id?: string | number) {
+    super(id !== undefined
+      ? `[RudderJS ORM] No ${model} found for id ${String(id)}.`
+      : `[RudderJS ORM] No ${model} found.`)
+    this.name = 'ModelNotFoundError'
+    this.model = model
+    if (id !== undefined) this.id = id
+  }
+}
+
 // ─── Observer Types ─────────────────────────────────────────
 
-export type ModelEvent = 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted' | 'restoring' | 'restored'
+export type ModelEvent =
+  | 'retrieved'
+  | 'creating' | 'created'
+  | 'updating' | 'updated'
+  | 'saving'   | 'saved'
+  | 'deleting' | 'deleted'
+  | 'restoring' | 'restored'
 
 export interface ModelObserver {
+  /** Fired after a record is loaded from the database (find/first/all/get). */
+  retrieved?(record: Record<string, unknown>): void | Promise<void>
   creating?(data: Record<string, unknown>): Record<string, unknown> | void | Promise<Record<string, unknown> | void>
   created?(record: Record<string, unknown>): void | Promise<void>
   updating?(id: string | number, data: Record<string, unknown>): Record<string, unknown> | false | void | Promise<Record<string, unknown> | false | void>
   updated?(record: Record<string, unknown>): void | Promise<void>
+  /** Fired before BOTH creating and updating, after the per-event handler. */
+  saving?(data: Record<string, unknown>): Record<string, unknown> | void | Promise<Record<string, unknown> | void>
+  /** Fired after BOTH created and updated. */
+  saved?(record: Record<string, unknown>): void | Promise<void>
   deleting?(id: string | number): false | void | Promise<false | void>
   deleted?(id: string | number): void | Promise<void>
   restoring?(id: string | number): false | void | Promise<false | void>
@@ -259,6 +292,9 @@ export abstract class Model {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static _listeners: Map<ModelEvent, Array<(...args: any[]) => any>> = new Map()
 
+  /** @internal — true while a withoutEvents() block is active for this class. */
+  private static _eventsMuted = false
+
   static observe(ObserverClass: new () => ModelObserver): void {
     if (!Object.prototype.hasOwnProperty.call(this, '_observers')) {
       this._observers = []
@@ -278,6 +314,11 @@ export abstract class Model {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static async _fireEvent(event: ModelEvent, ...args: any[]): Promise<any> {
+    if (Object.prototype.hasOwnProperty.call(this, '_eventsMuted') && this._eventsMuted) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      return args[0]
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     let result = args[0]
 
@@ -378,40 +419,130 @@ export abstract class Model {
     return result
   }
 
-  static find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {
-    return Model._q(this).find(id)
+  static async find<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T> | null> {
+    const self = this as typeof Model
+    const record = await Model._q(this).find(id)
+    if (record) await self._fireEvent('retrieved', record as Record<string, unknown>)
+    return record
   }
 
-  static all<T extends typeof Model>(this: T): Promise<InstanceType<T>[]> {
-    return Model._q(this).all()
+  /** Like `find()`, but throws `ModelNotFoundError` if no record matches. */
+  static async findOrFail<T extends typeof Model>(this: T, id: number | string): Promise<InstanceType<T>> {
+    const record = await (this as T & typeof Model).find(id)
+    if (!record) throw new ModelNotFoundError((this as typeof Model).name, id)
+    return record
   }
 
-  static first<T extends typeof Model>(this: T): Promise<InstanceType<T> | null> {
-    return Model._q(this).first()
+  static async all<T extends typeof Model>(this: T): Promise<InstanceType<T>[]> {
+    const self = this as typeof Model
+    const records = await Model._q(this).all()
+    for (const r of records) await self._fireEvent('retrieved', r as Record<string, unknown>)
+    return records
+  }
+
+  static async first<T extends typeof Model>(this: T): Promise<InstanceType<T> | null> {
+    const self = this as typeof Model
+    const record = await Model._q(this).first()
+    if (record) await self._fireEvent('retrieved', record as Record<string, unknown>)
+    return record
+  }
+
+  /** Like `first()`, but throws `ModelNotFoundError` if no record matches. */
+  static async firstOrFail<T extends typeof Model>(this: T): Promise<InstanceType<T>> {
+    const record = await (this as T & typeof Model).first()
+    if (!record) throw new ModelNotFoundError((this as typeof Model).name)
+    return record
   }
 
   static count<T extends typeof Model>(this: T): Promise<number> {
     return Model._q(this).count()
   }
 
-  static paginate<T extends typeof Model>(this: T, page: number, perPage?: number): Promise<PaginatedResult<InstanceType<T>>> {
-    return Model._q(this).paginate(page, perPage)
+  static async paginate<T extends typeof Model>(this: T, page: number, perPage?: number): Promise<PaginatedResult<InstanceType<T>>> {
+    const self = this as typeof Model
+    const result = await Model._q(this).paginate(page, perPage)
+    for (const r of result.data) await self._fireEvent('retrieved', r as Record<string, unknown>)
+    return result
   }
 
   static where<T extends typeof Model>(this: T, column: string, value: unknown): QueryBuilder<InstanceType<T>> {
     return Model._q(this).where(column, value)
   }
 
+  /**
+   * Find a record by attributes; if none exists, create one with `attrs` merged with `values`.
+   * Returns the existing or newly-created record.
+   */
+  static async firstOrCreate<T extends typeof Model>(
+    this: T,
+    attrs: Partial<InstanceType<T>>,
+    values: Partial<InstanceType<T>> = {},
+  ): Promise<InstanceType<T>> {
+    const self = this as typeof Model
+    let q: QueryBuilder<InstanceType<T>> = Model._q(this)
+    for (const [col, val] of Object.entries(attrs)) {
+      q = q.where(col, val)
+    }
+    const existing = await q.first()
+    if (existing) {
+      await self._fireEvent('retrieved', existing as Record<string, unknown>)
+      return existing
+    }
+    return (this as T & typeof Model).create({ ...attrs, ...values } as Partial<InstanceType<T>>)
+  }
+
+  /**
+   * Find a record by attributes; if found, update it with `values`. If not, create it
+   * with `attrs` merged with `values`. Returns the upserted record.
+   */
+  static async updateOrCreate<T extends typeof Model>(
+    this: T,
+    attrs: Partial<InstanceType<T>>,
+    values: Partial<InstanceType<T>>,
+  ): Promise<InstanceType<T>> {
+    const self = this as typeof Model
+    let q: QueryBuilder<InstanceType<T>> = Model._q(this)
+    for (const [col, val] of Object.entries(attrs)) {
+      q = q.where(col, val)
+    }
+    const existing = await q.first() as (InstanceType<T> & Record<string, unknown>) | null
+    if (existing) {
+      const id = existing[self.primaryKey] as string | number
+      return (this as T & typeof Model).update(id, values)
+    }
+    return (this as T & typeof Model).create({ ...attrs, ...values } as Partial<InstanceType<T>>)
+  }
+
+  /**
+   * Run `fn` with all observer / listener firing muted for this model class.
+   * Useful for bulk seeding or tests where lifecycle hooks would interfere.
+   */
+  static async withoutEvents<T>(this: typeof Model, fn: () => T | Promise<T>): Promise<T> {
+    const previous = Object.prototype.hasOwnProperty.call(this, '_eventsMuted') ? this._eventsMuted : false
+    this._eventsMuted = true
+    try {
+      return await fn()
+    } finally {
+      this._eventsMuted = previous
+    }
+  }
+
   static async create<T extends typeof Model>(this: T, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     let payload = self._applyMutators(data as Record<string, unknown>)
-    const result = await self._fireEvent('creating', payload)
-    if (result === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
-    if (result && typeof result === 'object') payload = result as Record<string, unknown>
+
+    const creatingResult = await self._fireEvent('creating', payload)
+    if (creatingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by observer on ${self.name}.`)
+    if (creatingResult && typeof creatingResult === 'object') payload = creatingResult as Record<string, unknown>
+
+    const savingResult = await self._fireEvent('saving', payload)
+    if (savingResult === false) throw new Error(`[RudderJS ORM] Create cancelled by saving observer on ${self.name}.`)
+    if (savingResult && typeof savingResult === 'object') payload = savingResult as Record<string, unknown>
 
     const record = await Model._q(this).create(payload as Partial<InstanceType<T>>)
 
     await self._fireEvent('created', record as Record<string, unknown>)
+    await self._fireEvent('saved',   record as Record<string, unknown>)
     return record
   }
 
@@ -422,13 +553,19 @@ export abstract class Model {
   static async update<T extends typeof Model>(this: T, id: number | string, data: Partial<InstanceType<T>>): Promise<InstanceType<T>> {
     const self = this as typeof Model
     let payload = self._applyMutators(data as Record<string, unknown>)
-    const result = await self._fireEvent('updating', id, payload)
-    if (result === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
-    if (result && typeof result === 'object') payload = result as Record<string, unknown>
+
+    const updatingResult = await self._fireEvent('updating', id, payload)
+    if (updatingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by observer on ${self.name}.`)
+    if (updatingResult && typeof updatingResult === 'object') payload = updatingResult as Record<string, unknown>
+
+    const savingResult = await self._fireEvent('saving', payload)
+    if (savingResult === false) throw new Error(`[RudderJS ORM] Update cancelled by saving observer on ${self.name}.`)
+    if (savingResult && typeof savingResult === 'object') payload = savingResult as Record<string, unknown>
 
     const record = await Model._q(this).update(id, payload as Partial<InstanceType<T>>)
 
     await self._fireEvent('updated', record as Record<string, unknown>)
+    await self._fireEvent('saved',   record as Record<string, unknown>)
     return record
   }
 
