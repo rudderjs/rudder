@@ -95,26 +95,32 @@ const user = await User.updateOrCreate(
 | `create(data)` / `update(id, data)` / `delete(id)` | Write |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
 
-## Records vs. instances
+## Hydrated instances
 
-Query results are **plain data objects**, not Model instances. Prototype methods don't survive — `(await User.find(id)).hasGrantType('foo')` throws "is not a function".
-
-The convention is to put behavior in standalone helpers:
+Every read path returns Model instances — `find`, `first`, `all`, `paginate`, `where(...).first()`, `where(...).get()`, `create`, `update`, `restore`, `firstOrCreate`, `updateOrCreate`. The result is `instanceof Model` with the prototype chain bound, so instance methods you define on the class work directly:
 
 ```ts
-// app/Models/helpers/userHelpers.ts
-export const userHelpers = {
-  hasRole(user: User, role: string) { return user.role === role },
-  isAdmin(user: User)               { return user.role === 'admin' },
+class User extends Model {
+  isAdmin() { return this.role === 'admin' }
 }
-```
 
-```ts
 const user = await User.find(id)
-if (userHelpers.isAdmin(user)) { /* ... */ }
+if (user?.isAdmin()) { /* ... */ }
 ```
 
-For mutations, call the static method: `await User.update(id, { role: 'admin' })`.
+The base `Model` ships with the persistence and identity methods you'd expect from Eloquent:
+
+| Method | What it does |
+|---|---|
+| `save()` | Inserts when the primary key is unset; otherwise updates. Routes through the static path so observers fire. |
+| `fill(data)` | Mass-assigns attributes without persisting. |
+| `refresh()` | Re-reads the row and replaces fields in place. Throws `ModelNotFoundError` if the row is gone. |
+| `delete()` | Soft-deletes when `static softDeletes = true`; otherwise hard-deletes. |
+| `replicate(except?)` | Clones the instance without primary key + `createdAt`/`updatedAt`/`deletedAt` (and any extra keys). |
+| `is(other)` / `isNot(other)` | Identity by table + primary key. |
+| `trashed()` | True when `deletedAt` is set. |
+
+`Model.hydrate(record)` is the escape hatch when you need to wrap a plain record from outside the ORM (cached JSON, fixtures, an external API response).
 
 ## Mass assignment
 
@@ -251,7 +257,7 @@ The mute is class-scoped and restored even if `fn` throws.
 
 ## Pitfalls
 
-- **Calling methods on query results.** Records are plain objects without prototype. `record.column` works; `record.method()` doesn't. Put behavior in helpers (see [Records vs. instances](#records-vs-instances)).
+- **`assert.deepStrictEqual(result, plainObject)` after a query.** Query results are now Model instances — node's `deepStrictEqual` checks the prototype, so this assertion fails against a plain literal. Compare via `{ ...result }` or assert `result instanceof Model`. See [Hydrated instances](#hydrated-instances).
 - **`fillable` is a documentation hint, not an enforced filter** (today). The ORM doesn't yet drop keys outside the list — filter user input with a `FormRequest` or explicit picks before passing to `create()` / `update()`. See [Mass assignment](#mass-assignment).
 - **Forgetting to register the adapter.** `Model.*` static methods throw `[RudderJS ORM] No adapter registered`. The database provider must boot before any model query runs — see [Database](/guide/database).
 - **`Model.query().create()` skipping observers.** Use `Model.create()` (and the other static methods) when you need observer hooks.

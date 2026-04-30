@@ -133,5 +133,5 @@ Run with `pnpm rudder db:seed`.
 
 - **`static table` mismatch.** For Prisma, the value is the **delegate** name (camelCase, e.g. `blogPost`) — not the SQL table name (`blog_posts`). For Drizzle, it's the key in the `tables: {}` object passed to the adapter.
 - **Stale Prisma client after schema change.** Run `pnpm rudder db:generate` (or `pnpm exec prisma generate`) — the TypeScript types in your app go stale until you regenerate.
-- **Records aren't Model instances.** Query results are plain objects without prototype methods. See [Models](/guide/database/models) for the helpers pattern.
+- **Query results are Model instances.** `find`/`first`/`all`/etc. return `instanceof Model` objects with prototype methods bound — call `await user.save()`, `user.is(other)`, `user.trashed()` directly. See [Models — Hydrated instances](/guide/database/models#hydrated-instances).
 - **`db:push` in production.** Use tracked migrations (`pnpm rudder migrate`) — `db:push` can drop columns silently on destructive changes.
