@@ -93,6 +93,7 @@ const user = await User.updateOrCreate(
 | `with(...rels)` | Eager-load relations (Prisma) |
 | `first()` / `find(id)` / `get()` | Read |
 | `create(data)` / `update(id, data)` / `delete(id)` | Write |
+| `increment(id, col, n?, extra?)` / `decrement(id, col, n?, extra?)` | Atomic counter delta (default `n`: 1) |
 | `paginate(page, perPage?)` | Paginated result (default `perPage`: 15) |
 
 ## Hydrated instances
@@ -119,8 +120,28 @@ The base `Model` ships with the persistence and identity methods you'd expect fr
 | `replicate(except?)` | Clones the instance without primary key + `createdAt`/`updatedAt`/`deletedAt` (and any extra keys). |
 | `is(other)` / `isNot(other)` | Identity by table + primary key. |
 | `trashed()` | True when `deletedAt` is set. |
+| `increment(col, n?, extra?)` / `decrement(col, n?, extra?)` | Atomic SQL counter update; merges the new value back onto the instance. |
 
 `Model.hydrate(record)` is the escape hatch when you need to wrap a plain record from outside the ORM (cached JSON, fixtures, an external API response).
+
+## Counters: increment / decrement
+
+For counter columns, `Model.increment()` / `Model.decrement()` issue a single SQL `UPDATE col = col ± amount` so the change is atomic — safe under concurrent writes, no read-modify-write race. Prisma maps to `{ increment: n }` / `{ decrement: n }`; Drizzle to a `sql\`${col} + ${n}\`` expression.
+
+```ts
+// Static — atomic delta, returns the updated record (hydrated)
+await Post.increment(postId, 'viewCount')              // +1
+await Post.increment(postId, 'viewCount', 5)           // +5
+await Post.decrement(userId, 'credits', 10)            // -10
+
+// With extras — set other columns in the same UPDATE
+await User.increment(id, 'balance', 25, { lastSeen: new Date() })
+
+// Instance — same SQL, merges the new value back so `post.viewCount` reflects it
+await post.increment('viewCount')
+```
+
+**Caveat — observers don't fire.** `increment` / `decrement` deliberately skip the `updating` / `updated` / `saving` / `saved` lifecycle. They're a pure data-plane operation: the observer payload would have to be either the delta (confusing) or the resolved value (would require a read, breaking atomicity). If you need observer hooks, read the row, set the resolved value, and call `Model.update()` instead.
 
 ## Mass assignment
 

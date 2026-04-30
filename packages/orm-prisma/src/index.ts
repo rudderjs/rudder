@@ -207,6 +207,20 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     await this.delegate.delete({ where: { id } })
   }
 
+  async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    return this.delegate.update({
+      where: { id },
+      data:  { [column]: { increment: amount }, ...extra },
+    }) as Promise<T>
+  }
+
+  async decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    return this.delegate.update({
+      where: { id },
+      data:  { [column]: { decrement: amount }, ...extra },
+    }) as Promise<T>
+  }
+
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
     const [data, total] = await Promise.all([
       this.delegate.findMany({

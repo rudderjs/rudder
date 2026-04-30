@@ -1,6 +1,6 @@
 import {
   eq, ne, gt, gte, lt, lte, like, inArray, notInArray,
-  and, asc, desc, count as sqlCount,
+  and, asc, desc, count as sqlCount, sql,
   type Column, type SQL,
 } from 'drizzle-orm'
 import type {
@@ -240,6 +240,30 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     await (this.db
       .delete(this.table)
       .where(eq(pkCol, id)) as unknown as Promise<void>)
+  }
+
+  async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    const pkCol = this.col(this.primaryKey) as Column
+    const col   = this.col(column) as Column
+    const result = await (this.db
+      .update(this.table)
+      .set({ [column]: sql`${col} + ${amount}`, ...extra })
+      .where(eq(pkCol, id))
+      .returning() as unknown as Promise<T[]>)
+    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] increment() returned no rows.')
+    return result[0]
+  }
+
+  async decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    const pkCol = this.col(this.primaryKey) as Column
+    const col   = this.col(column) as Column
+    const result = await (this.db
+      .update(this.table)
+      .set({ [column]: sql`${col} - ${amount}`, ...extra })
+      .where(eq(pkCol, id))
+      .returning() as unknown as Promise<T[]>)
+    if (!result[0]) throw new Error('[RudderJS ORM Drizzle] decrement() returned no rows.')
+    return result[0]
   }
 
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
