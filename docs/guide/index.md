@@ -53,7 +53,19 @@ Optional packages — `@rudderjs/passport`, `@rudderjs/sanctum`, `@rudderjs/soci
 
 ## Status
 
-RudderJS is in **early development**. All packages are functional, the playground is a working full-stack app, and the API is settling. Breaking changes may still occur before v1.0.
+RudderJS shipped its **first 1.0 wave on 2026-04-29** — 29 framework packages graduated from `0.x` to `1.0.0` simultaneously, signaling stable public APIs. Breaking changes from here on require explicit major bumps and migration notes.
+
+## Versioning
+
+RudderJS uses **independent versioning** — each `@rudderjs/*` package has its own version line. Same model as Laravel's first-party packages, AdonisJS, and most of the npm ecosystem.
+
+What you'll see across the workspace:
+
+- **`1.0.0`** — packages that just graduated. Stable public API, breaking changes require a major bump.
+- **Higher majors** (`auth@4.x`, `cashier-paddle@2.x`, `cli@4.x`, `horizon@4.x`, `mcp@4.x`, `pulse@5.x`, `queue@4.x`, `sanctum@6.x`, `telescope@10.x`) — packages that were already past 1.0 before the graduation, plus this release's necessary cascade-major-bumps. The number reflects iteration history, not "more important."
+- **Still `0.x`** — packages explicitly deferred from the first wave: `concurrency`, `console`, `http`, `image`, `process`, `orm-drizzle`, `sync`, `vite`. These will graduate individually as their APIs stabilize.
+
+The version spread is informative, not asymmetric: a higher major means the package has been through more iteration cycles, not that it's more central. `core@1.0.0` and `telescope@10.0.0` are equally stable from this release forward.
 
 ## Where to next
 
