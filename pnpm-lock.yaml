@@ -601,8 +601,8 @@ importers:
         version: 5.9.3
     optionalDependencies:
       '@libsql/client':
-        specifier: ^0.15.0
-        version: 0.15.15
+        specifier: ^0.17.0
+        version: 0.17.0
       '@prisma/adapter-better-sqlite3':
         specifier: ^7.0.0
         version: 7.4.2

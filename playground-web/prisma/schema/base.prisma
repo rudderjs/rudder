@@ -1,7 +1,18 @@
+// Prisma 7's new `prisma-client` generator emits a self-contained ESM client
+// at the configured `output` path — no engine binaries are downloaded at
+// install time and no native runtime is loaded at request time. SQL
+// execution flows through @prisma/adapter-libsql + @libsql/client, both of
+// which are pure JS. This is the WebContainer-compatible Prisma path.
+//
+// `output` is relative to the schema file's directory (prisma/schema/),
+// so "../generated/prisma" lands in prisma/generated/prisma/. The
+// `playground-web/.gitignore` excludes prisma/generated/ — the postinstall
+// hook regenerates it from the schema.
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters", "queryCompiler"]
-  engineType      = "client"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  runtime      = "nodejs"
+  moduleFormat = "esm"
 }
 
 datasource db {

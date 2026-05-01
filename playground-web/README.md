@@ -8,7 +8,7 @@ WebContainer-bootable variant of the canonical `playground/`. Designed to run in
 
 | Layer | `playground/` | `playground-web/` |
 |---|---|---|
-| Database | Prisma + better-sqlite3 (native binding) | Prisma + `@prisma/adapter-libsql` + `@libsql/client` (pure JS, WASM query compiler) |
+| Database | Prisma + better-sqlite3 (native binding) | Prisma + `@prisma/adapter-libsql` + `@libsql/client` (pure JS, WASM query compiler) — schema uses Prisma 7's new `prisma-client` generator (self-contained ESM client, no engine binaries downloaded at install) |
 | Cache | configurable | `memory` driver (auto-flipped via `isWebContainer()`) |
 | Queue | configurable | `sync` driver (auto-flipped via `isWebContainer()`) |
 | Mail | configurable | `log` driver (auto-flipped via `isWebContainer()`) |
@@ -28,19 +28,23 @@ cd playground-web
 pnpm dev                     # vike dev on :3000
 ```
 
-The schema is pre-pushed into a committed `prisma/dev.db`, so no `prisma db push` step is needed for a fresh clone. If you change the Prisma schema, regenerate it:
+The schema is pre-pushed into a committed `prisma/dev.db`, so no `prisma db push` step is needed for a fresh clone. The `postinstall` hook runs `prisma generate` to produce the self-contained ESM client at `prisma/generated/prisma/`, which the framework imports via `config/database.ts`.
+
+If you change the Prisma schema:
 
 ```bash
-pnpm exec prisma generate
+pnpm exec prisma generate    # regenerate the ESM client (also auto-runs on install)
 pnpm exec prisma db push     # re-materializes prisma/dev.db with the new schema
 git add prisma/dev.db        # commit it so WebContainer boots stay one-step
 ```
 
 ## Booting in WebContainer (StackBlitz)
 
-`pnpm install && pnpm dev`. No extra setup — the committed `prisma/dev.db` carries the schema, and the Prisma runtime uses the WASM query compiler via `@prisma/adapter-libsql`, so the Rust query engine is never loaded.
+`pnpm install && pnpm dev`. No extra setup:
 
-End-to-end StackBlitz validation is Phase 4 of the plan, not yet executed.
+- The committed `prisma/dev.db` carries the schema (no `prisma db push` needed).
+- The `postinstall` hook runs `prisma generate` against Prisma 7's new `prisma-client` generator — emits a self-contained ESM client without downloading any engine binaries from `binaries.prisma.sh`.
+- The Prisma runtime uses the WASM query compiler via `@prisma/adapter-libsql`, so the Rust query engine is never loaded.
 
 ## Dropped framework packages
 
