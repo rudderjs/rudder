@@ -1,6 +1,7 @@
 import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
+import { getCsrfToken } from '@rudderjs/middleware'
 
 // URL this view is served at — see Login.tsx for rationale.
 export const route = '/register'
@@ -28,7 +29,10 @@ export default function Register(props: RegisterProps) {
     setLoading(true)
     const res = await fetch(submitUrl, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
       body:    JSON.stringify({ name, email, password }),
     })
     if (res.ok) {

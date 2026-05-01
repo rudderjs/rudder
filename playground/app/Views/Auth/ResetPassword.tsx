@@ -1,5 +1,6 @@
 import '@/index.css'
 import { useState, useEffect } from 'react'
+import { getCsrfToken } from '@rudderjs/middleware'
 
 // URL this view is served at — see Login.tsx for rationale.
 export const route = '/reset-password'
@@ -45,7 +46,10 @@ export default function ResetPassword(props: ResetPasswordProps) {
     try {
       const res = await fetch(submitUrl, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrfToken(),
+        },
         body:    JSON.stringify({ token, email, newPassword: password }),
       })
       if (res.ok) {

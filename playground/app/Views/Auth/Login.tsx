@@ -1,6 +1,7 @@
 import '@/index.css'
 import { useState } from 'react'
 import { navigate } from 'vike/client/router'
+import { getCsrfToken } from '@rudderjs/middleware'
 
 // URL this view is served at — MUST match the controller route registered
 // by registerAuthRoutes() in the consumer project. If you override
@@ -32,7 +33,10 @@ export default function Login(props: LoginProps) {
     setLoading(true)
     const res = await fetch(submitUrl, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
       body:    JSON.stringify({ email, password }),
     })
     if (res.ok) {
