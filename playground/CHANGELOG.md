@@ -1,5 +1,14 @@
 # rudderjs-playground
 
+## 0.0.32
+
+### Patch Changes
+
+- Updated dependencies [8689218]
+  - @rudderjs/horizon@5.0.0
+  - @rudderjs/queue-bullmq@1.1.0
+  - @rudderjs/queue@4.1.0
+
 ## 0.0.31
 
 ### Patch Changes
