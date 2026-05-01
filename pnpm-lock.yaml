@@ -1147,6 +1147,9 @@ importers:
       '@rudderjs/passport':
         specifier: workspace:*
         version: link:../packages/passport
+      '@rudderjs/pennant':
+        specifier: workspace:*
+        version: link:../packages/pennant
       '@rudderjs/pulse':
         specifier: workspace:*
         version: link:../packages/pulse
