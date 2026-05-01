@@ -1,5 +1,15 @@
 # rudderjs-playground
 
+## 0.0.29
+
+### Patch Changes
+
+- Updated dependencies [550518c]
+- Updated dependencies [2ea4acf]
+  - @rudderjs/auth@4.0.2
+  - @rudderjs/server-hono@1.0.1
+  - @rudderjs/session@1.0.2
+
 ## 0.0.28
 
 ### Patch Changes

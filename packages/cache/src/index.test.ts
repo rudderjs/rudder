@@ -73,9 +73,9 @@ describe('MemoryAdapter', () => {
   })
 
   it('get() returns null after TTL expires', async () => {
-    await adapter.set('ttl', 'temp', 0.01)
+    await adapter.set('ttl', 'temp', 0.1)
     assert.strictEqual(await adapter.get('ttl'), 'temp')
-    await sleep(20)
+    await sleep(200)
     assert.strictEqual(await adapter.get('ttl'), null)
   })
 
