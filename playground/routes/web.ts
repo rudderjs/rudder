@@ -293,6 +293,31 @@ Route.get('/test/job', async (_req, res) => {
   res.json({ dispatched: 2 })
 })
 
+// GET /test/horizon — exercises Horizon's job/queue/worker collectors.
+// Dispatches a mix of jobs across queues + a guaranteed failure so the
+// dashboard's Recent / Failed / Queues / Workers pages all populate.
+// Pair with `pnpm rudder queue:work` in another terminal so a real worker
+// process picks up the jobs (BullMQ; needs Redis).
+Route.get('/test/horizon', async (_req, res) => {
+  const { WelcomeUserJob } = await import('../app/Jobs/WelcomeUserJob.js')
+  const { FailingJob }     = await import('../app/Jobs/FailingJob.js')
+
+  // Default queue
+  await WelcomeUserJob.dispatch('Alice', 'alice@example.com').send()
+  await WelcomeUserJob.dispatch('Bob',   'bob@example.com').send()
+
+  // Priority queue — exercises multi-queue throughput on /horizon/queues
+  await WelcomeUserJob.dispatch('VIP', 'vip@example.com').onQueue('priority').send()
+
+  // Always-fails — exhausts retries and lands in /horizon/jobs/failed
+  await FailingJob.dispatch('Crash on purpose').send()
+
+  res.json({
+    dispatched: 4,
+    note:       'Run `pnpm rudder queue:work --queue=default,priority` in another terminal to process them.',
+  })
+})
+
 // GET /test/cache — fires cache operations for telescope testing
 Route.get('/test/cache', async (_req, res) => {
   const { Cache } = await import('@rudderjs/cache')

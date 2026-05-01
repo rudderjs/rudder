@@ -3,7 +3,7 @@ import { MemoryStorage, SqliteStorage } from './storage.js'
 import { JobCollector } from './collectors/job.js'
 import { MetricsCollector } from './collectors/metrics.js'
 import { WorkerCollector } from './collectors/worker.js'
-import { registerRoutes } from './api/routes.js'
+import { registerHorizonRoutes } from './routes.js'
 import {
   defaultConfig,
   type HorizonConfig, type HorizonStorage, type HorizonJob,
@@ -131,7 +131,14 @@ export class HorizonProvider extends ServiceProvider {
       metricsCollector.register()
       workerCollector.register()
 
-    // ── Register API routes ───────────────────────────────
-    await registerRoutes(storage, resolved)
+    // ── Register UI + API routes ──────────────────────────
+    await registerHorizonRoutes(storage, {
+      path:       resolved.path,
+      ...(resolved.auth ? { auth: resolved.auth } : {}),
+    })
   }
 }
+
+// ─── Public route helper ───────────────────────────────────
+
+export { registerHorizonRoutes, type RegisterHorizonRoutesOptions } from './routes.js'
