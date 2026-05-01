@@ -1,45 +1,52 @@
+import { queueObservers } from '@rudderjs/queue/observers'
 import type { Recorder, PulseStorage } from '../types.js'
 
 /**
- * Tracks queue throughput, wait time, and failed jobs.
- * Wraps the QueueRegistry adapter's dispatch method.
+ * Tracks queue throughput, wait time, and failed jobs by subscribing to
+ * `@rudderjs/queue/observers`. Replaces the legacy `dispatch()`
+ * monkey-patch which only fired in the dispatching process — under
+ * BullMQ, worker-side completion and failure events were never recorded
+ * and `queue_wait_time` was actually the enqueue duration, not the
+ * queue-to-active wait.
  */
 export class QueueRecorder implements Recorder {
   readonly name = 'Queue Recorder'
+  private unsubscribe: (() => void) | null = null
 
   constructor(private readonly storage: PulseStorage) {}
 
-  async register(): Promise<void> {
-    try {
-      const { QueueRegistry } = await import('@rudderjs/queue')
-      const adapter = QueueRegistry.get()
-      if (!adapter) return
-
-      const storage          = this.storage
-      const originalDispatch = adapter.dispatch.bind(adapter)
-
-      ;(adapter as unknown as Record<string, unknown>)['dispatch'] = async (
-        job: unknown,
-        options?: unknown,
-      ): Promise<void> => {
-        const dispatchedAt = Date.now()
-        try {
-          await (originalDispatch as (...args: unknown[]) => Promise<void>)(job, options)
-          const duration = Date.now() - dispatchedAt
-          storage.record('queue_throughput', 1)
-          storage.record('queue_wait_time', duration)
-        } catch (err) {
-          storage.record('queue_throughput', 1)
-          const j = job as { constructor: { name: string } }
-          storage.storeEntry('failed_job', {
-            class:     j.constructor.name,
-            exception: err instanceof Error ? err.message : String(err),
-          })
-          throw err
+  register(): void {
+    this.unsubscribe = queueObservers.subscribe((event) => {
+      try {
+        switch (event.kind) {
+          case 'job.active': {
+            const wait = event.startedAt.getTime() - event.dispatchedAt.getTime()
+            void this.storage.record('queue_wait_time', wait)
+            break
+          }
+          case 'job.completed':
+            void this.storage.record('queue_throughput', 1)
+            break
+          case 'job.failed':
+            void this.storage.record('queue_throughput', 1)
+            void this.storage.storeEntry('failed_job', {
+              class:     event.name,
+              queue:     event.queue,
+              jobId:     event.jobId,
+              attempts:  event.attempts,
+              exception: event.error,
+            })
+            break
         }
+      } catch {
+        // observer errors must not break the queue layer
       }
-    } catch {
-      // @rudderjs/queue not installed — skip
-    }
+    })
+  }
+
+  /** @internal — used in tests + provider shutdown. */
+  unregister(): void {
+    this.unsubscribe?.()
+    this.unsubscribe = null
   }
 }
