@@ -94,10 +94,12 @@ await SendWelcomeEmail.dispatch(user.id)
 For BullMQ, run a separate worker process:
 
 ```bash
-pnpm rudder queue:work                       # default queue, default connection
-pnpm rudder queue:work --queue=notifications # specific queue
-pnpm rudder queue:work --connection=bullmq   # specific connection
+pnpm rudder queue:work                       # default queue
+pnpm rudder queue:work notifications         # specific queue
+pnpm rudder queue:work default,notifications # multiple queues (comma-separated)
 ```
+
+The connection is taken from the `default` field in `config/queue.ts` — switch connections by editing the config, not via a flag.
 
 The worker auto-discovers job classes via the framework's job registry. Stop it with Ctrl+C; in production run it under a process supervisor (systemd, pm2, Docker `restart: always`).
 
