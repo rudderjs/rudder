@@ -1570,11 +1570,15 @@ ${connections[ctx.db]}
 }
 
 function configQueue(): string {
-  return `import { Env } from '@rudderjs/support'
+  return `import { Env, isWebContainer } from '@rudderjs/support'
 import type { QueueConfig } from '@rudderjs/queue'
 
+// In WebContainer, BullMQ (Redis over raw TCP) doesn't work — fall back to
+// the in-process \`sync\` driver.
+const defaultConnection = isWebContainer() ? 'sync' : Env.get('QUEUE_CONNECTION', 'sync')
+
 export default {
-  default: Env.get('QUEUE_CONNECTION', 'sync'),
+  default: defaultConnection,
 
   connections: {
     sync: {
@@ -1594,10 +1598,14 @@ export default {
 }
 
 function configMail(): string {
-  return `import { Env } from '@rudderjs/support'
+  return `import { Env, isWebContainer } from '@rudderjs/support'
+
+// In WebContainer, raw SMTP (TCP) doesn't work — fall back to the log driver
+// (writes the rendered email to stdout instead of sending).
+const defaultMailer = isWebContainer() ? 'log' : Env.get('MAIL_MAILER', 'log')
 
 export default {
-  default: Env.get('MAIL_MAILER', 'log'),
+  default: defaultMailer,
 
   from: {
     address: Env.get('MAIL_FROM_ADDRESS', 'hello@example.com'),
@@ -1623,11 +1631,14 @@ export default {
 }
 
 function configCache(): string {
-  return `import { Env } from '@rudderjs/support'
+  return `import { Env, isWebContainer } from '@rudderjs/support'
 import type { CacheConfig } from '@rudderjs/cache'
 
+// In WebContainer, native Redis (raw TCP) doesn't work — fall back to memory.
+const defaultStore = isWebContainer() ? 'memory' : Env.get('CACHE_STORE', 'memory')
+
 export default {
-  default: Env.get('CACHE_STORE', 'memory'),
+  default: defaultStore,
 
   stores: {
     memory: {
@@ -1772,11 +1783,17 @@ declare module '@rudderjs/core' {
 }
 
 function configSession(): string {
-  return `import { Env } from '@rudderjs/support'
+  return `import { Env, isWebContainer } from '@rudderjs/support'
 import type { SessionConfig } from '@rudderjs/session'
 
+// In WebContainer, raw Redis (TCP) doesn't work — pin the session driver to
+// \`cookie\` so sessions survive without a Redis backend.
+const defaultDriver = isWebContainer()
+  ? 'cookie'
+  : (Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis')
+
 export default {
-  driver:   Env.get('SESSION_DRIVER', 'cookie') as 'cookie' | 'redis',
+  driver:   defaultDriver,
   lifetime: 120,
   secret:   Env.get('SESSION_SECRET', 'change-me-in-production'),
   cookie: {

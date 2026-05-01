@@ -686,6 +686,44 @@ describe('getTemplates() — log and hash configs', () => {
   })
 })
 
+// ─── WebContainer-aware config defaults ──────────────────
+//
+// Each of cache/queue/mail/session has an `isWebContainer()` gate that
+// short-circuits the env-driven default to a sandbox-safe driver. On regular
+// Node the gate returns false and the env path is preserved; only the gate
+// presence is asserted here.
+
+describe('getTemplates() — WebContainer-aware config defaults', () => {
+  it('config/cache.ts gates default store on isWebContainer()', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
+    const cache = files['config/cache.ts']!
+    assert.ok(cache.includes("import { Env, isWebContainer } from '@rudderjs/support'"))
+    assert.ok(cache.includes("isWebContainer() ? 'memory'"))
+  })
+
+  it('config/queue.ts gates default connection on isWebContainer()', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, queue: true } }))
+    const queue = files['config/queue.ts']!
+    assert.ok(queue.includes("import { Env, isWebContainer } from '@rudderjs/support'"))
+    assert.ok(queue.includes("isWebContainer() ? 'sync'"))
+  })
+
+  it('config/mail.ts gates default mailer on isWebContainer()', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, mail: true } }))
+    const mail = files['config/mail.ts']!
+    assert.ok(mail.includes("import { Env, isWebContainer } from '@rudderjs/support'"))
+    assert.ok(mail.includes("isWebContainer() ? 'log'"))
+  })
+
+  it('config/session.ts pins driver to cookie under isWebContainer()', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+    const session = files['config/session.ts']!
+    assert.ok(session.includes("import { Env, isWebContainer } from '@rudderjs/support'"))
+    assert.ok(session.includes("isWebContainer()"))
+    assert.ok(session.includes("'cookie'"))
+  })
+})
+
 // ─── sync config ──────────────────────────────────────────
 
 describe('getTemplates() — sync config wiring', () => {
