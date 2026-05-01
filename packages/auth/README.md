@@ -172,6 +172,8 @@ The `EloquentUserProvider` auto-wraps ORM model records with these methods (mapp
 
 Ships React views for Login, Register, ForgotPassword, ResetPassword under `views/react/`. `create-rudder-app` vendors them into `app/Views/Auth/` at scaffold time so the app owns the files from day one and can edit them freely.
 
+The views POST credentials with an `X-CSRF-Token` header read via `getCsrfToken()` from `@rudderjs/middleware`, so they work with `CsrfMiddleware` on the web group out of the box. `@rudderjs/middleware` is already a dep of any standard RudderJS app via the bootstrap pattern.
+
 To re-vendor manually (e.g. after upgrading this package):
 
 ```bash
