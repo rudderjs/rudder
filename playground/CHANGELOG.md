@@ -1,5 +1,12 @@
 # rudderjs-playground
 
+## 0.0.26
+
+### Patch Changes
+
+- Updated dependencies [ca14ecf]
+  - @rudderjs/orm-prisma@1.2.0
+
 ## 0.0.25
 
 ### Patch Changes
