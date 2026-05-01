@@ -22,7 +22,7 @@ export function jobTable(): string {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <template x-for="job in jobs" :key="job.id">
+            <template x-for="job in jobs" :key="job.queue + ':' + job.id">
               <tr class="hover:bg-gray-50">
                 <td class="px-4 py-3 font-mono text-xs" x-text="job.name"></td>
                 <td class="px-4 py-3" x-text="job.queue"></td>
@@ -34,9 +34,9 @@ export function jobTable(): string {
                 <td class="px-4 py-3 text-right" x-text="job.duration ? job.duration + 'ms' : '—'"></td>
                 <td class="px-4 py-3 text-right text-gray-400 text-xs" x-text="ago(job.dispatchedAt)"></td>
                 <td class="px-4 py-3 text-right">
-                  <button x-show="job.status === 'failed'" @click="retry(job.id)"
+                  <button x-show="job.status === 'failed'" @click="retry(job)"
                           class="text-xs text-teal-600 hover:text-teal-800 mr-2">Retry</button>
-                  <button @click="remove(job.id)"
+                  <button @click="remove(job)"
                           class="text-xs text-red-500 hover:text-red-700">Delete</button>
                 </td>
               </tr>
@@ -69,12 +69,14 @@ export function jobScript(apiPrefix: string): string {
             this.jobs = data.data || []
             this.meta = data.meta || { total: 0 }
           },
-          async retry(id) {
-            await fetch('${apiPrefix}/jobs/' + id + '/retry', { method: 'POST' })
+          async retry(job) {
+            const path = encodeURIComponent(job.queue) + '/' + encodeURIComponent(job.id)
+            await fetch('${apiPrefix}/jobs/' + path + '/retry', { method: 'POST' })
             this.load()
           },
-          async remove(id) {
-            await fetch('${apiPrefix}/jobs/' + id, { method: 'DELETE' })
+          async remove(job) {
+            const path = encodeURIComponent(job.queue) + '/' + encodeURIComponent(job.id)
+            await fetch('${apiPrefix}/jobs/' + path, { method: 'DELETE' })
             this.load()
           },
           ago(dateStr) {

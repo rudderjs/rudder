@@ -66,7 +66,9 @@ export async function showJob(
   req:     AppRequest,
   res:     AppResponse,
 ): Promise<void> {
-  const job = await storage.findJob(req.params['id'] ?? '')
+  const queue = req.params['queue'] ?? ''
+  const id    = req.params['id']    ?? ''
+  const job   = await storage.findJob(queue, id)
   if (!job) {
     res.status(404).json({ message: 'Job not found.' })
     return
@@ -79,7 +81,9 @@ export async function retryJob(
   req:     AppRequest,
   res:     AppResponse,
 ): Promise<void> {
-  const job = await storage.findJob(req.params['id'] ?? '')
+  const queue = req.params['queue'] ?? ''
+  const id    = req.params['id']    ?? ''
+  const job   = await storage.findJob(queue, id)
   if (!job) {
     res.status(404).json({ message: 'Job not found.' })
     return
@@ -92,7 +96,7 @@ export async function retryJob(
   const adapter = QueueRegistry.get()
   if (adapter?.retryFailed) {
     await adapter.retryFailed(job.queue)
-    storage.updateJob(job.id, { status: 'pending', exception: null })
+    storage.updateJob(job.queue, job.id, { status: 'pending', exception: null })
     res.json({ message: 'Job queued for retry.' })
   } else {
     res.status(501).json({ message: 'Queue adapter does not support retry.' })
@@ -104,12 +108,14 @@ export async function deleteJob(
   req:     AppRequest,
   res:     AppResponse,
 ): Promise<void> {
-  const job = await storage.findJob(req.params['id'] ?? '')
+  const queue = req.params['queue'] ?? ''
+  const id    = req.params['id']    ?? ''
+  const job   = await storage.findJob(queue, id)
   if (!job) {
     res.status(404).json({ message: 'Job not found.' })
     return
   }
-  storage.deleteJob(job.id)
+  storage.deleteJob(job.queue, job.id)
   res.json({ message: 'Job deleted.' })
 }
 

@@ -21,8 +21,8 @@ export class MemoryStorage implements HorizonStorage {
     }
   }
 
-  updateJob(id: string, updates: Partial<HorizonJob>): void {
-    const job = this.jobs.find(j => j.id === id)
+  updateJob(queue: string, id: string, updates: Partial<HorizonJob>): void {
+    const job = this.jobs.find(j => j.queue === queue && j.id === id)
     if (job) Object.assign(job, updates)
   }
 
@@ -34,8 +34,8 @@ export class MemoryStorage implements HorizonStorage {
     return this.filterJobs({ ...options, status: 'failed' })
   }
 
-  findJob(id: string): HorizonJob | null {
-    return this.jobs.find(j => j.id === id) ?? null
+  findJob(queue: string, id: string): HorizonJob | null {
+    return this.jobs.find(j => j.queue === queue && j.id === id) ?? null
   }
 
   recordMetric(metric: QueueMetric): void {
@@ -67,8 +67,8 @@ export class MemoryStorage implements HorizonStorage {
     return [...this.workerMap.values()]
   }
 
-  deleteJob(id: string): void {
-    const idx = this.jobs.findIndex(j => j.id === id)
+  deleteJob(queue: string, id: string): void {
+    const idx = this.jobs.findIndex(j => j.queue === queue && j.id === id)
     if (idx !== -1) this.jobs.splice(idx, 1)
   }
 
@@ -132,11 +132,14 @@ export class SqliteStorage implements HorizonStorage {
   }
 
   private migrate(): void {
+    // v2 table: composite PK so cross-queue id collisions (BullMQ assigns ids
+    // per-queue) don't clobber records. v1's `horizon_jobs` (single-column id
+    // PK) is left untouched on upgrade — pruneAfterHours ages it out.
     this.db!.exec(`
-      CREATE TABLE IF NOT EXISTS horizon_jobs (
-        id            TEXT PRIMARY KEY,
-        name          TEXT NOT NULL,
+      CREATE TABLE IF NOT EXISTS horizon_jobs_v2 (
         queue         TEXT NOT NULL,
+        id            TEXT NOT NULL,
+        name          TEXT NOT NULL,
         status        TEXT NOT NULL,
         payload       TEXT NOT NULL DEFAULT '{}',
         attempts      INTEGER NOT NULL DEFAULT 0,
@@ -145,10 +148,11 @@ export class SqliteStorage implements HorizonStorage {
         started_at    TEXT,
         completed_at  TEXT,
         duration      INTEGER,
-        tags          TEXT NOT NULL DEFAULT '[]'
+        tags          TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (queue, id)
       );
-      CREATE INDEX IF NOT EXISTS idx_horizon_status ON horizon_jobs(status, dispatched_at);
-      CREATE INDEX IF NOT EXISTS idx_horizon_queue ON horizon_jobs(queue, dispatched_at);
+      CREATE INDEX IF NOT EXISTS idx_horizon_status ON horizon_jobs_v2(status, dispatched_at);
+      CREATE INDEX IF NOT EXISTS idx_horizon_queue ON horizon_jobs_v2(queue, dispatched_at);
 
       CREATE TABLE IF NOT EXISTS horizon_metrics (
         id         TEXT PRIMARY KEY,
@@ -178,10 +182,10 @@ export class SqliteStorage implements HorizonStorage {
 
   recordJob(job: HorizonJob): void {
     this.getDb().prepare(
-      `INSERT INTO horizon_jobs (id, name, queue, status, payload, attempts, exception, dispatched_at, started_at, completed_at, duration, tags)
+      `INSERT OR REPLACE INTO horizon_jobs_v2 (queue, id, name, status, payload, attempts, exception, dispatched_at, started_at, completed_at, duration, tags)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      job.id, job.name, job.queue, job.status,
+      job.queue, job.id, job.name, job.status,
       JSON.stringify(job.payload), job.attempts, job.exception,
       job.dispatchedAt.toISOString(),
       job.startedAt?.toISOString() ?? null,
@@ -191,7 +195,7 @@ export class SqliteStorage implements HorizonStorage {
     )
   }
 
-  updateJob(id: string, updates: Partial<HorizonJob>): void {
+  updateJob(queue: string, id: string, updates: Partial<HorizonJob>): void {
     const sets: string[] = []
     const params: unknown[] = []
 
@@ -203,8 +207,8 @@ export class SqliteStorage implements HorizonStorage {
     if (updates.duration !== undefined)    { sets.push('duration = ?');     params.push(updates.duration) }
 
     if (sets.length === 0) return
-    params.push(id)
-    this.getDb().prepare(`UPDATE horizon_jobs SET ${sets.join(', ')} WHERE id = ?`).run(...params)
+    params.push(queue, id)
+    this.getDb().prepare(`UPDATE horizon_jobs_v2 SET ${sets.join(', ')} WHERE queue = ? AND id = ?`).run(...params)
   }
 
   recentJobs(options?: JobListOptions): HorizonJob[] {
@@ -215,8 +219,8 @@ export class SqliteStorage implements HorizonStorage {
     return this.queryJobs({ ...options, status: 'failed' })
   }
 
-  findJob(id: string): HorizonJob | null {
-    const row = this.getDb().prepare('SELECT * FROM horizon_jobs WHERE id = ?').get(id) as Record<string, unknown> | undefined
+  findJob(queue: string, id: string): HorizonJob | null {
+    const row = this.getDb().prepare('SELECT * FROM horizon_jobs_v2 WHERE queue = ? AND id = ?').get(queue, id) as Record<string, unknown> | undefined
     return row ? this.jobFromRow(row) : null
   }
 
@@ -268,23 +272,23 @@ export class SqliteStorage implements HorizonStorage {
     }))
   }
 
-  deleteJob(id: string): void {
-    this.getDb().prepare('DELETE FROM horizon_jobs WHERE id = ?').run(id)
+  deleteJob(queue: string, id: string): void {
+    this.getDb().prepare('DELETE FROM horizon_jobs_v2 WHERE queue = ? AND id = ?').run(queue, id)
   }
 
   pruneOlderThan(date: Date): void {
     const iso = date.toISOString()
     const db  = this.getDb()
-    db.prepare('DELETE FROM horizon_jobs WHERE dispatched_at < ?').run(iso)
+    db.prepare('DELETE FROM horizon_jobs_v2 WHERE dispatched_at < ?').run(iso)
     db.prepare('DELETE FROM horizon_metrics WHERE created_at < ?').run(iso)
   }
 
   jobCount(status?: JobStatus): number {
     if (status) {
-      const row = this.getDb().prepare('SELECT COUNT(*) as cnt FROM horizon_jobs WHERE status = ?').get(status) as { cnt: number }
+      const row = this.getDb().prepare('SELECT COUNT(*) as cnt FROM horizon_jobs_v2 WHERE status = ?').get(status) as { cnt: number }
       return row.cnt
     }
-    const row = this.getDb().prepare('SELECT COUNT(*) as cnt FROM horizon_jobs').get() as { cnt: number }
+    const row = this.getDb().prepare('SELECT COUNT(*) as cnt FROM horizon_jobs_v2').get() as { cnt: number }
     return row.cnt
   }
 
@@ -303,7 +307,7 @@ export class SqliteStorage implements HorizonStorage {
     params.push(perPage, offset)
 
     const rows = this.getDb().prepare(
-      `SELECT * FROM horizon_jobs ${where} ORDER BY dispatched_at DESC LIMIT ? OFFSET ?`,
+      `SELECT * FROM horizon_jobs_v2 ${where} ORDER BY dispatched_at DESC LIMIT ? OFFSET ?`,
     ).all(...params) as Record<string, unknown>[]
 
     return rows.map(r => this.jobFromRow(r))
@@ -344,6 +348,7 @@ export class SqliteStorage implements HorizonStorage {
 
 interface RedisLike {
   hset(key: string, field: Record<string, string | number>): Promise<number>
+  hsetnx(key: string, field: string, value: string | number): Promise<number>
   hgetall(key: string): Promise<Record<string, string>>
   zadd(key: string, score: number, member: string): Promise<number>
   zcard(key: string): Promise<number>
@@ -416,28 +421,71 @@ export class RedisStorage implements HorizonStorage {
   }
 
   // ─── Keys ────────────────────────────────────────────────
+  //
+  // Job records are stored at `jobs:{queue}:{id}`. BullMQ assigns ids
+  // per-queue (each queue starts at 1), so keying by id alone collides
+  // across queues. The `recent` and `failed` ZSets store members as
+  // `{queue}:{id}` so the listing path can split + lookup.
 
   private k = {
-    job:           (id: string)    => `${this.prefix}:jobs:${id}`,
-    recent:        ()              => `${this.prefix}:jobs:recent`,
-    failed:        ()              => `${this.prefix}:jobs:failed`,
-    byQueue:       (q: string)     => `${this.prefix}:jobs:by-queue:${q}`,
-    metricCurrent: (q: string)     => `${this.prefix}:metrics:${q}:current`,
-    metricHistory: (q: string)     => `${this.prefix}:metrics:${q}:history`,
-    worker:        (id: string)    => `${this.prefix}:workers:${id}`,
-    workersIndex:  ()              => `${this.prefix}:workers`,
+    job:           (queue: string, id: string) => `${this.prefix}:jobs:${queue}:${id}`,
+    recent:        ()                          => `${this.prefix}:jobs:recent`,
+    failed:        ()                          => `${this.prefix}:jobs:failed`,
+    byQueue:       (q: string)                 => `${this.prefix}:jobs:by-queue:${q}`,
+    metricCurrent: (q: string)                 => `${this.prefix}:metrics:${q}:current`,
+    metricHistory: (q: string)                 => `${this.prefix}:metrics:${q}:history`,
+    worker:        (id: string)                => `${this.prefix}:workers:${id}`,
+    workersIndex:  ()                          => `${this.prefix}:workers`,
+  }
+
+  private member(queue: string, id: string): string {
+    return `${queue}:${id}`
+  }
+
+  private parseMember(member: string): { queue: string; id: string } | null {
+    const idx = member.indexOf(':')
+    if (idx === -1) return null  // legacy v1 member; skip
+    return { queue: member.slice(0, idx), id: member.slice(idx + 1) }
   }
 
   // ─── Jobs ────────────────────────────────────────────────
 
   async recordJob(job: HorizonJob): Promise<void> {
-    const r = await this.getClient()
-    await r.hset(this.k.job(job.id), this.jobToHash(job))
+    const r   = await this.getClient()
+    const m   = this.member(job.queue, job.id)
+    const key = this.k.job(job.queue, job.id)
+
+    // Idempotent fields — same value across the lifecycle, safe to overwrite.
+    await r.hset(key, {
+      id:           job.id,
+      name:         job.name,
+      queue:        job.queue,
+      payload:      JSON.stringify(job.payload),
+      dispatchedAt: job.dispatchedAt.toISOString(),
+      tags:         JSON.stringify(job.tags),
+    })
+
+    // Lifecycle fields — set only if not already written. The dashboard
+    // process emits `job.dispatched` and queues an async storage write via
+    // microtask; the worker process can update the record to `processing`
+    // / `completed` BEFORE that microtask flushes (the dispatcher races
+    // BullMQ's polling). Plain HSET would let a late dispatched-write
+    // clobber the worker's status. HSETNX makes recordJob idempotent for
+    // these fields so worker updates always win.
+    await Promise.all([
+      r.hsetnx(key, 'status',      job.status),
+      r.hsetnx(key, 'attempts',    job.attempts),
+      r.hsetnx(key, 'startedAt',   job.startedAt   ? job.startedAt.toISOString()   : ''),
+      r.hsetnx(key, 'completedAt', job.completedAt ? job.completedAt.toISOString() : ''),
+      r.hsetnx(key, 'duration',    job.duration ?? -1),
+      r.hsetnx(key, 'exception',   job.exception ?? ''),
+    ])
+
     const score = job.dispatchedAt.getTime()
-    await r.zadd(this.k.recent(),         score, job.id)
+    await r.zadd(this.k.recent(),           score, m)
     await r.zadd(this.k.byQueue(job.queue), score, job.id)
     if (job.status === 'failed') {
-      await r.zadd(this.k.failed(), score, job.id)
+      await r.zadd(this.k.failed(), score, m)
     }
     // Cap recent index to maxJobs (drop oldest)
     const count = await r.zcard(this.k.recent())
@@ -446,7 +494,7 @@ export class RedisStorage implements HorizonStorage {
     }
   }
 
-  async updateJob(id: string, updates: Partial<HorizonJob>): Promise<void> {
+  async updateJob(queue: string, id: string, updates: Partial<HorizonJob>): Promise<void> {
     const r = await this.getClient()
     const fields: Record<string, string | number> = {}
 
@@ -460,13 +508,14 @@ export class RedisStorage implements HorizonStorage {
     if (updates.tags        !== undefined) fields['tags']          = JSON.stringify(updates.tags)
 
     if (Object.keys(fields).length === 0) return
-    await r.hset(this.k.job(id), fields)
+    await r.hset(this.k.job(queue, id), fields)
 
+    const m = this.member(queue, id)
     if (updates.status === 'failed') {
-      const job = await this.findJob(id)
-      if (job) await r.zadd(this.k.failed(), job.dispatchedAt.getTime(), id)
+      const job = await this.findJob(queue, id)
+      if (job) await r.zadd(this.k.failed(), job.dispatchedAt.getTime(), m)
     } else if (updates.status === 'completed') {
-      await r.zrem(this.k.failed(), id)
+      await r.zrem(this.k.failed(), m)
     }
   }
 
@@ -478,26 +527,30 @@ export class RedisStorage implements HorizonStorage {
     return this.listJobs(this.k.failed(), { ...options, status: 'failed' })
   }
 
-  async findJob(id: string): Promise<HorizonJob | null> {
+  async findJob(queue: string, id: string): Promise<HorizonJob | null> {
     const r    = await this.getClient()
-    const hash = await r.hgetall(this.k.job(id))
+    const hash = await r.hgetall(this.k.job(queue, id))
     if (!hash || Object.keys(hash).length === 0) return null
     return this.jobFromHash(hash)
   }
 
-  async deleteJob(id: string): Promise<void> {
+  async deleteJob(queue: string, id: string): Promise<void> {
     const r = await this.getClient()
-    await r.del(this.k.job(id))
-    await r.zrem(this.k.recent(), id)
-    await r.zrem(this.k.failed(), id)
+    const m = this.member(queue, id)
+    await r.del(this.k.job(queue, id))
+    await r.zrem(this.k.recent(), m)
+    await r.zrem(this.k.failed(), m)
   }
 
   async pruneOlderThan(date: Date): Promise<void> {
-    const r   = await this.getClient()
-    const cut = date.getTime()
-    const ids = await r.zrangebyscore(this.k.recent(), '-inf', cut)
-    if (ids.length === 0) return
-    await Promise.all(ids.map(id => r.del(this.k.job(id))))
+    const r       = await this.getClient()
+    const cut     = date.getTime()
+    const members = await r.zrangebyscore(this.k.recent(), '-inf', cut)
+    if (members.length === 0) return
+    await Promise.all(members.map(m => {
+      const parsed = this.parseMember(m)
+      return parsed ? r.del(this.k.job(parsed.queue, parsed.id)) : Promise.resolve(0)
+    }))
     await r.zremrangebyscore(this.k.recent(), '-inf', cut)
     await r.zremrangebyscore(this.k.failed(), '-inf', cut)
   }
@@ -537,17 +590,14 @@ export class RedisStorage implements HorizonStorage {
 
   async currentMetrics(): Promise<QueueMetric[]> {
     const r = await this.getClient()
-    // Discover queue names by scanning the recent-jobs zset members and
-    // bouncing through their queue field. Cheap because maxJobs is bounded.
-    const ids   = await r.zrevrange(this.k.recent(), 0, Math.min(this.maxJobs, 500) - 1)
-    if (ids.length === 0) return []
-    const pipe  = r.pipeline()
-    for (const id of ids) pipe.hgetall(this.k.job(id))
-    const rows  = await pipe.exec() ?? []
+    // Discover queue names directly from the recent-jobs zset members
+    // (now `{queue}:{id}`) — no per-record hgetall needed.
+    const members = await r.zrevrange(this.k.recent(), 0, Math.min(this.maxJobs, 500) - 1)
+    if (members.length === 0) return []
     const queues = new Set<string>()
-    for (const [, hash] of rows) {
-      const h = (hash as Record<string, string> | null)
-      if (h?.['queue']) queues.add(h['queue'])
+    for (const m of members) {
+      const parsed = this.parseMember(m)
+      if (parsed) queues.add(parsed.queue)
     }
 
     const metrics: QueueMetric[] = []
@@ -666,11 +716,14 @@ export class RedisStorage implements HorizonStorage {
     const perPage = options?.perPage ?? 50
     const start   = (page - 1) * perPage
 
-    const ids = await r.zrevrange(indexKey, start, start + perPage * 4)
-    if (ids.length === 0) return []
+    const members = await r.zrevrange(indexKey, start, start + perPage * 4)
+    if (members.length === 0) return []
 
     const pipe = r.pipeline()
-    for (const id of ids) pipe.hgetall(this.k.job(id))
+    for (const m of members) {
+      const parsed = this.parseMember(m)
+      if (parsed) pipe.hgetall(this.k.job(parsed.queue, parsed.id))
+    }
     const rows = await pipe.exec() ?? []
 
     let jobs: HorizonJob[] = []

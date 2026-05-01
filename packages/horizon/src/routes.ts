@@ -67,11 +67,11 @@ export async function registerHorizonRoutes(
     listRecentJobs(storage, req, res), middleware)
   router.get(`${apiPrefix}/jobs/failed`, (req: AppRequest, res: AppResponse) =>
     listFailedJobs(storage, req, res), middleware)
-  router.get(`${apiPrefix}/jobs/:id`, (req: AppRequest, res: AppResponse) =>
+  router.get(`${apiPrefix}/jobs/:queue/:id`, (req: AppRequest, res: AppResponse) =>
     showJob(storage, req, res), middleware)
-  router.post(`${apiPrefix}/jobs/:id/retry`, (req: AppRequest, res: AppResponse) =>
+  router.post(`${apiPrefix}/jobs/:queue/:id/retry`, (req: AppRequest, res: AppResponse) =>
     retryJob(storage, req, res), middleware)
-  router.delete(`${apiPrefix}/jobs/:id`, (req: AppRequest, res: AppResponse) =>
+  router.delete(`${apiPrefix}/jobs/:queue/:id`, (req: AppRequest, res: AppResponse) =>
     deleteJob(storage, req, res), middleware)
   router.get(`${apiPrefix}/queues`, (req: AppRequest, res: AppResponse) =>
     listQueues(storage, req, res), middleware)

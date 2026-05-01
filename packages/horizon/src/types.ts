@@ -47,15 +47,19 @@ export interface WorkerInfo {
 export interface HorizonStorage {
   /** Record a job event (dispatch, start, complete, fail) */
   recordJob(job: HorizonJob): void | Promise<void>
-  /** Update an existing job record */
-  updateJob(id: string, updates: Partial<HorizonJob>): void | Promise<void>
+  /**
+   * Update an existing job record. Records are keyed by `(queue, id)` because
+   * BullMQ assigns ids per-queue starting at 1 — `default:1` and `priority:1`
+   * collide on id alone.
+   */
+  updateJob(queue: string, id: string, updates: Partial<HorizonJob>): void | Promise<void>
 
   /** List recent jobs */
   recentJobs(options?: JobListOptions): HorizonJob[] | Promise<HorizonJob[]>
   /** List failed jobs */
   failedJobs(options?: JobListOptions): HorizonJob[] | Promise<HorizonJob[]>
-  /** Get a single job by ID */
-  findJob(id: string): HorizonJob | null | Promise<HorizonJob | null>
+  /** Get a single job by `(queue, id)` */
+  findJob(queue: string, id: string): HorizonJob | null | Promise<HorizonJob | null>
 
   /** Record a per-minute metric snapshot for a queue */
   recordMetric(metric: QueueMetric): void | Promise<void>
@@ -69,8 +73,8 @@ export interface HorizonStorage {
   /** List all known workers */
   workers(): WorkerInfo[] | Promise<WorkerInfo[]>
 
-  /** Delete a failed job record */
-  deleteJob(id: string): void | Promise<void>
+  /** Delete a job record by `(queue, id)` */
+  deleteJob(queue: string, id: string): void | Promise<void>
   /** Delete all data older than date */
   pruneOlderThan(date: Date): void | Promise<void>
 
