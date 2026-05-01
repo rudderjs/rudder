@@ -88,11 +88,23 @@ export interface JobListOptions {
 
 // ─── Config ────────────────────────────────────────────────
 
+export interface HorizonRedisConfig {
+  /** Redis URL: redis://[:password@]host[:port][/db] */
+  url?:      string | undefined
+  host?:     string | undefined
+  port?:     number | undefined
+  password?: string | undefined
+  /** Key prefix — default: 'rudderjs' */
+  prefix?:   string | undefined
+}
+
 export interface HorizonConfig {
   enabled?:           boolean | undefined
   path?:              string | undefined
-  storage?:           'memory' | 'sqlite' | undefined
+  storage?:           'memory' | 'sqlite' | 'redis' | undefined
   sqlitePath?:        string | undefined
+  /** Redis connection used by `storage: 'redis'`. Reuses BullMQ field shape. */
+  redis?:             HorizonRedisConfig | undefined
   maxJobs?:           number | undefined
   pruneAfterHours?:   number | undefined
   metricsIntervalMs?: number | undefined
@@ -104,6 +116,7 @@ export const defaultConfig = {
   path:              'horizon',
   storage:           'memory' as const,
   sqlitePath:        '.horizon.db',
+  redis:             {} as HorizonRedisConfig,
   maxJobs:           1000,
   pruneAfterHours:   72,
   metricsIntervalMs: 60_000,

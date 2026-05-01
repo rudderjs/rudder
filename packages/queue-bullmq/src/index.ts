@@ -1,5 +1,6 @@
-import { Queue, Worker } from 'bullmq'
+import { Queue, Worker, type Job as BullJob } from 'bullmq'
 import type { Job, QueueAdapter, QueueAdapterProvider, DispatchOptions, QueueStats, FailedJobInfo } from '@rudderjs/queue'
+import { queueObservers } from '@rudderjs/queue/observers'
 
 // ─── Config ────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ class BullMQAdapter implements QueueAdapter {
     return this.queues.get(name) as Queue
   }
 
-  private async processor(bullJob: { name: string; data: Record<string, unknown> }): Promise<void> {
+  private async processor(bullJob: BullJob): Promise<void> {
     const JobClass = this.jobRegistry.get(bullJob.name)
     if (!JobClass) {
       throw new Error(
@@ -101,6 +102,17 @@ class BullMQAdapter implements QueueAdapter {
         `Add it to the jobs[] array in config/queue.ts.`,
       )
     }
+
+    queueObservers.emit({
+      kind:         'job.active',
+      jobId:        String(bullJob.id ?? ''),
+      name:         bullJob.name,
+      queue:        bullJob.queueName,
+      payload:      bullJob.data,
+      attempts:     bullJob.attemptsMade,
+      dispatchedAt: new Date(bullJob.timestamp),
+      startedAt:    new Date(),
+    })
 
     // Separate __context from job data
     const { __context, ...jobData } = bullJob.data
@@ -140,7 +152,7 @@ class BullMQAdapter implements QueueAdapter {
       data['__context'] = options.__context
     }
 
-    await this.getQueue(queueName).add(
+    const bullJob = await this.getQueue(queueName).add(
       job.constructor.name,
       data,
       {
@@ -151,9 +163,24 @@ class BullMQAdapter implements QueueAdapter {
         removeOnFail:     { count: this.removeOnFail },
       },
     )
+
+    queueObservers.emit({
+      kind:         'job.dispatched',
+      jobId:        String(bullJob.id ?? ''),
+      name:         job.constructor.name,
+      queue:        queueName,
+      payload:      data,
+      attempts:     0,
+      dispatchedAt: new Date(bullJob.timestamp),
+    })
   }
 
   async work(queues = 'default'): Promise<void> {
+    // Mark this process as a queue worker so cross-cutting collectors (e.g.
+    // @rudderjs/horizon's WorkerCollector) only self-register here, not in
+    // the dev/web process that also boots HorizonProvider.
+    process.env['RUDDERJS_QUEUE_WORKER'] = '1'
+
     const names   = queues.split(',').map(q => q.trim()).filter(Boolean)
     const workers = names.map(name => ({
       queue: name,
@@ -178,11 +205,41 @@ class BullMQAdapter implements QueueAdapter {
       })
 
       worker.on('completed', (bullJob) => {
+        const finishedAt = bullJob.finishedOn  ? new Date(bullJob.finishedOn)  : new Date()
+        const startedAt  = bullJob.processedOn ? new Date(bullJob.processedOn) : finishedAt
+        queueObservers.emit({
+          kind:         'job.completed',
+          jobId:        String(bullJob.id ?? ''),
+          name:         bullJob.name,
+          queue,
+          payload:      bullJob.data,
+          attempts:     bullJob.attemptsMade,
+          dispatchedAt: new Date(bullJob.timestamp),
+          startedAt,
+          completedAt:  finishedAt,
+          duration:     finishedAt.getTime() - startedAt.getTime(),
+        })
         console.log(`[BullMQ] ✓ "${bullJob.name}" completed (queue: ${queue}, id: ${bullJob.id})`)
       })
 
       worker.on('failed', async (bullJob, error) => {
         if (!bullJob) return
+        const finishedAt = bullJob.finishedOn  ? new Date(bullJob.finishedOn)  : new Date()
+        const startedAt  = bullJob.processedOn ? new Date(bullJob.processedOn) : undefined
+        queueObservers.emit({
+          kind:         'job.failed',
+          jobId:        String(bullJob.id ?? ''),
+          name:         bullJob.name,
+          queue,
+          payload:      bullJob.data,
+          attempts:     bullJob.attemptsMade,
+          dispatchedAt: new Date(bullJob.timestamp),
+          ...(startedAt ? { startedAt } : {}),
+          completedAt:  finishedAt,
+          ...(startedAt ? { duration: finishedAt.getTime() - startedAt.getTime() } : {}),
+          error:        error.stack ?? error.message,
+        })
+
         const JobClass = this.jobRegistry.get(bullJob.name)
         if (JobClass) {
           const instance = Object.assign(new (JobClass as new () => Job)(), bullJob.data)

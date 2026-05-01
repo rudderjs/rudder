@@ -257,6 +257,14 @@ async function main(): Promise<void> {
     NO_BOOT_EXACT.has(arg) || NO_BOOT_PREFIX.some(p => arg.startsWith(p)),
   )
 
+  // Tag this process as a queue worker before providers boot, so cross-cutting
+  // collectors (e.g. @rudderjs/horizon's WorkerCollector) can self-register
+  // here but stay quiet in the dev/web process. Queue adapters also set this
+  // defensively, but doing it here guarantees the var is visible during boot.
+  if (process.argv.slice(2).includes('queue:work')) {
+    process.env['RUDDERJS_QUEUE_WORKER'] = '1'
+  }
+
   // Eagerly load make specs from installed packages so make:* works without boot.
   // Each package exports its MakeSpec objects from a known subpath.
   await loadPackageCommands()

@@ -19,6 +19,12 @@ export class WorkerCollector {
   }
 
   register(): void {
+    // Only register as a worker when running in an actual worker process.
+    // Set by `@rudderjs/queue-bullmq` (and any future self-hosted adapter)
+    // before booting `Worker` instances. Skipping in the dev/web process
+    // prevents the dashboard from listing itself as a worker.
+    if (process.env['RUDDERJS_QUEUE_WORKER'] !== '1') return
+
     // Report initial status
     this.report('active')
 
