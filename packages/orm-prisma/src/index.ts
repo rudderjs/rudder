@@ -295,8 +295,8 @@ class PrismaAdapter implements OrmAdapter {
           `\`PrismaClient\` via the database config:\n\n` +
           `  import { PrismaClient } from './prisma/generated/prisma/client.js'\n` +
           `  export default { PrismaClient, default: '...', connections: { ... } }\n\n` +
-          `Otherwise install @prisma/client (legacy "prisma-client-js" generator). ` +
-          `Original error: ${(err as Error).message}`
+          `Otherwise install @prisma/client (legacy "prisma-client-js" generator).`,
+          { cause: err }
         )
       }
       const m = mod as { PrismaClient?: PrismaClientConstructor; default?: PrismaClientConstructor | { PrismaClient?: PrismaClientConstructor } }
