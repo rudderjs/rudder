@@ -1,10 +1,10 @@
-import type { Aggregator, PulseStorage } from '../types.js'
+import type { Recorder, PulseStorage } from '../types.js'
 
 /**
  * Tracks cache hit/miss ratio by wrapping the CacheRegistry adapter.
  */
-export class CacheAggregator implements Aggregator {
-  readonly name = 'Cache Aggregator'
+export class CacheRecorder implements Recorder {
+  readonly name = 'Cache Recorder'
 
   constructor(private readonly storage: PulseStorage) {}
 

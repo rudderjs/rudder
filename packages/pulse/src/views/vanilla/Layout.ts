@@ -1,9 +1,22 @@
+import { html, raw } from './_html.js'
+
 /**
- * Shared HTML layout for Pulse UI pages.
- * Uses Tailwind CSS (CDN) + Alpine.js (CDN) for a zero-build UI.
+ * Shared HTML chrome for Pulse dashboard pages.
+ *
+ * Vanilla mode — Alpine.js + Tailwind via CDN, no client framework
+ * dependency, no build step. Self-contained so pulse can run in any
+ * RudderJS app regardless of frontend stack.
  */
-export function layout(title: string, body: string, path: string): string {
-  return `<!DOCTYPE html>
+
+export interface LayoutProps {
+  title: string
+  body:  string
+}
+
+export function Layout(props: LayoutProps): string {
+  const { title, body } = props
+
+  return html`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -20,14 +33,11 @@ export function layout(title: string, body: string, path: string): string {
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans antialiased">
   <div class="min-h-screen">
-    <!-- Header -->
     <header class="bg-white border-b border-gray-200 px-6 py-4">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
+            ${raw('<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>')}
           </div>
           <h1 class="text-lg font-semibold">Pulse</h1>
         </div>
@@ -42,12 +52,10 @@ export function layout(title: string, body: string, path: string): string {
         </div>
       </div>
     </header>
-
-    <!-- Content -->
     <main class="max-w-7xl mx-auto px-6 py-8">
-      ${body}
+      ${raw(body)}
     </main>
   </div>
 </body>
-</html>`
+</html>`.value
 }

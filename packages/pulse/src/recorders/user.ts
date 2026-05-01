@@ -1,13 +1,13 @@
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
-import type { Aggregator, PulseStorage } from '../types.js'
+import type { Recorder, PulseStorage } from '../types.js'
 import { isAsset } from '../utils.js'
 
 /**
  * Tracks active (unique) users per minute bucket.
  * Identifies users by session cookie, auth header, or IP.
  */
-export class UserAggregator implements Aggregator {
-  readonly name = 'User Aggregator'
+export class UserRecorder implements Recorder {
+  readonly name = 'User Recorder'
   private readonly seen = new Set<string>()
   private currentMinute = 0
 

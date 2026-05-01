@@ -1,10 +1,10 @@
-import type { Aggregator, PulseStorage } from '../types.js'
+import type { Recorder, PulseStorage } from '../types.js'
 
 /**
  * Tracks exception count over time by hooking into the exception reporter.
  */
-export class ExceptionAggregator implements Aggregator {
-  readonly name = 'Exception Aggregator'
+export class ExceptionRecorder implements Recorder {
+  readonly name = 'Exception Recorder'
 
   constructor(private readonly storage: PulseStorage) {}
 

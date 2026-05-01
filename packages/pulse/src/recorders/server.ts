@@ -1,11 +1,11 @@
 import { cpus, totalmem, freemem } from 'node:os'
-import type { Aggregator, PulseStorage } from '../types.js'
+import type { Recorder, PulseStorage } from '../types.js'
 
 /**
  * Periodically collects server resource metrics — CPU usage and memory.
  */
-export class ServerAggregator implements Aggregator {
-  readonly name = 'Server Aggregator'
+export class ServerRecorder implements Recorder {
+  readonly name = 'Server Recorder'
 
   constructor(
     private readonly storage: PulseStorage,

@@ -1,13 +1,13 @@
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
-import type { Aggregator, PulseStorage, PulseConfig } from '../types.js'
+import type { Recorder, PulseStorage, PulseConfig } from '../types.js'
 import { isAsset } from '../utils.js'
 
 /**
  * Tracks request throughput, duration (p50/p95/p99), and slow requests.
  * Installs as global middleware.
  */
-export class RequestAggregator implements Aggregator {
-  readonly name = 'Request Aggregator'
+export class RequestRecorder implements Recorder {
+  readonly name = 'Request Recorder'
 
   constructor(
     private readonly storage: PulseStorage,

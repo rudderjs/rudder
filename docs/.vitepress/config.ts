@@ -135,6 +135,7 @@ export default defineConfig({
             { text: 'Horizon', link: '/packages/horizon' },
             { text: 'Passport', link: '/packages/passport' },
             { text: 'Pennant', link: '/packages/pennant' },
+            { text: 'Pulse', link: '/packages/pulse' },
             { text: 'Sanctum', link: '/packages/sanctum' },
             { text: 'Socialite', link: '/packages/socialite' },
             { text: 'Telescope', link: '/packages/telescope' },

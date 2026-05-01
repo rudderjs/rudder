@@ -1,6 +1,6 @@
 # @rudderjs/pulse
 
-Application performance monitoring for RudderJS — aggregates request throughput, queue metrics, cache hit rates, exceptions, active users, slow queries, and server resource usage.
+Application performance monitoring for RudderJS — records request throughput, queue metrics, cache hit rates, exceptions, active users, slow queries, and server resource usage.
 
 ## Installation
 
@@ -53,12 +53,12 @@ const overview = await Pulse.overview(since)
 |------|--------|
 | `request_count` | Request middleware |
 | `request_duration` | Request middleware |
-| `queue_throughput` | Queue aggregator |
-| `queue_wait_time` | Queue aggregator |
-| `cache_hits` / `cache_misses` | Cache aggregator |
-| `exceptions` | Exception aggregator |
-| `active_users` | User aggregator middleware |
-| `server_cpu` / `server_memory` | Server aggregator (periodic) |
+| `queue_throughput` | Queue recorder |
+| `queue_wait_time` | Queue recorder |
+| `cache_hits` / `cache_misses` | Cache recorder |
+| `exceptions` | Exception recorder |
+| `active_users` | User recorder middleware |
+| `server_cpu` / `server_memory` | Server recorder (periodic) |
 
 ## Storage Drivers
 
@@ -88,17 +88,17 @@ export default {
 } satisfies PulseConfig
 ```
 
-## Aggregators
+## Recorders
 
-Pulse auto-registers aggregators based on config:
+Pulse auto-registers recorders based on config:
 
-- **RequestAggregator** — Tracks request throughput and duration via middleware
-- **QueueAggregator** — Tracks queue throughput and wait times
-- **CacheAggregator** — Tracks cache hit/miss rates
-- **ExceptionAggregator** — Counts unhandled exceptions
-- **QueryAggregator** — Records slow database queries
-- **UserAggregator** — Tracks unique active users via middleware
-- **ServerAggregator** — Periodically records CPU and memory usage
+- **RequestRecorder** — Tracks request throughput and duration via middleware
+- **QueueRecorder** — Tracks queue throughput and wait times
+- **CacheRecorder** — Tracks cache hit/miss rates
+- **ExceptionRecorder** — Counts unhandled exceptions
+- **QueryRecorder** — Records slow database queries
+- **UserRecorder** — Tracks unique active users via middleware
+- **ServerRecorder** — Periodically records CPU and memory usage
 
 ## Notes
 
