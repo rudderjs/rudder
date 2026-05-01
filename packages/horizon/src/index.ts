@@ -47,8 +47,8 @@ export class Horizon {
     return this.store().failedJobs(options)
   }
 
-  static findJob(id: string): HorizonJob | null | Promise<HorizonJob | null> {
-    return this.store().findJob(id)
+  static findJob(queue: string, id: string): HorizonJob | null | Promise<HorizonJob | null> {
+    return this.store().findJob(queue, id)
   }
 
   static currentMetrics(): QueueMetric[] | Promise<QueueMetric[]> {
@@ -148,7 +148,20 @@ export class HorizonProvider extends ServiceProvider {
       const workerCollector  = new WorkerCollector(storage)
 
       jobCollector.register()
-      metricsCollector.register()
+      // For out-of-process queues (BullMQ), `queueObservers` events fire in
+      // the worker process, not the dashboard. Letting both processes poll
+      // `MetricsCollector.collect()` makes the dashboard write
+      // `throughput: 0` rows that clobber the worker's real counts via the
+      // shared Redis history ZSet. Gate to the worker process. Sync queue
+      // is in-process — dashboard IS the worker, so we let it through.
+      const queueDriver       = (() => {
+        try { return config<{ default?: string }>('queue', {})?.default } catch { return undefined }
+      })()
+      const outOfProcessQueue = queueDriver === 'bullmq'
+      const isWorkerProcess   = process.env['RUDDERJS_QUEUE_WORKER'] === '1'
+      if (!outOfProcessQueue || isWorkerProcess) {
+        metricsCollector.register()
+      }
       workerCollector.register()
 
     // ── Register UI + API routes ──────────────────────────

@@ -24,7 +24,7 @@ import { Horizon } from '@rudderjs/horizon'
 
 const jobs    = await Horizon.recentJobs({ queue: 'emails', perPage: 25 })
 const failed  = await Horizon.failedJobs()
-const job     = await Horizon.findJob('job-id')
+const job     = await Horizon.findJob('emails', 'job-id')
 const metrics = await Horizon.currentMetrics()
 const workers = await Horizon.workers()
 const count   = await Horizon.jobCount('failed')
@@ -36,7 +36,7 @@ const count   = await Horizon.jobCount('failed')
 |--------|---------|-------------|
 | `recentJobs(options?)` | `HorizonJob[]` | List recent jobs with optional filters |
 | `failedJobs(options?)` | `HorizonJob[]` | List failed jobs |
-| `findJob(id)` | `HorizonJob \| null` | Find a single job by ID |
+| `findJob(queue, id)` | `HorizonJob \| null` | Find a single job by `(queue, id)` — BullMQ ids are per-queue |
 | `currentMetrics()` | `QueueMetric[]` | Latest metric snapshot per queue |
 | `workers()` | `WorkerInfo[]` | All known workers and their status |
 | `jobCount(status?)` | `number` | Count jobs, optionally by status |
@@ -85,3 +85,4 @@ Horizon serves a built-in UI at `/{path}` with pages for:
 - Requires `@rudderjs/queue` for job lifecycle hooks.
 - Peers: `@rudderjs/router` and `@rudderjs/middleware` for route registration.
 - Auto-prune runs on a background interval (does not block the event loop).
+- With BullMQ, `MetricsCollector` only registers in the worker process (set `RUDDERJS_QUEUE_WORKER=1` — `pnpm rudder queue:work` does this for you). The dashboard process serves `/horizon/api/queues` from the worker's last write. If the worker is offline the metrics tile freezes; jobs and failed tabs continue to work because they read live state from BullMQ.

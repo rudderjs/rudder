@@ -48,14 +48,14 @@ export class JobCollector {
               break
             }
             case 'job.active':
-              await this.storage.updateJob(event.jobId, {
+              await this.storage.updateJob(event.queue, event.jobId, {
                 status:    'processing',
                 startedAt: event.startedAt,
                 attempts:  event.attempts,
               })
               break
             case 'job.completed':
-              await this.storage.updateJob(event.jobId, {
+              await this.storage.updateJob(event.queue, event.jobId, {
                 status:      'completed',
                 completedAt: event.completedAt,
                 duration:    event.duration,
@@ -67,7 +67,7 @@ export class JobCollector {
               )
               break
             case 'job.failed':
-              await this.storage.updateJob(event.jobId, {
+              await this.storage.updateJob(event.queue, event.jobId, {
                 status:      'failed',
                 completedAt: event.completedAt,
                 ...(event.duration !== undefined ? { duration: event.duration } : {}),

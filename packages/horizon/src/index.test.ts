@@ -65,24 +65,33 @@ describe('MemoryStorage', () => {
     const job = makeJob({ id: 'j1' })
     storage.recordJob(job)
 
-    const found = storage.findJob('j1')
+    const found = storage.findJob('default', 'j1')
     assert.ok(found)
     assert.equal(found.id, 'j1')
     assert.equal(found.name, 'SendEmail')
   })
 
   it('returns null for missing job', () => {
-    assert.equal(storage.findJob('nonexistent'), null)
+    assert.equal(storage.findJob('default', 'nonexistent'), null)
   })
 
   it('updates a job', () => {
     const job = makeJob({ id: 'j2', status: 'pending' })
     storage.recordJob(job)
-    storage.updateJob('j2', { status: 'completed', duration: 200 })
+    storage.updateJob('default', 'j2', { status: 'completed', duration: 200 })
 
-    const found = storage.findJob('j2')
+    const found = storage.findJob('default', 'j2')
     assert.equal(found!.status, 'completed')
     assert.equal(found!.duration, 200)
+  })
+
+  it('keys jobs by (queue, id) — same id on different queues coexists', () => {
+    storage.recordJob(makeJob({ id: '1', queue: 'default',  name: 'AliceJob' }))
+    storage.recordJob(makeJob({ id: '1', queue: 'priority', name: 'VipJob' }))
+
+    assert.equal(storage.findJob('default',  '1')!.name, 'AliceJob')
+    assert.equal(storage.findJob('priority', '1')!.name, 'VipJob')
+    assert.equal(storage.jobCount(), 2)
   })
 
   it('recentJobs returns all jobs', () => {
@@ -142,10 +151,10 @@ describe('MemoryStorage', () => {
 
   it('deletes a job', () => {
     storage.recordJob(makeJob({ id: 'del' }))
-    assert.ok(storage.findJob('del'))
+    assert.ok(storage.findJob('default', 'del'))
 
-    storage.deleteJob('del')
-    assert.equal(storage.findJob('del'), null)
+    storage.deleteJob('default', 'del')
+    assert.equal(storage.findJob('default', 'del'), null)
   })
 
   it('jobCount returns total and by status', () => {
@@ -206,8 +215,8 @@ describe('MemoryStorage', () => {
 
     storage.pruneOlderThan(new Date(Date.now() - 50_000))
 
-    assert.equal(storage.findJob('old'), null)
-    assert.ok(storage.findJob('new'))
+    assert.equal(storage.findJob('default', 'old'), null)
+    assert.ok(storage.findJob('default', 'new'))
   })
 })
 

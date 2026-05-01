@@ -19,5 +19,7 @@ export default {
   },
   maxJobs:           1000,
   pruneAfterHours:   72,
-  metricsIntervalMs: 60_000,
+  // 5s in dev so browser-verify cycles don't have to wait a minute. Production
+  // default in framework code is still 60_000 ms.
+  metricsIntervalMs: 5_000,
 } satisfies HorizonConfig

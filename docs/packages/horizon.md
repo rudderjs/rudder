@@ -91,7 +91,7 @@ import { Horizon } from '@rudderjs/horizon'
 
 const recent  = await Horizon.recentJobs({ queue: 'emails', perPage: 25 })
 const failed  = await Horizon.failedJobs()
-const job     = await Horizon.findJob('job-id')
+const job     = await Horizon.findJob('emails', 'job-id')
 const metrics = await Horizon.currentMetrics()
 const workers = await Horizon.workers()
 const total   = await Horizon.jobCount('failed')
@@ -101,7 +101,7 @@ const total   = await Horizon.jobCount('failed')
 |---|---|---|
 | `recentJobs(opts?)` | `HorizonJob[]` | `opts`: `page`, `perPage`, `queue`, `search`, `status` |
 | `failedJobs(opts?)` | `HorizonJob[]` | Same shape, pre-filtered |
-| `findJob(id)` | `HorizonJob \| null` | |
+| `findJob(queue, id)` | `HorizonJob \| null` | Records are keyed by `(queue, id)` because BullMQ assigns ids per-queue |
 | `currentMetrics()` | `QueueMetric[]` | Latest snapshot per queue |
 | `workers()` | `WorkerInfo[]` | All registered workers |
 | `jobCount(status?)` | `number` | Total or by `JobStatus` |
@@ -165,3 +165,5 @@ The default queue connection in the playground is BullMQ, which needs Redis. Eit
 - **Dashboard UI is not a control plane.** Horizon reports queue / worker state but does not orchestrate workers — it doesn't start, stop, pause, or scale them. Use your queue adapter's CLI (`pnpm rudder queue:work`) and process manager (PM2, systemd, Kubernetes) for that.
 - **Multi-node deployments need a shared storage.** Memory and the default sqlite path are local to one Node process. Behind a load balancer, each request might hit a different process and see different history. Use `storage: 'redis'`, or implement a custom shared `HorizonStorage` driver.
 - **BullMQ + memory storage = stuck-pending jobs.** BullMQ runs jobs in a separate worker process; with `storage: 'memory'` the dashboard process can't see worker-side completed/failed events and every job appears stuck at `pending` forever. Switch to `storage: 'redis'`. Boot will print a warning when this misconfig is detected.
+- **`/horizon/api/queues` shows stale or zero throughput.** With BullMQ, `MetricsCollector` only registers in the worker process (controlled by the `RUDDERJS_QUEUE_WORKER=1` env var that `pnpm rudder queue:work` sets for you). If the worker is offline, the dashboard reads back the worker's last metric write — which freezes — until a worker comes back online. The Recent / Failed tabs are unaffected; they read live state from BullMQ via the queue adapter.
+- **API routes use `(queue, id)`.** `GET /horizon/api/jobs/:queue/:id`, `POST .../retry`, `DELETE` — BullMQ assigns ids per-queue starting at 1, so `default:1` and `priority:1` would collide on a single-id route. Pre-6.0 callers using `/jobs/:id` need to update to the new shape.
