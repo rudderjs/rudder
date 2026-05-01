@@ -1,30 +1,31 @@
 import { ServiceProvider, config } from '@rudderjs/core'
 import { MemoryStorage, SqliteStorage } from './storage.js'
-import { RequestAggregator } from './aggregators/request.js'
-import { QueueAggregator } from './aggregators/queue.js'
-import { CacheAggregator } from './aggregators/cache.js'
-import { ExceptionAggregator } from './aggregators/exception.js'
-import { UserAggregator } from './aggregators/user.js'
-import { QueryAggregator } from './aggregators/query.js'
-import { ServerAggregator } from './aggregators/server.js'
-import { registerRoutes } from './api/routes.js'
+import { RequestRecorder } from './recorders/request.js'
+import { QueueRecorder } from './recorders/queue.js'
+import { CacheRecorder } from './recorders/cache.js'
+import { ExceptionRecorder } from './recorders/exception.js'
+import { UserRecorder } from './recorders/user.js'
+import { QueryRecorder } from './recorders/query.js'
+import { ServerRecorder } from './recorders/server.js'
+import { registerPulseRoutes } from './routes.js'
 import {
   defaultConfig,
   type PulseConfig, type PulseStorage, type PulseAggregate, type PulseEntry,
-  type MetricType, type EntryType, type Aggregator, type EntryListOptions,
+  type MetricType, type EntryType, type Recorder, type EntryListOptions,
 } from './types.js'
 
 // ─── Re-exports ────────────────────────────────────────────
 
-export type { PulseConfig, PulseStorage, PulseAggregate, PulseEntry, MetricType, EntryType, Aggregator, EntryListOptions }
+export type { PulseConfig, PulseStorage, PulseAggregate, PulseEntry, MetricType, EntryType, Recorder, EntryListOptions }
 export { MemoryStorage, SqliteStorage } from './storage.js'
-export { RequestAggregator } from './aggregators/request.js'
-export { QueueAggregator } from './aggregators/queue.js'
-export { CacheAggregator } from './aggregators/cache.js'
-export { ExceptionAggregator } from './aggregators/exception.js'
-export { UserAggregator } from './aggregators/user.js'
-export { QueryAggregator } from './aggregators/query.js'
-export { ServerAggregator } from './aggregators/server.js'
+export { RequestRecorder } from './recorders/request.js'
+export { QueueRecorder } from './recorders/queue.js'
+export { CacheRecorder } from './recorders/cache.js'
+export { ExceptionRecorder } from './recorders/exception.js'
+export { UserRecorder } from './recorders/user.js'
+export { QueryRecorder } from './recorders/query.js'
+export { ServerRecorder } from './recorders/server.js'
+export { registerPulseRoutes, type RegisterPulseRoutesOptions } from './routes.js'
 
 // ─── Pulse Registry ────────────────────────────────────────
 
@@ -129,34 +130,37 @@ export class PulseProvider extends ServiceProvider {
         timer.unref()
       }
 
-      // ── Register aggregators ──────────────────────────────
-      const requestAgg = new RequestAggregator(storage, resolved)
-      const userAgg    = new UserAggregator(storage)
+      // ── Register recorders ────────────────────────────────
+      const requestRec = new RequestRecorder(storage, resolved)
+      const userRec    = new UserRecorder(storage)
 
-      const aggregators: Aggregator[] = []
+      const recorders: Recorder[] = []
 
-      if (resolved.recordQueues)     aggregators.push(new QueueAggregator(storage))
-      if (resolved.recordCache)      aggregators.push(new CacheAggregator(storage))
-      if (resolved.recordExceptions) aggregators.push(new ExceptionAggregator(storage))
-      if (resolved.recordServers)    aggregators.push(new ServerAggregator(storage, resolved.serverStatsIntervalMs))
+      if (resolved.recordQueues)     recorders.push(new QueueRecorder(storage))
+      if (resolved.recordCache)      recorders.push(new CacheRecorder(storage))
+      if (resolved.recordExceptions) recorders.push(new ExceptionRecorder(storage))
+      if (resolved.recordServers)    recorders.push(new ServerRecorder(storage, resolved.serverStatsIntervalMs))
 
-      // Query aggregator for slow queries
-      aggregators.push(new QueryAggregator(storage, resolved))
+      // Query recorder for slow queries
+      recorders.push(new QueryRecorder(storage, resolved))
 
-      for (const agg of aggregators) {
-        await agg.register()
+      for (const rec of recorders) {
+        await rec.register()
       }
 
       // ── Register middleware ───────────────────────────────
       try {
         const { router } = await import('@rudderjs/router')
-        if (resolved.recordRequests) router.use(requestAgg.middleware())
-        if (resolved.recordUsers)    router.use(userAgg.middleware())
+        if (resolved.recordRequests) router.use(requestRec.middleware())
+        if (resolved.recordUsers)    router.use(userRec.middleware())
       } catch {
         // @rudderjs/router not available
       }
 
-    // ── Register API routes ───────────────────────────────
-    await registerRoutes(storage, resolved)
+    // ── Register UI + API routes ──────────────────────────
+    await registerPulseRoutes(storage, {
+      path:       resolved.path,
+      ...(resolved.auth ? { auth: resolved.auth } : {}),
+    })
   }
 }

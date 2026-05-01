@@ -1,10 +1,10 @@
-import type { Aggregator, PulseStorage, PulseConfig } from '../types.js'
+import type { Recorder, PulseStorage, PulseConfig } from '../types.js'
 
 /**
  * Tracks slow database queries by hooking into the ORM adapter.
  */
-export class QueryAggregator implements Aggregator {
-  readonly name = 'Query Aggregator'
+export class QueryRecorder implements Recorder {
+  readonly name = 'Query Recorder'
 
   constructor(
     private readonly storage: PulseStorage,

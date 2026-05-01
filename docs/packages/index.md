@@ -11,6 +11,7 @@ Pick the packages that match what you're building. Packages don't depend on each
 - **[Horizon](/packages/horizon)** — Queue monitoring dashboard at `/horizon`: per-job lifecycle, per-queue throughput / wait / runtime, worker status. Memory or sqlite storage.
 - **[Passport](/packages/passport)** — Full OAuth 2 server: RS256-signed JWT access tokens, refresh tokens, personal access tokens, `HasApiTokens` mixin, `RequireBearer` + `scope` middleware.
 - **[Pennant](/packages/pennant)** — Feature flags: define flags once, check globally or per scope, gradual rollout via `Lottery`, route middleware, `Feature.fake()` for tests.
+- **[Pulse](/packages/pulse)** — Lightweight APM dashboard at `/pulse`: pre-aggregated request / queue / cache / exception / user / server metrics with sparklines and slow-request tables. Memory or sqlite storage.
 - **[Sanctum](/packages/sanctum)** — Lightweight API token auth: opaque bearer tokens with abilities, no OAuth or JWT machinery.
 - **[Socialite](/packages/socialite)** — OAuth-based social login: built-in providers for GitHub, Google, Facebook, Apple, plus an extension point for custom OAuth providers.
 - **[Telescope](/packages/telescope)** — Debug dashboard at `/telescope`: records 17 entry types — requests, queries, jobs, exceptions, mail, events, cache, AI runs, MCP activity, `dump()`, and more.

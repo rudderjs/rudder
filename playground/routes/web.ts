@@ -318,6 +318,48 @@ Route.get('/test/horizon', async (_req, res) => {
   })
 })
 
+// GET /test/pulse — exercises every pulse recorder in one request so all
+// dashboard cards populate. Slow request (forced sleep), cache hits +
+// misses, a recorded exception (caught + re-reported), a job dispatch,
+// and an ORM query. The Request + User + Server recorders fire
+// automatically on every request — no extra work needed for those.
+Route.get('/test/pulse', async (_req, res) => {
+  const { Cache } = await import('@rudderjs/cache')
+  const { report } = await import('@rudderjs/core')
+  const { WelcomeUserJob } = await import('../app/Jobs/WelcomeUserJob.js')
+  const { User } = await import('../app/Models/User.js')
+
+  // 1. Cache recorder — hits + misses
+  await Cache.set('pulse:warmup', 'value', 60)
+  await Cache.get<string>('pulse:warmup')          // hit
+  await Cache.get<string>('pulse:nonexistent')     // miss
+  await Cache.forget('pulse:warmup')
+
+  // 2. Query recorder — runs an ORM query (counts as request_duration too)
+  await User.count()
+
+  // 3. Queue recorder — dispatches a job through the queue adapter
+  await WelcomeUserJob.dispatch('Pulse Tester', 'pulse@example.com').send()
+
+  // 4. Exception recorder — report() without re-throwing so the request still 200s
+  try {
+    throw new Error('Pulse test exception')
+  } catch (err) {
+    report(err)
+  }
+
+  // 5. Slow request recorder — forced delay >slowRequestThreshold (default 1000ms)
+  await new Promise(resolve => setTimeout(resolve, 1100))
+
+  res.json({
+    cache:     { hit: 1, miss: 1 },
+    query:     'User.count()',
+    queue:     'WelcomeUserJob dispatched',
+    exception: 'reported',
+    duration:  '~1100ms (slow_request entry)',
+  })
+})
+
 // GET /test/cache — fires cache operations for telescope testing
 Route.get('/test/cache', async (_req, res) => {
   const { Cache } = await import('@rudderjs/cache')

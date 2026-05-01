@@ -69,9 +69,14 @@ export interface EntryListOptions {
   search?:  string | undefined
 }
 
-// ─── Aggregator Contract ───────────────────────────────────
+// ─── Recorder Contract ─────────────────────────────────────
+//
+// Renamed from `Aggregator` in the views/vanilla migration to align
+// with Laravel Pulse's vocabulary — recorders listen to events and call
+// `Pulse::record()`; "aggregation" is the storage-side bucketing
+// strategy, not a class-naming concept.
 
-export interface Aggregator {
+export interface Recorder {
   readonly name: string
   register(): void | Promise<void>
 }

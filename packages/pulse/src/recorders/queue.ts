@@ -1,11 +1,11 @@
-import type { Aggregator, PulseStorage } from '../types.js'
+import type { Recorder, PulseStorage } from '../types.js'
 
 /**
  * Tracks queue throughput, wait time, and failed jobs.
  * Wraps the QueueRegistry adapter's dispatch method.
  */
-export class QueueAggregator implements Aggregator {
-  readonly name = 'Queue Aggregator'
+export class QueueRecorder implements Recorder {
+  readonly name = 'Queue Recorder'
 
   constructor(private readonly storage: PulseStorage) {}
 

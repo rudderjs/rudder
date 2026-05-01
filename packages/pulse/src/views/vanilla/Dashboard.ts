@@ -1,10 +1,19 @@
-import { layout } from './layout.js'
+import { Layout } from './Layout.js'
+
+export interface DashboardProps {
+  apiPrefix: string
+}
 
 /**
- * Renders the Pulse dashboard — a single page with metric cards that auto-refresh.
+ * Pulse single-page dashboard — metric cards (request throughput, cache
+ * hit rate, queue jobs, exceptions, active users, server CPU/memory)
+ * with sparklines + slow-request and recent-exception tables.
+ * Auto-refreshes every 10 seconds.
  */
-export function dashboardPage(apiPrefix: string): string {
-  return layout('Dashboard', `
+export function Dashboard(props: DashboardProps): string {
+  const { apiPrefix } = props
+
+  const body = `
     <div x-data="dashboard()" x-init="load()" x-cloak>
       <!-- Metric Cards Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -167,7 +176,6 @@ export function dashboardPage(apiPrefix: string): string {
         </div>
       </div>
 
-      <!-- Auto-refresh indicator -->
       <div class="mt-4 text-center text-xs text-gray-400">
         Auto-refreshes every 10 seconds
       </div>
@@ -230,5 +238,7 @@ export function dashboardPage(apiPrefix: string): string {
           }
         }
       }
-    </script>`, 'pulse')
+    </script>`
+
+  return Layout({ title: 'Dashboard', body })
 }
