@@ -1,6 +1,6 @@
 # Plan: WebContainer-compatible playground
 
-> **STATUS 2026-05-01:** Phases 0–3 + framework-side Phase 4 unblock shipped on `main`. Issue [#127](https://github.com/rudderjs/rudder/issues/127) closed by [#128](https://github.com/rudderjs/rudder/pull/128); `@rudderjs/orm-prisma@1.2.0` published via [#129](https://github.com/rudderjs/rudder/pull/129). **Standalone `rudder-web-playground` BOOTS in StackBlitz** — `pnpm install && pnpm run dev` reaches `[RudderJS] ready` and serves `/` + `/login` as 200. Got there via four follow-up fixes after the orm-prisma migration: pre-commit `prisma/generated/` (schema-engine still pulls at `prisma generate` time); switch URL to `:memory:` + on-boot SQL seed (libsql swaps to a WASM build whose Emscripten FS can't see host files); explicitly wire `SessionMiddleware` + `AuthMiddleware` on the web group (the providers' `appendToGroup()` auto-install path doesn't fire in WebContainer — root cause unknown, framework follow-up filed in `project_webcontainer_playground.md`). **Next:** Phase 4 click-through validation (login flow, todo CRUD, telescope/pulse/horizon, AI agent), then Phase 5 (`create-rudder-app --preset web`) + Phase 6 (homepage button).
+> **STATUS 2026-05-01 — DONE (proof-of-concept achieved).** RudderJS works in WebContainer. Standalone `rudder-web-playground` boots clean in StackBlitz with no workarounds (`auth@4.0.1` + `session@1.0.1` from PR #131, `support@1.1.0` from PR #133). Scaffolder Phase 5 Tier 1 (WC-aware config gates in `create-rudder-app`'s `config/{cache,queue,mail,session}.ts`) shipped via PR #135 — any newly scaffolded RudderJS app now boots gracefully if dropped into a sandbox runtime, at zero cost on regular Node. **Phase 5 Tier 2 (`--preset web`) dropped** — standalone repo covers the use case, two recipes to keep in sync = pure cost. **Phase 6 (homepage button) dropped** — was never the actual goal; this was a proof-of-concept project, not a productionization push. **Phase 4 click-through** remains as optional polish (manual StackBlitz QA), not blocking anything.
 
 ## Context
 
@@ -130,23 +130,28 @@ Option (b) (raw DDL on first boot) deferred until drift becomes painful — prem
 
 Seeders run via `pnpm rudder db:seed` as today.
 
-### Phase 4 — StackBlitz validation — **BOOT PASSES 2026-05-01; click-through TODO**
+### Phase 4 — StackBlitz validation — **BOOT PASSES (no workarounds remaining); click-through TODO**
 
-Standalone repo (`github.com/rudderjs/rudder-web-playground`) now boots clean in StackBlitz: `pnpm install && pnpm run dev` reaches `[RudderJS] ready` and serves `/` + `/login` as HTTP 200. Got there via four sequential fixes on top of the framework-side `orm-prisma@1.2.0` release:
+Standalone repo (`github.com/rudderjs/rudder-web-playground`) boots clean in StackBlitz: `pnpm install && pnpm run dev` reaches `[RudderJS] ready` and serves `/` + `/login` as HTTP 200. The path there had two phases: standalone-repo fixes (still load-bearing for everything except the now-resolved appendToGroup), then upstream framework fixes that closed the remaining gaps.
 
-1. **`60551d1`** — sync the framework's PR #128 changes (prisma-client generator, `config/database.ts` `PrismaClient` field, `.gitignore`, `orm-prisma@^1.2.0`, drop predev/postinstall retry).
+**Standalone-repo fixes (still in place):**
+
+1. **`60551d1`** — sync framework PR #128 changes (prisma-client generator, `config/database.ts` `PrismaClient` field, `.gitignore`, `orm-prisma@^1.2.0`, drop predev/postinstall retry).
 2. **`985eda1`** — pre-commit `prisma/generated/` and drop the `postinstall` hook. WebContainer's pnpm refuses to run `@prisma/engines`'s install script, so when our app's postinstall calls `prisma generate` the CLI tries to download `schema-engine` from `binaries.prisma.sh` (no CORS, hangs). The new generator's output is binary-free (884K of TypeScript) and safe to commit.
-3. **`283a76d`** — `:memory:` URL + on-boot SQL seed. `@libsql/client` swaps to its WASM build inside WebContainer (because WASI-Node can't load `.node` binaries), and that WASM build runs SQLite via Emscripten — whose virtual filesystem can't read host files at any path. `file:./prisma/dev.db`, absolute paths, all throw `SQLITE_CANTOPEN`. Default URL to `:memory:` when `isWebContainer()`, then a new `app/Providers/SeedDbProvider.ts` replays `prisma/dev.sql` (a `sqlite3 .dump` of `dev.db`) through Prisma's `$executeRawUnsafe` after `DatabaseProvider` boots. Same shared `PrismaClient` instance, so the in-memory DB sees the schema before the first request.
-4. **`271869b`** — explicitly wire `SessionMiddleware` + `AuthMiddleware` on the `web` group in `bootstrap/app.ts`. `@rudderjs/auth` and `@rudderjs/session` install their middleware via `appendToGroup('web', ...)` from `@rudderjs/core` (a `globalThis`-keyed store). In WebContainer that path stops firing — the chain ends up `RateLimit → CsrfMiddleware → handler` with no Session/Auth context, so `auth().user()` throws "No auth context" on `/`. Root cause not pinned (the store IS already on `globalThis`, designed to survive dual-instance loads, so the obvious theory doesn't fully explain it). **Framework follow-up:** `appendToGroup` should be made WebContainer-safe so `playground-web/` and downstream apps don't each need this workaround.
+3. **`283a76d`** — `:memory:` URL + on-boot SQL seed. `@libsql/client` swaps to its WASM build inside WebContainer (because WASI-Node can't load `.node` binaries), and that WASM build runs SQLite via Emscripten — whose virtual filesystem can't read host files at any path. `file:./prisma/dev.db`, absolute paths, all throw `SQLITE_CANTOPEN`. Default URL to `:memory:` when `isWebContainer()`, then a new `app/Providers/SeedDbProvider.ts` replays `prisma/dev.sql` (a `sqlite3 .dump` of `dev.db`) through Prisma's `$executeRawUnsafe` after `DatabaseProvider` boots.
 
-**Trade-offs accepted:**
-- Schema-change workflow now: `prisma db push` → `sqlite3 prisma/dev.db .dump > prisma/dev.sql` → `prisma generate` → `git add prisma/`. Drift surfaces in PR diffs.
-- The vendored `src/runtime/webcontainer.ts` stays until `@rudderjs/support` publishes a release containing `isWebContainer()` (still pinned at `1.0.0` on npm; PR #121 not yet released).
-- Explicit middleware wiring in `bootstrap/app.ts` is a workaround until the framework auto-install bug is fixed.
+**Framework fixes that closed the remaining gaps:**
+
+4. **PR #131** (framework, released as auth@4.0.1 + session@1.0.1 via PR #132) — `appendToGroup` static-import fix. Both `AuthProvider.boot()` and `SessionProvider.boot()` were grabbing `appendToGroup` via `await import('@rudderjs/core')` inside a silent `try/catch` — even though they **already statically import** other symbols from core. WebContainer's pnpm-symlink-under-WASI module resolution made the dynamic import throw, the catch ate the error, and the auto-install never registered. Fix: drop the dynamic import, add `appendToGroup` to the existing static import, delete the catch. +2/-14 net per file. The earlier "globalThis sandboxing in Vike SSR" theory was a wrong lead — the store on `globalThis` was fine all along, we just never got to write to it. Standalone repo reverted commit `271869b`'s explicit middleware wiring in `39b54a4` once the fix shipped.
+
+5. **PR #133** (framework, released as support@1.1.0 via PR #134) — `isWebContainer()` published on npm. Standalone repo dropped its vendored `src/runtime/webcontainer.ts` (4-line copy) and re-pointed all six callers (`SeedDbProvider` + `config/{cache,database,mail,queue,session}.ts`) at `@rudderjs/support`.
+
+**Remaining trade-offs (these stay):**
+- Schema-change workflow: `prisma db push` → `sqlite3 prisma/dev.db .dump > prisma/dev.sql` → `prisma generate` → `git add prisma/`. Drift surfaces in PR diffs.
 
 **StackBlitz workspace caching gotcha:** StackBlitz reuses workspace IDs across visits to the same `?file=` URL. To pick up a fresh commit, close the tab fully and reopen the URL (or `git pull` inside the StackBlitz terminal). Otherwise it keeps testing the same SHA.
 
-**Phase 4 click-through still TODO** — the boot works; the per-feature validation list below has not been exercised in StackBlitz yet.
+**Phase 4 click-through still TODO** — the boot works; the per-feature validation list below has not been exercised in StackBlitz yet. This is a manual StackBlitz pass, not a code task.
 
 ---
 
@@ -163,18 +168,48 @@ Push to a fresh repo, open via `stackblitz.com/github/<repo>`. Click through:
 
 Fix what breaks. Likely surprises: `optimizeDeps` for the Vite scanner, peer resolution paths, anything implicitly assuming raw TCP, memory pressure during install.
 
-### Phase 5 — Distribution — **PARTIAL (BLOCKED on #127)**
+### Phase 5 — Distribution — **STANDALONE REPO SHIPS CLEAN; preset still TODO**
 
-Standalone repo route shipped: `https://github.com/rudderjs/rudder-web-playground` exists with a WebContainer-targeted variant of `playground-web/` (workspace:* deps replaced with npm versions, `isWebContainer()` inlined locally because `@rudderjs/support@1.0.0` on npm doesn't yet have the helper). Local sibling at `/Users/sleman/Projects/rudder-web-playground/`. **Doesn't boot in StackBlitz** for the same reason as Phase 4 — Prisma binary download.
+Standalone repo route fully working: `https://github.com/rudderjs/rudder-web-playground` boots clean in StackBlitz with **no workarounds remaining** (auth@4.0.1, session@1.0.1, support@1.1.0 all on npm). Local sibling at `/Users/sleman/Projects/rudder-web-playground/`.
 
-Still TODO:
-- `create-rudder-app --preset web` — defer until #127 + StackBlitz validation lands
+**Refined `--preset web` design — two tiers instead of one preset:**
 
-### Phase 6 — Homepage integration (~1h) — **BLOCKED**
+The blunt "WC vs regular" framing turned out to over-bundle. Most of the diff between regular scaffold and the standalone repo is zero-cost — `isWebContainer()` gates that just return `false` outside WC. Only a few items have real cost on regular Node and genuinely need to be opt-in.
 
-- Hero button on rudderjs.com homepage: "Try in browser →" — DO NOT SHIP until #127 fixes the StackBlitz boot
+**Tier 1 — bake into the regular scaffolder (no preset flag needed):**
+
+- All four `isWebContainer()` config gates: `cache.ts` (memory), `queue.ts` (sync), `mail.ts` (log), `session.ts` (cookie). On regular Node the gate returns false and the env-driven path is preserved exactly. Cost: zero. Benefit: any RudderJS app dropped into a sandbox runtime boots gracefully without re-config.
+- `@rudderjs/support` pin bumped to `^1.1.0` so the helper is available.
+
+These should land in the next scaffolder release independent of `--preset web`.
+
+**Tier 2 — `--preset web` for the heavy artifacts:**
+
+These have real cost on regular dev and stay opt-in:
+
+- Prisma generator: `prisma-client` (no engine binaries) instead of `prisma-client-js` — slightly slower than `better-sqlite3` for local dev today
+- Driver: `@prisma/adapter-libsql` + `@libsql/client` instead of `better-sqlite3` (drops native binding requirement)
+- `prisma/generated/` (~880K) + `prisma/dev.db` + `prisma/dev.sql` all committed to git
+- `app/Providers/SeedDbProvider.ts` that replays `prisma/dev.sql` against `:memory:` when `isWebContainer()`
+- No `postinstall: prisma generate` (WC pnpm refuses to run it; regular Node loses convenience)
+- `DATABASE_URL` defaults to `:memory:` under `isWebContainer()`
+- Excluded packages from the multiselect: broadcast, sync, queue-bullmq, better-sqlite3, y-websocket, yjs, ws (raw TCP / native bindings)
+
+This is the recipe in `playground-web/` and `rudder-web-playground` — the preset just codifies it.
+
+**Result: three-tier distribution**
+
+- `pnpm create rudder-app` — regular Node, but boots cleanly if dropped into WC (Tier 1)
+- `pnpm create rudder-app --preset web` — optimized to fork directly into StackBlitz (Tier 1 + Tier 2)
+- `git clone github.com/rudderjs/rudder-web-playground` — canonical "Try in browser" target (the latter two overlap heavily)
+
+### Phase 6 — Homepage integration (~1h) — **READY (pending Phase 4 manual click-through)**
+
+- Hero button on rudderjs.com homepage: "Try in browser →" pointing at `https://stackblitz.com/github/rudderjs/rudder-web-playground`
 - `/docs/installation` mentions it as the no-install path
 - Optional: dedicated `/docs/try-in-browser` page covering what's included and what's omitted (broadcast/sync)
+
+The boot works. Hold the homepage button until Phase 4 click-through confirms register/login, todo CRUD, telescope/pulse/horizon, and AI agent all work end-to-end in StackBlitz.
 
 ---
 
@@ -208,3 +243,11 @@ Still TODO:
 ## Marketing framing
 
 The pitch is **"click → running RudderJS in your browser, no install."** That is a 30-second proof-of-concept for skeptics, not a feature-complete demo. The two visible omissions (real-time broadcast, collaborative sync) are linked from a deployed demo that handles them properly. Two demos, each doing what it's good at.
+
+## Closing note (2026-05-01)
+
+This project's actual goal was **proof of concept**: demonstrate that RudderJS can run in WebContainer. That proof is in — `rudder-web-playground` boots clean in StackBlitz, and the scaffolder produces apps that survive a sandbox runtime gracefully.
+
+The original plan (Phase 6 homepage button, `--preset web`, ongoing StackBlitz QA) anticipated a productionization arc that we explicitly chose not to pursue. Reasons: (a) maintenance cost of a second scaffolder recipe in sync with the standalone repo isn't justified by the audience size, (b) "Try in browser" wasn't a positioning priority, (c) the load-bearing engineering wins (`isWebContainer()` gating discipline, `appendToGroup` static-import fix in PR #131, ESM-only peer resolution rules) all transfer to the next sandboxed-runtime story (Workers, Deno, RN) without needing the StackBlitz demo as a destination.
+
+Reconsider only if WC compatibility becomes a marketing/positioning surface, or if a user explicitly asks for a `create-rudder-app --preset web` shortcut and the standalone repo's package selection is the wrong default for them.
