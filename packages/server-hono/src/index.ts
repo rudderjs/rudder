@@ -125,6 +125,28 @@ function normalizeRequest(c: Context): AppRequest {
 function normalizeResponse(c: Context): AppResponse {
   let statusCode = 200
   const headers: Record<string, string> = {}
+  // Set-Cookie is the only standard header that can legitimately repeat. Track
+  // it separately so multiple middleware (CsrfMiddleware + SessionMiddleware)
+  // each writing a cookie don't clobber each other when applied to Hono.
+  const cookies: string[] = []
+
+  const applyHeaders = () => {
+    for (const [k, v] of Object.entries(headers)) c.header(k, v)
+    for (const cookie of cookies) c.header('Set-Cookie', cookie, { append: true })
+  }
+
+  // Merge pending headers/cookies into an already-finalized Response (used by
+  // route handler when a ViewResponse or raw Response is returned directly,
+  // bypassing res.json()/res.send() that would otherwise call applyHeaders()).
+  // Mutates res.headers in place — cloning via `new Response(body, { headers })`
+  // collapses multi-value Set-Cookie down to one in Node's undici-backed fetch.
+  const mergeInto = (res: Response): Response => {
+    if (Object.keys(headers).length === 0 && cookies.length === 0) return res
+    for (const [k, v] of Object.entries(headers)) res.headers.set(k, v)
+    for (const cookie of cookies) res.headers.append('Set-Cookie', cookie)
+    return res
+  }
+  ;(c as unknown as Record<string, unknown>)['__rjs_merge_pending'] = mergeInto
 
   return {
     raw: c,
@@ -135,12 +157,16 @@ function normalizeResponse(c: Context): AppResponse {
       return this
     },
     header(key, value) {
-      headers[key] = value
+      if (key.toLowerCase() === 'set-cookie') {
+        cookies.push(value)
+      } else {
+        headers[key] = value
+      }
       return this
     },
     json(data) {
       c.header('Content-Type', 'application/json')
-      Object.entries(headers).forEach(([k, v]) => c.header(k, v))
+      applyHeaders()
       c.status(statusCode as StatusCode)
       // Stash parsed body for observability (telescope) — avoids having to
       // re-read the Response stream after finalization.
@@ -151,7 +177,7 @@ function normalizeResponse(c: Context): AppResponse {
       return c.res
     },
     send(data) {
-      Object.entries(headers).forEach(([k, v]) => c.header(k, v))
+      applyHeaders()
       c.status(statusCode as StatusCode)
       // Use c.body() (not c.text()) so a custom Content-Type set via res.header()
       // is preserved. c.text() forces Content-Type: text/plain and overrides headers.
@@ -369,6 +395,15 @@ class HonoAdapter implements ServerAdapter {
             c.res = c.json(result) as Response
           }
           // else: handler called res.json()/res.send() which already set c.res
+
+          // Merge pending headers/cookies set via res.header() into c.res.
+          // ViewResponse + raw Response paths bypass res.json()/res.send(), so
+          // their applyHeaders() never fires — without this step, anything
+          // CsrfMiddleware (or other middleware using res.header()) wrote to
+          // the wrapper would silently drop on the floor.
+          const merge = (c as unknown as Record<string, unknown>)['__rjs_merge_pending'] as
+            ((r: Response) => Response) | undefined
+          if (merge && c.res) c.res = merge(c.res)
         }
       }
 
