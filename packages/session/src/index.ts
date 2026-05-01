@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { ServiceProvider, app, config } from '@rudderjs/core'
+import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
 
 // ─── Module Augmentation ───────────────────────────────────
@@ -422,13 +422,6 @@ export class SessionProvider extends ServiceProvider {
     // Auto-install on the web route group. Web routes (Vike pages, forms, auth
     // flow) need session; api routes are stateless. Apps that want session on
     // api routes can call SessionMiddleware() per-route.
-    try {
-      const { appendToGroup } = await import('@rudderjs/core') as {
-        appendToGroup: (g: 'web' | 'api', m: import('@rudderjs/contracts').MiddlewareHandler) => void
-      }
-      appendToGroup('web', mw)
-    } catch {
-      // Core peer not available — shouldn't happen since session depends on core.
-    }
+    appendToGroup('web', mw)
   }
 }

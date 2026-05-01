@@ -1,4 +1,4 @@
-import { ServiceProvider, app, config } from '@rudderjs/core'
+import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { AuthManager, Auth, runWithAuth, type AuthConfig } from './auth-manager.js'
 import type { AuthUser } from './contracts.js'
@@ -179,11 +179,6 @@ export class AuthProvider extends ServiceProvider {
     // context (SessionGuard) and is irrelevant to stateless API routes.
     // API routes opt into bearer auth with `RequireBearer()` from @rudderjs/passport
     // or `RequireAuth('api')` with a token-based guard.
-    try {
-      const { appendToGroup } = await import('@rudderjs/core') as { appendToGroup: (g: 'web' | 'api', m: MiddlewareHandler) => void }
-      appendToGroup('web', AuthMiddleware())
-    } catch {
-      // Core peer not available (shouldn't happen — it's a required dep).
-    }
+    appendToGroup('web', AuthMiddleware())
   }
 }
