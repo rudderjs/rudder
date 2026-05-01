@@ -1,6 +1,7 @@
 import { Env } from '@rudderjs/core'
 import type { QueueConfig } from '@rudderjs/queue'
 import { WelcomeUserJob } from '../app/Jobs/WelcomeUserJob.js'
+import { FailingJob } from '../app/Jobs/FailingJob.js'
 
 export default {
   default: Env.get('QUEUE_CONNECTION', 'bullmq'),
@@ -17,7 +18,7 @@ export default {
       signingKey: Env.get('INNGEST_SIGNING_KEY',  ''),
       // Job classes registered as Inngest functions.
       // Inngest calls back via POST /api/inngest to execute them.
-      jobs: [WelcomeUserJob],
+      jobs: [WelcomeUserJob, FailingJob],
     },
 
     bullmq: {
@@ -29,7 +30,7 @@ export default {
       prefix:   'rudderjs',
       // Job classes the worker can execute — add yours here.
       // Run the worker: pnpm rudder queue:work
-      jobs: [WelcomeUserJob],
+      jobs: [WelcomeUserJob, FailingJob],
     },
   },
 } satisfies QueueConfig

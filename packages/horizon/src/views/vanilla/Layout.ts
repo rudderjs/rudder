@@ -1,10 +1,30 @@
+import { html, raw } from './_html.js'
+
 /**
- * Shared HTML layout for Horizon UI pages.
- * Sidebar navigation + content area. Alpine.js + Tailwind CDN.
+ * Shared HTML chrome for Horizon dashboard pages.
+ *
+ * Vanilla mode (raw template literals + Alpine.js + Tailwind via CDN). No
+ * client framework dependency, no build step. The package's UI is fully
+ * self-contained so horizon can monitor a host app of any framework.
  */
 
-export function layout(title: string, body: string, basePath: string, activePath: string): string {
-  const nav = [
+export interface NavItem {
+  label: string
+  path:  string
+  icon:  string
+}
+
+export interface LayoutProps {
+  title:      string
+  body:       string
+  basePath:   string
+  activePath: string
+}
+
+export function Layout(props: LayoutProps): string {
+  const { title, body, basePath, activePath } = props
+
+  const nav: NavItem[] = [
     { label: 'Dashboard',    path: '',              icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { label: 'Recent Jobs',  path: '/jobs/recent',  icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     { label: 'Failed Jobs',  path: '/jobs/failed',  icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
@@ -15,13 +35,13 @@ export function layout(title: string, body: string, basePath: string, activePath
   const navHtml = nav.map(n => {
     const href   = `${basePath}${n.path}`
     const active = activePath === n.path || (n.path === '' && activePath === '/')
-    return `<a href="${href}" class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition ${active ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}">
-      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${n.icon}"/></svg>
+    return html`<a href="${href}" class="${raw(`flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition ${active ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`)}">
+      ${raw(`<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${n.icon}"/></svg>`)}
       ${n.label}
     </a>`
-  }).join('\n        ')
+  })
 
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -36,9 +56,7 @@ export function layout(title: string, body: string, basePath: string, activePath
     <aside class="w-56 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-4 py-5 flex items-center gap-2 border-b border-gray-100">
         <div class="w-7 h-7 bg-teal-600 rounded-lg flex items-center justify-center">
-          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-          </svg>
+          ${raw('<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>')}
         </div>
         <span class="font-semibold text-sm">Horizon</span>
       </div>
@@ -48,10 +66,10 @@ export function layout(title: string, body: string, basePath: string, activePath
     </aside>
     <main class="flex-1 overflow-auto">
       <div class="max-w-6xl mx-auto px-6 py-8">
-        ${body}
+        ${raw(body)}
       </div>
     </main>
   </div>
 </body>
-</html>`
+</html>`.value
 }
