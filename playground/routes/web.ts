@@ -314,7 +314,7 @@ Route.get('/test/horizon', async (_req, res) => {
 
   res.json({
     dispatched: 4,
-    note:       'Run `pnpm rudder queue:work --queue=default,priority` in another terminal to process them.',
+    note:       'Run `pnpm rudder queue:work default,priority` in another terminal to process them.',
   })
 })
 

@@ -1210,6 +1210,9 @@ importers:
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1
+      ioredis:
+        specifier: ^5.3.0
+        version: 5.9.3
       lucide-react:
         specifier: ^0.575.0
         version: 0.575.0(react@19.2.4)
