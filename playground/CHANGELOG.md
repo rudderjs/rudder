@@ -1,5 +1,12 @@
 # rudderjs-playground
 
+## 0.0.33
+
+### Patch Changes
+
+- Updated dependencies [05852de]
+  - @rudderjs/horizon@6.0.0
+
 ## 0.0.32
 
 ### Patch Changes
