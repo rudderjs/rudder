@@ -692,13 +692,13 @@ importers:
       '@rudderjs/orm':
         specifier: workspace:^
         version: link:../orm
-      '@rudderjs/queue':
-        specifier: workspace:^
-        version: link:../queue
       '@rudderjs/router':
         specifier: workspace:^
         version: link:../router
     devDependencies:
+      '@rudderjs/queue':
+        specifier: workspace:^
+        version: link:../queue
       '@types/better-sqlite3':
         specifier: ^7.6.0
         version: 7.6.13

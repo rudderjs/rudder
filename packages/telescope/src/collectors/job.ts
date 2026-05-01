@@ -1,57 +1,67 @@
+import { queueObservers } from '@rudderjs/queue/observers'
 import type { Collector, TelescopeStorage } from '../types.js'
 import { createEntry } from '../storage.js'
 import { batchOpts } from '../batch-context.js'
 
 /**
- * Records queue job dispatches by wrapping the QueueRegistry adapter's dispatch method.
+ * Subscribes to `@rudderjs/queue/observers` and records one entry per
+ * lifecycle transition. Replaces the legacy `dispatch()` monkey-patch
+ * which only fired in the dispatching process — under BullMQ, worker-side
+ * completion and failure events were never recorded.
  */
 export class JobCollector implements Collector {
   readonly name = 'Job Collector'
   readonly type = 'job' as const
+  private unsubscribe: (() => void) | null = null
 
   constructor(private readonly storage: TelescopeStorage) {}
 
-  async register(): Promise<void> {
-    try {
-      const { QueueRegistry } = await import('@rudderjs/queue')
-      const original = QueueRegistry.get()
-      if (!original) return
-
-      const storage          = this.storage
-      const originalDispatch = original.dispatch.bind(original)
-
-      original.dispatch = async (job: unknown, options?: unknown): Promise<void> => {
-        const j     = job as Record<string, unknown> & { constructor: { name: string } }
-        const ctor  = j.constructor as unknown as Record<string, unknown>
-        const opts  = (options ?? {}) as { queue?: string; delay?: number }
-        const queue = opts.queue ?? (ctor['queue'] as string | undefined) ?? 'default'
-        const delay = opts.delay ?? (ctor['delay'] as number | undefined) ?? 0
-        const start = Date.now()
-        try {
-          await (originalDispatch as (job: unknown, options?: unknown) => Promise<void>)(job, options)
-          const duration = Date.now() - start
-          storage.store(createEntry('job', {
-            class:    j.constructor.name,
-            queue,
-            status:   'dispatched',
-            duration,
-            ...(delay > 0 ? { delay } : undefined),
-            payload:  JSON.parse(JSON.stringify(job)),
-          }, { tags: [`job:${j.constructor.name}`, `queue:${queue}`, 'status:dispatched'], ...batchOpts() }))
-        } catch (err) {
-          const duration = Date.now() - start
-          storage.store(createEntry('job', {
-            class:     j.constructor.name,
-            queue,
-            status:    'failed',
-            duration,
-            exception: err instanceof Error ? err.message : String(err),
-          }, { tags: [`job:${j.constructor.name}`, `queue:${queue}`, 'status:failed'], ...batchOpts() }))
-          throw err
+  register(): void {
+    this.unsubscribe = queueObservers.subscribe((event) => {
+      try {
+        switch (event.kind) {
+          case 'job.dispatched':
+            this.storage.store(createEntry('job', {
+              class:    event.name,
+              queue:    event.queue,
+              jobId:    event.jobId,
+              status:   'dispatched',
+              payload:  event.payload,
+            }, { tags: [`job:${event.name}`, `queue:${event.queue}`, 'status:dispatched'], ...batchOpts() }))
+            break
+          case 'job.completed':
+            this.storage.store(createEntry('job', {
+              class:    event.name,
+              queue:    event.queue,
+              jobId:    event.jobId,
+              status:   'completed',
+              duration: event.duration,
+              attempts: event.attempts,
+            }, { tags: [`job:${event.name}`, `queue:${event.queue}`, 'status:completed'], ...batchOpts() }))
+            break
+          case 'job.failed':
+            this.storage.store(createEntry('job', {
+              class:     event.name,
+              queue:     event.queue,
+              jobId:     event.jobId,
+              status:    'failed',
+              attempts:  event.attempts,
+              exception: event.error,
+              ...(event.duration !== undefined ? { duration: event.duration } : {}),
+            }, { tags: [`job:${event.name}`, `queue:${event.queue}`, 'status:failed'], ...batchOpts() }))
+            break
+          // job.active is intentionally not recorded — it'd double the row count
+          // for every job and the same data lives on the completed/failed entry.
         }
+      } catch {
+        // observer errors must not break the queue layer
       }
-    } catch {
-      // @rudderjs/queue not installed — skip
-    }
+    })
+  }
+
+  /** @internal — used in tests + provider shutdown. */
+  unregister(): void {
+    this.unsubscribe?.()
+    this.unsubscribe = null
   }
 }
