@@ -5,6 +5,7 @@ import { config, resolve } from '@rudderjs/core'
 import { auth } from '@rudderjs/auth'
 import { registerAuthRoutes } from '@rudderjs/auth/routes'
 import { registerCashierRoutes, Cashier } from '@rudderjs/cashier-paddle'
+import { Feature, FeatureMiddleware } from '@rudderjs/pennant'
 import { AuthController } from '../app/Http/Controllers/AuthController.js'
 import { BillingController, billingDemoProps, billingSubscriptionsProps } from '../app/Http/Controllers/BillingController.js'
 import { TodoService } from '../app/Modules/Todo/TodoService.js'
@@ -75,6 +76,28 @@ Route.get('/demos/todos', async () => {
   const todos = await resolve<TodoService>(TodoService).findAll()
   return view('demos.todos', { todos })
 })
+
+// GET /demos/pennant — feature flags resolved against the current user.
+// Beta sub-route is guarded by FeatureMiddleware('beta-dashboard') and
+// only resolves true for user id 1, demonstrating the 403 path.
+Route.get('/demos/pennant', async () => {
+  const current = await auth().user() as Record<string, unknown> | null
+
+  // Resolve features against the raw user (so scoped resolvers see the id),
+  // but pluck a plain object for the view — Vike refuses to serialize Model
+  // instances across the SSR boundary.
+  const values = await Feature.values(
+    ['dark-mode', 'max-uploads', 'beta-dashboard', 'new-checkout'],
+    current as { id: string | number; [key: string]: unknown } | null,
+  )
+  const user = current
+    ? { id: String(current['id']), name: String(current['name'] ?? ''), email: String(current['email'] ?? '') }
+    : null
+
+  return view('demos.pennant', { user, values })
+})
+
+Route.get('/demos/pennant/beta', async () => view('demos.pennant-beta'), [FeatureMiddleware('beta-dashboard')])
 
 // GET /demos/billing — Paddle checkout demo (@rudderjs/cashier-paddle).
 Route.get('/demos/billing', async () => {
@@ -197,6 +220,34 @@ Route.get('/test/model', async (_req, res) => {
   await Todo.update(todo.id, { title: 'Telescope test (updated)' })
   await Todo.delete(todo.id)
   res.json({ created: todo.id })
+})
+
+// GET /test/pennant — exercises Feature resolution across scope shapes,
+// plus activate/deactivate/purge.
+Route.get('/test/pennant', async (_req, res) => {
+  const userOne   = { id: 1, name: 'Alice' }
+  const userTwo   = { id: 2, name: 'Bob' }
+
+  const beta = {
+    forUserOne: await Feature.active('beta-dashboard', userOne),
+    forUserTwo: await Feature.active('beta-dashboard', userTwo),
+    forNull:    await Feature.active('beta-dashboard', null),
+  }
+
+  // activate / deactivate flow
+  await Feature.activate('beta-dashboard', userTwo)
+  const afterActivate   = await Feature.active('beta-dashboard', userTwo)
+  await Feature.deactivate('beta-dashboard', userTwo)
+  const afterDeactivate = await Feature.active('beta-dashboard', userTwo)
+  await Feature.purge('beta-dashboard')
+  const afterPurge      = await Feature.active('beta-dashboard', userOne)
+
+  res.json({
+    boolean: await Feature.active('dark-mode'),
+    value:   await Feature.value<number>('max-uploads'),
+    scoped:  beta,
+    activate: { afterActivate, afterDeactivate, afterPurge },
+  })
 })
 
 // GET /test/gate — fires gate authorization checks for telescope testing.

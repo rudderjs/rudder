@@ -1,5 +1,6 @@
 import { ServiceProvider } from '@rudderjs/core'
 import { Mcp } from '@rudderjs/mcp'
+import { Feature, Lottery } from '@rudderjs/pennant'
 import { UserService } from '../Services/UserService.js'
 import { GreetingService } from '../Services/GreetingService.js'
 import { TodoServiceProvider } from '../Modules/Todo/TodoServiceProvider.js'
@@ -25,6 +26,11 @@ export class AppServiceProvider extends ServiceProvider {
     // Field.ai([...]). See providers.ts for the full ordering rationale.
 
     await this.app.register(TodoServiceProvider)
+
+    Feature.define('dark-mode',      () => true)
+    Feature.define('max-uploads',    () => 10)
+    Feature.define('beta-dashboard', (scope) => typeof scope === 'object' && scope !== null)
+    Feature.define('new-checkout',   () => Lottery.odds(1, 4))
 
     console.log(`[AppServiceProvider] booted — app: ${this.app.name}`)
   }

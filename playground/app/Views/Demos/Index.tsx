@@ -41,6 +41,12 @@ const demos: Demo[] = [
     href:        '/demos/billing',
     packages:    ['@rudderjs/cashier-paddle'],
   },
+  {
+    title:       'Feature flags',
+    description: 'Boolean, value, scoped, and Lottery features resolved against the current user. Sub-route guarded by FeatureMiddleware to demonstrate 403 blocking.',
+    href:        '/demos/pennant',
+    packages:    ['@rudderjs/pennant'],
+  },
 ]
 
 export default function DemosIndex() {
