@@ -141,14 +141,11 @@ export class SessionInstance {
     const cookieStr   = buildCookieHeader(this._config.cookie.name, cookieValue, this._config)
     const c = res.raw as Record<string, unknown> & { header(k: string, v: string): void; res?: Response }
     if (c.res) {
-      // Response already finalized — clone with Set-Cookie header
-      const newHeaders = new Headers(c.res.headers)
-      newHeaders.append('Set-Cookie', cookieStr)
-      c.res = new Response(c.res.body, {
-        status: c.res.status,
-        statusText: c.res.statusText,
-        headers: newHeaders,
-      })
+      // Response already finalized — append to its headers in place. Mutating
+      // c.res.headers preserves multi-value Set-Cookie; cloning via
+      // `new Response(body, { headers })` collapses repeats to a single value
+      // in Node's undici-backed fetch implementation.
+      c.res.headers.append('Set-Cookie', cookieStr)
     } else {
       c.header('Set-Cookie', cookieStr)
     }

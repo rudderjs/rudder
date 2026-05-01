@@ -11,3 +11,4 @@ Cookie-based session driver — `Session` facade, `sessionMiddleware(cfg)`, plug
 ## Pitfalls
 
 - Don't call `m.use(sessionMiddleware(cfg))` globally — it doubles up with the auto-install and reads from two different `SessionInstance`s. Symptom: session data set in the handler doesn't persist across requests.
+- `session.save()` appends `Set-Cookie` to `c.res.headers` **in place** when `c.res` is already finalized. Do not clone via `new Response(body, { headers: newHeaders })` — Node's undici-backed `Response` constructor collapses multi-value Set-Cookie, dropping any cookies (e.g. CSRF) that earlier middleware wrote.
