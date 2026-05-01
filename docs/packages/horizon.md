@@ -52,19 +52,35 @@ Collectors fail open: if `@rudderjs/queue` isn't installed (or the adapter doesn
 
 ```ts
 // config/horizon.ts
-storage:    'memory',  // 'memory' | 'sqlite'
+storage:    'memory',  // 'memory' | 'sqlite' | 'redis'
 sqlitePath: '.horizon.db',
+redis: {
+  url:      process.env.REDIS_URL,
+  host:     '127.0.0.1',
+  port:     6379,
+  password: undefined,
+  prefix:   'rudderjs',
+},
 maxJobs:    1000,
 ```
 
-| Driver | Persistence | When to use |
-|---|---|---|
-| `memory` *(default)* | In-process, bounded by `maxJobs` | Dev, single-process apps, anywhere job history doesn't need to survive a restart |
-| `sqlite` | Persistent via `better-sqlite3` | Production single-node deployments, or any time you want job history across restarts |
+| Driver | Persistence | Cross-process | When to use |
+|---|---|---|---|
+| `memory` *(default)* | In-process, bounded by `maxJobs` | No | Dev with the `sync` queue driver, single-process apps, anywhere job history doesn't need to survive a restart |
+| `sqlite` | `better-sqlite3` file (WAL mode) | Limited (single host, file locking) | Production single-node deployments, or any time you want job history across restarts |
+| `redis` | Redis hashes + sorted sets | **Yes** | Multi-process deployments — required when running BullMQ workers, since the dashboard process and the worker process need to share state |
 
-For sqlite, install the optional peer: `pnpm add better-sqlite3`. The driver writes to `sqlitePath` (default `.horizon.db`) using WAL mode so the dev server and CLI workers can read/write the same file concurrently.
+### Choosing a driver
 
-Multi-node deployments need a custom driver — implement `HorizonStorage` (the contract is in `@rudderjs/horizon`'s `types.ts`) and register it via your own provider.
+- **You're using `@rudderjs/queue-bullmq`?** Use `'redis'`. BullMQ jobs run in a separate worker process and the dashboard cannot see worker-side completed/failed transitions through `MemoryStorage`. Boot logs a warning if the misconfig is detected.
+- **You're using the built-in `sync` driver?** `'memory'` is fine — both halves run in the same Node process.
+- **Need persistence on a single host without Redis?** Use `'sqlite'`.
+
+`'redis'` reuses BullMQ's `url` / `host` / `port` / `password` / `prefix` field shape so you can point both at the same Redis instance. Storage uses keys under `<prefix>:horizon:*` and opens a separate connection by default — closing the dashboard never closes the queue adapter's connection.
+
+For sqlite, install the optional peer: `pnpm add better-sqlite3`. For redis: `pnpm add ioredis` (already a transitive dep of `bullmq`).
+
+Multi-node deployments without Redis need a custom driver — implement `HorizonStorage` (the contract is in `@rudderjs/horizon`'s `types.ts`) and register it via your own provider.
 
 ## The `Horizon` facade
 
@@ -130,7 +146,7 @@ Horizon's worker page only populates if a real worker process is running. The pl
 cd playground && pnpm dev
 
 # Terminal 2 — start a worker for both queues
-pnpm rudder queue:work --queue=default,priority
+pnpm rudder queue:work default,priority
 
 # Terminal 3 — dispatch a mix of jobs (default + priority + one guaranteed failure)
 curl http://localhost:3000/test/horizon
@@ -147,4 +163,5 @@ The default queue connection in the playground is BullMQ, which needs Redis. Eit
 - **Auto-prune cadence.** With `pruneAfterHours: 72`, the prune timer runs every `min(pruneAfterHours, 1)` hours, deleting jobs older than the cutoff. The first prune runs on the next interval, not on boot — fresh restarts will not show stale data being purged immediately.
 - **Retry uses the queue adapter.** The "Retry" button on the Failed Jobs page calls the queue adapter's `retryFailed(queue)` method. If your adapter doesn't implement it (e.g. the `sync` driver), the API responds `501 { message: 'Queue adapter does not support retry.' }`. BullMQ supports retry; Inngest re-runs failures via its own dashboard, so retry is delegated there.
 - **Dashboard UI is not a control plane.** Horizon reports queue / worker state but does not orchestrate workers — it doesn't start, stop, pause, or scale them. Use your queue adapter's CLI (`pnpm rudder queue:work`) and process manager (PM2, systemd, Kubernetes) for that.
-- **Multi-node deployments need a shared storage.** Memory and the default sqlite path are local to one Node process. Behind a load balancer, each request might hit a different process and see different history. Either implement a shared `HorizonStorage` driver, or pin Horizon to a single observer node.
+- **Multi-node deployments need a shared storage.** Memory and the default sqlite path are local to one Node process. Behind a load balancer, each request might hit a different process and see different history. Use `storage: 'redis'`, or implement a custom shared `HorizonStorage` driver.
+- **BullMQ + memory storage = stuck-pending jobs.** BullMQ runs jobs in a separate worker process; with `storage: 'memory'` the dashboard process can't see worker-side completed/failed events and every job appears stuck at `pending` forever. Switch to `storage: 'redis'`. Boot will print a warning when this misconfig is detected.

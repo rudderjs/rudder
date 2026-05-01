@@ -1,94 +1,90 @@
-import { randomUUID } from 'node:crypto'
-import { QueueRegistry, type Job, type DispatchOptions } from '@rudderjs/queue'
+import { queueObservers } from '@rudderjs/queue/observers'
 import type { HorizonStorage, HorizonJob } from '../types.js'
+import type { MetricsCollector } from './metrics.js'
 
 /**
- * Intercepts job dispatch and execution to record full job lifecycle.
- * Wraps the QueueAdapter to capture dispatch, start, completion, and failure events.
+ * Subscribes to `@rudderjs/queue/observers` and forwards lifecycle events
+ * into Horizon's storage. Replaces the legacy `dispatch()` monkey-patch
+ * which couldn't see worker-process events under BullMQ.
+ *
+ * The previous monkey-patch wrapped `job.handle` on an in-memory instance
+ * the worker process never received via Redis — so worker-side
+ * completed/failed transitions were lost. The observer surface emits in
+ * the worker process, RedisStorage propagates the writes back to the
+ * dashboard process. See `docs/plans/2026-05-01-horizon-bullmq-fix.md`.
  */
 export class JobCollector {
   readonly name = 'Job Collector'
+  private unsubscribe: (() => void) | null = null
 
-  constructor(private readonly storage: HorizonStorage) {}
+  constructor(
+    private readonly storage:          HorizonStorage,
+    private readonly metricsCollector: MetricsCollector | null = null,
+  ) {}
 
   register(): void {
-    const adapter = QueueRegistry.get()
-    if (!adapter) return
-
-    const storage          = this.storage
-    const originalDispatch = adapter.dispatch.bind(adapter)
-
-    ;(adapter as unknown as Record<string, unknown>)['dispatch'] = async (
-      job: Job,
-      options?: DispatchOptions,
-    ): Promise<void> => {
-      const id    = randomUUID()
-      const name  = job.constructor.name
-      const queue = options?.queue ?? (job.constructor as unknown as Record<string, unknown>)['queue'] as string ?? 'default'
-      const now   = new Date()
-
-      // Record dispatch
-      const record: HorizonJob = {
-        id,
-        name,
-        queue,
-        status:       'pending',
-        payload:      safeSerialize(job),
-        attempts:     0,
-        exception:    null,
-        dispatchedAt: now,
-        startedAt:    null,
-        completedAt:  null,
-        duration:     null,
-        tags:         [`job:${name}`, `queue:${queue}`],
-      }
-      storage.recordJob(record)
-
-      // Track start/complete/fail via wrapping the job's handle method
-      const originalHandle = job.handle.bind(job)
-      const originalFailed = job.failed?.bind(job)
-
-      job.handle = async () => {
-        const startedAt = new Date()
-        storage.updateJob(id, { status: 'processing', startedAt, attempts: record.attempts + 1 })
-
+    this.unsubscribe = queueObservers.subscribe((event) => {
+      // Storage writes can be async (Redis); fire-and-forget but trap rejects
+      // so a transient Redis blip never escapes into the queue layer.
+      void Promise.resolve().then(async () => {
         try {
-          await originalHandle()
-          const completedAt = new Date()
-          const duration    = completedAt.getTime() - startedAt.getTime()
-          storage.updateJob(id, { status: 'completed', completedAt, duration })
+          switch (event.kind) {
+            case 'job.dispatched': {
+              const record: HorizonJob = {
+                id:           event.jobId,
+                name:         event.name,
+                queue:        event.queue,
+                status:       'pending',
+                payload:      event.payload,
+                attempts:     0,
+                exception:    null,
+                dispatchedAt: event.dispatchedAt,
+                startedAt:    null,
+                completedAt:  null,
+                duration:     null,
+                tags:         [`job:${event.name}`, `queue:${event.queue}`],
+              }
+              await this.storage.recordJob(record)
+              break
+            }
+            case 'job.active':
+              await this.storage.updateJob(event.jobId, {
+                status:    'processing',
+                startedAt: event.startedAt,
+                attempts:  event.attempts,
+              })
+              break
+            case 'job.completed':
+              await this.storage.updateJob(event.jobId, {
+                status:      'completed',
+                completedAt: event.completedAt,
+                duration:    event.duration,
+              })
+              this.metricsCollector?.recordJobCompleted(
+                event.queue,
+                event.startedAt.getTime() - event.dispatchedAt.getTime(),
+                event.duration,
+              )
+              break
+            case 'job.failed':
+              await this.storage.updateJob(event.jobId, {
+                status:      'failed',
+                completedAt: event.completedAt,
+                ...(event.duration !== undefined ? { duration: event.duration } : {}),
+                exception:   event.error,
+              })
+              break
+          }
         } catch (err) {
-          const completedAt = new Date()
-          const duration    = completedAt.getTime() - startedAt.getTime()
-          storage.updateJob(id, {
-            status:    'failed',
-            completedAt,
-            duration,
-            exception: err instanceof Error ? err.message : String(err),
-          })
-          throw err
+          console.warn('[Horizon] storage write failed:', err instanceof Error ? err.message : String(err))
         }
-      }
-
-      if (originalFailed) {
-        job.failed = async (error: unknown) => {
-          storage.updateJob(id, {
-            status:    'failed',
-            exception: error instanceof Error ? error.message : String(error),
-          })
-          await originalFailed(error)
-        }
-      }
-
-      await (originalDispatch as (job: Job, options?: DispatchOptions) => Promise<void>)(job, options)
-    }
+      })
+    })
   }
-}
 
-function safeSerialize(obj: unknown): Record<string, unknown> {
-  try {
-    return JSON.parse(JSON.stringify(obj)) as Record<string, unknown>
-  } catch {
-    return {}
+  /** @internal — used in tests + provider shutdown. */
+  unregister(): void {
+    this.unsubscribe?.()
+    this.unsubscribe = null
   }
 }

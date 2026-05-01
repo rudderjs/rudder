@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { ServiceProvider, rudder, config } from '@rudderjs/core'
 import { resolveOptionalPeer } from '@rudderjs/core'
+import { queueObservers } from './observers.js'
 
 // ─── Job Contract ──────────────────────────────────────────
 
@@ -173,11 +175,46 @@ export class QueueRegistry {
 
 // ─── Sync Adapter ──────────────────────────────────────────
 
+function safePayload(job: Job): Record<string, unknown> {
+  try {
+    return JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
 export class SyncAdapter implements QueueAdapter {
-  async dispatch(job: Job, _options?: DispatchOptions): Promise<void> {
+  async dispatch(job: Job, options?: DispatchOptions): Promise<void> {
+    const jobId        = randomUUID()
+    const name         = job.constructor.name
+    const queue        = options?.queue ?? (job.constructor as typeof Job).queue
+    const payload      = safePayload(job)
+    const dispatchedAt = new Date()
+    const base         = { jobId, name, queue, payload, attempts: 1, dispatchedAt }
+
+    queueObservers.emit({ ...base, kind: 'job.dispatched', attempts: 0 })
+
+    const startedAt = new Date()
+    queueObservers.emit({ ...base, kind: 'job.active', startedAt })
+
     try {
       await job.handle()
+      const completedAt = new Date()
+      queueObservers.emit({
+        ...base,
+        kind: 'job.completed',
+        startedAt, completedAt,
+        duration: completedAt.getTime() - startedAt.getTime(),
+      })
     } catch (error) {
+      const completedAt = new Date()
+      queueObservers.emit({
+        ...base,
+        kind: 'job.failed',
+        startedAt, completedAt,
+        duration: completedAt.getTime() - startedAt.getTime(),
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      })
       await job.failed?.(error)
       throw error
     }
