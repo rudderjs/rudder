@@ -6,7 +6,6 @@ export interface TemplateContext {
   name:       string
   db:         'sqlite' | 'postgresql' | 'mysql'
   orm:        'prisma' | 'drizzle' | false
-  withTodo:   boolean
   authSecret: string
   frameworks: ('react' | 'vue' | 'solid')[]
   primary:    'react' | 'vue' | 'solid'
@@ -98,7 +97,6 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     if (ctx.packages.auth)          files['prisma/schema/auth.prisma']         = prismaAuth()
     if (ctx.packages.passport)      files['prisma/schema/passport.prisma']     = prismaPassport()
     if (ctx.packages.notifications) files['prisma/schema/notification.prisma'] = prismaNotification()
-    if (ctx.withTodo)               files['prisma/schema/todo.prisma']         = prismaTodo()
     files['prisma/schema/modules.prisma'] = '// <rudderjs:modules:start>\n// <rudderjs:modules:end>\n'
   }
 
@@ -161,15 +159,6 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   }
   files['pages/_error/+config.ts']       = pagesErrorConfig(ctx)
   files[`pages/_error/+Page${ext}`]      = pagesErrorPage(ctx)
-
-  if (ctx.withTodo) {
-    files['app/Modules/Todo/TodoSchema.ts']          = todoSchema()
-    files['app/Modules/Todo/TodoService.ts']         = todoService()
-    files['app/Modules/Todo/TodoServiceProvider.ts'] = todoServiceProvider()
-    files['pages/todos/+config.ts']                  = todoPageConfig(ctx)
-    files['pages/todos/+data.ts']                    = todoPageData()
-    files[`pages/todos/+Page${ext}`]                 = todoPage(ctx)
-  }
 
   if (ctx.packages.ai) {
     files['pages/ai-chat/+config.ts']        = aiChatPageConfig(ctx)
@@ -703,20 +692,6 @@ model OAuthDeviceCode {
 `
 }
 
-function prismaTodo(): string {
-  return `// <rudderjs:modules:start>
-// module: Todo (Todo.prisma)
-model Todo {
-  id        String   @id @default(cuid())
-  title     String
-  completed Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-// <rudderjs:modules:end>
-`
-}
-
 // ─── src/index.css ─────────────────────────────────────────
 
 function indexCss(ctx: TemplateContext): string {
@@ -993,27 +968,8 @@ function semanticRulesApply(): string {
   @apply py-8 text-center text-sm text-zinc-500 dark:text-zinc-400;
 }
 
-/* Todo list */
 .form-inline {
   @apply flex w-full max-w-md gap-2;
-}
-.todo-list {
-  @apply flex w-full max-w-md flex-col gap-2;
-}
-.todo-item {
-  @apply flex items-center gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800;
-}
-.todo-item.is-done span {
-  @apply line-through text-zinc-500 dark:text-zinc-400;
-}
-.todo-item span {
-  @apply flex-1;
-}
-.todo-item input[type="checkbox"] {
-  @apply h-4 w-4 cursor-pointer;
-}
-.link-danger {
-  @apply text-xs text-red-600 hover:underline dark:text-red-400;
 }
 
 /* AI chat */
@@ -1364,53 +1320,12 @@ a { color: inherit; }
   color: var(--fg-muted);
 }
 
-/* Todo list */
 .form-inline {
   display: flex;
   width: 100%;
   max-width: 28rem;
   gap: 0.5rem;
 }
-.todo-list {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 28rem;
-  gap: 0.5rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.todo-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  font-size: 0.875rem;
-  background: var(--surface);
-}
-.todo-item span { flex: 1; }
-.todo-item input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  cursor: pointer;
-}
-.todo-item.is-done span {
-  text-decoration: line-through;
-  color: var(--fg-muted);
-}
-.link-danger {
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--danger-fg);
-  text-decoration: none;
-}
-.link-danger:hover { text-decoration: underline; }
 
 /* AI chat */
 .chat-wrap {
@@ -1527,11 +1442,6 @@ function bootstrapProviders(ctx: TemplateContext): string {
     'eventsProvider({}),',
     'AppServiceProvider,',
   ]
-
-  if (ctx.withTodo) {
-    imports.push("import { TodoServiceProvider } from '../app/Modules/Todo/TodoServiceProvider.js'")
-    providers.push('TodoServiceProvider,')
-  }
 
   return `${imports.join('\n')}
 
@@ -2165,11 +2075,6 @@ router.get('/api/me', async (req, res) => {
 }, [SessionMiddleware()])`)
   }
 
-  if (ctx.withTodo) {
-    lines.push('')
-    lines.push('// Todo routes are registered by TodoServiceProvider — see app/Modules/Todo/TodoServiceProvider.ts')
-  }
-
   if (ctx.packages.ai) {
     lines.push('')
     lines.push(`// POST /api/ai/chat — simple AI chat endpoint
@@ -2355,9 +2260,6 @@ ${webMwBlock}${authBlock}${welcomeBlock}${demosBlock}
 // Web routes — HTML redirects, guards, and non-API server responses
 // These run before Vike's file-based page routing
 // Use this file for: redirects, server-side auth guards, download routes, sitemaps, etc.
-
-// Example: redirect root to /todos
-// Route.get('/', (_req, res) => res.redirect('/todos'))
 `
 }
 
@@ -2491,7 +2393,6 @@ function pagesIndexPage(ctx: TemplateContext): string {
 function pagesIndexPageReact(ctx: TemplateContext): string {
   const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
-  if (ctx.withTodo) extraLinks.push('        <a href="/todos" className="auth-link">Todos</a>')
   if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" className="auth-link">AI Chat</a>')
   const extraLinksStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
@@ -2515,10 +2416,6 @@ export default function Page() {
 }
 `
   }
-
-  const todosLink = ctx.withTodo
-    ? `          <a href="/todos" className="nav-button">View Todos</a>`
-    : ''
 
   return `${cssImport}import { useState } from 'react'
 import { useData } from 'vike-react/useData'
@@ -2548,13 +2445,11 @@ export default function Page() {
             Signed in as <strong>{user.name}</strong>
           </p>
           <div className="footer-links">
-${todosLink}
             <button onClick={signOut} className="nav-button">Sign out</button>
           </div>
         </>
       ) : (
         <div className="footer-links">
-${todosLink}
           <a href="/register" className="nav-button">Register</a>
           <a href="/login" className="nav-button">Login</a>
         </div>
@@ -2573,7 +2468,6 @@ ${todosLink}
 function pagesIndexPageVue(ctx: TemplateContext): string {
   const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
-  if (ctx.withTodo) extraLinks.push('      <a href="/todos" class="auth-link">Todos</a>')
   if (ctx.packages.ai) extraLinks.push('      <a href="/ai-chat" class="auth-link">AI Chat</a>')
   const extraStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
@@ -2597,10 +2491,6 @@ const data = useData<Data>()
 </template>
 `
   }
-
-  const todosLink = ctx.withTodo
-    ? `\n      <a href="/todos" class="nav-button">View Todos</a>`
-    : ''
 
   return `<script setup lang="ts">
 ${cssImport}import { ref } from 'vue'
@@ -2629,11 +2519,11 @@ async function signOut() {
       <p class="nav-badge">
         Signed in as <strong>{{ user.name }}</strong>
       </p>
-      <div class="footer-links">${todosLink}
+      <div class="footer-links">
         <button @click="signOut" class="nav-button">Sign out</button>
       </div>
     </template>
-    <div v-else class="footer-links">${todosLink}
+    <div v-else class="footer-links">
       <a href="/register" class="nav-button">Register</a>
       <a href="/login" class="nav-button">Login</a>
     </div>
@@ -2650,7 +2540,6 @@ async function signOut() {
 function pagesIndexPageSolid(ctx: TemplateContext): string {
   const cssImport = `import '@/index.css'\n`
   const extraLinks: string[] = []
-  if (ctx.withTodo) extraLinks.push('        <a href="/todos" class="auth-link">Todos</a>')
   if (ctx.packages.ai) extraLinks.push('        <a href="/ai-chat" class="auth-link">AI Chat</a>')
   const extraStr = extraLinks.length > 0 ? '\n' + extraLinks.join('\n') : ''
 
@@ -2674,10 +2563,6 @@ export default function Page() {
 }
 `
   }
-
-  const todosLink = ctx.withTodo
-    ? `\n            <a href="/todos" class="nav-button">View Todos</a>`
-    : ''
 
   return `${cssImport}import { createSignal, Show } from 'solid-js'
 import { useData } from 'vike-solid/useData'
@@ -2704,7 +2589,7 @@ export default function Page() {
       <Show
         when={user()}
         fallback={
-          <div class="footer-links">${todosLink}
+          <div class="footer-links">
             <a href="/register" class="nav-button">Register</a>
             <a href="/login" class="nav-button">Login</a>
           </div>
@@ -2713,7 +2598,7 @@ export default function Page() {
         <p class="nav-badge">
           Signed in as <strong>{user()!.name}</strong>
         </p>
-        <div class="footer-links">${todosLink}
+        <div class="footer-links">
           <button onClick={signOut} class="nav-button">Sign out</button>
         </div>
       </Show>
@@ -3277,387 +3162,6 @@ export default function Page() {
         </div>
       </Match>
     </Switch>
-  )
-}
-`
-}
-
-// ─── Todo module ───────────────────────────────────────────
-
-function todoSchema(): string {
-  return `import { z } from 'zod'
-
-export const TodoInputSchema = z.object({
-  title:     z.string().min(1, 'Title is required'),
-  completed: z.boolean().optional().default(false),
-})
-
-export const TodoUpdateSchema = z.object({
-  title:     z.string().min(1).optional(),
-  completed: z.boolean().optional(),
-})
-
-export type TodoInput  = z.infer<typeof TodoInputSchema>
-export type TodoUpdate = z.infer<typeof TodoUpdateSchema>
-
-export interface Todo {
-  id:        string
-  title:     string
-  completed: boolean
-  createdAt: Date
-  updatedAt: Date
-}
-`
-}
-
-function todoService(): string {
-  return `import { Injectable } from '@rudderjs/core'
-import { resolve } from '@rudderjs/core'
-import type { OrmAdapter } from '@rudderjs/orm'
-import type { Todo, TodoInput, TodoUpdate } from './TodoSchema.js'
-
-@Injectable()
-export class TodoService {
-  private get db(): OrmAdapter { return resolve<OrmAdapter>('db') }
-
-  findAll(): Promise<Todo[]> {
-    return this.db.query<Todo>('todo').orderBy('createdAt', 'DESC').get()
-  }
-
-  findById(id: string): Promise<Todo | null> {
-    return this.db.query<Todo>('todo').find(id)
-  }
-
-  create(input: TodoInput): Promise<Todo> {
-    return this.db.query<Todo>('todo').create(input as Partial<Todo>)
-  }
-
-  update(id: string, input: TodoUpdate): Promise<Todo> {
-    return this.db.query<Todo>('todo').update(id, input as Partial<Todo>)
-  }
-
-  delete(id: string): Promise<void> {
-    return this.db.query<Todo>('todo').delete(id)
-  }
-}
-`
-}
-
-function todoServiceProvider(): string {
-  return `import { ServiceProvider } from '@rudderjs/core'
-import { router } from '@rudderjs/router'
-import { TodoService } from './TodoService.js'
-import { TodoInputSchema, TodoUpdateSchema } from './TodoSchema.js'
-
-export class TodoServiceProvider extends ServiceProvider {
-  register(): void {
-    this.app.singleton(TodoService, () => new TodoService())
-  }
-
-  override async boot(): Promise<void> {
-    const service = this.app.make<TodoService>(TodoService)
-
-    router.get('/api/todos', async (_req, res) => {
-      const todos = await service.findAll()
-      res.json({ data: todos })
-    })
-
-    router.post('/api/todos', async (req, res) => {
-      const parsed = TodoInputSchema.safeParse(req.body)
-      if (!parsed.success) {
-        res.status(422).json({ errors: parsed.error.flatten().fieldErrors })
-        return
-      }
-      const todo = await service.create(parsed.data)
-      res.status(201).json({ data: todo })
-    })
-
-    router.patch('/api/todos/:id', async (req, res) => {
-      const parsed = TodoUpdateSchema.safeParse(req.body)
-      if (!parsed.success) {
-        res.status(422).json({ errors: parsed.error.flatten().fieldErrors })
-        return
-      }
-      const todo = await service.update(req.params['id']!, parsed.data)
-      res.json({ data: todo })
-    })
-
-    router.delete('/api/todos/:id', async (req, res) => {
-      await service.delete(req.params['id']!)
-      res.status(204).send('')
-    })
-  }
-}
-`
-}
-
-function todoPageConfig(ctx: TemplateContext): string {
-  switch (ctx.primary) {
-    case 'vue':
-      return `import type { Config } from 'vike/types'
-import vikeVue from 'vike-vue/config'
-
-export default {
-  extends: vikeVue,
-} satisfies Config
-`
-    case 'solid':
-      return `import type { Config } from 'vike/types'
-import vikeSolid from 'vike-solid/config'
-
-export default {
-  extends: vikeSolid,
-} satisfies Config
-`
-    default:
-      return `import type { Config } from 'vike/types'
-import vikeReact from 'vike-react/config'
-
-export default {
-  extends: vikeReact,
-} satisfies Config
-`
-  }
-}
-
-function todoPageData(): string {
-  return `import { resolve } from '@rudderjs/core'
-import { TodoService } from '../../app/Modules/Todo/TodoService.js'
-import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
-
-export type Data = { todos: Todo[] }
-
-export async function data(): Promise<Data> {
-  const service = resolve<TodoService>(TodoService)
-  const todos   = await service.findAll()
-  return { todos }
-}
-`
-}
-
-function todoPage(ctx: TemplateContext): string {
-  switch (ctx.primary) {
-    case 'vue':   return todoPageVue(ctx)
-    case 'solid': return todoPageSolid(ctx)
-    default:      return todoPageReact(ctx)
-  }
-}
-
-function todoPageReact(ctx: TemplateContext): string {
-  const cssImport = `import '@/index.css'\n`
-  return `${cssImport}import { useState } from 'react'
-import { useData } from 'vike-react/useData'
-import type { Data } from './+data.js'
-import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
-
-export default function Page() {
-  const data            = useData<Data>()
-  const [todos, setTodos] = useState<Todo[]>(data.todos)
-  const [input, setInput] = useState('')
-
-  async function addTodo(e: React.FormEvent) {
-    e.preventDefault()
-    if (!input.trim()) return
-    const res  = await fetch('/api/todos', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ title: input }),
-    })
-    const json = await res.json() as { data: Todo }
-    setTodos([json.data, ...todos])
-    setInput('')
-  }
-
-  async function toggleTodo(id: string, completed: boolean) {
-    await fetch(\`/api/todos/\${id}\`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ completed: !completed }),
-    })
-    setTodos(todos.map(t => t.id === id ? { ...t, completed: !completed } : t))
-  }
-
-  async function deleteTodo(id: string) {
-    await fetch(\`/api/todos/\${id}\`, { method: 'DELETE' })
-    setTodos(todos.filter(t => t.id !== id))
-  }
-
-  return (
-    <div className="error-wrap">
-      <h1 className="heading-lg">Todos</h1>
-
-      <form onSubmit={addTodo} className="form-inline">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="Add a new todo..."
-          className="form-input"
-        />
-        <button type="submit" className="form-submit">Add</button>
-      </form>
-
-      <ul className="todo-list">
-        {todos.map(todo => (
-          <li key={todo.id} className={\`todo-item\${todo.completed ? ' is-done' : ''}\`}>
-            <input
-              type="checkbox"
-              checked={todo.completed}
-              onChange={() => toggleTodo(todo.id, todo.completed)}
-            />
-            <span>{todo.title}</span>
-            <button onClick={() => deleteTodo(todo.id)} className="link-danger">
-              Delete
-            </button>
-          </li>
-        ))}
-        {todos.length === 0 && (
-          <li className="empty-state">No todos yet. Add one above!</li>
-        )}
-      </ul>
-
-      <a href="/" className="auth-link muted">← Back to home</a>
-    </div>
-  )
-}
-`
-}
-
-function todoPageVue(ctx: TemplateContext): string {
-  const cssImport = `import '@/index.css'\n`
-  return `<script setup lang="ts">
-${cssImport}import { ref } from 'vue'
-import { useData } from 'vike-vue/useData'
-import type { Data } from './+data.js'
-import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
-
-const data  = useData<Data>()
-const todos = ref<Todo[]>(data.todos)
-const input = ref('')
-
-async function addTodo(e: Event) {
-  e.preventDefault()
-  if (!input.value.trim()) return
-  const res  = await fetch('/api/todos', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ title: input.value }),
-  })
-  const json = await res.json() as { data: Todo }
-  todos.value = [json.data, ...todos.value]
-  input.value = ''
-}
-
-async function toggleTodo(id: string, completed: boolean) {
-  await fetch(\`/api/todos/\${id}\`, {
-    method:  'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ completed: !completed }),
-  })
-  todos.value = todos.value.map(t => t.id === id ? { ...t, completed: !completed } : t)
-}
-
-async function deleteTodo(id: string) {
-  await fetch(\`/api/todos/\${id}\`, { method: 'DELETE' })
-  todos.value = todos.value.filter(t => t.id !== id)
-}
-</script>
-
-<template>
-  <div class="error-wrap">
-    <h1 class="heading-lg">Todos</h1>
-
-    <form @submit="addTodo" class="form-inline">
-      <input v-model="input" placeholder="Add a new todo..." class="form-input" />
-      <button type="submit" class="form-submit">Add</button>
-    </form>
-
-    <ul class="todo-list">
-      <li v-for="todo in todos" :key="todo.id" :class="['todo-item', todo.completed ? 'is-done' : '']">
-        <input type="checkbox" :checked="todo.completed" @change="toggleTodo(todo.id, todo.completed)" />
-        <span>{{ todo.title }}</span>
-        <button @click="deleteTodo(todo.id)" class="link-danger">Delete</button>
-      </li>
-      <li v-if="todos.length === 0" class="empty-state">No todos yet. Add one above!</li>
-    </ul>
-
-    <a href="/" class="auth-link muted">← Back to home</a>
-  </div>
-</template>
-`
-}
-
-function todoPageSolid(ctx: TemplateContext): string {
-  const cssImport = `import '@/index.css'\n`
-  return `${cssImport}import { createSignal } from 'solid-js'
-import { For, Show } from 'solid-js'
-import { useData } from 'vike-solid/useData'
-import type { Data } from './+data.js'
-import type { Todo } from '../../app/Modules/Todo/TodoSchema.js'
-
-export default function Page() {
-  const data = useData<Data>()
-  const [todos, setTodos] = createSignal<Todo[]>(data.todos)
-  const [input, setInput] = createSignal('')
-
-  async function addTodo(e: Event) {
-    e.preventDefault()
-    if (!input().trim()) return
-    const res  = await fetch('/api/todos', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ title: input() }),
-    })
-    const json = await res.json() as { data: Todo }
-    setTodos([json.data, ...todos()])
-    setInput('')
-  }
-
-  async function toggleTodo(id: string, completed: boolean) {
-    await fetch(\`/api/todos/\${id}\`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ completed: !completed }),
-    })
-    setTodos(todos().map(t => t.id === id ? { ...t, completed: !completed } : t))
-  }
-
-  async function deleteTodo(id: string) {
-    await fetch(\`/api/todos/\${id}\`, { method: 'DELETE' })
-    setTodos(todos().filter(t => t.id !== id))
-  }
-
-  return (
-    <div class="error-wrap">
-      <h1 class="heading-lg">Todos</h1>
-
-      <form onSubmit={addTodo} class="form-inline">
-        <input
-          value={input()}
-          onInput={e => setInput(e.currentTarget.value)}
-          placeholder="Add a new todo..."
-          class="form-input"
-        />
-        <button type="submit" class="form-submit">Add</button>
-      </form>
-
-      <ul class="todo-list">
-        <For each={todos()} fallback={<li class="empty-state">No todos yet. Add one above!</li>}>
-          {(todo) => (
-            <li class={\`todo-item\${todo.completed ? ' is-done' : ''}\`}>
-              <input
-                type="checkbox"
-                checked={todo.completed}
-                onChange={() => toggleTodo(todo.id, todo.completed)}
-              />
-              <span>{todo.title}</span>
-              <button onClick={() => deleteTodo(todo.id)} class="link-danger">Delete</button>
-            </li>
-          )}
-        </For>
-      </ul>
-
-      <a href="/" class="auth-link muted">← Back to home</a>
-    </div>
   )
 }
 `

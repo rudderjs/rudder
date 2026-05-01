@@ -23,13 +23,12 @@ The scaffolder asks a series of questions, then generates only the code for the 
 | 1 | Project name | — |
 | 2 | Database ORM | Prisma · Drizzle · None |
 | 3 | Database driver | SQLite · PostgreSQL · MySQL — only when an ORM is selected |
-| 4 | Packages *(multiselect)* | Auth · Cache · Queue · Storage · Mail · Notifications · Scheduler · WebSocket · Sync · AI · MCP · Passport · Localization · Telescope · Boost |
-| 5 | Include Todo module? | only when an ORM is selected |
-| 6 | Frontend frameworks | React · Vue · Solid (multiselect) |
-| 7 | Primary framework | only when more than one is selected |
-| 8 | Add Tailwind CSS? | — |
-| 9 | Add shadcn/ui? | only when React + Tailwind |
-| 10 | Install dependencies? | — |
+| 4 | Packages *(multiselect)* | Auth · Cache · Queue · Storage · Mail · Notifications · Scheduler · WebSocket · Sync · AI · MCP · Passport · Localization · Telescope · Boost · Demos |
+| 5 | Frontend frameworks | React · Vue · Solid (multiselect) |
+| 6 | Primary framework | only when more than one is selected |
+| 7 | Add Tailwind CSS? | — |
+| 8 | Add shadcn/ui? | only when React + Tailwind |
+| 9 | Install dependencies? | — |
 
 When the scaffolder finishes it prints the exact next-step commands for your package manager. The shape is always:
 

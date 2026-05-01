@@ -33,7 +33,6 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     name:       'my-app',
     db:         'sqlite',
     orm:        'prisma' as const,
-    withTodo:   false,
     authSecret: 'test-secret',
     frameworks: ['react'] as ('react' | 'vue' | 'solid')[],
     primary:    'react' as const,
@@ -106,7 +105,7 @@ describe('getTemplates() — tailwind + shadcn', () => {
     const css = getTemplates(ctx({ tailwind: false, shadcn: false }))['src/index.css']!
     for (const selector of [
       '.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap',
-      '.empty-state', '.form-inline', '.todo-list', '.todo-item', '.link-danger',
+      '.empty-state', '.form-inline',
       '.chat-wrap', '.chat-column', '.chat-log', '.chat-bubble',
     ]) {
       assert.ok(css.includes(selector), `plain CSS missing selector ${selector}`)
@@ -117,7 +116,7 @@ describe('getTemplates() — tailwind + shadcn', () => {
     const css = getTemplates(ctx({ tailwind: true, shadcn: false }))['src/index.css']!
     for (const selector of [
       '.page', '.page-nav', '.hero', '.feature-card', '.auth-card', '.form-input', '.error-wrap',
-      '.empty-state', '.form-inline', '.todo-list', '.todo-item', '.link-danger',
+      '.empty-state', '.form-inline',
       '.chat-wrap', '.chat-column', '.chat-log', '.chat-bubble',
     ]) {
       assert.ok(css.includes(selector), `tailwind CSS missing selector ${selector}`)
@@ -151,25 +150,19 @@ describe('getTemplates() — tailwind + shadcn', () => {
     assert.ok(vite.includes('@tailwindcss/vite'))
   })
 
-  it('opt-in pages (todo / ai-chat) use semantic classes, no shadcn-flavored leaks', () => {
+  it('opt-in ai-chat page uses semantic classes, no shadcn-flavored leaks', () => {
     const files = getTemplates(ctx({
       tailwind: false, shadcn: false,
-      withTodo: true, packages: { ...allPkgs, ai: true },
+      packages: { ...allPkgs, ai: true },
       frameworks: ['react'], primary: 'react',
     }))
-    const todo   = files['pages/todos/+Page.tsx']!
     const aiChat = files['pages/ai-chat/+Page.tsx']!
 
-    // No shadcn-flavored utility classes should leak through in non-shadcn mode
     for (const leak of ['text-muted-foreground', 'bg-primary', 'text-primary-foreground', 'border-input', 'bg-background', 'bg-muted', 'text-destructive']) {
-      assert.ok(!todo.includes(leak),   `todo page leaks shadcn class: ${leak}`)
       assert.ok(!aiChat.includes(leak), `ai-chat page leaks shadcn class: ${leak}`)
     }
 
-    // And the new semantic classes ARE present
-    assert.ok(todo.includes('todo-list'))
-    assert.ok(todo.includes('todo-item'))
-    assert.ok(todo.includes('form-inline'))
+    assert.ok(aiChat.includes('form-inline'))
     assert.ok(aiChat.includes('chat-column'))
     assert.ok(aiChat.includes('chat-bubble'))
   })
@@ -185,32 +178,6 @@ describe('getTemplates() — tailwind + shadcn', () => {
     }
     assert.ok(index.includes('error-wrap'))
     assert.ok(index.includes('heading-lg'))
-  })
-})
-
-// ─── Todo module ───────────────────────────────────────────
-
-describe('getTemplates() — Todo module', () => {
-  it('generates Todo files when withTodo=true', () => {
-    const files = getTemplates(ctx({ withTodo: true }))
-    assert.ok('app/Modules/Todo/TodoService.ts' in files)
-    assert.ok('app/Modules/Todo/TodoSchema.ts' in files)
-    assert.ok('app/Modules/Todo/TodoServiceProvider.ts' in files)
-  })
-
-  it('does not generate Todo files when withTodo=false', () => {
-    const files = getTemplates(ctx({ withTodo: false }))
-    assert.ok(!('app/Modules/Todo/TodoService.ts' in files))
-  })
-
-  it('prisma schema includes Todo model when withTodo=true', () => {
-    const files = getTemplates(ctx({ withTodo: true }))
-    assert.ok(files['prisma/schema/todo.prisma']!.includes('model Todo {'))
-  })
-
-  it('prisma schema does not include Todo model when withTodo=false', () => {
-    const files = getTemplates(ctx({ withTodo: false }))
-    assert.ok(!('prisma/schema/todo.prisma' in files))
   })
 })
 

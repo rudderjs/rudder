@@ -121,7 +121,7 @@ rudderjs/
 │   ├── boost/              # AI developer tools — MCP server exposing project internals
 │   └── cli/                # Rudder-style CLI (make:*, module:*, module:publish, user commands)
 ├── create-rudder-app/      # Interactive CLI scaffolder (pnpm create rudder-app)
-│                           #   Prompts: name · DB · packages · Todo · frameworks · Tailwind · shadcn
+│                           #   Prompts: name · DB · packages · frameworks · Tailwind · shadcn
 │                           #   Published as `create-rudder-app` on npm (renamed from create-rudderjs-app)
 ├── .github/workflows/      # CI (build, typecheck, lint, test) + Release (Changesets auto-publish)
 ├── docs/                   # VitePress documentation site

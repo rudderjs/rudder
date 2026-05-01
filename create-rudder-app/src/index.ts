@@ -82,7 +82,7 @@ async function main(): Promise<void> {
       { value: 'localization',  label: 'Localization',     hint: 'i18n — trans(), setLocale()' },
       { value: 'telescope',     label: 'Telescope',        hint: 'debug dashboard — requests, queries, jobs, exceptions, AI, mail, cache' },
       { value: 'boost',         label: 'Boost (AI coding DX)', hint: 'expose project internals to Claude Code / Cursor / Copilot via MCP' },
-      { value: 'demos',         label: 'Demos',            hint: 'sample views (contact, todos, ws, live) under /demos — react primary only' },
+      { value: 'demos',         label: 'Demos',            hint: 'sample views (contact, ws, live) under /demos — react primary only' },
     ],
     initialValues: ['auth', 'cache'],
     required: false,
@@ -114,8 +114,6 @@ async function main(): Promise<void> {
     cancel('Passport requires Auth + Prisma. Re-run and select both, or drop Passport.')
     process.exit(1)
   }
-
-  const withTodo = false
 
   // ── Frontend frameworks ────────────────────────────────
 
@@ -196,7 +194,7 @@ async function main(): Promise<void> {
   const s = spinner()
   s.start('Scaffolding project files...')
 
-  const templates = getTemplates({ name, db, orm, withTodo, authSecret, frameworks, primary, tailwind, shadcn, pm, packages })
+  const templates = getTemplates({ name, db, orm, authSecret, frameworks, primary, tailwind, shadcn, pm, packages })
 
   for (const [filePath, content] of Object.entries(templates)) {
     const abs = path.join(target, filePath)
