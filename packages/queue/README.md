@@ -163,6 +163,22 @@ const adapter = new SyncAdapter()
 await adapter.dispatch(new MyJob())
 ```
 
+## Observers (advanced)
+
+Subscribe to job lifecycle events without depending on `@rudderjs/horizon`:
+
+```ts
+import { queueObservers } from '@rudderjs/queue/observers'
+
+const unsubscribe = queueObservers.subscribe((e) => {
+  if (e.kind === 'job.completed') {
+    // e.queue, e.jobId, e.name, e.duration, e.completedAt
+  }
+})
+```
+
+Event kinds: `job.dispatched`, `job.active`, `job.completed`, `job.failed`. The registry is a `globalThis` singleton (mirrors `@rudderjs/mcp/observers`, `@rudderjs/http/observers`, `@rudderjs/ai/observers`). `SyncAdapter.dispatch()` emits these natively; out-of-process drivers (BullMQ) emit them from the worker process so cross-process subscribers (e.g. `@rudderjs/horizon`'s `RedisStorage`) see every transition.
+
 ## Notes
 
 - TTL/delay values are in **milliseconds**.

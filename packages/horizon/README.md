@@ -43,8 +43,9 @@ const count   = await Horizon.jobCount('failed')
 
 ## Storage Drivers
 
-- **`memory`** (default) — In-process, bounded by `maxJobs`. Good for development.
+- **`memory`** (default) — In-process, bounded by `maxJobs`. Good for development with the `sync` queue driver.
 - **`sqlite`** — Persistent storage via `better-sqlite3`. Run `pnpm add better-sqlite3` to enable.
+- **`redis`** — Cross-process storage; **required** when using `@rudderjs/queue-bullmq` so the dashboard and worker process share state. Run `pnpm add ioredis` (install as a direct dep — pnpm strict resolution won't walk to ioredis transitively through `bullmq`).
 
 ## Configuration
 
@@ -53,10 +54,16 @@ const count   = await Horizon.jobCount('failed')
 export default {
   enabled: true,
   path: 'horizon',             // Dashboard route prefix
-  storage: 'memory',           // 'memory' | 'sqlite'
+  storage: 'memory',           // 'memory' | 'sqlite' | 'redis'
   sqlitePath: '.horizon.db',
+  redis: {                     // Used when storage: 'redis'
+    host:     'localhost',
+    port:     6379,
+    password: undefined,
+    prefix:   'rudderjs',
+  },
   maxJobs: 1000,               // Max jobs in memory storage
-  pruneAfterHours: 72,         // Auto-prune old records
+  pruneAfterHours: 72,         // Auto-prune old records (covers v1 → v2 key migration)
   metricsIntervalMs: 60_000,   // Metrics polling interval
   auth: null,                  // Optional auth callback for dashboard
 } satisfies HorizonConfig

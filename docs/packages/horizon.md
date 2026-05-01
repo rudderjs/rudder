@@ -78,7 +78,7 @@ maxJobs:    1000,
 
 `'redis'` reuses BullMQ's `url` / `host` / `port` / `password` / `prefix` field shape so you can point both at the same Redis instance. Storage uses keys under `<prefix>:horizon:*` and opens a separate connection by default — closing the dashboard never closes the queue adapter's connection.
 
-For sqlite, install the optional peer: `pnpm add better-sqlite3`. For redis: `pnpm add ioredis` (already a transitive dep of `bullmq`).
+For sqlite, install the optional peer: `pnpm add better-sqlite3`. For redis: `pnpm add ioredis` — install it as a **direct** dep even if you already use BullMQ. Under pnpm's strict workspace resolution, `RedisStorage`'s dynamic import refuses to walk to a transitive peer and the storage driver fails to load.
 
 Multi-node deployments without Redis need a custom driver — implement `HorizonStorage` (the contract is in `@rudderjs/horizon`'s `types.ts`) and register it via your own provider.
 
