@@ -1,5 +1,12 @@
 # @rudderjs/core
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [1d81533]
+  - @rudderjs/console@1.0.0
+
 ## 1.0.0
 
 ### Major Changes
