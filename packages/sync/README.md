@@ -12,25 +12,34 @@ pnpm add @rudderjs/sync
 
 ## Setup
 
-```ts
-// bootstrap/providers.ts
-import { broadcasting } from '@rudderjs/broadcast'
-import { sync }         from '@rudderjs/sync'
+`SyncProvider` is auto-discovered. Install the package, run `pnpm rudder providers:discover`, and configure via `config/sync.ts`:
 
-export default [
-  broadcasting(),  // /ws      — pub/sub channels
-  sync(),          // /ws-sync — Yjs CRDT documents
-]
+```ts
+// config/sync.ts
+import type { SyncConfig } from '@rudderjs/sync'
+
+export default {
+  path: '/ws-sync',
+} satisfies SyncConfig
 ```
 
 ```ts
-// bootstrap/app.ts
+// bootstrap/providers.ts
+import { defaultProviders } from '@rudderjs/core'
+
+export default [...(await defaultProviders())]
+```
+
+```ts
+// bootstrap/app.ts (optional — only if you broadcast over channels too)
 .withRouting({
   channels: () => import('../routes/channels.ts'),
 })
 ```
 
-That's it. Both `ws` and `ws-sync` share the same port — no proxy, no extra process.
+Both `/ws` (broadcast) and `/ws-sync` (sync) share the same port — no proxy, no extra process. Register `BroadcastingProvider` before `SyncProvider` if you use both — `defaultProviders()` orders them correctly out of the box.
+
+To opt out of auto-discovery, import `SyncProvider` from `@rudderjs/sync` and list it explicitly.
 
 ---
 
@@ -41,13 +50,13 @@ Yjs is editor-agnostic; the core package handles document sync. For server-side 
 | Adapter | Subpath | Status |
 |---|---|---|
 | Lexical | `@rudderjs/sync/lexical` | Available |
-| Tiptap  | `@rudderjs/sync/tiptap`  | Scaffolded — implementation forthcoming |
+| Tiptap  | _planned_                | Coming in a future release |
 
 ```ts
-import { sync }                    from '@rudderjs/sync'
+import { Sync }                    from '@rudderjs/sync'
 import { editBlock, insertBlock }  from '@rudderjs/sync/lexical'
 
-const doc = await sync.document('panel:articles:42:richcontent:body')
+const doc = Sync.document('panel:articles:42:richcontent:body')
 insertBlock(doc, 'callToAction', { title: 'Subscribe' })
 editBlock(doc, 'callToAction', 0, 'buttonText', 'Learn More')
 ```
@@ -56,12 +65,15 @@ editBlock(doc, 'callToAction', 0, 'buttonText', 'Learn More')
 
 ## Persistence Drivers
 
+All driver selection happens in `config/sync.ts` — the `SyncProvider` reads it on boot.
+
 ### Memory (default)
 
 Zero config. Documents live in RAM and reset on server restart. Good for development and ephemeral sessions.
 
 ```ts
-sync()
+// config/sync.ts
+export default {} satisfies SyncConfig
 ```
 
 ### Prisma
@@ -79,14 +91,15 @@ model SyncDocument {
 }
 ```
 
-Then pass the adapter:
+Then wire the adapter:
 
 ```ts
-import { sync, syncPrisma } from '@rudderjs/sync'
+// config/sync.ts
+import { syncPrisma } from '@rudderjs/sync'
 
-sync({
+export default {
   persistence: syncPrisma({ model: 'syncDocument' }),
-})
+} satisfies SyncConfig
 ```
 
 ### Redis
@@ -98,11 +111,12 @@ pnpm add ioredis
 ```
 
 ```ts
-import { sync, syncRedis } from '@rudderjs/sync'
+// config/sync.ts
+import { syncRedis } from '@rudderjs/sync'
 
-sync({
-  persistence: syncRedis({ url: env('REDIS_URL') }),
-})
+export default {
+  persistence: syncRedis({ url: process.env.REDIS_URL }),
+} satisfies SyncConfig
 ```
 
 ---
@@ -112,12 +126,13 @@ sync({
 Protect documents with an `onAuth` callback. Return `true` to allow, `false` to deny.
 
 ```ts
-sync({
+// config/sync.ts
+export default {
   onAuth: async (req, docName) => {
     const token = req.token ?? req.headers['authorization']
     return verifyToken(token)
   },
-})
+} satisfies SyncConfig
 ```
 
 The `req` object contains:
@@ -132,12 +147,13 @@ The `req` object contains:
 Called (with the raw Yjs update) whenever a document changes. Useful for indexing, webhooks, or audit logs.
 
 ```ts
-sync({
+// config/sync.ts
+export default {
   onChange: async (docName, update) => {
     console.log(`Document "${docName}" updated`)
     await searchIndex.update(docName, update)
   },
-})
+} satisfies SyncConfig
 ```
 
 ---
@@ -145,7 +161,8 @@ sync({
 ## Custom Path
 
 ```ts
-sync({ path: '/ws-collab' })
+// config/sync.ts
+export default { path: '/ws-collab' } satisfies SyncConfig
 ```
 
 ---
@@ -257,9 +274,9 @@ Multiple clients connecting to the same document name automatically share state.
 
 | Driver | Persistence | Scales | Use case |
 |---|---|---|---|
-| Memory (default) | ❌ Resets on restart | Single instance | Dev, demos, ephemeral |
-| `syncPrisma()`   | ✅ Database         | Single instance | Most production apps |
-| `syncRedis()`    | ✅ Redis            | Multi-instance  | High-traffic, horizontal scale |
+| `MemoryPersistence` (default) | Resets on restart | Single instance | Dev, demos, ephemeral |
+| `syncPrisma()`                | Database          | Single instance | Most production apps |
+| `syncRedis()`                 | Redis             | Multi-instance  | High-traffic, horizontal scale |
 
 For very large scale (millions of users), run [yhub](https://github.com/yjs/yhub) as a separate service — it's y-websocket compatible so clients work without any changes.
 
@@ -282,7 +299,8 @@ class MyAdapter implements SyncPersistence {
   async destroy(): Promise<void> { ... }
 }
 
-sync({ persistence: new MyAdapter() })
+// config/sync.ts
+export default { persistence: new MyAdapter() } satisfies SyncConfig
 ```
 
 ---
@@ -312,7 +330,7 @@ This package was previously named `@rudderjs/live`. Renamed in `0.1.0` to better
 | `LiveConfig`              | `SyncConfig` |
 | `LivePersistence`         | `SyncPersistence` |
 | `livePrisma`, `liveRedis` | `syncPrisma`, `syncRedis` |
-| `live()` factory          | `sync()` factory |
+| `LIVE_UPGRADE_KEY`        | `SYNC_UPGRADE_KEY` |
 | `/ws-live`                | `/ws-sync` |
 | `config/live.ts`          | `config/sync.ts` |
 | `'liveDocument'` (Prisma model default) | `'syncDocument'` |

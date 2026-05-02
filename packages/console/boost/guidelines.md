@@ -33,7 +33,7 @@ class PingCommand extends Command {
   readonly description = 'Ping with an optional name'
 
   async handle() {
-    const name = this.option<string>('name')
+    const name = String(this.option('name'))
     this.info(`Pong, ${name}!`)
   }
 }
@@ -41,7 +41,7 @@ class PingCommand extends Command {
 Rudder.register(PingCommand)
 ```
 
-Use the class form when the command has multiple phases, needs DI via constructor, or when you want inherited helpers (`this.info/error/warn`, `this.prompt/confirm/select`, `this.argument/option`).
+Use the class form when the command has multiple phases, needs DI via constructor, or when you want inherited helpers (`this.info/error/warn`, `this.ask/confirm/choice/secret`, `this.argument/option`).
 
 ### Signature grammar (Laravel-style)
 
@@ -61,18 +61,19 @@ command-name {required} {optional?} {--flag} {--key=default} {--S|short=value}
 
 ```ts
 // Inside a class command's handle()
-const name = await this.prompt('Project name?')
-const confirm = await this.confirm('Proceed?', true)
-const choice = await this.select('Pick one', ['a', 'b', 'c'])
-const multi = await this.multiselect('Pick several', ['x', 'y', 'z'])
+const name    = await this.ask('Project name?', 'my-app')
+const ok      = await this.confirm('Proceed?', true)
+const env     = await this.choice('Select environment', ['local', 'staging', 'production'])
+const pass    = await this.secret('Enter password')
 
-this.info('Processing...')
-this.success('Done!')
+this.info('Done.')
 this.warn('Heads up.')
 this.error('Something failed.')
+this.line('Plain output')
+this.comment('Dimmed note')
 ```
 
-All backed by `@clack/prompts`. Fall back to plain stdin on non-TTY.
+Backed by `@clack/prompts` (lazy-loaded). All four prompt helpers throw `CancelledError` on Ctrl+C.
 
 ### Skip-boot optimization
 
@@ -125,5 +126,5 @@ import { Rudder, Command, registerMakeSpecs, CliError, CancelledError } from '@r
 // Re-exported via core (same instance)
 import { rudder } from '@rudderjs/core'
 
-import type { CommandSignature, CommandHandler } from '@rudderjs/console'
+import type { ConsoleHandler, ParsedSignature, MakeSpec, MakeResult } from '@rudderjs/console'
 ```

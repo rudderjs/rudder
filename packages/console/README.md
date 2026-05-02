@@ -220,6 +220,24 @@ try {
 
 ---
 
+### `CliError`
+
+Throw from a command handler to abort with a clean message (no stack trace) and a specific exit code. Recognised by the CLI runner.
+
+```ts
+import { CliError } from '@rudderjs/console'
+
+async handle() {
+  if (!process.env.DATABASE_URL) {
+    throw new CliError('DATABASE_URL is not set', 2)
+  }
+}
+```
+
+Defaults to exit code `1`. Use specific codes when scripts need to branch on outcome.
+
+---
+
 ### `parseSignature(signature)`
 
 Parses a command signature string into a structured `ParsedSignature` object.

@@ -50,7 +50,7 @@ const demos: Demo[] = [
   {
     title:       'Collaborative editor',
     description: 'Yjs CRDT live document with awareness cursors. Open in two tabs to see real-time sync over @rudderjs/sync.',
-    href:        '/demos/live',
+    href:        '/demos/sync',
     packages:    ['@rudderjs/sync'],
   },
   {

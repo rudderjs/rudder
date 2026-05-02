@@ -1,7 +1,7 @@
 {
   "name": "@rudderjs/sync",
   "version": "0.2.2",
-  "description": "Real-time collaborative document sync engine for RudderJS — Yjs CRDT over WebSocket, with editor adapters under subpath exports (Lexical, Tiptap).",
+  "description": "Real-time collaborative document sync engine for RudderJS — Yjs CRDT over WebSocket, with a Lexical editor adapter under a subpath export.",
   "rudderjs": {
     "provider": "SyncProvider",
     "stage": "feature"
@@ -26,10 +26,6 @@
     "./lexical": {
       "import": "./dist/lexical/index.js",
       "types": "./dist/lexical/index.d.ts"
-    },
-    "./tiptap": {
-      "import": "./dist/tiptap/index.js",
-      "types": "./dist/tiptap/index.d.ts"
     }
   },
   "scripts": {

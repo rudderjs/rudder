@@ -1,11 +1,6 @@
 /**
- * Error thrown by CLI helpers when they need to abort with a specific
- * exit code and a clean (no stack trace) message. The top-level handler
- * in `index.ts` recognises this and exits accordingly.
+ * Re-export of the canonical `CliError` from `@rudderjs/console`. Kept here so
+ * existing `import { CliError } from '@rudderjs/cli'` paths still work; new code
+ * should import from `@rudderjs/console` (where command primitives live).
  */
-export class CliError extends Error {
-  constructor(message: string, readonly exitCode: number = 1) {
-    super(message)
-    this.name = 'CliError'
-  }
-}
+export { CliError } from '@rudderjs/console'

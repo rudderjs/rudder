@@ -4,36 +4,47 @@
 
 Real-time collaborative document sync engine via [Yjs](https://yjs.dev) CRDT. Every connected client always sees the same shared state with conflict-free merging — even after going offline and reconnecting. Works alongside `@rudderjs/broadcast` on the same port. Server-side only — clients use standard Yjs packages (`yjs`, `y-websocket`) directly.
 
-Editor-specific helpers (block/text mutations) live under subpath exports: `@rudderjs/sync/lexical` (available), `@rudderjs/sync/tiptap` (scaffolded).
+Editor-specific helpers (block/text mutations) live under subpath exports: `@rudderjs/sync/lexical` is available; a Tiptap adapter is planned for a future release.
 
 ## Key Patterns
 
 ### Setup
 
+`SyncProvider` is auto-discovered via `defaultProviders()`. Configure via `config/sync.ts`:
+
+```ts
+// config/sync.ts
+import type { SyncConfig } from '@rudderjs/sync'
+
+export default {
+  path: '/ws-sync',  // default
+} satisfies SyncConfig
+```
+
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@rudderjs/broadcast'
-import { sync }         from '@rudderjs/sync'
+import { defaultProviders } from '@rudderjs/core'
 
-export default [
-  broadcasting(),   // /ws       pub/sub channels
-  sync(),           // /ws-sync  Yjs CRDT documents (register AFTER broadcasting)
-]
+export default [...(await defaultProviders())]
 ```
+
+`/ws` (broadcast) and `/ws-sync` (sync) share the same port. `defaultProviders()` orders `BroadcastingProvider` before `SyncProvider` automatically; if you list providers manually, keep that order.
 
 ### Persistence drivers
 
 ```ts
+// config/sync.ts
+import { syncRedis, syncPrisma } from '@rudderjs/sync'
+import type { SyncConfig } from '@rudderjs/sync'
+
 // Memory (default) — resets on restart, good for dev
-sync()
+export default {} satisfies SyncConfig
 
 // Redis — updates append-only per document, fast writes, full history
-import { sync, syncRedis } from '@rudderjs/sync'
-sync({ persistence: syncRedis({ url: process.env.REDIS_URL }) })
+export default { persistence: syncRedis({ url: process.env.REDIS_URL }) } satisfies SyncConfig
 
 // Prisma — durable, queryable from SQL
-import { sync, syncPrisma } from '@rudderjs/sync'
-sync({ persistence: syncPrisma({ model: 'syncDocument' }) })
+export default { persistence: syncPrisma({ model: 'syncDocument' }) } satisfies SyncConfig
 ```
 
 For Prisma, add the `SyncDocument` model to your schema:
@@ -47,11 +58,12 @@ model SyncDocument {
 }
 ```
 
-### Config
+### Auth + onChange
 
 ```ts
-sync({
-  path:       '/ws-sync',          // default
+// config/sync.ts
+export default {
+  path:        '/ws-sync',
   persistence: syncRedis({ ... }),
   onAuth: async (req, docName) => {
     return verifyToken(req.headers['authorization']?.split(' ')[1])
@@ -59,7 +71,7 @@ sync({
   onChange: async (docName, update) => {
     console.log(`"${docName}" updated (${update.length} bytes)`)
   },
-})
+} satisfies SyncConfig
 ```
 
 ### Client usage
@@ -126,15 +138,15 @@ Useful for server-driven document edits, versioning, and migrations. Resolves pe
 For server-side mutations against editor-specific document shapes, import from the relevant adapter subpath:
 
 ```ts
-import { sync }                              from '@rudderjs/sync'
+import { Sync }                              from '@rudderjs/sync'
 import { editBlock, insertBlock, editText }  from '@rudderjs/sync/lexical'
 
-const doc = await sync.document('panel:articles:abc123:richcontent:body')
+const doc = Sync.document('panel:articles:abc123:richcontent:body')
 insertBlock(doc, 'callToAction', { title: 'Subscribe' })
 editText(doc, { from: 0, to: 5, insert: 'Hi' })
 ```
 
-Tiptap support: `@rudderjs/sync/tiptap` is scaffolded — interface-only until the implementation lands.
+A Tiptap adapter is planned for a future release.
 
 ### Observability
 
@@ -142,20 +154,21 @@ If `@rudderjs/telescope` is installed, document opens/closes, updates applied, a
 
 ## Common Pitfalls
 
-- **`sync()` before `broadcasting()`.** `sync` shares the WS upgrade handler with broadcast. Registration order: `broadcasting()` → `sync()`.
+- **Provider order — broadcast before sync.** Sync shares the WS upgrade handler with broadcast. `defaultProviders()` orders this correctly; if you list providers manually, register `BroadcastingProvider` before `SyncProvider`.
 - **Awareness without throttling.** Mouse movement triggers awareness updates at ~60fps. Without throttling, the telescope entry count explodes on high-traffic rooms. `liveAwarenessSampleMs` in telescope config throttles collection side; y-awareness itself doesn't throttle client-side.
 - **Forgetting `ioredis` for Redis persistence.** Optional peer — install: `pnpm add ioredis`.
 - **Custom persistence adapter — implement all 6 methods.** `getYDoc`, `storeUpdate`, `getStateVector`, `getDiff`, `clearDocument`, `destroy`. Missing any throws at first use.
 - **`Sync.seed()` on already-seeded docs.** Idempotent — only sets fields not already in the map. Won't overwrite existing data. For full replacement, use `Sync.clearDocument()` first.
+- **`Sync.document()` is synchronous.** Returns a `Y.Doc` directly — no `await`. The doc is a live in-memory handle, not an async resolver.
 - **Client using standard y-websocket over plain WS.** Works in dev. In production behind a reverse proxy, ensure the proxy supports WS upgrades (nginx `proxy_set_header Upgrade $http_upgrade` + `Connection "upgrade"`).
-- **Editor block ops on the core facade.** `Sync.editBlock`/`insertBlock`/`removeBlock` (formerly on the `Live` facade) moved to `@rudderjs/sync/lexical` as standalone functions taking a `Y.Doc`. Use `sync.document(name)` to get the handle.
+- **Editor block ops on the core facade.** `Sync.editBlock`/`insertBlock`/`removeBlock` (formerly on the `Live` facade) moved to `@rudderjs/sync/lexical` as standalone functions taking a `Y.Doc`. Use `Sync.document(name)` to get the handle.
 
 ## Key Imports
 
 ```ts
-import { sync, syncRedis, syncPrisma, Sync } from '@rudderjs/sync'
+import { Sync, SyncProvider, syncRedis, syncPrisma, MemoryPersistence } from '@rudderjs/sync'
 
-import type { SyncConfig, SyncPersistence } from '@rudderjs/sync'
+import type { SyncConfig, SyncPersistence, YDoc } from '@rudderjs/sync'
 
 // Editor-specific helpers (Lexical)
 import { editBlock, insertBlock, removeBlock, editText } from '@rudderjs/sync/lexical'

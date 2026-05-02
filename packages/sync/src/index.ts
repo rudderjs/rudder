@@ -485,7 +485,7 @@ async function handleConnection(
 
 // ─── globalThis key for upgrade handler ─────────────────────
 
-export const LIVE_UPGRADE_KEY = '__rudderjs_live_upgrade__'
+export const SYNC_UPGRADE_KEY = '__rudderjs_sync_upgrade__'
 
 export { syncObservers, SyncObserverRegistry }      from './observers.js'
 export type { SyncEvent, SyncObserver }             from './observers.js'
@@ -499,18 +499,21 @@ export type { Doc as YDoc } from 'yjs'
 /**
  * Sync — real-time collaborative document sync via Yjs CRDT.
  *
- * Same port as HTTP and @rudderjs/ws — no separate server needed.
+ * Shares the same port as `@rudderjs/broadcast` and the HTTP server — no
+ * separate process required. Auto-discovered via `defaultProviders()`.
  *
- * Built-in persistence drivers: memory (default), prisma, redis.
+ * Built-in persistence drivers: memory (default), prisma, redis. Configure
+ * via `config/sync.ts`.
  *
  * @example
- * // bootstrap/providers.ts
- * import { sync, syncRedis } from '@rudderjs/sync'
- * export default [
- *   broadcasting(),
- *   sync(),                              // memory (dev)
- *   sync({ persistence: syncRedis() }),  // redis (production)
- * ]
+ * // config/sync.ts
+ * import { syncRedis } from '@rudderjs/sync'
+ * import type { SyncConfig } from '@rudderjs/sync'
+ *
+ * export default {
+ *   path:        '/ws-sync',
+ *   persistence: syncRedis({ url: process.env.REDIS_URL }),
+ * } satisfies SyncConfig
  */
 export class SyncProvider extends ServiceProvider {
   private _persistence!: SyncPersistence
@@ -542,7 +545,7 @@ export class SyncProvider extends ServiceProvider {
         | ((req: unknown, socket: unknown, head: unknown) => void)
         | undefined
 
-      g[LIVE_UPGRADE_KEY] = (req: IncomingMessage, socket: unknown, head: unknown) => {
+      g[SYNC_UPGRADE_KEY] = (req: IncomingMessage, socket: unknown, head: unknown) => {
         const pathname = (req.url ?? '/').split('?')[0] ?? '/'
         if (pathname.startsWith(path)) {
           wss.handleUpgrade(req, socket as import('net').Socket, head as Buffer, (ws) => {
@@ -554,7 +557,7 @@ export class SyncProvider extends ServiceProvider {
       }
 
       // Register as the active upgrade handler
-      g['__rudderjs_ws_upgrade__'] = g[LIVE_UPGRADE_KEY]
+      g['__rudderjs_ws_upgrade__'] = g[SYNC_UPGRADE_KEY]
 
       rudder.command('sync:docs', async () => {
         const rooms = g[KEY] as Map<string, Room> | undefined
@@ -826,10 +829,10 @@ export const Sync = {
    * WS layer broadcasts them to connected clients.
    *
    * @example
-   * import { sync } from '@rudderjs/sync'
+   * import { Sync } from '@rudderjs/sync'
    * import { insertBlock } from '@rudderjs/sync/lexical'
    *
-   * const doc = sync.document('panel:articles:42:richcontent:body')
+   * const doc = Sync.document('panel:articles:42:richcontent:body')
    * insertBlock(doc, 'callToAction', { title: 'Subscribe' })
    */
   document(docName: string): Y.Doc {

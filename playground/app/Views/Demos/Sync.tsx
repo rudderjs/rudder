@@ -7,7 +7,7 @@ function getWsUrl() {
   return `ws://${window.location.host}/ws-sync`
 }
 
-export default function LiveDemo() {
+export default function SyncDemo() {
   const [connected, setConnected] = useState(false)
   const [text,      setText]      = useState('')
   const [users,     setUsers]     = useState<{ name: string; color: string }[]>([])
@@ -21,7 +21,7 @@ export default function LiveDemo() {
   useEffect(() => {
     const doc      = new Y.Doc()
     const ytext    = doc.getText('content')
-    const provider = new WebsocketProvider(getWsUrl(), 'live-demo', doc)
+    const provider = new WebsocketProvider(getWsUrl(), 'sync-demo', doc)
 
     docRef.current  = doc
     provRef.current = provider
@@ -69,7 +69,7 @@ export default function LiveDemo() {
     <div className="min-h-svh bg-background flex flex-col">
       <div className="border-b px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">Live Demo</h1>
+          <h1 className="text-xl font-semibold">Sync Demo</h1>
           <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium ${connected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700'}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} />
             {connected ? 'Connected' : 'Connecting…'}
@@ -84,7 +84,7 @@ export default function LiveDemo() {
         <div className="flex-1 flex flex-col p-6 gap-3">
           <p className="text-xs text-muted-foreground">
             Open this page in another tab — edits sync in real-time via Yjs CRDT. Rendered from{' '}
-            <code>app/Views/Demos/Live.tsx</code> via <code>view('demos.live')</code>.
+            <code>app/Views/Demos/Sync.tsx</code> via <code>view('demos.sync')</code>.
           </p>
           <textarea
             ref={textareaRef}
