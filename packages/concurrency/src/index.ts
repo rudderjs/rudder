@@ -12,11 +12,6 @@ interface ConcurrencyDriver {
   defer(task: Task<void>): void
 }
 
-export interface ConcurrencyConfig {
-  driver?:     'worker' | 'sync'
-  maxWorkers?: number
-}
-
 // ─── Worker Driver ────────────────────────────────────────
 
 const __dir = dirname(fileURLToPath(import.meta.url))

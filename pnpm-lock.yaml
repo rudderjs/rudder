@@ -1102,6 +1102,9 @@ importers:
       '@rudderjs/cashier-paddle':
         specifier: workspace:*
         version: link:../packages/cashier-paddle
+      '@rudderjs/concurrency':
+        specifier: workspace:*
+        version: link:../packages/concurrency
       '@rudderjs/console':
         specifier: workspace:*
         version: link:../packages/console

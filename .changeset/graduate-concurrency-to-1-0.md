@@ -1,0 +1,15 @@
+---
+'@rudderjs/concurrency': major
+---
+
+Graduate to 1.0.0. The `Concurrency` static facade — `Concurrency.run()` (parallel worker-pool dispatch), `Concurrency.defer()` (fire-and-forget), `Concurrency.fake()` / `Concurrency.restore()` (sync driver for testing) — is now part of the stable public API.
+
+Dogfooded in the playground via the Fibonacci demo (`/demos/fibonacci` → compute `fib(n)` N times sequentially vs in parallel via worker pool). Verified 5.7× speedup on `fib(38) × 8` (5293ms → 923ms) and 2.9× on `fib(36) × 4` (882ms → 307ms).
+
+**Breaking changes:**
+- Removed unused `ConcurrencyConfig` interface export. The interface was exported but never wired into any constructor or method — it had no functional effect. Pool size remains fixed at `os.cpus().length`. Runtime configuration can be added in 1.x if real users need it.
+
+**Docs refresh:**
+- README: added Common Pitfalls section (closure scope, structured-cloneable returns, defer error swallowing, Vite SSR + dist requirement, I/O-bound antipattern, fake state global) and Key Imports.
+- `boost/guidelines.md`: removed the dead `ConcurrencyConfig` import line — it didn't compile against an unconfigurable API.
+- Pool-size default + 1.0 config-API rationale documented in README.

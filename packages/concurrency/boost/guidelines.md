@@ -84,6 +84,4 @@ Everything the task needs must be either (a) inline, (b) lazy-imported inside th
 
 ```ts
 import { Concurrency } from '@rudderjs/concurrency'
-
-import type { ConcurrencyConfig } from '@rudderjs/concurrency'
 ```

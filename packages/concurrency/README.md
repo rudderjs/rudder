@@ -88,3 +88,21 @@ await Concurrency.restore()
 | `Concurrency.defer(task)` | Fire-and-forget a task in a worker thread |
 | `Concurrency.fake()` | Switch to sync driver (sequential, main thread) |
 | `Concurrency.restore()` | Restore the default worker driver |
+
+The pool size defaults to `os.cpus().length`. There is no runtime configuration API in 1.0 — the defaults cover the common use cases (CPU-bound parallelism for small task counts).
+
+## Common Pitfalls
+
+- **Closures over external variables don't work.** Tasks are serialized via `.toString()` and re-evaluated in a fresh worker context — they don't carry the surrounding scope. Inline any constants, or pass values via `new Function` source generation. See the "Task Constraints" section above.
+- **Return values must be structured-cloneable.** Functions, classes with prototypes, and circular references can't cross the worker boundary. Plain objects, primitives, arrays, Buffers, and TypedArrays work.
+- **Errors in `defer()` are swallowed.** They're logged to `console.error` and never reach your code. For durable error handling, use `@rudderjs/queue` instead — it persists jobs and supports retries.
+- **Workers don't auto-terminate on process exit.** Call `await Concurrency.restore()` if you need a clean shutdown (also useful between tests). Otherwise the pool lives for the process lifetime.
+- **Vite SSR / dev mode requires the package to be built.** Worker entry is loaded from `dist/worker-entry.js` via `import.meta.url`. If you change the package source, run `pnpm build` for `@rudderjs/concurrency` and restart your dev server — Vite HMR doesn't catch worker-entry changes.
+- **Don't use for I/O-bound work.** Worker threads are for CPU-bound parallelism. For HTTP fetches, DB queries, or filesystem I/O, plain `Promise.all` is faster (no serialization overhead, no worker startup cost).
+- **`Concurrency.fake()` is global.** Tests that call it must call `Concurrency.restore()` in `afterEach`, or the sync driver leaks into the next test.
+
+## Key Imports
+
+```ts
+import { Concurrency } from '@rudderjs/concurrency'
+```
