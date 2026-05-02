@@ -151,3 +151,27 @@ fake.restore()
 | `output()` | Alias for stdout |
 | `errorOutput()` | Alias for stderr |
 | `throw()` | Throws `ProcessFailedException` if failed |
+
+## Common Pitfalls
+
+- **Shell injection from interpolated strings.** `Process.run(\`git checkout ${userInput}\`)` is dangerous. All commands are shell-parsed (`spawn(cmd, [], { shell: true })`) — there is no array-form API that bypasses the shell. Validate/escape user input yourself, or avoid interpolation entirely. Treat command strings like SQL.
+- **`.timeout(60)` is seconds, not milliseconds.** `timeout(60_000)` is 1000 minutes, not 1 minute. Timed-out commands exit with code 124 (matches GNU `timeout`).
+- **Non-zero exit codes don't throw.** `Process.run()` always resolves; check `result.successful()` / `result.failed()`, or call `result.throw()` to raise `ProcessFailedException`.
+- **`Process.start()` keeps the event loop alive.** Background processes need either `await running.wait()` or `running.kill()` — otherwise Node won't exit.
+- **`Process.pipe()` stops on first failure.** Downstream commands are skipped — check `result.exitCode`. Use `Process.pool()` if you want all commands to run regardless.
+- **Capturing huge stdout.** `result.stdout` holds the entire output in memory. For multi-GB outputs, use `.onOutput((type, data) => ...)` to stream, or redirect inside the shell (`> /tmp/out.log`) and read the file separately.
+- **`Process.fake()` is global.** Calling `fake()` while already faked replaces the previous fake (no stack). Always call `fake.restore()` in `afterEach` so state doesn't leak between tests.
+
+## Key Imports
+
+```ts
+import { Process } from '@rudderjs/process'
+
+import type {
+  ProcessResult,           // { exitCode, stdout, stderr, successful(), failed(), output(), errorOutput(), throw() }
+  RunningProcess,          // { pid, running(), output(), errorOutput(), wait(), kill() }
+  PendingProcess,          // builder returned by Process.command()
+  ProcessPoolResult,       // { results, successful() }
+  ProcessFailedException,  // thrown by ProcessResult.throw()
+} from '@rudderjs/process'
+```

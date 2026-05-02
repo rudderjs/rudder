@@ -24,6 +24,12 @@ const demos: Demo[] = [
     packages:    ['@rudderjs/image', '@rudderjs/storage'],
   },
   {
+    title:       'System info',
+    description: 'Three shell commands (git, node, uptime) executed via @rudderjs/process. Compares sequential vs parallel cost using Process.pool().',
+    href:        '/demos/system-info',
+    packages:    ['@rudderjs/process'],
+  },
+  {
     title:       'Todos',
     description: 'ORM + interactive UI. Controller loads initial data, the view hydrates and POSTs to /api/todos/* for live updates.',
     href:        '/demos/todos',
