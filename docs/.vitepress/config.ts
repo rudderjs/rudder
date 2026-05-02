@@ -20,7 +20,7 @@ export default defineConfig({
       { text: 'Packages', link: '/packages/', activeMatch: '/packages/' },
       { text: 'Contributing', link: '/contributing/', activeMatch: '/contributing/' },
       {
-        text: 'v0.1.0',
+        text: 'v1.0',
         items: [
           { text: 'Changelog', link: 'https://github.com/rudderjs/rudder/releases' },
           { text: 'Contributing Guide', link: '/contributing/' },
