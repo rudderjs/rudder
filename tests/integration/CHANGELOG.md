@@ -1,5 +1,12 @@
 # @rudderjs/integration-tests
 
+## 0.0.18
+
+### Patch Changes
+
+- Updated dependencies [d33a492]
+  - @rudderjs/orm-drizzle@1.0.0
+
 ## 0.0.17
 
 ### Patch Changes
