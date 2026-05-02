@@ -455,7 +455,7 @@ export class DatabaseProvider extends ServiceProvider {
   async boot(): Promise<void> {
     const cfg = appConfig<DatabaseConfig | undefined>('database', undefined)
 
-    let drizzleConfig: DrizzleConfig = {}
+    const drizzleConfig: DrizzleConfig = {}
 
     if (cfg) {
       const conn = cfg.connections[cfg.default]
