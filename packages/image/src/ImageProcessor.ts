@@ -95,7 +95,10 @@ export class ImageProcessor {
     return this
   }
 
-  /** Smart optimization: strip metadata + good quality defaults. */
+  /**
+   * Strip metadata. Per-format quality defaults are applied by `.format(fmt)`
+   * automatically — call `.optimize().format('webp')` to get both.
+   */
   optimize(): this {
     this._stripMeta = true
     return this

@@ -64,6 +64,10 @@ Route.get('/demos', async () => view('demos.index'))
 // POST handler for /api/contact lives in routes/api.ts.
 Route.get('/demos/contact', async () => view('demos.contact'))
 
+// GET /demos/avatar — image resize demo via @rudderjs/image + @rudderjs/storage.
+// POST handler for /api/avatar lives in routes/api.ts.
+Route.get('/demos/avatar', async () => view('demos.avatar'))
+
 // GET /demos/live — Yjs CRDT collaborative editor (@rudderjs/sync).
 Route.get('/demos/live', async () => view('demos.live'))
 

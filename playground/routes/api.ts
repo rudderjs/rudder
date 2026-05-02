@@ -233,6 +233,41 @@ Route.post('/api/contact', async (req, res) => {
   return res.json({ ok: true, message: `Thanks ${result.data.name}, your message has been received!` })
 }, [CsrfMiddleware()])
 
+// POST /api/avatar — resize an uploaded image to 256x256 webp via @rudderjs/image
+Route.post('/api/avatar', async (req, res) => {
+  const { image: dataUrl } = (req.body ?? {}) as { image?: string }
+  if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+    return res.status(422).json({ message: 'Body must be { image: "data:image/...;base64,..." }' })
+  }
+  const base64 = dataUrl.split(',', 2)[1] ?? ''
+  const input  = Buffer.from(base64, 'base64')
+
+  const { image } = await import('@rudderjs/image')
+
+  const original = await image(input).metadata()
+  const buf      = await image(input).resize(256, 256).format('webp').quality(85).toBuffer()
+  const meta     = await image(buf).metadata()
+
+  const filename = `avatars/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`
+  await Storage.disk('public').put(filename, buf)
+
+  return res.json({
+    original: {
+      format: original.format,
+      width:  original.width,
+      height: original.height,
+      size:   input.length,
+    },
+    processed: {
+      url:    Storage.disk('public').url(filename),
+      format: meta.format,
+      width:  meta.width,
+      height: meta.height,
+      size:   buf.length,
+    },
+  })
+}, [RateLimit.perMinute(10)])
+
 // ── AI test routes ───────────────────────────────────────────────────────────
 
 import { AI, agent, toolDefinition, type AiMiddleware } from '@rudderjs/ai'
