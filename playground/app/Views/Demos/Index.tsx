@@ -30,6 +30,12 @@ const demos: Demo[] = [
     packages:    ['@rudderjs/process'],
   },
   {
+    title:       'Worker threads',
+    description: 'Compute fib(n) sequentially on the main thread vs across @rudderjs/concurrency worker pool. Watch the parallel cost stay flat as you crank N.',
+    href:        '/demos/fibonacci',
+    packages:    ['@rudderjs/concurrency'],
+  },
+  {
     title:       'Todos',
     description: 'ORM + interactive UI. Controller loads initial data, the view hydrates and POSTs to /api/todos/* for live updates.',
     href:        '/demos/todos',

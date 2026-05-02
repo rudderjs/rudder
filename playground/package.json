@@ -30,6 +30,7 @@
     "@rudderjs/broadcast": "workspace:*",
     "@rudderjs/cache": "workspace:*",
     "@rudderjs/cashier-paddle": "workspace:*",
+    "@rudderjs/concurrency": "workspace:*",
     "@rudderjs/console": "workspace:*",
     "@rudderjs/contracts": "workspace:*",
     "@rudderjs/core": "workspace:*",

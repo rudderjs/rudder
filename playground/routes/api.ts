@@ -233,6 +233,47 @@ Route.post('/api/contact', async (req, res) => {
   return res.json({ ok: true, message: `Thanks ${result.data.name}, your message has been received!` })
 }, [CsrfMiddleware()])
 
+// GET /api/fib?n=36&count=4 — compute fib(n) `count` times, sequentially then in parallel via @rudderjs/concurrency.
+Route.get('/api/fib', async (req, res) => {
+  const n     = Math.max(1, Math.min(42, Number((req.query as Record<string, string>)['n'] ?? 36)))
+  const count = Math.max(1, Math.min(16, Number((req.query as Record<string, string>)['count'] ?? 4)))
+
+  const { Concurrency } = await import('@rudderjs/concurrency')
+  const { cpus }        = await import('node:os')
+
+  // The task body must be self-contained — closures don't capture variables across the
+  // worker boundary. Inline `fib` and bind `n` via a Function-style template.
+  const buildTask = (val: number): (() => number) => {
+    const src = `
+      function fib(k) { return k < 2 ? k : fib(k - 1) + fib(k - 2) }
+      return fib(${val})
+    `
+    return new Function(src) as () => number
+  }
+
+  // Sequential: run each in turn (blocks the event loop while running).
+  const seqStart = Date.now()
+  let result = 0
+  for (let i = 0; i < count; i++) result = buildTask(n)()
+  const sequentialMs = Date.now() - seqStart
+
+  // Parallel: dispatch to worker pool — each task runs in its own worker thread.
+  const parStart = Date.now()
+  const tasks = Array.from({ length: count }, () => buildTask(n))
+  const results = await Concurrency.run(tasks)
+  const parallelMs = Date.now() - parStart
+  result = results[0] ?? result
+
+  return res.json({
+    n,
+    count,
+    result,
+    sequentialMs,
+    parallelMs,
+    workers: Math.min(count, cpus().length),
+  })
+})
+
 // GET /api/system-info — runs three shell commands and reports parallel vs sequential timing.
 // Demonstrates @rudderjs/process: Process.run() (single command) and Process.pool() (parallel).
 Route.get('/api/system-info', async (_req, res) => {
