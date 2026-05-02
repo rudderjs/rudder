@@ -1,5 +1,12 @@
 # rudderjs-playground
 
+## 0.0.39
+
+### Patch Changes
+
+- Updated dependencies [eda23b0]
+  - @rudderjs/concurrency@1.0.0
+
 ## 0.0.38
 
 ### Patch Changes
