@@ -412,3 +412,65 @@ export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
     },
   }
 }
+
+// ─── DatabaseProvider ──────────────────────────────────────
+
+import { ServiceProvider, config as appConfig } from '@rudderjs/core'
+import { ModelRegistry } from '@rudderjs/orm'
+
+export interface DatabaseConnectionConfig {
+  driver: 'sqlite' | 'postgresql' | 'libsql'
+  url?:   string
+}
+
+/**
+ * Database config consumed by `DatabaseProvider`.
+ *
+ * Mirrors the Prisma adapter's `DatabaseConfig` shape (`default` + `connections`)
+ * so apps can switch drivers without restructuring their `config/database.ts`,
+ * with two Drizzle-specific extras:
+ *
+ * - `tables` — map of table name → drizzle table object (Drizzle is schema-first
+ *   in TypeScript; the adapter needs the table objects to build queries).
+ * - `client` — pre-built drizzle db instance, for tests or hand-wired setups.
+ */
+export interface DatabaseConfig {
+  default:     string
+  connections: Record<string, DatabaseConnectionConfig>
+  tables?:     Record<string, unknown>
+  client?:     unknown
+}
+
+/**
+ * Auto-discovered service provider that boots a `DrizzleAdapter` from
+ * `config('database')` and registers it on the DI container.
+ *
+ * Wires:
+ *   - `ModelRegistry.set(adapter)` so `@rudderjs/orm` Models route through it
+ *   - `app.instance('db', adapter)` for direct DI lookup
+ */
+export class DatabaseProvider extends ServiceProvider {
+  register(): void {}
+
+  async boot(): Promise<void> {
+    const cfg = appConfig<DatabaseConfig | undefined>('database', undefined)
+
+    let drizzleConfig: DrizzleConfig = {}
+
+    if (cfg) {
+      const conn = cfg.connections[cfg.default]
+      if (conn) {
+        drizzleConfig.driver = conn.driver
+        if (conn.url !== undefined) drizzleConfig.url = conn.url
+      }
+      if (cfg.tables) drizzleConfig.tables = cfg.tables
+      if (cfg.client) drizzleConfig.client = cfg.client
+    }
+
+    const adapter = await DrizzleAdapter.make(drizzleConfig)
+    await adapter.connect()
+
+    ModelRegistry.set(adapter)
+    this.app.instance('db', adapter)
+  }
+}
