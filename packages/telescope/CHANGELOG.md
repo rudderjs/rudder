@@ -1,5 +1,12 @@
 # @rudderjs/telescope
 
+## 11.0.0
+
+### Patch Changes
+
+- Updated dependencies [8ca33a1]
+  - @rudderjs/http@1.0.0
+
 ## 10.1.0
 
 ### Minor Changes
