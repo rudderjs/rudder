@@ -18,6 +18,12 @@ const demos: Demo[] = [
     packages:    ['@rudderjs/middleware', '@rudderjs/core'],
   },
   {
+    title:       'Avatar resize',
+    description: 'Upload an image — server resizes it to 256×256 WebP via @rudderjs/image and saves to public storage. Side-by-side compare.',
+    href:        '/demos/avatar',
+    packages:    ['@rudderjs/image', '@rudderjs/storage'],
+  },
+  {
     title:       'Todos',
     description: 'ORM + interactive UI. Controller loads initial data, the view hydrates and POSTs to /api/todos/* for live updates.',
     href:        '/demos/todos',
