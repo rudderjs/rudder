@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/image",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Fluent image processing for RudderJS — resize, crop, convert, optimize (sharp wrapper).",
   "license": "MIT",
   "repository": {
