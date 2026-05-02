@@ -1153,6 +1153,9 @@ importers:
       '@rudderjs/pennant':
         specifier: workspace:*
         version: link:../packages/pennant
+      '@rudderjs/process':
+        specifier: workspace:*
+        version: link:../packages/process
       '@rudderjs/pulse':
         specifier: workspace:*
         version: link:../packages/pulse

@@ -47,6 +47,7 @@
     "@rudderjs/orm-prisma": "workspace:*",
     "@rudderjs/passport": "workspace:*",
     "@rudderjs/pennant": "workspace:*",
+    "@rudderjs/process": "workspace:*",
     "@rudderjs/pulse": "workspace:*",
     "@rudderjs/queue": "workspace:*",
     "@rudderjs/queue-bullmq": "workspace:*",

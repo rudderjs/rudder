@@ -233,6 +233,38 @@ Route.post('/api/contact', async (req, res) => {
   return res.json({ ok: true, message: `Thanks ${result.data.name}, your message has been received!` })
 }, [CsrfMiddleware()])
 
+// GET /api/system-info — runs three shell commands and reports parallel vs sequential timing.
+// Demonstrates @rudderjs/process: Process.run() (single command) and Process.pool() (parallel).
+Route.get('/api/system-info', async (_req, res) => {
+  const { Process } = await import('@rudderjs/process')
+  const commands = ['git rev-parse HEAD', 'node --version', 'uptime']
+
+  // Sequential: await each command in turn — sum of individual durations.
+  const sequential: { command: string; duration: number }[] = []
+  for (const cmd of commands) {
+    const t0 = Date.now()
+    await Process.run(cmd)
+    sequential.push({ command: cmd, duration: Date.now() - t0 })
+  }
+  const totalMs = sequential.reduce((sum, r) => sum + r.duration, 0)
+
+  // Parallel: Process.pool() fires all at once.
+  const t0   = Date.now()
+  const pool = await Process.pool(commands)
+  const parallelMs = Date.now() - t0
+
+  const results = pool.results.map((r, i) => ({
+    command:  commands[i],
+    ok:       r.successful(),
+    exitCode: r.exitCode,
+    duration: sequential[i]!.duration,
+    stdout:   r.stdout.trim(),
+    stderr:   r.stderr.trim(),
+  }))
+
+  return res.json({ results, totalMs, parallelMs })
+})
+
 // POST /api/avatar — resize an uploaded image to 256x256 webp via @rudderjs/image
 Route.post('/api/avatar', async (req, res) => {
   const { image: dataUrl } = (req.body ?? {}) as { image?: string }

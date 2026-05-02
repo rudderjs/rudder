@@ -2,7 +2,7 @@
 
 ## Overview
 
-Shell execution facade — Laravel's Process facade for Node. Wraps `child_process` with a fluent builder (`Process.command(...)`), parallel pools (`Process.pool`), pipe chains (`Process.pipe`), background processes (`Process.start`), and full-stack `Process.fake()` for testing. Use this instead of reaching for `child_process.exec` directly — you get timeouts, retries, typed results, and test fakes for free.
+Shell execution facade — Laravel's Process facade for Node. Wraps `child_process` with a fluent builder (`Process.command(...)`), parallel pools (`Process.pool`), pipe chains (`Process.pipe`), background processes (`Process.start`), and full-stack `Process.fake()` for testing. Use this instead of reaching for `child_process.exec` directly — you get timeouts, typed results, and test fakes for free.
 
 ## Key Patterns
 
@@ -30,7 +30,7 @@ const result = await Process
   .env({ NODE_ENV: 'production' })
   .input(stdinString)                 // provide stdin
   .quietly()                           // suppress onOutput callbacks
-  .onOutput(chunk => process.stdout.write(chunk))   // stream live
+  .onOutput((type, data) => process.stdout.write(data))   // stream live; type is 'stdout' | 'stderr'
   .run()
 ```
 
@@ -108,11 +108,11 @@ Nothing touches the shell under `Process.fake()`. Critical for CI — tests can'
 
 ## Common Pitfalls
 
-- **Shell injection from interpolated strings.** `Process.run(\`git checkout ${userInput}\`)` is dangerous. Prefer array form via `Process.command([...])` or explicitly validate/escape user input. Treat command strings like SQL.
+- **Shell injection from interpolated strings.** `Process.run(\`git checkout ${userInput}\`)` is dangerous. All commands are shell-parsed (`spawn(cmd, [], { shell: true })`) — there is no array form that bypasses the shell. Validate/escape user input yourself, treat command strings like SQL, or avoid interpolation entirely.
 - **`Process.start()` without `await wait()` or `kill()`.** Background processes keep the event loop alive. If you forget both, the Node process won't exit.
 - **`.timeout(60)` is seconds, not milliseconds.** Common bug. `timeout(60_000)` = ~1000 minutes, not 1 minute.
 - **Pipe with a failing middle command.** Subsequent commands are skipped. Check `result.exitCode` + `result.failed()` to detect partial failure; `pool` completes all and reports individual failures.
-- **Capturing huge stdout.** `result.stdout` holds the entire output in memory. For multi-GB outputs, use `.onOutput(chunk => ...)` to stream, or redirect inside the shell (`> /tmp/out.log`) and read the file.
+- **Capturing huge stdout.** `result.stdout` holds the entire output in memory. For multi-GB outputs, use `.onOutput((type, data) => ...)` to stream, or redirect inside the shell (`> /tmp/out.log`) and read the file.
 - **Forgetting `fake.restore()` in tests.** Fake state persists globally across tests. Always restore in `afterEach`.
 - **Nested faking.** Calling `Process.fake()` while already faked replaces the previous fake. No stack. Design your test setup around a single `fake()` per test.
 
