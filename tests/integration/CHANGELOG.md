@@ -1,5 +1,11 @@
 # @rudderjs/integration-tests
 
+## 0.0.17
+
+### Patch Changes
+
+- @rudderjs/core@1.0.1
+
 ## 0.0.16
 
 ### Patch Changes
