@@ -12,12 +12,12 @@
 
 **Tech Stack:** TypeScript (strict, NodeNext), `@clack/prompts` for interactive prompts, `node:test` for tests, semantic CSS for styling.
 
-**Status today (verified 2026-05-02):**
+**Status today (verified 2026-05-02 evening — after wave-3/4 graduation):**
 - `create-rudder-app/src/templates.ts`: 4028 lines, 82 template functions
 - `create-rudder-app/src/index.ts`: 291 lines, 9 steps, `demos` mixed in package multiselect
-- Playground demos: 9 files at `playground/app/Views/Demos/`
-- Scaffolder ships 3 demos (Contact/Ws/Live); missing Todos/Billing/Pennant
-- Billing/BillingSubscriptions/Pennant/PennantBeta use raw Tailwind + shadcn (break without Tailwind)
+- Playground demos: **12 files** at `playground/app/Views/Demos/` — Avatar, Billing, BillingSubscriptions, Contact, Fibonacci, Index, Pennant, PennantBeta, Sync, SystemInfo, Todos, Ws
+- Scaffolder ships 3 demos (Contact/Ws/Live); missing Todos/Billing/Pennant/Avatar/Fibonacci/SystemInfo
+- **6 of 12 demos break without Tailwind** (verified): `Contact.tsx` (shadcn + 17 raw-Tailwind hits), `Sync.tsx` (11 hits), `Ws.tsx` (16 hits), `Pennant.tsx` (shadcn + 13), `PennantBeta.tsx` (4), `Todos.tsx` (shadcn + 7). Already semantic via `@/index.css`: Avatar, Billing, BillingSubscriptions, Fibonacci, SystemInfo, Index.
 
 **Ship as 6 PRs, in order.** Each PR is independently reviewable and adds no regression.
 
@@ -310,7 +310,7 @@ Today these are partially transitive via Auth — making them explicit-but-silen
 
 ### Tier C — visible multiselect (categorized)
 
-8 categories, 21 rows total, 1 pre-checked (Authentication). Categories are visual headers (faked via disabled clack options — see Task 2.2). Currently-deferred 0.x packages (Image, HTTP, Concurrency, Process) are NOT shipped now; they join their existing categories after graduating to 1.0.
+8 categories, 25 rows total, 1 pre-checked (Authentication). Categories are visual headers (faked via disabled clack options — see Task 2.2). All ship-ready (zero packages on 0.x as of 2026-05-02).
 
 ```
 ─── Auth & Users (4) ───
@@ -319,10 +319,11 @@ Today these are partially transitive via Auth — making them explicit-but-silen
   [ ] Passport                         (OAuth2 server — requires Auth + Prisma)
   [ ] Socialite                        (social login: GitHub, Google, Facebook, Apple)
 
-─── Infrastructure (3) ───
+─── Infrastructure (4) ───
   [ ] Queue                            (background jobs)
   [ ] Storage                          (file uploads — local + S3)
   [ ] Scheduler                        (cron-like task scheduling)
+  [ ] Image                            (resize, crop, convert — sharp wrapper)
 
 ─── Communication (4) ───
   [ ] Mail                             (SMTP + log driver)
@@ -347,8 +348,11 @@ Today these are partially transitive via Auth — making them explicit-but-silen
   [ ] Pulse                            (metrics dashboard — throughput, latency, hit rates)
   [ ] Horizon                          (queue monitoring — lifecycle, workers, retry/delete)
 
-─── Utilities (1) ───
+─── Utilities (4) ───
   [ ] Crypt                            (AES-256-CBC + HMAC encryption)
+  [ ] HTTP                             (fluent fetch client — retries, timeouts, pools)
+  [ ] Process                          (shell execution — run, pool, pipe, real-time output)
+  [ ] Concurrency                      (parallel execution — worker thread pool)
 ```
 
 ### ORM=none gating
@@ -412,6 +416,7 @@ const PACKAGES = [
   { value: 'queue',         label: 'Queue',            hint: 'background jobs' },
   { value: 'storage',       label: 'Storage',          hint: 'file uploads (local + S3)' },
   { value: 'scheduler',     label: 'Scheduler',        hint: 'cron-like task scheduling' },
+  { value: 'image',         label: 'Image',            hint: 'resize, crop, convert (sharp wrapper)' },
 
   { __sep: 'Communication' },
   { value: 'mail',          label: 'Mail',             hint: 'SMTP + log driver' },
@@ -438,6 +443,9 @@ const PACKAGES = [
 
   { __sep: 'Utilities' },
   { value: 'crypt',         label: 'Crypt',            hint: 'AES encryption + HMAC' },
+  { value: 'http',          label: 'HTTP',             hint: 'fluent fetch client — retries, timeouts, pools' },
+  { value: 'process',       label: 'Process',          hint: 'shell execution — run, pool, pipe' },
+  { value: 'concurrency',   label: 'Concurrency',      hint: 'parallel execution via worker threads' },
 ] as const
 ```
 
@@ -618,8 +626,8 @@ gh pr create --title "feat(create-rudder-app): cascade-aware prompt flow + categ
 
 PR body lists:
 - Tier A silent install (session, hash, cache always present)
-- 8 categorized package sections, 21 visible rows, 1 pre-checked (Authentication)
-- 7 new packages added: sanctum, socialite, pulse, horizon, crypt, cashier-paddle, pennant
+- 8 categorized package sections, 25 visible rows, 1 pre-checked (Authentication)
+- 11 new packages added: sanctum, socialite, pulse, horizon, crypt, cashier-paddle, pennant, image, http, process, concurrency
 - ORM=none filters out auth, sanctum, passport, cashier-paddle
 - Demos extracted into dedicated multiselect step, gated by package selection
 
@@ -627,16 +635,27 @@ PR body lists:
 
 ## Phase 3 — Standardize playground demo styling
 
-**Why:** Billing/BillingSubscriptions/Pennant/PennantBeta use raw Tailwind utilities and shadcn imports. They break in projects that opt out of Tailwind. Refactor to use the same semantic-class pattern as `Welcome.tsx` and `Todos.tsx` (after migration — see note below).
+**Why:** 6 of the 12 playground demos use shadcn imports or raw Tailwind utilities and break in projects that opt out of Tailwind. Refactor to use the same semantic-class pattern as `Welcome.tsx` and the recent `Avatar.tsx` / `Fibonacci.tsx` / `SystemInfo.tsx` demos.
 
-**Heads-up on Todos.tsx:** the playground's `Todos.tsx` *also* uses shadcn (Button/Input/Checkbox/Card) and raw Tailwind. It needs the same refactor.
+**Files needing refactor** (verified 2026-05-02 evening):
+
+| File | shadcn imports | raw-Tailwind hits | Currently shipped by scaffolder? |
+|---|---|---|---|
+| Contact.tsx | ✓ | 17 | ✓ (`contact`) |
+| Sync.tsx | — | 11 | ✓ (`live`) |
+| Ws.tsx | — | 16 | ✓ (`ws`) |
+| Pennant.tsx | ✓ | 13 | — |
+| PennantBeta.tsx | — | 4 | — |
+| Todos.tsx | ✓ | 7 | — |
+
+**Critical:** Contact/Sync/Ws are the 3 demos the scaffolder currently ships, so generated projects today break without Tailwind. Phase 3's first task is to fix the playground versions, then Phase 4 ports the fixed versions into the scaffolder.
 
 ### Task 3.1: Inventory existing semantic classes
 
 **Files:**
 - Read: `playground/app/index.css` (or the equivalent CSS entry — may be `playground/src/index.css`)
 - Read: `playground/app/Views/Welcome.tsx`
-- Read: `playground/app/Views/Demos/Contact.tsx` (already semantic — reference)
+- Read: `playground/app/Views/Demos/Avatar.tsx`, `Fibonacci.tsx`, `SystemInfo.tsx` (already semantic — reference)
 
 **Step 1: List the semantic classes already defined**
 
@@ -695,15 +714,17 @@ Temporarily remove `@import "tailwindcss"` from `index.css`, restart, verify the
 git commit -m "refactor(playground): Todos demo uses semantic classes"
 ```
 
-### Tasks 3.3 – 3.5: Repeat for Billing, BillingSubscriptions, Pennant, PennantBeta
+### Tasks 3.3 – 3.5: Repeat for Contact, Sync, Ws, Pennant, PennantBeta
 
-| Task | File | Commit |
-|------|------|--------|
-| 3.3 | `playground/app/Views/Demos/Billing.tsx` + `BillingSubscriptions.tsx` | `refactor(playground): Billing demos use semantic classes` |
-| 3.4 | `playground/app/Views/Demos/Pennant.tsx` + `PennantBeta.tsx` | `refactor(playground): Pennant demos use semantic classes` |
-| 3.5 | `playground/app/Views/Demos/Index.tsx` | `refactor(playground): Demos index uses semantic classes` (audit; may already be fine) |
+| Task | File(s) | Commit |
+|------|---------|--------|
+| 3.3 | `playground/app/Views/Demos/Contact.tsx` | `refactor(playground): Contact demo uses semantic classes (drops shadcn)` |
+| 3.4 | `playground/app/Views/Demos/Sync.tsx` + `Ws.tsx` | `refactor(playground): Sync + Ws demos use semantic classes` |
+| 3.5 | `playground/app/Views/Demos/Pennant.tsx` + `PennantBeta.tsx` | `refactor(playground): Pennant demos use semantic classes (drops shadcn)` |
 
 Each: replace shadcn imports + raw Tailwind → native HTML + semantic classes; verify in browser; verify no-Tailwind path; commit.
+
+**Note:** `Index.tsx` already uses semantic classes (0 raw-Tailwind hits) — no audit task needed. `Billing.tsx`, `BillingSubscriptions.tsx`, `Avatar.tsx`, `Fibonacci.tsx`, `SystemInfo.tsx` also already semantic — no work.
 
 ### Task 3.6: Open the Phase 3 PR
 
@@ -713,9 +734,9 @@ gh pr create --title "refactor(playground): demos use semantic classes (no shadc
 
 ---
 
-## Phase 4 — Port Todos / Billing / Pennant demos into the scaffolder
+## Phase 4 — Port playground demos into the scaffolder
 
-**Why:** Now that the playground demos are styled portably and the scaffolder has cascade slots, port the missing demos. Each demo needs: view file + routes + (optionally) model + service + migration + config.
+**Why:** Now that the playground demos are styled portably and the scaffolder has cascade slots, port every demo that's tied to a Phase-2 package. Each demo needs: view file + routes + (optionally) model + service + migration + config. Avatar/Fibonacci/SystemInfo are eligible because Phase 2 adds image/process/concurrency to the multiselect.
 
 ### Task 4.1: Port Todos demo
 
@@ -778,10 +799,40 @@ Port `Pennant.tsx` + `PennantBeta.tsx`. Add `Pennant.feature(...)` definitions i
 git commit -m "feat(create-rudder-app): scaffold Pennant feature-flag demo when selected"
 ```
 
-### Task 4.4: Open the Phase 4 PR
+### Task 4.4: Port Avatar demo (gated on storage + image)
+
+Same pattern as 4.1. Port `playground/app/Views/Demos/Avatar.tsx` — file upload + image resize. Add `/demos/avatar` web route + `/api/avatar` upload endpoint. Already semantic — no styling work.
+
+**Step 4: Commit**
 
 ```bash
-gh pr create --title "feat(create-rudder-app): port Todos/Billing/Pennant demos from playground"
+git commit -m "feat(create-rudder-app): scaffold Avatar upload demo when Storage + Image selected"
+```
+
+### Task 4.5: Port Fibonacci demo (gated on concurrency)
+
+Port `playground/app/Views/Demos/Fibonacci.tsx` — parallel computation via worker threads. Add `/demos/fibonacci` route + the API endpoint that calls `Concurrency.run(...)`. Already semantic.
+
+**Step 4: Commit**
+
+```bash
+git commit -m "feat(create-rudder-app): scaffold Fibonacci concurrency demo when selected"
+```
+
+### Task 4.6: Port SystemInfo demo (gated on process)
+
+Port `playground/app/Views/Demos/SystemInfo.tsx` — runs shell commands (uname/uptime/etc) via `Process.run()`. Add `/demos/system-info` route + API endpoint. Already semantic.
+
+**Step 4: Commit**
+
+```bash
+git commit -m "feat(create-rudder-app): scaffold SystemInfo process demo when selected"
+```
+
+### Task 4.7: Open the Phase 4 PR
+
+```bash
+gh pr create --title "feat(create-rudder-app): port 6 playground demos (Todos/Billing/Pennant/Avatar/Fibonacci/SystemInfo)"
 ```
 
 ---
@@ -797,9 +848,11 @@ gh pr create --title "feat(create-rudder-app): port Todos/Billing/Pennant demos 
 | 5.1 | Cache counter | `cache` | "Page viewed N times" — counter persisted via `Cache.increment()` |
 | 5.2 | Job dispatch | `queue` | Button → dispatches `ExampleJob` → "queued, see Telescope" hint |
 | 5.3 | Mail send | `mail` | "Send test email" → log driver writes to terminal |
-| 5.4 | Storage upload | `storage` | File upload form, file list with download links |
-| 5.5 | Notifications trigger | `notifications` | Trigger a notification, show across mail+log channels |
-| 5.6 | Localization | `localization` | Language switcher → re-renders strings via `trans()` |
+| 5.4 | Notifications trigger | `notifications` | Trigger a notification, show across mail+log channels |
+| 5.5 | Localization | `localization` | Language switcher → re-renders strings via `trans()` |
+| 5.6 | HTTP client | `http` | "Fetch from external API" using `Http.get()` with retry + timeout |
+
+(Storage upload covered by Avatar port in Phase 4.4. Concurrency + Process covered by Fibonacci/SystemInfo ports in 4.5/4.6.)
 
 ### Task 5.X (template for each)
 
@@ -817,7 +870,7 @@ gh pr create --title "feat(create-rudder-app): port Todos/Billing/Pennant demos 
 ### Task 5.7: Open the Phase 5 PR
 
 ```bash
-gh pr create --title "feat(create-rudder-app): per-package demos (cache, queue, mail, storage, notifications, localization)"
+gh pr create --title "feat(create-rudder-app): per-package demos (cache, queue, mail, notifications, localization, http)"
 ```
 
 ---
@@ -893,4 +946,3 @@ gh pr create --title "feat(create-rudder-app): ORM=none survivability (storage f
 - Horizon/Pulse/Telescope as demos — they're dashboards, not features; the demos surface end-user behavior
 - Sanctum/Socialite demos — packages added in Phase 2, demo pages can come later
 - Demo gallery in playground that reads `DEMOS` registry — speculative, defer until needed
-- **0.x packages awaiting graduation** — Image (0.0.1), HTTP (0.0.2), Concurrency (0.0.1), Process (0.0.1). Scaffolder ships 1.0+ surface only. After each graduates, a small follow-up PR adds them to their existing categories: Image → Infrastructure; HTTP/Concurrency/Process → Utilities.
