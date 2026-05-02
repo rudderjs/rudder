@@ -19,6 +19,9 @@ dev.db
 .telescope.db
 .telescope.db-shm
 .telescope.db-wal
+.pulse.db
+.pulse.db-shm
+.pulse.db-wal
 bootstrap/cache/
 
 # Storage uploads

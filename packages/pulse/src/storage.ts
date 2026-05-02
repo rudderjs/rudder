@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
 import type {
   PulseAggregate, PulseEntry, PulseStorage,
   MetricType, EntryType, EntryListOptions,
@@ -118,11 +119,21 @@ export class SqliteStorage implements PulseStorage {
 
   private getDb(): import('better-sqlite3').Database {
     if (!this.db) {
-      const Database = (globalThis as Record<string, unknown>).__betterSqlite3 as typeof import('better-sqlite3') | undefined
+      // Load better-sqlite3 via createRequire so native bindings work under
+      // ESM + Vite SSR. Allow consumers to pre-stash the module on globalThis
+      // (e.g. when bundling) as an escape hatch.
+      let Database = (globalThis as Record<string, unknown>).__betterSqlite3 as typeof import('better-sqlite3') | undefined
       if (!Database) {
-        throw new Error(
-          '[RudderJS Pulse] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3',
-        )
+        try {
+          const req = createRequire(import.meta.url)
+          Database = req('better-sqlite3') as typeof import('better-sqlite3')
+        } catch (err) {
+          throw new Error(
+            '[RudderJS Pulse] better-sqlite3 is required for SQLite storage. Run: pnpm add better-sqlite3 ' +
+            `(load error: ${err instanceof Error ? err.message : String(err)})`,
+            { cause: err },
+          )
+        }
       }
       this.db = new (Database as unknown as new (path: string) => import('better-sqlite3').Database)(this.dbPath)
       this.migrate()
@@ -131,7 +142,13 @@ export class SqliteStorage implements PulseStorage {
   }
 
   private migrate(): void {
-    this.db!.exec(`
+    const db = this.db!
+    // WAL mode lets the dev server + worker process read/write the same file
+    // concurrently without "database is locked" errors. Required for queue
+    // metrics under BullMQ where the worker process emits `job.completed` /
+    // `job.failed` and the dashboard process serves `/pulse/api/queues`.
+    db.pragma('journal_mode = WAL')
+    db.exec(`
       CREATE TABLE IF NOT EXISTS pulse_aggregates (
         id         TEXT PRIMARY KEY,
         bucket     TEXT NOT NULL,
