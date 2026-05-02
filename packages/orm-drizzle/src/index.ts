@@ -1,6 +1,7 @@
 import {
   eq, ne, gt, gte, lt, lte, like, inArray, notInArray,
-  and, asc, desc, count as sqlCount, sql,
+  isNull, isNotNull,
+  and, or, asc, desc, count as sqlCount, sql,
   type Column, type SQL,
 } from 'drizzle-orm'
 import type {
@@ -53,10 +54,14 @@ export class DrizzleTableRegistry {
 // ─── Drizzle Query Builder ─────────────────────────────────
 
 class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
-  private _wheres:  WhereClause[] = []
-  private _orders:  OrderClause[] = []
-  private _limitN:  number | null = null
-  private _offsetN: number | null = null
+  private _wheres:      WhereClause[] = []
+  private _orWheres:    WhereClause[] = []
+  private _orders:      OrderClause[] = []
+  private _limitN:      number | null = null
+  private _offsetN:     number | null = null
+  private _withTrashed  = false
+  private _onlyTrashed  = false
+  private _softDeletes  = false
 
   constructor(
     private readonly db:         DrizzleDb,
@@ -73,8 +78,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return this
   }
 
-  orWhere(column: string, value: unknown): this {
-    this._wheres.push({ column, operator: '=', value })
+  orWhere(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
+    if (value === undefined) {
+      this._orWheres.push({ column, operator: '=', value: operatorOrValue })
+    } else {
+      this._orWheres.push({ column, operator: operatorOrValue as WhereOperator, value })
+    }
     return this
   }
 
@@ -86,52 +95,71 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
 
-  // Drizzle relational queries require pre-defined relation schemas — no-op here
+  // Drizzle relational queries require pre-defined relation schemas. We don't
+  // yet thread a relations object into the adapter, so eager-loading via .with()
+  // is not implemented. Calls are silently dropped to keep the QueryBuilder
+  // contract compatible across adapters; use Drizzle's relational query API
+  // directly when you need eager loading.
   with(..._relations: string[]): this { return this }
-
-  // Soft delete support
-  private _withTrashed  = false
-  private _onlyTrashed  = false
-  private _softDeletes  = false
 
   withTrashed(): this  { this._withTrashed = true; return this }
   onlyTrashed(): this  { this._onlyTrashed = true; return this }
+
+  /** @internal — called by Model to enable automatic soft delete filtering */
   _enableSoftDeletes(): this { this._softDeletes = true; return this }
 
   private col(column: string): unknown {
     return (this.table as Record<string, unknown>)[column]
   }
 
-  private buildConditions(): SQL | undefined {
-    const exprs = this._wheres.map(clause => {
-      const col = this.col(clause.column) as Column
-      switch (clause.operator) {
-        case '=':      return eq(col, clause.value)
-        case '!=':     return ne(col, clause.value)
-        case '>':      return gt(col, clause.value)
-        case '>=':     return gte(col, clause.value)
-        case '<':      return lt(col, clause.value)
-        case '<=':     return lte(col, clause.value)
-        case 'LIKE':   return like(col, clause.value as string)
-        case 'IN':     return inArray(col, clause.value as unknown[])
-        case 'NOT IN': return notInArray(col, clause.value as unknown[])
-      }
-    })
-
-    // Soft delete filtering
-    if (this._softDeletes && !this._withTrashed) {
-      const deletedAtCol = this.col('deletedAt') as Column | undefined
-      if (deletedAtCol) {
-        if (this._onlyTrashed) {
-          exprs.push(ne(deletedAtCol, null) as SQL)
-        } else {
-          exprs.push(eq(deletedAtCol, null) as SQL)
-        }
+  private clauseToExpr(clause: WhereClause): SQL {
+    const col = this.col(clause.column) as Column
+    switch (clause.operator) {
+      case '=':      return eq(col, clause.value) as SQL
+      case '!=':     return ne(col, clause.value) as SQL
+      case '>':      return gt(col, clause.value) as SQL
+      case '>=':     return gte(col, clause.value) as SQL
+      case '<':      return lt(col, clause.value) as SQL
+      case '<=':     return lte(col, clause.value) as SQL
+      case 'LIKE':   return like(col, clause.value as string) as SQL
+      case 'IN':     return inArray(col, clause.value as unknown[]) as SQL
+      case 'NOT IN': return notInArray(col, clause.value as unknown[]) as SQL
+      default: {
+        const _exhaustive: never = clause.operator
+        throw new Error(`[RudderJS ORM Drizzle] Unsupported operator: ${String(_exhaustive)}`)
       }
     }
+  }
 
-    if (!exprs.length) return undefined
-    return exprs.length === 1 ? exprs[0] : and(...(exprs as SQL[]))
+  private softDeleteExpr(): SQL | undefined {
+    if (!this._softDeletes || this._withTrashed) return undefined
+    const deletedAtCol = this.col('deletedAt') as Column | undefined
+    if (!deletedAtCol) return undefined
+    // SQL: `col = NULL` never matches — must use IS NULL / IS NOT NULL
+    return (this._onlyTrashed ? isNotNull(deletedAtCol) : isNull(deletedAtCol)) as SQL
+  }
+
+  private buildConditions(): SQL | undefined {
+    const andExprs: SQL[] = this._wheres.map(c => this.clauseToExpr(c))
+    const orExprs:  SQL[] = this._orWheres.map(c => this.clauseToExpr(c))
+
+    const softExpr = this.softDeleteExpr()
+    if (softExpr) andExprs.push(softExpr)
+
+    const hasAnd = andExprs.length > 0
+    const hasOr  = orExprs.length > 0
+
+    if (!hasAnd && !hasOr) return undefined
+
+    const andCombined: SQL | undefined = hasAnd
+      ? (andExprs.length === 1 ? andExprs[0] : and(...andExprs) as SQL)
+      : undefined
+    const orCombined: SQL | undefined = hasOr
+      ? (orExprs.length === 1 ? orExprs[0] : or(...orExprs) as SQL)
+      : undefined
+
+    if (andCombined && orCombined) return or(andCombined, orCombined) as SQL
+    return (andCombined ?? orCombined) as SQL
   }
 
   private buildOrderBy(): SQL[] {
@@ -155,11 +183,15 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async find(id: number | string): Promise<T | null> {
-    const pkCol = this.col(this.primaryKey) as Column
+    const pkCol    = this.col(this.primaryKey) as Column
+    const softExpr = this.softDeleteExpr()
+    const pkExpr   = eq(pkCol, id) as SQL
+    const cond     = softExpr ? and(pkExpr, softExpr) as SQL : pkExpr
+
     const result = await (this.db
       .select()
       .from(this.table)
-      .where(eq(pkCol, id))
+      .where(cond)
       .limit(1) as unknown as Promise<T[]>)
     return result[0] ?? null
   }
@@ -178,7 +210,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async all(): Promise<T[]> {
-    return this.db.select().from(this.table) as unknown as Promise<T[]>
+    return this.get()
   }
 
   async count(): Promise<number> {
@@ -214,11 +246,8 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async delete(id: number | string): Promise<void> {
     const pkCol = this.col(this.primaryKey) as Column
     if (this._softDeletes) {
-      const deletedAtCol = this.col('deletedAt') as Column
-      if (deletedAtCol) {
-        await (this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)) as unknown as Promise<void>)
-        return
-      }
+      await (this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)) as unknown as Promise<void>)
+      return
     }
     await (this.db
       .delete(this.table)
@@ -302,9 +331,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
 // ─── Drizzle Adapter ───────────────────────────────────────
 
-class DrizzleAdapter implements OrmAdapter {
+export class DrizzleAdapter implements OrmAdapter {
   private constructor(
-    private readonly db:         DrizzleDb,
+    readonly db:                 DrizzleDb,
     private readonly tables:     Record<string, unknown>,
     private readonly primaryKey: string,
   ) {}
@@ -381,5 +410,67 @@ export function drizzle(config: DrizzleConfig = {}): OrmAdapterProvider {
     async create(): Promise<OrmAdapter> {
       return DrizzleAdapter.make(config)
     },
+  }
+}
+
+// ─── DatabaseProvider ──────────────────────────────────────
+
+import { ServiceProvider, config as appConfig } from '@rudderjs/core'
+import { ModelRegistry } from '@rudderjs/orm'
+
+export interface DatabaseConnectionConfig {
+  driver: 'sqlite' | 'postgresql' | 'libsql'
+  url?:   string
+}
+
+/**
+ * Database config consumed by `DatabaseProvider`.
+ *
+ * Mirrors the Prisma adapter's `DatabaseConfig` shape (`default` + `connections`)
+ * so apps can switch drivers without restructuring their `config/database.ts`,
+ * with two Drizzle-specific extras:
+ *
+ * - `tables` — map of table name → drizzle table object (Drizzle is schema-first
+ *   in TypeScript; the adapter needs the table objects to build queries).
+ * - `client` — pre-built drizzle db instance, for tests or hand-wired setups.
+ */
+export interface DatabaseConfig {
+  default:     string
+  connections: Record<string, DatabaseConnectionConfig>
+  tables?:     Record<string, unknown>
+  client?:     unknown
+}
+
+/**
+ * Auto-discovered service provider that boots a `DrizzleAdapter` from
+ * `config('database')` and registers it on the DI container.
+ *
+ * Wires:
+ *   - `ModelRegistry.set(adapter)` so `@rudderjs/orm` Models route through it
+ *   - `app.instance('db', adapter)` for direct DI lookup
+ */
+export class DatabaseProvider extends ServiceProvider {
+  register(): void {}
+
+  async boot(): Promise<void> {
+    const cfg = appConfig<DatabaseConfig | undefined>('database', undefined)
+
+    const drizzleConfig: DrizzleConfig = {}
+
+    if (cfg) {
+      const conn = cfg.connections[cfg.default]
+      if (conn) {
+        drizzleConfig.driver = conn.driver
+        if (conn.url !== undefined) drizzleConfig.url = conn.url
+      }
+      if (cfg.tables) drizzleConfig.tables = cfg.tables
+      if (cfg.client) drizzleConfig.client = cfg.client
+    }
+
+    const adapter = await DrizzleAdapter.make(drizzleConfig)
+    await adapter.connect()
+
+    ModelRegistry.set(adapter)
+    this.app.instance('db', adapter)
   }
 }

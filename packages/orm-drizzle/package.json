@@ -2,6 +2,11 @@
   "name": "@rudderjs/orm-drizzle",
   "version": "0.1.0",
   "description": "Drizzle ORM adapter for RudderJS. Implements OrmAdapterProvider / OrmAdapter / QueryBuilder<T> using Drizzle's SQL-like fluent API.",
+  "rudderjs": {
+    "provider": "DatabaseProvider",
+    "stage": "infrastructure",
+    "optional": true
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,12 +31,14 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/*.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.0",
-    "@rudderjs/contracts": "workspace:^"
+    "@rudderjs/contracts": "workspace:^",
+    "@rudderjs/core": "workspace:^",
+    "@rudderjs/orm": "workspace:^"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.0.0",
