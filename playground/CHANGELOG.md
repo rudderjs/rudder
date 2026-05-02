@@ -1,5 +1,12 @@
 # rudderjs-playground
 
+## 0.0.35
+
+### Patch Changes
+
+- Updated dependencies [f4863b4]
+  - @rudderjs/pulse@6.1.1
+
 ## 0.0.34
 
 ### Patch Changes
