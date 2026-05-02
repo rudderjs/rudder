@@ -41,7 +41,7 @@ Pulse ships seven recorders. Each one subscribes to its peer package's hooks (or
 | Recorder | Source | Records |
 |---|---|---|
 | **RequestRecorder** | Global middleware | `request_count`, `request_duration`, `slow_request` entries |
-| **QueueRecorder** | Wraps `@rudderjs/queue` adapter | `queue_throughput`, `queue_wait_time`, `failed_job` entries |
+| **QueueRecorder** | `@rudderjs/queue/observers` (cross-process) | `queue_throughput`, `queue_wait_time`, `failed_job` entries |
 | **CacheRecorder** | Wraps `@rudderjs/cache` adapter | `cache_hits`, `cache_misses` |
 | **ExceptionRecorder** | Hooks `@rudderjs/core`'s exception reporter | `exceptions`, `exception` entries |
 | **QueryRecorder** | Hooks `@rudderjs/orm` adapter `onQuery` | `slow_query` entries |
@@ -78,12 +78,14 @@ storage:    'memory',  // 'memory' | 'sqlite'
 sqlitePath: '.pulse.db',
 ```
 
-| Driver | Persistence | When to use |
-|---|---|---|
-| `memory` *(default)* | In-process | Dev, single-process apps where a bit of metric loss on restart is acceptable |
-| `sqlite` | Persistent via `better-sqlite3` | Production single-node deployments |
+| Driver | Persistence | Cross-process | When to use |
+|---|---|---|---|
+| `memory` *(default)* | In-process | No | Dev with the `sync` queue driver, single-process apps where a bit of metric loss on restart is acceptable |
+| `sqlite` | Persistent via `better-sqlite3` | Yes (WAL) | Production single-node deployments — **required when using BullMQ** so the dashboard process and the worker process share queue metrics |
 
-For sqlite, install the optional peer: `pnpm add better-sqlite3`. The driver writes to `sqlitePath` in WAL mode so dev server + CLI commands can read/write concurrently.
+For sqlite, install the optional peer: `pnpm add better-sqlite3`. The driver writes to `sqlitePath` in WAL journal mode so the dev server, CLI commands, and worker process can read/write the same file concurrently.
+
+**BullMQ caveat:** with `storage: 'memory'`, queue metrics live in whichever process emits them — the dashboard sees its own dispatches but never the worker's `completed` / `failed` events, and `/pulse/api/queues` returns empty. Switch to `storage: 'sqlite'` to get true cross-process queue throughput and wait time.
 
 Multi-node deployments need a custom driver — implement the `PulseStorage` contract from `@rudderjs/pulse`'s `types.ts` and register your driver via your own provider.
 
@@ -152,7 +154,7 @@ curl http://localhost:3000/test/pulse
 
 Then open `/pulse`. The Cache, Requests, Queue, Exceptions, and Slow Requests sections should all show non-zero data within ~10 s (the dashboard's auto-refresh interval). Active Users counts the request itself. Server CPU / Memory populate independently on the periodic timer (default every 15 s).
 
-Unlike Horizon, Pulse does **not** need a separate worker process — recorders fire on the request middleware as web traffic flows through. Sync queue driver is fine for the demo; BullMQ is fine too.
+Pulse's request, cache, exception, query, user, and server recorders all fire in the dashboard process — no separate worker needed. The queue recorder works the same way under the `sync` driver. Under BullMQ the worker process emits `job.completed` / `job.failed` events; pair `storage: 'sqlite'` with the worker (`pnpm rudder queue:work`) so those metrics reach the dashboard.
 
 ## Pulse vs Telescope vs Horizon
 
@@ -174,3 +176,5 @@ Most apps keep Telescope in dev only, Horizon optional, and Pulse always-on for 
 - **Server CPU is OS-load, not Node-only.** `ServerRecorder` reads `os.cpus()` — that's the *whole machine*, not just the Node process. Useful as a "is the box hot" signal, not for measuring app cost.
 - **No path-level breakdowns by default.** Aggregates are keyless unless you record with a `key`. To track requests per route, call `Pulse.record('request_count', 1, req.path)` from your own middleware. RequestRecorder intentionally keys nothing to avoid cardinality blow-up on dynamic paths.
 - **Recorder classes were renamed in 6.0.** `RequestAggregator` → `RequestRecorder`, etc. — the `Aggregator` interface is now `Recorder`. The change aligns with Laravel Pulse's vocabulary; the runtime behavior is identical.
+- **`QueueRecorder` semantics in 6.1.** `queue_throughput` now increments on terminal states (`job.completed` / `job.failed`), so it counts jobs *processed* per minute, not *dispatched* per minute. `queue_wait_time` is the true queue-to-active wait (`startedAt - dispatchedAt`), not the enqueue duration. Anyone alerting off pre-6.1 numbers should re-baseline.
+- **MemoryStorage + BullMQ = empty queue metrics.** See the storage table — switch to `sqlite` to get cross-process queue visibility under BullMQ.

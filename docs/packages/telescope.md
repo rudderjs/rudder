@@ -36,7 +36,7 @@ Run `pnpm rudder providers:discover` after install. The UI lives at `/{path}` (d
 |---|---|---|
 | `request` | router | HTTP requests + responses |
 | `query` | orm | DB queries (flags slow ones) |
-| `job` | queue | Job dispatch and execution |
+| `job` | queue | Job lifecycle — one entry per terminal state (`dispatched`, `completed`, `failed`) with shared `jobId` |
 | `exception` | core | Unhandled exceptions |
 | `log` | log | All log channels |
 | `mail` | mail | Sent emails |
@@ -85,7 +85,7 @@ await Telescope.prune('log')
 | Driver | When |
 |---|---|
 | `memory` (default) | Development. In-process, bounded by `maxEntries`. |
-| `sqlite` | Persistent. Install `better-sqlite3` as a peer. |
+| `sqlite` | Persistent. Install `better-sqlite3` as a peer. WAL journal mode is enabled by default so the dev server, CLI commands, and BullMQ worker process all read/write the same `.telescope.db` concurrently — required for cross-process job lifecycle entries. |
 
 ```ts
 storage:    'sqlite',
@@ -134,6 +134,7 @@ Pause and resume from the dashboard or via the API. The toggle lives on `globalT
 - **Exception collector failing on its own error.** The collector must swallow internal errors (try/catch around `record()`) to prevent cascading stack overflows.
 - **Field-name mismatch in detail vs list.** When a collector writes `agentName` but the list config expects `agent`, the entry shows in the list with a dash and full data in detail. Keep the column config and collector aligned.
 - **Dump line numbers off in dev.** Under Vite SSR, line numbers are off by ~40-50 because Vite's Module Runner uses `new Function()` and source maps don't apply. Production reports correct lines.
+- **Job entries split across processes (10.1+).** Telescope writes one entry per terminal lifecycle state — `dispatched` from the dispatcher process (with the request `batchId`), `completed`/`failed` from the worker process (no `batchId`). Use the `jobId` field to correlate dispatcher / worker rows for the same job. Under BullMQ this requires `storage: 'sqlite'` so both processes share the same DB; with `storage: 'memory'` the worker writes to its own process memory and never reaches the dashboard.
 
 ## Related
 
