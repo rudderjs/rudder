@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * Live demo tests — baseline for WebSocket/Yjs functionality.
- * The live-demo page uses direct Y.Doc + WebsocketProvider (no Lexical).
+ * Sync demo tests — baseline for WebSocket/Yjs functionality.
+ * The sync-demo page uses direct Y.Doc + WebsocketProvider (no Lexical).
  * If these pass but collaborative.spec.ts fails, the issue is in the Lexical integration.
  */
 
@@ -21,11 +21,11 @@ async function waitForConnected(page: Page) {
   await page.waitForTimeout(500)
 }
 
-test.describe('Live Demo — WebSocket baseline', () => {
+test.describe('Sync Demo — WebSocket baseline', () => {
   test('single user: type and see value', async ({ page }) => {
     page.on('console', msg => { if (msg.type() === 'error' || msg.type() === 'warning') console.log(`[browser:${msg.type()}] ${msg.text()}`) })
 
-    await page.goto('/demos/live')
+    await page.goto('/demos/sync')
     await waitForConnected(page)
 
     const value = `Hello-${Date.now().toString().slice(-6)}`
@@ -46,8 +46,8 @@ test.describe('Live Demo — WebSocket baseline', () => {
     page2.on('console', msg => { if (msg.type() === 'error' || msg.type() === 'warning') console.log(`[user2:${msg.type()}] ${msg.text()}`) })
 
     try {
-      await page1.goto('/demos/live')
-      await page2.goto('/demos/live')
+      await page1.goto('/demos/sync')
+      await page2.goto('/demos/sync')
       await waitForConnected(page1)
       await waitForConnected(page2)
 
@@ -71,8 +71,8 @@ test.describe('Live Demo — WebSocket baseline', () => {
     const page2 = await ctx2.newPage()
 
     try {
-      await page1.goto('/demos/live')
-      await page2.goto('/demos/live')
+      await page1.goto('/demos/sync')
+      await page2.goto('/demos/sync')
       await waitForConnected(page1)
       await waitForConnected(page2)
 
@@ -86,7 +86,7 @@ test.describe('Live Demo — WebSocket baseline', () => {
       await page2.waitForTimeout(1000)
 
       // User 2 refreshes
-      await page2.goto('/demos/live')
+      await page2.goto('/demos/sync')
       await waitForConnected(page2)
 
       const afterRefresh = await getTextareaValue(page2)
@@ -106,7 +106,7 @@ test.describe('Live Demo — WebSocket baseline', () => {
       if (msg.type() === 'warning' && msg.text().includes('WebSocket')) errors.push(msg.text())
     })
 
-    await page.goto('/demos/live')
+    await page.goto('/demos/sync')
     await waitForConnected(page)
     await page.waitForTimeout(2000)
 

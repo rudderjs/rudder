@@ -76,8 +76,8 @@ Route.get('/demos/system-info', async () => view('demos.system-info'))
 // GET handler for /api/fib lives in routes/api.ts.
 Route.get('/demos/fibonacci', async () => view('demos.fibonacci'))
 
-// GET /demos/live — Yjs CRDT collaborative editor (@rudderjs/sync).
-Route.get('/demos/live', async () => view('demos.live'))
+// GET /demos/sync — Yjs CRDT collaborative editor (@rudderjs/sync).
+Route.get('/demos/sync', async () => view('demos.sync'))
 
 // GET /demos/ws — WebSocket chat + presence (@rudderjs/broadcast).
 Route.get('/demos/ws', async () => view('demos.ws'))

@@ -8,6 +8,20 @@ export class CancelledError extends Error {
   }
 }
 
+// ─── CLI Error ─────────────────────────────────────────────
+
+/**
+ * Thrown by command handlers to abort with a specific exit code and a clean
+ * message (no stack trace). The CLI runner (`@rudderjs/cli`) recognises this
+ * and exits with the given code.
+ */
+export class CliError extends Error {
+  constructor(message: string, readonly exitCode: number = 1) {
+    super(message)
+    this.name = 'CliError'
+  }
+}
+
 // ─── Rudder Registry ──────────────────────────────────────
 
 export type ConsoleHandler = (args: string[], opts: Record<string, unknown>) => void | Promise<void>
