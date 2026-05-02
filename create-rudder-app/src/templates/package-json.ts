@@ -90,9 +90,15 @@ export function packageJson(ctx: TemplateContext): string {
     deps['@rudderjs/orm-drizzle'] = 'latest'
   }
 
+  // Tier A — always installed silently. Required by default bootstrap (cache for
+  // RateLimit middleware) or peer of Auth (session for cookies/CSRF, hash for
+  // password hashing — also useful standalone).
+  deps['@rudderjs/session'] = 'latest'
+  deps['@rudderjs/hash']    = 'latest'
+  deps['@rudderjs/cache']   = 'latest'
+
   // Optional package deps
-  if (ctx.packages.auth)         { deps['@rudderjs/auth'] = 'latest'; deps['@rudderjs/session'] = 'latest'; deps['@rudderjs/hash'] = 'latest' }
-  if (ctx.packages.cache)         deps['@rudderjs/cache']        = 'latest'
+  if (ctx.packages.auth)          deps['@rudderjs/auth']         = 'latest'
   if (ctx.packages.queue)         deps['@rudderjs/queue']        = 'latest'
   if (ctx.packages.storage)       deps['@rudderjs/storage']      = 'latest'
   if (ctx.packages.mail)          deps['@rudderjs/mail']         = 'latest'

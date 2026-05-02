@@ -17,7 +17,6 @@ const ctx: TemplateContext = {
   pm:         'pnpm',
   packages: {
     auth:          true,
-    cache:         true,
     queue:         true,
     storage:       true,
     mail:          true,
@@ -49,7 +48,7 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline captured 2026-05-02 before Phase 1 refactor.
+  // Baseline last captured 2026-05-02 (Phase 2 Task 2.1 — Tier A silent install).
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -59,7 +58,7 @@ test('getTemplates() output is byte-stable across refactor', () => {
 
 const EXPECTED_FILE_COUNT = 58
 const EXPECTED_TOTAL_BYTES = 59688
-const EXPECTED_CONTENT_HASH = 'dd43cb91e481cd931c193254771187d3a6498709b31ce3aa538751ddcfb841a1'
+const EXPECTED_CONTENT_HASH = '332bb1cc7bd8b2b4e3d8c3ccc74e0abc48c4bc45c49b13e8c3f30e11519b79bb'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',

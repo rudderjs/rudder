@@ -5,25 +5,25 @@ import { getTemplates, pmExec, pmRun, pmInstall, type TemplateContext } from './
 // ─── Helpers ───────────────────────────────────────────────
 
 const defaultPkgs: TemplateContext['packages'] = {
-  auth: true, cache: true, queue: false, storage: false,
+  auth: true, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
   broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
-  auth: false, cache: false, queue: false, storage: false,
+  auth: false, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
   broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
 }
 
 const noAuth: TemplateContext['packages'] = {
-  auth: false, cache: true, queue: false, storage: false,
+  auth: false, queue: false, storage: false,
   mail: false, notifications: false, scheduler: false,
   broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
 }
 
 const allPkgs: TemplateContext['packages'] = {
-  auth: true, cache: true, queue: true, storage: true,
+  auth: true, queue: true, storage: true,
   mail: true, notifications: true, scheduler: true,
   broadcast: true, sync: true, ai: true, mcp: true, passport: true, localization: true, telescope: true, boost: true, demos: true,
 }
@@ -506,32 +506,32 @@ describe('getTemplates() — package checklist', () => {
   })
 
   it('auth not selected → no auth schema, no config/auth.ts, no @rudderjs/auth in deps', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
+    const files = getTemplates(ctx({ packages: { ...noPkgs } }))
     assert.ok(!('prisma/schema/auth.prisma' in files))
     assert.ok(!('config/auth.ts' in files))
-    assert.ok(!('config/session.ts' in files))
     assert.ok(!('app/Models/User.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
     assert.ok(!('@rudderjs/auth' in pkg.dependencies))
-    assert.ok(!('@rudderjs/session' in pkg.dependencies))
   })
 
   it('auth selected → auth schema, config/auth.ts, @rudderjs/auth in deps', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
     assert.ok('prisma/schema/auth.prisma' in files)
     assert.ok('config/auth.ts' in files)
-    assert.ok('config/session.ts' in files)
     assert.ok('app/Models/User.ts' in files)
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('@rudderjs/auth' in pkg.dependencies)
-    assert.ok('@rudderjs/session' in pkg.dependencies)
   })
 
-  it('cache not selected → no config/cache.ts, no @rudderjs/cache in deps', () => {
+  it('Tier A — session/hash/cache always installed regardless of selection', () => {
     const files = getTemplates(ctx({ packages: noPkgs }))
-    assert.ok(!('config/cache.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok(!('@rudderjs/cache' in pkg.dependencies))
+    assert.ok('@rudderjs/session' in pkg.dependencies, 'session must always be in deps')
+    assert.ok('@rudderjs/hash'    in pkg.dependencies, 'hash must always be in deps')
+    assert.ok('@rudderjs/cache'   in pkg.dependencies, 'cache must always be in deps')
+    assert.ok('config/session.ts' in files, 'config/session.ts must always be generated')
+    assert.ok('config/hash.ts'    in files, 'config/hash.ts must always be generated')
+    assert.ok('config/cache.ts'   in files, 'config/cache.ts must always be generated')
   })
 
   it('queue selected → config/queue.ts, @rudderjs/queue in deps', () => {
@@ -553,7 +553,6 @@ describe('getTemplates() — package checklist', () => {
     const providers = files['bootstrap/providers.ts']!
     assert.ok(providers.includes('AppServiceProvider'))
     assert.ok(!providers.includes('@rudderjs/auth'))
-    assert.ok(!providers.includes('@rudderjs/cache'))
     assert.ok(!providers.includes('@rudderjs/queue'))
   })
 
@@ -573,7 +572,10 @@ describe('getTemplates() — package checklist', () => {
     assert.ok(index.includes("from './app.js'"))
     assert.ok(index.includes("from './server.js'"))
     assert.ok(!index.includes("from './auth.js'"))
-    assert.ok(!index.includes("from './cache.js'"))
+    // Tier A — session/hash/cache always wired
+    assert.ok(index.includes("from './session.js'"))
+    assert.ok(index.includes("from './hash.js'"))
+    assert.ok(index.includes("from './cache.js'"))
   })
 
   it('base deps always included regardless of package selection', () => {
@@ -643,15 +645,10 @@ describe('getTemplates() — log and hash configs', () => {
     assert.ok(files['config/log.ts']!.includes('LogConfig'))
   })
 
-  it('config/hash.ts generated when auth selected', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+  it('config/hash.ts always generated (Tier A)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
     assert.ok('config/hash.ts' in files)
     assert.ok(files['config/hash.ts']!.includes('HashConfig'))
-  })
-
-  it('config/hash.ts not generated when auth not selected', () => {
-    const files = getTemplates(ctx({ packages: noPkgs }))
-    assert.ok(!('config/hash.ts' in files))
   })
 
   it('@rudderjs/log always in base deps', () => {
@@ -660,8 +657,8 @@ describe('getTemplates() — log and hash configs', () => {
     assert.ok('@rudderjs/log' in pkg.dependencies)
   })
 
-  it('@rudderjs/hash in deps when auth selected', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+  it('@rudderjs/hash always in deps (Tier A)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('@rudderjs/hash' in pkg.dependencies)
   })
@@ -680,8 +677,8 @@ describe('getTemplates() — log and hash configs', () => {
     assert.ok(files['config/index.ts']!.includes("from './log.js'"))
   })
 
-  it('config/index.ts includes hash when auth selected', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+  it('config/index.ts always includes hash (Tier A)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
     assert.ok(files['config/index.ts']!.includes("from './hash.js'"))
   })
 })
@@ -695,7 +692,7 @@ describe('getTemplates() — log and hash configs', () => {
 
 describe('getTemplates() — WebContainer-aware config defaults', () => {
   it('config/cache.ts gates default store on isWebContainer()', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
+    const files = getTemplates(ctx({ packages: noPkgs }))
     const cache = files['config/cache.ts']!
     assert.ok(cache.includes("import { Env, isWebContainer } from '@rudderjs/support'"))
     assert.ok(cache.includes("isWebContainer() ? 'memory'"))

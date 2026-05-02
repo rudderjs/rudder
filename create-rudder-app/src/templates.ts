@@ -63,7 +63,6 @@ export interface TemplateContext {
   pm:         PackageManager
   packages: {
     auth:          boolean
-    cache:         boolean
     queue:         boolean
     storage:       boolean
     mail:          boolean
@@ -110,19 +109,19 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['bootstrap/app.ts']       = bootstrapApp(ctx)
   files['bootstrap/providers.ts'] = bootstrapProviders(ctx)
 
-  // Config files — always generated
+  // Config files — always generated (Tier A silent install + framework defaults)
   files['config/app.ts']      = configApp()
   files['config/server.ts']   = configServer()
   files['config/log.ts']      = configLog()
+  files['config/session.ts']  = configSession()
+  files['config/hash.ts']     = configHash()
+  files['config/cache.ts']    = configCache()
 
   // Config files — conditional on selected packages
   if (ctx.orm)                    files['config/database.ts'] = configDatabase(ctx)
   if (ctx.packages.auth)         files['config/auth.ts']     = configAuth(ctx)
-  if (ctx.packages.auth)         files['config/session.ts']  = configSession()
-  if (ctx.packages.auth)         files['config/hash.ts']     = configHash()
   if (ctx.packages.queue)        files['config/queue.ts']    = configQueue()
   if (ctx.packages.mail)         files['config/mail.ts']     = configMail()
-  if (ctx.packages.cache)        files['config/cache.ts']    = configCache()
   if (ctx.packages.storage)      files['config/storage.ts']  = configStorage()
   if (ctx.packages.ai)           files['config/ai.ts']       = configAi()
   if (ctx.packages.sync)         files['config/sync.ts']     = configSync(ctx)

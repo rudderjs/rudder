@@ -68,7 +68,6 @@ async function main(): Promise<void> {
     message: 'Select packages to include',
     options: [
       { value: 'auth',          label: 'Authentication',   hint: 'login, register, sessions' },
-      { value: 'cache',         label: 'Cache',            hint: 'memory + Redis drivers' },
       { value: 'queue',         label: 'Queue',            hint: 'background jobs' },
       { value: 'storage',       label: 'Storage',          hint: 'file uploads (local + S3)' },
       { value: 'mail',          label: 'Mail',             hint: 'SMTP + log driver' },
@@ -84,7 +83,7 @@ async function main(): Promise<void> {
       { value: 'boost',         label: 'Boost (AI coding DX)', hint: 'expose project internals to Claude Code / Cursor / Copilot via MCP' },
       { value: 'demos',         label: 'Demos',            hint: 'sample views (contact, ws, live) under /demos — react primary only' },
     ],
-    initialValues: ['auth', 'cache'],
+    initialValues: ['auth'],
     required: false,
   })
   if (isCancel(packageAnswer)) { cancel('Cancelled.'); process.exit(0) }
@@ -92,7 +91,6 @@ async function main(): Promise<void> {
 
   const packages = {
     auth:          selectedPackages.includes('auth'),
-    cache:         selectedPackages.includes('cache'),
     queue:         selectedPackages.includes('queue'),
     storage:       selectedPackages.includes('storage'),
     mail:          selectedPackages.includes('mail'),
