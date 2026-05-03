@@ -325,12 +325,13 @@ export class UserRegistered {
 
 ```ts
 // bootstrap/providers.ts — register listeners
-import { events } from '@rudderjs/core'
+import { defaultProviders, eventsProvider } from '@rudderjs/core'
 import { UserRegistered } from '../app/Events/UserRegistered.js'
 import { SendWelcomeEmailListener } from '../app/Listeners/SendWelcomeEmailListener.js'
 
 export default [
-  events({ [UserRegistered.name]: [new SendWelcomeEmailListener()] }),
+  ...(await defaultProviders()),
+  eventsProvider({ [UserRegistered.name]: [SendWelcomeEmailListener] }),
   // ...other providers
 ]
 ```
@@ -375,10 +376,10 @@ broadcast('private-orders.42', 'status.updated', { status: 'shipped' })
 ```
 
 ```ts
-// Client (BKSocket — publish with: pnpm rudder vendor:publish --tag=broadcast-client)
-import { BKSocket } from './vendor/BKSocket'
+// Client (RudderSocket — publish with: pnpm rudder vendor:publish --tag=broadcast-client)
+import { RudderSocket } from './vendor/RudderSocket'
 
-const socket = new BKSocket('ws://localhost:3000/ws')
+const socket = new RudderSocket('ws://localhost:3000/ws')
 
 const chat = socket.channel('chat')
 chat.on('message', ({ user, text }) => console.log(`${user}: ${text}`))
@@ -436,7 +437,7 @@ const svc = resolve<UserService>(UserService)
 
 ## Packages (46)
 
-> **45 first-party packages** across 9 categories — everything from DI and routing to AI agents, real-time CRDT, and production monitoring. All under one monorepo, all opt-in.
+> **46 first-party packages** across 9 categories — everything from DI and routing to AI agents, real-time CRDT, and production monitoring. All under one monorepo, all opt-in.
 
 ### Foundation (7)
 | Package | Description |

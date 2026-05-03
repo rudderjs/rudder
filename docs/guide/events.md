@@ -96,11 +96,11 @@ Wildcard listeners receive the event object as their `handle()` argument — use
 For programmatic registration (e.g. inside a service provider's `boot()`), reach for the global dispatcher:
 
 ```ts
-import { events } from '@rudderjs/core'
+import { dispatcher } from '@rudderjs/core'
 
-events().register('UserRegistered', new SendWelcomeEmail())
-events().has('UserRegistered')          // boolean
-events().listenerCount('UserRegistered') // number
+dispatcher.register('UserRegistered', new SendWelcomeEmail())
+dispatcher.hasListeners('UserRegistered')   // boolean
+dispatcher.listenerCount('UserRegistered')  // number
 ```
 
 Most apps stick with `eventsProvider({...})` — it's declarative and the listener map is one place to read.
