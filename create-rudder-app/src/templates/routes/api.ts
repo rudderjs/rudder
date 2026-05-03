@@ -8,6 +8,7 @@ import { demosMailApiBlock } from '../demos/mail.js'
 import { demosNotificationsApiBlock } from '../demos/notifications.js'
 import { demosLocalizationApiBlock } from '../demos/localization.js'
 import { demosHttpApiBlock } from '../demos/http.js'
+import { demosPolymorphicApiBlock } from '../demos/polymorphic.js'
 
 export function routesApi(ctx: TemplateContext): string {
   const imports: string[] = [
@@ -168,6 +169,14 @@ router.get('/api/ws/ping', (_req, res) => res.json(broadcastStats()))`)
     if (shouldScaffoldDemo(ctx, 'http')) {
       lines.push('')
       lines.push(demosHttpApiBlock())
+    }
+    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
+      imports.push(`import { Model } from '@rudderjs/orm'`)
+      imports.push(`import { Post } from '../app/Models/Post.ts'`)
+      imports.push(`import { Video } from '../app/Models/Video.ts'`)
+      imports.push(`import { Comment } from '../app/Models/Comment.ts'`)
+      lines.push('')
+      lines.push(demosPolymorphicApiBlock())
     }
   }
 

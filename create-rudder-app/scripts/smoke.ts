@@ -154,7 +154,7 @@ const profiles: Record<string, TemplateContext> = {
       crypt: false, http: true, process: true, concurrency: true,
     },
     demos: [
-      'contact', 'todos', 'avatar', 'fibonacci', 'system-info', 'pennant',
+      'contact', 'todos', 'polymorphic', 'avatar', 'fibonacci', 'system-info', 'pennant',
       'cache', 'queue', 'mail', 'notifications', 'localization', 'http',
     ],
   },

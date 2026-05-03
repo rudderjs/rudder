@@ -1,4 +1,5 @@
 import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
+import { demosPolymorphicWebBlock } from '../demos/polymorphic.js'
 
 export function routesWeb(ctx: TemplateContext): string {
   const hasAuth     = ctx.packages.auth
@@ -93,6 +94,11 @@ Route.get('/', async () => {${hasAuth ? `
       imports.push(`import { resolve } from '@rudderjs/core'`)
       imports.push(`import { TodoService } from '../app/Modules/Todo/TodoService.ts'`)
     }
+    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
+      imports.push(`import { Post } from '../app/Models/Post.ts'`)
+      imports.push(`import { Video } from '../app/Models/Video.ts'`)
+      imports.push(`import type { Comment } from '../app/Models/Comment.ts'`)
+    }
     if (shouldScaffoldDemo(ctx, 'pennant')) {
       imports.push(`import { Feature, FeatureMiddleware } from '@rudderjs/pennant'`)
       // auth().user() — Pennant demo gates on `auth` so the import is always available
@@ -108,6 +114,9 @@ Route.get('/', async () => {${hasAuth ? `
       lines.push(`  const todos = await resolve<TodoService>(TodoService).findAll()`)
       lines.push(`  return view('demos.todos', { todos })`)
       lines.push(`})`)
+    }
+    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
+      lines.push(demosPolymorphicWebBlock())
     }
     if (shouldScaffoldDemo(ctx, 'avatar'))        lines.push(`Route.get('/demos/avatar',        async () => view('demos.avatar'))`)
     if (shouldScaffoldDemo(ctx, 'fibonacci'))     lines.push(`Route.get('/demos/fibonacci',     async () => view('demos.fibonacci'))`)
