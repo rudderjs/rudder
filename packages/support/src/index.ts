@@ -152,7 +152,7 @@ export class ConfigRepository {
     if (this._cache.has(key)) {
       const v = this._cache.get(key)
       if (v === ConfigRepository._MISS) return fallback as T
-      return (v !== undefined ? v : fallback) as T
+      return v as T
     }
     const parts = key.split('.')
     let current: unknown = this.data

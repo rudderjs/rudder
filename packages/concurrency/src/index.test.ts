@@ -111,13 +111,21 @@ describe('Concurrency.fake()', () => {
 })
 
 describe('Concurrency.defer() — error handling', () => {
-  it('defer() swallows errors instead of throwing', async () => {
+  it('defer() swallows errors instead of throwing, and logs them', async () => {
     Concurrency.fake()
-    // Should not throw — errors in deferred tasks are caught and logged.
-    assert.doesNotThrow(() => {
-      Concurrency.defer(() => { throw new Error('deferred-error') })
-    })
-    // Give the microtask a chance to run so any re-throws would surface.
-    await new Promise(r => setTimeout(r, 20))
+    const logged: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => { logged.push(args.map(String).join(' ')) }
+    try {
+      // Should not throw — errors in deferred tasks are caught and logged.
+      assert.doesNotThrow(() => {
+        Concurrency.defer(() => { throw new Error('deferred-error') })
+      })
+      // Give the microtask a chance to run.
+      await new Promise(r => setTimeout(r, 30))
+      assert.ok(logged.some(l => l.includes('deferred-error')), 'Expected error to be logged')
+    } finally {
+      console.error = original
+    }
   })
 })
