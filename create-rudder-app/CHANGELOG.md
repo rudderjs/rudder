@@ -1,5 +1,11 @@
 # create-rudder-app
 
+## 0.7.0
+
+### Minor Changes
+
+- 4708f99: Add `polymorphic` to the demo multiselect (gated on ORM, parallel to `todos`). Selecting it scaffolds Post/Video/Comment models with `morphMany`/`morphTo` relations, the Prisma block (camelCase `commentableId`/`commentableType` + index), the `/demos/polymorphic` controller, and six API endpoints exercising `Model.morph()` writes + `morphTo` resolution against a closed `types: () => [Post, Video]` list. Mirrors the playground demo from rudder #197.
+
 ## 0.6.1
 
 ### Patch Changes
