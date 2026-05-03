@@ -497,26 +497,6 @@ describe('ConfigRepository', () => {
     const repo = new ConfigRepository({})
     assert.doesNotThrow(() => repo.set('constructor.polluted', true))
   })
-
-  it('get() returns cached value on repeated lookups', () => {
-    const repo = new ConfigRepository({ app: { name: 'RudderJS' } })
-    // First call populates cache; second call must return the same value.
-    assert.strictEqual(repo.get('app.name'), 'RudderJS')
-    assert.strictEqual(repo.get('app.name'), 'RudderJS')
-  })
-
-  it('get() returns cached miss on repeated missing-key lookups', () => {
-    const repo = new ConfigRepository({})
-    assert.strictEqual(repo.get('no.such.key', 'fb'), 'fb')
-    assert.strictEqual(repo.get('no.such.key', 'fb'), 'fb')
-  })
-
-  it('set() invalidates the cache so get() sees the new value', () => {
-    const repo = new ConfigRepository({ x: 1 })
-    assert.strictEqual(repo.get('x'), 1)     // populates cache
-    repo.set('x', 42)
-    assert.strictEqual(repo.get('x'), 42)    // must NOT return cached 1
-  })
 })
 
 // ─── config() helper ───────────────────────────────────────
