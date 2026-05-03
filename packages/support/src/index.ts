@@ -141,17 +141,29 @@ export function t(template: string, vars: Record<string, string | number>): stri
 // ─── ConfigRepository ──────────────────────────────────────
 
 export class ConfigRepository {
+  private readonly _cache = new Map<string, unknown>()
+  // Sentinel that means "key not found (or found-but-undefined)" so we can
+  // distinguish a cache miss from a stored undefined value.
+  private static readonly _MISS = Symbol('miss')
+
   constructor(private readonly data: Record<string, unknown>) {}
 
   get<T = unknown>(key: string, fallback?: T): T {
+    if (this._cache.has(key)) {
+      const v = this._cache.get(key)
+      if (v === ConfigRepository._MISS) return fallback as T
+      return (v !== undefined ? v : fallback) as T
+    }
     const parts = key.split('.')
     let current: unknown = this.data
     for (const part of parts) {
       if (current === null || typeof current !== 'object' || !(part in (current as object))) {
+        this._cache.set(key, ConfigRepository._MISS)
         return fallback as T
       }
       current = (current as Record<string, unknown>)[part]
     }
+    this._cache.set(key, current)
     return (current !== undefined ? current : fallback) as T
   }
 
@@ -168,6 +180,9 @@ export class ConfigRepository {
       current = current[part] as Record<string, unknown>
     }
     current[parts[parts.length - 1] ?? ''] = value
+    // Invalidate the entire lookup cache — set() is a boot-time operation so
+    // the cost of a full clear is negligible compared to per-request savings.
+    this._cache.clear()
   }
 
   has(key: string): boolean {

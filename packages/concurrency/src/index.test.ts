@@ -100,4 +100,24 @@ describe('Concurrency.fake()', () => {
     const results = await Concurrency.run([() => 99])
     assert.deepStrictEqual(results, [99])
   })
+
+  it('restore() after fake() allows the driver to be recreated', async () => {
+    Concurrency.fake()
+    await Concurrency.restore()
+    // After restore, run() should still work (worker driver auto-created).
+    const results = await Concurrency.run([() => 42])
+    assert.deepStrictEqual(results, [42])
+  })
+})
+
+describe('Concurrency.defer() — error handling', () => {
+  it('defer() swallows errors instead of throwing', async () => {
+    Concurrency.fake()
+    // Should not throw — errors in deferred tasks are caught and logged.
+    assert.doesNotThrow(() => {
+      Concurrency.defer(() => { throw new Error('deferred-error') })
+    })
+    // Give the microtask a chance to run so any re-throws would surface.
+    await new Promise(r => setTimeout(r, 20))
+  })
 })

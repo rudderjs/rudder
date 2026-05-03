@@ -182,14 +182,18 @@ describe('ModelRegistry', () => {
 // ─── Model.getTable() ──────────────────────────────────────────────────────────
 
 describe('Model.getTable()', () => {
-  it('infers table as lowercase class name + s', () => {
+  it('infers table as lowercase class name + s (with basic pluralization)', () => {
     class User extends Model {}
     class Post extends Model {}
     class Category extends Model {}
+    class Box extends Model {}
+    class Branch extends Model {}
 
     assert.strictEqual(User.getTable(), 'users')
     assert.strictEqual(Post.getTable(), 'posts')
-    assert.strictEqual(Category.getTable(), 'categorys')
+    assert.strictEqual(Category.getTable(), 'categories')
+    assert.strictEqual(Box.getTable(), 'boxes')
+    assert.strictEqual(Branch.getTable(), 'branches')
   })
 
   it('uses the static table property when set', () => {

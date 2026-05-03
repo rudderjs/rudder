@@ -517,7 +517,12 @@ export abstract class Model {
   // ── Query Methods ──────────────────────────────────────
 
   static getTable(this: typeof Model): string {
-    return this.table ?? `${this.name.toLowerCase()}s`
+    if (this.table) return this.table
+    const name = this.name.toLowerCase()
+    // basic English pluralization for table name inference
+    if (/[^aeiou]y$/.test(name)) return name.slice(0, -1) + 'ies'
+    if (/(?:s|x|z|ch|sh)$/.test(name)) return name + 'es'
+    return name + 's'
   }
 
   /**

@@ -131,6 +131,178 @@ describe('Collection', () => {
     const parsed = JSON.parse(JSON.stringify(col))
     assert.deepStrictEqual(parsed, [{ a: 1 }])
   })
+
+  // ── methods added for coverage ───────────────────────────
+
+  it('isNotEmpty() returns true for non-empty, false for empty', () => {
+    assert.ok(new Collection([1]).isNotEmpty())
+    assert.ok(!new Collection([]).isNotEmpty())
+  })
+
+  it('first(fn) returns the first item matching the predicate', () => {
+    const col = new Collection([1, 2, 3, 4])
+    assert.strictEqual(col.first(n => n > 2), 3)
+    assert.strictEqual(col.first(n => n > 99), undefined)
+  })
+
+  it('last(fn) returns the last item matching the predicate', () => {
+    const col = new Collection([1, 2, 3, 4])
+    assert.strictEqual(col.last(n => n < 3), 2)
+    assert.strictEqual(col.last(n => n > 99), undefined)
+  })
+
+  it('contains(value) returns true when value is in the collection', () => {
+    const col = new Collection([1, 2, 3])
+    assert.ok(col.contains(2))
+    assert.ok(!col.contains(99))
+  })
+
+  it('flatMap() flattens one level and returns a new Collection', () => {
+    const col = new Collection([1, 2, 3]).flatMap(n => [n, n * 10])
+    assert.deepStrictEqual(col.toArray(), [1, 10, 2, 20, 3, 30])
+  })
+
+  it('reject() keeps items that do NOT match the predicate', () => {
+    const col = new Collection([1, 2, 3, 4]).reject(n => n % 2 === 0)
+    assert.deepStrictEqual(col.toArray(), [1, 3])
+  })
+
+  it('sole() returns the single matching item', () => {
+    const col = new Collection([1, 2, 3])
+    assert.strictEqual(col.sole(n => n === 2), 2)
+  })
+
+  it('sole() throws when no item matches', () => {
+    const col = new Collection([1, 2, 3])
+    assert.throws(() => col.sole(n => n === 99), /sole\(\) found no matching items/)
+  })
+
+  it('sole() throws when more than one item matches', () => {
+    const col = new Collection([1, 2, 3])
+    assert.throws(() => col.sole(n => n > 1), /sole\(\) found 2 items/)
+  })
+
+  it('keyBy() indexes items by key (last write wins on collision)', () => {
+    const col = new Collection([{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }])
+    const map = col.keyBy('id')
+    assert.deepStrictEqual(Object.keys(map), ['1', '2'])
+    assert.strictEqual(map['1']?.name, 'Alice')
+  })
+
+  it('keyBy() accepts a function resolver', () => {
+    const col = new Collection([{ code: 'A' }, { code: 'B' }])
+    const map = col.keyBy(item => item.code.toLowerCase())
+    assert.ok('a' in map)
+    assert.ok('b' in map)
+  })
+
+  it('mapWithKeys() produces a Record from [key, value] pairs', () => {
+    const col = new Collection([{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }])
+    const map = col.mapWithKeys(item => [String(item.id), item.name])
+    assert.deepStrictEqual(map, { '1': 'Alice', '2': 'Bob' })
+  })
+
+  it('chunk() splits into chunks of the given size', () => {
+    const chunks = new Collection([1, 2, 3, 4, 5]).chunk(2)
+    assert.deepStrictEqual(chunks.toArray(), [[1, 2], [3, 4], [5]])
+  })
+
+  it('chunk() throws when size is less than 1', () => {
+    assert.throws(() => new Collection([1]).chunk(0), /size must be >= 1/)
+  })
+
+  it('splitIn() splits into roughly equal groups', () => {
+    const groups = new Collection([1, 2, 3, 4, 5]).splitIn(2)
+    assert.strictEqual(groups.count(), 2)
+    assert.deepStrictEqual(groups.toArray()[0], [1, 2, 3])
+    assert.deepStrictEqual(groups.toArray()[1], [4, 5])
+  })
+
+  it('partition() splits into [passing, failing]', () => {
+    const [evens, odds] = new Collection([1, 2, 3, 4]).partition(n => n % 2 === 0)
+    assert.deepStrictEqual(evens.toArray(), [2, 4])
+    assert.deepStrictEqual(odds.toArray(), [1, 3])
+  })
+
+  it('sliding() produces overlapping windows', () => {
+    const windows = new Collection([1, 2, 3, 4]).sliding(2)
+    assert.deepStrictEqual(windows.toArray(), [[1, 2], [2, 3], [3, 4]])
+  })
+
+  it('sliding() respects the step parameter', () => {
+    const windows = new Collection([1, 2, 3, 4]).sliding(2, 2)
+    assert.deepStrictEqual(windows.toArray(), [[1, 2], [3, 4]])
+  })
+
+  it('zip() pairs items with another array (shortest wins)', () => {
+    const zipped = new Collection([1, 2, 3]).zip(['a', 'b'])
+    assert.deepStrictEqual(zipped.toArray(), [[1, 'a'], [2, 'b']])
+  })
+
+  it('zip() accepts a Collection as input', () => {
+    const zipped = new Collection([1, 2]).zip(new Collection(['x', 'y']))
+    assert.deepStrictEqual(zipped.toArray(), [[1, 'x'], [2, 'y']])
+  })
+
+  it('crossJoin() returns the cartesian product', () => {
+    const product = new Collection([1, 2]).crossJoin(['a', 'b'])
+    assert.deepStrictEqual(product.toArray(), [[1, 'a'], [1, 'b'], [2, 'a'], [2, 'b']])
+  })
+
+  it('combine() zips keys and values into a Record', () => {
+    const record = new Collection(['name', 'age']).combine(['Alice', 30])
+    assert.deepStrictEqual(record, { name: 'Alice', age: 30 })
+  })
+
+  it('mapSpread() spreads tuple items as arguments', () => {
+    const col = new Collection<[number, string]>([[1, 'a'], [2, 'b']])
+    const result = col.mapSpread((n, s) => `${String(n)}-${String(s)}`)
+    assert.deepStrictEqual(result.toArray(), ['1-a', '2-b'])
+  })
+
+  it('when(true) applies the callback', () => {
+    const col = new Collection([1, 2, 3]).when(true, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [2, 3])
+  })
+
+  it('when(false) skips the callback and returns this', () => {
+    const original = new Collection([1, 2, 3])
+    const result = original.when(false, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(result.toArray(), [1, 2, 3])
+  })
+
+  it('when(false) calls the otherwise branch when provided', () => {
+    const col = new Collection([1, 2, 3]).when(false, c => c, c => c.filter(n => n > 2))
+    assert.deepStrictEqual(col.toArray(), [3])
+  })
+
+  it('when() accepts a function condition', () => {
+    const col = new Collection([1, 2, 3]).when(c => c.count() > 2, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [2, 3])
+  })
+
+  it('unless(true) skips the callback', () => {
+    const col = new Collection([1, 2, 3]).unless(true, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [1, 2, 3])
+  })
+
+  it('unless(false) applies the callback', () => {
+    const col = new Collection([1, 2, 3]).unless(false, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [2, 3])
+  })
+
+  it('pipe() passes the collection to a function and returns the result', () => {
+    const count = new Collection([1, 2, 3]).pipe(c => c.count())
+    assert.strictEqual(count, 3)
+  })
+
+  it('tap() calls side-effect and returns this', () => {
+    let seen = 0
+    const col = new Collection([1, 2, 3])
+    const returned = col.tap(c => { seen = c.count() })
+    assert.strictEqual(seen, 3)
+    assert.strictEqual(returned, col)
+  })
 })
 
 // ─── Env ───────────────────────────────────────────────────
@@ -324,6 +496,26 @@ describe('ConfigRepository', () => {
   it('set() silently ignores constructor key', () => {
     const repo = new ConfigRepository({})
     assert.doesNotThrow(() => repo.set('constructor.polluted', true))
+  })
+
+  it('get() returns cached value on repeated lookups', () => {
+    const repo = new ConfigRepository({ app: { name: 'RudderJS' } })
+    // First call populates cache; second call must return the same value.
+    assert.strictEqual(repo.get('app.name'), 'RudderJS')
+    assert.strictEqual(repo.get('app.name'), 'RudderJS')
+  })
+
+  it('get() returns cached miss on repeated missing-key lookups', () => {
+    const repo = new ConfigRepository({})
+    assert.strictEqual(repo.get('no.such.key', 'fb'), 'fb')
+    assert.strictEqual(repo.get('no.such.key', 'fb'), 'fb')
+  })
+
+  it('set() invalidates the cache so get() sees the new value', () => {
+    const repo = new ConfigRepository({ x: 1 })
+    assert.strictEqual(repo.get('x'), 1)     // populates cache
+    repo.set('x', 42)
+    assert.strictEqual(repo.get('x'), 42)    // must NOT return cached 1
   })
 })
 
