@@ -5,27 +5,38 @@ import { getTemplates, pmExec, pmRun, pmInstall, type TemplateContext } from './
 // ─── Helpers ───────────────────────────────────────────────
 
 const defaultPkgs: TemplateContext['packages'] = {
-  auth: true, queue: false, storage: false,
-  mail: false, notifications: false, scheduler: false,
-  broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
+  auth: true, sanctum: false, passport: false, socialite: false,
+  queue: false, storage: false, scheduler: false, image: false,
+  mail: false, notifications: false, broadcast: false, sync: false,
+  ai: false, mcp: false, boost: false,
+  localization: false, cashierPaddle: false, pennant: false,
+  telescope: false, pulse: false, horizon: false,
+  crypt: false, http: false, process: false, concurrency: false,
+  demos: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
-  auth: false, queue: false, storage: false,
-  mail: false, notifications: false, scheduler: false,
-  broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
+  auth: false, sanctum: false, passport: false, socialite: false,
+  queue: false, storage: false, scheduler: false, image: false,
+  mail: false, notifications: false, broadcast: false, sync: false,
+  ai: false, mcp: false, boost: false,
+  localization: false, cashierPaddle: false, pennant: false,
+  telescope: false, pulse: false, horizon: false,
+  crypt: false, http: false, process: false, concurrency: false,
+  demos: false,
 }
 
-const noAuth: TemplateContext['packages'] = {
-  auth: false, queue: false, storage: false,
-  mail: false, notifications: false, scheduler: false,
-  broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
-}
+const noAuth: TemplateContext['packages'] = noPkgs
 
 const allPkgs: TemplateContext['packages'] = {
-  auth: true, queue: true, storage: true,
-  mail: true, notifications: true, scheduler: true,
-  broadcast: true, sync: true, ai: true, mcp: true, passport: true, localization: true, telescope: true, boost: true, demos: true,
+  auth: true, sanctum: true, passport: true, socialite: true,
+  queue: true, storage: true, scheduler: true, image: true,
+  mail: true, notifications: true, broadcast: true, sync: true,
+  ai: true, mcp: true, boost: true,
+  localization: true, cashierPaddle: true, pennant: true,
+  telescope: true, pulse: true, horizon: true,
+  crypt: true, http: true, process: true, concurrency: true,
+  demos: true,
 }
 
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {

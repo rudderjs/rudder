@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {
-  intro, outro, text, select, multiselect, confirm, spinner,
+  intro, outro, text, select, multiselect, groupMultiselect, confirm, spinner, log,
   isCancel, cancel,
 } from '@clack/prompts'
 import fs     from 'node:fs/promises'
@@ -63,48 +63,107 @@ async function main(): Promise<void> {
   }
 
   // ── Package checklist ────────────────────────────────────
+  //
+  // Categorized via clack's groupMultiselect — one section per concern,
+  // group headers are non-selectable (selectableGroups: false).
+  // ORM=none filters out DB-dependent packages (auth/sanctum/passport/cashier)
+  // before the prompt renders, so the user never sees rows they can't use.
 
-  const packageAnswer = await multiselect({
-    message: 'Select packages to include',
-    options: [
-      { value: 'auth',          label: 'Authentication',   hint: 'login, register, sessions' },
-      { value: 'queue',         label: 'Queue',            hint: 'background jobs' },
-      { value: 'storage',       label: 'Storage',          hint: 'file uploads (local + S3)' },
-      { value: 'mail',          label: 'Mail',             hint: 'SMTP + log driver' },
-      { value: 'notifications', label: 'Notifications',    hint: 'multi-channel notifications' },
-      { value: 'scheduler',     label: 'Scheduler',        hint: 'cron-like task scheduling' },
-      { value: 'broadcast',     label: 'WebSocket',        hint: 'real-time channels' },
-      { value: 'sync',          label: 'Sync (Yjs CRDT)',   hint: 'real-time collaborative documents' },
-      { value: 'ai',            label: 'AI',               hint: 'LLM providers (Anthropic, OpenAI, Google, Ollama)' },
-      { value: 'mcp',           label: 'MCP',              hint: 'Model Context Protocol servers — expose tools/resources to LLMs' },
-      { value: 'passport',      label: 'Passport (OAuth2)', hint: 'OAuth 2 server with JWT — requires Auth + Prisma' },
-      { value: 'localization',  label: 'Localization',     hint: 'i18n — trans(), setLocale()' },
-      { value: 'telescope',     label: 'Telescope',        hint: 'debug dashboard — requests, queries, jobs, exceptions, AI, mail, cache' },
-      { value: 'boost',         label: 'Boost (AI coding DX)', hint: 'expose project internals to Claude Code / Cursor / Copilot via MCP' },
-      { value: 'demos',         label: 'Demos',            hint: 'sample views (contact, ws, live) under /demos — react primary only' },
+  // Database-dependent packages — hidden when ORM=none.
+  const DB_GATED = new Set(['auth', 'sanctum', 'passport', 'cashierPaddle'])
+
+  type Pkg = { value: string; label: string; hint?: string }
+  const PACKAGE_GROUPS: Record<string, Pkg[]> = {
+    'Auth & Users': [
+      { value: 'auth',          label: 'Authentication',        hint: 'login, register, sessions' },
+      { value: 'sanctum',       label: 'Sanctum',               hint: 'API tokens (SHA-256 + abilities)' },
+      { value: 'passport',      label: 'Passport',              hint: 'OAuth2 server — requires Auth + Prisma' },
+      { value: 'socialite',     label: 'Socialite',             hint: 'social login: GitHub, Google, Facebook, Apple' },
     ],
-    initialValues: ['auth'],
-    required: false,
+    'Infrastructure': [
+      { value: 'queue',         label: 'Queue',                 hint: 'background jobs' },
+      { value: 'storage',       label: 'Storage',               hint: 'file uploads (local + S3)' },
+      { value: 'scheduler',     label: 'Scheduler',             hint: 'cron-like task scheduling' },
+      { value: 'image',         label: 'Image',                 hint: 'resize, crop, convert (sharp wrapper)' },
+    ],
+    'Communication': [
+      { value: 'mail',          label: 'Mail',                  hint: 'SMTP + log driver' },
+      { value: 'notifications', label: 'Notifications',         hint: 'multi-channel notifications' },
+      { value: 'broadcast',     label: 'WebSocket / Broadcast', hint: 'real-time channels' },
+      { value: 'sync',          label: 'Sync (Yjs CRDT)',       hint: 'collaborative documents' },
+    ],
+    'AI': [
+      { value: 'ai',            label: 'AI',                    hint: 'LLM providers (Anthropic, OpenAI, Google, Ollama)' },
+      { value: 'mcp',           label: 'MCP',                   hint: 'Model Context Protocol — expose tools/resources to LLMs' },
+      { value: 'boost',         label: 'Boost',                 hint: 'AI coding DX (Claude Code/Cursor/Copilot)' },
+    ],
+    'Internationalization': [
+      { value: 'localization',  label: 'Localization',          hint: 'i18n — trans(), setLocale()' },
+    ],
+    'Product & Features': [
+      { value: 'cashierPaddle', label: 'Cashier-Paddle',        hint: 'subscriptions + checkout — requires Auth + Prisma' },
+      { value: 'pennant',       label: 'Pennant',               hint: 'feature flags' },
+    ],
+    'Observability': [
+      { value: 'telescope',     label: 'Telescope',             hint: 'debug dashboard — requests, queries, jobs, exceptions' },
+      { value: 'pulse',         label: 'Pulse',                 hint: 'metrics dashboard — throughput, latency, hit rates' },
+      { value: 'horizon',       label: 'Horizon',               hint: 'queue monitoring — lifecycle, workers, retry/delete' },
+    ],
+    'Utilities': [
+      { value: 'crypt',         label: 'Crypt',                 hint: 'AES-256-CBC + HMAC encryption' },
+      { value: 'http',          label: 'HTTP',                  hint: 'fluent fetch client — retries, timeouts, pools' },
+      { value: 'process',       label: 'Process',               hint: 'shell execution — run, pool, pipe' },
+      { value: 'concurrency',   label: 'Concurrency',           hint: 'parallel execution via worker threads' },
+    ],
+  }
+
+  if (orm === false) {
+    log.info('Database not selected — auth, sanctum, passport, and billing options are hidden.')
+  }
+
+  const groupedOptions: Record<string, Pkg[]> = {}
+  for (const [group, pkgs] of Object.entries(PACKAGE_GROUPS)) {
+    const visible = orm === false ? pkgs.filter(p => !DB_GATED.has(p.value)) : pkgs
+    if (visible.length > 0) groupedOptions[group] = visible
+  }
+
+  const packageAnswer = await groupMultiselect({
+    message:          'Select packages',
+    options:          groupedOptions,
+    initialValues:    orm === false ? [] : ['auth'],
+    required:         false,
+    selectableGroups: false,
   })
   if (isCancel(packageAnswer)) { cancel('Cancelled.'); process.exit(0) }
   const selectedPackages = packageAnswer as string[]
 
   const packages = {
     auth:          selectedPackages.includes('auth'),
+    sanctum:       selectedPackages.includes('sanctum'),
+    passport:      selectedPackages.includes('passport'),
+    socialite:     selectedPackages.includes('socialite'),
     queue:         selectedPackages.includes('queue'),
     storage:       selectedPackages.includes('storage'),
+    scheduler:     selectedPackages.includes('scheduler'),
+    image:         selectedPackages.includes('image'),
     mail:          selectedPackages.includes('mail'),
     notifications: selectedPackages.includes('notifications'),
-    scheduler:     selectedPackages.includes('scheduler'),
     broadcast:     selectedPackages.includes('broadcast'),
     sync:          selectedPackages.includes('sync'),
     ai:            selectedPackages.includes('ai'),
     mcp:           selectedPackages.includes('mcp'),
-    passport:      selectedPackages.includes('passport'),
-    localization:  selectedPackages.includes('localization'),
-    telescope:     selectedPackages.includes('telescope'),
     boost:         selectedPackages.includes('boost'),
-    demos:         selectedPackages.includes('demos'),
+    localization:  selectedPackages.includes('localization'),
+    cashierPaddle: selectedPackages.includes('cashierPaddle'),
+    pennant:       selectedPackages.includes('pennant'),
+    telescope:     selectedPackages.includes('telescope'),
+    pulse:         selectedPackages.includes('pulse'),
+    horizon:       selectedPackages.includes('horizon'),
+    crypt:         selectedPackages.includes('crypt'),
+    http:          selectedPackages.includes('http'),
+    process:       selectedPackages.includes('process'),
+    concurrency:   selectedPackages.includes('concurrency'),
+    demos:         false, // populated by the dedicated Demos step in Task 2.4
   }
 
   // Passport requires auth + prisma at runtime. Warn and drop silently if missing.

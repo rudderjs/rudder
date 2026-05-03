@@ -63,19 +63,30 @@ export interface TemplateContext {
   pm:         PackageManager
   packages: {
     auth:          boolean
+    sanctum:       boolean
+    passport:      boolean
+    socialite:     boolean
     queue:         boolean
     storage:       boolean
+    scheduler:     boolean
+    image:         boolean
     mail:          boolean
     notifications: boolean
-    scheduler:     boolean
     broadcast:     boolean
     sync:          boolean
     ai:            boolean
     mcp:           boolean
-    passport:      boolean
-    localization:  boolean
-    telescope:     boolean
     boost:         boolean
+    localization:  boolean
+    cashierPaddle: boolean
+    pennant:       boolean
+    telescope:     boolean
+    pulse:         boolean
+    horizon:       boolean
+    crypt:         boolean
+    http:          boolean
+    process:       boolean
+    concurrency:   boolean
     demos:         boolean
   }
 }
