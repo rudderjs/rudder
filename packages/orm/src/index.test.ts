@@ -1823,7 +1823,7 @@ function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record
 
   const makeQbFor = <T>(table: string): QueryBuilder<T> => {
     const wheres: Array<[string, string, unknown]> = []
-    let nextId = (): number => {
+    const nextId = (): number => {
       const data = ensure(table)
       let max = 0
       for (const r of data) {
@@ -2198,18 +2198,19 @@ describe('Model.belongsToMany — attach / detach / sync', () => {
   it('lazy model thunk handles circular import case (no throw at module load)', async () => {
     const { adapter, rows } = memoryAdapter()
     ModelRegistry.set(adapter)
-    // Declare User before Role to simulate a circular import where Role
-    // is not yet defined at the time User's relations are read. The
-    // `() => Role` thunk should defer the lookup until first use.
-    let Role!: typeof Model
+    // Simulate a circular import where the related class is not yet
+    // defined at the time the parent's `relations` map is read. The
+    // `() => holder.Role` thunk defers the lookup until first use.
+    const holder: { Role?: typeof Model } = {}
     class User extends Model {
       static override relations = {
-        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+        roles: { type: 'belongsToMany' as const, model: () => holder.Role!, pivotTable: 'role_user' },
       }
       id!: number
     }
-    Role = class extends Model { id!: number }
+    const Role = class extends Model { id!: number }
     Object.defineProperty(Role, 'name', { value: 'Role' })
+    holder.Role = Role
     rows('roles').push({ id: 1 })
     const u = User.hydrate({ id: 5 })!
     await Model.belongsToMany(u, 'roles').attach([1])

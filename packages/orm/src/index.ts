@@ -1399,6 +1399,17 @@ const _UNSUPPORTED_TERMINALS = new Set([
  * write the pivot via `belongsToMany().attach/detach/sync` and write the
  * related rows via the related model directly.
  */
+type QbAsDict = Record<string, ((...a: unknown[]) => unknown) | undefined>
+
+function _replayChain(q: QueryBuilder<Model>, recorded: ReadonlyArray<[string, unknown[]]>): QueryBuilder<Model> {
+  let cur = q
+  for (const [m, args] of recorded) {
+    const fn = (cur as unknown as QbAsDict)[m]
+    if (fn) cur = fn.apply(cur, args) as QueryBuilder<Model>
+  }
+  return cur
+}
+
 function _belongsToManyDeferredQb(
   Related:    typeof Model,
   _def:       BelongsToManyDef,
@@ -1414,20 +1425,11 @@ function _belongsToManyDeferredQb(
       .where(meta.foreignPivotKey, parentVal)
       .get()
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
-    if (ids.length === 0) {
-      // Empty IN list — short-circuit with a guaranteed-empty query so
-      // adapters don't have to handle the edge case.
-      let q = (Related.query() as unknown as QueryBuilder<Model>).where(meta.relatedKey, 'IN', [])
-      for (const [m, args] of recorded) {
-        q = (q as unknown as Record<string, (...a: unknown[]) => unknown>)[m]!(...args) as QueryBuilder<Model>
-      }
-      return q
-    }
-    let q = (Related.query() as unknown as QueryBuilder<Model>).where(meta.relatedKey, 'IN', ids)
-    for (const [m, args] of recorded) {
-      q = (q as unknown as Record<string, (...a: unknown[]) => unknown>)[m]!(...args) as QueryBuilder<Model>
-    }
-    return q
+    // Empty IN list — short-circuit with a guaranteed-empty query so
+    // adapters don't have to handle the edge case.
+    const q = (Related.query() as unknown as QueryBuilder<Model>)
+      .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
+    return _replayChain(q, recorded)
   }
 
   const proxy: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
@@ -1442,7 +1444,8 @@ function _belongsToManyDeferredQb(
       if (_TERMINAL_METHODS.has(name)) {
         return async (...args: unknown[]) => {
           const q = await buildResolved()
-          return (q as unknown as Record<string, (...a: unknown[]) => unknown>)[name]!(...args)
+          const fn = (q as unknown as QbAsDict)[name]
+          return fn ? fn.apply(q, args) : undefined
         }
       }
       if (_UNSUPPORTED_TERMINALS.has(name)) {
@@ -1471,18 +1474,18 @@ type AttachInput = ReadonlyArray<number | string> | Record<string | number, Reco
 
 function _normalizeAttachInput(
   input:           AttachInput,
+  foreignPivotKey: string,
+  parentVal:       unknown,
+  relatedPivotKey: string,
   flatPivot?:      Record<string, unknown>,
-  foreignPivotKey?: string,
-  parentVal?:       unknown,
-  relatedPivotKey?: string,
 ): Array<Record<string, unknown>> {
   const rows: Array<Record<string, unknown>> = []
   if (Array.isArray(input)) {
     for (const id of input) {
       rows.push({
         ...(flatPivot ?? {}),
-        [foreignPivotKey!]: parentVal,
-        [relatedPivotKey!]: id,
+        [foreignPivotKey]: parentVal,
+        [relatedPivotKey]: id,
       })
     }
   } else {
@@ -1492,8 +1495,8 @@ function _normalizeAttachInput(
       const idVal: unknown = /^\d+$/.test(id) ? Number(id) : id
       rows.push({
         ...perIdPivot,
-        [foreignPivotKey!]: parentVal,
-        [relatedPivotKey!]: idVal,
+        [foreignPivotKey]: parentVal,
+        [relatedPivotKey]: idVal,
       })
     }
   }
@@ -1553,7 +1556,7 @@ function _makeBelongsToManyAccessor(
     async attach(input, flatPivot) {
       const ids = _idsFromAttachInput(input)
       if (ids.length === 0) return
-      const rows = _normalizeAttachInput(input, flatPivot, meta.foreignPivotKey, parentVal, meta.relatedPivotKey)
+      const rows = _normalizeAttachInput(input, meta.foreignPivotKey, parentVal, meta.relatedPivotKey, flatPivot)
       await ModelRegistry.getAdapter()
         .query<Record<string, unknown>>(meta.pivotTable)
         .insertMany(rows)
