@@ -29,7 +29,7 @@ RudderJS refuses the tradeoff. It's batteries-included, modular, UI-agnostic, an
 | **DI container** | None | Class-based IoC | IoC | Service Providers + ALS request scope |
 | **AI-native** | ✗ | ✗ | ✗ | ✓ 11 providers, agents, streaming, MCP |
 | **Real-time collab** | ✗ | ✗ | ✗ | ✓ Yjs CRDT + WebSocket on same port |
-| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 45 opt-in packages |
+| **Modularity** | All-in | All-in | Preset-based | **Pay-as-you-go** — 46 opt-in packages |
 
 The shape: one DI container, one CLI, one mental model. Routes return `view()`. Models query the database. Jobs queue work. Agents call tools. The same TypeScript ergonomics from the HTTP edge to the database row.
 
@@ -61,9 +61,8 @@ RudderJS uses **independent versioning** — each `@rudderjs/*` package has its 
 
 What you'll see across the workspace:
 
-- **`1.0.0`** — packages that just graduated. Stable public API, breaking changes require a major bump.
+- **`1.0.0`** — packages that graduated in the first wave (2026-04-29). Stable public API, breaking changes require a major bump.
 - **Higher majors** (`auth@4.x`, `cashier-paddle@2.x`, `cli@4.x`, `horizon@4.x`, `mcp@4.x`, `pulse@5.x`, `queue@4.x`, `sanctum@6.x`, `telescope@10.x`) — packages that were already past 1.0 before the graduation, plus this release's necessary cascade-major-bumps. The number reflects iteration history, not "more important."
-- **Still `0.x`** — packages explicitly deferred from the first wave: `concurrency`, `console`, `http`, `image`, `process`, `orm-drizzle`, `sync`, `vite`. These will graduate individually as their APIs stabilize.
 
 The version spread is informative, not asymmetric: a higher major means the package has been through more iteration cycles, not that it's more central. `core@1.0.0` and `telescope@10.0.0` are equally stable from this release forward.
 

@@ -105,4 +105,20 @@ describe('view() + isViewResponse()', () => {
     assert.equal(isViewResponse({}),            false)
     assert.equal(isViewResponse(null),          false)
   })
+
+  it('view() with no props defaults to empty object', () => {
+    const r = view('about')
+    assert.ok(r instanceof ViewResponse)
+    assert.equal(r.id, 'about')
+    assert.deepEqual(r.props, {})
+  })
+
+  it('isViewResponse() returns false for undefined', () => {
+    assert.equal(isViewResponse(undefined), false)
+  })
+
+  it('SafeString.toString() returns the raw value', () => {
+    const s = new SafeString('<b>bold</b>')
+    assert.equal(s.toString(), '<b>bold</b>')
+  })
 })

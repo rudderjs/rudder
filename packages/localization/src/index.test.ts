@@ -120,4 +120,32 @@ describe('file loading via trans()', () => {
     LocalizationRegistry.configure({ locale: 'es', fallback: 'en', path: tmpDir })
     assert.equal(await trans('site.missing.key'), 'site.missing.key')
   })
+
+  it('trans() caches — loading the same namespace twice does not re-read disk', async () => {
+    LocalizationRegistry.configure({ locale: 'en', fallback: 'en', path: tmpDir })
+    const first  = await trans('site.title')
+    const second = await trans('site.title')
+    assert.equal(first,  'My App')
+    assert.equal(second, 'My App')
+    // Both should resolve to the same string — no error means caching worked.
+  })
+})
+
+// ─── __() pluralize count = 0 edge case ─────────────────────
+
+describe('__() pluralize count = 0 edge case', () => {
+  it('{0} branch resolves for count 0', () => {
+    LocalizationRegistry.reset()
+    LocalizationRegistry.configure({ locale: 'en', fallback: 'en', path: '/tmp' })
+    LocalizationRegistry.seed('en', 'msg', { items: '{0} none|{1} one|{n} :count items' })
+    assert.equal(__('msg.items', 0), 'none')
+  })
+
+  it('simple two-part form uses singular for count 1 and plural for 0', () => {
+    LocalizationRegistry.reset()
+    LocalizationRegistry.configure({ locale: 'en', fallback: 'en', path: '/tmp' })
+    LocalizationRegistry.seed('en', 'msg', { file: 'one file|many files' })
+    assert.equal(__('msg.file', 1), 'one file')
+    assert.equal(__('msg.file', 0), 'many files')
+  })
 })

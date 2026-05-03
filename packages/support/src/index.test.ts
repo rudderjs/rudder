@@ -19,6 +19,8 @@ import {
   ConfigRepository,
   config,
   setConfigRepository,
+  Str,
+  Num,
 } from './index.js'
 import { z } from 'zod'
 
@@ -128,6 +130,178 @@ describe('Collection', () => {
     const col = new Collection([{ a: 1 }])
     const parsed = JSON.parse(JSON.stringify(col))
     assert.deepStrictEqual(parsed, [{ a: 1 }])
+  })
+
+  // ── methods added for coverage ───────────────────────────
+
+  it('isNotEmpty() returns true for non-empty, false for empty', () => {
+    assert.ok(new Collection([1]).isNotEmpty())
+    assert.ok(!new Collection([]).isNotEmpty())
+  })
+
+  it('first(fn) returns the first item matching the predicate', () => {
+    const col = new Collection([1, 2, 3, 4])
+    assert.strictEqual(col.first(n => n > 2), 3)
+    assert.strictEqual(col.first(n => n > 99), undefined)
+  })
+
+  it('last(fn) returns the last item matching the predicate', () => {
+    const col = new Collection([1, 2, 3, 4])
+    assert.strictEqual(col.last(n => n < 3), 2)
+    assert.strictEqual(col.last(n => n > 99), undefined)
+  })
+
+  it('contains(value) returns true when value is in the collection', () => {
+    const col = new Collection([1, 2, 3])
+    assert.ok(col.contains(2))
+    assert.ok(!col.contains(99))
+  })
+
+  it('flatMap() flattens one level and returns a new Collection', () => {
+    const col = new Collection([1, 2, 3]).flatMap(n => [n, n * 10])
+    assert.deepStrictEqual(col.toArray(), [1, 10, 2, 20, 3, 30])
+  })
+
+  it('reject() keeps items that do NOT match the predicate', () => {
+    const col = new Collection([1, 2, 3, 4]).reject(n => n % 2 === 0)
+    assert.deepStrictEqual(col.toArray(), [1, 3])
+  })
+
+  it('sole() returns the single matching item', () => {
+    const col = new Collection([1, 2, 3])
+    assert.strictEqual(col.sole(n => n === 2), 2)
+  })
+
+  it('sole() throws when no item matches', () => {
+    const col = new Collection([1, 2, 3])
+    assert.throws(() => col.sole(n => n === 99), /sole\(\) found no matching items/)
+  })
+
+  it('sole() throws when more than one item matches', () => {
+    const col = new Collection([1, 2, 3])
+    assert.throws(() => col.sole(n => n > 1), /sole\(\) found 2 items/)
+  })
+
+  it('keyBy() indexes items by key (last write wins on collision)', () => {
+    const col = new Collection([{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }])
+    const map = col.keyBy('id')
+    assert.deepStrictEqual(Object.keys(map), ['1', '2'])
+    assert.strictEqual(map['1']?.name, 'Alice')
+  })
+
+  it('keyBy() accepts a function resolver', () => {
+    const col = new Collection([{ code: 'A' }, { code: 'B' }])
+    const map = col.keyBy(item => item.code.toLowerCase())
+    assert.ok('a' in map)
+    assert.ok('b' in map)
+  })
+
+  it('mapWithKeys() produces a Record from [key, value] pairs', () => {
+    const col = new Collection([{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }])
+    const map = col.mapWithKeys(item => [String(item.id), item.name])
+    assert.deepStrictEqual(map, { '1': 'Alice', '2': 'Bob' })
+  })
+
+  it('chunk() splits into chunks of the given size', () => {
+    const chunks = new Collection([1, 2, 3, 4, 5]).chunk(2)
+    assert.deepStrictEqual(chunks.toArray(), [[1, 2], [3, 4], [5]])
+  })
+
+  it('chunk() throws when size is less than 1', () => {
+    assert.throws(() => new Collection([1]).chunk(0), /size must be >= 1/)
+  })
+
+  it('splitIn() splits into roughly equal groups', () => {
+    const groups = new Collection([1, 2, 3, 4, 5]).splitIn(2)
+    assert.strictEqual(groups.count(), 2)
+    assert.deepStrictEqual(groups.toArray()[0], [1, 2, 3])
+    assert.deepStrictEqual(groups.toArray()[1], [4, 5])
+  })
+
+  it('partition() splits into [passing, failing]', () => {
+    const [evens, odds] = new Collection([1, 2, 3, 4]).partition(n => n % 2 === 0)
+    assert.deepStrictEqual(evens.toArray(), [2, 4])
+    assert.deepStrictEqual(odds.toArray(), [1, 3])
+  })
+
+  it('sliding() produces overlapping windows', () => {
+    const windows = new Collection([1, 2, 3, 4]).sliding(2)
+    assert.deepStrictEqual(windows.toArray(), [[1, 2], [2, 3], [3, 4]])
+  })
+
+  it('sliding() respects the step parameter', () => {
+    const windows = new Collection([1, 2, 3, 4]).sliding(2, 2)
+    assert.deepStrictEqual(windows.toArray(), [[1, 2], [3, 4]])
+  })
+
+  it('zip() pairs items with another array (shortest wins)', () => {
+    const zipped = new Collection([1, 2, 3]).zip(['a', 'b'])
+    assert.deepStrictEqual(zipped.toArray(), [[1, 'a'], [2, 'b']])
+  })
+
+  it('zip() accepts a Collection as input', () => {
+    const zipped = new Collection([1, 2]).zip(new Collection(['x', 'y']))
+    assert.deepStrictEqual(zipped.toArray(), [[1, 'x'], [2, 'y']])
+  })
+
+  it('crossJoin() returns the cartesian product', () => {
+    const product = new Collection([1, 2]).crossJoin(['a', 'b'])
+    assert.deepStrictEqual(product.toArray(), [[1, 'a'], [1, 'b'], [2, 'a'], [2, 'b']])
+  })
+
+  it('combine() zips keys and values into a Record', () => {
+    const record = new Collection(['name', 'age']).combine(['Alice', 30])
+    assert.deepStrictEqual(record, { name: 'Alice', age: 30 })
+  })
+
+  it('mapSpread() spreads tuple items as arguments', () => {
+    const col = new Collection<[number, string]>([[1, 'a'], [2, 'b']])
+    const result = col.mapSpread((n, s) => `${String(n)}-${String(s)}`)
+    assert.deepStrictEqual(result.toArray(), ['1-a', '2-b'])
+  })
+
+  it('when(true) applies the callback', () => {
+    const col = new Collection([1, 2, 3]).when(true, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [2, 3])
+  })
+
+  it('when(false) skips the callback and returns this', () => {
+    const original = new Collection([1, 2, 3])
+    const result = original.when(false, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(result.toArray(), [1, 2, 3])
+  })
+
+  it('when(false) calls the otherwise branch when provided', () => {
+    const col = new Collection([1, 2, 3]).when(false, c => c, c => c.filter(n => n > 2))
+    assert.deepStrictEqual(col.toArray(), [3])
+  })
+
+  it('when() accepts a function condition', () => {
+    const col = new Collection([1, 2, 3]).when(c => c.count() > 2, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [2, 3])
+  })
+
+  it('unless(true) skips the callback', () => {
+    const col = new Collection([1, 2, 3]).unless(true, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [1, 2, 3])
+  })
+
+  it('unless(false) applies the callback', () => {
+    const col = new Collection([1, 2, 3]).unless(false, c => c.filter(n => n > 1))
+    assert.deepStrictEqual(col.toArray(), [2, 3])
+  })
+
+  it('pipe() passes the collection to a function and returns the result', () => {
+    const count = new Collection([1, 2, 3]).pipe(c => c.count())
+    assert.strictEqual(count, 3)
+  })
+
+  it('tap() calls side-effect and returns this', () => {
+    let seen = 0
+    const col = new Collection([1, 2, 3])
+    const returned = col.tap(c => { seen = c.count() })
+    assert.strictEqual(seen, 3)
+    assert.strictEqual(returned, col)
   })
 })
 
@@ -551,5 +725,548 @@ describe('isWebContainer', () => {
   it('returns true when process.versions.webcontainer is set', () => {
     ;(process.versions as Record<string, string | undefined>).webcontainer = '1.0.0'
     assert.strictEqual(isWebContainer(), true)
+  })
+})
+
+// ─── Str ───────────────────────────────────────────────────
+
+describe('Str.camel()', () => {
+  it('converts snake_case to camelCase', () => {
+    assert.strictEqual(Str.camel('hello_world'), 'helloWorld')
+  })
+  it('converts kebab-case to camelCase', () => {
+    assert.strictEqual(Str.camel('hello-world'), 'helloWorld')
+  })
+  it('lowercases the first letter', () => {
+    assert.strictEqual(Str.camel('HelloWorld'), 'helloWorld')
+  })
+  it('handles single word', () => {
+    assert.strictEqual(Str.camel('hello'), 'hello')
+  })
+})
+
+describe('Str.snake()', () => {
+  it('converts camelCase to snake_case', () => {
+    assert.strictEqual(Str.snake('helloWorld'), 'hello_world')
+  })
+  it('converts StudlyCase to snake_case', () => {
+    assert.strictEqual(Str.snake('HelloWorld'), 'hello_world')
+  })
+  it('handles consecutive uppercase (acronyms)', () => {
+    assert.strictEqual(Str.snake('parseHTMLString'), 'parse_html_string')
+  })
+  it('handles already snake_case', () => {
+    assert.strictEqual(Str.snake('hello_world'), 'hello_world')
+  })
+})
+
+describe('Str.kebab()', () => {
+  it('converts camelCase to kebab-case', () => {
+    assert.strictEqual(Str.kebab('helloWorld'), 'hello-world')
+  })
+  it('converts snake_case to kebab-case', () => {
+    assert.strictEqual(Str.kebab('hello_world'), 'hello-world')
+  })
+})
+
+describe('Str.studly()', () => {
+  it('converts snake_case to StudlyCase', () => {
+    assert.strictEqual(Str.studly('hello_world'), 'HelloWorld')
+  })
+  it('converts kebab-case to StudlyCase', () => {
+    assert.strictEqual(Str.studly('hello-world'), 'HelloWorld')
+  })
+  it('uppercases the first letter', () => {
+    assert.strictEqual(Str.studly('hello'), 'Hello')
+  })
+})
+
+describe('Str.title()', () => {
+  it('capitalises each word', () => {
+    assert.strictEqual(Str.title('hello world'), 'Hello World')
+  })
+  it('handles single word', () => {
+    assert.strictEqual(Str.title('hello'), 'Hello')
+  })
+})
+
+describe('Str.headline()', () => {
+  it('converts snake_case to headline', () => {
+    assert.strictEqual(Str.headline('user_profile'), 'User Profile')
+  })
+  it('converts camelCase to headline', () => {
+    assert.strictEqual(Str.headline('userProfile'), 'User Profile')
+  })
+  it('converts kebab-case to headline', () => {
+    assert.strictEqual(Str.headline('user-profile'), 'User Profile')
+  })
+})
+
+describe('Str.limit()', () => {
+  it('returns full string if shorter than limit', () => {
+    assert.strictEqual(Str.limit('hello', 10), 'hello')
+  })
+  it('truncates and appends ellipsis', () => {
+    assert.strictEqual(Str.limit('hello world', 5), 'hello...')
+  })
+  it('uses custom end', () => {
+    assert.strictEqual(Str.limit('hello world', 5, '!'), 'hello!')
+  })
+})
+
+describe('Str.words()', () => {
+  it('returns full string when within word limit', () => {
+    assert.strictEqual(Str.words('one two three', 5), 'one two three')
+  })
+  it('truncates to word count and appends ellipsis', () => {
+    assert.strictEqual(Str.words('one two three four', 2), 'one two...')
+  })
+  it('uses custom end', () => {
+    assert.strictEqual(Str.words('one two three', 2, ' →'), 'one two →')
+  })
+})
+
+describe('Str.excerpt()', () => {
+  it('returns excerpt centered on the phrase', () => {
+    const result = Str.excerpt('The quick brown fox', 'quick', { radius: 3 })
+    assert.ok(result.includes('quick'))
+  })
+  it('returns start of string when phrase not found', () => {
+    const result = Str.excerpt('Hello world', 'missing', { radius: 5 })
+    assert.ok(result.startsWith('Hello'))
+  })
+})
+
+describe('Str.contains()', () => {
+  it('returns true when needle is found', () => {
+    assert.ok(Str.contains('hello world', 'world'))
+  })
+  it('returns false when needle is not found', () => {
+    assert.ok(!Str.contains('hello world', 'foo'))
+  })
+  it('accepts an array of needles (any match)', () => {
+    assert.ok(Str.contains('hello world', ['foo', 'world']))
+    assert.ok(!Str.contains('hello world', ['foo', 'bar']))
+  })
+})
+
+describe('Str.containsAll()', () => {
+  it('returns true when all needles are found', () => {
+    assert.ok(Str.containsAll('hello world foo', ['hello', 'world']))
+  })
+  it('returns false when any needle is missing', () => {
+    assert.ok(!Str.containsAll('hello world', ['hello', 'missing']))
+  })
+})
+
+describe('Str.startsWith()', () => {
+  it('returns true when string starts with needle', () => {
+    assert.ok(Str.startsWith('hello world', 'hello'))
+  })
+  it('returns false when string does not start with needle', () => {
+    assert.ok(!Str.startsWith('hello world', 'world'))
+  })
+  it('accepts an array of needles', () => {
+    assert.ok(Str.startsWith('hello world', ['foo', 'hello']))
+  })
+})
+
+describe('Str.endsWith()', () => {
+  it('returns true when string ends with needle', () => {
+    assert.ok(Str.endsWith('hello world', 'world'))
+  })
+  it('returns false when string does not end with needle', () => {
+    assert.ok(!Str.endsWith('hello world', 'hello'))
+  })
+  it('accepts an array of needles', () => {
+    assert.ok(Str.endsWith('hello world', ['foo', 'world']))
+  })
+})
+
+describe('Str.before()', () => {
+  it('returns everything before first occurrence', () => {
+    assert.strictEqual(Str.before('hello@example.com', '@'), 'hello')
+  })
+  it('returns full string when search is not found', () => {
+    assert.strictEqual(Str.before('hello', '@'), 'hello')
+  })
+})
+
+describe('Str.beforeLast()', () => {
+  it('returns everything before the last occurrence', () => {
+    assert.strictEqual(Str.beforeLast('a/b/c', '/'), 'a/b')
+  })
+  it('returns full string when search is not found', () => {
+    assert.strictEqual(Str.beforeLast('hello', '/'), 'hello')
+  })
+})
+
+describe('Str.after()', () => {
+  it('returns everything after first occurrence', () => {
+    assert.strictEqual(Str.after('hello@example.com', '@'), 'example.com')
+  })
+  it('returns full string when search is not found', () => {
+    assert.strictEqual(Str.after('hello', '@'), 'hello')
+  })
+})
+
+describe('Str.afterLast()', () => {
+  it('returns everything after the last occurrence', () => {
+    assert.strictEqual(Str.afterLast('a/b/c', '/'), 'c')
+  })
+  it('returns full string when search is not found', () => {
+    assert.strictEqual(Str.afterLast('hello', '/'), 'hello')
+  })
+})
+
+describe('Str.between()', () => {
+  it('returns the substring between from and to', () => {
+    assert.strictEqual(Str.between('[hello]', '[', ']'), 'hello')
+  })
+  it('returns empty string when markers are adjacent', () => {
+    assert.strictEqual(Str.between('[]', '[', ']'), '')
+  })
+})
+
+describe('Str.replaceFirst()', () => {
+  it('replaces only the first occurrence', () => {
+    assert.strictEqual(Str.replaceFirst('aaa', 'a', 'b'), 'baa')
+  })
+  it('returns unchanged string when search is not found', () => {
+    assert.strictEqual(Str.replaceFirst('hello', 'x', 'y'), 'hello')
+  })
+})
+
+describe('Str.replaceLast()', () => {
+  it('replaces only the last occurrence', () => {
+    assert.strictEqual(Str.replaceLast('aaa', 'a', 'b'), 'aab')
+  })
+  it('returns unchanged string when search is not found', () => {
+    assert.strictEqual(Str.replaceLast('hello', 'x', 'y'), 'hello')
+  })
+})
+
+describe('Str.padLeft()', () => {
+  it('pads the left side with spaces by default', () => {
+    assert.strictEqual(Str.padLeft('5', 3), '  5')
+  })
+  it('pads with custom character', () => {
+    assert.strictEqual(Str.padLeft('5', 3, '0'), '005')
+  })
+  it('returns unchanged string when already at length', () => {
+    assert.strictEqual(Str.padLeft('hello', 3), 'hello')
+  })
+})
+
+describe('Str.padRight()', () => {
+  it('pads the right side with spaces', () => {
+    assert.strictEqual(Str.padRight('hi', 5), 'hi   ')
+  })
+  it('pads with custom character', () => {
+    assert.strictEqual(Str.padRight('hi', 5, '-'), 'hi---')
+  })
+})
+
+describe('Str.padBoth()', () => {
+  it('centres the string', () => {
+    const result = Str.padBoth('hi', 6)
+    assert.strictEqual(result.length, 6)
+    assert.ok(result.includes('hi'))
+  })
+  it('returns unchanged string when already at or over length', () => {
+    assert.strictEqual(Str.padBoth('hello', 3), 'hello')
+  })
+})
+
+describe('Str.squish()', () => {
+  it('collapses multiple spaces', () => {
+    assert.strictEqual(Str.squish('  hello   world  '), 'hello world')
+  })
+  it('trims leading and trailing whitespace', () => {
+    assert.strictEqual(Str.squish('\thello\t'), 'hello')
+  })
+})
+
+describe('Str.trim()', () => {
+  it('trims whitespace by default', () => {
+    assert.strictEqual(Str.trim('  hello  '), 'hello')
+  })
+  it('trims specified characters', () => {
+    assert.strictEqual(Str.trim('/path/', '/'), 'path')
+  })
+})
+
+describe('Str.mask()', () => {
+  it('masks from start to end of string by default', () => {
+    const result = Str.mask('hello', '*', 2)
+    assert.strictEqual(result, 'he***')
+  })
+  it('masks only the specified length', () => {
+    const result = Str.mask('4111 1111 1111 1111', '*', 0, 14)
+    assert.strictEqual(result, '************** 1111')
+  })
+})
+
+describe('Str.ascii()', () => {
+  it('strips diacritics', () => {
+    assert.strictEqual(Str.ascii('café'), 'cafe')
+  })
+  it('handles plain ASCII unchanged', () => {
+    assert.strictEqual(Str.ascii('hello'), 'hello')
+  })
+})
+
+describe('Str.slug()', () => {
+  it('converts to URL-friendly slug', () => {
+    assert.strictEqual(Str.slug('Hello World!'), 'hello-world')
+  })
+  it('uses custom separator', () => {
+    assert.strictEqual(Str.slug('Hello World', '_'), 'hello_world')
+  })
+  it('strips special characters', () => {
+    assert.strictEqual(Str.slug('Hello & World'), 'hello-world')
+  })
+})
+
+describe('Str.uuid()', () => {
+  it('generates a valid UUID v4', () => {
+    const id = Str.uuid()
+    assert.ok(Str.isUuid(id), `Expected UUID, got: ${id}`)
+  })
+  it('generates unique values', () => {
+    assert.notStrictEqual(Str.uuid(), Str.uuid())
+  })
+})
+
+describe('Str.isUuid()', () => {
+  it('returns true for a valid UUID', () => {
+    assert.ok(Str.isUuid('550e8400-e29b-41d4-a716-446655440000'))
+  })
+  it('returns false for invalid input', () => {
+    assert.ok(!Str.isUuid('not-a-uuid'))
+    assert.ok(!Str.isUuid(''))
+  })
+})
+
+describe('Str.isUlid()', () => {
+  it('returns false for non-ULID input', () => {
+    assert.ok(!Str.isUlid('not-a-ulid'))
+  })
+  it('returns true for a valid ULID (26 uppercase Crockford base32 chars)', () => {
+    assert.ok(Str.isUlid('01ARZ3NDEKTSV4RRFFQ69G5FAV'))
+  })
+})
+
+describe('Str.random()', () => {
+  it('generates a string of the requested length', () => {
+    assert.strictEqual(Str.random(16).length, 16)
+    assert.strictEqual(Str.random(32).length, 32)
+  })
+  it('generates unique values', () => {
+    assert.notStrictEqual(Str.random(), Str.random())
+  })
+})
+
+describe('Str.password()', () => {
+  it('generates a string of the requested length', () => {
+    assert.strictEqual(Str.password(24).length, 24)
+  })
+  it('generates unique values', () => {
+    assert.notStrictEqual(Str.password(), Str.password())
+  })
+})
+
+describe('Str.plural()', () => {
+  it('pluralises a regular word', () => {
+    assert.strictEqual(Str.plural('post'), 'posts')
+  })
+  it('returns singular form when count is 1', () => {
+    assert.strictEqual(Str.plural('post', 1), 'post')
+  })
+  it('handles irregular words', () => {
+    assert.strictEqual(Str.plural('person'), 'people')
+    assert.strictEqual(Str.plural('child'), 'children')
+  })
+  it('handles uncountable words', () => {
+    assert.strictEqual(Str.plural('sheep'), 'sheep')
+    assert.strictEqual(Str.plural('fish'), 'fish')
+  })
+  it('handles -y → -ies', () => {
+    assert.strictEqual(Str.plural('category'), 'categories')
+  })
+  it('handles -s, -x, -z, -ch, -sh → -es', () => {
+    assert.strictEqual(Str.plural('box'), 'boxes')
+    assert.strictEqual(Str.plural('branch'), 'branches')
+  })
+})
+
+describe('Str.singular()', () => {
+  it('singularises a regular word', () => {
+    assert.strictEqual(Str.singular('posts'), 'post')
+  })
+  it('handles irregular plurals', () => {
+    assert.strictEqual(Str.singular('people'), 'person')
+    assert.strictEqual(Str.singular('children'), 'child')
+  })
+  it('handles uncountable words', () => {
+    assert.strictEqual(Str.singular('sheep'), 'sheep')
+  })
+  it('handles -ies → -y', () => {
+    assert.strictEqual(Str.singular('categories'), 'category')
+  })
+})
+
+// ─── Num ───────────────────────────────────────────────────
+
+describe('Num.format()', () => {
+  it('formats a number with commas', () => {
+    assert.strictEqual(Num.format(1234567), '1,234,567')
+  })
+  it('formats with specified decimal places', () => {
+    assert.strictEqual(Num.format(1234567.89, 2), '1,234,567.89')
+  })
+  it('formats zero decimals explicitly', () => {
+    assert.strictEqual(Num.format(1000, 0), '1,000')
+  })
+})
+
+describe('Num.currency()', () => {
+  it('formats USD by default', () => {
+    assert.strictEqual(Num.currency(9.99), '$9.99')
+  })
+  it('formats EUR with German locale', () => {
+    const result = Num.currency(9.99, 'EUR', 'de-DE')
+    assert.ok(result.includes('9') && result.includes('€'), `Unexpected: ${result}`)
+  })
+})
+
+describe('Num.percentage()', () => {
+  it('formats as a percentage', () => {
+    assert.strictEqual(Num.percentage(50), '50%')
+  })
+  it('respects decimal places', () => {
+    assert.strictEqual(Num.percentage(73.5, 1), '73.5%')
+  })
+})
+
+describe('Num.fileSize()', () => {
+  it('formats bytes', () => {
+    assert.strictEqual(Num.fileSize(0), '0 B')
+    assert.strictEqual(Num.fileSize(512), '512 B')
+  })
+  it('formats kilobytes', () => {
+    assert.strictEqual(Num.fileSize(1536), '1.50 KB')
+  })
+  it('formats megabytes', () => {
+    assert.ok(Num.fileSize(1_048_576).includes('MB'))
+  })
+  it('formats gigabytes', () => {
+    assert.ok(Num.fileSize(1_073_741_824).includes('GB'))
+  })
+})
+
+describe('Num.abbreviate()', () => {
+  it('abbreviates thousands', () => {
+    assert.strictEqual(Num.abbreviate(1500), '1.5K')
+  })
+  it('abbreviates millions', () => {
+    assert.strictEqual(Num.abbreviate(1_500_000), '1.5M')
+  })
+  it('abbreviates billions', () => {
+    assert.strictEqual(Num.abbreviate(2_000_000_000), '2.0B')
+  })
+  it('abbreviates trillions', () => {
+    assert.strictEqual(Num.abbreviate(3_000_000_000_000), '3.0T')
+  })
+  it('handles negative values', () => {
+    assert.strictEqual(Num.abbreviate(-1500), '-1.5K')
+  })
+  it('returns string for small numbers', () => {
+    assert.strictEqual(Num.abbreviate(42), '42')
+  })
+})
+
+describe('Num.ordinal()', () => {
+  it('handles 1st, 2nd, 3rd', () => {
+    assert.strictEqual(Num.ordinal(1), '1st')
+    assert.strictEqual(Num.ordinal(2), '2nd')
+    assert.strictEqual(Num.ordinal(3), '3rd')
+  })
+  it('handles 4th through 20th', () => {
+    assert.strictEqual(Num.ordinal(4), '4th')
+    assert.strictEqual(Num.ordinal(11), '11th')
+    assert.strictEqual(Num.ordinal(12), '12th')
+    assert.strictEqual(Num.ordinal(13), '13th')
+  })
+  it('handles 21st, 22nd, 23rd', () => {
+    assert.strictEqual(Num.ordinal(21), '21st')
+    assert.strictEqual(Num.ordinal(22), '22nd')
+    assert.strictEqual(Num.ordinal(23), '23rd')
+  })
+})
+
+describe('Num.clamp()', () => {
+  it('returns value when within range', () => {
+    assert.strictEqual(Num.clamp(50, 0, 100), 50)
+  })
+  it('clamps to min', () => {
+    assert.strictEqual(Num.clamp(-10, 0, 100), 0)
+  })
+  it('clamps to max', () => {
+    assert.strictEqual(Num.clamp(150, 0, 100), 100)
+  })
+})
+
+describe('Num.trim()', () => {
+  it('removes trailing zeros', () => {
+    assert.strictEqual(Num.trim(1.5), '1.5')
+    assert.strictEqual(Num.trim(1.0), '1')
+  })
+  it('respects decimal places when specified', () => {
+    assert.strictEqual(Num.trim(1.5, 3), '1.5')
+    assert.strictEqual(Num.trim(1.0, 2), '1')
+  })
+})
+
+describe('Num.spell()', () => {
+  it('spells zero', () => {
+    assert.strictEqual(Num.spell(0), 'zero')
+  })
+  it('spells single-digit numbers', () => {
+    assert.strictEqual(Num.spell(1), 'one')
+    assert.strictEqual(Num.spell(9), 'nine')
+  })
+  it('spells teens', () => {
+    assert.strictEqual(Num.spell(11), 'eleven')
+    assert.strictEqual(Num.spell(19), 'nineteen')
+  })
+  it('spells tens', () => {
+    assert.strictEqual(Num.spell(20), 'twenty')
+    assert.strictEqual(Num.spell(42), 'forty-two')
+  })
+  it('spells hundreds', () => {
+    assert.strictEqual(Num.spell(100), 'one hundred')
+    assert.strictEqual(Num.spell(999), 'nine hundred ninety-nine')
+  })
+  it('spells thousands', () => {
+    assert.strictEqual(Num.spell(1000), 'one thousand')
+    assert.strictEqual(Num.spell(1001), 'one thousand one')
+  })
+  it('spells millions', () => {
+    assert.strictEqual(Num.spell(1_000_000), 'one million')
+    assert.strictEqual(Num.spell(2_500_000), 'two million five hundred thousand')
+  })
+  it('spells billions', () => {
+    assert.strictEqual(Num.spell(1_000_000_000), 'one billion')
+  })
+  it('spells trillions', () => {
+    assert.strictEqual(Num.spell(1_000_000_000_000), 'one trillion')
+    assert.strictEqual(Num.spell(999_000_000_000_000), 'nine hundred ninety-nine trillion')
+  })
+  it('spells negative numbers', () => {
+    assert.strictEqual(Num.spell(-42), 'negative forty-two')
+  })
+  it('truncates fractional part', () => {
+    assert.strictEqual(Num.spell(3.9), 'three')
   })
 })
