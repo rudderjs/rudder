@@ -8,3 +8,28 @@ model Todo {
   updatedAt DateTime @updatedAt
 }
 // <rudderjs:modules:end>
+
+// Polymorphic-relations demo (used by /demos/polymorphic).
+// Comment.commentable is morphTo Post | Video; commentableId/commentableType
+// follow @rudderjs/orm's camelCase polymorphic convention.
+model Post {
+  id        Int      @id @default(autoincrement())
+  title     String
+  createdAt DateTime @default(now())
+}
+
+model Video {
+  id        Int      @id @default(autoincrement())
+  url       String
+  createdAt DateTime @default(now())
+}
+
+model Comment {
+  id              Int      @id @default(autoincrement())
+  body            String
+  commentableId   Int
+  commentableType String
+  createdAt       DateTime @default(now())
+
+  @@index([commentableType, commentableId])
+}

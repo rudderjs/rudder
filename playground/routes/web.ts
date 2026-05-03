@@ -10,6 +10,9 @@ import { AuthController } from '../app/Http/Controllers/AuthController.js'
 import { BillingController, billingDemoProps, billingSubscriptionsProps } from '../app/Http/Controllers/BillingController.js'
 import { TodoService } from '../app/Modules/Todo/TodoService.js'
 import { User } from '../app/Models/User.js'
+import { Post } from '../app/Models/Post.js'
+import { Video } from '../app/Models/Video.js'
+import type { Comment } from '../app/Models/Comment.js'
 
 
 // GET view pages — /login, /register, /forgot-password, /reset-password
@@ -105,6 +108,26 @@ Route.get('/demos/http', async () => view('demos.http'))
 Route.get('/demos/todos', async () => {
   const todos = await resolve<TodoService>(TodoService).findAll()
   return view('demos.todos', { todos })
+})
+
+// GET /demos/polymorphic — morphMany / morphTo demo. Controller loads posts +
+// videos with comments via the morph relation; the view exercises Model.morph()
+// writes and morphTo resolution end-to-end.
+Route.get('/demos/polymorphic', async () => {
+  const [posts, videos] = await Promise.all([
+    Post.all(),
+    Video.all(),
+  ])
+
+  const hydrate = async <T extends { id: number }>(parent: T & { related(name: string): { get(): Promise<unknown[]> } }) => {
+    const comments = await parent.related('comments').get() as Comment[]
+    return { ...parent, comments: comments.map(c => ({ ...c })) }
+  }
+
+  return view('demos.polymorphic', {
+    posts:  await Promise.all(posts.map(p => hydrate(p as Post & { related(n: string): { get(): Promise<unknown[]> } }))),
+    videos: await Promise.all(videos.map(v => hydrate(v as Video & { related(n: string): { get(): Promise<unknown[]> } }))),
+  })
 })
 
 // GET /demos/pennant — feature flags resolved against the current user.
