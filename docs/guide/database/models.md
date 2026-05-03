@@ -154,9 +154,10 @@ class Post extends Model {}
 
 class User extends Model {
   static override relations = {
-    posts: { type: 'hasMany',   model: () => Post, foreignKey: 'authorId' },
-    team:  { type: 'belongsTo', model: () => Team, foreignKey: 'teamId' },
-    phone: { type: 'hasOne',    model: () => Phone, foreignKey: 'userId' },
+    posts: { type: 'hasMany',       model: () => Post,  foreignKey: 'authorId' },
+    team:  { type: 'belongsTo',     model: () => Team,  foreignKey: 'teamId' },
+    phone: { type: 'hasOne',        model: () => Phone, foreignKey: 'userId' },
+    roles: { type: 'belongsToMany', model: () => Role,  pivotTable: 'role_user' },
   } as const
 }
 
@@ -172,11 +173,78 @@ const recent = await user!.related('posts')
 const team = await user!.related('team').first()
 ```
 
-**Supported types:** `hasOne`, `hasMany`, `belongsTo`. Polymorphic and many-to-many are intentionally out of scope — reach for the adapter directly when you need them.
+**Supported types:** `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`. Polymorphic relations are out of scope — reach for the adapter directly when you need them.
 
 **Defaults:** `foreignKey` defaults to `<parentClassName>Id` (camelCase) for `hasOne` / `hasMany`, and `<relatedClassName>Id` for `belongsTo`. `localKey` defaults to the parent's primary key (or the FK on `belongsTo`). Override either when your schema diverges.
 
 The `model: () => Post` thunk is mandatory — relation declarations sit on each side of the relationship, and a direct reference would create a circular import at module evaluation time.
+
+### Many-to-many (`belongsToMany`)
+
+Many-to-many relations route through a pivot table. `pivotTable` is required; the two pivot columns default to camelCase of each side's class name + `Id` (`User` ⇄ `Role` → `userId` / `roleId`). Override either with `foreignPivotKey` / `relatedPivotKey` when your schema differs.
+
+```ts
+class User extends Model {
+  static override relations = {
+    roles: {
+      type:             'belongsToMany',
+      model:            () => Role,
+      pivotTable:       'role_user',
+      // foreignPivotKey: 'userId',        // default
+      // relatedPivotKey: 'roleId',        // default
+    },
+  } as const
+}
+```
+
+**Reading.** `related('roles')` returns a chainable QueryBuilder on the *related* model — the pivot stays invisible. The pivot lookup runs on terminal evaluation (`.get()`, `.first()`, `.paginate()`), so chaining stays synchronous.
+
+```ts
+const user = await User.find(1)
+const active = await user!.related('roles')
+  .where('active', true)
+  .orderBy('name')
+  .get()
+```
+
+**Writing.** Pivot mutations live on a separate accessor — `user.roles()` (auto-generated when the parent model is first queried) — exposing `attach`, `detach`, `sync`:
+
+```ts
+// Attach by id list. Optional pivot data is written to every new row.
+await user!.roles().attach([1, 2, 3])
+await user!.roles().attach([1, 2], { addedBy: 'admin' })
+
+// Per-id pivot data — different columns per row.
+await user!.roles().attach({
+  1: { addedBy: 'admin' },
+  2: { addedBy: 'system' },
+})
+
+// Detach. With ids, removes only those pivot rows; with no args, removes all.
+await user!.roles().detach([1])      // returns count of rows removed
+await user!.roles().detach()         // detaches everything for this user
+
+// Sync = diff: attach the missing, detach what's no longer present.
+const result = await user!.roles().sync([1, 3, 5])
+// → { attached: [3, 5], detached: [2] }
+```
+
+For TypeScript users who want strongly-typed accessors, define the method explicitly — it dispatches to the same helper:
+
+```ts
+class User extends Model {
+  static override relations = { /* ... */ }
+  // Same behavior as the auto-installed method, with your own type signature.
+  roles() { return Model.belongsToMany(this, 'roles') }
+}
+```
+
+**v1 limitations:**
+
+- Pivot columns are not surfaced on read results — `related('roles').get()` returns clean `Role` instances without `_pivot` fields. Pivot data round-trips through `attach`/`sync` on the write side.
+- No `withTimestamps` — apps that want `createdAt` on the pivot can write it via `attach(ids, { createdAt: new Date() })` or schema-level defaults.
+- No polymorphic `belongsToMany` (`morphToMany`).
+- Mutations (`create`, `update`, `delete`, `insertMany`, `deleteAll`) on the deferred query throw — write the pivot via the accessor and write the related rows via the related model directly.
 
 ## Route model binding
 

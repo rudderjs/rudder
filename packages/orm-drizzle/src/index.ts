@@ -271,6 +271,24 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       .where(eq(pkCol, id)) as unknown as Promise<void>)
   }
 
+  async insertMany(rows: Partial<T>[]): Promise<void> {
+    if (rows.length === 0) return
+    await (this.db.insert(this.table).values(rows) as unknown as Promise<void>)
+  }
+
+  async deleteAll(): Promise<number> {
+    const cond = this.buildConditions()
+    let q = this.db.delete(this.table)
+    if (cond) q = q.where(cond)
+    // .returning() lets us count rows deleted across SQLite/Postgres without
+    // a driver-specific RowsAffected hop. MySQL drivers ignore .returning()
+    // and the count comes back zero — adapter consumers needing precise MySQL
+    // counts should switch to a Postgres or SQLite Drizzle driver until we
+    // surface driver capability flags.
+    const result = await ((q as unknown as { returning?: () => DrizzleQB }).returning?.() ?? q) as unknown as Array<unknown>
+    return Array.isArray(result) ? result.length : 0
+  }
+
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
     const pkCol = this.col(this.primaryKey) as Column
     const col   = this.col(column) as Column

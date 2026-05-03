@@ -48,6 +48,7 @@ export class ModelRegistry {
     const name = ModelClass.name
     if (!name || this.models.has(name)) return
     this.models.set(name, ModelClass)
+    _installBelongsToManyMethods(ModelClass)
     for (const listener of this.listeners) listener(name, ModelClass)
   }
 
@@ -148,16 +149,40 @@ type ScopeFn = (query: QueryBuilder<any>, ...args: any[]) => QueryBuilder<any>
  *
  * `localKey` lets you override the column resolved on the parent side (the
  * primary key by default for has*, or the foreign key for belongsTo).
+ *
+ * `belongsToMany` declares a many-to-many relation through a pivot table.
+ * `pivotTable` is required; the two pivot keys default to camelCase of each
+ * side's class name + `Id` (`User` ⇄ `Role` → `userId` / `roleId`). Reads
+ * route through `Model.related(name)` returning a chainable QueryBuilder on
+ * the related model; pivot mutations (`attach` / `detach` / `sync`) live on
+ * the per-relation accessor (`user.roles().attach([1,2])`) — see
+ * {@link Model.belongsToMany}.
  */
-export interface RelationDefinition {
-  type:        'hasOne' | 'hasMany' | 'belongsTo'
-  /** Lazy reference to the related model class — avoids circular imports. */
-  model:       () => typeof Model
-  /** Foreign-key column. Defaults are described in the interface comment. */
-  foreignKey?: string
-  /** Override the local column joined against `foreignKey`. */
-  localKey?:   string
-}
+export type RelationDefinition =
+  | {
+      type:        'hasOne' | 'hasMany' | 'belongsTo'
+      /** Lazy reference to the related model class — avoids circular imports. */
+      model:       () => typeof Model
+      /** Foreign-key column. Defaults are described in the interface comment. */
+      foreignKey?: string
+      /** Override the local column joined against `foreignKey`. */
+      localKey?:   string
+    }
+  | {
+      type:             'belongsToMany'
+      /** Lazy reference to the related model class — avoids circular imports. */
+      model:            () => typeof Model
+      /** Pivot table name — required. Conventionally `<a>_<b>` alphabetical. */
+      pivotTable:       string
+      /** Pivot column pointing at the parent. Default: `${camelCase(thisClass)}Id`. */
+      foreignPivotKey?: string
+      /** Pivot column pointing at the related row. Default: `${camelCase(relatedClass)}Id`. */
+      relatedPivotKey?: string
+      /** Column on the parent model joined against `foreignPivotKey`. Default: `primaryKey`. */
+      parentKey?:       string
+      /** Column on the related model joined against `relatedPivotKey`. Default: `Related.primaryKey`. */
+      relatedKey?:      string
+    }
 
 // ─── Decorators ────────────────────────────────────────────
 
@@ -304,21 +329,29 @@ export abstract class Model {
    * `await user.related('posts').where('published', true).get()` — where you
    * want a chainable QueryBuilder scoped to the parent record.
    *
-   * Supported types: `hasMany`, `hasOne`, `belongsTo`. Polymorphic and
-   * many-to-many relations are intentionally out of scope; reach for the
+   * Supported types: `hasMany`, `hasOne`, `belongsTo`, `belongsToMany`.
+   * Polymorphic relations are intentionally out of scope — reach for the
    * adapter directly when you need them.
+   *
+   * For `belongsToMany`, pivot mutations (`attach` / `detach` / `sync`) live
+   * on a separate accessor — see {@link Model.belongsToMany}. `related()`
+   * returns the related rows already filtered through the pivot, so callers
+   * can chain `where`/`orderBy`/`paginate` without seeing the pivot.
    *
    * @example
    * class User extends Model {
    *   static override relations = {
-   *     posts: { type: 'hasMany',   model: () => Post,    foreignKey: 'authorId' },
-   *     team:  { type: 'belongsTo', model: () => Team,    foreignKey: 'teamId' },
-   *     phone: { type: 'hasOne',    model: () => Phone,   foreignKey: 'userId' },
+   *     posts: { type: 'hasMany',       model: () => Post,    foreignKey: 'authorId' },
+   *     team:  { type: 'belongsTo',     model: () => Team,    foreignKey: 'teamId' },
+   *     phone: { type: 'hasOne',        model: () => Phone,   foreignKey: 'userId' },
+   *     roles: { type: 'belongsToMany', model: () => Role,    pivotTable: 'role_user' },
    *   } as const
    * }
    *
    * const user = await User.find(1)
    * await user!.related('posts').where('published', true).get()
+   * await user!.related('roles').orderBy('name').get()
+   * await user!.roles().attach([1, 2, 3])
    */
   static relations: Record<string, RelationDefinition> = {}
 
@@ -1110,6 +1143,15 @@ export abstract class Model {
     const Related = def.model() as typeof Model
     const fkCamel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1)
 
+    if (def.type === 'belongsToMany') {
+      const meta = _resolveBelongsToManyMeta(ctor, Related, def)
+      const parentVal = (this as unknown as Record<string, unknown>)[meta.parentKey]
+      if (parentVal === undefined || parentVal === null) {
+        throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+      }
+      return _belongsToManyDeferredQb(Related, def, meta, parentVal) as QueryBuilder<Model>
+    }
+
     if (def.type === 'belongsTo') {
       // This model holds the FK; query the related model's PK.
       const fk        = def.foreignKey ?? `${fkCamel(Related.name)}Id`
@@ -1129,6 +1171,46 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
     }
     return Related.where(fk, localVal) as QueryBuilder<Model>
+  }
+
+  /**
+   * Pivot-mutation accessor for a `belongsToMany` relation.
+   *
+   * Most callers use the auto-generated per-relation method
+   * (`user.roles().attach([1, 2])`) installed when the parent model is
+   * first queried. This static is the public-facing alias the
+   * auto-method dispatches to — call it directly when you want to define
+   * a typed wrapper on your Model subclass:
+   *
+   * ```ts
+   * class User extends Model {
+   *   static override relations = {
+   *     roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+   *   }
+   *   // Override for typing — same behavior as the auto-generated method.
+   *   roles() { return Model.belongsToMany(this, 'roles') }
+   * }
+   * ```
+   */
+  static belongsToMany(parent: Model, name: string): BelongsToManyAccessor {
+    const ctor = parent.constructor as typeof Model
+    const def = ctor.relations[name]
+    if (!def) {
+      throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
+    }
+    if (def.type !== 'belongsToMany') {
+      throw new Error(`[RudderJS ORM] Relation "${name}" on ${ctor.name} is "${def.type}", not "belongsToMany".`)
+    }
+    const Related = def.model() as typeof Model
+    const meta = _resolveBelongsToManyMeta(ctor, Related, def)
+    const parentVal = (parent as unknown as Record<string, unknown>)[meta.parentKey]
+    if (parentVal === undefined || parentVal === null) {
+      throw new Error(`[RudderJS ORM] Cannot use belongsToMany "${name}" on ${ctor.name} — ${meta.parentKey} is unset.`)
+    }
+    // Belt-and-suspenders: make sure the auto-method is installed even
+    // for instances constructed before any query against this class.
+    _installBelongsToManyMethods(ctor)
+    return _makeBelongsToManyAccessor(ctor, Related, def, parentVal)
   }
 
   // ── Cast / Mutator helpers ─────────────────────────────
@@ -1265,6 +1347,287 @@ export abstract class Model {
     return Object.fromEntries(
       Object.entries(result).filter(([k]) => !effectiveHidden.includes(k))
     )
+  }
+}
+
+// ─── belongsToMany internals ───────────────────────────────
+
+interface BelongsToManyMeta {
+  pivotTable:      string
+  foreignPivotKey: string
+  relatedPivotKey: string
+  parentKey:       string
+  relatedKey:      string
+}
+
+type BelongsToManyDef = Extract<RelationDefinition, { type: 'belongsToMany' }>
+
+function _camelHead(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1)
+}
+
+function _resolveBelongsToManyMeta(
+  Parent:  typeof Model,
+  Related: typeof Model,
+  def:     BelongsToManyDef,
+): BelongsToManyMeta {
+  return {
+    pivotTable:      def.pivotTable,
+    foreignPivotKey: def.foreignPivotKey ?? `${_camelHead(Parent.name)}Id`,
+    relatedPivotKey: def.relatedPivotKey ?? `${_camelHead(Related.name)}Id`,
+    parentKey:       def.parentKey       ?? Parent.primaryKey,
+    relatedKey:      def.relatedKey      ?? Related.primaryKey,
+  }
+}
+
+const _CHAIN_METHODS = new Set([
+  'where', 'orWhere', 'orderBy', 'limit', 'offset', 'with', 'withTrashed', 'onlyTrashed',
+])
+const _TERMINAL_METHODS = new Set([
+  'first', 'find', 'get', 'all', 'count', 'paginate',
+])
+const _UNSUPPORTED_TERMINALS = new Set([
+  'create', 'update', 'delete', 'restore', 'forceDelete', 'increment', 'decrement', 'insertMany', 'deleteAll',
+])
+
+/**
+ * Build a deferred QueryBuilder that runs the pivot lookup on terminal
+ * evaluation. Chain methods (where/orderBy/etc.) are recorded and replayed
+ * against `Related.where(relatedKey, 'IN', ids)` once ids are resolved.
+ *
+ * Mutations (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw —
+ * write the pivot via `belongsToMany().attach/detach/sync` and write the
+ * related rows via the related model directly.
+ */
+type QbAsDict = Record<string, ((...a: unknown[]) => unknown) | undefined>
+
+function _replayChain(q: QueryBuilder<Model>, recorded: ReadonlyArray<[string, unknown[]]>): QueryBuilder<Model> {
+  let cur = q
+  for (const [m, args] of recorded) {
+    const fn = (cur as unknown as QbAsDict)[m]
+    if (fn) cur = fn.apply(cur, args) as QueryBuilder<Model>
+  }
+  return cur
+}
+
+function _belongsToManyDeferredQb(
+  Related:    typeof Model,
+  _def:       BelongsToManyDef,
+  meta:       BelongsToManyMeta,
+  parentVal:  unknown,
+): QueryBuilder<Model> {
+  const recorded: Array<[string, unknown[]]> = []
+
+  const buildResolved = async (): Promise<QueryBuilder<Model>> => {
+    const adapter = ModelRegistry.getAdapter()
+    const pivotRows = await adapter
+      .query<Record<string, unknown>>(meta.pivotTable)
+      .where(meta.foreignPivotKey, parentVal)
+      .get()
+    const ids = pivotRows.map(r => r[meta.relatedPivotKey])
+    // Empty IN list — short-circuit with a guaranteed-empty query so
+    // adapters don't have to handle the edge case.
+    const q = (Related.query() as unknown as QueryBuilder<Model>)
+      .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
+    return _replayChain(q, recorded)
+  }
+
+  const proxy: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
+    get(_t, prop): unknown {
+      const name = String(prop)
+      if (_CHAIN_METHODS.has(name)) {
+        return (...args: unknown[]) => {
+          recorded.push([name, args])
+          return proxy
+        }
+      }
+      if (_TERMINAL_METHODS.has(name)) {
+        return async (...args: unknown[]) => {
+          const q = await buildResolved()
+          const fn = (q as unknown as QbAsDict)[name]
+          return fn ? fn.apply(q, args) : undefined
+        }
+      }
+      if (_UNSUPPORTED_TERMINALS.has(name)) {
+        return () => {
+          throw new Error(
+            `[RudderJS ORM] "${name}" is not supported on a belongsToMany lazy-fetch query. ` +
+            `Use Model.belongsToMany(parent, name) for pivot mutations or call methods on the related Model directly.`,
+          )
+        }
+      }
+      return undefined
+    },
+  })
+
+  return proxy
+}
+
+/**
+ * Helper for `Model.belongsToMany` — accepts both flat pivot data
+ * (same row written for every id) and a per-id map.
+ *
+ * Flat:    `attach([1, 2, 3], { addedBy: 'admin' })`
+ * Per-id:  `attach({ 1: { addedBy: 'admin' }, 2: { addedBy: 'system' } })`
+ */
+type AttachInput = ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>
+
+function _normalizeAttachInput(
+  input:           AttachInput,
+  foreignPivotKey: string,
+  parentVal:       unknown,
+  relatedPivotKey: string,
+  flatPivot?:      Record<string, unknown>,
+): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = []
+  if (Array.isArray(input)) {
+    for (const id of input) {
+      rows.push({
+        ...(flatPivot ?? {}),
+        [foreignPivotKey]: parentVal,
+        [relatedPivotKey]: id,
+      })
+    }
+  } else {
+    for (const [id, perIdPivot] of Object.entries(input as Record<string | number, Record<string, unknown>>)) {
+      // Normalize numeric-string keys back to numbers when possible — JS
+      // object keys are always strings; the pivot column may be int.
+      const idVal: unknown = /^\d+$/.test(id) ? Number(id) : id
+      rows.push({
+        ...perIdPivot,
+        [foreignPivotKey]: parentVal,
+        [relatedPivotKey]: idVal,
+      })
+    }
+  }
+  return rows
+}
+
+function _idsFromAttachInput(input: AttachInput): unknown[] {
+  if (Array.isArray(input)) return [...input]
+  return Object.keys(input).map(k => /^\d+$/.test(k) ? Number(k) : k)
+}
+
+/**
+ * Per-relation accessor for a `belongsToMany` relation. Returned from
+ * {@link Model.belongsToMany} and from the auto-generated prototype
+ * methods.
+ *
+ * `attach` writes new pivot rows. `detach` removes pivot rows. `sync`
+ * diffs the current pivot ids against the requested set and runs
+ * `attach`/`detach` for the difference.
+ */
+export interface BelongsToManyAccessor {
+  /**
+   * Insert pivot rows. Accepts a list of ids (with optional flat pivot data
+   * applied to every row) or a per-id map keyed by related id with that
+   * row's pivot data.
+   *
+   * Empty input is a no-op — no INSERT, no error.
+   */
+  attach(input: AttachInput, flatPivot?: Record<string, unknown>): Promise<void>
+  /**
+   * Delete pivot rows. With ids, deletes only the matching pivot rows.
+   * With no args, deletes all pivot rows for this parent.
+   */
+  detach(ids?: ReadonlyArray<number | string>): Promise<number>
+  /**
+   * Diff the current pivot set against `desiredIds` — attach the missing,
+   * detach what's no longer present. Optional flat pivot data is written
+   * onto the *new* pivot rows only; existing rows are not modified.
+   *
+   * Returns counts of what changed.
+   */
+  sync(
+    desiredIds: ReadonlyArray<number | string>,
+    flatPivot?: Record<string, unknown>,
+  ): Promise<{ attached: unknown[]; detached: unknown[] }>
+}
+
+function _makeBelongsToManyAccessor(
+  Parent:    typeof Model,
+  Related:   typeof Model,
+  def:       BelongsToManyDef,
+  parentVal: unknown,
+): BelongsToManyAccessor {
+  const meta = _resolveBelongsToManyMeta(Parent, Related, def)
+
+  return {
+    async attach(input, flatPivot) {
+      const ids = _idsFromAttachInput(input)
+      if (ids.length === 0) return
+      const rows = _normalizeAttachInput(input, meta.foreignPivotKey, parentVal, meta.relatedPivotKey, flatPivot)
+      await ModelRegistry.getAdapter()
+        .query<Record<string, unknown>>(meta.pivotTable)
+        .insertMany(rows)
+    },
+
+    async detach(ids) {
+      const adapter = ModelRegistry.getAdapter()
+      let q = adapter
+        .query<Record<string, unknown>>(meta.pivotTable)
+        .where(meta.foreignPivotKey, parentVal)
+      if (ids !== undefined) {
+        if (ids.length === 0) return 0
+        q = q.where(meta.relatedPivotKey, 'IN', [...ids])
+      }
+      return q.deleteAll()
+    },
+
+    async sync(desiredIds, flatPivot) {
+      const adapter = ModelRegistry.getAdapter()
+      const currentRows = await adapter
+        .query<Record<string, unknown>>(meta.pivotTable)
+        .where(meta.foreignPivotKey, parentVal)
+        .get()
+      const current = new Set(currentRows.map(r => r[meta.relatedPivotKey]))
+      const desired = new Set<unknown>(desiredIds)
+      const attached: unknown[] = []
+      const detached: unknown[] = []
+      for (const id of desired) if (!current.has(id)) attached.push(id)
+      for (const id of current) if (!desired.has(id)) detached.push(id)
+
+      if (attached.length > 0) {
+        const rows = attached.map(id => ({
+          ...(flatPivot ?? {}),
+          [meta.foreignPivotKey]: parentVal,
+          [meta.relatedPivotKey]: id,
+        }))
+        await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
+      }
+      if (detached.length > 0) {
+        await adapter
+          .query<Record<string, unknown>>(meta.pivotTable)
+          .where(meta.foreignPivotKey, parentVal)
+          .where(meta.relatedPivotKey, 'IN', detached)
+          .deleteAll()
+      }
+
+      return { attached, detached }
+    },
+  }
+}
+
+/**
+ * Install per-relation prototype methods for every `belongsToMany` entry
+ * declared on `static relations`. Idempotent — won't overwrite a method
+ * the author already defined (typing escape hatch).
+ *
+ * Called on first query (via `ModelRegistry.register`) and once more
+ * defensively from `Model.belongsToMany` so apps that construct instances
+ * without ever querying still get the auto-method.
+ */
+function _installBelongsToManyMethods(ModelClass: typeof Model): void {
+  for (const [name, def] of Object.entries(ModelClass.relations)) {
+    if (def.type !== 'belongsToMany') continue
+    if (Object.prototype.hasOwnProperty.call(ModelClass.prototype, name)) continue
+    Object.defineProperty(ModelClass.prototype, name, {
+      configurable: true,
+      writable:     true,
+      value(this: Model): BelongsToManyAccessor {
+        return Model.belongsToMany(this, name)
+      },
+    })
   }
 }
 

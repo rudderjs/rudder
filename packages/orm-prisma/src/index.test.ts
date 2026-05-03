@@ -18,8 +18,10 @@ function makeCapturingClient() {
     findUnique: async (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return null },
     count:      async (args: { where?: Record<string, unknown> }) => { lastWhere = args.where ?? {}; return 0 },
     create:     async () => ({}),
+    createMany: async () => ({ count: 0 }),
     update:     async () => ({}),
     delete:     async () => undefined,
+    deleteMany: async () => ({ count: 0 }),
   }
   const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
   return { fakeClient, getLastWhere: () => lastWhere }
@@ -104,8 +106,10 @@ describe('PrismaQueryBuilder — increment / decrement', () => {
       findUnique: async () => null,
       count:      async () => 0,
       create:     async () => ({}),
+      createMany: async () => ({ count: 0 }),
       update:     async (args: Record<string, unknown>) => { lastArgs = args; return { id: 1 } },
       delete:     async () => undefined,
+      deleteMany: async () => ({ count: 0 }),
     }
     const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
     return { fakeClient, getLastArgs: () => lastArgs }

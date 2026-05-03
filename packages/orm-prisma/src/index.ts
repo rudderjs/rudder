@@ -6,8 +6,10 @@ type PrismaModelDelegate = {
   findMany(args?: Record<string, unknown>): Promise<unknown[]>
   count(args?: Record<string, unknown>): Promise<number>
   create(args: Record<string, unknown>): Promise<unknown>
+  createMany(args: { data: Record<string, unknown>[] }): Promise<{ count: number }>
   update(args: Record<string, unknown>): Promise<unknown>
   delete(args: Record<string, unknown>): Promise<unknown>
+  deleteMany(args: { where?: Record<string, unknown> }): Promise<{ count: number }>
 }
 type PrismaClient = {
   $connect(): Promise<void>
@@ -205,6 +207,16 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async forceDelete(id: number | string): Promise<void> {
     await this.delegate.delete({ where: { id } })
+  }
+
+  async insertMany(rows: Partial<T>[]): Promise<void> {
+    if (rows.length === 0) return
+    await this.delegate.createMany({ data: rows as Record<string, unknown>[] })
+  }
+
+  async deleteAll(): Promise<number> {
+    const result = await this.delegate.deleteMany({ where: this.buildWhere() })
+    return result.count
   }
 
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
