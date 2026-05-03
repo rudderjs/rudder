@@ -985,6 +985,68 @@ describe('getTemplates() — demos', () => {
     assert.ok(files['routes/web.ts']!.includes("view('demos.live')"))
   })
 
+  it('todos demo + ORM → Todo module + Prisma model + /demos/todos controller', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['todos'] }))
+    assert.ok('app/Views/Demos/Todos.tsx' in files)
+    assert.ok('app/Modules/Todo/TodoSchema.ts' in files)
+    assert.ok('app/Modules/Todo/TodoService.ts' in files)
+    assert.ok('app/Modules/Todo/TodoServiceProvider.ts' in files)
+    assert.match(files['prisma/schema/modules.prisma']!, /model Todo \{/)
+    assert.ok(files['routes/web.ts']!.includes("view('demos.todos'"))
+    assert.ok(files['routes/web.ts']!.includes('TodoService'))
+    assert.ok(files['app/Providers/AppServiceProvider.ts']!.includes('TodoServiceProvider'))
+  })
+
+  it('todos demo selected but ORM=none → demo dropped (registry gating)', () => {
+    const files = getTemplates(ctx({ orm: false, packages: noPkgs, demos: ['todos'] }))
+    assert.ok(!('app/Views/Demos/Todos.tsx' in files))
+    assert.ok(!('app/Modules/Todo/TodoService.ts' in files))
+    assert.ok(!files['routes/web.ts']!.includes("view('demos.todos'"))
+  })
+
+  it('fibonacci demo + concurrency → view + /api/fib + /demos/fibonacci', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, concurrency: true }, demos: ['fibonacci'] }))
+    assert.ok('app/Views/Demos/Fibonacci.tsx' in files)
+    assert.ok(files['routes/web.ts']!.includes("view('demos.fibonacci')"))
+    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/fib'/)
+  })
+
+  it('system-info demo + process → view + /api/system-info + /demos/system-info', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, process: true }, demos: ['system-info'] }))
+    assert.ok('app/Views/Demos/SystemInfo.tsx' in files)
+    assert.ok(files['routes/web.ts']!.includes("view('demos.system-info')"))
+    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/system-info'/)
+  })
+
+  it('avatar demo + storage + image → view + /api/avatar + /demos/avatar', () => {
+    const files = getTemplates(ctx({
+      packages: { ...noPkgs, storage: true, image: true },
+      demos: ['avatar'],
+    }))
+    assert.ok('app/Views/Demos/Avatar.tsx' in files)
+    assert.ok(files['routes/web.ts']!.includes("view('demos.avatar')"))
+    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/avatar'/)
+  })
+
+  it('pennant demo + pennant + auth → views + Feature.define seed + /demos/pennant/beta with FeatureMiddleware', () => {
+    const files = getTemplates(ctx({
+      packages: { ...noPkgs, auth: true, pennant: true },
+      demos: ['pennant'],
+    }))
+    assert.ok('app/Views/Demos/Pennant.tsx' in files)
+    assert.ok('app/Views/Demos/PennantBeta.tsx' in files)
+    assert.match(files['app/Providers/AppServiceProvider.ts']!, /Feature\.define\('dark-mode'/)
+    assert.match(files['app/Providers/AppServiceProvider.ts']!, /Feature\.define\('beta-dashboard'/)
+    assert.match(files['routes/web.ts']!, /view\('demos\.pennant',/)
+    assert.ok(files['routes/web.ts']!.includes("FeatureMiddleware('beta-dashboard')"))
+  })
+
+  it('pennant demo selected without pennant package → demo dropped', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true }, demos: ['pennant'] }))
+    assert.ok(!('app/Views/Demos/Pennant.tsx' in files))
+    assert.ok(!/view\('demos\.pennant'/.test(files['routes/web.ts']!))
+  })
+
   it('ws demo selected but broadcast not → demo dropped (registry gating)', () => {
     const files = getTemplates(ctx({ packages: noPkgs, demos: ['ws'] }))
     assert.ok(!('app/Views/Demos/Ws.tsx' in files))

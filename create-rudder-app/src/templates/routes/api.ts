@@ -1,4 +1,7 @@
 import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
+import { demosFibonacciApiBlock } from '../demos/fibonacci.js'
+import { demosSystemInfoApiBlock } from '../demos/system-info.js'
+import { demosAvatarApiBlock } from '../demos/avatar.js'
 
 export function routesApi(ctx: TemplateContext): string {
   const imports: string[] = [
@@ -77,8 +80,11 @@ router.get('/api/passport/me', async (req, res) => {
   }
 
   if (shouldScaffoldAnyDemo(ctx)) {
-    const wantContact = shouldScaffoldDemo(ctx, 'contact')
-    const wantWs      = shouldScaffoldDemo(ctx, 'ws')
+    const wantContact    = shouldScaffoldDemo(ctx, 'contact')
+    const wantWs         = shouldScaffoldDemo(ctx, 'ws')
+    const wantFibonacci  = shouldScaffoldDemo(ctx, 'fibonacci')
+    const wantSystemInfo = shouldScaffoldDemo(ctx, 'system-info')
+    const wantAvatar     = shouldScaffoldDemo(ctx, 'avatar')
 
     if (wantContact) imports.push(`import { z } from '@rudderjs/core'`)
     if (wantContact && ctx.packages.auth) imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
@@ -116,6 +122,21 @@ router.post('/api/ws/broadcast', async (req, res) => {
 
 // GET /api/ws/ping — current connection / channel counts.
 router.get('/api/ws/ping', (_req, res) => res.json(broadcastStats()))`)
+    }
+
+    if (wantFibonacci) {
+      lines.push('')
+      lines.push(demosFibonacciApiBlock())
+    }
+
+    if (wantSystemInfo) {
+      lines.push('')
+      lines.push(demosSystemInfoApiBlock())
+    }
+
+    if (wantAvatar) {
+      lines.push('')
+      lines.push(demosAvatarApiBlock())
     }
   }
 

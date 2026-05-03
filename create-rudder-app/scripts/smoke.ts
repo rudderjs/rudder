@@ -80,6 +80,53 @@ const profiles: Record<string, TemplateContext> = {
     },
     demos: [],
   },
+  todos: {
+    name:       'smoke-app',
+    db:         'sqlite',
+    orm:        'prisma',
+    authSecret: 'smoke-test-secret-' + Date.now(),
+    appKey:     Buffer.from('smoke-test-app-key-padding-32-bytes!').toString('base64'),
+    frameworks: ['react'],
+    primary:    'react',
+    tailwind:   false,
+    shadcn:     false,
+    pm:         'pnpm',
+    packages: {
+      auth: true, sanctum: false, passport: false, socialite: false,
+      queue: false, storage: false, scheduler: false, image: false,
+      mail: false, notifications: false, broadcast: false, sync: false,
+      ai: false, mcp: false, boost: false,
+      localization: false, cashierPaddle: false, pennant: false,
+      telescope: false, pulse: false, horizon: false,
+      crypt: false, http: false, process: false, concurrency: false,
+    },
+    demos: ['todos'],
+  },
+  // Heavy: every Phase-4 demo at once. Catches cross-demo collisions in
+  // routes/web.ts, routes/api.ts, AppServiceProvider boot ordering, and
+  // the modules.prisma schema generation.
+  'demos-all': {
+    name:       'smoke-app',
+    db:         'sqlite',
+    orm:        'prisma',
+    authSecret: 'smoke-test-secret-' + Date.now(),
+    appKey:     Buffer.from('smoke-test-app-key-padding-32-bytes!').toString('base64'),
+    frameworks: ['react'],
+    primary:    'react',
+    tailwind:   false,
+    shadcn:     false,
+    pm:         'pnpm',
+    packages: {
+      auth: true, sanctum: false, passport: false, socialite: false,
+      queue: false, storage: true, scheduler: false, image: true,
+      mail: false, notifications: false, broadcast: false, sync: false,
+      ai: false, mcp: false, boost: false,
+      localization: false, cashierPaddle: false, pennant: true,
+      telescope: false, pulse: false, horizon: false,
+      crypt: false, http: false, process: true, concurrency: true,
+    },
+    demos: ['contact', 'todos', 'avatar', 'fibonacci', 'system-info', 'pennant'],
+  },
 }
 
 // ─── Utilities ──────────────────────────────────────────

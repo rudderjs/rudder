@@ -89,13 +89,45 @@ Route.get('/', async () => {${hasAuth ? `
       // For multi-framework projects (no welcome) we still need the view import here.
       imports.push(`import { view } from '@rudderjs/view'`)
     }
+    if (shouldScaffoldDemo(ctx, 'todos')) {
+      imports.push(`import { resolve } from '@rudderjs/core'`)
+      imports.push(`import { TodoService } from '../app/Modules/Todo/TodoService.ts'`)
+    }
+    if (shouldScaffoldDemo(ctx, 'pennant')) {
+      imports.push(`import { Feature, FeatureMiddleware } from '@rudderjs/pennant'`)
+      // auth().user() — Pennant demo gates on `auth` so the import is always available
+      // when this branch fires; it's also already imported above when hasAuth.
+    }
     const lines = [
       `// Demos — see app/Views/Demos/`,
       `Route.get('/demos',         async () => view('demos.index'))`,
     ]
-    if (shouldScaffoldDemo(ctx, 'contact')) lines.push(`Route.get('/demos/contact', async () => view('demos.contact'))`)
-    if (shouldScaffoldDemo(ctx, 'ws'))      lines.push(`Route.get('/demos/ws',      async () => view('demos.ws'))`)
-    if (shouldScaffoldDemo(ctx, 'live'))    lines.push(`Route.get('/demos/live',    async () => view('demos.live'))`)
+    if (shouldScaffoldDemo(ctx, 'contact'))     lines.push(`Route.get('/demos/contact', async () => view('demos.contact'))`)
+    if (shouldScaffoldDemo(ctx, 'todos')) {
+      lines.push(`Route.get('/demos/todos',   async () => {`)
+      lines.push(`  const todos = await resolve<TodoService>(TodoService).findAll()`)
+      lines.push(`  return view('demos.todos', { todos })`)
+      lines.push(`})`)
+    }
+    if (shouldScaffoldDemo(ctx, 'avatar'))      lines.push(`Route.get('/demos/avatar',      async () => view('demos.avatar'))`)
+    if (shouldScaffoldDemo(ctx, 'fibonacci'))   lines.push(`Route.get('/demos/fibonacci',   async () => view('demos.fibonacci'))`)
+    if (shouldScaffoldDemo(ctx, 'system-info')) lines.push(`Route.get('/demos/system-info', async () => view('demos.system-info'))`)
+    if (shouldScaffoldDemo(ctx, 'pennant')) {
+      lines.push(`Route.get('/demos/pennant', async () => {`)
+      lines.push(`  const current = await auth().user() as Record<string, unknown> | null`)
+      lines.push(`  const values = await Feature.values(`)
+      lines.push(`    ['dark-mode', 'max-uploads', 'beta-dashboard', 'new-checkout'],`)
+      lines.push(`    current as { id: string | number; [k: string]: unknown } | null,`)
+      lines.push(`  )`)
+      lines.push(`  const user = current`)
+      lines.push(`    ? { id: String(current['id']), name: String(current['name'] ?? ''), email: String(current['email'] ?? '') }`)
+      lines.push(`    : null`)
+      lines.push(`  return view('demos.pennant', { user, values })`)
+      lines.push(`})`)
+      lines.push(`Route.get('/demos/pennant/beta', async () => view('demos.pennant-beta'), [FeatureMiddleware('beta-dashboard')])`)
+    }
+    if (shouldScaffoldDemo(ctx, 'ws'))          lines.push(`Route.get('/demos/ws',      async () => view('demos.ws'))`)
+    if (shouldScaffoldDemo(ctx, 'live'))        lines.push(`Route.get('/demos/live',    async () => view('demos.live'))`)
     demosBlock = '\n' + lines.join('\n') + '\n'
   }
 
