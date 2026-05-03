@@ -1,4 +1,4 @@
-import type { TemplateContext } from '../../templates.js'
+import { shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
 
 export function demosIndexView(ctx: TemplateContext): string {
   const cards: { title: string; desc: string; href: string; show: boolean; pkgs: string }[] = [
@@ -7,21 +7,21 @@ export function demosIndexView(ctx: TemplateContext): string {
       desc:  'CSRF-protected form with Zod validation. Demonstrates getCsrfToken() and FormRequest-style error handling.',
       href:  '/demos/contact',
       pkgs:  '@rudderjs/middleware · @rudderjs/core',
-      show:  true,
+      show:  shouldScaffoldDemo(ctx, 'contact'),
     },
     {
       title: 'WebSocket chat',
       desc:  'Real-time chat + presence using @rudderjs/broadcast — multi-channel pub/sub over a single WebSocket connection.',
       href:  '/demos/ws',
       pkgs:  '@rudderjs/broadcast',
-      show:  ctx.packages.broadcast,
+      show:  shouldScaffoldDemo(ctx, 'ws'),
     },
     {
       title: 'Collaborative editor',
       desc:  'Yjs CRDT live document with awareness cursors. Open in two tabs to see real-time sync over @rudderjs/sync.',
       href:  '/demos/live',
       pkgs:  '@rudderjs/sync',
-      show:  ctx.packages.sync,
+      show:  shouldScaffoldDemo(ctx, 'live'),
     },
   ].filter(c => c.show)
 

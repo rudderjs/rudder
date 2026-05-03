@@ -1,4 +1,4 @@
-import { shouldScaffoldDemos, type TemplateContext } from '../../templates.js'
+import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
 
 export function routesWeb(ctx: TemplateContext): string {
   const hasAuth     = ctx.packages.auth
@@ -83,7 +83,7 @@ Route.get('/', async () => {${hasAuth ? `
   // ── demos wiring ────────────────────────────────────────
   // Controllers for /demos and /demos/<name>. Views live under app/Views/Demos/.
   let demosBlock = ''
-  if (shouldScaffoldDemos(ctx)) {
+  if (shouldScaffoldAnyDemo(ctx)) {
     if (!hasWelcome) {
       // Demo files exist but routesWeb already has `view` imports if hasWelcome.
       // For multi-framework projects (no welcome) we still need the view import here.
@@ -92,10 +92,10 @@ Route.get('/', async () => {${hasAuth ? `
     const lines = [
       `// Demos — see app/Views/Demos/`,
       `Route.get('/demos',         async () => view('demos.index'))`,
-      `Route.get('/demos/contact', async () => view('demos.contact'))`,
     ]
-    if (ctx.packages.broadcast) lines.push(`Route.get('/demos/ws',      async () => view('demos.ws'))`)
-    if (ctx.packages.sync)      lines.push(`Route.get('/demos/live',    async () => view('demos.live'))`)
+    if (shouldScaffoldDemo(ctx, 'contact')) lines.push(`Route.get('/demos/contact', async () => view('demos.contact'))`)
+    if (shouldScaffoldDemo(ctx, 'ws'))      lines.push(`Route.get('/demos/ws',      async () => view('demos.ws'))`)
+    if (shouldScaffoldDemo(ctx, 'live'))    lines.push(`Route.get('/demos/live',    async () => view('demos.live'))`)
     demosBlock = '\n' + lines.join('\n') + '\n'
   }
 

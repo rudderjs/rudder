@@ -51,6 +51,7 @@ import { demosContactView } from './templates/demos/contact.js'
 import { demosWsView } from './templates/demos/ws.js'
 import { demosLiveView } from './templates/demos/live.js'
 import { bkSocketSource } from './templates/demos/bk-socket.js'
+import { availableDemos } from './templates/demos/registry.js'
 import { packageJson } from './templates/package-json.js'
 import { tsconfigJson } from './templates/tsconfig.js'
 import { viteConfig } from './templates/vite.js'
@@ -96,8 +97,9 @@ export interface TemplateContext {
     http:          boolean
     process:       boolean
     concurrency:   boolean
-    demos:         boolean
   }
+  /** Demo IDs to scaffold (e.g. 'contact', 'ws', 'live'). See templates/demos/registry.ts. */
+  demos: string[]
 }
 
 export function getTemplates(ctx: TemplateContext): Record<string, string> {
@@ -202,15 +204,15 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files[`pages/${fw}-demo/+Page${dext}`] = demoPage(fw, ctx)
   }
 
-  // Demos — react primary only; ws/live require their respective packages.
-  if (shouldScaffoldDemos(ctx)) {
-    files['app/Views/Demos/Index.tsx']   = demosIndexView(ctx)
-    files['app/Views/Demos/Contact.tsx'] = demosContactView(ctx)
-    if (ctx.packages.broadcast) {
+  // Demos — react primary only; per-demo opt-in via ctx.demos (see registry.ts).
+  if (shouldScaffoldAnyDemo(ctx)) {
+    files['app/Views/Demos/Index.tsx'] = demosIndexView(ctx)
+    if (shouldScaffoldDemo(ctx, 'contact')) files['app/Views/Demos/Contact.tsx'] = demosContactView(ctx)
+    if (shouldScaffoldDemo(ctx, 'ws')) {
       files['app/Views/Demos/Ws.tsx'] = demosWsView()
       files['src/BKSocket.ts']        = bkSocketSource()
     }
-    if (ctx.packages.sync) {
+    if (shouldScaffoldDemo(ctx, 'live')) {
       files['app/Views/Demos/Live.tsx'] = demosLiveView()
     }
   }
@@ -218,9 +220,23 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   return files
 }
 
-/** Demos are React-primary only for v1 — vue/solid variants aren't written yet. */
-export function shouldScaffoldDemos(ctx: TemplateContext): boolean {
-  return ctx.packages.demos && ctx.primary === 'react'
+/**
+ * Demos are React-primary only for v1 — vue/solid variants aren't written yet.
+ * `name` is a demo ID from `templates/demos/registry.ts` (e.g. 'contact', 'ws', 'live').
+ * Returns true when the demo was selected AND its package gates are satisfied.
+ */
+export function shouldScaffoldDemo(ctx: TemplateContext, name: string): boolean {
+  if (ctx.primary !== 'react') return false
+  if (!ctx.demos.includes(name)) return false
+  // Defense-in-depth: even if a stale demo id slipped through (e.g. user kept it
+  // checked while unticking the underlying package), filter by registry rules.
+  const allowed = availableDemos(ctx.orm, ctx.packages).map(d => d.value)
+  return allowed.includes(name)
+}
+
+export function shouldScaffoldAnyDemo(ctx: TemplateContext): boolean {
+  if (ctx.primary !== 'react') return false
+  return ctx.demos.some(name => shouldScaffoldDemo(ctx, name))
 }
 
 

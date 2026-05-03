@@ -1,5 +1,5 @@
 import { pmRun, type PackageManager } from './package-managers.js'
-import { shouldScaffoldDemos, type TemplateContext } from '../templates.js'
+import { shouldScaffoldDemo, type TemplateContext } from '../templates.js'
 
 export function packageJson(ctx: TemplateContext): string {
   const { frameworks, tailwind, shadcn, db } = ctx
@@ -110,7 +110,7 @@ export function packageJson(ctx: TemplateContext): string {
   if (ctx.packages.notifications) deps['@rudderjs/notification'] = 'latest'
   if (ctx.packages.broadcast)     deps['@rudderjs/broadcast']    = 'latest'
   if (ctx.packages.sync)          deps['@rudderjs/sync']         = 'latest'
-  if (shouldScaffoldDemos(ctx) && ctx.packages.sync) deps['y-websocket']           = '^2.0.0'
+  if (shouldScaffoldDemo(ctx, 'live')) deps['y-websocket'] = '^2.0.0'
   if (ctx.packages.ai)            deps['@rudderjs/ai']           = 'latest'
   if (ctx.packages.mcp)           deps['@rudderjs/mcp']          = 'latest'
   if (ctx.packages.localization)  deps['@rudderjs/localization'] = 'latest'

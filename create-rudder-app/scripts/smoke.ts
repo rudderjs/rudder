@@ -55,8 +55,8 @@ const profiles: Record<string, TemplateContext> = {
       localization: false, cashierPaddle: false, pennant: false,
       telescope: false, pulse: false, horizon: false,
       crypt: false, http: false, process: false, concurrency: false,
-      demos: false,
     },
+    demos: [],
   },
   minimal: {
     name:       'smoke-app',
@@ -77,8 +77,8 @@ const profiles: Record<string, TemplateContext> = {
       localization: false, cashierPaddle: false, pennant: false,
       telescope: false, pulse: false, horizon: false,
       crypt: false, http: false, process: false, concurrency: false,
-      demos: false,
     },
+    demos: [],
   },
 }
 

@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { getTemplates, detectPackageManager, pmExec, pmRun, pmInstall } from './templates.js'
+import { availableDemos } from './templates/demos/registry.js'
 
 async function main(): Promise<void> {
   const argName = process.argv[2]
@@ -163,7 +164,6 @@ async function main(): Promise<void> {
     http:          selectedPackages.includes('http'),
     process:       selectedPackages.includes('process'),
     concurrency:   selectedPackages.includes('concurrency'),
-    demos:         false, // populated by the dedicated Demos step in Task 2.4
   }
 
   // Passport requires auth + prisma at runtime. Warn and drop silently if missing.
@@ -225,6 +225,31 @@ async function main(): Promise<void> {
     shadcn = shadcnAnswer as boolean
   }
 
+  // ── Demos ──────────────────────────────────────────────
+  // Demos are only scaffolded when React is the primary framework — vue/solid
+  // variants aren't written yet. Each demo is gated by package selection
+  // (e.g. WebSocket chat needs Broadcast). Rows that fail their gate are
+  // filtered out before the prompt renders so the user only sees what's available.
+
+  let demos: string[] = []
+  if (primary === 'react') {
+    const demoOptions = availableDemos(orm, packages)
+    if (demoOptions.length > 0) {
+      const demoAnswer = await multiselect({
+        message:       'Select demos to scaffold (under /demos)',
+        options:       demoOptions.map(d => ({
+          value: d.value,
+          label: d.label,
+          ...(d.hint !== undefined ? { hint: d.hint } : {}),
+        })),
+        initialValues: ['contact'],
+        required:      false,
+      })
+      if (isCancel(demoAnswer)) { cancel('Cancelled.'); process.exit(0) }
+      demos = demoAnswer as string[]
+    }
+  }
+
   // ── Install dependencies ───────────────────────────────
 
   const installAnswer = await confirm({
@@ -252,7 +277,7 @@ async function main(): Promise<void> {
   const s = spinner()
   s.start('Scaffolding project files...')
 
-  const templates = getTemplates({ name, db, orm, authSecret, appKey, frameworks, primary, tailwind, shadcn, pm, packages })
+  const templates = getTemplates({ name, db, orm, authSecret, appKey, frameworks, primary, tailwind, shadcn, pm, packages, demos })
 
   for (const [filePath, content] of Object.entries(templates)) {
     const abs = path.join(target, filePath)

@@ -1,4 +1,4 @@
-import { shouldScaffoldDemos, type TemplateContext } from '../../templates.js'
+import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
 
 export function routesApi(ctx: TemplateContext): string {
   const imports: string[] = [
@@ -76,14 +76,19 @@ router.get('/api/passport/me', async (req, res) => {
 }, [RequireBearer(), scope('read')])`)
   }
 
-  if (shouldScaffoldDemos(ctx)) {
-    imports.push(`import { z } from '@rudderjs/core'`)
-    if (ctx.packages.auth) imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
-    if (ctx.packages.broadcast) imports.push(`import { broadcast, broadcastStats } from '@rudderjs/broadcast'`)
+  if (shouldScaffoldAnyDemo(ctx)) {
+    const wantContact = shouldScaffoldDemo(ctx, 'contact')
+    const wantWs      = shouldScaffoldDemo(ctx, 'ws')
+
+    if (wantContact) imports.push(`import { z } from '@rudderjs/core'`)
+    if (wantContact && ctx.packages.auth) imports.push(`import { CsrfMiddleware } from '@rudderjs/middleware'`)
+    if (wantWs) imports.push(`import { broadcast, broadcastStats } from '@rudderjs/broadcast'`)
 
     lines.push('')
-    lines.push(`// ── Demos ────────────────────────────────────────────────
-// POST /api/contact — Zod validation${ctx.packages.auth ? ' + CSRF' : ''}.
+    lines.push(`// ── Demos ────────────────────────────────────────────────`)
+
+    if (wantContact) {
+      lines.push(`// POST /api/contact — Zod validation${ctx.packages.auth ? ' + CSRF' : ''}.
 const contactSchema = z.object({
   name:    z.string().min(2,  'Name must be at least 2 characters.'),
   email:   z.string().email('Please enter a valid email address.'),
@@ -98,8 +103,9 @@ router.post('/api/contact', async (req, res) => {
   }
   return res.json({ ok: true, message: \`Thanks \${result.data.name}, your message has been received!\` })
 }${ctx.packages.auth ? ', [CsrfMiddleware()]' : ''})`)
+    }
 
-    if (ctx.packages.broadcast) {
+    if (wantWs) {
       lines.push('')
       lines.push(`// POST /api/ws/broadcast — push a chat message to subscribers of the 'chat' channel.
 router.post('/api/ws/broadcast', async (req, res) => {

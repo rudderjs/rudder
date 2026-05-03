@@ -42,8 +42,8 @@ const ctx: TemplateContext = {
     http:          true,
     process:       true,
     concurrency:   true,
-    demos:         true,
   },
+  demos: ['contact', 'ws', 'live'],
 }
 
 test('getTemplates() output is byte-stable across refactor', () => {

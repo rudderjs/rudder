@@ -12,7 +12,6 @@ const defaultPkgs: TemplateContext['packages'] = {
   localization: false, cashierPaddle: false, pennant: false,
   telescope: false, pulse: false, horizon: false,
   crypt: false, http: false, process: false, concurrency: false,
-  demos: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
@@ -23,7 +22,6 @@ const noPkgs: TemplateContext['packages'] = {
   localization: false, cashierPaddle: false, pennant: false,
   telescope: false, pulse: false, horizon: false,
   crypt: false, http: false, process: false, concurrency: false,
-  demos: false,
 }
 
 const noAuth: TemplateContext['packages'] = noPkgs
@@ -36,7 +34,6 @@ const allPkgs: TemplateContext['packages'] = {
   localization: true, cashierPaddle: true, pennant: true,
   telescope: true, pulse: true, horizon: true,
   crypt: true, http: true, process: true, concurrency: true,
-  demos: true,
 }
 
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
@@ -52,6 +49,7 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     shadcn:     false,
     pm:         'pnpm' as const,
     packages:   defaultPkgs,
+    demos:      [],
     ...overrides,
   }
 }
@@ -952,8 +950,8 @@ describe('getTemplates() — boost package', () => {
 // ─── demos package ───────────────────────────────────────
 
 describe('getTemplates() — demos', () => {
-  it('demos not selected → no Demos/* views, no /api/contact route', () => {
-    const files = getTemplates(ctx({ packages: noPkgs }))
+  it('no demos selected → no Demos/* views, no /api/contact route', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: [] }))
     assert.ok(!('app/Views/Demos/Index.tsx' in files))
     assert.ok(!('app/Views/Demos/Contact.tsx' in files))
     assert.ok(!('app/Views/Demos/Ws.tsx' in files))
@@ -962,8 +960,8 @@ describe('getTemplates() — demos', () => {
     assert.ok(!files['routes/web.ts']!.includes("view('demos.index')"))
   })
 
-  it('demos selected (react primary) → Index + Contact views, /demos and /api/contact routes', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true } }))
+  it('contact demo → Index + Contact views, /demos and /api/contact routes', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['contact'] }))
     assert.ok('app/Views/Demos/Index.tsx' in files)
     assert.ok('app/Views/Demos/Contact.tsx' in files)
     assert.ok(files['routes/web.ts']!.includes("view('demos.index')"))
@@ -971,25 +969,33 @@ describe('getTemplates() — demos', () => {
     assert.ok(files['routes/api.ts']!.includes("router.post('/api/contact'"))
   })
 
-  it('demos + broadcast → Ws view + BKSocket + ws routes', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true, broadcast: true } }))
+  it('ws demo + broadcast → Ws view + BKSocket + ws routes', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, broadcast: true }, demos: ['ws'] }))
     assert.ok('app/Views/Demos/Ws.tsx' in files)
     assert.ok('src/BKSocket.ts' in files)
     assert.ok(files['routes/web.ts']!.includes("view('demos.ws')"))
     assert.ok(files['routes/api.ts']!.includes("/api/ws/broadcast"))
   })
 
-  it('demos + sync → Live view + y-websocket dep + /demos/live route', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true, sync: true } }))
+  it('live demo + sync → Live view + y-websocket dep + /demos/live route', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, sync: true }, demos: ['live'] }))
     assert.ok('app/Views/Demos/Live.tsx' in files)
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('y-websocket' in pkg.dependencies)
     assert.ok(files['routes/web.ts']!.includes("view('demos.live')"))
   })
 
-  it('demos selected but primary !== react → demos silently skipped', () => {
+  it('ws demo selected but broadcast not → demo dropped (registry gating)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['ws'] }))
+    assert.ok(!('app/Views/Demos/Ws.tsx' in files))
+    assert.ok(!('src/BKSocket.ts' in files))
+    assert.ok(!files['routes/web.ts']!.includes("view('demos.ws')"))
+  })
+
+  it('demos requested but primary !== react → demos silently skipped', () => {
     const files = getTemplates(ctx({
-      packages: { ...noPkgs, demos: true, broadcast: true, sync: true },
+      packages: { ...noPkgs, broadcast: true, sync: true },
+      demos: ['contact', 'ws', 'live'],
       frameworks: ['vue'], primary: 'vue',
     }))
     assert.ok(!('app/Views/Demos/Index.tsx' in files))
@@ -1001,16 +1007,15 @@ describe('getTemplates() — demos', () => {
     assert.ok(!('y-websocket' in pkg.dependencies))
   })
 
-  it('demos + auth → contact API uses CsrfMiddleware', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true, auth: true } }))
+  it('contact demo + auth → contact API uses CsrfMiddleware', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true }, demos: ['contact'] }))
     assert.ok(files['routes/api.ts']!.includes('CsrfMiddleware()'))
     assert.ok(files['app/Views/Demos/Contact.tsx']!.includes('X-CSRF-Token'))
   })
 
-  it('demos without auth → contact API has no CSRF middleware', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true } }))
+  it('contact demo without auth → contact API has no CSRF middleware', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['contact'] }))
     const apiContact = files['routes/api.ts']!
-    // CsrfMiddleware must not appear on the contact route
     const contactBlock = apiContact.slice(apiContact.indexOf("'/api/contact'"))
     assert.ok(!contactBlock.slice(0, 400).includes('CsrfMiddleware'))
   })
