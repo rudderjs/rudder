@@ -46,7 +46,7 @@ const ctx: TemplateContext = {
     process:       true,
     concurrency:   true,
   },
-  demos: ['contact', 'ws', 'live'],
+  demos: ['contact', 'ws', 'sync'],
 }
 
 const out = getTemplates(ctx)

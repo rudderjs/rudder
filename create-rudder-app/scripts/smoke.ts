@@ -102,8 +102,8 @@ const profiles: Record<string, TemplateContext> = {
     },
     demos: ['todos'],
   },
-  // Heavy: every Phase-4 demo at once. Catches cross-demo collisions in
-  // routes/web.ts, routes/api.ts, AppServiceProvider boot ordering, and
+  // Heavy: every Phase-4 + Phase-5 demo at once. Catches cross-demo collisions
+  // in routes/web.ts, routes/api.ts, AppServiceProvider boot ordering, and
   // the modules.prisma schema generation.
   'demos-all': {
     name:       'smoke-app',
@@ -118,14 +118,17 @@ const profiles: Record<string, TemplateContext> = {
     pm:         'pnpm',
     packages: {
       auth: true, sanctum: false, passport: false, socialite: false,
-      queue: false, storage: true, scheduler: false, image: true,
-      mail: false, notifications: false, broadcast: false, sync: false,
+      queue: true, storage: true, scheduler: false, image: true,
+      mail: true, notifications: true, broadcast: false, sync: false,
       ai: false, mcp: false, boost: false,
-      localization: false, pennant: true,
+      localization: true, pennant: true,
       telescope: false, pulse: false, horizon: false,
-      crypt: false, http: false, process: true, concurrency: true,
+      crypt: false, http: true, process: true, concurrency: true,
     },
-    demos: ['contact', 'todos', 'avatar', 'fibonacci', 'system-info', 'pennant'],
+    demos: [
+      'contact', 'todos', 'avatar', 'fibonacci', 'system-info', 'pennant',
+      'cache', 'queue', 'mail', 'notifications', 'localization', 'http',
+    ],
   },
 }
 

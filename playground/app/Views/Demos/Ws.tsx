@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BKSocket } from '@/BKSocket'
+import { RudderSocket } from '@/RudderSocket'
 import '@/index.css'
 
 type Message = { user: string; text: string; ts: number }
@@ -13,7 +13,7 @@ function getWsUrl() {
 export default function WsDemo() {
   const [ME, setME]               = useState('')
   useEffect(() => { setME(`User-${Math.floor(Math.random() * 1000)}`) }, [])
-  const socketRef                 = useRef<BKSocket | null>(null)
+  const socketRef                 = useRef<RudderSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const [messages,  setMessages]  = useState<Message[]>([])
   const [members,   setMembers]   = useState<Member[]>([])
@@ -22,7 +22,7 @@ export default function WsDemo() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const socket = new BKSocket(getWsUrl())
+    const socket = new RudderSocket(getWsUrl())
     socketRef.current = socket
 
     const chat = socket.channel('chat')

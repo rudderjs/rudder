@@ -1,5 +1,5 @@
-export function bkSocketSource(): string {
-  return `// BKSocket — RudderJS WebSocket client
+export function rudderSocketSource(): string {
+  return `// RudderSocket — RudderJS WebSocket client
 //
 // Multiplexes channels and presence rooms over a single WebSocket connection.
 // Mirrors the API expected by @rudderjs/broadcast on the server.
@@ -10,7 +10,7 @@ class Channel {
   private listeners = new Map<string, Set<Listener>>()
 
   constructor(
-    private readonly socket: BKSocket,
+    private readonly socket: RudderSocket,
     public readonly name: string,
   ) {}
 
@@ -25,19 +25,19 @@ class Channel {
     return this
   }
 
-  /** @internal — invoked by BKSocket on incoming messages */
+  /** @internal — invoked by RudderSocket on incoming messages */
   receive(event: string, data: unknown) {
     this.listeners.get(event)?.forEach(fn => fn(data))
   }
 
-  /** @internal — invoked by BKSocket to (re)subscribe after connect */
+  /** @internal — invoked by RudderSocket to (re)subscribe after connect */
   subscribe() {
     this.socket.send({ type: 'subscribe', channel: this.name })
   }
 }
 
 class Presence extends Channel {
-  constructor(socket: BKSocket, name: string, private readonly token: string) {
+  constructor(socket: RudderSocket, name: string, private readonly token: string) {
     super(socket, name)
   }
 
@@ -46,7 +46,7 @@ class Presence extends Channel {
   }
 }
 
-export class BKSocket {
+export class RudderSocket {
   private ws?: WebSocket
   private readonly channels = new Map<string, Channel>()
   private reconnectTimer?: ReturnType<typeof setTimeout>

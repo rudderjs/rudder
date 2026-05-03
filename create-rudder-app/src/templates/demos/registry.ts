@@ -11,14 +11,20 @@ export interface DemoSpec {
 }
 
 export const DEMOS: ReadonlyArray<DemoSpec> = [
-  { value: 'contact',     label: 'Contact form',      hint: 'CSRF + Zod validation' },
-  { value: 'todos',       label: 'Todos CRUD',        hint: 'requires ORM',                   requiresOrm: true },
-  { value: 'avatar',      label: 'Avatar resize',     hint: 'requires Storage + Image',       requires: ['storage', 'image'] },
-  { value: 'fibonacci',   label: 'Worker threads',    hint: 'requires Concurrency',           requires: ['concurrency'] },
-  { value: 'system-info', label: 'System info',       hint: 'requires Process',               requires: ['process'] },
-  { value: 'pennant',     label: 'Feature flags',     hint: 'requires Pennant + Auth',        requires: ['pennant', 'auth'] },
-  { value: 'ws',          label: 'WebSocket chat',    hint: 'requires WebSocket / Broadcast', requires: ['broadcast'] },
-  { value: 'live',        label: 'Yjs collaboration', hint: 'requires Sync',                  requires: ['sync'] },
+  { value: 'contact',       label: 'Contact form',      hint: 'CSRF + Zod validation' },
+  { value: 'cache',         label: 'Cache counter',     hint: 'Cache.get + Cache.set round-trip' },
+  { value: 'todos',         label: 'Todos CRUD',        hint: 'requires ORM',                   requiresOrm: true },
+  { value: 'queue',         label: 'Queue dispatch',    hint: 'requires Queue',                 requires: ['queue'] },
+  { value: 'mail',          label: 'Mail send',         hint: 'requires Mail',                  requires: ['mail'] },
+  { value: 'notifications', label: 'Notifications',     hint: 'requires Notifications + Mail',  requires: ['notifications', 'mail'] },
+  { value: 'localization',  label: 'Localization',      hint: 'requires Localization',          requires: ['localization'] },
+  { value: 'http',          label: 'HTTP client',       hint: 'requires HTTP',                  requires: ['http'] },
+  { value: 'avatar',        label: 'Avatar resize',     hint: 'requires Storage + Image',       requires: ['storage', 'image'] },
+  { value: 'fibonacci',     label: 'Worker threads',    hint: 'requires Concurrency',           requires: ['concurrency'] },
+  { value: 'system-info',   label: 'System info',       hint: 'requires Process',               requires: ['process'] },
+  { value: 'pennant',       label: 'Feature flags',     hint: 'requires Pennant + Auth',        requires: ['pennant', 'auth'] },
+  { value: 'ws',            label: 'WebSocket chat',    hint: 'requires WebSocket / Broadcast', requires: ['broadcast'] },
+  { value: 'sync',          label: 'Yjs collaboration', hint: 'requires Sync',                  requires: ['sync'] },
 ]
 
 export function availableDemos(
