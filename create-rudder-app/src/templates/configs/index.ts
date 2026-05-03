@@ -55,10 +55,6 @@ export function configIndex(ctx: TemplateContext): string {
     imports.push("import localization from './localization.js'")
     keys.push('localization')
   }
-  if (ctx.packages.cashierPaddle) {
-    imports.push("import cashier from './cashier.js'")
-    keys.push('cashier')
-  }
   if (ctx.packages.pennant) {
     imports.push("import pennant from './pennant.js'")
     keys.push('pennant')

@@ -9,7 +9,7 @@ const defaultPkgs: TemplateContext['packages'] = {
   queue: false, storage: false, scheduler: false, image: false,
   mail: false, notifications: false, broadcast: false, sync: false,
   ai: false, mcp: false, boost: false,
-  localization: false, cashierPaddle: false, pennant: false,
+  localization: false, pennant: false,
   telescope: false, pulse: false, horizon: false,
   crypt: false, http: false, process: false, concurrency: false,
 }
@@ -19,7 +19,7 @@ const noPkgs: TemplateContext['packages'] = {
   queue: false, storage: false, scheduler: false, image: false,
   mail: false, notifications: false, broadcast: false, sync: false,
   ai: false, mcp: false, boost: false,
-  localization: false, cashierPaddle: false, pennant: false,
+  localization: false, pennant: false,
   telescope: false, pulse: false, horizon: false,
   crypt: false, http: false, process: false, concurrency: false,
 }
@@ -31,7 +31,7 @@ const allPkgs: TemplateContext['packages'] = {
   queue: true, storage: true, scheduler: true, image: true,
   mail: true, notifications: true, broadcast: true, sync: true,
   ai: true, mcp: true, boost: true,
-  localization: true, cashierPaddle: true, pennant: true,
+  localization: true, pennant: true,
   telescope: true, pulse: true, horizon: true,
   crypt: true, http: true, process: true, concurrency: true,
 }
@@ -882,7 +882,6 @@ describe('getTemplates() — Phase 2 new packages', () => {
     { key: 'pulse',         dep: '@rudderjs/pulse',          configFile: 'config/pulse.ts' },
     { key: 'horizon',       dep: '@rudderjs/horizon',        configFile: 'config/horizon.ts' },
     { key: 'crypt',         dep: '@rudderjs/crypt',          configFile: 'config/crypt.ts' },
-    { key: 'cashierPaddle', dep: '@rudderjs/cashier-paddle', configFile: 'config/cashier.ts' },
     { key: 'pennant',       dep: '@rudderjs/pennant',        configFile: 'config/pennant.ts' },
     { key: 'image',         dep: '@rudderjs/image' },
     { key: 'http',          dep: '@rudderjs/http' },
@@ -922,11 +921,6 @@ describe('getTemplates() — Phase 2 new packages', () => {
     assert.ok(files['.env']!.includes('GOOGLE_CLIENT_ID='))
   })
 
-  it('cashier-paddle selected → Paddle env keys emitted', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, cashierPaddle: true } }))
-    assert.ok(files['.env']!.includes('PADDLE_API_KEY='))
-    assert.ok(files['.env']!.includes('PADDLE_SANDBOX=true'))
-  })
 })
 
 // ─── boost package ───────────────────────────────────────

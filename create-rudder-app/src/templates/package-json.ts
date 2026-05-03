@@ -114,7 +114,6 @@ export function packageJson(ctx: TemplateContext): string {
   if (ctx.packages.ai)            deps['@rudderjs/ai']           = 'latest'
   if (ctx.packages.mcp)           deps['@rudderjs/mcp']          = 'latest'
   if (ctx.packages.localization)  deps['@rudderjs/localization'] = 'latest'
-  if (ctx.packages.cashierPaddle) deps['@rudderjs/cashier-paddle'] = 'latest'
   if (ctx.packages.pennant)       deps['@rudderjs/pennant']      = 'latest'
   if (ctx.packages.telescope)     deps['@rudderjs/telescope']    = 'latest'
   if (ctx.packages.pulse)         deps['@rudderjs/pulse']        = 'latest'
