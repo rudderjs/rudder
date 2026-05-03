@@ -2,6 +2,12 @@ import { shouldScaffoldAnyDemo, shouldScaffoldDemo, type TemplateContext } from 
 import { demosFibonacciApiBlock } from '../demos/fibonacci.js'
 import { demosSystemInfoApiBlock } from '../demos/system-info.js'
 import { demosAvatarApiBlock } from '../demos/avatar.js'
+import { demosCacheApiBlock } from '../demos/cache.js'
+import { demosQueueApiBlock } from '../demos/queue.js'
+import { demosMailApiBlock } from '../demos/mail.js'
+import { demosNotificationsApiBlock } from '../demos/notifications.js'
+import { demosLocalizationApiBlock } from '../demos/localization.js'
+import { demosHttpApiBlock } from '../demos/http.js'
 
 export function routesApi(ctx: TemplateContext): string {
   const imports: string[] = [
@@ -137,6 +143,31 @@ router.get('/api/ws/ping', (_req, res) => res.json(broadcastStats()))`)
     if (wantAvatar) {
       lines.push('')
       lines.push(demosAvatarApiBlock())
+    }
+
+    if (shouldScaffoldDemo(ctx, 'cache')) {
+      lines.push('')
+      lines.push(demosCacheApiBlock())
+    }
+    if (shouldScaffoldDemo(ctx, 'queue')) {
+      lines.push('')
+      lines.push(demosQueueApiBlock())
+    }
+    if (shouldScaffoldDemo(ctx, 'mail')) {
+      lines.push('')
+      lines.push(demosMailApiBlock())
+    }
+    if (shouldScaffoldDemo(ctx, 'notifications')) {
+      lines.push('')
+      lines.push(demosNotificationsApiBlock())
+    }
+    if (shouldScaffoldDemo(ctx, 'localization')) {
+      lines.push('')
+      lines.push(demosLocalizationApiBlock())
+    }
+    if (shouldScaffoldDemo(ctx, 'http')) {
+      lines.push('')
+      lines.push(demosHttpApiBlock())
     }
   }
 

@@ -1,7 +1,7 @@
 export function demosWsView(): string {
   return `import '@/index.css'
 import { useEffect, useRef, useState } from 'react'
-import { BKSocket } from '@/BKSocket'
+import { RudderSocket } from '@/RudderSocket'
 
 type Message = { user: string; text: string; ts: number }
 type Member  = { id: string; name: string }
@@ -13,7 +13,7 @@ function getWsUrl() {
 
 export default function WsDemo() {
   const [me, setMe]               = useState('')
-  const socketRef                 = useRef<BKSocket | null>(null)
+  const socketRef                 = useRef<RudderSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const [messages,  setMessages]  = useState<Message[]>([])
   const [members,   setMembers]   = useState<Member[]>([])
@@ -23,7 +23,7 @@ export default function WsDemo() {
 
   useEffect(() => {
     if (!me) return
-    const socket = new BKSocket(getWsUrl())
+    const socket = new RudderSocket(getWsUrl())
     socketRef.current = socket
 
     const chat = socket.channel('chat')

@@ -2,7 +2,7 @@
 //
 // Dropped from this variant (do not re-add without WebContainer-safe replacements):
 //   - @rudderjs/broadcast (raw TCP WebSocket server) and its /demos/ws view
-//   - @rudderjs/sync      (Yjs WebSocket server)     and its /demos/live view
+//   - @rudderjs/sync      (Yjs WebSocket server)     and its /demos/sync view
 //   - routes/channels.ts  (broadcast channel auth)
 //
 // See docs/plans/2026-04-30-webcontainer-playground.md for the full rationale.

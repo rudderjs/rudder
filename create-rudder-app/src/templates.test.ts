@@ -949,7 +949,7 @@ describe('getTemplates() — demos', () => {
     assert.ok(!('app/Views/Demos/Index.tsx' in files))
     assert.ok(!('app/Views/Demos/Contact.tsx' in files))
     assert.ok(!('app/Views/Demos/Ws.tsx' in files))
-    assert.ok(!('app/Views/Demos/Live.tsx' in files))
+    assert.ok(!('app/Views/Demos/Sync.tsx' in files))
     assert.ok(!files['routes/api.ts']!.includes('/api/contact'))
     assert.ok(!files['routes/web.ts']!.includes("view('demos.index')"))
   })
@@ -963,20 +963,20 @@ describe('getTemplates() — demos', () => {
     assert.ok(files['routes/api.ts']!.includes("router.post('/api/contact'"))
   })
 
-  it('ws demo + broadcast → Ws view + BKSocket + ws routes', () => {
+  it('ws demo + broadcast → Ws view + RudderSocket + ws routes', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, broadcast: true }, demos: ['ws'] }))
     assert.ok('app/Views/Demos/Ws.tsx' in files)
-    assert.ok('src/BKSocket.ts' in files)
+    assert.ok('src/RudderSocket.ts' in files)
     assert.ok(files['routes/web.ts']!.includes("view('demos.ws')"))
     assert.ok(files['routes/api.ts']!.includes("/api/ws/broadcast"))
   })
 
-  it('live demo + sync → Live view + y-websocket dep + /demos/live route', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, sync: true }, demos: ['live'] }))
-    assert.ok('app/Views/Demos/Live.tsx' in files)
+  it('sync demo + sync → Sync view + y-websocket dep + /demos/sync route', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, sync: true }, demos: ['sync'] }))
+    assert.ok('app/Views/Demos/Sync.tsx' in files)
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('y-websocket' in pkg.dependencies)
-    assert.ok(files['routes/web.ts']!.includes("view('demos.live')"))
+    assert.ok(files['routes/web.ts']!.includes("view('demos.sync')"))
   })
 
   it('todos demo + ORM → Todo module + Prisma model + /demos/todos controller', () => {
@@ -1041,24 +1041,80 @@ describe('getTemplates() — demos', () => {
     assert.ok(!/view\('demos\.pennant'/.test(files['routes/web.ts']!))
   })
 
+  it('cache demo (always available — Tier A) → view + /api/cache/views routes', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['cache'] }))
+    assert.ok('app/Views/Demos/Cache.tsx' in files)
+    assert.ok(files['routes/web.ts']!.includes("view('demos.cache')"))
+    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/cache\/views'/)
+  })
+
+  it('queue demo + queue → ExampleJob + /api/queue/dispatch + /demos/queue', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, queue: true }, demos: ['queue'] }))
+    assert.ok('app/Views/Demos/Queue.tsx' in files)
+    assert.ok('app/Jobs/ExampleJob.ts' in files)
+    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/queue\/dispatch'/)
+  })
+
+  it('mail demo + mail → DemoMail + /api/mail/send', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, mail: true }, demos: ['mail'] }))
+    assert.ok('app/Views/Demos/Mail.tsx' in files)
+    assert.ok('app/Mail/DemoMail.ts' in files)
+    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/mail\/send'/)
+  })
+
+  it('notifications demo + notifications + mail → WelcomeNotification + /api/notifications/send', () => {
+    const files = getTemplates(ctx({
+      packages: { ...noPkgs, notifications: true, mail: true },
+      demos: ['notifications'],
+    }))
+    assert.ok('app/Views/Demos/Notifications.tsx' in files)
+    assert.ok('app/Notifications/WelcomeNotification.ts' in files)
+    assert.match(files['routes/api.ts']!, /router\.post\('\/api\/notifications\/send'/)
+  })
+
+  it('localization demo + localization → lang/<locale>/messages.json + /api/i18n', () => {
+    const files = getTemplates(ctx({
+      packages: { ...noPkgs, localization: true },
+      demos: ['localization'],
+    }))
+    assert.ok('app/Views/Demos/Localization.tsx' in files)
+    assert.ok('lang/en/messages.json' in files)
+    assert.ok('lang/es/messages.json' in files)
+    assert.ok('lang/ar/messages.json' in files)
+    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/i18n'/)
+  })
+
+  it('http demo + http → view + /api/http/fetch with Http.get', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, http: true }, demos: ['http'] }))
+    assert.ok('app/Views/Demos/Http.tsx' in files)
+    assert.match(files['routes/api.ts']!, /router\.get\('\/api\/http\/fetch'/)
+    assert.match(files['routes/api.ts']!, /Http\.get\(url\)\.retry\(/)
+  })
+
+  it('queue demo selected without queue package → demo dropped', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['queue'] }))
+    assert.ok(!('app/Views/Demos/Queue.tsx' in files))
+    assert.ok(!('app/Jobs/ExampleJob.ts' in files))
+  })
+
   it('ws demo selected but broadcast not → demo dropped (registry gating)', () => {
     const files = getTemplates(ctx({ packages: noPkgs, demos: ['ws'] }))
     assert.ok(!('app/Views/Demos/Ws.tsx' in files))
-    assert.ok(!('src/BKSocket.ts' in files))
+    assert.ok(!('src/RudderSocket.ts' in files))
     assert.ok(!files['routes/web.ts']!.includes("view('demos.ws')"))
   })
 
   it('demos requested but primary !== react → demos silently skipped', () => {
     const files = getTemplates(ctx({
       packages: { ...noPkgs, broadcast: true, sync: true },
-      demos: ['contact', 'ws', 'live'],
+      demos: ['contact', 'ws', 'sync'],
       frameworks: ['vue'], primary: 'vue',
     }))
     assert.ok(!('app/Views/Demos/Index.tsx' in files))
     assert.ok(!('app/Views/Demos/Contact.tsx' in files))
     assert.ok(!('app/Views/Demos/Ws.tsx' in files))
-    assert.ok(!('app/Views/Demos/Live.tsx' in files))
-    assert.ok(!('src/BKSocket.ts' in files))
+    assert.ok(!('app/Views/Demos/Sync.tsx' in files))
+    assert.ok(!('src/RudderSocket.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
     assert.ok(!('y-websocket' in pkg.dependencies))
   })

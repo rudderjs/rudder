@@ -52,9 +52,15 @@ import { demosFibonacciView } from './templates/demos/fibonacci.js'
 import { demosSystemInfoView } from './templates/demos/system-info.js'
 import { demosAvatarView } from './templates/demos/avatar.js'
 import { demosPennantView, demosPennantBetaView } from './templates/demos/pennant.js'
+import { demosCacheView } from './templates/demos/cache.js'
+import { demosQueueView, exampleJob } from './templates/demos/queue.js'
+import { demosMailView, demoMailable } from './templates/demos/mail.js'
+import { demosNotificationsView, demoNotification } from './templates/demos/notifications.js'
+import { demosLocalizationView, langMessages } from './templates/demos/localization.js'
+import { demosHttpView } from './templates/demos/http.js'
 import { demosWsView } from './templates/demos/ws.js'
-import { demosLiveView } from './templates/demos/live.js'
-import { bkSocketSource } from './templates/demos/bk-socket.js'
+import { demosSyncView } from './templates/demos/sync.js'
+import { rudderSocketSource } from './templates/demos/rudder-socket.js'
 import { availableDemos } from './templates/demos/registry.js'
 import { packageJson } from './templates/package-json.js'
 import { tsconfigJson } from './templates/tsconfig.js'
@@ -101,7 +107,7 @@ export interface TemplateContext {
     process:       boolean
     concurrency:   boolean
   }
-  /** Demo IDs to scaffold (e.g. 'contact', 'ws', 'live'). See templates/demos/registry.ts. */
+  /** Demo IDs to scaffold (e.g. 'contact', 'ws', 'sync'). See templates/demos/registry.ts. */
   demos: string[]
 }
 
@@ -223,12 +229,32 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
       files['app/Views/Demos/Pennant.tsx']     = demosPennantView()
       files['app/Views/Demos/PennantBeta.tsx'] = demosPennantBetaView()
     }
+    if (shouldScaffoldDemo(ctx, 'cache'))       files['app/Views/Demos/Cache.tsx']      = demosCacheView()
+    if (shouldScaffoldDemo(ctx, 'queue')) {
+      files['app/Views/Demos/Queue.tsx'] = demosQueueView()
+      files['app/Jobs/ExampleJob.ts']    = exampleJob()
+    }
+    if (shouldScaffoldDemo(ctx, 'mail')) {
+      files['app/Views/Demos/Mail.tsx'] = demosMailView()
+      files['app/Mail/DemoMail.ts']     = demoMailable()
+    }
+    if (shouldScaffoldDemo(ctx, 'notifications')) {
+      files['app/Views/Demos/Notifications.tsx']        = demosNotificationsView()
+      files['app/Notifications/WelcomeNotification.ts'] = demoNotification()
+    }
+    if (shouldScaffoldDemo(ctx, 'localization')) {
+      files['app/Views/Demos/Localization.tsx'] = demosLocalizationView()
+      files['lang/en/messages.json']            = langMessages('en')
+      files['lang/es/messages.json']            = langMessages('es')
+      files['lang/ar/messages.json']            = langMessages('ar')
+    }
+    if (shouldScaffoldDemo(ctx, 'http'))        files['app/Views/Demos/Http.tsx']       = demosHttpView()
     if (shouldScaffoldDemo(ctx, 'ws')) {
       files['app/Views/Demos/Ws.tsx'] = demosWsView()
-      files['src/BKSocket.ts']        = bkSocketSource()
+      files['src/RudderSocket.ts']        = rudderSocketSource()
     }
-    if (shouldScaffoldDemo(ctx, 'live')) {
-      files['app/Views/Demos/Live.tsx'] = demosLiveView()
+    if (shouldScaffoldDemo(ctx, 'sync')) {
+      files['app/Views/Demos/Sync.tsx'] = demosSyncView()
     }
   }
 
@@ -237,7 +263,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
 /**
  * Demos are React-primary only for v1 — vue/solid variants aren't written yet.
- * `name` is a demo ID from `templates/demos/registry.ts` (e.g. 'contact', 'ws', 'live').
+ * `name` is a demo ID from `templates/demos/registry.ts` (e.g. 'contact', 'ws', 'sync').
  * Returns true when the demo was selected AND its package gates are satisfied.
  */
 export function shouldScaffoldDemo(ctx: TemplateContext, name: string): boolean {

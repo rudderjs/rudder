@@ -109,9 +109,15 @@ Route.get('/', async () => {${hasAuth ? `
       lines.push(`  return view('demos.todos', { todos })`)
       lines.push(`})`)
     }
-    if (shouldScaffoldDemo(ctx, 'avatar'))      lines.push(`Route.get('/demos/avatar',      async () => view('demos.avatar'))`)
-    if (shouldScaffoldDemo(ctx, 'fibonacci'))   lines.push(`Route.get('/demos/fibonacci',   async () => view('demos.fibonacci'))`)
-    if (shouldScaffoldDemo(ctx, 'system-info')) lines.push(`Route.get('/demos/system-info', async () => view('demos.system-info'))`)
+    if (shouldScaffoldDemo(ctx, 'avatar'))        lines.push(`Route.get('/demos/avatar',        async () => view('demos.avatar'))`)
+    if (shouldScaffoldDemo(ctx, 'fibonacci'))     lines.push(`Route.get('/demos/fibonacci',     async () => view('demos.fibonacci'))`)
+    if (shouldScaffoldDemo(ctx, 'system-info'))   lines.push(`Route.get('/demos/system-info',   async () => view('demos.system-info'))`)
+    if (shouldScaffoldDemo(ctx, 'cache'))         lines.push(`Route.get('/demos/cache',         async () => view('demos.cache'))`)
+    if (shouldScaffoldDemo(ctx, 'queue'))         lines.push(`Route.get('/demos/queue',         async () => view('demos.queue'))`)
+    if (shouldScaffoldDemo(ctx, 'mail'))          lines.push(`Route.get('/demos/mail',          async () => view('demos.mail'))`)
+    if (shouldScaffoldDemo(ctx, 'notifications')) lines.push(`Route.get('/demos/notifications', async () => view('demos.notifications'))`)
+    if (shouldScaffoldDemo(ctx, 'localization'))  lines.push(`Route.get('/demos/localization',  async () => view('demos.localization'))`)
+    if (shouldScaffoldDemo(ctx, 'http'))          lines.push(`Route.get('/demos/http',          async () => view('demos.http'))`)
     if (shouldScaffoldDemo(ctx, 'pennant')) {
       lines.push(`Route.get('/demos/pennant', async () => {`)
       lines.push(`  const current = await auth().user() as Record<string, unknown> | null`)
@@ -127,7 +133,7 @@ Route.get('/', async () => {${hasAuth ? `
       lines.push(`Route.get('/demos/pennant/beta', async () => view('demos.pennant-beta'), [FeatureMiddleware('beta-dashboard')])`)
     }
     if (shouldScaffoldDemo(ctx, 'ws'))          lines.push(`Route.get('/demos/ws',      async () => view('demos.ws'))`)
-    if (shouldScaffoldDemo(ctx, 'live'))        lines.push(`Route.get('/demos/live',    async () => view('demos.live'))`)
+    if (shouldScaffoldDemo(ctx, 'sync'))        lines.push(`Route.get('/demos/sync',    async () => view('demos.sync'))`)
     demosBlock = '\n' + lines.join('\n') + '\n'
   }
 

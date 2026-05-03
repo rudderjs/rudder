@@ -1,4 +1,4 @@
-export function demosLiveView(): string {
+export function demosSyncView(): string {
   return `import '@/index.css'
 import { useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
@@ -9,7 +9,7 @@ function getWsUrl() {
   return \`ws://\${window.location.host}/ws-sync\`
 }
 
-export default function LiveDemo() {
+export default function SyncDemo() {
   const [connected, setConnected] = useState(false)
   const [text,      setText]      = useState('')
   const [users,     setUsers]     = useState<{ name: string; color: string }[]>([])
@@ -23,7 +23,7 @@ export default function LiveDemo() {
   useEffect(() => {
     const doc      = new Y.Doc()
     const ytext    = doc.getText('content')
-    const provider = new WebsocketProvider(getWsUrl(), 'live-demo', doc)
+    const provider = new WebsocketProvider(getWsUrl(), 'sync-demo', doc)
 
     docRef.current  = doc
     provRef.current = provider

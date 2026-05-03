@@ -1,6 +1,6 @@
-// BKSocket — RudderJS WebSocket client
+// RudderSocket — RudderJS WebSocket client
 // Published by: pnpm rudder vendor:publish --tag=ws-client
-// Copy this file anywhere in your frontend source (e.g. src/BKSocket.ts)
+// Copy this file anywhere in your frontend source (e.g. src/RudderSocket.ts)
 
 type Handler = (data: unknown) => void
 
@@ -10,7 +10,7 @@ class ChannelSub {
   private handlers = new Map<string, Handler[]>()
 
   constructor(
-    private readonly socket: BKSocket,
+    private readonly socket: RudderSocket,
     readonly channelName: string,
     private readonly token?: string,
   ) {}
@@ -40,15 +40,15 @@ class ChannelSub {
     this.handlers.get(event)?.forEach((h) => h(data))
   }
 
-  /** @internal — called by BKSocket to (re)subscribe after reconnect */
+  /** @internal — called by RudderSocket to (re)subscribe after reconnect */
   _subscribe(): void {
     this.socket._send({ type: 'subscribe', channel: this.channelName, token: this.token })
   }
 }
 
-// ─── BKSocket ───────────────────────────────────────────────
+// ─── RudderSocket ───────────────────────────────────────────────
 
-export class BKSocket {
+export class RudderSocket {
   private ws:             WebSocket | null   = null
   private channels        = new Map<string, ChannelSub>()
   private reconnectTimer?: ReturnType<typeof setTimeout>

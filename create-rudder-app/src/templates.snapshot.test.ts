@@ -42,7 +42,7 @@ const ctx: TemplateContext = {
     process:       true,
     concurrency:   true,
   },
-  demos: ['contact', 'ws', 'live'],
+  demos: ['contact', 'ws', 'sync'],
 }
 
 test('getTemplates() output is byte-stable across refactor', () => {
@@ -68,8 +68,8 @@ test('getTemplates() output is byte-stable across refactor', () => {
 })
 
 const EXPECTED_FILE_COUNT = 64
-const EXPECTED_TOTAL_BYTES = 65227
-const EXPECTED_CONTENT_HASH = '98dc4a5ee29298e831d9c2828779cec309fb5dd419406f56769a08b801bf9df4'
+const EXPECTED_TOTAL_BYTES = 65267
+const EXPECTED_CONTENT_HASH = 'e711f76fca45c4fd0a7f1d59cc7adaddd2d285db21e881294bd153195ad34f49'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
@@ -82,7 +82,7 @@ const EXPECTED_PATHS = [
   'app/Providers/AppServiceProvider.ts',
   'app/Views/Demos/Contact.tsx',
   'app/Views/Demos/Index.tsx',
-  'app/Views/Demos/Live.tsx',
+  'app/Views/Demos/Sync.tsx',
   'app/Views/Demos/Ws.tsx',
   'bootstrap/app.ts',
   'bootstrap/providers.ts',
@@ -131,7 +131,7 @@ const EXPECTED_PATHS = [
   'routes/api.ts',
   'routes/console.ts',
   'routes/web.ts',
-  'src/BKSocket.ts',
+  'src/RudderSocket.ts',
   'src/index.css',
   'tsconfig.json',
   'vite.config.ts',
