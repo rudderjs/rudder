@@ -12,6 +12,10 @@ import { WelcomeNotification } from '../app/Notifications/WelcomeNotification.js
 import { CreateUserRequest } from '../app/Http/Requests/CreateUserRequest.js'
 import { TestController } from '../app/Http/Controllers/TestController.js'
 import { AppError } from '../app/Exceptions/AppError.js'
+import { Model } from '@rudderjs/orm'
+import { Post } from '../app/Models/Post.js'
+import { Video } from '../app/Models/Video.js'
+import { Comment } from '../app/Models/Comment.js'
 import { z } from 'zod'
 
 // Register decorator-based controllers
@@ -320,6 +324,83 @@ Route.post('/api/cache/views', async (_req, res) => {
 Route.delete('/api/cache/views', async (_req, res) => {
   await Cache.forget('demos:views')
   res.json({ views: 0, key: 'demos:views' })
+})
+
+// ── /demos/polymorphic — morphMany / morphTo via @rudderjs/orm ──────────────
+
+// GET /api/polymorphic/state — posts + videos with their comments hydrated.
+Route.get('/api/polymorphic/state', async (_req, res) => {
+  const [posts, videos] = await Promise.all([Post.all(), Video.all()])
+  const hydrate = async (parent: Post | Video) => {
+    const comments = await (parent as unknown as { related(n: string): { get(): Promise<Comment[]> } })
+      .related('comments').get()
+    return { ...parent, comments: comments.map(c => ({ ...c })) }
+  }
+  res.json({
+    posts:  await Promise.all(posts.map(hydrate)),
+    videos: await Promise.all(videos.map(hydrate)),
+  })
+})
+
+// POST /api/polymorphic/posts — create a post.
+Route.post('/api/polymorphic/posts', async (req, res) => {
+  const { title } = (req.body ?? {}) as { title?: string }
+  if (!title) return res.status(400).json({ error: 'title required' })
+  const post = await Post.create({ title })
+  res.status(201).json({ ...post })
+})
+
+// POST /api/polymorphic/videos — create a video.
+Route.post('/api/polymorphic/videos', async (req, res) => {
+  const { url } = (req.body ?? {}) as { url?: string }
+  if (!url) return res.status(400).json({ error: 'url required' })
+  const video = await Video.create({ url })
+  res.status(201).json({ ...video })
+})
+
+// POST /api/polymorphic/(posts|videos)/:id/comments — write via Model.morph().
+// Demonstrates the symmetric write helper: spread the result into create()
+// and the commentableId/commentableType columns get populated together.
+Route.post('/api/polymorphic/posts/:id/comments', async (req, res) => {
+  const idParam = req.params['id']
+  if (!idParam) return res.status(400).json({ error: 'id required' })
+  const post = await Post.find(Number(idParam))
+  if (!post) return res.status(404).json({ error: 'post not found' })
+  const { body } = (req.body ?? {}) as { body?: string }
+  if (!body) return res.status(400).json({ error: 'body required' })
+  const comment = await Comment.create({ body, ...Model.morph('commentable', post) })
+  res.status(201).json({ ...comment })
+})
+
+Route.post('/api/polymorphic/videos/:id/comments', async (req, res) => {
+  const idParam = req.params['id']
+  if (!idParam) return res.status(400).json({ error: 'id required' })
+  const video = await Video.find(Number(idParam))
+  if (!video) return res.status(404).json({ error: 'video not found' })
+  const { body } = (req.body ?? {}) as { body?: string }
+  if (!body) return res.status(400).json({ error: 'body required' })
+  const comment = await Comment.create({ body, ...Model.morph('commentable', video) })
+  res.status(201).json({ ...comment })
+})
+
+// GET /api/polymorphic/comments/:id/parent — morphTo resolution.
+// Reads commentableType, branches via the closed types: () => [Post, Video]
+// list, and runs Target.where(pk, commentableId).first() under the hood.
+Route.get('/api/polymorphic/comments/:id/parent', async (req, res) => {
+  const idParam = req.params['id']
+  if (!idParam) return res.status(400).json({ error: 'id required' })
+  const comment = await Comment.find(Number(idParam))
+  if (!comment) return res.status(404).json({ error: 'comment not found' })
+
+  const parent = await (comment as unknown as { related(n: string): { first(): Promise<Post | Video | null> } })
+    .related('commentable').first()
+  if (!parent) return res.status(404).json({ error: 'parent not found' })
+
+  res.json({
+    type:  comment.commentableType,
+    id:    parent.id,
+    title: 'title' in parent ? parent.title : parent.url,
+  })
 })
 
 // POST /api/queue/dispatch — enqueue ExampleJob. Worker drains it during dev.
