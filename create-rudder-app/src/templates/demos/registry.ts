@@ -11,9 +11,14 @@ export interface DemoSpec {
 }
 
 export const DEMOS: ReadonlyArray<DemoSpec> = [
-  { value: 'contact', label: 'Contact form',      hint: 'CSRF + Zod validation' },
-  { value: 'ws',      label: 'WebSocket chat',    hint: 'requires WebSocket / Broadcast', requires: ['broadcast'] },
-  { value: 'live',    label: 'Yjs collaboration', hint: 'requires Sync',                  requires: ['sync'] },
+  { value: 'contact',     label: 'Contact form',      hint: 'CSRF + Zod validation' },
+  { value: 'todos',       label: 'Todos CRUD',        hint: 'requires ORM',                   requiresOrm: true },
+  { value: 'avatar',      label: 'Avatar resize',     hint: 'requires Storage + Image',       requires: ['storage', 'image'] },
+  { value: 'fibonacci',   label: 'Worker threads',    hint: 'requires Concurrency',           requires: ['concurrency'] },
+  { value: 'system-info', label: 'System info',       hint: 'requires Process',               requires: ['process'] },
+  { value: 'pennant',     label: 'Feature flags',     hint: 'requires Pennant + Auth',        requires: ['pennant', 'auth'] },
+  { value: 'ws',          label: 'WebSocket chat',    hint: 'requires WebSocket / Broadcast', requires: ['broadcast'] },
+  { value: 'live',        label: 'Yjs collaboration', hint: 'requires Sync',                  requires: ['sync'] },
 ]
 
 export function availableDemos(

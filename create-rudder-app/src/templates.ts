@@ -48,6 +48,11 @@ import { aiChatPageConfig, aiChatPage } from './templates/pages/ai-chat.js'
 import { demoPageConfig, demoPage } from './templates/pages/demo.js'
 import { demosIndexView } from './templates/demos/index-view.js'
 import { demosContactView } from './templates/demos/contact.js'
+import { demosTodosView, todoModelPrisma, todoSchema, todoService, todoServiceProvider } from './templates/demos/todos.js'
+import { demosFibonacciView } from './templates/demos/fibonacci.js'
+import { demosSystemInfoView } from './templates/demos/system-info.js'
+import { demosAvatarView } from './templates/demos/avatar.js'
+import { demosPennantView, demosPennantBetaView } from './templates/demos/pennant.js'
 import { demosWsView } from './templates/demos/ws.js'
 import { demosLiveView } from './templates/demos/live.js'
 import { bkSocketSource } from './templates/demos/bk-socket.js'
@@ -123,7 +128,7 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     if (ctx.packages.auth)          files['prisma/schema/auth.prisma']         = prismaAuth()
     if (ctx.packages.passport)      files['prisma/schema/passport.prisma']     = prismaPassport()
     if (ctx.packages.notifications) files['prisma/schema/notification.prisma'] = prismaNotification()
-    files['prisma/schema/modules.prisma'] = '// <rudderjs:modules:start>\n// <rudderjs:modules:end>\n'
+    files['prisma/schema/modules.prisma'] = modulesPrisma(ctx)
   }
 
   files['src/index.css'] = indexCss(ctx)
@@ -208,6 +213,19 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (shouldScaffoldAnyDemo(ctx)) {
     files['app/Views/Demos/Index.tsx'] = demosIndexView(ctx)
     if (shouldScaffoldDemo(ctx, 'contact')) files['app/Views/Demos/Contact.tsx'] = demosContactView(ctx)
+    if (shouldScaffoldDemo(ctx, 'todos')) {
+      files['app/Views/Demos/Todos.tsx']                     = demosTodosView()
+      files['app/Modules/Todo/TodoSchema.ts']                = todoSchema()
+      files['app/Modules/Todo/TodoService.ts']               = todoService()
+      files['app/Modules/Todo/TodoServiceProvider.ts']       = todoServiceProvider()
+    }
+    if (shouldScaffoldDemo(ctx, 'fibonacci'))   files['app/Views/Demos/Fibonacci.tsx']  = demosFibonacciView()
+    if (shouldScaffoldDemo(ctx, 'system-info')) files['app/Views/Demos/SystemInfo.tsx'] = demosSystemInfoView()
+    if (shouldScaffoldDemo(ctx, 'avatar'))      files['app/Views/Demos/Avatar.tsx']     = demosAvatarView()
+    if (shouldScaffoldDemo(ctx, 'pennant')) {
+      files['app/Views/Demos/Pennant.tsx']     = demosPennantView()
+      files['app/Views/Demos/PennantBeta.tsx'] = demosPennantBetaView()
+    }
     if (shouldScaffoldDemo(ctx, 'ws')) {
       files['app/Views/Demos/Ws.tsx'] = demosWsView()
       files['src/BKSocket.ts']        = bkSocketSource()
@@ -237,6 +255,21 @@ export function shouldScaffoldDemo(ctx: TemplateContext, name: string): boolean 
 export function shouldScaffoldAnyDemo(ctx: TemplateContext): boolean {
   if (ctx.primary !== 'react') return false
   return ctx.demos.some(name => shouldScaffoldDemo(ctx, name))
+}
+
+/**
+ * Generates the multi-file `prisma/schema/modules.prisma` that holds
+ * domain modules (added by `pnpm rudder make:module` or by demos that
+ * ship a Prisma model). The `<rudderjs:modules:*>` markers are how the
+ * `make:module` runtime command knows where to insert new model blocks.
+ */
+function modulesPrisma(ctx: TemplateContext): string {
+  const blocks: string[] = []
+  if (shouldScaffoldDemo(ctx, 'todos')) {
+    blocks.push(`// module: Todo (Todos demo)\n${todoModelPrisma()}`)
+  }
+  const body = blocks.length > 0 ? '\n' + blocks.join('\n') : ''
+  return `// <rudderjs:modules:start>${body}\n// <rudderjs:modules:end>\n`
 }
 
 
