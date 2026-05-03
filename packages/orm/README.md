@@ -116,18 +116,31 @@ Eager loading is delegated to the adapter — Prisma's `include` / `select` and 
 ```ts
 class User extends Model {
   static override relations = {
-    posts: { type: 'hasMany',   model: () => Post, foreignKey: 'authorId' },
-    team:  { type: 'belongsTo', model: () => Team, foreignKey: 'teamId' },
-    phone: { type: 'hasOne',    model: () => Phone, foreignKey: 'userId' },
+    posts: { type: 'hasMany',       model: () => Post,  foreignKey: 'authorId' },
+    team:  { type: 'belongsTo',     model: () => Team,  foreignKey: 'teamId' },
+    phone: { type: 'hasOne',        model: () => Phone, foreignKey: 'userId' },
+    roles: { type: 'belongsToMany', model: () => Role,  pivotTable: 'role_user' },
   } as const
 }
 
 const user = await User.find(1)
 const recentPosts = await user!.related('posts').orderBy('createdAt', 'desc').limit(5).get()
 const team        = await user!.related('team').first()
+
+// Many-to-many: chainable read filtered through the pivot
+const activeRoles = await user!.related('roles').where('active', true).get()
+
+// Pivot mutations on the auto-generated per-relation accessor
+await user!.roles().attach([1, 2, 3])
+await user!.roles().attach([1], { addedBy: 'admin' })
+await user!.roles().detach([2])
+const result = await user!.roles().sync([1, 3, 5])
+// → { attached: [3, 5], detached: [2] }
 ```
 
-Supported types: `hasOne`, `hasMany`, `belongsTo`. Polymorphic and many-to-many relations are out of scope. Defaults: `foreignKey` → `<parentClassName>Id` for `hasOne`/`hasMany`, `<relatedClassName>Id` for `belongsTo`. The `model: () => Class` thunk avoids circular-import issues.
+Supported types: `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`. Polymorphic relations are out of scope. Defaults: `foreignKey` → `<parentClassName>Id` for `hasOne`/`hasMany`, `<relatedClassName>Id` for `belongsTo`. For `belongsToMany`, `pivotTable` is required; `foreignPivotKey` / `relatedPivotKey` default to camelCase of each side's class name + `Id`. The `model: () => Class` thunk avoids circular-import issues.
+
+`belongsToMany` v1 limitations: pivot columns are not surfaced on read results (write side only), no `withTimestamps`, no polymorphic `morphToMany`. Mutations on the deferred read query (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw — write the pivot via the accessor and write the related rows via the related model directly.
 
 ---
 

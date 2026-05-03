@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { Model, ModelRegistry, ModelNotFoundError, type QueryBuilder, type OrmAdapter } from './index.js'
+import { Model, ModelRegistry, ModelNotFoundError, type QueryBuilder, type OrmAdapter, type BelongsToManyAccessor } from './index.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,8 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     forceDelete: async () => undefined,
     increment: async (_id, _col, _amount, _extra) => ({} as T),
     decrement: async (_id, _col, _amount, _extra) => ({} as T),
+    insertMany: async () => undefined,
+    deleteAll:  async () => 0,
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     ...overrides,
   }
@@ -1783,5 +1785,447 @@ describe('Model.related()', () => {
     const u = User.hydrate({ uuid: 'abc-123' })!
     u.related('posts')
     assert.deepStrictEqual(seen, [['ownerUuid', 'abc-123']])
+  })
+})
+
+// ─── belongsToMany ────────────────────────────────────────────────────────────
+
+/**
+ * Tiny in-memory adapter that supports multiple tables — needed for the
+ * M2M tests where we have to reason about real pivot state across calls.
+ * Implements the chainable wheres + the new bulk primitives. Skips features
+ * orthogonal to M2M (paginate, casts, soft-delete column).
+ */
+function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record<string, unknown>[] } {
+  const tables = new Map<string, Record<string, unknown>[]>()
+  const ensure = (table: string): Record<string, unknown>[] => {
+    if (!tables.has(table)) tables.set(table, [])
+    return tables.get(table)!
+  }
+
+  const matches = (row: Record<string, unknown>, wheres: Array<[string, string, unknown]>): boolean => {
+    for (const [col, op, val] of wheres) {
+      const v = row[col]
+      switch (op) {
+        case '=':      if (v !== val) return false; break
+        case '!=':     if (v === val) return false; break
+        case '>':      if (!(typeof v === 'number' && typeof val === 'number' && v >  val)) return false; break
+        case '>=':     if (!(typeof v === 'number' && typeof val === 'number' && v >= val)) return false; break
+        case '<':      if (!(typeof v === 'number' && typeof val === 'number' && v <  val)) return false; break
+        case '<=':     if (!(typeof v === 'number' && typeof val === 'number' && v <= val)) return false; break
+        case 'IN':     if (!Array.isArray(val) || !val.some(x => x === v)) return false; break
+        case 'NOT IN': if (!Array.isArray(val) ||  val.some(x => x === v)) return false; break
+        default: throw new Error(`memoryAdapter: unsupported op ${op}`)
+      }
+    }
+    return true
+  }
+
+  const makeQbFor = <T>(table: string): QueryBuilder<T> => {
+    const wheres: Array<[string, string, unknown]> = []
+    let nextId = (): number => {
+      const data = ensure(table)
+      let max = 0
+      for (const r of data) {
+        const id = r['id']
+        if (typeof id === 'number' && id > max) max = id
+      }
+      return max + 1
+    }
+    const qb: QueryBuilder<T> = {
+      where: (col: string, opOrVal: unknown, maybeVal?: unknown) => {
+        const op = arguments.length === 3 || maybeVal !== undefined ? String(opOrVal) : '='
+        const val = maybeVal !== undefined ? maybeVal : opOrVal
+        wheres.push([col, op, val])
+        return qb
+      },
+      orWhere: () => qb,
+      orderBy: () => qb,
+      limit:   () => qb,
+      offset:  () => qb,
+      with:    () => qb,
+      withTrashed: () => qb,
+      onlyTrashed: () => qb,
+      first: async () => (ensure(table).find(r => matches(r, wheres)) ?? null) as T | null,
+      find:  async (id) => (ensure(table).find(r => r['id'] === id) ?? null) as T | null,
+      get:   async () => ensure(table).filter(r => matches(r, wheres)) as T[],
+      all:   async () => [...ensure(table)] as T[],
+      count: async () => ensure(table).filter(r => matches(r, wheres)).length,
+      create: async (data) => {
+        const data2 = data as Record<string, unknown>
+        const row = { id: data2['id'] ?? nextId(), ...data2 }
+        ensure(table).push(row)
+        return row as T
+      },
+      update: async (id, data) => {
+        const list = ensure(table)
+        const i = list.findIndex(r => r['id'] === id)
+        if (i < 0) throw new Error(`memoryAdapter: no row in ${table} with id=${String(id)}`)
+        list[i] = { ...list[i], ...(data as Record<string, unknown>) }
+        return list[i] as T
+      },
+      delete: async (id) => {
+        const list = ensure(table)
+        const i = list.findIndex(r => r['id'] === id)
+        if (i >= 0) list.splice(i, 1)
+      },
+      restore: async (_id) => ({} as T),
+      forceDelete: async (id) => {
+        const list = ensure(table)
+        const i = list.findIndex(r => r['id'] === id)
+        if (i >= 0) list.splice(i, 1)
+      },
+      increment: async () => ({} as T),
+      decrement: async () => ({} as T),
+      insertMany: async (rows) => {
+        const list = ensure(table)
+        for (const r of rows) list.push({ ...(r as Record<string, unknown>) })
+      },
+      deleteAll: async () => {
+        const list = ensure(table)
+        const keep: Record<string, unknown>[] = []
+        let removed = 0
+        for (const r of list) {
+          if (matches(r, wheres)) { removed++ } else { keep.push(r) }
+        }
+        list.length = 0
+        list.push(...keep)
+        return removed
+      },
+      paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
+    }
+    // Workaround: arrow functions don't have `arguments`. Rewrite where().
+    qb.where = ((col: string, opOrVal: unknown, maybeVal?: unknown) => {
+      const op  = maybeVal === undefined ? '=' : String(opOrVal)
+      const val = maybeVal === undefined ? opOrVal : maybeVal
+      wheres.push([col, op, val])
+      return qb
+    }) as QueryBuilder<T>['where']
+    return qb
+  }
+
+  return {
+    adapter: {
+      query: <T,>(table: string) => makeQbFor<T>(table),
+      connect: async () => undefined,
+      disconnect: async () => undefined,
+    },
+    rows: (table: string) => ensure(table),
+  }
+}
+
+describe('Model.belongsToMany — declaration', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('relations entry parses as belongsToMany with required + optional fields', () => {
+    class Role extends Model {}
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    const def = User.relations['roles']!
+    assert.strictEqual(def.type, 'belongsToMany')
+    if (def.type === 'belongsToMany') {
+      assert.strictEqual(def.pivotTable, 'role_user')
+      assert.strictEqual((def as { foreignPivotKey?: string }).foreignPivotKey, undefined)
+    }
+  })
+
+  it('throws when used on a non-belongsToMany relation', () => {
+    const { adapter } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Post extends Model {}
+    class User extends Model {
+      static override relations = {
+        posts: { type: 'hasMany' as const, model: () => Post, foreignKey: 'authorId' },
+      }
+      id!: number
+    }
+    const u = User.hydrate({ id: 1 })!
+    assert.throws(() => Model.belongsToMany(u, 'posts'), /not "belongsToMany"/)
+  })
+
+  it('throws when the relation is not declared at all', () => {
+    const { adapter } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class User extends Model { id!: number }
+    const u = User.hydrate({ id: 1 })!
+    assert.throws(() => Model.belongsToMany(u, 'mystery'), /not defined on User/)
+  })
+})
+
+describe('Model.belongsToMany — related() lazy fetch', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('returns the related rows joined through the pivot', async () => {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model { id!: number; name!: string }
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    rows('roles').push({ id: 1, name: 'admin' }, { id: 2, name: 'editor' })
+    rows('role_user').push({ userId: 5, roleId: 1 }, { userId: 5, roleId: 2 })
+
+    const u = User.hydrate({ id: 5 })!
+    const roles = await u.related('roles').get()
+    const ids = roles.map(r => (r as unknown as { id: number }).id).sort()
+    assert.deepStrictEqual(ids, [1, 2])
+  })
+
+  it('returns empty array when the pivot has no rows for this parent', async () => {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model { id!: number }
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    rows('roles').push({ id: 1, name: 'admin' })
+    const u = User.hydrate({ id: 99 })!
+    const roles = await u.related('roles').get()
+    assert.deepStrictEqual(roles, [])
+  })
+
+  it('chainable .where() filters via the related model columns', async () => {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model { id!: number; active!: boolean }
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    rows('roles').push({ id: 1, active: true }, { id: 2, active: false }, { id: 3, active: true })
+    rows('role_user').push({ userId: 5, roleId: 1 }, { userId: 5, roleId: 2 }, { userId: 5, roleId: 3 })
+
+    const u = User.hydrate({ id: 5 })!
+    const active = await u.related('roles').where('active', true).get()
+    const ids = active.map(r => (r as unknown as { id: number }).id).sort()
+    assert.deepStrictEqual(ids, [1, 3])
+  })
+
+  it('throws when the parent key is unset on the instance', () => {
+    const { adapter } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model {}
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id?: number
+    }
+    const u = new User()
+    assert.throws(() => u.related('roles').get(), /id is unset/)
+  })
+
+  it('mutation methods on the deferred QB throw with a helpful message', async () => {
+    const { adapter } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model {}
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    const u = User.hydrate({ id: 5 })!
+    const q = u.related('roles')
+    assert.throws(() => (q as unknown as { create: () => void }).create(), /not supported on a belongsToMany/)
+    assert.throws(() => (q as unknown as { delete: () => void }).delete(), /not supported on a belongsToMany/)
+  })
+})
+
+describe('Model.belongsToMany — attach / detach / sync', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  function setup() {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Role extends Model { id!: number; name!: string }
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    rows('roles').push({ id: 1, name: 'admin' }, { id: 2, name: 'editor' }, { id: 3, name: 'viewer' })
+    return { Role, User, rows }
+  }
+
+  it('attach writes pivot rows', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1, 2])
+    const pivot = rows('role_user').filter(r => r['userId'] === 5)
+    assert.strictEqual(pivot.length, 2)
+    assert.deepStrictEqual(pivot.map(r => r['roleId']).sort(), [1, 2])
+  })
+
+  it('attach with flat pivot data round-trips the extra column', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1], { addedBy: 'admin' })
+    const pivot = rows('role_user')
+    assert.strictEqual(pivot.length, 1)
+    assert.strictEqual(pivot[0]!['addedBy'], 'admin')
+  })
+
+  it('attach with per-id pivot data writes per-row pivot columns', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach({
+      1: { addedBy: 'admin' },
+      2: { addedBy: 'system' },
+    })
+    const byRole = new Map(rows('role_user').map(r => [r['roleId'], r['addedBy']]))
+    assert.strictEqual(byRole.get(1), 'admin')
+    assert.strictEqual(byRole.get(2), 'system')
+  })
+
+  it('attach with empty input is a no-op', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([])
+    assert.strictEqual(rows('role_user').length, 0)
+  })
+
+  it('detach(ids) removes only matching pivot rows', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1, 2, 3])
+    const removed = await Model.belongsToMany(u, 'roles').detach([2])
+    assert.strictEqual(removed, 1)
+    const remaining = rows('role_user').filter(r => r['userId'] === 5).map(r => r['roleId']).sort()
+    assert.deepStrictEqual(remaining, [1, 3])
+  })
+
+  it('detach() with no args removes all pivot rows for this parent', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1, 2])
+    const removed = await Model.belongsToMany(u, 'roles').detach()
+    assert.strictEqual(removed, 2)
+    assert.strictEqual(rows('role_user').filter(r => r['userId'] === 5).length, 0)
+  })
+
+  it('detach([]) is a no-op (does not delete everything)', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1, 2])
+    const removed = await Model.belongsToMany(u, 'roles').detach([])
+    assert.strictEqual(removed, 0)
+    assert.strictEqual(rows('role_user').length, 2)
+  })
+
+  it('sync diffs correctly — attach missing, detach extra', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1, 2])
+    const result = await Model.belongsToMany(u, 'roles').sync([2, 3])
+    assert.deepStrictEqual([...result.attached].sort(), [3])
+    assert.deepStrictEqual([...result.detached].sort(), [1])
+    const finalIds = rows('role_user').filter(r => r['userId'] === 5).map(r => r['roleId']).sort()
+    assert.deepStrictEqual(finalIds, [2, 3])
+  })
+
+  it('sync writes pivot data on the new attaches only — leaves existing alone', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1], { addedBy: 'system' })
+    await Model.belongsToMany(u, 'roles').sync([1, 2], { addedBy: 'admin' })
+    const byRole = new Map(rows('role_user').map(r => [r['roleId'], r['addedBy']]))
+    assert.strictEqual(byRole.get(1), 'system')
+    assert.strictEqual(byRole.get(2), 'admin')
+  })
+
+  it('sync([]) detaches all', async () => {
+    const { User, rows } = setup()
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1, 2])
+    const result = await Model.belongsToMany(u, 'roles').sync([])
+    assert.deepStrictEqual([...result.detached].sort(), [1, 2])
+    assert.deepStrictEqual(result.attached, [])
+    assert.strictEqual(rows('role_user').length, 0)
+  })
+
+  it('multiple parents are isolated — detach for one does not affect the other', async () => {
+    const { User, rows } = setup()
+    const a = User.hydrate({ id: 5 })!
+    const b = User.hydrate({ id: 6 })!
+    await Model.belongsToMany(a, 'roles').attach([1, 2])
+    await Model.belongsToMany(b, 'roles').attach([1, 3])
+    await Model.belongsToMany(a, 'roles').detach()
+    const aRows = rows('role_user').filter(r => r['userId'] === 5)
+    const bRows = rows('role_user').filter(r => r['userId'] === 6).map(r => r['roleId']).sort()
+    assert.strictEqual(aRows.length, 0)
+    assert.deepStrictEqual(bRows, [1, 3])
+  })
+
+  it('honors custom pivot keys', async () => {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    class Tag extends Model { id!: number }
+    class Post extends Model {
+      static override relations = {
+        tags: {
+          type:            'belongsToMany' as const,
+          model:           () => Tag,
+          pivotTable:      'post_tag',
+          foreignPivotKey: 'thePostId',
+          relatedPivotKey: 'theTagId',
+        },
+      }
+      id!: number
+    }
+    rows('tags').push({ id: 10 }, { id: 20 })
+    const p = Post.hydrate({ id: 7 })!
+    await Model.belongsToMany(p, 'tags').attach([10, 20])
+    const pivot = rows('post_tag')
+    assert.strictEqual(pivot.length, 2)
+    assert.strictEqual(pivot[0]!['thePostId'], 7)
+    assert.deepStrictEqual(pivot.map(r => r['theTagId']).sort(), [10, 20])
+  })
+
+  it('lazy model thunk handles circular import case (no throw at module load)', async () => {
+    const { adapter, rows } = memoryAdapter()
+    ModelRegistry.set(adapter)
+    // Declare User before Role to simulate a circular import where Role
+    // is not yet defined at the time User's relations are read. The
+    // `() => Role` thunk should defer the lookup until first use.
+    let Role!: typeof Model
+    class User extends Model {
+      static override relations = {
+        roles: { type: 'belongsToMany' as const, model: () => Role, pivotTable: 'role_user' },
+      }
+      id!: number
+    }
+    Role = class extends Model { id!: number }
+    Object.defineProperty(Role, 'name', { value: 'Role' })
+    rows('roles').push({ id: 1 })
+    const u = User.hydrate({ id: 5 })!
+    await Model.belongsToMany(u, 'roles').attach([1])
+    const list = await u.related('roles').get()
+    assert.strictEqual(list.length, 1)
+  })
+
+  it('auto-installs a per-relation method on the prototype', async () => {
+    const { User, rows } = setup()
+    // Before any query the prototype method may not be installed yet —
+    // calling Model.query() (via ModelRegistry.register) installs it.
+    User.query()
+    const u = User.hydrate({ id: 5 })!
+    interface UserWithRoles { roles(): BelongsToManyAccessor }
+    const accessor = (u as unknown as UserWithRoles).roles()
+    await accessor.attach([1, 2])
+    assert.strictEqual(rows('role_user').filter(r => r['userId'] === 5).length, 2)
   })
 })

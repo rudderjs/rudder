@@ -42,6 +42,19 @@ export interface QueryBuilder<T> {
   create(data: Partial<T>): Promise<T>
   update(id: number | string, data: Partial<T>): Promise<T>
   delete(id: number | string): Promise<void>
+  /**
+   * Bulk insert. Used by `belongsToMany` attach to write pivot rows in one
+   * round-trip and by callers that need batched inserts. No return value —
+   * adapters that can't echo inserted ids without a round-trip don't have to.
+   */
+  insertMany(rows: Partial<T>[]): Promise<void>
+  /**
+   * Delete every row matching the chained `where`/`orWhere` clauses.
+   * Returns the number of rows deleted. Bypasses soft deletes — call
+   * `withTrashed()` first if you need to scope including trashed rows
+   * (most adapters apply the soft-delete filter automatically otherwise).
+   */
+  deleteAll(): Promise<number>
   /** Restore a soft-deleted record. */
   restore(id: number | string): Promise<T>
   /** Permanently delete a record, bypassing soft deletes. */
