@@ -46,14 +46,6 @@ export function dotenv(ctx: TemplateContext): string {
     lines.push('GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback')
   }
 
-  if (ctx.packages.cashierPaddle) {
-    lines.push('')
-    lines.push('PADDLE_API_KEY=')
-    lines.push('PADDLE_CLIENT_SIDE_TOKEN=')
-    lines.push('PADDLE_WEBHOOK_SECRET=')
-    lines.push('PADDLE_SANDBOX=true')
-  }
-
   return lines.join('\n') + '\n'
 }
 
@@ -102,14 +94,6 @@ export function dotenvExample(ctx: TemplateContext): string {
     lines.push('GOOGLE_CLIENT_ID=')
     lines.push('GOOGLE_CLIENT_SECRET=')
     lines.push('GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback')
-  }
-
-  if (ctx.packages.cashierPaddle) {
-    lines.push('')
-    lines.push('PADDLE_API_KEY=')
-    lines.push('PADDLE_CLIENT_SIDE_TOKEN=')
-    lines.push('PADDLE_WEBHOOK_SECRET=')
-    lines.push('PADDLE_SANDBOX=true')
   }
 
   return lines.join('\n') + '\n'

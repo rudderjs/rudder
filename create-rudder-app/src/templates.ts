@@ -27,7 +27,6 @@ import { configSocialite } from './templates/configs/socialite.js'
 import { configPulse } from './templates/configs/pulse.js'
 import { configHorizon } from './templates/configs/horizon.js'
 import { configCrypt } from './templates/configs/crypt.js'
-import { configCashier } from './templates/configs/cashier.js'
 import { configPennant } from './templates/configs/pennant.js'
 import { dotenv, dotenvExample, envDts, gitignore, pnpmWorkspace } from './templates/env.js'
 import { serverTs } from './templates/server.js'
@@ -93,7 +92,6 @@ export interface TemplateContext {
     mcp:           boolean
     boost:         boolean
     localization:  boolean
-    cashierPaddle: boolean
     pennant:       boolean
     telescope:     boolean
     pulse:         boolean
@@ -156,7 +154,6 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (ctx.packages.sanctum)      files['config/sanctum.ts']  = configSanctum()
   if (ctx.packages.socialite)    files['config/socialite.ts'] = configSocialite()
   if (ctx.packages.localization) files['config/localization.ts'] = configLocalization()
-  if (ctx.packages.cashierPaddle) files['config/cashier.ts']    = configCashier()
   if (ctx.packages.pennant)      files['config/pennant.ts']  = configPennant()
   if (ctx.packages.telescope)    files['config/telescope.ts'] = configTelescope()
   if (ctx.packages.pulse)        files['config/pulse.ts']    = configPulse()
