@@ -1,6 +1,6 @@
 # RudderJS Feature Roadmap
 
-> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-04-20
+> Laravel 13 gap analysis — compiled 2026-04-06, last updated 2026-05-03
 >
 > Legend: S = Small (1-2 days) | M = Medium (3-5 days) | L = Large (1-2 weeks)
 
@@ -130,13 +130,13 @@
 
 ---
 
-## Plan 7: Monitoring & Observability — partial
+## Plan 7: Monitoring & Observability — mostly done
 
 *Production visibility — equivalent to Pulse, Telescope, Horizon, Nightwatch.*
 
-**Status**: Telescope shipped as `@rudderjs/telescope` and verified end-to-end (all 17 collectors smoke-tested 2026-04-20). Pulse and Horizon packages exist under `@rudderjs/*` but haven't been verified against fixtures and may need build/parity work. Nightwatch still ⬜.
+**Status**: Telescope (19 collectors), Pulse, and Horizon all shipped at 1.0+ and browser-verified end-to-end as of 2026-05-02 (Pulse + Horizon went through PRs #144 / #146 / #149 / #151 / #153 / #156 / #158 / #160 — cross-process queue collector saga, SQLite WAL storage fix, docs sweep). Nightwatch still ⬜ — open question whether to ship a self-hosted dashboard, a SaaS product, or both.
 
-### 7.1 — `@rudderjs/pulse` ⬜ untested
+### 7.1 — `@rudderjs/pulse` ✅
 
 **Laravel equivalent**: [Laravel Pulse](https://laravel.com/docs/13.x/pulse) — self-hosted performance monitoring dashboard.
 
@@ -181,7 +181,7 @@
 
 **Effort**: Large
 
-**Watchers (18 types):**
+**Watchers (18 types in Laravel's spec):**
 1. **Request Watcher** — HTTP request/response details, headers, payload, status
 2. **Query Watcher** — database queries with execution time, slow query threshold (default 100ms)
 3. **Exception Watcher** — reportable exceptions with full stack traces
@@ -221,7 +221,7 @@
 
 ---
 
-### 7.3 — `@rudderjs/horizon` ⬜ untested
+### 7.3 — `@rudderjs/horizon` ✅
 
 **Laravel equivalent**: [Laravel Horizon](https://laravel.com/docs/13.x/horizon) — Redis queue monitoring + management.
 
@@ -308,9 +308,9 @@
 ---
 
 ### Plan 7 Deliverables
-- [x] `@rudderjs/telescope` — debug inspector (17 watchers, tagging, filtering, related-entry correlation, SQLite + WAL for cross-process viewing) — verified end-to-end 2026-04-20
-- [ ] `@rudderjs/pulse` — performance dashboard (package exists, untested against fixtures)
-- [ ] `@rudderjs/horizon` — queue monitor (package exists, untested against fixtures)
+- [x] `@rudderjs/telescope` — debug inspector. Shipped 19 collectors (request, query, exception, job, mail, notification, cache, log, event, command, schedule, http, model, gate, ai, mcp, broadcast, sync, dump) — partial overlap with Laravel's 18, swapping Redis/View/Batch for ai/mcp/broadcast/sync. Tagging, filtering, related-entry correlation, SQLite + WAL for cross-process viewing. Verified end-to-end 2026-04-20.
+- [x] `@rudderjs/pulse` — performance dashboard. 7 aggregators (request, queue, cache, exception, user, query, server), period-windowed aggregates, individual-entry storage for slow events. Browser-verified 2026-05-02 (PRs #156 + #158 + #160).
+- [x] `@rudderjs/horizon` — queue monitor. Full job lifecycle, per-queue metrics, worker status, retry/delete from UI. Browser-verified 2026-05-02 across the cross-process queue collector saga (PRs #144 / #146 / #149 / #151 / #153).
 - [ ] `@rudderjs/nightwatch` — external monitoring (panel plugin first, SaaS later)
 
 ---
@@ -333,8 +333,8 @@ Phase 4 ──── Plan 5 (Advanced) + Plan 6 (Testing)  ← parallel    ✅ D
 Phase 5 ──── Plan 8 (AI, Boost & MCP — Laravel Parity)            ✅ MOSTLY DONE
               ├── ai loop parity, @rudderjs/mcp, boost guidelines + tools
               │
-Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ partial
-              ├── @rudderjs/telescope ✅, pulse ⬜, horizon ⬜, nightwatch ⬜
+Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ mostly done
+              ├── @rudderjs/telescope ✅, pulse ✅, horizon ✅, nightwatch ⬜
 ```
 
 ---
@@ -352,8 +352,8 @@ Phase 6 ──── Plan 7 (Monitoring & Observability)                  ◐ pa
 | `@rudderjs/testing` | 6 | Core framework | ✅ |
 | `@rudderjs/mcp` | 8 | Core framework | ✅ |
 | `@rudderjs/telescope` | 7 | Core framework | ✅ |
-| `@rudderjs/pulse` | 7 | Core framework | ⬜ untested |
-| `@rudderjs/horizon` | 7 | Core framework | ⬜ untested |
+| `@rudderjs/pulse` | 7 | Core framework | ✅ |
+| `@rudderjs/horizon` | 7 | Core framework | ✅ |
 | `@rudderjs/nightwatch` | 7 | Core framework / SaaS | ⬜ |
 
 ## Existing Package Enhancements

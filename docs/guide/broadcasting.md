@@ -1,6 +1,6 @@
 # Broadcasting
 
-`@rudderjs/broadcast` is the framework's WebSocket pub/sub layer. It runs on the same port as your HTTP server, supports public, private, and presence channels, and ships a small client (`BKSocket`) for the browser. No Pusher account, no separate process, no external service.
+`@rudderjs/broadcast` is the framework's WebSocket pub/sub layer. It runs on the same port as your HTTP server, supports public, private, and presence channels, and ships a small client (`RudderSocket`) for the browser. No Pusher account, no separate process, no external service.
 
 ## Setup
 
@@ -80,15 +80,15 @@ Publish the client into your project:
 
 ```bash
 pnpm rudder vendor:publish --tag=broadcast-client
-# → src/lib/BKSocket.ts
+# → src/RudderSocket.ts
 ```
 
 Use it from frontend code:
 
 ```ts
-import { BKSocket } from './lib/BKSocket'
+import { RudderSocket } from './RudderSocket'
 
-const socket = new BKSocket('ws://localhost:3000/ws')
+const socket = new RudderSocket('ws://localhost:3000/ws')
 
 // Public channel — no auth
 const chat = socket.channel('chat')
@@ -110,7 +110,7 @@ room.on('presence.left',    ({ user })    => console.log(`${user.name} left`))
 orders.leave()
 ```
 
-`BKSocket` reconnects automatically after 3 seconds on disconnect and resubscribes to every active channel after reconnecting. The token is re-sent on each reconnect so the server can re-validate.
+`RudderSocket` reconnects automatically after 3 seconds on disconnect and resubscribes to every active channel after reconnecting. The token is re-sent on each reconnect so the server can re-validate.
 
 ## Stats
 
@@ -160,4 +160,4 @@ Both real-time packages can coexist in the same process — they own different p
 - **Channel auth callback running too late.** The callback fires on subscribe, not on every event. Re-validate inside the auth callback if your token can expire mid-session — or rely on token TTL + reconnect.
 - **Forgetting `channels: () => import('./routes/channels.ts')`.** The provider boots cleanly but no auth callbacks are registered, so private/presence channels reject everyone.
 - **Sending sensitive data to public channels.** Public means *unauthenticated*. Treat anything you broadcast there as world-readable.
-- **Browser client without `BKSocket`.** Hand-rolling the WebSocket protocol is fiddly — the client handles framing, channel multiplexing, and reconnect resubscribe. Vendor it once and forget.
+- **Browser client without `RudderSocket`.** Hand-rolling the WebSocket protocol is fiddly — the client handles framing, channel multiplexing, and reconnect resubscribe. Vendor it once and forget.

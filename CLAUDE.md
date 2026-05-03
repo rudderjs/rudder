@@ -16,7 +16,7 @@ This file provides guidance to Claude Code when working in this repository.
 - **Language**: TypeScript (strict, ESM, NodeNext)
 - **npm scope**: `@rudderjs/*`
 - **GitHub**: https://github.com/rudderjs/rudder
-- **Status**: 1.0 graduated 2026-04-29 (29 framework packages → 1.0.0; see `docs/plans/2026-04-28-1x-graduation.md`)
+- **Status**: 1.0 graduated 2026-05-02 (every `@rudderjs/*` package on npm is 1.0.0+; zero packages on 0.x). See `docs/plans/2026-04-28-1x-graduation.md`.
 
 ---
 
@@ -217,17 +217,29 @@ playground/
 ├── bootstrap/
 │   ├── app.ts          # Application.configure()...create()
 │   └── providers.ts    # [...(await defaultProviders()), eventsProvider({...}), AppServiceProvider]
-├── config/             # app, server, database, auth, queue, mail, cache, storage, ai, log, telescope, pulse, horizon, index
+├── config/             # ai, app, auth, cache, cashier, database, hash, horizon, localization,
+│                       #   log, mail, passport, pulse, queue, server, session, storage, sync,
+│                       #   telescope + index.ts barrel
 ├── app/
-│   ├── Models/User.ts
 │   ├── Agents/ResearchAgent.ts   # @rudderjs/ai framework demo
+│   ├── Commands/                 # custom rudder commands
+│   ├── Events/ + Listeners/      # event dispatching demo
+│   ├── Exceptions/               # custom exception renderers
+│   ├── Http/                     # Controllers/, Middleware/ (Laravel-style namespace)
+│   ├── Jobs/ExampleJob.ts        # queue demo
+│   ├── Mail/DemoMail.ts          # mail demo
+│   ├── Mcp/                      # MCP servers + tools (Echo + secured)
+│   ├── Models/User.ts
 │   ├── Modules/Todo/             # self-contained module with its own .prisma + test
-│   ├── Views/                    # Laravel-style view() components (controller-returned)
-│   │   ├── Welcome.tsx           #   `export const route = '/'` → served at /
-│   │   ├── Home.tsx / About.tsx  #   id-derived URLs — /home, /about
-│   │   └── Auth/                 #   vendored from @rudderjs/auth/views/react/
-│   │       └── {Login,Register,ForgotPassword,ResetPassword}.tsx
-│   └── Providers/AppServiceProvider.ts
+│   ├── Notifications/            # WelcomeNotification + others
+│   ├── Providers/AppServiceProvider.ts
+│   ├── Services/                 # singleton-ish app services
+│   └── Views/                    # Laravel-style view() components (controller-returned)
+│       ├── Welcome.tsx           #   `export const route = '/'` → served at /
+│       ├── Home.tsx / About.tsx  #   id-derived URLs — /home, /about
+│       ├── Auth/                 #   vendored from @rudderjs/auth/views/react/
+│       │   └── {Login,Register,ForgotPassword,ResetPassword}.tsx
+│       └── Demos/                #   /demos index + 14 framework-feature demos
 ├── routes/
 │   ├── web.ts          # Web routes: welcome + registerAuthRoutes() + redirects/guards
 │   ├── api.ts          # JSON API routes (router.get/post/all())
