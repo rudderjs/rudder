@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
+import '@/index.css'
 
 function getWsUrl() {
   if (typeof window === 'undefined') return ''
@@ -66,25 +67,26 @@ export default function SyncDemo() {
   }
 
   return (
-    <div className="min-h-svh bg-background flex flex-col">
-      <div className="border-b px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">Sync Demo</h1>
-          <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium ${connected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} />
+    <div className="split-frame">
+      <div className="split-toolbar">
+        <div className="split-toolbar-title">
+          <h1 className="split-toolbar-heading">Sync Demo</h1>
+          <span className={`status-pill ${connected ? 'status-pill-on' : 'status-pill-off'}`}>
+            <span className={`status-dot ${connected ? 'status-dot-on' : 'status-dot-off'}`} />
             {connected ? 'Connected' : 'Connecting…'}
           </span>
         </div>
-        <span className="text-sm text-muted-foreground">
-          You: <span className="font-medium" style={{ color: myColor }}>{myName}</span>
+        <span className="split-toolbar-meta">
+          You: <span style={{ color: myColor, fontWeight: 500 }}>{myName}</span>
         </span>
       </div>
 
-      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 65px)' }}>
-        <div className="flex-1 flex flex-col p-6 gap-3">
-          <p className="text-xs text-muted-foreground">
+      <div className="split-body">
+        <div className="collab-pane">
+          <p className="collab-meta">
             Open this page in another tab — edits sync in real-time via Yjs CRDT. Rendered from{' '}
-            <code>app/Views/Demos/Sync.tsx</code> via <code>view('demos.sync')</code>.
+            <code className="inline-code">app/Views/Demos/Sync.tsx</code> via{' '}
+            <code className="inline-code">view('demos.sync')</code>.
           </p>
           <textarea
             ref={textareaRef}
@@ -92,34 +94,35 @@ export default function SyncDemo() {
             onChange={handleChange}
             disabled={!connected}
             placeholder="Start typing… changes sync instantly across all connected clients."
-            className="flex-1 w-full px-4 py-3 rounded-xl border bg-background text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 font-mono"
+            className="collab-textarea"
           />
-          <p className="text-xs text-muted-foreground text-right">
-            {text.length} characters · powered by <span className="font-medium">@rudderjs/sync</span> + Yjs
+          <p className="collab-meta" style={{ textAlign: 'right' }}>
+            {text.length} characters · powered by{' '}
+            <span style={{ fontWeight: 500 }}>@rudderjs/sync</span> + Yjs
           </p>
         </div>
 
-        <div className="w-52 border-l flex flex-col shrink-0">
-          <div className="px-4 py-3 border-b flex items-center gap-2">
-            <span className="text-sm font-medium">Online</span>
-            <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">{users.length}</span>
+        <aside className="split-sidebar">
+          <div className="split-sidebar-header">
+            <span className="sidebar-title">Online</span>
+            <span className="member-count">{users.length}</span>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
             {users.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-3">No one here yet</p>
+              <p className="sidebar-empty">No one here yet</p>
             ) : users.map((u, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-muted/50">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
-                <span className="truncate">{u.name}</span>
+              <div key={i} className="member-row">
+                <span className="member-dot" style={{ backgroundColor: u.color }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
               </div>
             ))}
           </div>
-          <div className="border-t p-3">
-            <p className="text-xs text-muted-foreground leading-relaxed">
+          <div className="split-sidebar-footer">
+            <p className="sidebar-note">
               Awareness tracks who is connected via Yjs presence protocol.
             </p>
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   )

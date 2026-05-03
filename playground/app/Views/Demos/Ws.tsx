@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BKSocket } from '@/BKSocket'
+import '@/index.css'
 
 type Message = { user: string; text: string; ts: number }
 type Member  = { id: string; name: string }
@@ -70,57 +71,49 @@ export default function WsDemo() {
   }
 
   return (
-    <div className="min-h-svh bg-background flex flex-col">
-      <div className="border-b px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">WebSocket Demo</h1>
-          <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium ${connected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} />
+    <div className="split-frame">
+      <div className="split-toolbar">
+        <div className="split-toolbar-title">
+          <h1 className="split-toolbar-heading">WebSocket Demo</h1>
+          <span className={`status-pill ${connected ? 'status-pill-on' : 'status-pill-off'}`}>
+            <span className={`status-dot ${connected ? 'status-dot-on' : 'status-dot-off'}`} />
             {connected ? 'Connected' : 'Connecting…'}
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            You: <span className="font-medium text-foreground">{ME}</span>
+        <div className="split-toolbar-title">
+          <span className="split-toolbar-meta">
+            You: <span style={{ fontWeight: 500 }}>{ME}</span>
           </span>
-          <button
-            onClick={loadStats}
-            className="text-xs px-3 py-1.5 rounded-md border hover:bg-muted transition-colors"
-          >
-            Stats
-          </button>
+          <button onClick={loadStats} className="toolbar-button">Stats</button>
           {stats && (
-            <span className="text-xs text-muted-foreground">
+            <span className="split-toolbar-meta">
               {stats.connections} conn · {stats.channels} ch
             </span>
           )}
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 65px)' }}>
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="split-body">
+        <div className="split-main">
+          <div className="chat-list">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-                <p className="text-muted-foreground text-sm">No messages yet.</p>
-                <p className="text-muted-foreground text-xs">
+              <div className="chat-empty">
+                <p>No messages yet.</p>
+                <p>
                   Open this page in another tab — messages appear in real-time. Rendered from{' '}
-                  <code>app/Views/Demos/Ws.tsx</code> via <code>view('demos.ws')</code>.
+                  <code className="inline-code">app/Views/Demos/Ws.tsx</code> via{' '}
+                  <code className="inline-code">view('demos.ws')</code>.
                 </p>
               </div>
             )}
             {messages.map((m, i) => {
               const isMe = m.user === ME
               return (
-                <div key={i} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold shrink-0">
-                    {m.user.slice(-3)}
-                  </div>
-                  <div className={`flex flex-col gap-1 max-w-sm ${isMe ? 'items-end' : 'items-start'}`}>
-                    <span className="text-xs text-muted-foreground">{m.user}</span>
-                    <div className={`px-4 py-2 rounded-2xl text-sm leading-relaxed ${isMe ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted rounded-tl-sm'}`}>
-                      {m.text}
-                    </div>
+                <div key={i} className={`chat-message${isMe ? ' chat-message-me' : ''}`}>
+                  <div className="chat-avatar">{m.user.slice(-3)}</div>
+                  <div className={`chat-stack${isMe ? ' chat-stack-me' : ''}`}>
+                    <span className="chat-author">{m.user}</span>
+                    <div className={isMe ? 'chat-bubble-me' : 'chat-bubble'}>{m.text}</div>
                   </div>
                 </div>
               )
@@ -128,46 +121,45 @@ export default function WsDemo() {
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={sendMessage} className="border-t p-4 flex gap-3">
+          <form onSubmit={sendMessage} className="chat-form">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message and press Enter…"
               disabled={!connected}
-              className="flex-1 px-4 py-2.5 rounded-xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              className="chat-input"
             />
             <button
               type="submit"
               disabled={!input.trim() || !connected}
-              className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+              className="chat-send"
             >
               Send
             </button>
           </form>
         </div>
 
-        <div className="w-52 border-l flex flex-col shrink-0">
-          <div className="px-4 py-3 border-b flex items-center gap-2">
-            <span className="text-sm font-medium">Online</span>
-            <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">{members.length}</span>
+        <aside className="split-sidebar">
+          <div className="split-sidebar-header">
+            <span className="sidebar-title">Online</span>
+            <span className="member-count">{members.length}</span>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
             {members.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-3">No one here yet</p>
+              <p className="sidebar-empty">No one here yet</p>
             ) : members.map((m) => (
-              <div key={m.id} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-muted/50">
-                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                <span className="truncate">{m.name}</span>
+              <div key={m.id} className="member-row">
+                <span className="member-dot status-dot-on" />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
               </div>
             ))}
           </div>
-
-          <div className="border-t p-3">
-            <p className="text-xs text-muted-foreground leading-relaxed">
+          <div className="split-sidebar-footer">
+            <p className="sidebar-note">
               Presence channel tracks who is connected in real-time.
             </p>
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   )

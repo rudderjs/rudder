@@ -1,8 +1,5 @@
 import { useState, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import '@/index.css'
 import type { Todo } from '../../Modules/Todo/TodoSchema.js'
 
 interface TodosDemoProps {
@@ -48,68 +45,78 @@ export default function TodosDemo({ todos: initial }: TodosDemoProps) {
   const pending = todos.length - done
 
   return (
-    <div className="min-h-svh bg-background p-8">
-      <div className="mx-auto max-w-lg space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Todo List</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {pending} remaining · {done} completed
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            Rendered from <code>app/Views/Demos/Todos.tsx</code> via{' '}
-            <code>view('demos.todos', &#123; todos &#125;)</code>. Initial data fetched
-            by the controller, not the view.
-          </p>
+    <div className="page">
+      <nav className="page-nav">
+        <div className="brand">
+          <span className="brand-dot" />
+          RudderJS
         </div>
+        <div className="nav-right">
+          <a href="/demos" className="nav-link">Demos</a>
+          <a href="/" className="nav-link">Home</a>
+        </div>
+      </nav>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex gap-2">
-              <Input
+      <section className="hero">
+        <h1 className="hero-title">Todo List</h1>
+        <p className="hero-lead">
+          {pending} remaining · {done} completed
+        </p>
+        <p className="hero-meta">
+          Rendered from <code className="inline-code">app/Views/Demos/Todos.tsx</code> via{' '}
+          <code className="inline-code">view('demos.todos', &#123; todos &#125;)</code>.
+          Initial data fetched by the controller, not the view.
+        </p>
+      </section>
+
+      <section className="feature-section">
+        <div className="demo-narrow">
+          <div className="demo-card">
+            <div className="input-row">
+              <input
                 ref={inputRef}
+                className="form-input"
                 placeholder="What needs to be done?"
                 onKeyDown={e => e.key === 'Enter' && addTodo()}
               />
-              <Button onClick={addTodo} disabled={loading}>
+              <button className="button-primary" onClick={addTodo} disabled={loading}>
                 {loading ? '...' : 'Add'}
-              </Button>
+              </button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Tasks</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 pb-4">
-            {todos.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No todos yet. Add one above!
-              </p>
-            )}
-            {todos.map(todo => (
-              <div
-                key={todo.id}
-                className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-muted/50 group"
-              >
-                <Checkbox
-                  checked={todo.completed}
-                  onCheckedChange={() => toggleTodo(todo)}
-                />
-                <span className={`flex-1 text-sm ${todo.completed ? 'line-through text-muted-foreground' : ''}`}>
-                  {todo.title}
-                </span>
-                <button
-                  onClick={() => deleteTodo(todo.id)}
-                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive text-xs transition-opacity"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+          <div className="demo-card">
+            <div className="demo-card-header">
+              <h2 className="demo-card-title">Tasks</h2>
+            </div>
+            <div className="demo-card-body">
+              {todos.length === 0 && (
+                <p className="empty-state">No todos yet. Add one above!</p>
+              )}
+              {todos.map(todo => (
+                <div key={todo.id} className="list-row group">
+                  <input
+                    type="checkbox"
+                    className="checkbox-input"
+                    checked={todo.completed}
+                    onChange={() => toggleTodo(todo)}
+                  />
+                  <span className={`list-row-text${todo.completed ? ' list-row-text-done' : ''}`}>
+                    {todo.title}
+                  </span>
+                  <button
+                    onClick={() => deleteTodo(todo.id)}
+                    className="list-row-delete"
+                    aria-label="Delete"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
