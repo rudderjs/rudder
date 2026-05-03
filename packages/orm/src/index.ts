@@ -183,6 +183,42 @@ export type RelationDefinition =
       /** Column on the related model joined against `relatedPivotKey`. Default: `Related.primaryKey`. */
       relatedKey?:      string
     }
+  | {
+      type:       'morphMany'
+      /** Lazy reference to the related (child) model class — avoids circular imports. */
+      model:      () => typeof Model
+      /** Polymorphic relation name — drives `{morphName}Id` + `{morphName}Type` columns.
+       *  E.g. `morphName: 'commentable'` → columns `commentableId` / `commentableType`. */
+      morphName:  string
+      /** Override the discriminator value written to `{morphName}Type`.
+       *  Defaults to `Parent.morphAlias ?? Parent.name`. */
+      morphType?: string
+      /** Override the parent column joined against `{morphName}Id`. Default: `Parent.primaryKey`. */
+      localKey?:  string
+    }
+  | {
+      type:       'morphOne'
+      /** Lazy reference to the related (child) model class — avoids circular imports. */
+      model:      () => typeof Model
+      /** Polymorphic relation name — drives `{morphName}Id` + `{morphName}Type` columns. */
+      morphName:  string
+      /** Override the discriminator value written to `{morphName}Type`.
+       *  Defaults to `Parent.morphAlias ?? Parent.name`. */
+      morphType?: string
+      /** Override the parent column joined against `{morphName}Id`. Default: `Parent.primaryKey`. */
+      localKey?:  string
+    }
+  | {
+      type:       'morphTo'
+      /** Polymorphic relation name — drives `{morphName}Id` + `{morphName}Type` columns. */
+      morphName:  string
+      /** Closed list of allowed target classes. Lazy thunk dodges circular imports.
+       *  Required: `morphTo` resolution looks up the class whose `morphAlias ?? name`
+       *  matches the value stored in `{morphName}Type`. Listing the closed set keeps
+       *  lookup deterministic without depending on `ModelRegistry.register` having
+       *  been called eagerly for every target. */
+      types:      () => Array<typeof Model>
+    }
 
 // ─── Decorators ────────────────────────────────────────────
 
@@ -274,6 +310,22 @@ export abstract class Model {
   static primaryKey = 'id'
 
   /**
+   * Discriminator value written to `{morph}Type` columns by polymorphic
+   * relations (`morphTo` / `morphMany` / `morphOne`). Defaults to `Class.name`.
+   * Override to decouple the persisted discriminator from the JS class name —
+   * lets you rename the class without rewriting historical rows.
+   *
+   * Once set and data exists, treat as immutable storage — same posture as a
+   * column rename.
+   *
+   * @example
+   * class BlogPost extends Model {
+   *   static override morphAlias = 'post'   // stores 'post', not 'BlogPost'
+   * }
+   */
+  static morphAlias?: string
+
+  /**
    * Column used to resolve a route parameter into a Model instance via
    * {@link Model.findForRoute}. Defaults to the primary key. Override to
    * resolve by slug, uuid, or any other unique column:
@@ -329,9 +381,11 @@ export abstract class Model {
    * `await user.related('posts').where('published', true).get()` — where you
    * want a chainable QueryBuilder scoped to the parent record.
    *
-   * Supported types: `hasMany`, `hasOne`, `belongsTo`, `belongsToMany`.
-   * Polymorphic relations are intentionally out of scope — reach for the
-   * adapter directly when you need them.
+   * Supported types: `hasMany`, `hasOne`, `belongsTo`, `belongsToMany`,
+   * `morphMany`, `morphOne`, `morphTo`. Polymorphic columns use camelCase
+   * (`commentableId` / `commentableType`) for ORM consistency — a deliberate
+   * divergence from Laravel's snake_case. `morphToMany` / `morphedByMany` are
+   * deferred (drop to the adapter for now).
    *
    * For `belongsToMany`, pivot mutations (`attach` / `detach` / `sync`) live
    * on a separate accessor — see {@link Model.belongsToMany}. `related()`
@@ -345,6 +399,7 @@ export abstract class Model {
    *     team:  { type: 'belongsTo',     model: () => Team,    foreignKey: 'teamId' },
    *     phone: { type: 'hasOne',        model: () => Phone,   foreignKey: 'userId' },
    *     roles: { type: 'belongsToMany', model: () => Role,    pivotTable: 'role_user' },
+   *     image: { type: 'morphOne',      model: () => Image,   morphName: 'imageable' },
    *   } as const
    * }
    *
@@ -1140,6 +1195,47 @@ export abstract class Model {
     if (!def) {
       throw new Error(`[RudderJS ORM] Relation "${name}" is not defined on ${ctor.name}.`)
     }
+
+    if (def.type === 'morphTo') {
+      const idCol   = `${def.morphName}Id`
+      const typeCol = `${def.morphName}Type`
+      const idVal   = (this as unknown as Record<string, unknown>)[idCol]
+      const typeVal = (this as unknown as Record<string, unknown>)[typeCol]
+      if (idVal === undefined || idVal === null || typeVal === undefined || typeVal === null) {
+        throw new Error(`[RudderJS ORM] Cannot resolve morphTo "${name}" on ${ctor.name} — ${idCol}/${typeCol} unset.`)
+      }
+      const targets = def.types()
+      if (targets.length === 0) {
+        throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: \`types: () => [...]\` is empty — declare at least one allowed target class.`)
+      }
+      if (process.env['NODE_ENV'] !== 'production') {
+        const seen = new Map<string, string>()
+        for (const C of targets) {
+          const key = C.morphAlias ?? C.name
+          const prev = seen.get(key)
+          if (prev) {
+            throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: duplicate discriminator "${key}" — both ${prev} and ${C.name} resolve to the same value. Set a distinct \`static morphAlias\` on one.`)
+          }
+          seen.set(key, C.name)
+        }
+      }
+      const Target = targets.find(C => (C.morphAlias ?? C.name) === String(typeVal))
+      if (!Target) {
+        throw new Error(`[RudderJS ORM] morphTo "${name}" on ${ctor.name}: unknown ${typeCol} = ${JSON.stringify(typeVal)}. Allowed: ${targets.map(C => C.morphAlias ?? C.name).join(', ')}`)
+      }
+      return Target.where(Target.primaryKey, idVal) as QueryBuilder<Model>
+    }
+
+    // morphOne and morphMany share the same query — the difference is consumer
+    // expectation (`first()` vs `get()`). Split into two ifs so TS can narrow
+    // each tag literal out of the union for the fall-through branches below.
+    if (def.type === 'morphMany') {
+      return _morphParentQuery(this, ctor, def, name)
+    }
+    if (def.type === 'morphOne') {
+      return _morphParentQuery(this, ctor, def, name)
+    }
+
     const Related = def.model() as typeof Model
     const fkCamel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1)
 
@@ -1211,6 +1307,31 @@ export abstract class Model {
     // for instances constructed before any query against this class.
     _installBelongsToManyMethods(ctor)
     return _makeBelongsToManyAccessor(ctor, Related, def, parentVal)
+  }
+
+  /**
+   * Build the `{name}Id + {name}Type` payload for a polymorphic write.
+   *
+   * Spread into `Model.create()` (or any write) on the polymorphic side. The
+   * parent must already have a primary-key value — save it first if needed.
+   *
+   * @example
+   * await Comment.create({
+   *   body: 'Nice post',
+   *   ...Model.morph('commentable', post),
+   * })
+   * // → { body, commentableId: post.id, commentableType: 'Post' }
+   */
+  static morph(name: string, parent: Model): Record<string, unknown> {
+    const ctor = parent.constructor as typeof Model
+    const pk   = (parent as unknown as Record<string, unknown>)[ctor.primaryKey]
+    if (pk === undefined || pk === null) {
+      throw new Error(`[RudderJS ORM] Model.morph("${name}", parent): parent.${ctor.primaryKey} is unset — save the parent first.`)
+    }
+    return {
+      [`${name}Id`]:   pk,
+      [`${name}Type`]: ctor.morphAlias ?? ctor.name,
+    }
   }
 
   // ── Cast / Mutator helpers ─────────────────────────────
@@ -1361,9 +1482,28 @@ interface BelongsToManyMeta {
 }
 
 type BelongsToManyDef = Extract<RelationDefinition, { type: 'belongsToMany' }>
+type MorphParentDef = Extract<RelationDefinition, { type: 'morphMany' | 'morphOne' }>
 
 function _camelHead(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1)
+}
+
+function _morphParentQuery(
+  self:  Model,
+  ctor:  typeof Model,
+  def:   MorphParentDef,
+  name:  string,
+): QueryBuilder<Model> {
+  const Related  = def.model() as typeof Model
+  const idCol    = `${def.morphName}Id`
+  const typeCol  = `${def.morphName}Type`
+  const localCol = def.localKey ?? ctor.primaryKey
+  const localVal = (self as unknown as Record<string, unknown>)[localCol]
+  const typeVal  = def.morphType ?? ctor.morphAlias ?? ctor.name
+  if (localVal === undefined || localVal === null) {
+    throw new Error(`[RudderJS ORM] Cannot resolve "${name}" on ${ctor.name} — ${localCol} is unset.`)
+  }
+  return Related.where(idCol, localVal).where(typeCol, typeVal) as QueryBuilder<Model>
 }
 
 function _resolveBelongsToManyMeta(

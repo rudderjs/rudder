@@ -138,9 +138,64 @@ const result = await user!.roles().sync([1, 3, 5])
 // → { attached: [3, 5], detached: [2] }
 ```
 
-Supported types: `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`. Polymorphic relations are out of scope. Defaults: `foreignKey` → `<parentClassName>Id` for `hasOne`/`hasMany`, `<relatedClassName>Id` for `belongsTo`. For `belongsToMany`, `pivotTable` is required; `foreignPivotKey` / `relatedPivotKey` default to camelCase of each side's class name + `Id`. The `model: () => Class` thunk avoids circular-import issues.
+Supported types: `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`, `morphMany`, `morphOne`, `morphTo`. Defaults: `foreignKey` → `<parentClassName>Id` for `hasOne`/`hasMany`, `<relatedClassName>Id` for `belongsTo`. For `belongsToMany`, `pivotTable` is required; `foreignPivotKey` / `relatedPivotKey` default to camelCase of each side's class name + `Id`. The `model: () => Class` thunk avoids circular-import issues.
 
-`belongsToMany` v1 limitations: pivot columns are not surfaced on read results (write side only), no `withTimestamps`, no polymorphic `morphToMany`. Mutations on the deferred read query (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw — write the pivot via the accessor and write the related rows via the related model directly.
+### Polymorphic relations
+
+`morphMany` / `morphOne` / `morphTo` let one related table belong to several parent types (Comments on Posts and Videos, Images on Users and Products, etc.). The polymorphic side carries two columns — `{morphName}Id` and `{morphName}Type` — written in **camelCase** for ORM consistency (a deliberate divergence from Laravel's snake_case).
+
+```prisma
+model Comment {
+  id              Int    @id @default(autoincrement())
+  body            String
+  commentableId   Int
+  commentableType String
+}
+
+model Post  { id Int @id @default(autoincrement()); title String }
+model Video { id Int @id @default(autoincrement()); url   String }
+```
+
+```ts
+class Post  extends Model { static override table = 'post';  id!: number; title!: string }
+class Video extends Model { static override table = 'video'; id!: number; url!:   string }
+
+class Comment extends Model {
+  static override relations = {
+    commentable: {
+      type: 'morphTo' as const,
+      morphName: 'commentable',
+      types: () => [Post, Video],   // closed list of allowed targets
+    },
+  }
+  id!: number
+  body!: string
+  commentableId!: number
+  commentableType!: string
+}
+
+class Post extends Model {
+  static override relations = {
+    comments: { type: 'morphMany' as const, model: () => Comment, morphName: 'commentable' },
+  }
+}
+
+// Reads
+const post     = await Post.find(1)
+const comments = await post!.related('comments').get()
+const comment  = await Comment.find(1)
+const owner    = await comment!.related('commentable').first()    // Post or Video
+
+// Writes — Model.morph() builds the { id + type } payload
+await Comment.create({
+  body: 'Nice post',
+  ...Model.morph('commentable', post!),
+})
+```
+
+The discriminator stored in `{morphName}Type` defaults to the parent's class name (`'Post'`, `'Video'`). Override per-class with `static morphAlias = 'post'` to decouple persisted values from JS class names — useful for rename-safe storage. Once set and data exists, treat it as immutable. In dev mode (`NODE_ENV !== 'production'`), `morphTo` resolution checks the `types` list for duplicate discriminators and throws if two classes resolve to the same value.
+
+`belongsToMany` and polymorphic v1 limitations: pivot columns are not surfaced on read results (write side only), no `withTimestamps`, no `morphToMany` / `morphedByMany`, no fluent eager-load (`User.with('comments.commentable')`) — drop to the adapter (Prisma `include`) for those. Mutations on the deferred read query (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw — write through the related model directly.
 
 ---
 
