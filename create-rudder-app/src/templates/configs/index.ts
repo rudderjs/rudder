@@ -5,8 +5,11 @@ export function configIndex(ctx: TemplateContext): string {
     "import app      from './app.js'",
     "import server   from './server.js'",
     "import log      from './log.js'",
+    "import session  from './session.js'",
+    "import hash     from './hash.js'",
+    "import cache    from './cache.js'",
   ]
-  const keys: string[] = ['app', 'server', 'log']
+  const keys: string[] = ['app', 'server', 'log', 'session', 'hash', 'cache']
 
   if (ctx.orm) {
     imports.push("import database from './database.js'")
@@ -14,9 +17,7 @@ export function configIndex(ctx: TemplateContext): string {
   }
   if (ctx.packages.auth) {
     imports.push("import auth     from './auth.js'")
-    imports.push("import session  from './session.js'")
-    imports.push("import hash     from './hash.js'")
-    keys.push('auth', 'session', 'hash')
+    keys.push('auth')
   }
   if (ctx.packages.queue) {
     imports.push("import queue    from './queue.js'")
@@ -25,10 +26,6 @@ export function configIndex(ctx: TemplateContext): string {
   if (ctx.packages.mail) {
     imports.push("import mail     from './mail.js'")
     keys.push('mail')
-  }
-  if (ctx.packages.cache) {
-    imports.push("import cache    from './cache.js'")
-    keys.push('cache')
   }
   if (ctx.packages.storage) {
     imports.push("import storage  from './storage.js'")
@@ -46,13 +43,41 @@ export function configIndex(ctx: TemplateContext): string {
     imports.push("import passport from './passport.js'")
     keys.push('passport')
   }
+  if (ctx.packages.sanctum) {
+    imports.push("import sanctum from './sanctum.js'")
+    keys.push('sanctum')
+  }
+  if (ctx.packages.socialite) {
+    imports.push("import socialite from './socialite.js'")
+    keys.push('socialite')
+  }
   if (ctx.packages.localization) {
     imports.push("import localization from './localization.js'")
     keys.push('localization')
   }
+  if (ctx.packages.cashierPaddle) {
+    imports.push("import cashier from './cashier.js'")
+    keys.push('cashier')
+  }
+  if (ctx.packages.pennant) {
+    imports.push("import pennant from './pennant.js'")
+    keys.push('pennant')
+  }
   if (ctx.packages.telescope) {
     imports.push("import telescope from './telescope.js'")
     keys.push('telescope')
+  }
+  if (ctx.packages.pulse) {
+    imports.push("import pulse from './pulse.js'")
+    keys.push('pulse')
+  }
+  if (ctx.packages.horizon) {
+    imports.push("import horizon from './horizon.js'")
+    keys.push('horizon')
+  }
+  if (ctx.packages.crypt) {
+    imports.push("import crypt from './crypt.js'")
+    keys.push('crypt')
   }
   return `${imports.join('\n')}
 

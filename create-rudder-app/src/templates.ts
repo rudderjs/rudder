@@ -22,6 +22,13 @@ import { configSync } from './templates/configs/sync.js'
 import { configPassport } from './templates/configs/passport.js'
 import { configLocalization } from './templates/configs/localization.js'
 import { configTelescope } from './templates/configs/telescope.js'
+import { configSanctum } from './templates/configs/sanctum.js'
+import { configSocialite } from './templates/configs/socialite.js'
+import { configPulse } from './templates/configs/pulse.js'
+import { configHorizon } from './templates/configs/horizon.js'
+import { configCrypt } from './templates/configs/crypt.js'
+import { configCashier } from './templates/configs/cashier.js'
+import { configPennant } from './templates/configs/pennant.js'
 import { dotenv, dotenvExample, envDts, gitignore, pnpmWorkspace } from './templates/env.js'
 import { serverTs } from './templates/server.js'
 import { bootstrapApp } from './templates/bootstrap/app.js'
@@ -44,6 +51,7 @@ import { demosContactView } from './templates/demos/contact.js'
 import { demosWsView } from './templates/demos/ws.js'
 import { demosLiveView } from './templates/demos/live.js'
 import { bkSocketSource } from './templates/demos/bk-socket.js'
+import { availableDemos } from './templates/demos/registry.js'
 import { packageJson } from './templates/package-json.js'
 import { tsconfigJson } from './templates/tsconfig.js'
 import { viteConfig } from './templates/vite.js'
@@ -56,6 +64,8 @@ export interface TemplateContext {
   db:         'sqlite' | 'postgresql' | 'mysql'
   orm:        'prisma' | 'drizzle' | false
   authSecret: string
+  /** Random base64-encoded 32-byte key for @rudderjs/crypt's APP_KEY. */
+  appKey:     string
   frameworks: ('react' | 'vue' | 'solid')[]
   primary:    'react' | 'vue' | 'solid'
   tailwind:   boolean
@@ -63,22 +73,33 @@ export interface TemplateContext {
   pm:         PackageManager
   packages: {
     auth:          boolean
-    cache:         boolean
+    sanctum:       boolean
+    passport:      boolean
+    socialite:     boolean
     queue:         boolean
     storage:       boolean
+    scheduler:     boolean
+    image:         boolean
     mail:          boolean
     notifications: boolean
-    scheduler:     boolean
     broadcast:     boolean
     sync:          boolean
     ai:            boolean
     mcp:           boolean
-    passport:      boolean
-    localization:  boolean
-    telescope:     boolean
     boost:         boolean
-    demos:         boolean
+    localization:  boolean
+    cashierPaddle: boolean
+    pennant:       boolean
+    telescope:     boolean
+    pulse:         boolean
+    horizon:       boolean
+    crypt:         boolean
+    http:          boolean
+    process:       boolean
+    concurrency:   boolean
   }
+  /** Demo IDs to scaffold (e.g. 'contact', 'ws', 'live'). See templates/demos/registry.ts. */
+  demos: string[]
 }
 
 export function getTemplates(ctx: TemplateContext): Record<string, string> {
@@ -110,25 +131,32 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   files['bootstrap/app.ts']       = bootstrapApp(ctx)
   files['bootstrap/providers.ts'] = bootstrapProviders(ctx)
 
-  // Config files — always generated
+  // Config files — always generated (Tier A silent install + framework defaults)
   files['config/app.ts']      = configApp()
   files['config/server.ts']   = configServer()
   files['config/log.ts']      = configLog()
+  files['config/session.ts']  = configSession()
+  files['config/hash.ts']     = configHash()
+  files['config/cache.ts']    = configCache()
 
   // Config files — conditional on selected packages
   if (ctx.orm)                    files['config/database.ts'] = configDatabase(ctx)
   if (ctx.packages.auth)         files['config/auth.ts']     = configAuth(ctx)
-  if (ctx.packages.auth)         files['config/session.ts']  = configSession()
-  if (ctx.packages.auth)         files['config/hash.ts']     = configHash()
   if (ctx.packages.queue)        files['config/queue.ts']    = configQueue()
   if (ctx.packages.mail)         files['config/mail.ts']     = configMail()
-  if (ctx.packages.cache)        files['config/cache.ts']    = configCache()
   if (ctx.packages.storage)      files['config/storage.ts']  = configStorage()
   if (ctx.packages.ai)           files['config/ai.ts']       = configAi()
   if (ctx.packages.sync)         files['config/sync.ts']     = configSync(ctx)
   if (ctx.packages.passport)     files['config/passport.ts'] = configPassport()
+  if (ctx.packages.sanctum)      files['config/sanctum.ts']  = configSanctum()
+  if (ctx.packages.socialite)    files['config/socialite.ts'] = configSocialite()
   if (ctx.packages.localization) files['config/localization.ts'] = configLocalization()
+  if (ctx.packages.cashierPaddle) files['config/cashier.ts']    = configCashier()
+  if (ctx.packages.pennant)      files['config/pennant.ts']  = configPennant()
   if (ctx.packages.telescope)    files['config/telescope.ts'] = configTelescope()
+  if (ctx.packages.pulse)        files['config/pulse.ts']    = configPulse()
+  if (ctx.packages.horizon)      files['config/horizon.ts']  = configHorizon()
+  if (ctx.packages.crypt)        files['config/crypt.ts']    = configCrypt()
 
   files['config/index.ts']    = configIndex(ctx)
   files['env.d.ts']           = envDts()
@@ -176,15 +204,15 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
     files[`pages/${fw}-demo/+Page${dext}`] = demoPage(fw, ctx)
   }
 
-  // Demos — react primary only; ws/live require their respective packages.
-  if (shouldScaffoldDemos(ctx)) {
-    files['app/Views/Demos/Index.tsx']   = demosIndexView(ctx)
-    files['app/Views/Demos/Contact.tsx'] = demosContactView(ctx)
-    if (ctx.packages.broadcast) {
+  // Demos — react primary only; per-demo opt-in via ctx.demos (see registry.ts).
+  if (shouldScaffoldAnyDemo(ctx)) {
+    files['app/Views/Demos/Index.tsx'] = demosIndexView(ctx)
+    if (shouldScaffoldDemo(ctx, 'contact')) files['app/Views/Demos/Contact.tsx'] = demosContactView(ctx)
+    if (shouldScaffoldDemo(ctx, 'ws')) {
       files['app/Views/Demos/Ws.tsx'] = demosWsView()
       files['src/BKSocket.ts']        = bkSocketSource()
     }
-    if (ctx.packages.sync) {
+    if (shouldScaffoldDemo(ctx, 'live')) {
       files['app/Views/Demos/Live.tsx'] = demosLiveView()
     }
   }
@@ -192,9 +220,23 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   return files
 }
 
-/** Demos are React-primary only for v1 — vue/solid variants aren't written yet. */
-export function shouldScaffoldDemos(ctx: TemplateContext): boolean {
-  return ctx.packages.demos && ctx.primary === 'react'
+/**
+ * Demos are React-primary only for v1 — vue/solid variants aren't written yet.
+ * `name` is a demo ID from `templates/demos/registry.ts` (e.g. 'contact', 'ws', 'live').
+ * Returns true when the demo was selected AND its package gates are satisfied.
+ */
+export function shouldScaffoldDemo(ctx: TemplateContext, name: string): boolean {
+  if (ctx.primary !== 'react') return false
+  if (!ctx.demos.includes(name)) return false
+  // Defense-in-depth: even if a stale demo id slipped through (e.g. user kept it
+  // checked while unticking the underlying package), filter by registry rules.
+  const allowed = availableDemos(ctx.orm, ctx.packages).map(d => d.value)
+  return allowed.includes(name)
+}
+
+export function shouldScaffoldAnyDemo(ctx: TemplateContext): boolean {
+  if (ctx.primary !== 'react') return false
+  return ctx.demos.some(name => shouldScaffoldDemo(ctx, name))
 }
 
 

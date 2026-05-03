@@ -22,6 +22,11 @@ export function dotenv(ctx: TemplateContext): string {
     lines.push(`AUTH_SECRET=${ctx.authSecret}`)
   }
 
+  if (ctx.packages.crypt) {
+    lines.push('')
+    lines.push(`APP_KEY=base64:${ctx.appKey}`)
+  }
+
   if (ctx.packages.ai) {
     lines.push('')
     lines.push('AI_MODEL=anthropic/claude-sonnet-4-5')
@@ -29,6 +34,24 @@ export function dotenv(ctx: TemplateContext): string {
     lines.push('# OPENAI_API_KEY=')
     lines.push('# GOOGLE_AI_API_KEY=')
     lines.push('# OLLAMA_BASE_URL=http://localhost:11434')
+  }
+
+  if (ctx.packages.socialite) {
+    lines.push('')
+    lines.push('GITHUB_CLIENT_ID=')
+    lines.push('GITHUB_CLIENT_SECRET=')
+    lines.push('GITHUB_REDIRECT_URL=http://localhost:3000/auth/github/callback')
+    lines.push('GOOGLE_CLIENT_ID=')
+    lines.push('GOOGLE_CLIENT_SECRET=')
+    lines.push('GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback')
+  }
+
+  if (ctx.packages.cashierPaddle) {
+    lines.push('')
+    lines.push('PADDLE_API_KEY=')
+    lines.push('PADDLE_CLIENT_SIDE_TOKEN=')
+    lines.push('PADDLE_WEBHOOK_SECRET=')
+    lines.push('PADDLE_SANDBOX=true')
   }
 
   return lines.join('\n') + '\n'
@@ -56,6 +79,12 @@ export function dotenvExample(ctx: TemplateContext): string {
     lines.push('AUTH_SECRET=please-set-a-real-32-char-secret-here')
   }
 
+  if (ctx.packages.crypt) {
+    lines.push('')
+    lines.push('# Generate with: node -e "console.log(\'base64:\' + require(\'crypto\').randomBytes(32).toString(\'base64\'))"')
+    lines.push('APP_KEY=')
+  }
+
   if (ctx.packages.ai) {
     lines.push('')
     lines.push('AI_MODEL=anthropic/claude-sonnet-4-5')
@@ -63,6 +92,24 @@ export function dotenvExample(ctx: TemplateContext): string {
     lines.push('# OPENAI_API_KEY=')
     lines.push('# GOOGLE_AI_API_KEY=')
     lines.push('# OLLAMA_BASE_URL=http://localhost:11434')
+  }
+
+  if (ctx.packages.socialite) {
+    lines.push('')
+    lines.push('GITHUB_CLIENT_ID=')
+    lines.push('GITHUB_CLIENT_SECRET=')
+    lines.push('GITHUB_REDIRECT_URL=http://localhost:3000/auth/github/callback')
+    lines.push('GOOGLE_CLIENT_ID=')
+    lines.push('GOOGLE_CLIENT_SECRET=')
+    lines.push('GOOGLE_REDIRECT_URL=http://localhost:3000/auth/google/callback')
+  }
+
+  if (ctx.packages.cashierPaddle) {
+    lines.push('')
+    lines.push('PADDLE_API_KEY=')
+    lines.push('PADDLE_CLIENT_SIDE_TOKEN=')
+    lines.push('PADDLE_WEBHOOK_SECRET=')
+    lines.push('PADDLE_SANDBOX=true')
   }
 
   return lines.join('\n') + '\n'

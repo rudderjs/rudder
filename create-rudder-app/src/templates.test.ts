@@ -5,27 +5,35 @@ import { getTemplates, pmExec, pmRun, pmInstall, type TemplateContext } from './
 // ─── Helpers ───────────────────────────────────────────────
 
 const defaultPkgs: TemplateContext['packages'] = {
-  auth: true, cache: true, queue: false, storage: false,
-  mail: false, notifications: false, scheduler: false,
-  broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
+  auth: true, sanctum: false, passport: false, socialite: false,
+  queue: false, storage: false, scheduler: false, image: false,
+  mail: false, notifications: false, broadcast: false, sync: false,
+  ai: false, mcp: false, boost: false,
+  localization: false, cashierPaddle: false, pennant: false,
+  telescope: false, pulse: false, horizon: false,
+  crypt: false, http: false, process: false, concurrency: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
-  auth: false, cache: false, queue: false, storage: false,
-  mail: false, notifications: false, scheduler: false,
-  broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
+  auth: false, sanctum: false, passport: false, socialite: false,
+  queue: false, storage: false, scheduler: false, image: false,
+  mail: false, notifications: false, broadcast: false, sync: false,
+  ai: false, mcp: false, boost: false,
+  localization: false, cashierPaddle: false, pennant: false,
+  telescope: false, pulse: false, horizon: false,
+  crypt: false, http: false, process: false, concurrency: false,
 }
 
-const noAuth: TemplateContext['packages'] = {
-  auth: false, cache: true, queue: false, storage: false,
-  mail: false, notifications: false, scheduler: false,
-  broadcast: false, sync: false, ai: false, mcp: false, passport: false, localization: false, telescope: false, boost: false, demos: false,
-}
+const noAuth: TemplateContext['packages'] = noPkgs
 
 const allPkgs: TemplateContext['packages'] = {
-  auth: true, cache: true, queue: true, storage: true,
-  mail: true, notifications: true, scheduler: true,
-  broadcast: true, sync: true, ai: true, mcp: true, passport: true, localization: true, telescope: true, boost: true, demos: true,
+  auth: true, sanctum: true, passport: true, socialite: true,
+  queue: true, storage: true, scheduler: true, image: true,
+  mail: true, notifications: true, broadcast: true, sync: true,
+  ai: true, mcp: true, boost: true,
+  localization: true, cashierPaddle: true, pennant: true,
+  telescope: true, pulse: true, horizon: true,
+  crypt: true, http: true, process: true, concurrency: true,
 }
 
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
@@ -34,12 +42,14 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     db:         'sqlite',
     orm:        'prisma' as const,
     authSecret: 'test-secret',
+    appKey:     'test-app-key',
     frameworks: ['react'] as ('react' | 'vue' | 'solid')[],
     primary:    'react' as const,
     tailwind:   true,
     shadcn:     false,
     pm:         'pnpm' as const,
     packages:   defaultPkgs,
+    demos:      [],
     ...overrides,
   }
 }
@@ -506,32 +516,32 @@ describe('getTemplates() — package checklist', () => {
   })
 
   it('auth not selected → no auth schema, no config/auth.ts, no @rudderjs/auth in deps', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
+    const files = getTemplates(ctx({ packages: { ...noPkgs } }))
     assert.ok(!('prisma/schema/auth.prisma' in files))
     assert.ok(!('config/auth.ts' in files))
-    assert.ok(!('config/session.ts' in files))
     assert.ok(!('app/Models/User.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
     assert.ok(!('@rudderjs/auth' in pkg.dependencies))
-    assert.ok(!('@rudderjs/session' in pkg.dependencies))
   })
 
   it('auth selected → auth schema, config/auth.ts, @rudderjs/auth in deps', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
     assert.ok('prisma/schema/auth.prisma' in files)
     assert.ok('config/auth.ts' in files)
-    assert.ok('config/session.ts' in files)
     assert.ok('app/Models/User.ts' in files)
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('@rudderjs/auth' in pkg.dependencies)
-    assert.ok('@rudderjs/session' in pkg.dependencies)
   })
 
-  it('cache not selected → no config/cache.ts, no @rudderjs/cache in deps', () => {
+  it('Tier A — session/hash/cache always installed regardless of selection', () => {
     const files = getTemplates(ctx({ packages: noPkgs }))
-    assert.ok(!('config/cache.ts' in files))
     const pkg = JSON.parse(files['package.json']!)
-    assert.ok(!('@rudderjs/cache' in pkg.dependencies))
+    assert.ok('@rudderjs/session' in pkg.dependencies, 'session must always be in deps')
+    assert.ok('@rudderjs/hash'    in pkg.dependencies, 'hash must always be in deps')
+    assert.ok('@rudderjs/cache'   in pkg.dependencies, 'cache must always be in deps')
+    assert.ok('config/session.ts' in files, 'config/session.ts must always be generated')
+    assert.ok('config/hash.ts'    in files, 'config/hash.ts must always be generated')
+    assert.ok('config/cache.ts'   in files, 'config/cache.ts must always be generated')
   })
 
   it('queue selected → config/queue.ts, @rudderjs/queue in deps', () => {
@@ -553,7 +563,6 @@ describe('getTemplates() — package checklist', () => {
     const providers = files['bootstrap/providers.ts']!
     assert.ok(providers.includes('AppServiceProvider'))
     assert.ok(!providers.includes('@rudderjs/auth'))
-    assert.ok(!providers.includes('@rudderjs/cache'))
     assert.ok(!providers.includes('@rudderjs/queue'))
   })
 
@@ -573,7 +582,10 @@ describe('getTemplates() — package checklist', () => {
     assert.ok(index.includes("from './app.js'"))
     assert.ok(index.includes("from './server.js'"))
     assert.ok(!index.includes("from './auth.js'"))
-    assert.ok(!index.includes("from './cache.js'"))
+    // Tier A — session/hash/cache always wired
+    assert.ok(index.includes("from './session.js'"))
+    assert.ok(index.includes("from './hash.js'"))
+    assert.ok(index.includes("from './cache.js'"))
   })
 
   it('base deps always included regardless of package selection', () => {
@@ -643,15 +655,10 @@ describe('getTemplates() — log and hash configs', () => {
     assert.ok(files['config/log.ts']!.includes('LogConfig'))
   })
 
-  it('config/hash.ts generated when auth selected', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+  it('config/hash.ts always generated (Tier A)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
     assert.ok('config/hash.ts' in files)
     assert.ok(files['config/hash.ts']!.includes('HashConfig'))
-  })
-
-  it('config/hash.ts not generated when auth not selected', () => {
-    const files = getTemplates(ctx({ packages: noPkgs }))
-    assert.ok(!('config/hash.ts' in files))
   })
 
   it('@rudderjs/log always in base deps', () => {
@@ -660,8 +667,8 @@ describe('getTemplates() — log and hash configs', () => {
     assert.ok('@rudderjs/log' in pkg.dependencies)
   })
 
-  it('@rudderjs/hash in deps when auth selected', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+  it('@rudderjs/hash always in deps (Tier A)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('@rudderjs/hash' in pkg.dependencies)
   })
@@ -680,8 +687,8 @@ describe('getTemplates() — log and hash configs', () => {
     assert.ok(files['config/index.ts']!.includes("from './log.js'"))
   })
 
-  it('config/index.ts includes hash when auth selected', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true } }))
+  it('config/index.ts always includes hash (Tier A)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs }))
     assert.ok(files['config/index.ts']!.includes("from './hash.js'"))
   })
 })
@@ -695,7 +702,7 @@ describe('getTemplates() — log and hash configs', () => {
 
 describe('getTemplates() — WebContainer-aware config defaults', () => {
   it('config/cache.ts gates default store on isWebContainer()', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, cache: true } }))
+    const files = getTemplates(ctx({ packages: noPkgs }))
     const cache = files['config/cache.ts']!
     assert.ok(cache.includes("import { Env, isWebContainer } from '@rudderjs/support'"))
     assert.ok(cache.includes("isWebContainer() ? 'memory'"))
@@ -866,6 +873,62 @@ describe('getTemplates() — telescope package', () => {
   })
 })
 
+// ─── new Phase 2 packages ────────────────────────────────
+
+describe('getTemplates() — Phase 2 new packages', () => {
+  const cases: Array<{ key: keyof TemplateContext['packages']; dep: string; configFile?: string }> = [
+    { key: 'sanctum',       dep: '@rudderjs/sanctum',        configFile: 'config/sanctum.ts' },
+    { key: 'socialite',     dep: '@rudderjs/socialite',      configFile: 'config/socialite.ts' },
+    { key: 'pulse',         dep: '@rudderjs/pulse',          configFile: 'config/pulse.ts' },
+    { key: 'horizon',       dep: '@rudderjs/horizon',        configFile: 'config/horizon.ts' },
+    { key: 'crypt',         dep: '@rudderjs/crypt',          configFile: 'config/crypt.ts' },
+    { key: 'cashierPaddle', dep: '@rudderjs/cashier-paddle', configFile: 'config/cashier.ts' },
+    { key: 'pennant',       dep: '@rudderjs/pennant',        configFile: 'config/pennant.ts' },
+    { key: 'image',         dep: '@rudderjs/image' },
+    { key: 'http',          dep: '@rudderjs/http' },
+    { key: 'process',       dep: '@rudderjs/process' },
+    { key: 'concurrency',   dep: '@rudderjs/concurrency' },
+  ]
+
+  for (const { key, dep, configFile } of cases) {
+    it(`${key} selected → ${dep} in deps${configFile ? ` + ${configFile}` : ''}`, () => {
+      const files = getTemplates(ctx({ packages: { ...noPkgs, [key]: true } }))
+      const pkg = JSON.parse(files['package.json']!)
+      assert.ok(dep in pkg.dependencies, `${dep} must be in dependencies`)
+      if (configFile) {
+        assert.ok(configFile in files, `${configFile} must be generated`)
+        assert.ok(files['config/index.ts']!.includes(`from './${configFile.split('/')[1]!.replace('.ts', '.js')}'`),
+          `${configFile} must be wired in config/index.ts`)
+      }
+    })
+
+    it(`${key} not selected → ${dep} not in deps`, () => {
+      const files = getTemplates(ctx({ packages: noPkgs }))
+      const pkg = JSON.parse(files['package.json']!)
+      assert.ok(!(dep in pkg.dependencies))
+      if (configFile) assert.ok(!(configFile in files))
+    })
+  }
+
+  it('crypt selected → APP_KEY emitted in .env', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, crypt: true }, appKey: 'test-key' }))
+    assert.ok(files['.env']!.includes('APP_KEY=base64:test-key'))
+    assert.ok(files['.env.example']!.includes('APP_KEY='))
+  })
+
+  it('socialite selected → GitHub + Google env keys emitted', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, socialite: true } }))
+    assert.ok(files['.env']!.includes('GITHUB_CLIENT_ID='))
+    assert.ok(files['.env']!.includes('GOOGLE_CLIENT_ID='))
+  })
+
+  it('cashier-paddle selected → Paddle env keys emitted', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, cashierPaddle: true } }))
+    assert.ok(files['.env']!.includes('PADDLE_API_KEY='))
+    assert.ok(files['.env']!.includes('PADDLE_SANDBOX=true'))
+  })
+})
+
 // ─── boost package ───────────────────────────────────────
 
 describe('getTemplates() — boost package', () => {
@@ -887,8 +950,8 @@ describe('getTemplates() — boost package', () => {
 // ─── demos package ───────────────────────────────────────
 
 describe('getTemplates() — demos', () => {
-  it('demos not selected → no Demos/* views, no /api/contact route', () => {
-    const files = getTemplates(ctx({ packages: noPkgs }))
+  it('no demos selected → no Demos/* views, no /api/contact route', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: [] }))
     assert.ok(!('app/Views/Demos/Index.tsx' in files))
     assert.ok(!('app/Views/Demos/Contact.tsx' in files))
     assert.ok(!('app/Views/Demos/Ws.tsx' in files))
@@ -897,8 +960,8 @@ describe('getTemplates() — demos', () => {
     assert.ok(!files['routes/web.ts']!.includes("view('demos.index')"))
   })
 
-  it('demos selected (react primary) → Index + Contact views, /demos and /api/contact routes', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true } }))
+  it('contact demo → Index + Contact views, /demos and /api/contact routes', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['contact'] }))
     assert.ok('app/Views/Demos/Index.tsx' in files)
     assert.ok('app/Views/Demos/Contact.tsx' in files)
     assert.ok(files['routes/web.ts']!.includes("view('demos.index')"))
@@ -906,25 +969,33 @@ describe('getTemplates() — demos', () => {
     assert.ok(files['routes/api.ts']!.includes("router.post('/api/contact'"))
   })
 
-  it('demos + broadcast → Ws view + BKSocket + ws routes', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true, broadcast: true } }))
+  it('ws demo + broadcast → Ws view + BKSocket + ws routes', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, broadcast: true }, demos: ['ws'] }))
     assert.ok('app/Views/Demos/Ws.tsx' in files)
     assert.ok('src/BKSocket.ts' in files)
     assert.ok(files['routes/web.ts']!.includes("view('demos.ws')"))
     assert.ok(files['routes/api.ts']!.includes("/api/ws/broadcast"))
   })
 
-  it('demos + sync → Live view + y-websocket dep + /demos/live route', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true, sync: true } }))
+  it('live demo + sync → Live view + y-websocket dep + /demos/live route', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, sync: true }, demos: ['live'] }))
     assert.ok('app/Views/Demos/Live.tsx' in files)
     const pkg = JSON.parse(files['package.json']!)
     assert.ok('y-websocket' in pkg.dependencies)
     assert.ok(files['routes/web.ts']!.includes("view('demos.live')"))
   })
 
-  it('demos selected but primary !== react → demos silently skipped', () => {
+  it('ws demo selected but broadcast not → demo dropped (registry gating)', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['ws'] }))
+    assert.ok(!('app/Views/Demos/Ws.tsx' in files))
+    assert.ok(!('src/BKSocket.ts' in files))
+    assert.ok(!files['routes/web.ts']!.includes("view('demos.ws')"))
+  })
+
+  it('demos requested but primary !== react → demos silently skipped', () => {
     const files = getTemplates(ctx({
-      packages: { ...noPkgs, demos: true, broadcast: true, sync: true },
+      packages: { ...noPkgs, broadcast: true, sync: true },
+      demos: ['contact', 'ws', 'live'],
       frameworks: ['vue'], primary: 'vue',
     }))
     assert.ok(!('app/Views/Demos/Index.tsx' in files))
@@ -936,16 +1007,15 @@ describe('getTemplates() — demos', () => {
     assert.ok(!('y-websocket' in pkg.dependencies))
   })
 
-  it('demos + auth → contact API uses CsrfMiddleware', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true, auth: true } }))
+  it('contact demo + auth → contact API uses CsrfMiddleware', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, auth: true }, demos: ['contact'] }))
     assert.ok(files['routes/api.ts']!.includes('CsrfMiddleware()'))
     assert.ok(files['app/Views/Demos/Contact.tsx']!.includes('X-CSRF-Token'))
   })
 
-  it('demos without auth → contact API has no CSRF middleware', () => {
-    const files = getTemplates(ctx({ packages: { ...noPkgs, demos: true } }))
+  it('contact demo without auth → contact API has no CSRF middleware', () => {
+    const files = getTemplates(ctx({ packages: noPkgs, demos: ['contact'] }))
     const apiContact = files['routes/api.ts']!
-    // CsrfMiddleware must not appear on the contact route
     const contactBlock = apiContact.slice(apiContact.indexOf("'/api/contact'"))
     assert.ok(!contactBlock.slice(0, 400).includes('CsrfMiddleware'))
   })

@@ -1,5 +1,5 @@
 import { pmRun, type PackageManager } from './package-managers.js'
-import { shouldScaffoldDemos, type TemplateContext } from '../templates.js'
+import { shouldScaffoldDemo, type TemplateContext } from '../templates.js'
 
 export function packageJson(ctx: TemplateContext): string {
   const { frameworks, tailwind, shadcn, db } = ctx
@@ -90,22 +90,39 @@ export function packageJson(ctx: TemplateContext): string {
     deps['@rudderjs/orm-drizzle'] = 'latest'
   }
 
+  // Tier A — always installed silently. Required by default bootstrap (cache for
+  // RateLimit middleware) or peer of Auth (session for cookies/CSRF, hash for
+  // password hashing — also useful standalone).
+  deps['@rudderjs/session'] = 'latest'
+  deps['@rudderjs/hash']    = 'latest'
+  deps['@rudderjs/cache']   = 'latest'
+
   // Optional package deps
-  if (ctx.packages.auth)         { deps['@rudderjs/auth'] = 'latest'; deps['@rudderjs/session'] = 'latest'; deps['@rudderjs/hash'] = 'latest' }
-  if (ctx.packages.cache)         deps['@rudderjs/cache']        = 'latest'
+  if (ctx.packages.auth)          deps['@rudderjs/auth']         = 'latest'
+  if (ctx.packages.sanctum)       deps['@rudderjs/sanctum']      = 'latest'
+  if (ctx.packages.passport)      deps['@rudderjs/passport']     = 'latest'
+  if (ctx.packages.socialite)     deps['@rudderjs/socialite']    = 'latest'
   if (ctx.packages.queue)         deps['@rudderjs/queue']        = 'latest'
   if (ctx.packages.storage)       deps['@rudderjs/storage']      = 'latest'
+  if (ctx.packages.scheduler)     deps['@rudderjs/schedule']     = 'latest'
+  if (ctx.packages.image)         deps['@rudderjs/image']        = 'latest'
   if (ctx.packages.mail)          deps['@rudderjs/mail']         = 'latest'
   if (ctx.packages.notifications) deps['@rudderjs/notification'] = 'latest'
-  if (ctx.packages.scheduler)     deps['@rudderjs/schedule']     = 'latest'
   if (ctx.packages.broadcast)     deps['@rudderjs/broadcast']    = 'latest'
   if (ctx.packages.sync)          deps['@rudderjs/sync']         = 'latest'
-  if (shouldScaffoldDemos(ctx) && ctx.packages.sync) deps['y-websocket']           = '^2.0.0'
+  if (shouldScaffoldDemo(ctx, 'live')) deps['y-websocket'] = '^2.0.0'
   if (ctx.packages.ai)            deps['@rudderjs/ai']           = 'latest'
   if (ctx.packages.mcp)           deps['@rudderjs/mcp']          = 'latest'
-  if (ctx.packages.passport)      deps['@rudderjs/passport']     = 'latest'
   if (ctx.packages.localization)  deps['@rudderjs/localization'] = 'latest'
+  if (ctx.packages.cashierPaddle) deps['@rudderjs/cashier-paddle'] = 'latest'
+  if (ctx.packages.pennant)       deps['@rudderjs/pennant']      = 'latest'
   if (ctx.packages.telescope)     deps['@rudderjs/telescope']    = 'latest'
+  if (ctx.packages.pulse)         deps['@rudderjs/pulse']        = 'latest'
+  if (ctx.packages.horizon)       deps['@rudderjs/horizon']      = 'latest'
+  if (ctx.packages.crypt)         deps['@rudderjs/crypt']        = 'latest'
+  if (ctx.packages.http)          deps['@rudderjs/http']         = 'latest'
+  if (ctx.packages.process)       deps['@rudderjs/process']      = 'latest'
+  if (ctx.packages.concurrency)   deps['@rudderjs/concurrency']  = 'latest'
   const devDeps: Record<string, string> = {
     '@rudderjs/cli': 'latest',
     '@types/node':   '^20.0.0',
