@@ -37,7 +37,6 @@ const ctx: TemplateContext = {
     mcp:           true,
     boost:         true,
     localization:  true,
-    cashierPaddle: true,
     pennant:       true,
     telescope:     true,
     pulse:         true,

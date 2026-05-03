@@ -67,11 +67,11 @@ async function main(): Promise<void> {
   //
   // Categorized via clack's groupMultiselect — one section per concern,
   // group headers are non-selectable (selectableGroups: false).
-  // ORM=none filters out DB-dependent packages (auth/sanctum/passport/cashier)
+  // ORM=none filters out DB-dependent packages (auth/sanctum/passport)
   // before the prompt renders, so the user never sees rows they can't use.
 
   // Database-dependent packages — hidden when ORM=none.
-  const DB_GATED = new Set(['auth', 'sanctum', 'passport', 'cashierPaddle'])
+  const DB_GATED = new Set(['auth', 'sanctum', 'passport'])
 
   type Pkg = { value: string; label: string; hint?: string }
   const PACKAGE_GROUPS: Record<string, Pkg[]> = {
@@ -102,7 +102,6 @@ async function main(): Promise<void> {
       { value: 'localization',  label: 'Localization',          hint: 'i18n — trans(), setLocale()' },
     ],
     'Product & Features': [
-      { value: 'cashierPaddle', label: 'Cashier-Paddle',        hint: 'subscriptions + checkout — requires Auth + Prisma' },
       { value: 'pennant',       label: 'Pennant',               hint: 'feature flags' },
     ],
     'Observability': [
@@ -119,7 +118,7 @@ async function main(): Promise<void> {
   }
 
   if (orm === false) {
-    log.info('Database not selected — auth, sanctum, passport, and billing options are hidden.')
+    log.info('Database not selected — auth, sanctum, and passport options are hidden.')
   }
 
   const groupedOptions: Record<string, Pkg[]> = {}
@@ -155,7 +154,6 @@ async function main(): Promise<void> {
     mcp:           selectedPackages.includes('mcp'),
     boost:         selectedPackages.includes('boost'),
     localization:  selectedPackages.includes('localization'),
-    cashierPaddle: selectedPackages.includes('cashierPaddle'),
     pennant:       selectedPackages.includes('pennant'),
     telescope:     selectedPackages.includes('telescope'),
     pulse:         selectedPackages.includes('pulse'),

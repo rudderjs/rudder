@@ -33,7 +33,6 @@ const ctx: TemplateContext = {
     mcp:           true,
     boost:         true,
     localization:  true,
-    cashierPaddle: true,
     pennant:       true,
     telescope:     true,
     pulse:         true,
@@ -68,9 +67,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 65
-const EXPECTED_TOTAL_BYTES = 66292
-const EXPECTED_CONTENT_HASH = 'dc728c3202f955a56a1ac989ead208913b54dcca9e0ace968f001ed912ab4348'
+const EXPECTED_FILE_COUNT = 64
+const EXPECTED_TOTAL_BYTES = 65227
+const EXPECTED_CONTENT_HASH = '98dc4a5ee29298e831d9c2828779cec309fb5dd419406f56769a08b801bf9df4'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
@@ -91,7 +90,6 @@ const EXPECTED_PATHS = [
   'config/app.ts',
   'config/auth.ts',
   'config/cache.ts',
-  'config/cashier.ts',
   'config/crypt.ts',
   'config/database.ts',
   'config/hash.ts',
