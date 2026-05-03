@@ -28,12 +28,6 @@ const playgroundExtras: CardData[] = [
     href:        '/demos/billing',
     packages:    ['@rudderjs/cashier-paddle'],
   },
-  {
-    title:       'Polymorphic relations',
-    description: 'morphMany + morphTo via @rudderjs/orm. One Comment table belongs to either a Post or a Video. Demonstrates Model.morph() write helper + closed types() resolution.',
-    href:        '/demos/polymorphic',
-    packages:    ['@rudderjs/orm'],
-  },
 ]
 
 const cards: CardData[] = [...DEMOS.map(fromSpec), ...playgroundExtras]
