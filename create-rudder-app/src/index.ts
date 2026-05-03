@@ -238,6 +238,7 @@ async function main(): Promise<void> {
 
   const target     = path.resolve(process.cwd(), name)
   const authSecret = randomBytes(32).toString('hex')
+  const appKey     = randomBytes(32).toString('base64')
 
   // Make sure target directory doesn't exist
   try {
@@ -251,7 +252,7 @@ async function main(): Promise<void> {
   const s = spinner()
   s.start('Scaffolding project files...')
 
-  const templates = getTemplates({ name, db, orm, authSecret, frameworks, primary, tailwind, shadcn, pm, packages })
+  const templates = getTemplates({ name, db, orm, authSecret, appKey, frameworks, primary, tailwind, shadcn, pm, packages })
 
   for (const [filePath, content] of Object.entries(templates)) {
     const abs = path.join(target, filePath)

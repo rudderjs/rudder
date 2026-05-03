@@ -45,6 +45,7 @@ function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {
     db:         'sqlite',
     orm:        'prisma' as const,
     authSecret: 'test-secret',
+    appKey:     'test-app-key',
     frameworks: ['react'] as ('react' | 'vue' | 'solid')[],
     primary:    'react' as const,
     tailwind:   true,
@@ -871,6 +872,62 @@ describe('getTemplates() — telescope package', () => {
     const pkg = JSON.parse(files['package.json']!)
     assert.ok(!('@rudderjs/telescope' in pkg.dependencies))
     assert.ok(!files['config/index.ts']!.includes("from './telescope.js'"))
+  })
+})
+
+// ─── new Phase 2 packages ────────────────────────────────
+
+describe('getTemplates() — Phase 2 new packages', () => {
+  const cases: Array<{ key: keyof TemplateContext['packages']; dep: string; configFile?: string }> = [
+    { key: 'sanctum',       dep: '@rudderjs/sanctum',        configFile: 'config/sanctum.ts' },
+    { key: 'socialite',     dep: '@rudderjs/socialite',      configFile: 'config/socialite.ts' },
+    { key: 'pulse',         dep: '@rudderjs/pulse',          configFile: 'config/pulse.ts' },
+    { key: 'horizon',       dep: '@rudderjs/horizon',        configFile: 'config/horizon.ts' },
+    { key: 'crypt',         dep: '@rudderjs/crypt',          configFile: 'config/crypt.ts' },
+    { key: 'cashierPaddle', dep: '@rudderjs/cashier-paddle', configFile: 'config/cashier.ts' },
+    { key: 'pennant',       dep: '@rudderjs/pennant',        configFile: 'config/pennant.ts' },
+    { key: 'image',         dep: '@rudderjs/image' },
+    { key: 'http',          dep: '@rudderjs/http' },
+    { key: 'process',       dep: '@rudderjs/process' },
+    { key: 'concurrency',   dep: '@rudderjs/concurrency' },
+  ]
+
+  for (const { key, dep, configFile } of cases) {
+    it(`${key} selected → ${dep} in deps${configFile ? ` + ${configFile}` : ''}`, () => {
+      const files = getTemplates(ctx({ packages: { ...noPkgs, [key]: true } }))
+      const pkg = JSON.parse(files['package.json']!)
+      assert.ok(dep in pkg.dependencies, `${dep} must be in dependencies`)
+      if (configFile) {
+        assert.ok(configFile in files, `${configFile} must be generated`)
+        assert.ok(files['config/index.ts']!.includes(`from './${configFile.split('/')[1]!.replace('.ts', '.js')}'`),
+          `${configFile} must be wired in config/index.ts`)
+      }
+    })
+
+    it(`${key} not selected → ${dep} not in deps`, () => {
+      const files = getTemplates(ctx({ packages: noPkgs }))
+      const pkg = JSON.parse(files['package.json']!)
+      assert.ok(!(dep in pkg.dependencies))
+      if (configFile) assert.ok(!(configFile in files))
+    })
+  }
+
+  it('crypt selected → APP_KEY emitted in .env', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, crypt: true }, appKey: 'test-key' }))
+    assert.ok(files['.env']!.includes('APP_KEY=base64:test-key'))
+    assert.ok(files['.env.example']!.includes('APP_KEY='))
+  })
+
+  it('socialite selected → GitHub + Google env keys emitted', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, socialite: true } }))
+    assert.ok(files['.env']!.includes('GITHUB_CLIENT_ID='))
+    assert.ok(files['.env']!.includes('GOOGLE_CLIENT_ID='))
+  })
+
+  it('cashier-paddle selected → Paddle env keys emitted', () => {
+    const files = getTemplates(ctx({ packages: { ...noPkgs, cashierPaddle: true } }))
+    assert.ok(files['.env']!.includes('PADDLE_API_KEY='))
+    assert.ok(files['.env']!.includes('PADDLE_SANDBOX=true'))
   })
 })
 

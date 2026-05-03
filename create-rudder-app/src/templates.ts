@@ -22,6 +22,13 @@ import { configSync } from './templates/configs/sync.js'
 import { configPassport } from './templates/configs/passport.js'
 import { configLocalization } from './templates/configs/localization.js'
 import { configTelescope } from './templates/configs/telescope.js'
+import { configSanctum } from './templates/configs/sanctum.js'
+import { configSocialite } from './templates/configs/socialite.js'
+import { configPulse } from './templates/configs/pulse.js'
+import { configHorizon } from './templates/configs/horizon.js'
+import { configCrypt } from './templates/configs/crypt.js'
+import { configCashier } from './templates/configs/cashier.js'
+import { configPennant } from './templates/configs/pennant.js'
 import { dotenv, dotenvExample, envDts, gitignore, pnpmWorkspace } from './templates/env.js'
 import { serverTs } from './templates/server.js'
 import { bootstrapApp } from './templates/bootstrap/app.js'
@@ -56,6 +63,8 @@ export interface TemplateContext {
   db:         'sqlite' | 'postgresql' | 'mysql'
   orm:        'prisma' | 'drizzle' | false
   authSecret: string
+  /** Random base64-encoded 32-byte key for @rudderjs/crypt's APP_KEY. */
+  appKey:     string
   frameworks: ('react' | 'vue' | 'solid')[]
   primary:    'react' | 'vue' | 'solid'
   tailwind:   boolean
@@ -137,8 +146,15 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
   if (ctx.packages.ai)           files['config/ai.ts']       = configAi()
   if (ctx.packages.sync)         files['config/sync.ts']     = configSync(ctx)
   if (ctx.packages.passport)     files['config/passport.ts'] = configPassport()
+  if (ctx.packages.sanctum)      files['config/sanctum.ts']  = configSanctum()
+  if (ctx.packages.socialite)    files['config/socialite.ts'] = configSocialite()
   if (ctx.packages.localization) files['config/localization.ts'] = configLocalization()
+  if (ctx.packages.cashierPaddle) files['config/cashier.ts']    = configCashier()
+  if (ctx.packages.pennant)      files['config/pennant.ts']  = configPennant()
   if (ctx.packages.telescope)    files['config/telescope.ts'] = configTelescope()
+  if (ctx.packages.pulse)        files['config/pulse.ts']    = configPulse()
+  if (ctx.packages.horizon)      files['config/horizon.ts']  = configHorizon()
+  if (ctx.packages.crypt)        files['config/crypt.ts']    = configCrypt()
 
   files['config/index.ts']    = configIndex(ctx)
   files['env.d.ts']           = envDts()

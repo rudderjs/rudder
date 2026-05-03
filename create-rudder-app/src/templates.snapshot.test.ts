@@ -10,6 +10,7 @@ const ctx: TemplateContext = {
   db:         'sqlite',
   orm:        'prisma',
   authSecret: 'a'.repeat(64),
+  appKey:     'b'.repeat(44),
   frameworks: ['react', 'vue'],
   primary:    'react',
   tailwind:   true,
@@ -59,7 +60,7 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-02 (Phase 2 Task 2.1 — Tier A silent install).
+  // Baseline last captured 2026-05-03 (Phase 2 Task 2.3 — wire new package deps + configs).
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -67,9 +68,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 58
-const EXPECTED_TOTAL_BYTES = 59688
-const EXPECTED_CONTENT_HASH = '332bb1cc7bd8b2b4e3d8c3ccc74e0abc48c4bc45c49b13e8c3f30e11519b79bb'
+const EXPECTED_FILE_COUNT = 65
+const EXPECTED_TOTAL_BYTES = 66292
+const EXPECTED_CONTENT_HASH = 'dc728c3202f955a56a1ac989ead208913b54dcca9e0ace968f001ed912ab4348'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
@@ -90,16 +91,23 @@ const EXPECTED_PATHS = [
   'config/app.ts',
   'config/auth.ts',
   'config/cache.ts',
+  'config/cashier.ts',
+  'config/crypt.ts',
   'config/database.ts',
   'config/hash.ts',
+  'config/horizon.ts',
   'config/index.ts',
   'config/localization.ts',
   'config/log.ts',
   'config/mail.ts',
   'config/passport.ts',
+  'config/pennant.ts',
+  'config/pulse.ts',
   'config/queue.ts',
+  'config/sanctum.ts',
   'config/server.ts',
   'config/session.ts',
+  'config/socialite.ts',
   'config/storage.ts',
   'config/sync.ts',
   'config/telescope.ts',
