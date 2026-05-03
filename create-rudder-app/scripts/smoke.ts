@@ -102,6 +102,34 @@ const profiles: Record<string, TemplateContext> = {
     },
     demos: ['todos'],
   },
+  // ORM=none + every package that survives the multiselect filter. Catches
+  // packages that look DB-independent in their config defaults (memory storage,
+  // log driver, sync queue) but secretly require Prisma during provider boot.
+  // Telescope, Pulse, Horizon are the specific Phase-6 targets — their configs
+  // already default to in-memory storage, but their providers need to register
+  // observers, mount routes, and avoid asking the ORM for query timings.
+  'no-db': {
+    name:       'smoke-app',
+    db:         'sqlite',
+    orm:        false,
+    authSecret: '',
+    appKey:     Buffer.from('smoke-test-app-key-padding-32b!!').toString('base64'),
+    frameworks: ['react'],
+    primary:    'react',
+    tailwind:   false,
+    shadcn:     false,
+    pm:         'pnpm',
+    packages: {
+      auth: false, sanctum: false, passport: false, socialite: false,
+      queue: true, storage: true, scheduler: true, image: true,
+      mail: true, notifications: true, broadcast: false, sync: false,
+      ai: false, mcp: false, boost: false,
+      localization: true, pennant: true,
+      telescope: true, pulse: true, horizon: true,
+      crypt: true, http: true, process: true, concurrency: true,
+    },
+    demos: [],
+  },
   // Heavy: every Phase-4 + Phase-5 demo at once. Catches cross-demo collisions
   // in routes/web.ts, routes/api.ts, AppServiceProvider boot ordering, and
   // the modules.prisma schema generation.
