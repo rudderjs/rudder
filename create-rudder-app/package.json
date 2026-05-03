@@ -19,6 +19,10 @@
   "exports": {
     ".": {
       "import": "./dist/index.js"
+    },
+    "./demos-registry": {
+      "types": "./dist/templates/demos/registry.d.ts",
+      "import": "./dist/templates/demos/registry.js"
     }
   },
   "scripts": {
