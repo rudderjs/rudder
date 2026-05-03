@@ -82,6 +82,24 @@ Route.get('/demos/sync', async () => view('demos.sync'))
 // GET /demos/ws — WebSocket chat + presence (@rudderjs/broadcast).
 Route.get('/demos/ws', async () => view('demos.ws'))
 
+// GET /demos/cache — Cache.get + Cache.set round-trip (@rudderjs/cache).
+Route.get('/demos/cache', async () => view('demos.cache'))
+
+// GET /demos/queue — Job dispatch demo (@rudderjs/queue).
+Route.get('/demos/queue', async () => view('demos.queue'))
+
+// GET /demos/mail — Mail send demo (@rudderjs/mail).
+Route.get('/demos/mail', async () => view('demos.mail'))
+
+// GET /demos/notifications — multi-channel notification (@rudderjs/notification + mail).
+Route.get('/demos/notifications', async () => view('demos.notifications'))
+
+// GET /demos/localization — locale switcher + trans() round-trip (@rudderjs/localization).
+Route.get('/demos/localization', async () => view('demos.localization'))
+
+// GET /demos/http — fluent HTTP client (@rudderjs/http) with retry + timeout.
+Route.get('/demos/http', async () => view('demos.http'))
+
 // GET /demos/todos — ORM + interactive state. Controller loads initial data,
 // view hydrates and POSTs mutations to /api/todos/* for live updates.
 Route.get('/demos/todos', async () => {

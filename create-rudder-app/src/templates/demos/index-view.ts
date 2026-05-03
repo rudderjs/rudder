@@ -81,7 +81,7 @@ export function demosIndexView(ctx: TemplateContext): string {
     },
     {
       title: 'HTTP client',
-      desc:  'Server-side Http.get(url).retry(3, 200).timeout(5000) against a public API. The 500 endpoint exercises retry.',
+      desc:  'Server-side Http.retry(3, 200).timeout(5000).get(url) against a public API. The 500 endpoint exercises retry.',
       href:  '/demos/http',
       pkgs:  '@rudderjs/http',
       show:  shouldScaffoldDemo(ctx, 'http'),

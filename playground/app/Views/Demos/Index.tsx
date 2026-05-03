@@ -18,6 +18,42 @@ const demos: Demo[] = [
     packages:    ['@rudderjs/middleware', '@rudderjs/core'],
   },
   {
+    title:       'Cache counter',
+    description: 'Click "Bump" to read the current value via Cache.get, increment it, and write it back via Cache.set. Default driver is in-memory.',
+    href:        '/demos/cache',
+    packages:    ['@rudderjs/cache'],
+  },
+  {
+    title:       'Queue dispatch',
+    description: 'Dispatch ExampleJob via @rudderjs/queue. The handler logs to the server terminal — install @rudderjs/horizon for a UI.',
+    href:        '/demos/queue',
+    packages:    ['@rudderjs/queue'],
+  },
+  {
+    title:       'Mail send',
+    description: 'Send a DemoMail via @rudderjs/mail. Default driver is log — output lands in the dev server terminal.',
+    href:        '/demos/mail',
+    packages:    ['@rudderjs/mail'],
+  },
+  {
+    title:       'Notifications',
+    description: 'Dispatch a WelcomeNotification via notify(). The notification\'s via() picks the channel(s); mail routes through the log driver.',
+    href:        '/demos/notifications',
+    packages:    ['@rudderjs/notification', '@rudderjs/mail'],
+  },
+  {
+    title:       'Localization',
+    description: 'Locale switcher resolves the same keys server-side via trans(). Strings live in lang/<locale>/messages.json.',
+    href:        '/demos/localization',
+    packages:    ['@rudderjs/localization'],
+  },
+  {
+    title:       'HTTP client',
+    description: 'Server-side Http.retry(3, 200).timeout(5000).get(url) against a public API. The 500 endpoint exercises the retry path.',
+    href:        '/demos/http',
+    packages:    ['@rudderjs/http'],
+  },
+  {
     title:       'Avatar resize',
     description: 'Upload an image — server resizes it to 256×256 WebP via @rudderjs/image and saves to public storage. Side-by-side compare.',
     href:        '/demos/avatar',

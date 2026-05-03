@@ -306,6 +306,102 @@ Route.get('/api/system-info', async (_req, res) => {
   return res.json({ results, totalMs, parallelMs })
 })
 
+// ── Demo API endpoints (paired with /demos/* views) ───────────────────────
+
+// POST /api/cache/views — read+increment+write (no TTL); DELETE to forget the key.
+Route.post('/api/cache/views', async (_req, res) => {
+  const KEY     = 'demos:views'
+  const current = (await Cache.get<number>(KEY)) ?? 0
+  const next    = current + 1
+  await Cache.set(KEY, next)
+  res.json({ views: next, key: KEY })
+})
+
+Route.delete('/api/cache/views', async (_req, res) => {
+  await Cache.forget('demos:views')
+  res.json({ views: 0, key: 'demos:views' })
+})
+
+// POST /api/queue/dispatch — enqueue ExampleJob. Worker drains it during dev.
+Route.post('/api/queue/dispatch', async (_req, res) => {
+  const { ExampleJob } = await import('../app/Jobs/ExampleJob.js')
+  await ExampleJob.dispatch('hello from /api/queue/dispatch').send()
+  res.json({ ok: true, queue: 'default', dispatchedAt: new Date().toISOString() })
+})
+
+// POST /api/mail/send — sends a DemoMail to the user-supplied address.
+Route.post('/api/mail/send', async (req, res) => {
+  const body = (req.body ?? {}) as { to?: string; subject?: string }
+  if (!body.to || !body.subject) {
+    return res.status(422).json({ message: 'Body must be { to, subject }' })
+  }
+  const { Mail }     = await import('@rudderjs/mail')
+  const { DemoMail } = await import('../app/Mail/DemoMail.js')
+  await Mail.to(body.to).send(new DemoMail(body.subject))
+  return res.json({
+    ok:      true,
+    to:      body.to,
+    subject: body.subject,
+    driver:  config<string>('mail.default', 'log'),
+  })
+})
+
+// POST /api/notifications/send — dispatches WelcomeNotification to the supplied email.
+// Synthesizes a notifiable so both mail + database channels can fire.
+Route.post('/api/notifications/send', async (req, res) => {
+  const body = (req.body ?? {}) as { to?: string }
+  if (!body.to) return res.status(422).json({ message: 'Body must be { to }' })
+
+  const notification = new WelcomeNotification()
+  await notify({ id: `demo-${Date.now()}`, email: body.to, name: 'Demo User' }, notification)
+  return res.json({
+    ok:       true,
+    to:       body.to,
+    channels: notification.via({ id: '0', email: body.to }),
+  })
+})
+
+// GET /api/i18n?locale=… — resolves the same keys in the requested locale.
+Route.get('/api/i18n', async (req, res) => {
+  const requested = (req.query as Record<string, string>)['locale'] ?? 'en'
+
+  const payload = await runWithLocale(requested, async () => {
+    setLocale(requested)
+    return {
+      locale:   getLocale(),
+      welcome:  await trans('messages.welcome'),
+      greeting: await trans('messages.greeting', { name: 'World' }),
+      items:    await trans('messages.items', 3),
+    }
+  })
+
+  return res.json(payload)
+})
+
+// GET /api/http/fetch?url=… — server-side HTTP with retry + timeout.
+Route.get('/api/http/fetch', async (req, res) => {
+  const url = (req.query as Record<string, string>)['url']
+  if (!url) return res.status(422).json({ message: 'url is required' })
+  if (!/^https?:\/\//.test(url)) return res.status(422).json({ message: 'url must be http(s)' })
+
+  const { Http } = await import('@rudderjs/http')
+  const t0 = Date.now()
+  try {
+    const response = await Http.retry(3, 200).timeout(5000).get(url)
+    let body: unknown = null
+    try { body = response.json() } catch { body = response.body.slice(0, 600) }
+    return res.json({
+      status:     response.status,
+      ok:         response.ok(),
+      durationMs: Date.now() - t0,
+      url,
+      body,
+    })
+  } catch (e) {
+    return res.status(502).json({ message: (e as Error).message ?? 'Request failed', durationMs: Date.now() - t0, url })
+  }
+})
+
 // POST /api/avatar — resize an uploaded image to 256x256 webp via @rudderjs/image
 Route.post('/api/avatar', async (req, res) => {
   const { image: dataUrl } = (req.body ?? {}) as { image?: string }

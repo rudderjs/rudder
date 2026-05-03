@@ -43,7 +43,7 @@ export default function WsDemo() {
       setMembers(prev => prev.filter(m => m.id !== id))
     })
 
-    return () => { socket.close() }
+    return () => { socket.disconnect() }
   }, [me])
 
   async function send() {
