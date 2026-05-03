@@ -121,6 +121,7 @@ export class Num {
    * Supports integers from -(10^15 - 1) to (10^15 - 1).
    * @example Num.spell(42) → 'forty-two'
    * @example Num.spell(1001) → 'one thousand one'
+   * @example Num.spell(1_000_000_000_000) → 'one trillion'
    */
   static spell(value: number): string {
     const n = Math.trunc(value)
@@ -129,12 +130,14 @@ export class Num {
     const sign = n < 0 ? 'negative ' : ''
     const abs  = Math.abs(n)
 
-    const billions    = Math.floor(abs / 1_000_000_000)
+    const trillions   = Math.floor(abs / 1_000_000_000_000)
+    const billions    = Math.floor((abs % 1_000_000_000_000) / 1_000_000_000)
     const millions    = Math.floor((abs % 1_000_000_000) / 1_000_000)
     const thousands   = Math.floor((abs % 1_000_000) / 1_000)
     const remainder   = abs % 1_000
 
     const parts: string[] = []
+    if (trillions) parts.push(`${spellBelow1000(trillions)} trillion`)
     if (billions)  parts.push(`${spellBelow1000(billions)} billion`)
     if (millions)  parts.push(`${spellBelow1000(millions)} million`)
     if (thousands) parts.push(`${spellBelow1000(thousands)} thousand`)
