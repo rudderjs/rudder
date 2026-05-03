@@ -48,6 +48,7 @@ import { demoPageConfig, demoPage } from './templates/pages/demo.js'
 import { demosIndexView } from './templates/demos/index-view.js'
 import { demosContactView } from './templates/demos/contact.js'
 import { demosTodosView, todoModelPrisma, todoSchema, todoService, todoServiceProvider } from './templates/demos/todos.js'
+import { commentModelTs, demosPolymorphicView, polymorphicPrismaBlock, postModelTs, videoModelTs } from './templates/demos/polymorphic.js'
 import { demosFibonacciView } from './templates/demos/fibonacci.js'
 import { demosSystemInfoView } from './templates/demos/system-info.js'
 import { demosAvatarView } from './templates/demos/avatar.js'
@@ -222,6 +223,12 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
       files['app/Modules/Todo/TodoService.ts']               = todoService()
       files['app/Modules/Todo/TodoServiceProvider.ts']       = todoServiceProvider()
     }
+    if (shouldScaffoldDemo(ctx, 'polymorphic')) {
+      files['app/Views/Demos/Polymorphic.tsx'] = demosPolymorphicView()
+      files['app/Models/Post.ts']              = postModelTs()
+      files['app/Models/Video.ts']             = videoModelTs()
+      files['app/Models/Comment.ts']           = commentModelTs()
+    }
     if (shouldScaffoldDemo(ctx, 'fibonacci'))   files['app/Views/Demos/Fibonacci.tsx']  = demosFibonacciView()
     if (shouldScaffoldDemo(ctx, 'system-info')) files['app/Views/Demos/SystemInfo.tsx'] = demosSystemInfoView()
     if (shouldScaffoldDemo(ctx, 'avatar'))      files['app/Views/Demos/Avatar.tsx']     = demosAvatarView()
@@ -290,6 +297,9 @@ function modulesPrisma(ctx: TemplateContext): string {
   const blocks: string[] = []
   if (shouldScaffoldDemo(ctx, 'todos')) {
     blocks.push(`// module: Todo (Todos demo)\n${todoModelPrisma()}`)
+  }
+  if (shouldScaffoldDemo(ctx, 'polymorphic')) {
+    blocks.push(polymorphicPrismaBlock())
   }
   const body = blocks.length > 0 ? '\n' + blocks.join('\n') : ''
   return `// <rudderjs:modules:start>${body}\n// <rudderjs:modules:end>\n`

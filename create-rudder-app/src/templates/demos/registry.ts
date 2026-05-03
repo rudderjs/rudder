@@ -49,6 +49,14 @@ export const DEMOS: ReadonlyArray<DemoSpec> = [
     requiresOrm: true,
   },
   {
+    value:       'polymorphic',
+    label:       'Polymorphic relations',
+    hint:        'requires ORM',
+    description: 'morphMany + morphTo via @rudderjs/orm. One Comment table belongs to either a Post or a Video. Demonstrates Model.morph() write helper + closed types() resolution.',
+    packages:    ['@rudderjs/orm'],
+    requiresOrm: true,
+  },
+  {
     value:       'queue',
     label:       'Queue dispatch',
     hint:        'requires Queue',
