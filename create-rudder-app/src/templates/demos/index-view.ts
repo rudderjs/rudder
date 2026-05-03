@@ -1,112 +1,15 @@
 import { shouldScaffoldDemo, type TemplateContext } from '../../templates.js'
+import { DEMOS, demoHref, demoTitle } from './registry.js'
 
 export function demosIndexView(ctx: TemplateContext): string {
-  const cards: { title: string; desc: string; href: string; show: boolean; pkgs: string }[] = [
-    {
-      title: 'Contact form',
-      desc:  'CSRF-protected form with Zod validation. Demonstrates getCsrfToken() and FormRequest-style error handling.',
-      href:  '/demos/contact',
-      pkgs:  '@rudderjs/middleware · @rudderjs/core',
-      show:  shouldScaffoldDemo(ctx, 'contact'),
-    },
-    {
-      title: 'Todos',
-      desc:  'ORM + interactive UI. Controller loads initial data, the view hydrates and POSTs to /api/todos/* for live updates.',
-      href:  '/demos/todos',
-      pkgs:  '@rudderjs/orm · @rudderjs/router',
-      show:  shouldScaffoldDemo(ctx, 'todos'),
-    },
-    {
-      title: 'Avatar resize',
-      desc:  'Upload an image — server resizes it to 256×256 WebP via @rudderjs/image and saves to public storage. Side-by-side compare.',
-      href:  '/demos/avatar',
-      pkgs:  '@rudderjs/image · @rudderjs/storage',
-      show:  shouldScaffoldDemo(ctx, 'avatar'),
-    },
-    {
-      title: 'System info',
-      desc:  'Three shell commands (git, node, uptime) executed via @rudderjs/process. Compares sequential vs parallel cost using Process.pool().',
-      href:  '/demos/system-info',
-      pkgs:  '@rudderjs/process',
-      show:  shouldScaffoldDemo(ctx, 'system-info'),
-    },
-    {
-      title: 'Worker threads',
-      desc:  'Compute fib(n) sequentially on the main thread vs across @rudderjs/concurrency worker pool. Watch the parallel cost stay flat as you crank N.',
-      href:  '/demos/fibonacci',
-      pkgs:  '@rudderjs/concurrency',
-      show:  shouldScaffoldDemo(ctx, 'fibonacci'),
-    },
-    {
-      title: 'Feature flags',
-      desc:  'Boolean, value, scoped, and Lottery features resolved against the current user. Sub-route guarded by FeatureMiddleware to demonstrate 403 blocking.',
-      href:  '/demos/pennant',
-      pkgs:  '@rudderjs/pennant',
-      show:  shouldScaffoldDemo(ctx, 'pennant'),
-    },
-    {
-      title: 'Cache counter',
-      desc:  'Persistent view counter via Cache.get + Cache.set. Demonstrates the Cache facade with the in-memory driver.',
-      href:  '/demos/cache',
-      pkgs:  '@rudderjs/cache',
-      show:  shouldScaffoldDemo(ctx, 'cache'),
-    },
-    {
-      title: 'Queue dispatch',
-      desc:  'Click to enqueue ExampleJob via @rudderjs/queue. The handler logs to the server terminal.',
-      href:  '/demos/queue',
-      pkgs:  '@rudderjs/queue',
-      show:  shouldScaffoldDemo(ctx, 'queue'),
-    },
-    {
-      title: 'Mail send',
-      desc:  'Send a Mailable via Mail.to(...).send(). Default driver is "log" — output appears in the dev terminal.',
-      href:  '/demos/mail',
-      pkgs:  '@rudderjs/mail',
-      show:  shouldScaffoldDemo(ctx, 'mail'),
-    },
-    {
-      title: 'Notifications',
-      desc:  'Multi-channel notification via notify(notifiable, notification). Mail channel uses the log driver.',
-      href:  '/demos/notifications',
-      pkgs:  '@rudderjs/notification · @rudderjs/mail',
-      show:  shouldScaffoldDemo(ctx, 'notifications'),
-    },
-    {
-      title: 'Localization',
-      desc:  'Pick a locale to fetch the same keys via trans() server-side. Strings live in lang/<locale>/messages.json.',
-      href:  '/demos/localization',
-      pkgs:  '@rudderjs/localization',
-      show:  shouldScaffoldDemo(ctx, 'localization'),
-    },
-    {
-      title: 'HTTP client',
-      desc:  'Server-side Http.retry(3, 200).timeout(5000).get(url) against a public API. The 500 endpoint exercises retry.',
-      href:  '/demos/http',
-      pkgs:  '@rudderjs/http',
-      show:  shouldScaffoldDemo(ctx, 'http'),
-    },
-    {
-      title: 'WebSocket chat',
-      desc:  'Real-time chat + presence using @rudderjs/broadcast — multi-channel pub/sub over a single WebSocket connection.',
-      href:  '/demos/ws',
-      pkgs:  '@rudderjs/broadcast',
-      show:  shouldScaffoldDemo(ctx, 'ws'),
-    },
-    {
-      title: 'Collaborative editor',
-      desc:  'Yjs CRDT live document with awareness cursors. Open in two tabs to see real-time sync over @rudderjs/sync.',
-      href:  '/demos/sync',
-      pkgs:  '@rudderjs/sync',
-      show:  shouldScaffoldDemo(ctx, 'sync'),
-    },
-  ].filter(c => c.show)
-
-  const cardsJsx = cards.map(c => `        <a key="${c.href}" href="${c.href}" className="feature-card">
-          <h3 className="feature-title">${c.title}</h3>
-          <p className="feature-desc">${c.desc}</p>
-          <p className="feature-desc" style={{ fontSize: '0.7rem', opacity: 0.7 }}>${c.pkgs}</p>
-        </a>`).join('\n')
+  const cards = DEMOS
+    .filter(d => shouldScaffoldDemo(ctx, d.value))
+    .map(d => `        <a key="${demoHref(d)}" href="${demoHref(d)}" className="feature-card">
+          <h3 className="feature-title">${demoTitle(d)}</h3>
+          <p className="feature-desc">${escapeJsxText(d.description)}</p>
+          <p className="feature-desc" style={{ fontSize: '0.7rem', opacity: 0.7 }}>${d.packages.join(' · ')}</p>
+        </a>`)
+    .join('\n')
 
   return `import '@/index.css'
 
@@ -136,11 +39,18 @@ export default function DemosIndex() {
 
       <section className="feature-section">
         <div className="feature-grid">
-${cardsJsx}
+${cards}
         </div>
       </section>
     </div>
   )
 }
 `
+}
+
+// Description strings live as plain text in the registry, but they're emitted
+// inside JSX text nodes. Escape '<' and '>' so a raw '<name>' (e.g. in the
+// localization description) doesn't get parsed as a JSX element.
+function escapeJsxText(s: string): string {
+  return s.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
