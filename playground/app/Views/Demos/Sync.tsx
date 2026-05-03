@@ -1,7 +1,7 @@
+import '@/index.css'
 import { useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
-import '@/index.css'
 
 function getWsUrl() {
   if (typeof window === 'undefined') return ''
@@ -27,103 +27,67 @@ export default function SyncDemo() {
     docRef.current  = doc
     provRef.current = provider
 
-    ytext.observe(() => {
-      setText(ytext.toString())
-    })
-
-    provider.on('status', ({ status }: { status: string }) => {
-      setConnected(status === 'connected')
-    })
-
+    ytext.observe(() => setText(ytext.toString()))
+    provider.on('status', ({ status }: { status: string }) => setConnected(status === 'connected'))
     provider.awareness.setLocalStateField('user', { name: myName, color: myColor })
 
     const syncUsers = () => {
       const states = [...provider.awareness.getStates().values()] as { user?: { name: string; color: string } }[]
-      setUsers(states.flatMap(s => s.user ? [s.user] : []))
+      setUsers(states.map(s => s.user).filter((u): u is { name: string; color: string } => Boolean(u)))
     }
-
-    syncUsers()
     provider.awareness.on('change', syncUsers)
+    syncUsers()
 
-    return () => {
-      provider.destroy()
-      doc.destroy()
-      docRef.current  = null
-      provRef.current = null
-    }
+    return () => { provider.destroy(); doc.destroy() }
   }, [myName, myColor])
 
-  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const doc = docRef.current
-    if (!doc) return
-    const ytext = doc.getText('content')
-    const next  = e.target.value
-    const prev  = ytext.toString()
-
-    doc.transact(() => {
-      ytext.delete(0, prev.length)
-      ytext.insert(0, next)
+  function onChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const ytext = docRef.current?.getText('content')
+    if (!ytext) return
+    docRef.current?.transact(() => {
+      ytext.delete(0, ytext.length)
+      ytext.insert(0, e.target.value)
     })
   }
 
   return (
-    <div className="split-frame">
-      <div className="split-toolbar">
-        <div className="split-toolbar-title">
-          <h1 className="split-toolbar-heading">Sync Demo</h1>
-          <span className={`status-pill ${connected ? 'status-pill-on' : 'status-pill-off'}`}>
-            <span className={`status-dot ${connected ? 'status-dot-on' : 'status-dot-off'}`} />
-            {connected ? 'Connected' : 'Connecting…'}
-          </span>
+    <div className="page">
+      <nav className="page-nav">
+        <div className="brand">
+          <span className="brand-dot" />
+          RudderJS
         </div>
-        <span className="split-toolbar-meta">
-          You: <span style={{ color: myColor, fontWeight: 500 }}>{myName}</span>
-        </span>
-      </div>
-
-      <div className="split-body">
-        <div className="collab-pane">
-          <p className="collab-meta">
-            Open this page in another tab — edits sync in real-time via Yjs CRDT. Rendered from{' '}
-            <code className="inline-code">app/Views/Demos/Sync.tsx</code> via{' '}
-            <code className="inline-code">view('demos.sync')</code>.
-          </p>
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleChange}
-            disabled={!connected}
-            placeholder="Start typing… changes sync instantly across all connected clients."
-            className="collab-textarea"
-          />
-          <p className="collab-meta" style={{ textAlign: 'right' }}>
-            {text.length} characters · powered by{' '}
-            <span style={{ fontWeight: 500 }}>@rudderjs/sync</span> + Yjs
-          </p>
+        <div className="nav-right">
+          <a href="/demos" className="nav-link">← Demos</a>
         </div>
+      </nav>
 
-        <aside className="split-sidebar">
-          <div className="split-sidebar-header">
-            <span className="sidebar-title">Online</span>
-            <span className="member-count">{users.length}</span>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
-            {users.length === 0 ? (
-              <p className="sidebar-empty">No one here yet</p>
-            ) : users.map((u, i) => (
-              <div key={i} className="member-row">
-                <span className="member-dot" style={{ backgroundColor: u.color }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
-              </div>
-            ))}
-          </div>
-          <div className="split-sidebar-footer">
-            <p className="sidebar-note">
-              Awareness tracks who is connected via Yjs presence protocol.
-            </p>
-          </div>
-        </aside>
-      </div>
+      <section className="hero">
+        <h1 className="hero-title">Collaborative editor</h1>
+        <p className="hero-lead">
+          Yjs CRDT over @rudderjs/sync. Open this page in two tabs to see real-time updates.{' '}
+          {connected ? '🟢 connected' : '⚪ connecting…'}
+        </p>
+      </section>
+
+      <section className="feature-section" style={{ maxWidth: '40rem', margin: '0 auto' }}>
+        <p className="form-label">Active users:</p>
+        <ul style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          {users.map((u, i) => (
+            <li key={i} className="inline-code" style={{ borderLeft: `3px solid ${u.color}`, paddingLeft: '0.5rem' }}>
+              {u.name}
+            </li>
+          ))}
+        </ul>
+        <textarea
+          ref={textareaRef}
+          className="form-input"
+          rows={10}
+          value={text}
+          onChange={onChange}
+          placeholder="Start typing…"
+        />
+      </section>
     </div>
   )
 }

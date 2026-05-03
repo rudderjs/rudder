@@ -1,7 +1,4 @@
-// HTTP client demo — fluent fetch with retry + timeout against a public API.
-
-export function demosHttpView(): string {
-  return `import { useState } from 'react'
+import { useState } from 'react'
 import '@/index.css'
 
 interface HttpResponseShape {
@@ -87,32 +84,4 @@ export default function HttpDemo() {
       </section>
     </div>
   )
-}
-`
-}
-
-export function demosHttpApiBlock(): string {
-  return `// GET /api/http/fetch?url=… — server-side HTTP with retry + timeout.
-router.get('/api/http/fetch', async (req, res) => {
-  const url = (req.query as Record<string, string>)['url']
-  if (!url) return res.status(422).json({ message: 'url is required' })
-  if (!/^https?:\\/\\//.test(url)) return res.status(422).json({ message: 'url must be http(s)' })
-
-  const { Http } = await import('@rudderjs/http')
-  const t0 = Date.now()
-  try {
-    const response = await Http.retry(3, 200).timeout(5000).get(url)
-    let body: unknown = null
-    try { body = response.json() } catch { body = response.body.slice(0, 600) }
-    res.json({
-      status:     response.status,
-      ok:         response.ok(),
-      durationMs: Date.now() - t0,
-      url,
-      body,
-    })
-  } catch (e) {
-    res.status(502).json({ message: (e as Error).message ?? 'Request failed', durationMs: Date.now() - t0, url })
-  }
-})`
 }

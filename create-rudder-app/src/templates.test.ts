@@ -1084,11 +1084,11 @@ describe('getTemplates() — demos', () => {
     assert.match(files['routes/api.ts']!, /router\.get\('\/api\/i18n'/)
   })
 
-  it('http demo + http → view + /api/http/fetch with Http.get', () => {
+  it('http demo + http → view + /api/http/fetch with Http.retry().get(url)', () => {
     const files = getTemplates(ctx({ packages: { ...noPkgs, http: true }, demos: ['http'] }))
     assert.ok('app/Views/Demos/Http.tsx' in files)
     assert.match(files['routes/api.ts']!, /router\.get\('\/api\/http\/fetch'/)
-    assert.match(files['routes/api.ts']!, /Http\.get\(url\)\.retry\(/)
+    assert.match(files['routes/api.ts']!, /Http\.retry\(3, 200\)\.timeout\(5000\)\.get\(url\)/)
   })
 
   it('queue demo selected without queue package → demo dropped', () => {
