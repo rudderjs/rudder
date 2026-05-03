@@ -257,3 +257,226 @@
 .error-link {
   @apply mt-4 text-sm underline transition-colors hover:text-zinc-900 dark:hover:text-zinc-100;
 }
+
+/* ─── Demo view classes ─────────────────────────────────────
+   Generic primitives shared by app/Views/Demos/*. Same goal
+   as the scaffolded block above — keep selectors stable so the
+   --no-tailwind variant of create-rudder-app can ship a plain
+   CSS file with identical names. */
+
+.demo-narrow {
+  @apply mx-auto max-w-lg space-y-6;
+}
+.demo-stack {
+  @apply space-y-4;
+}
+.demo-back-link {
+  @apply text-sm text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100;
+}
+
+.demo-card {
+  @apply rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950;
+}
+.demo-card-header {
+  @apply mb-4;
+}
+.demo-card-title {
+  @apply text-base font-semibold;
+}
+.demo-card-desc {
+  @apply mt-1 text-sm text-zinc-500 dark:text-zinc-400;
+}
+.demo-card-body {
+  @apply space-y-3;
+}
+.demo-card-grid {
+  @apply grid w-full gap-6 md:grid-cols-2;
+}
+
+.input-row {
+  @apply flex gap-2;
+}
+.list-row {
+  @apply flex items-center gap-3 rounded-md px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900;
+}
+.list-row-text {
+  @apply flex-1 text-sm;
+}
+.list-row-text-done {
+  @apply text-zinc-500 line-through dark:text-zinc-400;
+}
+.list-row-delete {
+  @apply text-xs text-zinc-500 opacity-0 transition-opacity hover:text-red-600 group-hover:opacity-100 dark:text-zinc-400 dark:hover:text-red-400;
+}
+.empty-state {
+  @apply py-6 text-center text-sm text-zinc-500 dark:text-zinc-400;
+}
+.checkbox-input {
+  @apply h-4 w-4 rounded border border-zinc-300 dark:border-zinc-700;
+}
+
+.button-row {
+  @apply flex gap-3;
+}
+.button-primary {
+  @apply rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900;
+}
+.button-secondary {
+  @apply rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900;
+}
+.form-textarea {
+  @apply w-full rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-100;
+}
+.form-error-inline {
+  @apply text-xs text-red-600 dark:text-red-400;
+}
+
+/* Split layout shared by Sync + Ws demos: top toolbar + main pane + sidebar. */
+.split-frame {
+  @apply flex min-h-svh flex-col bg-white text-zinc-900 dark:bg-black dark:text-zinc-100;
+}
+.split-toolbar {
+  @apply flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800;
+}
+.split-toolbar-title {
+  @apply flex items-center gap-3;
+}
+.split-toolbar-heading {
+  @apply text-lg font-semibold;
+}
+.split-toolbar-meta {
+  @apply text-sm text-zinc-500 dark:text-zinc-400;
+}
+.split-body {
+  @apply flex flex-1 overflow-hidden;
+}
+.split-main {
+  @apply flex min-w-0 flex-1 flex-col;
+}
+.split-sidebar {
+  @apply flex w-52 shrink-0 flex-col border-l border-zinc-200 dark:border-zinc-800;
+}
+.split-sidebar-header {
+  @apply flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800;
+}
+.split-sidebar-footer {
+  @apply border-t border-zinc-200 p-3 dark:border-zinc-800;
+}
+
+/* Connection / status pill + dot. */
+.status-pill {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium;
+}
+.status-pill-on {
+  @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300;
+}
+.status-pill-off {
+  @apply bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300;
+}
+.status-dot {
+  @apply h-1.5 w-1.5 rounded-full;
+}
+.status-dot-on {
+  @apply bg-emerald-500;
+}
+.status-dot-off {
+  @apply bg-amber-500;
+}
+
+/* Member list (sidebar). */
+.member-row {
+  @apply flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900;
+}
+.member-dot {
+  @apply h-2 w-2 shrink-0 rounded-full;
+}
+.member-count {
+  @apply rounded-full bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300;
+}
+.sidebar-title {
+  @apply text-sm font-medium;
+}
+.sidebar-empty {
+  @apply p-3 text-xs text-zinc-500 dark:text-zinc-400;
+}
+.sidebar-note {
+  @apply text-xs leading-relaxed text-zinc-500 dark:text-zinc-400;
+}
+
+/* Sync: collaborative textarea + footer meta. */
+.collab-pane {
+  @apply flex flex-1 flex-col gap-3 p-6;
+}
+.collab-meta {
+  @apply text-xs text-zinc-500 dark:text-zinc-400;
+}
+.collab-textarea {
+  @apply min-h-0 flex-1 resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-mono text-sm leading-relaxed outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-100;
+}
+
+/* Ws: chat list + bubbles + composer. */
+.chat-list {
+  @apply flex flex-1 flex-col gap-4 overflow-y-auto p-6;
+}
+.chat-empty {
+  @apply flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-zinc-500 dark:text-zinc-400;
+}
+.chat-message {
+  @apply flex gap-2;
+}
+.chat-message-me {
+  @apply flex-row-reverse;
+}
+.chat-avatar {
+  @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-bold dark:bg-zinc-900;
+}
+.chat-stack {
+  @apply flex max-w-sm flex-col gap-1;
+}
+.chat-stack-me {
+  @apply items-end;
+}
+.chat-author {
+  @apply text-xs text-zinc-500 dark:text-zinc-400;
+}
+.chat-bubble {
+  @apply rounded-2xl rounded-tl-sm bg-zinc-100 px-4 py-2 text-sm leading-relaxed dark:bg-zinc-900;
+}
+.chat-bubble-me {
+  @apply rounded-2xl rounded-tr-sm bg-zinc-900 px-4 py-2 text-sm leading-relaxed text-white dark:bg-zinc-100 dark:text-zinc-900;
+}
+.chat-form {
+  @apply flex gap-3 border-t border-zinc-200 p-4 dark:border-zinc-800;
+}
+.chat-input {
+  @apply flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:ring-zinc-100;
+}
+.chat-send {
+  @apply rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900;
+}
+.toolbar-button {
+  @apply rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900;
+}
+
+/* Feature-flag (Pennant) cards. */
+.flag-name {
+  @apply font-mono text-base font-semibold;
+}
+.flag-shape {
+  @apply text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400;
+}
+.flag-section {
+  @apply space-y-1;
+}
+.flag-section-label {
+  @apply text-xs text-zinc-500 dark:text-zinc-400;
+}
+.flag-resolved {
+  @apply mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800;
+}
+.flag-resolved-value {
+  @apply font-mono text-base font-semibold;
+}
+.code-inline-block {
+  @apply block rounded bg-zinc-100 px-2 py-1 font-mono text-xs dark:bg-zinc-900;
+}

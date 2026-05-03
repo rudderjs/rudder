@@ -1,11 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import '@/index.css'
 
 interface PennantProps {
   user:   { id: string; name: string; email: string } | null
@@ -48,72 +41,83 @@ const features: FeatureCardSpec[] = [
 
 export default function PennantDemo({ user, values }: PennantProps) {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-start gap-8 p-8 max-w-4xl mx-auto">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold tracking-tight">Feature flags</h1>
-        <p className="mt-2 text-muted-foreground text-sm max-w-2xl">
+    <div className="page">
+      <nav className="page-nav">
+        <div className="brand">
+          <span className="brand-dot" />
+          RudderJS
+        </div>
+        <div className="nav-right">
+          <a href="/demos" className="nav-link">Demos</a>
+          <a href="/" className="nav-link">Home</a>
+        </div>
+      </nav>
+
+      <section className="hero">
+        <h1 className="hero-title">Feature flags</h1>
+        <p className="hero-lead">
           Resolved against the current scope ({user
             ? <><strong>{user.name}</strong> · {user.email}</>
             : <em>guest</em>}). Definitions live in{' '}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">app/Providers/AppServiceProvider.ts</code>{' '}
+          <code className="inline-code">app/Providers/AppServiceProvider.ts</code>{' '}
           and resolution happens here via{' '}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">Feature.values([...], scope)</code>.
+          <code className="inline-code">Feature.values([...], scope)</code>.
         </p>
         {!user && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Sign in to see <code>beta-dashboard</code> flip to true.
+          <p className="hero-meta">
+            Sign in to see <code className="inline-code">beta-dashboard</code> flip to true.
           </p>
         )}
-      </div>
+      </section>
 
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 w-full">
-        {features.map(f => {
-          const resolved = values[f.name]
-          const display  = JSON.stringify(resolved)
-          return (
-            <Card key={f.name}>
-              <CardHeader>
-                <CardTitle className="font-mono text-base">{f.name}</CardTitle>
-                <CardDescription className="text-xs uppercase tracking-wide">{f.shape}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2 text-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground">resolver</div>
-                  <code className="text-xs bg-muted px-2 py-1 rounded block">{f.resolver}</code>
+      <section className="feature-section">
+        <div className="demo-card-grid">
+          {features.map(f => {
+            const resolved = values[f.name]
+            const display  = JSON.stringify(resolved)
+            return (
+              <div key={f.name} className="demo-card">
+                <div className="demo-card-header">
+                  <h2 className="flag-name">{f.name}</h2>
+                  <p className="flag-shape">{f.shape}</p>
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">expected</div>
-                  <p className="text-xs">{f.expected}</p>
+                <div className="demo-card-body">
+                  <div className="flag-section">
+                    <div className="flag-section-label">resolver</div>
+                    <code className="code-inline-block">{f.resolver}</code>
+                  </div>
+                  <div className="flag-section">
+                    <div className="flag-section-label">expected</div>
+                    <p className="demo-card-desc">{f.expected}</p>
+                  </div>
+                  <div className="flag-resolved">
+                    <div className="flag-section-label">resolved value</div>
+                    <code className="flag-resolved-value">{display}</code>
+                  </div>
                 </div>
-                <div className="border-t pt-2 mt-1">
-                  <div className="text-xs text-muted-foreground">resolved value</div>
-                  <code className="font-mono text-base">{display}</code>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+              </div>
+            )
+          })}
+        </div>
 
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>FeatureMiddleware</CardTitle>
-          <CardDescription>
-            <code>/demos/pennant/beta</code> is wrapped in{' '}
-            <code>FeatureMiddleware(&apos;beta-dashboard&apos;)</code>. The middleware reads{' '}
-            <code>req.user</code> as the scope; non-matching scopes get a 403.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <a href="/demos/pennant/beta">
-            <Button>Open /demos/pennant/beta →</Button>
+        <div className="demo-card" style={{ marginTop: '1.5rem' }}>
+          <div className="demo-card-header">
+            <h2 className="demo-card-title">FeatureMiddleware</h2>
+            <p className="demo-card-desc">
+              <code className="inline-code">/demos/pennant/beta</code> is wrapped in{' '}
+              <code className="inline-code">FeatureMiddleware('beta-dashboard')</code>. The middleware reads{' '}
+              <code className="inline-code">req.user</code> as the scope; non-matching scopes get a 403.
+            </p>
+          </div>
+          <a href="/demos/pennant/beta" className="button-primary" style={{ display: 'inline-block', textDecoration: 'none' }}>
+            Open /demos/pennant/beta →
           </a>
-        </CardContent>
-      </Card>
+        </div>
 
-      <a href="/demos" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-        ← Back to demos
-      </a>
+        <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+          <a href="/demos" className="demo-back-link">← Back to demos</a>
+        </div>
+      </section>
     </div>
   )
 }
