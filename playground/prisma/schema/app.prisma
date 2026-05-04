@@ -33,3 +33,20 @@ model Comment {
 
   @@index([commentableType, commentableId])
 }
+
+// Polymorphic many-to-many (morphToMany / morphedByMany). One Tag table
+// shared by both Post and Video through a single Taggable pivot. The pivot
+// carries tagId (strong side) + taggableId/taggableType (polymorphic side).
+model Tag {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+}
+
+model Taggable {
+  tagId         Int
+  taggableId    Int
+  taggableType  String
+
+  @@id([tagId, taggableId, taggableType])
+  @@index([taggableId, taggableType])
+}

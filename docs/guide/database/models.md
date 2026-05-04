@@ -173,7 +173,7 @@ const recent = await user!.related('posts')
 const team = await user!.related('team').first()
 ```
 
-**Supported types:** `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`. Polymorphic relations are out of scope — reach for the adapter directly when you need them.
+**Supported types:** `hasOne`, `hasMany`, `belongsTo`, `belongsToMany`, `morphTo`, `morphMany`, `morphOne`, `morphToMany`, `morphedByMany`. Polymorphic columns use camelCase (`commentableId` / `commentableType`) — a deliberate divergence from Laravel's snake_case.
 
 **Defaults:** `foreignKey` defaults to `<parentClassName>Id` (camelCase) for `hasOne` / `hasMany`, and `<relatedClassName>Id` for `belongsTo`. `localKey` defaults to the parent's primary key (or the FK on `belongsTo`). Override either when your schema diverges.
 
@@ -243,8 +243,89 @@ class User extends Model {
 
 - Pivot columns are not surfaced on read results — `related('roles').get()` returns clean `Role` instances without `_pivot` fields. Pivot data round-trips through `attach`/`sync` on the write side.
 - No `withTimestamps` — apps that want `createdAt` on the pivot can write it via `attach(ids, { createdAt: new Date() })` or schema-level defaults.
-- No polymorphic `belongsToMany` (`morphToMany`).
 - Mutations (`create`, `update`, `delete`, `insertMany`, `deleteAll`) on the deferred query throw — write the pivot via the accessor and write the related rows via the related model directly.
+
+### Polymorphic many-to-many (`morphToMany` / `morphedByMany`)
+
+A taggable system is the canonical example: `Post` and `Video` both share a single `Tag` table through one shared pivot. The pivot carries the strong-side FK (`tagId`) plus a polymorphic pair (`taggableId` + `taggableType`).
+
+```prisma
+model Tag      { id Int @id @default(autoincrement()); name String @unique }
+model Post     { id Int @id @default(autoincrement()); title String }
+model Video    { id Int @id @default(autoincrement()); url   String }
+
+model Taggable {
+  tagId         Int
+  taggableId    Int
+  taggableType  String
+  @@id([tagId, taggableId, taggableType])
+  @@index([taggableId, taggableType])
+}
+```
+
+Owning side (`morphToMany`) — the model that *has* tags:
+
+```ts
+class Post extends Model {
+  static override relations = {
+    tags: {
+      type:       'morphToMany',
+      model:      () => Tag,
+      pivotTable: 'taggable',
+      morphName:  'taggable',     // → taggableId / taggableType columns on the pivot
+    },
+  } as const
+}
+
+const post = await Post.find(1)
+const tags = await post!.related('tags').orderBy('name').get()
+await post!.tags().attach([3, 5])
+```
+
+Inverse side (`morphedByMany`) — the strong-side model walking back to each owning class. Each declaration targets one concrete inverse class, so a single `Tag` declares `posts` and `videos` separately:
+
+```ts
+class Tag extends Model {
+  static override relations = {
+    posts:  {
+      type:       'morphedByMany',
+      model:      () => Post,
+      pivotTable: 'taggable',
+      morphName:  'taggable',
+    },
+    videos: {
+      type:       'morphedByMany',
+      model:      () => Video,
+      pivotTable: 'taggable',
+      morphName:  'taggable',
+    },
+  } as const
+}
+
+const tag = await Tag.find(7)
+const taggedPosts  = await tag!.related('posts').get()
+const taggedVideos = await tag!.related('videos').get()
+await tag!.posts().attach([1, 2])
+```
+
+The discriminator written to `taggableType` defaults to the owning class's `Class.name`; override per-class via `static morphAlias = 'post'`. Once data exists, treat `morphAlias` as immutable storage.
+
+For typed accessors, define the method explicitly — same idiom as `belongsToMany`:
+
+```ts
+class Post extends Model {
+  static override relations = { /* ... */ }
+  tags() { return Model.morphToMany(this, 'tags') }
+}
+```
+
+Don't use a class-field annotation (`tags!: () => ...`) — it creates an own property at construction that shadows the prototype-installed accessor.
+
+**v1 limitations** (mirror `belongsToMany`):
+
+- Pivot columns are not surfaced on read.
+- No `withTimestamps` — pass `attach(ids, { createdAt: new Date() })` or use schema defaults.
+- Each `morphedByMany` relation targets one concrete inverse class. To query *every* taggable for a tag, declare one relation per concrete class and merge results in app code (or drop to the adapter).
 
 ## Route model binding
 
