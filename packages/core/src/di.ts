@@ -65,6 +65,12 @@ export class Container {
   // ── Contextual bindings ───────────────────────────────────
   private _contextual = new Map<string, Map<string | symbol, Factory>>()
 
+  // ── Tagging ───────────────────────────────────────────────
+  // Map of tag name → set of token keys (resolved via toToken()).
+  // Tagging an unbound token is allowed (Laravel parity); tagged() throws
+  // the standard "cannot resolve" error when one is asked for.
+  private _tags = new Map<string, Set<string | symbol>>()
+
   // ── Missing handler (for deferred providers) ──────────────
   private _missingHandler: ((token: string | symbol) => void) | null = null
 
@@ -73,6 +79,7 @@ export class Container {
     this.instances.clear()
     this.aliases.clear()
     this._contextual.clear()
+    this._tags.clear()
     this._missingHandler = null
     return this
   }
@@ -108,6 +115,60 @@ export class Container {
     const key = this.toToken(token)
     this.instances.set(key, value)
     return this
+  }
+
+  /**
+   * Bind a factory only if the token is not already bound. Returns `this` either way.
+   * Useful for framework providers registering sane defaults that an app provider
+   * can override by binding the same token first.
+   */
+  bindIf<T>(token: string | symbol | Constructor<T>, factory: Factory<T>): this {
+    return this.has(token) ? this : this.bind(token, factory)
+  }
+
+  /** Singleton variant of `bindIf`. */
+  singletonIf<T>(token: string | symbol | Constructor<T>, factory: Factory<T>): this {
+    return this.has(token) ? this : this.singleton(token, factory)
+  }
+
+  /** Scoped variant of `bindIf`. */
+  scopedIf<T>(token: string | symbol | Constructor<T>, factory: Factory<T>): this {
+    return this.has(token) ? this : this.scoped(token, factory)
+  }
+
+  /**
+   * Tag one or more tokens with one or more tag names. Calls are additive —
+   * tagging the same token twice with the same tag is a no-op.
+   * Tagging an unbound token is allowed; resolution via `tagged()` will
+   * throw the standard "cannot resolve" error.
+   */
+  tag(
+    tokens: string | symbol | Constructor | Array<string | symbol | Constructor>,
+    tags: string | string[],
+  ): this {
+    const tokenList = Array.isArray(tokens) ? tokens : [tokens]
+    const tagList   = Array.isArray(tags)   ? tags   : [tags]
+    for (const tag of tagList) {
+      let set = this._tags.get(tag)
+      if (!set) {
+        set = new Set<string | symbol>()
+        this._tags.set(tag, set)
+      }
+      for (const t of tokenList) set.add(this.toToken(t))
+    }
+    return this
+  }
+
+  /**
+   * Resolve every token registered under `tag` via `make()`. Returns `[]` for
+   * an unknown tag (no throw). Order is insertion order.
+   */
+  tagged<T>(tag: string): T[] {
+    const set = this._tags.get(tag)
+    if (!set) return []
+    const out: T[] = []
+    for (const token of set) out.push(this.make<T>(token))
+    return out
   }
 
   alias(from: string, to: string | symbol): this {
