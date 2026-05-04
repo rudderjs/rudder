@@ -121,7 +121,7 @@ Extend `Listener` and call `dispatch(new MyEvent(data))`. Register listeners in 
 
 ### Validation
 
-Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.object({...})`). `z` is re-exported from `@rudderjs/core`.
+Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.object({...})`). `z` is re-exported from `@rudderjs/core`. Five optional lifecycle hooks mirror Laravel: `prepareForValidation` (mutate input pre-parse), `messages` (per-request error message overrides keyed by dot-path), `after` (array of cross-field check closures with `addError(path, msg)`), `passedValidation` (final transform on parsed data), and `failedValidation` (override the throw — return a `Response` to short-circuit, otherwise it throws `ValidationError`). Parameterize as `extends FormRequest<typeof schema>` to get `z.infer<typeof schema>` typing inside the hooks.
 
 ## Common Pitfalls
 
@@ -135,7 +135,7 @@ Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.ob
 
 ```ts
 import { Application, app, resolve, ServiceProvider, Injectable, Inject } from '@rudderjs/core'
-import { FormRequest, ValidationError, z } from '@rudderjs/core'
+import { FormRequest, ValidationError, ValidationResponse, z } from '@rudderjs/core'
 import { Listener, dispatch, events } from '@rudderjs/core'
 import { HttpException, abort, abort_if, report } from '@rudderjs/core'
 import { Collection, Env, env, config, sleep } from '@rudderjs/core'

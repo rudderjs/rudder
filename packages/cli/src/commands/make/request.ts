@@ -14,6 +14,30 @@ export class ${className} extends FormRequest {
       // TODO: define validation rules
     })
   }
+
+  // ─── Optional lifecycle hooks (uncomment to use) ──────────
+
+  // protected override prepareForValidation(input: Record<string, unknown>) {
+  //   // Mutate input before validation, e.g.:
+  //   // if (typeof input.email === 'string') input.email = input.email.toLowerCase()
+  // }
+
+  // protected override messages() {
+  //   // Per-request error message overrides keyed by dot-path.
+  //   return { /* email: 'Please enter a valid email.' */ }
+  // }
+
+  // protected override after() {
+  //   // Cross-field checks against parsed data; addError(path, msg) collects errors.
+  //   return [
+  //     // ({ data, addError, req }) => { if (data.from === data.to) addError('to', 'Same account') },
+  //   ]
+  // }
+
+  // protected override async passedValidation(data: unknown) {
+  //   // Final transform after all checks pass; return value replaces resolved data.
+  //   return data
+  // }
 }
 `
 }

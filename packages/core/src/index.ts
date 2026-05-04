@@ -40,7 +40,8 @@ export type { DispatchedEvent } from './events-fake.js'
 
 // ─── Validation ────────────────────────────────────────────
 
-export { FormRequest, ValidationError, validate, validateWith, z } from './validation.js'
+export { FormRequest, ValidationError, ValidationResponse, validate, validateWith, z } from './validation.js'
+export type { AfterCallback, AfterContext, MessagesMap } from './validation.js'
 
 // ─── Rudder ───────────────────────────────────────────────
 

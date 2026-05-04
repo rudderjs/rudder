@@ -3,7 +3,7 @@ import { ServiceProvider } from './service-provider.js'
 import { Env, ConfigRepository, setConfigRepository } from '@rudderjs/support'
 import type { ServerAdapterProvider, ServerAdapter, FetchHandler, MiddlewareHandler, AppRequest } from '@rudderjs/contracts'
 import { rudder } from '@rudderjs/console'
-import { ValidationError } from './validation.js'
+import { ValidationError, ValidationResponse } from './validation.js'
 import {
   HttpException,
   renderHttpException,
@@ -415,7 +415,12 @@ export class ExceptionConfigurator {
         if (err instanceof type) return fn(err, req)
       }
 
-      // 3. ValidationError — 422 JSON
+      // 3. ValidationResponse — short-circuit emit the wrapped Response (FormRequest.failedValidation)
+      if (err instanceof ValidationResponse) {
+        return err.response
+      }
+
+      // 4. ValidationError — 422 JSON
       if (err instanceof ValidationError) {
         return new Response(JSON.stringify(err.toJSON()), {
           status: 422,

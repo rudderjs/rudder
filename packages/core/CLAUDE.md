@@ -8,7 +8,7 @@ The framework kernel — Application lifecycle, DI container, service providers,
 - `src/di.ts` — `Container`, `@Injectable`, `@Inject`, contextual bindings, scoped (AsyncLocalStorage)
 - `src/service-provider.ts` — `ServiceProvider` base class, `PublishGroup`, dedup guard
 - `src/events.ts` — `EventDispatcher`, `eventsProvider()`, wildcard listeners
-- `src/validation.ts` — `FormRequest`, `ValidationError`, zod integration
+- `src/validation.ts` — `FormRequest` (with lifecycle hooks: `prepareForValidation`, `messages`, `after`, `passedValidation`, `failedValidation`), `ValidationError`, `ValidationResponse`, zod integration
 - `src/exceptions.ts` — `HttpException`, `abort()`, `report()`
 - `src/default-providers.ts` — `defaultProviders()` auto-discovery from manifest
 - `src/provider-sort.ts` — Stage + topo sort: foundation → infrastructure → feature → monitoring
