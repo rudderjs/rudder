@@ -491,7 +491,7 @@ const svc = resolve<UserService>(UserService)
 
 ## Packages (46)
 
-> **46 first-party packages** across 9 categories — everything from DI and routing to AI agents, real-time CRDT, and production monitoring. All under one monorepo, all opt-in.
+> **46 first-party packages** across 12 categories — everything from DI and routing to AI agents, real-time CRDT, and production monitoring. All under one monorepo, all opt-in.
 
 ### Foundation (7)
 | Package | Description |
@@ -519,7 +519,7 @@ const svc = resolve<UserService>(UserService)
 | [`@rudderjs/orm-prisma`](./packages/orm-prisma) | Prisma adapter (SQLite, PostgreSQL, MySQL) |
 | [`@rudderjs/orm-drizzle`](./packages/orm-drizzle) | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
 
-### Auth & Security (7)
+### Auth & Security (6)
 | Package | Description |
 |---|---|
 | [`@rudderjs/hash`](./packages/hash) | Password hashing (bcrypt, argon2) |
@@ -528,9 +528,13 @@ const svc = resolve<UserService>(UserService)
 | [`@rudderjs/sanctum`](./packages/sanctum) | API token authentication with abilities |
 | [`@rudderjs/passport`](./packages/passport) | OAuth 2 server (JWT RS256) — auth code + PKCE, client credentials, refresh, device code |
 | [`@rudderjs/socialite`](./packages/socialite) | OAuth providers (GitHub, Google, Facebook, Apple) |
+
+### Billing (1)
+| Package | Description |
+|---|---|
 | [`@rudderjs/cashier-paddle`](./packages/cashier-paddle) | Paddle billing — Billable mixin, subscriptions, signed webhooks, checkout, refunds, price previews |
 
-### Infrastructure (11)
+### Infrastructure (6)
 | Package | Description |
 |---|---|
 | [`@rudderjs/queue`](./packages/queue) | Job base class, queue contract |
@@ -538,11 +542,19 @@ const svc = resolve<UserService>(UserService)
 | [`@rudderjs/queue-inngest`](./packages/queue-inngest) | Inngest serverless queue |
 | [`@rudderjs/cache`](./packages/cache) | Cache facade, memory + Redis drivers (`ioredis` optional) |
 | [`@rudderjs/storage`](./packages/storage) | Storage facade, local + S3/R2/MinIO (`@aws-sdk/client-s3` optional) |
+| [`@rudderjs/schedule`](./packages/schedule) | Task scheduler, cron-based |
+
+### Communication (4)
+| Package | Description |
+|---|---|
 | [`@rudderjs/mail`](./packages/mail) | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
 | [`@rudderjs/notification`](./packages/notification) | Multi-channel notifications (mail, database) |
-| [`@rudderjs/schedule`](./packages/schedule) | Task scheduler, cron-based |
 | [`@rudderjs/broadcast`](./packages/broadcast) | WebSocket channels — pub/sub, private, presence |
 | [`@rudderjs/sync`](./packages/sync) | Yjs CRDT real-time document sync (editor adapters under subpaths: `@rudderjs/sync/lexical`, `/tiptap`) |
+
+### Internationalization (1)
+| Package | Description |
+|---|---|
 | [`@rudderjs/localization`](./packages/localization) | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
 ### Developer Experience (7)
@@ -561,7 +573,7 @@ const svc = resolve<UserService>(UserService)
 |---|---|
 | [`@rudderjs/image`](./packages/image) | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
-### Monitoring (3)
+### Observability (3)
 | Package | Description |
 |---|---|
 | [`@rudderjs/telescope`](./packages/telescope) | Development inspector — 19 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, AI agent runs, MCP server activity, dumps, WebSocket lifecycle, Yjs CRDT events |
