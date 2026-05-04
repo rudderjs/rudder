@@ -1,5 +1,12 @@
 # rudderjs-playground-web
 
+## 0.0.17
+
+### Patch Changes
+
+- Updated dependencies [150b7e3]
+  - @rudderjs/orm@1.6.0
+
 ## 0.0.16
 
 ### Patch Changes
