@@ -75,17 +75,17 @@ async function main(): Promise<void> {
 
   type Pkg = { value: string; label: string; hint?: string }
   const PACKAGE_GROUPS: Record<string, Pkg[]> = {
-    'Auth & Users': [
+    'Auth & Security': [
       { value: 'auth',          label: 'Authentication',        hint: 'login, register, sessions' },
       { value: 'sanctum',       label: 'Sanctum',               hint: 'API tokens (SHA-256 + abilities)' },
       { value: 'passport',      label: 'Passport',              hint: 'OAuth2 server — requires Auth + Prisma' },
       { value: 'socialite',     label: 'Socialite',             hint: 'social login: GitHub, Google, Facebook, Apple' },
+      { value: 'crypt',         label: 'Crypt',                 hint: 'AES-256-CBC + HMAC encryption' },
     ],
     'Infrastructure': [
       { value: 'queue',         label: 'Queue',                 hint: 'background jobs' },
       { value: 'storage',       label: 'Storage',               hint: 'file uploads (local + S3)' },
       { value: 'scheduler',     label: 'Scheduler',             hint: 'cron-like task scheduling' },
-      { value: 'image',         label: 'Image',                 hint: 'resize, crop, convert (sharp wrapper)' },
     ],
     'Communication': [
       { value: 'mail',          label: 'Mail',                  hint: 'SMTP + log driver' },
@@ -93,27 +93,27 @@ async function main(): Promise<void> {
       { value: 'broadcast',     label: 'WebSocket / Broadcast', hint: 'real-time channels' },
       { value: 'sync',          label: 'Sync (Yjs CRDT)',       hint: 'collaborative documents' },
     ],
-    'AI': [
-      { value: 'ai',            label: 'AI',                    hint: 'LLM providers (Anthropic, OpenAI, Google, Ollama)' },
-      { value: 'mcp',           label: 'MCP',                   hint: 'Model Context Protocol — expose tools/resources to LLMs' },
-      { value: 'boost',         label: 'Boost',                 hint: 'AI coding DX (Claude Code/Cursor/Copilot)' },
-    ],
     'Internationalization': [
       { value: 'localization',  label: 'Localization',          hint: 'i18n — trans(), setLocale()' },
     ],
-    'Product & Features': [
+    'Developer Experience': [
       { value: 'pennant',       label: 'Pennant',               hint: 'feature flags' },
+      { value: 'http',          label: 'HTTP',                  hint: 'fluent fetch client — retries, timeouts, pools' },
+      { value: 'process',       label: 'Process',               hint: 'shell execution — run, pool, pipe' },
+      { value: 'concurrency',   label: 'Concurrency',           hint: 'parallel execution via worker threads' },
+    ],
+    'Media': [
+      { value: 'image',         label: 'Image',                 hint: 'resize, crop, convert (sharp wrapper)' },
     ],
     'Observability': [
       { value: 'telescope',     label: 'Telescope',             hint: 'debug dashboard — requests, queries, jobs, exceptions' },
       { value: 'pulse',         label: 'Pulse',                 hint: 'metrics dashboard — throughput, latency, hit rates' },
       { value: 'horizon',       label: 'Horizon',               hint: 'queue monitoring — lifecycle, workers, retry/delete' },
     ],
-    'Utilities': [
-      { value: 'crypt',         label: 'Crypt',                 hint: 'AES-256-CBC + HMAC encryption' },
-      { value: 'http',          label: 'HTTP',                  hint: 'fluent fetch client — retries, timeouts, pools' },
-      { value: 'process',       label: 'Process',               hint: 'shell execution — run, pool, pipe' },
-      { value: 'concurrency',   label: 'Concurrency',           hint: 'parallel execution via worker threads' },
+    'AI & Tooling': [
+      { value: 'ai',            label: 'AI',                    hint: 'LLM providers (Anthropic, OpenAI, Google, Ollama)' },
+      { value: 'mcp',           label: 'MCP',                   hint: 'Model Context Protocol — expose tools/resources to LLMs' },
+      { value: 'boost',         label: 'Boost',                 hint: 'AI coding DX (Claude Code/Cursor/Copilot)' },
     ],
   }
 

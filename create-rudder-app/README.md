@@ -69,20 +69,20 @@ The installer walks you through up to 10 prompts (several are conditional):
 
 ### Package checklist (prompt 4)
 
-Eight categories, 25 visible rows, one pre-checked. Picking ORM=none filters out the four DB-gated rows (Authentication, Sanctum, Passport, Cashier-Paddle).
+Eight categories, 24 visible rows, one pre-checked. Picking ORM=none filters out the three DB-gated rows (Authentication, Sanctum, Passport). Category labels mirror the framework README.
 
 ```
-─── Auth & Users ───
+─── Auth & Security ───
   Authentication              login, register, sessions
   Sanctum                     API tokens (SHA-256 + abilities)
   Passport                    OAuth 2 server — requires Auth + Prisma
   Socialite                   social login (GitHub, Google, Facebook, Apple)
+  Crypt                       AES-256-CBC + HMAC encryption
 
 ─── Infrastructure ───
   Queue                       background jobs
   Storage                     file uploads (local + S3)
   Scheduler                   cron-like task scheduling
-  Image                       resize, crop, convert (sharp wrapper)
 
 ─── Communication ───
   Mail                        SMTP + log driver
@@ -90,28 +90,27 @@ Eight categories, 25 visible rows, one pre-checked. Picking ORM=none filters out
   WebSocket / Broadcast       real-time channels
   Sync (Yjs CRDT)             collaborative documents
 
-─── AI ───
-  AI                          11 LLM providers (Anthropic, OpenAI, …)
-  MCP                         Model Context Protocol — expose tools to LLMs
-  Boost                       AI coding DX (Claude Code / Cursor / Copilot)
-
 ─── Internationalization ───
   Localization                i18n — trans(), setLocale()
 
-─── Product & Features ───
-  Cashier-Paddle              subscriptions + checkout — requires Auth + Prisma
+─── Developer Experience ───
   Pennant                     feature flags
+  HTTP                        fluent fetch client (retries, timeouts, pools)
+  Process                     shell execution (run, pool, pipe)
+  Concurrency                 parallel execution via worker threads
+
+─── Media ───
+  Image                       resize, crop, convert (sharp wrapper)
 
 ─── Observability ───
   Telescope                   debug dashboard
   Pulse                       metrics dashboard
   Horizon                     queue monitoring
 
-─── Utilities ───
-  Crypt                       AES-256-CBC + HMAC encryption
-  HTTP                        fluent fetch client (retries, timeouts, pools)
-  Process                     shell execution (run, pool, pipe)
-  Concurrency                 parallel execution via worker threads
+─── AI & Tooling ───
+  AI                          11 LLM providers (Anthropic, OpenAI, …)
+  MCP                         Model Context Protocol — expose tools to LLMs
+  Boost                       AI coding DX (Claude Code / Cursor / Copilot)
 ```
 
 Package-specific behavior:
