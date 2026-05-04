@@ -5,7 +5,7 @@ The framework kernel — Application lifecycle, DI container, service providers,
 ## Key Files
 
 - `src/application.ts` — `Application`, `AppBuilder`, `RudderJS` singleton, boot lifecycle
-- `src/di.ts` — `Container`, `@Injectable`, `@Inject`, contextual bindings, scoped (AsyncLocalStorage)
+- `src/di.ts` — `Container`, `@Injectable`, `@Inject`, contextual bindings, scoped (AsyncLocalStorage), tagging (`tag`/`tagged`), conditional binding (`bindIf`/`singletonIf`/`scopedIf`)
 - `src/service-provider.ts` — `ServiceProvider` base class, `PublishGroup`, dedup guard
 - `src/events.ts` — `EventDispatcher`, `eventsProvider()`, wildcard listeners
 - `src/validation.ts` — `FormRequest` (with lifecycle hooks: `prepareForValidation`, `messages`, `after`, `passedValidation`, `failedValidation`), `ValidationError`, `ValidationResponse`, zod integration

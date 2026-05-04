@@ -80,6 +80,40 @@ export default Application.configure({
 - `ConfigureOptions`
   - `server`, `config?`, `providers?`
 
+## Container
+
+The DI `Container` is the heart of the framework — services bound here are resolvable via `@Inject()`, contextual bindings (`when().needs().give()`), and direct `make()` calls. Beyond `bind` / `singleton` / `scoped` / `instance`, two convenience surfaces help framework providers and plugin-style fan-out:
+
+### Conditional binding (`*If`)
+
+`bindIf` / `singletonIf` / `scopedIf` register a binding only when the token is currently unbound. Lets framework providers register a sane default that an app provider can override by binding the same token first:
+
+```ts
+// Inside CacheServiceProvider.register()
+this.app.singletonIf(CacheManager, c => new CacheManager(c.make(ConfigRepo)))
+```
+
+If an app provider already bound `CacheManager` before this provider registers, the framework default is skipped — no ad-hoc `if (!app.has(...))` dance.
+
+### Tagging
+
+Group bindings under one or more tag names, then resolve them all at once. Useful for plugin fan-out — exporters, channels, recorders:
+
+```ts
+container.bind('csv.exporter',  () => new CsvExporter())
+container.bind('xlsx.exporter', () => new XlsxExporter())
+container.bind('json.exporter', () => new JsonExporter())
+
+container.tag(['csv.exporter', 'xlsx.exporter', 'json.exporter'], 'reports.exporters')
+// or, additively:
+container.tag('json.exporter', ['reports.exporters', 'serializers.json'])
+
+const exporters = container.tagged<Exporter>('reports.exporters')
+// → [CsvExporter, XlsxExporter, JsonExporter] — resolved in insertion order
+```
+
+`tagged()` returns `[]` for unknown tags (no throw). Singletons stay singletons across `tagged()` calls. Tagging an unbound token is allowed — `tagged()` will throw the standard "cannot resolve" error when one is asked for, matching Laravel's behavior.
+
 ## Middleware Groups
 
 Routes loaded via `withRouting({ web })` are tagged `web`; via `withRouting({ api })` tagged `api`. The server adapter prepends the matching group's middleware stack before per-route middleware — Laravel-style.

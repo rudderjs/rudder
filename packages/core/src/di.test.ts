@@ -520,3 +520,133 @@ describe('Container.setMissingHandler()', () => {
     assert.strictEqual(c.setMissingHandler(null), c)
   })
 })
+
+// ─── Container.tag() / tagged() ────────────────────────────
+
+describe('Container.tag() / tagged()', () => {
+  it('returns [] for an unknown tag (no throw)', () => {
+    const c = new Container()
+    assert.deepStrictEqual(c.tagged('missing'), [])
+  })
+
+  it('groups multiple tokens under one tag (insertion order)', () => {
+    const c = new Container()
+    c.bind('a', () => 'A').bind('b', () => 'B').bind('c', () => 'C')
+    c.tag(['a', 'b', 'c'], 'group')
+    assert.deepStrictEqual(c.tagged<string>('group'), ['A', 'B', 'C'])
+  })
+
+  it('supports a single-token form', () => {
+    const c = new Container()
+    c.bind('a', () => 'A')
+    c.tag('a', 'group')
+    assert.deepStrictEqual(c.tagged<string>('group'), ['A'])
+  })
+
+  it('supports a single-tag form alongside arrays', () => {
+    const c = new Container()
+    c.bind('a', () => 'A')
+    c.tag('a', ['g1', 'g2'])
+    assert.deepStrictEqual(c.tagged<string>('g1'), ['A'])
+    assert.deepStrictEqual(c.tagged<string>('g2'), ['A'])
+  })
+
+  it('is additive — calling tag() twice on the same token is a no-op', () => {
+    const c = new Container()
+    c.bind('a', () => 'A')
+    c.tag('a', 'group')
+    c.tag('a', 'group')
+    assert.deepStrictEqual(c.tagged<string>('group'), ['A'])
+  })
+
+  it('throws on resolve when a tagged token was never bound', () => {
+    const c = new Container()
+    c.tag('unbound', 'group')
+    assert.throws(() => c.tagged('group'), /Cannot resolve/)
+  })
+
+  it('preserves singleton identity across tagged() calls', () => {
+    const c = new Container()
+    c.singleton('svc', () => ({ id: Math.random() }))
+    c.tag('svc', 'group')
+    const [first]  = c.tagged<{ id: number }>('group')
+    const [second] = c.tagged<{ id: number }>('group')
+    assert.strictEqual(first, second)
+  })
+
+  it('returns this for chaining', () => {
+    const c = new Container()
+    assert.strictEqual(c.tag('x', 'g'), c)
+  })
+
+  it('reset() clears tags', () => {
+    const c = new Container()
+    c.bind('a', () => 'A')
+    c.tag('a', 'group')
+    c.reset()
+    assert.deepStrictEqual(c.tagged('group'), [])
+  })
+})
+
+// ─── Container.bindIf / singletonIf / scopedIf ─────────────
+
+describe('Container.bindIf()', () => {
+  it('binds when the token is unbound', () => {
+    const c = new Container()
+    c.bindIf('svc', () => 'first')
+    assert.strictEqual(c.make<string>('svc'), 'first')
+  })
+
+  it('does not overwrite an existing binding', () => {
+    const c = new Container()
+    c.bind('svc', () => 'first')
+    c.bindIf('svc', () => 'second')
+    assert.strictEqual(c.make<string>('svc'), 'first')
+  })
+
+  it('does not overwrite an existing instance', () => {
+    const c = new Container()
+    c.instance('svc', 'fixed')
+    c.bindIf('svc', () => 'replaced')
+    assert.strictEqual(c.make<string>('svc'), 'fixed')
+  })
+
+  it('returns this for chaining', () => {
+    const c = new Container()
+    assert.strictEqual(c.bindIf('x', () => 1), c)
+  })
+})
+
+describe('Container.singletonIf()', () => {
+  it('registers a singleton when unbound', () => {
+    const c = new Container()
+    c.singletonIf('svc', () => ({ id: 1 }))
+    const a = c.make<{ id: number }>('svc')
+    const b = c.make<{ id: number }>('svc')
+    assert.strictEqual(a, b)
+  })
+
+  it('does not overwrite an existing singleton', () => {
+    const c = new Container()
+    c.singleton('svc', () => 'first')
+    c.singletonIf('svc', () => 'second')
+    assert.strictEqual(c.make<string>('svc'), 'first')
+  })
+})
+
+describe('Container.scopedIf()', () => {
+  it('registers a scoped binding when unbound', () => {
+    const c = new Container()
+    c.scopedIf('svc', () => 'scoped-value')
+    c.runScoped(() => {
+      assert.strictEqual(c.make<string>('svc'), 'scoped-value')
+    })
+  })
+
+  it('does not overwrite an existing binding', () => {
+    const c = new Container()
+    c.bind('svc', () => 'original')
+    c.scopedIf('svc', () => 'replaced')
+    assert.strictEqual(c.make<string>('svc'), 'original')
+  })
+})

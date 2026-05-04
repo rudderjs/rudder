@@ -100,6 +100,10 @@ Contextual bindings let you override a dependency for a specific consumer:
 container.when(PhotoController).needs('storage').give(() => new S3Storage())
 ```
 
+Conditional binding helpers (`bindIf` / `singletonIf` / `scopedIf`) register only when the token is currently unbound — used by framework providers so app providers can override defaults by binding first.
+
+Tagging groups bindings under one or more tag names: `container.tag(['csv.exporter', 'xlsx.exporter'], 'reports.exporters')`, then `container.tagged<Exporter>('reports.exporters')` resolves all of them in insertion order. Singletons stay singletons across `tagged()` calls.
+
 ### Middleware
 
 Middleware is configured in `bootstrap/app.ts` via `withMiddleware()`. Each handler receives a `MiddlewareHandler` signature from `@rudderjs/contracts`:
