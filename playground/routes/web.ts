@@ -12,6 +12,7 @@ import { TodoService } from '../app/Modules/Todo/TodoService.js'
 import { User } from '../app/Models/User.js'
 import { Post } from '../app/Models/Post.js'
 import { Video } from '../app/Models/Video.js'
+import { Tag } from '../app/Models/Tag.js'
 import type { Comment } from '../app/Models/Comment.js'
 
 
@@ -110,23 +111,34 @@ Route.get('/demos/todos', async () => {
   return view('demos.todos', { todos })
 })
 
-// GET /demos/polymorphic — morphMany / morphTo demo. Controller loads posts +
-// videos with comments via the morph relation; the view exercises Model.morph()
-// writes and morphTo resolution end-to-end.
+// GET /demos/polymorphic — morphMany / morphTo / morphToMany / morphedByMany.
+// Posts and videos each have polymorphic comments + a polymorphic many-to-many
+// link to a shared Tag table via the `taggable` pivot.
 Route.get('/demos/polymorphic', async () => {
-  const [posts, videos] = await Promise.all([
+  const [posts, videos, tags] = await Promise.all([
     Post.all(),
     Video.all(),
+    Tag.all(),
   ])
 
-  const hydrate = async <T extends { id: number }>(parent: T & { related(name: string): { get(): Promise<unknown[]> } }) => {
-    const comments = await parent.related('comments').get() as Comment[]
-    return { ...parent, comments: comments.map(c => ({ ...c })) }
+  type WithRelated = { related(name: string): { get(): Promise<unknown[]> } }
+
+  const hydrate = async <T extends { id: number }>(parent: T & WithRelated) => {
+    const [comments, ptags] = await Promise.all([
+      parent.related('comments').get() as Promise<Comment[]>,
+      parent.related('tags').get()     as Promise<Tag[]>,
+    ])
+    return {
+      ...parent,
+      comments: comments.map(c => ({ ...c })),
+      tags:     ptags.map(t => ({ ...t })),
+    }
   }
 
   return view('demos.polymorphic', {
-    posts:  await Promise.all(posts.map(p => hydrate(p as Post & { related(n: string): { get(): Promise<unknown[]> } }))),
-    videos: await Promise.all(videos.map(v => hydrate(v as Video & { related(n: string): { get(): Promise<unknown[]> } }))),
+    posts:  await Promise.all(posts.map(p  => hydrate(p as Post  & WithRelated))),
+    videos: await Promise.all(videos.map(v => hydrate(v as Video & WithRelated))),
+    tags:   tags.map(t => ({ ...t })),
   })
 })
 

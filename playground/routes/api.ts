@@ -16,6 +16,7 @@ import { Model } from '@rudderjs/orm'
 import { Post } from '../app/Models/Post.js'
 import { Video } from '../app/Models/Video.js'
 import { Comment } from '../app/Models/Comment.js'
+import { Tag } from '../app/Models/Tag.js'
 import { z } from 'zod'
 
 // Register decorator-based controllers
@@ -328,17 +329,26 @@ Route.delete('/api/cache/views', async (_req, res) => {
 
 // ── /demos/polymorphic — morphMany / morphTo via @rudderjs/orm ──────────────
 
-// GET /api/polymorphic/state — posts + videos with their comments hydrated.
+// GET /api/polymorphic/state — posts + videos with their comments + tags
+// hydrated, plus the flat tag list.
 Route.get('/api/polymorphic/state', async (_req, res) => {
-  const [posts, videos] = await Promise.all([Post.all(), Video.all()])
+  const [posts, videos, tags] = await Promise.all([Post.all(), Video.all(), Tag.all()])
   const hydrate = async (parent: Post | Video) => {
-    const comments = await (parent as unknown as { related(n: string): { get(): Promise<Comment[]> } })
-      .related('comments').get()
-    return { ...parent, comments: comments.map(c => ({ ...c })) }
+    const r = parent as unknown as { related(n: string): { get(): Promise<unknown[]> } }
+    const [comments, ptags] = await Promise.all([
+      r.related('comments').get() as Promise<Comment[]>,
+      r.related('tags').get()     as Promise<Tag[]>,
+    ])
+    return {
+      ...parent,
+      comments: comments.map(c => ({ ...c })),
+      tags:     ptags.map(t => ({ ...t })),
+    }
   }
   res.json({
     posts:  await Promise.all(posts.map(hydrate)),
     videos: await Promise.all(videos.map(hydrate)),
+    tags:   tags.map(t => ({ ...t })),
   })
 })
 
@@ -400,6 +410,79 @@ Route.get('/api/polymorphic/comments/:id/parent', async (req, res) => {
     type:  comment.commentableType,
     id:    parent.id,
     title: 'title' in parent ? parent.title : parent.url,
+  })
+})
+
+// ── /demos/polymorphic — morphToMany / morphedByMany tag endpoints ─────────
+
+// POST /api/polymorphic/tags — create a tag.
+Route.post('/api/polymorphic/tags', async (req, res) => {
+  const { name } = (req.body ?? {}) as { name?: string }
+  if (!name) return res.status(400).json({ error: 'name required' })
+  const tag = await Tag.create({ name })
+  res.status(201).json({ ...tag })
+})
+
+// POST /api/polymorphic/posts/:id/tags — attach a tag to a post via
+// morphToMany. The pivot row carries taggableType='Post' automatically.
+Route.post('/api/polymorphic/posts/:id/tags', async (req, res) => {
+  const idParam = req.params['id']
+  if (!idParam) return res.status(400).json({ error: 'id required' })
+  const post = await Post.find(Number(idParam))
+  if (!post) return res.status(404).json({ error: 'post not found' })
+  const { tagId } = (req.body ?? {}) as { tagId?: number }
+  if (typeof tagId !== 'number') return res.status(400).json({ error: 'tagId required' })
+  await Model.morphToMany(post, 'tags').attach([tagId])
+  res.json({ ok: true })
+})
+
+// POST /api/polymorphic/videos/:id/tags — attach a tag to a video.
+Route.post('/api/polymorphic/videos/:id/tags', async (req, res) => {
+  const idParam = req.params['id']
+  if (!idParam) return res.status(400).json({ error: 'id required' })
+  const video = await Video.find(Number(idParam))
+  if (!video) return res.status(404).json({ error: 'video not found' })
+  const { tagId } = (req.body ?? {}) as { tagId?: number }
+  if (typeof tagId !== 'number') return res.status(400).json({ error: 'tagId required' })
+  await Model.morphToMany(video, 'tags').attach([tagId])
+  res.json({ ok: true })
+})
+
+// DELETE /api/polymorphic/posts/:id/tags/:tagId — detach a tag (scoped to
+// taggableType='Post' so videos sharing the same tag are untouched).
+Route.delete('/api/polymorphic/posts/:id/tags/:tagId', async (req, res) => {
+  const id = req.params['id']; const tagId = req.params['tagId']
+  if (!id || !tagId) return res.status(400).json({ error: 'id/tagId required' })
+  const post = await Post.find(Number(id))
+  if (!post) return res.status(404).json({ error: 'post not found' })
+  await Model.morphToMany(post, 'tags').detach([Number(tagId)])
+  res.json({ ok: true })
+})
+
+Route.delete('/api/polymorphic/videos/:id/tags/:tagId', async (req, res) => {
+  const id = req.params['id']; const tagId = req.params['tagId']
+  if (!id || !tagId) return res.status(400).json({ error: 'id/tagId required' })
+  const video = await Video.find(Number(id))
+  if (!video) return res.status(404).json({ error: 'video not found' })
+  await Model.morphToMany(video, 'tags').detach([Number(tagId)])
+  res.json({ ok: true })
+})
+
+// GET /api/polymorphic/tags/:id/items — inverse fan-out via morphedByMany.
+// One pivot table; two scoped reads (one per concrete inverse class).
+Route.get('/api/polymorphic/tags/:id/items', async (req, res) => {
+  const idParam = req.params['id']
+  if (!idParam) return res.status(400).json({ error: 'id required' })
+  const tag = await Tag.find(Number(idParam))
+  if (!tag) return res.status(404).json({ error: 'tag not found' })
+  const r = tag as unknown as { related(n: string): { get(): Promise<unknown[]> } }
+  const [posts, videos] = await Promise.all([
+    r.related('posts').get()  as Promise<Post[]>,
+    r.related('videos').get() as Promise<Video[]>,
+  ])
+  res.json({
+    posts:  posts.map(p  => ({ ...p })),
+    videos: videos.map(v => ({ ...v })),
   })
 })
 

@@ -998,19 +998,29 @@ describe('getTemplates() — demos', () => {
     assert.ok(!files['routes/web.ts']!.includes("view('demos.todos'"))
   })
 
-  it('polymorphic demo + ORM → Post/Video/Comment models + Prisma block + /demos/polymorphic + API', () => {
+  it('polymorphic demo + ORM → Post/Video/Comment/Tag models + Prisma block + /demos/polymorphic + API', () => {
     const files = getTemplates(ctx({ packages: noPkgs, demos: ['polymorphic'] }))
     assert.ok('app/Views/Demos/Polymorphic.tsx' in files)
     assert.ok('app/Models/Post.ts' in files)
     assert.ok('app/Models/Video.ts' in files)
     assert.ok('app/Models/Comment.ts' in files)
+    assert.ok('app/Models/Tag.ts' in files)
     assert.match(files['app/Models/Comment.ts']!, /morphTo/)
     assert.match(files['app/Models/Post.ts']!,    /morphMany/)
+    assert.match(files['app/Models/Post.ts']!,    /morphToMany/)
+    assert.match(files['app/Models/Video.ts']!,   /morphToMany/)
+    assert.match(files['app/Models/Tag.ts']!,     /morphedByMany/)
     assert.match(files['prisma/schema/modules.prisma']!, /model Comment \{/)
     assert.match(files['prisma/schema/modules.prisma']!, /commentableId/)
+    assert.match(files['prisma/schema/modules.prisma']!, /model Tag \{/)
+    assert.match(files['prisma/schema/modules.prisma']!, /model Taggable \{/)
+    assert.match(files['prisma/schema/modules.prisma']!, /taggableType/)
     assert.ok(files['routes/web.ts']!.includes("view('demos.polymorphic'"))
     assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/state"))
     assert.ok(files['routes/api.ts']!.includes("Model.morph('commentable'"))
+    assert.ok(files['routes/api.ts']!.includes("Model.morphToMany"))
+    assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/tags"))
+    assert.ok(files['routes/api.ts']!.includes("/api/polymorphic/tags/:id/items"))
   })
 
   it('polymorphic demo selected but ORM=none → demo dropped (registry gating)', () => {

@@ -52,7 +52,7 @@ export const DEMOS: ReadonlyArray<DemoSpec> = [
     value:       'polymorphic',
     label:       'Polymorphic relations',
     hint:        'requires ORM',
-    description: 'morphMany + morphTo via @rudderjs/orm. One Comment table belongs to either a Post or a Video. Demonstrates Model.morph() write helper + closed types() resolution.',
+    description: 'morphMany + morphTo + morphToMany / morphedByMany via @rudderjs/orm. One Comment table belongs to either a Post or a Video; Posts and Videos share a Tag table through a single polymorphic pivot. End-to-end demo of every polymorphic relation type.',
     packages:    ['@rudderjs/orm'],
     requiresOrm: true,
   },

@@ -195,7 +195,7 @@ await Comment.create({
 
 The discriminator stored in `{morphName}Type` defaults to the parent's class name (`'Post'`, `'Video'`). Override per-class with `static morphAlias = 'post'` to decouple persisted values from JS class names — useful for rename-safe storage. Once set and data exists, treat it as immutable. In dev mode (`NODE_ENV !== 'production'`), `morphTo` resolution checks the `types` list for duplicate discriminators and throws if two classes resolve to the same value.
 
-`belongsToMany` and polymorphic v1 limitations: pivot columns are not surfaced on read results (write side only), no `withTimestamps`, no `morphToMany` / `morphedByMany`, no fluent eager-load (`User.with('comments.commentable')`) — drop to the adapter (Prisma `include`) for those. Mutations on the deferred read query (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw — write through the related model directly.
+`belongsToMany` and polymorphic v1 limitations: pivot columns are not surfaced on read results (write side only), no `withTimestamps`, no fluent eager-load (`User.with('comments.commentable')`) — drop to the adapter (Prisma `include`) for that. Mutations on the deferred read query (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw — write through the related model directly. `morphToMany` / `morphedByMany` are supported with the same `attach` / `detach` / `sync` accessor as `belongsToMany`, plus discriminator-scoped pivot reads/writes — see the [polymorphic many-to-many guide](https://rudderjs.com/docs/database/models#polymorphic-many-to-many-morphtomany-morphedbymany).
 
 ---
 
