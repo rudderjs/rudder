@@ -44,9 +44,9 @@ RudderJS is the middle ground — **batteries-included, modular, UI-agnostic, fu
 
 - **Controller-returned views** — `return view('dashboard', { users })` renders a typed React/Vue/Solid component through Vike SSR with full SPA navigation. No Inertia adapter, no JSON envelope, ~400 bytes per nav.
 - **AI-native from day one** — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure for text; Cohere, Jina for reranking + embeddings), agents with tools, streaming, middleware, conversations, attachments, MCP server support, queue integration.
-- **Real-time on one port** — WebSocket channels (`@rudderjs/broadcast`), Yjs CRDT collab (`@rudderjs/sync`), and HTTP all share the same server. No separate process, no proxy.
+- **Real-time on one port** — WebSocket channels ([`@rudderjs/broadcast`](./packages/broadcast)), Yjs CRDT collab ([`@rudderjs/sync`](./packages/sync)), and HTTP all share the same server. No separate process, no proxy.
 - **Service-oriented architecture** — DI container, service providers, gates & policies, an active-record ORM (Prisma or Drizzle), scheduling, queues, notifications, and a built-in inspector — all wired through one bootstrap file and one `rudder` CLI.
-- **Pay-as-you-go modularity** — 45 first-party `@rudderjs/*` packages. Start with 3 (core, router, server-hono), bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3).
+- **Pay-as-you-go modularity** — 46 first-party [`@rudderjs/*`](#packages-46) packages. Start with 3 ([`core`](./packages/core), [`router`](./packages/router), [`server-hono`](./packages/server-hono)), bolt on what you need. Swap adapters (Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3).
 - **TypeScript-first, strict by default** — `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime.
 
 ---
@@ -188,9 +188,9 @@ Middleware (auth, rate limiting, CSRF, form validation) runs **before** the view
 
 > **Why not Inertia?** Inertia ships a ~30kb client runtime, a page-object JSON protocol on every navigation, and an adapter layer between your controller and the renderer. With Laravel you also run a *second* Node SSR process and pay an intra-server HTTP hop on every request. RudderJS is pure Vike in a single Node process: props are JS objects passed by reference, client hydration uses Vike's native path, no protocol, no adapter, no second daemon to run or monitor in production.
 
-**Framework support**: React (`vike-react`), Vue (`vike-vue`), Solid (`vike-solid`), and a vanilla HTML-string mode — zero client JS, perfect for admin reports, email bodies, webhook responses. The scanner auto-detects which renderer is installed. Vanilla views use `@rudderjs/view`'s `html\`\`` tagged template, which auto-escapes interpolations and composes via `SafeString`.
+**Framework support**: React (`vike-react`), Vue (`vike-vue`), Solid (`vike-solid`), and a vanilla HTML-string mode — zero client JS, perfect for admin reports, email bodies, webhook responses. The scanner auto-detects which renderer is installed. Vanilla views use [`@rudderjs/view`](./packages/view)'s `html\`\`` tagged template, which auto-escapes interpolations and composes via `SafeString`.
 
-**Packages that ship views** follow a consistent shape: `views/<framework>/<Name>.{tsx,vue}` + a `registerXRoutes(router, opts)` helper. `@rudderjs/auth` is the reference implementation — `registerAuthRoutes(Route, { middleware })` wires `/login`, `/register`, `/forgot-password`, `/reset-password` in one line, with the views vendored into `app/Views/Auth/` for the consumer to customize.
+**Packages that ship views** follow a consistent shape: `views/<framework>/<Name>.{tsx,vue}` + a `registerXRoutes(router, opts)` helper. [`@rudderjs/auth`](./packages/auth) is the reference implementation — `registerAuthRoutes(Route, { middleware })` wires `/login`, `/register`, `/forgot-password`, `/reset-password` in one line, with the views vendored into `app/Views/Auth/` for the consumer to customize.
 
 See [`@rudderjs/view`](./packages/view) for the full reference.
 
@@ -419,7 +419,61 @@ provider.awareness.on('change', () => {
 
 HTTP, WebSocket channels, and CRDT sync all share the same port — no separate process or proxy needed.
 
-### 11. Debug helpers
+### 11. AI agents — providers, tools, streaming
+
+```ts
+// config/ai.ts
+export default {
+  default: 'anthropic/claude-sonnet-4-5',
+  providers: {
+    anthropic: { driver: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! },
+    openai:    { driver: 'openai',    apiKey: process.env.OPENAI_API_KEY! },
+  },
+}
+```
+
+```ts
+// app/Agents/SearchAgent.ts
+import { Agent, toolDefinition, stepCountIs } from '@rudderjs/ai'
+import type { HasTools } from '@rudderjs/ai'
+import { z } from 'zod'
+import { User } from '../Models/User.js'
+
+const searchUsers = toolDefinition({
+  name: 'search_users',
+  description: 'Search users by name',
+  inputSchema: z.object({ query: z.string() }),
+}).server(async ({ query }) => User.where('name', 'like', `%${query}%`).get())
+
+export class SearchAgent extends Agent implements HasTools {
+  instructions() { return 'You help find users in the system.' }
+  model()        { return 'anthropic/claude-sonnet-4-5' }
+  tools()        { return [searchUsers] }
+  stopWhen()     { return stepCountIs(5) }
+}
+```
+
+```ts
+// Use it from any route
+import { SearchAgent } from '../app/Agents/SearchAgent.js'
+
+Route.post('/api/search', async (req, res) => {
+  const response = await new SearchAgent().prompt(req.body.query)
+  return res.json({ text: response.text })
+})
+```
+
+Or call any provider directly with the `AI` facade:
+
+```ts
+import { AI } from '@rudderjs/ai'
+
+const summary = await AI.prompt('Summarize this article: …')
+```
+
+Streaming responses, structured output (Zod schema), conversation memory, middleware, MCP tools, and approval gates for sensitive actions all ship in [`@rudderjs/ai`](./packages/ai).
+
+### 12. Debug helpers
 
 ```ts
 import { config, dump, dd, app, resolve } from '@rudderjs/core'
@@ -442,84 +496,84 @@ const svc = resolve<UserService>(UserService)
 ### Foundation (7)
 | Package | Description |
 |---|---|
-| `@rudderjs/core` | Application bootstrap, DI container, Events, ServiceProvider lifecycle |
-| `@rudderjs/router` | Fluent + decorator-based HTTP routing |
-| `@rudderjs/middleware` | Pipeline, CORS, logger, CSRF, rate limiting |
-| `@rudderjs/console` | Rudder CLI registry, Command base class |
-| `@rudderjs/cli` | CLI runner — dispatches `make:*` and domain commands (`queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, …) shipped by their owning packages |
-| `@rudderjs/support` | Env, Collection, ConfigRepository, helpers |
-| `@rudderjs/contracts` | Shared TypeScript types (no runtime) |
+| [`@rudderjs/core`](./packages/core) | Application bootstrap, DI container, Events, ServiceProvider lifecycle |
+| [`@rudderjs/router`](./packages/router) | Fluent + decorator-based HTTP routing |
+| [`@rudderjs/middleware`](./packages/middleware) | Pipeline, CORS, logger, CSRF, rate limiting |
+| [`@rudderjs/console`](./packages/console) | Rudder CLI registry, Command base class |
+| [`@rudderjs/cli`](./packages/cli) | CLI runner — dispatches `make:*` and domain commands (`queue:*`, `mail:*`, `mcp:*`, `passport:*`, `db:*`, `storage:*`, …) shipped by their owning packages |
+| [`@rudderjs/support`](./packages/support) | Env, Collection, ConfigRepository, helpers |
+| [`@rudderjs/contracts`](./packages/contracts) | Shared TypeScript types (no runtime) |
 
 ### HTTP & Frontend (4)
 | Package | Description |
 |---|---|
-| `@rudderjs/server-hono` | Hono HTTP adapter |
-| `@rudderjs/session` | Cookie + Redis session drivers, `Session` facade — auto-installs on the `web` route group |
-| `@rudderjs/view` | `view('id', props)` controller responses via Vike SSR |
-| `@rudderjs/vite` | Vite + Vike plugin with SSR externals and RudderJS integration |
+| [`@rudderjs/server-hono`](./packages/server-hono) | Hono HTTP adapter |
+| [`@rudderjs/session`](./packages/session) | Cookie + Redis session drivers, `Session` facade — auto-installs on the `web` route group |
+| [`@rudderjs/view`](./packages/view) | `view('id', props)` controller responses via Vike SSR |
+| [`@rudderjs/vite`](./packages/vite) | Vite + Vike plugin with SSR externals and RudderJS integration |
 
 ### Database (3)
 | Package | Description |
 |---|---|
-| `@rudderjs/orm` | Model base class, ModelRegistry, QueryBuilder |
-| `@rudderjs/orm-prisma` | Prisma adapter (SQLite, PostgreSQL, MySQL) |
-| `@rudderjs/orm-drizzle` | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
+| [`@rudderjs/orm`](./packages/orm) | Model base class, ModelRegistry, QueryBuilder |
+| [`@rudderjs/orm-prisma`](./packages/orm-prisma) | Prisma adapter (SQLite, PostgreSQL, MySQL) |
+| [`@rudderjs/orm-drizzle`](./packages/orm-drizzle) | Drizzle adapter (SQLite, PostgreSQL, libSQL) |
 
 ### Auth & Security (7)
 | Package | Description |
 |---|---|
-| `@rudderjs/hash` | Password hashing (bcrypt, argon2) |
-| `@rudderjs/crypt` | Symmetric encryption (AES-256-CBC) |
-| `@rudderjs/auth` | Authentication (guards, providers), Authorization (gates, policies), Password resets |
-| `@rudderjs/sanctum` | API token authentication with abilities |
-| `@rudderjs/passport` | OAuth 2 server (JWT RS256) — auth code + PKCE, client credentials, refresh, device code |
-| `@rudderjs/socialite` | OAuth providers (GitHub, Google, Facebook, Apple) |
-| `@rudderjs/cashier-paddle` | Paddle billing — Billable mixin, subscriptions, signed webhooks, checkout, refunds, price previews |
+| [`@rudderjs/hash`](./packages/hash) | Password hashing (bcrypt, argon2) |
+| [`@rudderjs/crypt`](./packages/crypt) | Symmetric encryption (AES-256-CBC) |
+| [`@rudderjs/auth`](./packages/auth) | Authentication (guards, providers), Authorization (gates, policies), Password resets |
+| [`@rudderjs/sanctum`](./packages/sanctum) | API token authentication with abilities |
+| [`@rudderjs/passport`](./packages/passport) | OAuth 2 server (JWT RS256) — auth code + PKCE, client credentials, refresh, device code |
+| [`@rudderjs/socialite`](./packages/socialite) | OAuth providers (GitHub, Google, Facebook, Apple) |
+| [`@rudderjs/cashier-paddle`](./packages/cashier-paddle) | Paddle billing — Billable mixin, subscriptions, signed webhooks, checkout, refunds, price previews |
 
 ### Infrastructure (11)
 | Package | Description |
 |---|---|
-| `@rudderjs/queue` | Job base class, queue contract |
-| `@rudderjs/queue-bullmq` | BullMQ Redis-backed queue |
-| `@rudderjs/queue-inngest` | Inngest serverless queue |
-| `@rudderjs/cache` | Cache facade, memory + Redis drivers (`ioredis` optional) |
-| `@rudderjs/storage` | Storage facade, local + S3/R2/MinIO (`@aws-sdk/client-s3` optional) |
-| `@rudderjs/mail` | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
-| `@rudderjs/notification` | Multi-channel notifications (mail, database) |
-| `@rudderjs/schedule` | Task scheduler, cron-based |
-| `@rudderjs/broadcast` | WebSocket channels — pub/sub, private, presence |
-| `@rudderjs/sync` | Yjs CRDT real-time document sync (editor adapters under subpaths: `@rudderjs/sync/lexical`, `/tiptap`) |
-| `@rudderjs/localization` | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
+| [`@rudderjs/queue`](./packages/queue) | Job base class, queue contract |
+| [`@rudderjs/queue-bullmq`](./packages/queue-bullmq) | BullMQ Redis-backed queue |
+| [`@rudderjs/queue-inngest`](./packages/queue-inngest) | Inngest serverless queue |
+| [`@rudderjs/cache`](./packages/cache) | Cache facade, memory + Redis drivers (`ioredis` optional) |
+| [`@rudderjs/storage`](./packages/storage) | Storage facade, local + S3/R2/MinIO (`@aws-sdk/client-s3` optional) |
+| [`@rudderjs/mail`](./packages/mail) | Mailable, Mail facade, log + SMTP drivers (`nodemailer` optional) |
+| [`@rudderjs/notification`](./packages/notification) | Multi-channel notifications (mail, database) |
+| [`@rudderjs/schedule`](./packages/schedule) | Task scheduler, cron-based |
+| [`@rudderjs/broadcast`](./packages/broadcast) | WebSocket channels — pub/sub, private, presence |
+| [`@rudderjs/sync`](./packages/sync) | Yjs CRDT real-time document sync (editor adapters under subpaths: `@rudderjs/sync/lexical`, `/tiptap`) |
+| [`@rudderjs/localization`](./packages/localization) | i18n — `trans()`, `setLocale()`, locale-aware middleware, JSON translation files |
 
 ### Developer Experience (7)
 | Package | Description |
 |---|---|
-| `@rudderjs/log` | Structured logging — channels (console, file, daily, stack), RFC 5424 levels, formatters, context |
-| `@rudderjs/http` | Fluent HTTP client — retries, timeouts, pools, interceptors, `Http.fake()` |
-| `@rudderjs/context` | Request-scoped context — ALS-backed data bag, auto-propagates to logs and queued jobs |
-| `@rudderjs/pennant` | Feature flags — define, scope to users/teams, Lottery gradual rollout, `Feature.fake()` |
-| `@rudderjs/process` | Shell execution — run, pool, pipe, timeouts, real-time output, `Process.fake()` |
-| `@rudderjs/concurrency` | Parallel execution via worker threads, deferred fire-and-forget, sync driver for testing |
-| `@rudderjs/testing` | TestCase, TestResponse assertions, RefreshDatabase, WithFaker, HTTP request helpers |
+| [`@rudderjs/log`](./packages/log) | Structured logging — channels (console, file, daily, stack), RFC 5424 levels, formatters, context |
+| [`@rudderjs/http`](./packages/http) | Fluent HTTP client — retries, timeouts, pools, interceptors, `Http.fake()` |
+| [`@rudderjs/context`](./packages/context) | Request-scoped context — ALS-backed data bag, auto-propagates to logs and queued jobs |
+| [`@rudderjs/pennant`](./packages/pennant) | Feature flags — define, scope to users/teams, Lottery gradual rollout, `Feature.fake()` |
+| [`@rudderjs/process`](./packages/process) | Shell execution — run, pool, pipe, timeouts, real-time output, `Process.fake()` |
+| [`@rudderjs/concurrency`](./packages/concurrency) | Parallel execution via worker threads, deferred fire-and-forget, sync driver for testing |
+| [`@rudderjs/testing`](./packages/testing) | TestCase, TestResponse assertions, RefreshDatabase, WithFaker, HTTP request helpers |
 
 ### Media (1)
 | Package | Description |
 |---|---|
-| `@rudderjs/image` | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
+| [`@rudderjs/image`](./packages/image) | Fluent image processing — resize, crop, convert, optimize (sharp wrapper) |
 
 ### Monitoring (3)
 | Package | Description |
 |---|---|
-| `@rudderjs/telescope` | Development inspector — 19 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, AI agent runs, MCP server activity, dumps, WebSocket lifecycle, Yjs CRDT events |
-| `@rudderjs/pulse` | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
-| `@rudderjs/horizon` | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
+| [`@rudderjs/telescope`](./packages/telescope) | Development inspector — 19 watchers: requests, queries, jobs, exceptions, logs, mail, notifications, events, cache, schedule, models, commands, outgoing HTTP, authorization gates, AI agent runs, MCP server activity, dumps, WebSocket lifecycle, Yjs CRDT events |
+| [`@rudderjs/pulse`](./packages/pulse) | Application metrics — request throughput/duration, queue metrics, cache hit rates, active users, server stats |
+| [`@rudderjs/horizon`](./packages/horizon) | Queue monitor — full job lifecycle, per-queue metrics, worker status, failed job retry/delete |
 
 ### AI & Tooling (3)
 | Package | Description |
 |---|---|
-| `@rudderjs/ai` | AI engine — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure for text; Cohere, Jina for reranking + embeddings), Agent class, tool system, streaming, middleware |
-| `@rudderjs/boost` | AI dev tools — MCP server for Claude Code, Cursor, Copilot |
-| `@rudderjs/mcp` | MCP server framework — build custom MCP servers with decorators and testing utilities |
+| [`@rudderjs/ai`](./packages/ai) | AI engine — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure for text; Cohere, Jina for reranking + embeddings), Agent class, tool system, streaming, middleware |
+| [`@rudderjs/boost`](./packages/boost) | AI dev tools — MCP server for Claude Code, Cursor, Copilot |
+| [`@rudderjs/mcp`](./packages/mcp) | MCP server framework — build custom MCP servers with decorators and testing utilities |
 
 ---
 
