@@ -265,8 +265,65 @@ When `@rudderjs/log` is installed, `report()` routes through the log channel aut
 | Error type | Response |
 |---|---|
 | `ValidationError` | `422` JSON `{ message, errors }` |
+| `ValidationResponse` | The wrapped `Response` is emitted directly (used by `FormRequest.failedValidation()` short-circuit) |
 | `HttpException` | Status from `statusCode`, JSON or HTML based on `Accept` |
 | Unhandled error | Reported via reporter, then `500` (with stack in debug mode) |
+
+## FormRequest
+
+Subclass `FormRequest`, define a Zod schema in `rules()`, and call `validate(req)`. The merged `body + query + params` flows through five optional lifecycle hooks that mirror Laravel's `FormRequest`:
+
+```ts
+import { FormRequest, z } from '@rudderjs/core'
+
+const schema = z.object({
+  email:    z.string().email(),
+  password: z.string().min(8),
+})
+
+class StoreUser extends FormRequest<typeof schema> {
+  rules() { return schema }
+
+  // Mutate input before parsing — sync only.
+  protected override prepareForValidation(input: Record<string, unknown>) {
+    if (typeof input['email'] === 'string') input['email'] = input['email'].toLowerCase().trim()
+  }
+
+  // Per-request message overrides keyed by dot-path. Static string OR function.
+  protected override messages() {
+    return {
+      email:    'Please enter a valid email address.',
+      password: (issue: z.core.$ZodRawIssue) =>
+        issue.code === 'too_small' ? 'Min 8 characters.' : 'Invalid password.',
+    }
+  }
+
+  // Cross-field checks against parsed data. Run serially after parse; collect all errors.
+  protected override after() {
+    return [
+      ({ data, addError }) => {
+        if (data.email.endsWith('@example.com')) addError('email', 'No example.com addresses')
+      },
+    ]
+  }
+
+  // Final transform after all checks pass; return value replaces resolved data.
+  protected override async passedValidation(data: z.infer<typeof schema>) {
+    return { ...data, password: await Bcrypt.hash(data.password) }
+  }
+
+  // Customize the failure path. Default throws `ValidationError`; return a `Response` to short-circuit.
+  protected override failedValidation(errors: Record<string, string[]>): never {
+    throw new ValidationError(errors)
+  }
+}
+```
+
+**Pipeline order:** `authorize → prepareForValidation → rules.parse → after → passedValidation`. Both Zod parse failures and `after()` errors converge through `failedValidation(errors)`.
+
+**Short-circuit responses:** `failedValidation` may `return` a Web `Response` to bypass the default 422 — the framework's exception handler unwraps the `ValidationResponse` sentinel and emits the wrapped Response directly.
+
+**Type inference:** parameterize the class with the schema type (`extends FormRequest<typeof schema>`) so `data` in `after()`/`passedValidation` is inferred as `z.infer<typeof schema>`. Without the parameter, `data` is typed as `unknown`.
 
 ## Notes
 

@@ -2,7 +2,8 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { attachInputAccessors } from '@rudderjs/contracts'
-import { z, validate, validateWith, FormRequest, ValidationError } from './validation.js'
+import { z, validate, validateWith, FormRequest, ValidationError, ValidationResponse } from './validation.js'
+import type { AfterCallback } from './validation.js'
 
 // ─── Test helpers ──────────────────────────────────────────
 
@@ -276,6 +277,294 @@ describe('FormRequest', () => {
     }
     const data = await new Req().validate(makeReq({ body: null, query: { role: 'user' } })) as { role: string }
     assert.strictEqual(data.role, 'user')
+  })
+
+  // ─── prepareForValidation ────────────────────────────────
+
+  it('prepareForValidation: mutates input in place (void return)', async () => {
+    class Req extends FormRequest {
+      override prepareForValidation(input: Record<string, unknown>) {
+        if (typeof input['email'] === 'string') input['email'] = (input['email'] as string).toLowerCase()
+      }
+      rules() { return z.object({ email: z.string().email() }) }
+    }
+    const data = await new Req().validate(makeReq({ body: { email: 'BOB@EXAMPLE.COM' } })) as { email: string }
+    assert.strictEqual(data.email, 'bob@example.com')
+  })
+
+  it('prepareForValidation: returning new object replaces input', async () => {
+    class Req extends FormRequest {
+      override prepareForValidation(_input: Record<string, unknown>) {
+        return { name: 'overridden' }
+      }
+      rules() { return z.object({ name: z.string() }) }
+    }
+    const data = await new Req().validate(makeReq({ body: { name: 'original' } })) as { name: string }
+    assert.strictEqual(data.name, 'overridden')
+  })
+
+  it('prepareForValidation: runs before rules() is called', async () => {
+    const order: string[] = []
+    class Req extends FormRequest {
+      override prepareForValidation() { order.push('prepare') }
+      rules() {
+        order.push('rules')
+        return z.object({ x: z.string() })
+      }
+    }
+    await new Req().validate(makeReq({ body: { x: 'ok' } }))
+    // rules() is called twice — once for the schema build inside validate(), once when registered.
+    // Just assert prepare came before the first rules() call.
+    assert.strictEqual(order[0], 'prepare')
+    assert.ok(order.includes('rules'))
+  })
+
+  // ─── passedValidation ────────────────────────────────────
+
+  it('passedValidation: returning Record replaces resolved data', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ password: z.string() }) }
+      override passedValidation(data: { password: string }) {
+        return { ...data, password: `hashed:${data.password}` }
+      }
+    }
+    const data = await new Req().validate(makeReq({ body: { password: 'secret' } })) as { password: string }
+    assert.strictEqual(data.password, 'hashed:secret')
+  })
+
+  it('passedValidation: void return preserves parsed data', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override passedValidation() { /* no-op */ }
+    }
+    const data = await new Req().validate(makeReq({ body: { x: 'ok' } })) as { x: string }
+    assert.strictEqual(data.x, 'ok')
+  })
+
+  it('passedValidation: async return is awaited', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override async passedValidation(data: { x: string }) {
+        await new Promise((r) => setTimeout(r, 1))
+        return { x: `async:${data.x}` }
+      }
+    }
+    const data = await new Req().validate(makeReq({ body: { x: 'ok' } })) as { x: string }
+    assert.strictEqual(data.x, 'async:ok')
+  })
+
+  // ─── after() ────────────────────────────────────────────
+
+  it('after: empty array resolves normally', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override after() { return [] }
+    }
+    const data = await new Req().validate(makeReq({ body: { x: 'ok' } })) as { x: string }
+    assert.strictEqual(data.x, 'ok')
+  })
+
+  it('after: addError throws ValidationError with that field', async () => {
+    const schema = z.object({ from: z.string(), to: z.string() })
+    type Data = z.infer<typeof schema>
+    class Req extends FormRequest<typeof schema> {
+      rules() { return schema }
+      override after(): Array<AfterCallback<Data>> {
+        return [({ data, addError }) => {
+          if (data.from === data.to) addError('to', 'Cannot transfer to the same account')
+        }]
+      }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { from: 'a', to: 'a' } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['to'], ['Cannot transfer to the same account'])
+        return true
+      }
+    )
+  })
+
+  it('after: collects errors across multiple callbacks (one round-trip)', async () => {
+    const schema = z.object({ a: z.string(), b: z.string() })
+    type Data = z.infer<typeof schema>
+    class Req extends FormRequest<typeof schema> {
+      rules() { return schema }
+      override after(): Array<AfterCallback<Data>> {
+        return [
+          ({ addError }) => addError('a', 'a is bad'),
+          ({ addError }) => addError('b', 'b is bad'),
+        ]
+      }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { a: '1', b: '2' } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['a'], ['a is bad'])
+        assert.deepStrictEqual(err.errors['b'], ['b is bad'])
+        return true
+      }
+    )
+  })
+
+  it('after: async callbacks are awaited serially', async () => {
+    const order: string[] = []
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override after() {
+        return [
+          async () => {
+            await new Promise((r) => setTimeout(r, 5))
+            order.push('first')
+          },
+          () => {
+            order.push('second')
+          },
+        ]
+      }
+    }
+    await new Req().validate(makeReq({ body: { x: 'ok' } }))
+    assert.deepStrictEqual(order, ['first', 'second'])
+  })
+
+  // ─── failedValidation ────────────────────────────────────
+
+  it('failedValidation: override can throw a custom error', async () => {
+    class CustomError extends Error {}
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override failedValidation(_errors: Record<string, string[]>): never {
+        throw new CustomError('nope')
+      }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { x: 123 } })),
+      (err: unknown) => err instanceof CustomError
+    )
+  })
+
+  it('failedValidation: returning Response throws ValidationResponse wrapper', async () => {
+    const customResponse = new Response('custom body', { status: 418 })
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override failedValidation(_errors: Record<string, string[]>): Response {
+        return customResponse
+      }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { x: 123 } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationResponse)
+        assert.strictEqual(err.response, customResponse)
+        return true
+      }
+    )
+  })
+
+  it('failedValidation: fires for after()-added errors too', async () => {
+    let capturedErrors: Record<string, string[]> | null = null
+    const schema = z.object({ x: z.string() })
+    type Data = z.infer<typeof schema>
+    class Req extends FormRequest<typeof schema> {
+      rules() { return schema }
+      override after(): Array<AfterCallback<Data>> {
+        return [({ addError }) => addError('x', 'cross-field nope')]
+      }
+      override failedValidation(errors: Record<string, string[]>): never {
+        capturedErrors = errors
+        throw new ValidationError(errors)
+      }
+    }
+    await assert.rejects(async () => new Req().validate(makeReq({ body: { x: 'ok' } })))
+    assert.deepStrictEqual(capturedErrors, { x: ['cross-field nope'] })
+  })
+
+  // ─── messages() ─────────────────────────────────────────
+
+  it('messages: static string overrides Zod default', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ email: z.string() }) }
+      override messages() { return { email: 'Custom email message' } }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { email: 123 } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['email'], ['Custom email message'])
+        return true
+      }
+    )
+  })
+
+  it('messages: function form receives the issue', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ age: z.number().int().min(18) }) }
+      override messages() {
+        return {
+          age: (issue: z.core.$ZodRawIssue) =>
+            issue.code === 'too_small' ? 'too young' : `bad: ${issue.code}`,
+        }
+      }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { age: 15 } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['age'], ['too young'])
+        return true
+      }
+    )
+  })
+
+  it('messages: no entry for path falls through to Zod default', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ name: z.string(), age: z.number() }) }
+      override messages() { return { age: 'Custom age message' } }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { name: 123, age: 'x' } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['age'], ['Custom age message'])
+        // name should NOT be the custom message — it should be Zod's default
+        assert.ok(err.errors['name'] && err.errors['name'][0] !== 'Custom age message')
+        return true
+      }
+    )
+  })
+
+  // ─── Order of operations ─────────────────────────────────
+
+  it('order: prepareForValidation → parse → after → passedValidation', async () => {
+    const order: string[] = []
+    class Req extends FormRequest {
+      override prepareForValidation() { order.push('prepare') }
+      rules() {
+        order.push('rules')
+        return z.object({ x: z.string() })
+      }
+      override after() {
+        return [() => { order.push('after') }]
+      }
+      override passedValidation() { order.push('passed') }
+    }
+    await new Req().validate(makeReq({ body: { x: 'ok' } }))
+    // First entry must be prepare
+    assert.strictEqual(order[0], 'prepare')
+    // 'after' must come before 'passed'
+    const afterIdx = order.indexOf('after')
+    const passedIdx = order.indexOf('passed')
+    assert.ok(afterIdx > -1 && passedIdx > -1 && afterIdx < passedIdx)
+  })
+
+  it('regression: existing rules() + authorize() subclass still works', async () => {
+    class Req extends FormRequest {
+      rules() { return z.object({ x: z.string() }) }
+      override authorize() { return true }
+    }
+    const data = await new Req().validate(makeReq({ body: { x: 'ok' } })) as { x: string }
+    assert.strictEqual(data.x, 'ok')
   })
 })
 
