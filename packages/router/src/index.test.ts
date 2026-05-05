@@ -695,6 +695,50 @@ describe('RouteBuilder.where()', () => {
     assert.strictEqual(called, true)
     assert.deepStrictEqual((req as unknown as { bound: Record<string, unknown> }).bound, { id: { ok: true } })
   })
+
+  it('whereIn handles values that regex-escape to `\\}` without breaking route()', () => {
+    // `}` is regex-escaped to `\}`, which a naive balanced-brace scanner
+    // would treat as a block terminator and corrupt the param extraction
+    // — the regression was a path like `/items/a}bc)}` (junk appended).
+    router.get('/items/:id', handler)
+      .whereIn('id', ['ok', 'a}b'])
+      .name('rb.brace.escape')
+    assert.strictEqual(route('rb.brace.escape', { id: 'ok' }), '/items/ok')
+    router.reset()
+  })
+
+  it('repeat where() after whereIn-with-`}` overwrites cleanly (escape-aware brace tracking)', () => {
+    // First call writes a path containing `\}`. Second call has to balance
+    // braces correctly to find the existing block, even though the escape
+    // sits inside it. Without escape-aware tracking, the second call would
+    // overwrite only part of the block and leave `]+}` style junk behind.
+    r.get('/items/:id', handler).whereIn('id', ['a}b']).whereNumber('id')
+    assert.strictEqual(r.list()[0]?.path, `/items/:id{${ROUTE_PATTERN_NUMBER}}`)
+  })
+
+  it('repeat where() after a regex with `}` inside `[^}]` overwrites cleanly', () => {
+    // `}` inside a character class is literal. The brace scanner has to
+    // track `[ ... ]` context so the inner `}` doesn't terminate the block.
+    r.get('/u/:slug', handler).where('slug', '[^}]+').whereAlpha('slug')
+    assert.strictEqual(r.list()[0]?.path, `/u/:slug{${ROUTE_PATTERN_ALPHA}}`)
+  })
+
+  it('route binding param extraction is unaffected by escaped `}` in the constraint', async () => {
+    let resolvedWith: string | null = null
+    const resolver = {
+      name: 'X',
+      findForRoute: (v: string) => { resolvedWith = v; return { ok: true } },
+    }
+    r.bind('id', resolver)
+    r.get('/items/:id', handler).whereIn('id', ['ok', 'x}y'])
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+    const req = { params: { id: 'ok' }, query: {}, headers: {}, body: undefined, url: '/items/ok' }
+    await mw(req as unknown as Parameters<MiddlewareHandler>[0], {} as unknown as Parameters<MiddlewareHandler>[1], async () => {})
+    assert.strictEqual(resolvedWith, 'ok', 'binding should be invoked with the :id value, not a corrupted name')
+    assert.deepStrictEqual((req as unknown as { bound: Record<string, unknown> }).bound, { id: { ok: true } })
+  })
 })
 
 // ─── RouteBuilder.domain() — subdomain routing ─────────────

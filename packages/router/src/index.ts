@@ -126,23 +126,48 @@ export const Options = createMethodDecorator('OPTIONS')
 // ─── Path utilities ────────────────────────────────────────
 
 /**
+ * Walk a balanced `{ ... }` block starting at `i` (must point at the opening
+ * `{`). Returns the index AFTER the matching `}`, or `path.length` if the
+ * block is unterminated. Recognises:
+ *
+ *   - `\<char>` escape pairs — `\{` and `\}` from regex-escaped values
+ *     (e.g. `whereIn(['x}y'])`) don't affect depth.
+ *   - `[ ... ]` character classes — `{` and `}` inside `[^}]`-style classes
+ *     are literal and don't affect depth.
+ *
+ * Used by both `stripRegexSegments()` and `RouteBuilder.where()`'s scanner so
+ * the two stay in lock-step on regex syntax recognition.
+ */
+function consumeBraceBlock(path: string, i: number): number {
+  let depth   = 1
+  let inClass = false
+  i++
+  while (i < path.length && depth > 0) {
+    const ch = path[i]
+    if (ch === '\\') { i += 2; continue }
+    if (inClass) {
+      if (ch === ']') inClass = false
+    } else {
+      if      (ch === '[') inClass = true
+      else if (ch === '{') depth++
+      else if (ch === '}') depth--
+    }
+    i++
+  }
+  return i
+}
+
+/**
  * Remove every balanced `{...}` block from a path. Used to peel off
  * `where*()` regex constraint segments before scanning the path for `:param`
- * names. Brace nesting is honoured so quantifier braces (`{8}`, `{4}`) inside
- * a constraint don't terminate the block early.
+ * names.
  */
 function stripRegexSegments(path: string): string {
   let out = ''
   let i = 0
   while (i < path.length) {
     if (path[i] !== '{') { out += path[i]; i++; continue }
-    let depth = 1
-    i++
-    while (i < path.length && depth > 0) {
-      if      (path[i] === '{') depth++
-      else if (path[i] === '}') depth--
-      i++
-    }
+    i = consumeBraceBlock(path, i)
   }
   return out
 }
@@ -189,8 +214,9 @@ export class RouteBuilder {
 
   /**
    * Constrain a `:param` segment with a custom regex. Accepts either a string
-   * (used verbatim) or a `RegExp` (its `.source` is taken — `/^/`, `/$/`, and
-   * flags are ignored, since Hono anchors per-segment).
+   * (used verbatim) or a `RegExp` (its `.source` is taken — flags are dropped
+   * automatically; anchors `^` / `$` pass through but are typically redundant
+   * since Hono anchors per-segment).
    *
    * Mutates the route's path in place to `:param{pattern}` (Hono regex syntax).
    * Calling `where*` again on the same param overwrites the previous pattern.
@@ -214,17 +240,10 @@ export class RouteBuilder {
       let opt = ''
       if (path[j] === '?') { opt = '?'; j++ }
 
-      // Consume a balanced `{ ... }` block (handles `[0-9]{8}`-style nesting).
-      let bodyEnd = j
-      if (path[j] === '{') {
-        let depth = 1
-        bodyEnd = j + 1
-        while (bodyEnd < path.length && depth > 0) {
-          if      (path[bodyEnd] === '{') depth++
-          else if (path[bodyEnd] === '}') depth--
-          bodyEnd++
-        }
-      }
+      // Consume a balanced `{ ... }` block via the shared scanner — handles
+      // `[0-9]{8}`-style nesting, `\{`/`\}` escapes, and `}` literals inside
+      // `[^}]`-style character classes.
+      const bodyEnd = path[j] === '{' ? consumeBraceBlock(path, j) : j
 
       if (name === param) {
         out += `:${name}${opt}{${pattern}}`
