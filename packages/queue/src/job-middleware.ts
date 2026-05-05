@@ -66,7 +66,7 @@ export class RateLimited implements JobMiddleware {
       )
     }
 
-    await cache.put(key, count + 1, this._decaySeconds)
+    await cache.set(key, count + 1, this._decaySeconds)
     return next()
   }
 }
@@ -147,7 +147,7 @@ export class ThrottlesExceptions implements JobMiddleware {
         // Success — reset counter
         await cache.forget(key)
       } catch (err) {
-        await cache.put(key, count + 1, this._decayMinutes * 60)
+        await cache.set(key, count + 1, this._decayMinutes * 60)
         throw err
       }
     } else {
@@ -192,7 +192,7 @@ export class Skip implements JobMiddleware {
 
 interface CacheLike {
   get(key: string): Promise<unknown>
-  put(key: string, value: unknown, ttl?: number): Promise<void>
+  set(key: string, value: unknown, ttl?: number): Promise<void>
   forget(key: string): Promise<void>
 }
 

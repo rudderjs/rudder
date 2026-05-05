@@ -56,11 +56,11 @@ export async function acquireUniqueLock(job: Job & ShouldBeUnique): Promise<bool
   const ttl = job.uniqueFor?.() ?? 0
 
   // Try cache adapter first
-  const cache = _getCache()
+  const cache = await _getCache()
   if (cache) {
     const existing = await cache.get(key)
     if (existing !== null && existing !== undefined) return false
-    await cache.put(key, '1', ttl > 0 ? ttl : 86400)
+    await cache.set(key, '1', ttl > 0 ? ttl : 86400)
     return true
   }
 
@@ -79,7 +79,7 @@ export async function acquireUniqueLock(job: Job & ShouldBeUnique): Promise<bool
 export async function releaseUniqueLock(job: Job & ShouldBeUnique): Promise<void> {
   const key = `rudderjs:unique:${job.uniqueId()}`
 
-  const cache = _getCache()
+  const cache = await _getCache()
   if (cache) {
     await cache.forget(key)
     return
@@ -97,14 +97,13 @@ export function _clearLocks(): void {
 
 interface CacheLike {
   get(key: string): Promise<unknown>
-  put(key: string, value: unknown, ttl?: number): Promise<void>
+  set(key: string, value: unknown, ttl?: number): Promise<void>
   forget(key: string): Promise<void>
 }
 
-function _getCache(): CacheLike | null {
+async function _getCache(): Promise<CacheLike | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@rudderjs/cache') as { CacheRegistry?: { get(): CacheLike | null } }
+    const mod = await import('@rudderjs/cache') as unknown as { CacheRegistry?: { get(): CacheLike | null } }
     return mod.CacheRegistry?.get() ?? null
   } catch {
     return null
