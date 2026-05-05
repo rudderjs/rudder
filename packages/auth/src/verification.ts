@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { Url } from '@rudderjs/router'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import type { Authenticatable, AuthUser } from './contracts.js'
 
@@ -9,7 +11,7 @@ import type { Authenticatable, AuthUser } from './contracts.js'
  * @example
  * class User extends Model implements Authenticatable, MustVerifyEmail {
  *   hasVerifiedEmail() { return this.emailVerifiedAt !== null }
- *   markEmailAsVerified() { this.emailVerifiedAt = new Date().toISOString(); return Promise.resolve() }
+ *   async markEmailAsVerified() { await User.update(this.id, { emailVerifiedAt: new Date() }) }
  *   getEmailForVerification() { return this.email }
  * }
  */
@@ -73,18 +75,6 @@ export function EnsureEmailIsVerified(): MiddlewareHandler {
  * const url = verificationUrl(user)
  */
 export function verificationUrl(user: MustVerifyEmail & { id?: string | number; getAuthIdentifier?(): string }): string {
-  let Url: { temporarySignedRoute(name: string, seconds: number, params?: Record<string, unknown>): string }
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@rudderjs/router') as { Url: typeof Url }
-    Url = mod.Url
-  } catch {
-    throw new Error(
-      '[RudderJS Auth] Email verification requires @rudderjs/router for signed URLs.'
-    )
-  }
-
   const id    = user.getAuthIdentifier?.() ?? String((user as unknown as Record<string, unknown>)['id'] ?? '')
   const email = user.getEmailForVerification()
 
@@ -131,7 +121,5 @@ export async function handleEmailVerification(
 // ─── SHA-256 hash ───────────────────────────────────────────
 
 function _sha256(input: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createHash } = require('node:crypto') as typeof import('node:crypto')
   return createHash('sha256').update(input).digest('hex')
 }

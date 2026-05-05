@@ -8,9 +8,9 @@ export class User extends Model {
   id!:            string
   name!:          string
   email!:         string
-  password?:      string | null
-  emailVerified!: boolean
-  role!:          string
+  password?:        string | null
+  emailVerifiedAt!: Date | null
+  role!:            string
   createdAt!:     Date
   updatedAt!:     Date
 }

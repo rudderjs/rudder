@@ -1,14 +1,14 @@
-import { pgTable, text, boolean, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const user = pgTable('user', {
-  id:            text('id').primaryKey(),
-  name:          text('name').notNull(),
-  email:         text('email').notNull().unique(),
-  emailVerified: boolean('emailVerified').notNull().default(false),
-  image:         text('image'),
-  role:          text('role').notNull().default('user'),
-  createdAt:     timestamp('createdAt').notNull().defaultNow(),
-  updatedAt:     timestamp('updatedAt').notNull().defaultNow(),
+  id:              text('id').primaryKey(),
+  name:            text('name').notNull(),
+  email:           text('email').notNull().unique(),
+  emailVerifiedAt: timestamp('emailVerifiedAt'),
+  image:           text('image'),
+  role:            text('role').notNull().default('user'),
+  createdAt:       timestamp('createdAt').notNull().defaultNow(),
+  updatedAt:       timestamp('updatedAt').notNull().defaultNow(),
 })
 
 export const session = pgTable('session', {
