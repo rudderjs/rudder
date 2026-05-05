@@ -10,6 +10,8 @@ Mail facade + mailable abstraction with built-in `log` (for dev) and `smtp` driv
 
 ```ts
 // config/mail.ts
+import type { MailConfig } from '@rudderjs/mail'
+
 export default {
   default: 'smtp',
   from: { address: 'noreply@example.com', name: 'My App' },
@@ -18,11 +20,9 @@ export default {
     smtp: { driver: 'smtp', host: '...', port: 587, username: '...', password: '...', encryption: 'tls' },
   },
 } satisfies MailConfig
-
-// bootstrap/providers.ts
-import { mail } from '@rudderjs/mail'
-export default [mail(configs.mail), ...]
 ```
+
+`MailProvider` is auto-discovered — run `pnpm rudder providers:discover` after install. To register explicitly, list `MailProvider` in `bootstrap/providers.ts`.
 
 Use `log` driver in dev and tests — no external SMTP required, all mail prints to the console.
 
@@ -75,9 +75,9 @@ build() {
 ### Testing
 
 ```ts
-import { MailFake } from '@rudderjs/mail'
+import { Mail } from '@rudderjs/mail'
 
-const fake = MailFake.fake()
+const fake = Mail.fake()
 await Mail.to('user@example.com').send(new WelcomeMail(user))
 
 fake.assertSent(WelcomeMail)
@@ -93,14 +93,14 @@ fake.restore()
 - **Missing `from` address.** Required in config — throws at send-time if unset. The `from: { address, name }` block is not optional.
 - **Mailable without `build()`.** Silent — send goes through with empty headers. Always implement `build()` and return `this` from the chain so the configuration actually applies.
 - **HTML without text fallback.** Best practice: always set both `.html()` and `.text()`. Some clients (plain-text subscribers, accessibility tools) don't render HTML.
-- **Forgetting `MailFake.restore()` in tests.** Fake state persists — subsequent tests assert against stale sends. Always restore in `afterEach`.
+- **Forgetting `fake.restore()` in tests.** Fake state persists — subsequent tests assert against stale sends. Always restore in `afterEach`.
 - **Telescope records mail.** `@rudderjs/telescope`'s `mail` collector records every send with subject, recipients, html, attachments. Redact sensitive fields via config if needed.
 - **Method-as-property bug.** `mailable['subject']` returns the fluent setter function, not the value. Use `mailable.getSubject()` or read the private `_subject` field. This has bitten several collectors — don't assume bracket-access returns values for fluent builder classes.
 
 ## Key Imports
 
 ```ts
-import { mail, Mail, Mailable, MailFake } from '@rudderjs/mail'
+import { Mail, Mailable, MailProvider, FakeMailAdapter } from '@rudderjs/mail'
 
-import type { MailConfig, MailDriver, MailableContract } from '@rudderjs/mail'
+import type { MailConfig, MailAdapter } from '@rudderjs/mail'
 ```

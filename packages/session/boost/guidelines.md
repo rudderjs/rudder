@@ -23,8 +23,8 @@ export default {
 } satisfies SessionConfig
 
 // bootstrap/providers.ts
-import { session } from '@rudderjs/session'
-export default [session(configs.session)]
+import { SessionProvider } from '@rudderjs/session'
+export default [SessionProvider]
 ```
 
 No per-route wiring needed on web routes — the provider auto-installs on the `web` group during `boot()`.
@@ -87,7 +87,7 @@ Route.post('/api/preferences', handler, [SessionMiddleware()])
 
 ```ts
 // Provider + middleware
-import { session, sessionMiddleware, SessionMiddleware } from '@rudderjs/session'
+import { SessionProvider, sessionMiddleware, SessionMiddleware } from '@rudderjs/session'
 
 // Facade
 import { Session } from '@rudderjs/session'

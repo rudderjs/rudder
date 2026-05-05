@@ -10,8 +10,8 @@ Feature flags — define features, check activation, scope to users/teams, gradu
 
 ```ts
 // bootstrap/providers.ts
-import { pennant } from '@rudderjs/pennant'
-export default [..., pennant()]
+import { PennantProvider } from '@rudderjs/pennant'
+export default [PennantProvider]
 ```
 
 ### Defining features
@@ -121,7 +121,7 @@ No real driver calls under `Feature.fake()`.
 ## Key Imports
 
 ```ts
-import { pennant, Feature, Lottery, FeatureMiddleware } from '@rudderjs/pennant'
+import { PennantProvider, Feature, Lottery, FeatureMiddleware } from '@rudderjs/pennant'
 
 import type { FeatureResolver, PennantConfig } from '@rudderjs/pennant'
 ```

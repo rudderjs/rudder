@@ -326,15 +326,15 @@ export const notify = (
   notification: Notification,
 ): Promise<void> => Notifier.send(notifiables, notification)
 
-// ─── Service Provider Factory ──────────────────────────────
+// ─── Service Provider ──────────────────────────────────────
 
 /**
- * Returns a NotificationServiceProvider that registers built-in channels
- * (mail, database) into the ChannelRegistry.
+ * Registers built-in channels (mail, database, broadcast) into the
+ * ChannelRegistry on boot.
  *
  * Usage in bootstrap/providers.ts:
- *   import { notifications } from '@rudderjs/notification'
- *   export default [..., notifications(), ...]
+ *   import { NotificationProvider } from '@rudderjs/notification'
+ *   export default [..., NotificationProvider]
  */
 export { NotificationFake } from './fake.js'
 export type { SentNotification } from './fake.js'

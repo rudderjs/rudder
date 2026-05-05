@@ -25,8 +25,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { localization } from '@rudderjs/localization'
-export default [localization(configs.localization), ...]
+import { LocalizationProvider } from '@rudderjs/localization'
+export default [LocalizationProvider]
 ```
 
 ### Translation lookup
@@ -89,7 +89,7 @@ If a key is missing in the current locale, the `fallback` locale is tried. If st
 ## Key Imports
 
 ```ts
-import { localization, trans, __, setLocale, getLocale } from '@rudderjs/localization'
+import { LocalizationProvider, trans, __, setLocale, getLocale } from '@rudderjs/localization'
 
 import type { LocalizationConfig } from '@rudderjs/localization'
 ```

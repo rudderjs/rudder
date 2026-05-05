@@ -51,14 +51,21 @@ export class AppServiceProvider extends ServiceProvider {
 }
 ```
 
-Many packages export a **factory function** that returns a provider class (e.g., `cache(config)`, `queue(config)`). These are used in `bootstrap/providers.ts`:
+Most packages export a `*Provider` class directly. List them by reference in `bootstrap/providers.ts` — `defaultProviders()` from `@rudderjs/core` auto-discovers all installed framework providers via the manifest at `bootstrap/cache/providers.json` (run `pnpm rudder providers:discover` after install):
 
 ```ts
-import { cache } from '@rudderjs/cache'
-export default [cache(cacheConfig), AppServiceProvider]
+import { defaultProviders } from '@rudderjs/core'
+import { AppServiceProvider } from '../app/Providers/AppServiceProvider.js'
+
+export default [
+  ...(await defaultProviders()),
+  AppServiceProvider,
+]
 ```
 
-Providers can be registered dynamically at runtime via `app().register(ProviderClass)`. Duplicates are silently skipped (guarded by class reference and class name).
+To register manually, list each `*Provider` class explicitly (`CacheProvider`, `QueueProvider`, etc.) and read config from a `config: configs` object passed to `Application.configure()` — the providers resolve their config keys via the DI container.
+
+Providers can also be registered dynamically at runtime via `app().register(ProviderClass)`. Duplicates are silently skipped (guarded by class reference and class name).
 
 Deferred providers define `provides()` returning token strings -- they are lazily booted on first container resolve of those tokens.
 

@@ -46,7 +46,10 @@ Auth delegates hashing to `@rudderjs/hash`. The hash provider **must** be regist
 
 ```ts
 // bootstrap/providers.ts
-export default [hash(configs.hash), auth(configs.auth), ...]
+import { HashProvider } from '@rudderjs/hash'
+import { AuthProvider } from '@rudderjs/auth'
+
+export default [HashProvider, AuthProvider]
 ```
 
 The `EloquentUserProvider` calls `hashCheck(plain, hashed)` internally during `validateCredentials()`.
@@ -115,7 +118,7 @@ class PostPolicy extends Policy {
 
 ```ts
 // Provider factory
-import { auth } from '@rudderjs/auth'
+import { AuthProvider } from '@rudderjs/auth'
 
 // Middleware
 import { AuthMiddleware, RequireAuth, EnsureEmailIsVerified } from '@rudderjs/auth'

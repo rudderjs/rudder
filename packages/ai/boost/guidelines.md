@@ -26,10 +26,12 @@ await agent('You are helpful.').prompt('Hello') // simplest form
 
 ### Using Providers (Anthropic, OpenAI, Google, etc.)
 
-Configure providers in `config/ai.ts` and register with `ai()`:
+Configure providers in `config/ai.ts`. The Node-only `AiProvider` lives at `@rudderjs/ai/server` (the main `@rudderjs/ai` entry is runtime-agnostic and has no provider class):
 
 ```ts
 // config/ai.ts — providers: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure
+import type { AiConfig } from '@rudderjs/ai'
+
 export default {
   default: 'anthropic/claude-sonnet-4-5',
   providers: {
@@ -40,8 +42,11 @@ export default {
 } satisfies AiConfig
 
 // bootstrap/providers.ts
-export default [ai(configs.ai), ...]
+import { AiProvider } from '@rudderjs/ai/server'
+export default [AiProvider]
 ```
+
+Provider auto-discovery (`defaultProviders()`) finds `AiProvider` automatically via the `rudderjs.providerSubpath` field in `@rudderjs/ai/package.json` — no manual subpath import needed when using auto-discovery.
 
 Agents support failover: `failover() { return ['openai/gpt-4o'] }`
 
@@ -138,7 +143,7 @@ const items = Output.array({ element: z.object({ title: z.string() }) })
 ## Key Imports
 
 ```ts
-import { ai } from '@rudderjs/ai'                          // provider factory
+import { AiProvider } from '@rudderjs/ai/server'           // service provider (Node only)
 import { Agent, agent, ConversableAgent } from '@rudderjs/ai'  // agents
 import { AI } from '@rudderjs/ai'                          // facade (AI.prompt, AI.agent, AI.embed)
 import { toolDefinition } from '@rudderjs/ai'              // tool builder
