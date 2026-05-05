@@ -196,6 +196,66 @@ Returning `null` from `findForRoute` triggers `RouteModelNotFoundError` (HTTP 40
 
 The `RouteResolver` contract is duck-typed — `name: string` + `findForRoute(value): unknown | Promise<unknown | null>` — so the router doesn't depend on `@rudderjs/orm`.
 
+### Custom 404 with `.missing()`
+
+Override the default 404 response per route. Receives the request and the binding error; return a value the route handler may return — `Response`, plain object → JSON, string → body, or `undefined` (you wrote to `res` directly).
+
+```ts
+router.get('/users/:user', show)
+  .missing((_req, err) => Response.json({ error: err.message }, { status: 404 }))
+
+router.get('/posts/:post', show)
+  .missing((_req, err) => ({ message: `Post ${err.value} not found` }))    // → 200 JSON
+```
+
+Optional bindings do NOT trigger `.missing()` — they quietly resolve to `null` instead.
+
+---
+
+## Route groups (`router.group()`)
+
+Apply a `prefix`, `domain`, or shared `middleware` stack to every route registered inside the callback. Nested groups concatenate prefixes and middleware; the innermost defined `domain` wins (hosts can't compose).
+
+```ts
+import { router } from '@rudderjs/router'
+
+router.group({ prefix: '/admin', middleware: [adminAuth] }, () => {
+  router.get('/users', listUsers)            // GET /admin/users (with adminAuth)
+  router.get('/posts', listPosts)            // GET /admin/posts (with adminAuth)
+})
+
+router.group({ domain: ':tenant.example.com', prefix: '/api' }, () => {
+  router.get('/me', me)                      // GET :tenant.example.com/api/me
+})
+
+// Nested
+router.group({ prefix: '/api' }, () => {
+  router.group({ prefix: '/v1', middleware: [throttle] }, () => {
+    router.get('/users', listUsers)          // GET /api/v1/users (with throttle)
+  })
+})
+```
+
+`router.group()` is the user-facing scoping primitive. Distinct from `runWithGroup('web' | 'api', …)` — that tags routes with their middleware-group label and is called once by the framework's route loader. Both can be active at the same time.
+
+---
+
+## Subdomain routing (`.domain()`)
+
+Restrict a route to a specific host. The template is matched against the request's `Host` header (port stripped, case-insensitive); `:param` segments capture into `req.params` alongside path params.
+
+```ts
+router.get('/users', listUsers).domain('api.example.com')
+router.get('/me', me).domain(':tenant.example.com')
+// req.params.tenant === 'acme' for Host: acme.example.com
+
+router.group({ domain: 'admin.example.com', middleware: [adminAuth] }, () => {
+  router.get('/dashboard', dash)             // GET admin.example.com/dashboard
+})
+```
+
+Mismatched hosts return 404. Subdomain `:param` and path `:param` of the same name collide — path wins.
+
 ---
 
 ## Mounting onto a server adapter
@@ -223,6 +283,7 @@ router.mount(serverAdapter)
 | `use(middleware)` | `this` | Register global middleware |
 | `bind(name, resolver, opts?)` | `this` | Bind a `:param` to a `RouteResolver` (e.g. an ORM Model) for auto-resolution |
 | `listBindings()` | `Record<string, RouteResolver>` | All registered route bindings |
+| `group(opts, fn)` | `this` | Apply prefix/domain/middleware to every route registered inside `fn` |
 | `registerController(Class)` | `this` | Register decorator-based controller |
 | `mount(serverAdapter)` | `void` | Apply middleware + routes to adapter |
 | `list()` | `RouteDefinition[]` | All registered routes |
@@ -244,6 +305,8 @@ Returned by the shorthand route methods. Allows naming the registered route and 
 | `.whereUuid(param)` | Shortcut for any-version UUID |
 | `.whereUlid(param)` | Shortcut for Crockford base32 ULID |
 | `.whereIn(param, values)` | Constrain `:param` to one of the supplied literals |
+| `.domain(template)` | Restrict to a host; `:param` segments capture into `req.params` |
+| `.missing(fn)` | Custom 404 callback when an explicit binding fails to resolve |
 
 ### `Url`
 
