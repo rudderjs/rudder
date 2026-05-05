@@ -233,6 +233,69 @@ Supported relation types: `hasMany`, `hasOne`, `belongsTo`, `belongsToMany`, `mo
 - **Nested `whereHas` inside the constrain callback throws** — recursive predicates are deferred to v2. Filter on flat columns inside the callback for now.
 - **Soft deletes inside the relation predicate** — apply `q.where('deletedAt', null)` explicitly inside the constrain callback when needed.
 
+### Aggregate eager loading — `withCount` / `withSum` / `withMin` / `withMax` / `withAvg` / `withExists`
+
+Eager-load aggregates of related rows alongside the parent in a single query. The result is stamped onto each parent under a deterministic alias (`<relation><Verb><Column>`) so admin tables, dashboards, and any list page can render counts / sums next to each row without N+1.
+
+```ts
+// Counts: stamps user.postsCount on each row
+await User.query().withCount('posts').get()
+
+// Sum / min / max / avg of a related column — stamps postsSumViews etc.
+await User.query().withSum('posts', 'views').get()
+await Login.query().withMax('sessions', 'createdAt').get()
+
+// Boolean — stamps subscriptionExists (true/false)
+await User.query().withExists('subscription').get()
+
+// Multiple at once
+await User.query()
+  .withCount('posts')
+  .withSum('orders', 'total')
+  .paginate(1)
+```
+
+**Constraint callbacks (map form)** — narrow what counts as a "matching" row, optionally aliasing the result key:
+
+```ts
+await User.query()
+  .withCount({ posts: q => q.where('published', true).as('publishedPosts') })
+  .get()
+// → user.publishedPostsCount
+
+await User.query()
+  .withSum({
+    orders: { column: 'total', constraint: q => q.where('status', 'paid') },
+  })
+  .get()
+// → user.ordersSumTotal
+```
+
+**Per-instance variants** — `loadCount` / `loadExists` / `loadSum` / `loadMin` / `loadMax` / `loadAvg` mutate a single instance in place. Use these when you've already fetched one parent and need the aggregate on demand. For batched loads on a list, prefer `Model.query().withCount(...)` on the parent query.
+
+```ts
+const user = await User.find(1)
+await user!.loadCount('posts')
+console.log(user!.postsCount)
+```
+
+**`loadMissing(...names)`** — eager-load each named relation onto the instance only when the property is currently `null` / `undefined`. Skips relations that are already populated.
+
+```ts
+const user = await User.query().with('profile').first()
+// profile is already populated; only `posts` issues a query
+await user!.loadMissing('profile', 'posts')
+```
+
+**Notes:**
+
+- Aggregate columns are enumerable own-properties — they appear in `JSON.stringify(row)`, `Object.entries(row)`, and `{ ...row }` spreads. They're tagged via a Symbol so `model.save()` strips them out before writing back to the DB.
+- **`withCount` on `belongsTo` throws** (every parent matches exactly one row, so the count is always 0 or 1). Use `withExists('relation')` to test presence, or query the inverse `hasMany` side.
+- **`withCount` on `morphTo` throws** — the related table is dynamic. Aggregate per-target by querying each target class separately.
+- Results are typed `unknown` at the property-access site — cast at the call site (`(user as { postsCount: number }).postsCount`) since the QB type doesn't track the injected aliases. The instance load path doesn't need a cast at the access site.
+- **Soft deletes** on the related model are applied automatically — the adapter ANDs `deleted_at IS NULL` into the aggregate subquery.
+- **Adapter behavior**: Prisma uses `_count.select` for direct count/exists (round-trip-saving) and a second-batch `groupBy` for polymorphic / pivot / numeric aggregates. Drizzle emits one correlated subselect per aggregate in the SELECT list, joining through the pivot table when present.
+
 ---
 
 ## Route model binding

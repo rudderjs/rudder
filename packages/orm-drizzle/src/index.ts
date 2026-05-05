@@ -3,9 +3,12 @@ import {
   isNull, isNotNull,
   and, or, asc, desc, count as sqlCount, sql,
   exists, notExists,
+  getTableColumns,
   type Column, type SQL,
 } from 'drizzle-orm'
 import type {
+  AggregateFn,
+  AggregateRequest,
   OrmAdapter,
   OrmAdapterProvider,
   QueryBuilder,
@@ -76,6 +79,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   /** Extra SQL expressions AND-merged into buildConditions(). Populated by
    *  whereRelationExists with `EXISTS` / `NOT EXISTS` correlated subqueries. */
   private _extraExprs:  SQL[] = []
+  /** Aggregate eager-load requests. Each becomes one correlated subselect in
+   *  the SELECT list of the main query (run once per terminal call). */
+  private _aggregates: AggregateRequest[] = []
 
   constructor(
     private readonly db:         DrizzleDb,
@@ -230,6 +236,146 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   // query API has its own `with(..., { where })` shape we don't currently
   // surface. `withWhereHas` falls back to plain `with()` until we wire it up.
 
+  withAggregate(requests: AggregateRequest[]): this {
+    this._aggregates.push(...requests)
+    return this
+  }
+
+  async _aggregate(fn: AggregateFn, column?: string): Promise<unknown> {
+    const cond = this.buildConditions()
+
+    const valueExpr = (() => {
+      switch (fn) {
+        case 'count':
+          return sql<number>`COUNT(*)`
+        case 'exists':
+          return sql<number>`COUNT(*)`
+        case 'sum':
+          return sql<number>`COALESCE(SUM(${this.col(column!) as Column}), 0)`
+        case 'min':
+          return sql<number>`MIN(${this.col(column!) as Column})`
+        case 'max':
+          return sql<number>`MAX(${this.col(column!) as Column})`
+        case 'avg':
+          return sql<number>`AVG(${this.col(column!) as Column})`
+      }
+    })()
+
+    let q = this.db.select({ value: valueExpr }).from(this.table)
+    if (cond) q = q.where(cond)
+
+    const result = await (q as unknown as Promise<Array<{ value: unknown }>>)
+    const raw = result[0]?.value
+    if (fn === 'count') return Number(raw ?? 0)
+    if (fn === 'exists') return Number(raw ?? 0) > 0
+    if (raw === null || raw === undefined) {
+      return fn === 'sum' ? 0 : null
+    }
+    return Number(raw)
+  }
+
+  /** @internal — build a correlated subselect SQL fragment for one
+   *  AggregateRequest. Used by `buildAggregateSelectFields`. */
+  private _aggregateSubquery(req: AggregateRequest): SQL {
+    const js      = req.joinShape
+    const Related = this.resolveTable(js.relatedTable)
+    if (!Related) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] withAggregate: no table schema registered for "${js.relatedTable}". ` +
+        `Pass tables: { ${js.relatedTable}: ... } in drizzle() config.`,
+      )
+    }
+    const parentCol = this.col(js.parentColumn) as Column
+
+    if (js.through) {
+      const Pivot = this.resolveTable(js.through.pivotTable)
+      if (!Pivot) {
+        throw new Error(
+          `[RudderJS ORM Drizzle] withAggregate: no table schema registered for pivot "${js.through.pivotTable}".`,
+        )
+      }
+      const pivotForeignCol = this.colOf(Pivot,   js.through.foreignPivotKey)
+      const pivotRelatedCol = this.colOf(Pivot,   js.through.relatedPivotKey)
+      const relatedKeyCol   = this.colOf(Related, js.relatedColumn)
+
+      const needJoin = req.fn === 'sum' || req.fn === 'min' || req.fn === 'max' || req.fn === 'avg'
+        || req.constraintWheres.length > 0
+        || js.softDeletes === true
+
+      const exprs: SQL[] = [eq(pivotForeignCol, parentCol) as SQL]
+      for (const [k, v] of Object.entries(js.extraEquals ?? {})) {
+        exprs.push(eq(this.colOf(Pivot, k), v) as SQL)
+      }
+
+      const fnExpr = this._aggregateFnExpr(req, Related)
+
+      if (!needJoin) {
+        // Simple count(*) over pivot rows for this parent.
+        const subq = sql`(SELECT ${fnExpr} FROM ${Pivot as Column} WHERE ${_andSql(exprs)})`
+        return req.fn === 'exists' ? (sql`(${subq} > 0)` as SQL) : (subq as SQL)
+      }
+
+      // Join pivot → related so we can apply soft-delete + constraints +
+      // numeric aggregates over a related column.
+      for (const w of req.constraintWheres) exprs.push(this.clauseToExprOn(Related, w))
+      if (js.softDeletes) {
+        const da = this.colOf(Related, 'deletedAt') as Column | undefined
+        if (da) exprs.push(isNull(da) as SQL)
+      }
+      const subq = sql`(SELECT ${fnExpr} FROM ${Pivot as Column} INNER JOIN ${Related as Column} ON ${relatedKeyCol} = ${pivotRelatedCol} WHERE ${_andSql(exprs)})`
+      return req.fn === 'exists' ? (sql`(${subq} > 0)` as SQL) : (subq as SQL)
+    }
+
+    // Direct (no pivot): single subselect on the related table.
+    const relatedRelCol = this.colOf(Related, js.relatedColumn)
+    const exprs: SQL[] = [eq(relatedRelCol, parentCol) as SQL]
+    for (const w of req.constraintWheres) exprs.push(this.clauseToExprOn(Related, w))
+    for (const [k, v] of Object.entries(js.extraEquals ?? {})) {
+      exprs.push(eq(this.colOf(Related, k), v) as SQL)
+    }
+    if (js.softDeletes) {
+      const da = this.colOf(Related, 'deletedAt') as Column | undefined
+      if (da) exprs.push(isNull(da) as SQL)
+    }
+
+    const fnExpr = this._aggregateFnExpr(req, Related)
+    const subq = sql`(SELECT ${fnExpr} FROM ${Related as Column} WHERE ${_andSql(exprs)})`
+    return req.fn === 'exists' ? (sql`(${subq} > 0)` as SQL) : (subq as SQL)
+  }
+
+  /** @internal — `COUNT(*)` / `SUM(col)` / etc. SQL fragment, plus the
+   *  COALESCE wrapping that keeps null-sum from leaking out of an empty
+   *  matching set. */
+  private _aggregateFnExpr(req: AggregateRequest, Related: unknown): SQL {
+    switch (req.fn) {
+      case 'count':
+      case 'exists':
+        return sql`COUNT(*)`
+      case 'sum':
+        return sql`COALESCE(SUM(${this.colOf(Related, req.column!)}), 0)`
+      case 'min':
+        return sql`MIN(${this.colOf(Related, req.column!)})`
+      case 'max':
+        return sql`MAX(${this.colOf(Related, req.column!)})`
+      case 'avg':
+        return sql`AVG(${this.colOf(Related, req.column!)})`
+    }
+  }
+
+  /** @internal — returns the SELECT-list fields object when aggregates are
+   *  present, or `null` to signal "default *-select." Mixing the two forms
+   *  is what lets `db.select(<fields>)` inject named aggregate columns
+   *  alongside the original table columns. */
+  private buildAggregateSelectFields(): Record<string, unknown> | null {
+    if (this._aggregates.length === 0) return null
+    const cols = getTableColumns(this.table as Parameters<typeof getTableColumns>[0]) as Record<string, unknown>
+    const fields: Record<string, unknown> = { ...cols }
+    for (const req of this._aggregates) {
+      fields[req.alias] = this._aggregateSubquery(req)
+    }
+    return fields
+  }
+
 
   private softDeleteExpr(): SQL | undefined {
     if (!this._softDeletes || this._withTrashed) return undefined
@@ -275,8 +421,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async first(): Promise<T | null> {
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
+    const fields  = this.buildAggregateSelectFields()
 
-    let q = this.db.select().from(this.table)
+    let q = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
     if (cond)           q = q.where(cond)
     if (orderBy.length) q = q.orderBy(...orderBy)
     q = q.limit(1)
@@ -290,10 +437,10 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const softExpr = this.softDeleteExpr()
     const pkExpr   = eq(pkCol, id) as SQL
     const cond     = softExpr ? and(pkExpr, softExpr) as SQL : pkExpr
+    const fields   = this.buildAggregateSelectFields()
 
-    const result = await (this.db
-      .select()
-      .from(this.table)
+    const sel = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
+    const result = await (sel
       .where(cond)
       .limit(1) as unknown as Promise<T[]>)
     return result[0] ?? null
@@ -302,8 +449,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async get(): Promise<T[]> {
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
+    const fields  = this.buildAggregateSelectFields()
 
-    let q = this.db.select().from(this.table)
+    let q = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
     if (cond)           q = q.where(cond)
     if (orderBy.length) q = q.orderBy(...orderBy)
     if (this._limitN  !== null) q = q.limit(this._limitN)
@@ -419,8 +567,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
+    const fields  = this.buildAggregateSelectFields()
 
-    let pageQ = this.db.select().from(this.table)
+    let pageQ = fields ? this.db.select(fields).from(this.table) : this.db.select().from(this.table)
     let cntQ  = this.db.select({ value: sqlCount() }).from(this.table)
 
     if (cond) {

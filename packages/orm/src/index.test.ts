@@ -30,6 +30,8 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     deleteAll:  async () => 0,
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     whereRelationExists: () => qb,
+    withAggregate: () => qb,
+    _aggregate: async () => 0,
     ...overrides,
   }
   return qb
@@ -2052,6 +2054,8 @@ function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record
       },
       paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
       whereRelationExists: () => qb,
+      withAggregate: () => qb,
+      _aggregate: async () => 0,
     }
     // Workaround: arrow functions don't have `arguments`. Rewrite where().
     qb.where = ((col: string, opOrVal: unknown, maybeVal?: unknown) => {

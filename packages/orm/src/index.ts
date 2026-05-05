@@ -1,8 +1,20 @@
-import type { QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate } from '@rudderjs/contracts'
+import type { AggregateRequest, QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate } from '@rudderjs/contracts'
 import { castGet, castSet, type CastDefinition } from './cast.js'
 import { type Attribute } from './attribute.js'
+import {
+  AGGREGATES_SYMBOL,
+  aggregateKeysOf,
+  loadCountOrExists,
+  loadMissingRelations,
+  loadNumericAggregate,
+  normalizeWithCount,
+  normalizeWithExists,
+  normalizeWithNumericAggregate,
+  type AggregateConstraint,
+  type AggregateSumSpec,
+} from './aggregate.js'
 
-export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate } from '@rudderjs/contracts'
+export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate, AggregateFn, AggregateRequest, AggregateJoinShape } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
 export { Attribute }                               from './attribute.js'
 export { JsonResource, ResourceCollection }        from './resource.js'
@@ -10,6 +22,8 @@ export { ModelCollection }                         from './collection.js'
 export { ModelFactory, sequence }                  from './factory.js'
 export { Seeder }                                  from './seeder.js'
 export type { SeederConstructor }                  from './seeder.js'
+export { AggregateConstraintBuilder, AGGREGATES_SYMBOL }    from './aggregate.js'
+export type { AggregateConstraint, AggregateSumSpec } from './aggregate.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
@@ -654,9 +668,25 @@ export abstract class Model {
   /** @internal — wrap a QueryBuilder so its read methods return Model instances. */
   private static _hydratingQb<T extends typeof Model>(self: T, qb: QueryBuilder<InstanceType<T>>): QueryBuilder<InstanceType<T>> {
     const ModelClass  = self as typeof Model
-    const wrap        = (r: unknown): InstanceType<T> => ModelClass.hydrate.call(self, r) as InstanceType<T>
+    /** Aliases stamped onto rows by the adapter for any aggregates registered
+     *  on this QB. Tagged on each hydrated instance via `aggregateKeysOf` so
+     *  `_toData()` excludes them on writes. */
+    const aggregateAliases = new Set<string>()
+    const wrap = (r: unknown): InstanceType<T> => {
+      const inst = ModelClass.hydrate.call(self, r) as InstanceType<T>
+      if (inst && aggregateAliases.size > 0) {
+        const set = aggregateKeysOf(inst)
+        for (const a of aggregateAliases) set.add(a)
+      }
+      return inst
+    }
     const wrapMaybe   = (r: unknown): InstanceType<T> | null => r == null ? null : wrap(r)
     const wrapMany    = (rs: unknown[]): InstanceType<T>[]  => rs.map(wrap)
+
+    const dispatchAggregates = (reqs: AggregateRequest[]): void => {
+      for (const r of reqs) aggregateAliases.add(r.alias)
+      ;(qb as QueryBuilder<unknown>).withAggregate(reqs)
+    }
 
     const proxy: QueryBuilder<InstanceType<T>> = new Proxy(qb as object, {
       get(target, prop, receiver): unknown {
@@ -684,6 +714,28 @@ export abstract class Model {
         if (prop === 'whereBelongsTo') {
           return (parent: Model, relation?: string): QueryBuilder<InstanceType<T>> => {
             _attachWhereBelongsTo(ModelClass, target as QueryBuilder<Model>, parent, relation)
+            return proxy
+          }
+        }
+        if (prop === 'withCount') {
+          return (arg: string | readonly string[] | Record<string, AggregateConstraint>): QueryBuilder<InstanceType<T>> => {
+            dispatchAggregates(normalizeWithCount(ModelClass, arg))
+            return proxy
+          }
+        }
+        if (prop === 'withExists') {
+          return (arg: string | readonly string[]): QueryBuilder<InstanceType<T>> => {
+            dispatchAggregates(normalizeWithExists(ModelClass, arg))
+            return proxy
+          }
+        }
+        if (prop === 'withSum' || prop === 'withMin' || prop === 'withMax' || prop === 'withAvg') {
+          const fn = prop.slice(4).toLowerCase() as 'sum' | 'min' | 'max' | 'avg'
+          return (
+            arg1: string | Record<string, AggregateSumSpec>,
+            arg2?: string,
+          ): QueryBuilder<InstanceType<T>> => {
+            dispatchAggregates(normalizeWithNumericAggregate(ModelClass, fn, arg1, arg2))
             return proxy
           }
         }
@@ -917,6 +969,94 @@ export abstract class Model {
   }
 
   /**
+   * Aggregate eager-loading — count related rows alongside the parent in a
+   * single query. The result is stamped onto each parent under
+   * `<relation>Count` (`postsCount` for `withCount('posts')`) without dropping
+   * into the adapter.
+   *
+   * Three call shapes:
+   *   - `withCount('posts')` — single relation, no constraint.
+   *   - `withCount(['posts', 'comments'])` — multiple, no constraints.
+   *   - `withCount({ posts: q => q.where('published', true).as('publishedPosts') })`
+   *     — map form with `where`/`orWhere` constraints + optional alias override.
+   *
+   * Closes the N+1 footgun for hot list pages. For a single instance use
+   * `instance.loadCount('posts')` instead.
+   *
+   * @example
+   * await User.query().withCount('posts').get()                                  // user.postsCount
+   * await User.query().withCount({ posts: q => q.where('published', true) }).get()
+   * await Post.query().withCount(['comments', 'tags']).paginate(1)
+   */
+  static withCount<T extends typeof Model>(
+    this: T,
+    arg:  string | readonly string[] | Record<string, AggregateConstraint>,
+  ): QueryBuilder<InstanceType<T>> {
+    return (Model._q(this) as unknown as { withCount: (a: typeof arg) => QueryBuilder<InstanceType<T>> }).withCount(arg)
+  }
+
+  /**
+   * Boolean aggregate — stamps `<relation>Exists` (true/false) onto each
+   * parent. Cheap on Prisma (translates to `_count > 0`) and Drizzle
+   * (`EXISTS (...)` correlated subquery). Use this instead of `withCount`
+   * when you only need presence, not the count.
+   */
+  static withExists<T extends typeof Model>(
+    this: T,
+    arg:  string | readonly string[],
+  ): QueryBuilder<InstanceType<T>> {
+    return (Model._q(this) as unknown as { withExists: (a: typeof arg) => QueryBuilder<InstanceType<T>> }).withExists(arg)
+  }
+
+  /**
+   * Aggregate eager-loading — sum a column across the related rows.
+   * Stamps `<relation>Sum<Column>` onto each parent (e.g.
+   * `withSum('orders', 'total')` → `ordersSumTotal`).
+   *
+   * Map form supports per-relation constraints + alias overrides:
+   *
+   * ```ts
+   * await User.query().withSum({
+   *   orders: { column: 'total', constraint: q => q.where('status', 'paid') },
+   * }).get()
+   * ```
+   */
+  static withSum<T extends typeof Model>(
+    this:    T,
+    arg1:    string | Record<string, AggregateSumSpec>,
+    column?: string,
+  ): QueryBuilder<InstanceType<T>> {
+    return (Model._q(this) as unknown as { withSum: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withSum(arg1, column)
+  }
+
+  /** Min of a column across the related rows. Stamps `<relation>Min<Column>`. */
+  static withMin<T extends typeof Model>(
+    this:    T,
+    arg1:    string | Record<string, AggregateSumSpec>,
+    column?: string,
+  ): QueryBuilder<InstanceType<T>> {
+    return (Model._q(this) as unknown as { withMin: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withMin(arg1, column)
+  }
+
+  /** Max of a column across the related rows. Stamps `<relation>Max<Column>`. */
+  static withMax<T extends typeof Model>(
+    this:    T,
+    arg1:    string | Record<string, AggregateSumSpec>,
+    column?: string,
+  ): QueryBuilder<InstanceType<T>> {
+    return (Model._q(this) as unknown as { withMax: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withMax(arg1, column)
+  }
+
+  /** Average of a column across the related rows. Stamps `<relation>Avg<Column>`. */
+  static withAvg<T extends typeof Model>(
+    this:    T,
+    arg1:    string | Record<string, AggregateSumSpec>,
+    column?: string,
+  ): QueryBuilder<InstanceType<T>> {
+    return (Model._q(this) as unknown as { withAvg: (a: typeof arg1, c?: string) => QueryBuilder<InstanceType<T>> }).withAvg(arg1, column)
+  }
+
+  /**
    * Find a record by attributes; if none exists, create one with `attrs` merged with `values`.
    * Returns the existing or newly-created record.
    */
@@ -1136,14 +1276,19 @@ export abstract class Model {
 
   /**
    * @internal — current own-property column attributes, with framework `_`
-   * keys + `undefined` placeholders dropped. Single source of truth shared
-   * by `_toData()` and dirty-tracking baselines.
+   * keys + `undefined` placeholders dropped. Aggregate-injected keys (stamped
+   * by `withCount` / `loadCount` etc.) are excluded — they're not real schema
+   * columns and would be rejected by Prisma writes / Drizzle inserts.
+   *
+   * Single source of truth shared by `_toData()` and dirty-tracking baselines.
    */
   private _currentAttrs(): Record<string, unknown> {
     const out: Record<string, unknown> = {}
+    const aggregates = (this as unknown as Record<symbol, Set<string> | undefined>)[AGGREGATES_SYMBOL]
     for (const [k, v] of Object.entries(this)) {
       if (k.startsWith('_')) continue
       if (v === undefined) continue
+      if (aggregates && aggregates.has(k)) continue
       out[k] = v
     }
     return out
@@ -1310,6 +1455,73 @@ export abstract class Model {
     }).increment(id, column, amount, extra as Record<string, unknown>)
     Object.assign(this, updated)
     this._syncOriginal()
+    return this
+  }
+
+  /**
+   * Aggregate-load related rows for this single instance. Mutates in place
+   * by setting `this[<relation>Count]` (or the `.as(name)` override) and
+   * returns `this` for chaining.
+   *
+   * One round-trip per call. For batched loads on a list, prefer
+   * `Model.query().withCount(...)` on the parent query.
+   *
+   * @example
+   * const user = await User.find(1)
+   * await user!.loadCount('posts')
+   * console.log(user!.postsCount)
+   *
+   * await user!.loadCount({ posts: q => q.where('published', true).as('publishedPosts') })
+   * console.log(user!.publishedPostsCount)
+   */
+  async loadCount(arg: string | readonly string[] | Record<string, AggregateConstraint>): Promise<this> {
+    await loadCountOrExists(this, 'count', arg)
+    return this
+  }
+
+  /** Boolean aggregate — stamps `<relation>Exists` on the instance. */
+  async loadExists(arg: string | readonly string[]): Promise<this> {
+    await loadCountOrExists(this, 'exists', arg)
+    return this
+  }
+
+  /** Sum of `column` across the related rows. Stamps `<relation>Sum<Column>`. */
+  async loadSum(arg1: string | Record<string, AggregateSumSpec>, column?: string): Promise<this> {
+    await loadNumericAggregate(this, 'sum', arg1, column)
+    return this
+  }
+
+  /** Min of `column` across the related rows. Stamps `<relation>Min<Column>`. */
+  async loadMin(arg1: string | Record<string, AggregateSumSpec>, column?: string): Promise<this> {
+    await loadNumericAggregate(this, 'min', arg1, column)
+    return this
+  }
+
+  /** Max of `column` across the related rows. Stamps `<relation>Max<Column>`. */
+  async loadMax(arg1: string | Record<string, AggregateSumSpec>, column?: string): Promise<this> {
+    await loadNumericAggregate(this, 'max', arg1, column)
+    return this
+  }
+
+  /** Average of `column` across the related rows. Stamps `<relation>Avg<Column>`. */
+  async loadAvg(arg1: string | Record<string, AggregateSumSpec>, column?: string): Promise<this> {
+    await loadNumericAggregate(this, 'avg', arg1, column)
+    return this
+  }
+
+  /**
+   * Eager-load each named relation onto the instance only when the property
+   * is currently `null` / `undefined`. Truthy properties are skipped — useful
+   * after partial hydration to backfill the relations a downstream consumer
+   * needs without refetching what's already there.
+   *
+   * @example
+   * const user = await User.query().with('profile').first()
+   * // profile already populated; only `posts` issues a query.
+   * await user!.loadMissing('profile', 'posts')
+   */
+  async loadMissing(...relations: string[]): Promise<this> {
+    await loadMissingRelations(this, relations)
     return this
   }
 
