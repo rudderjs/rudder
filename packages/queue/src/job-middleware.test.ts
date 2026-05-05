@@ -2,9 +2,13 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { FakeCacheAdapter } from '@rudderjs/cache'
 import { Job } from './index.js'
-import { WithoutOverlapping } from './job-middleware.js'
+import { WithoutOverlapping, RateLimited, ThrottlesExceptions } from './job-middleware.js'
 
 class StubJob extends Job {
+  async handle(): Promise<void> { /* noop */ }
+}
+
+class NamedJob extends Job {
   async handle(): Promise<void> { /* noop */ }
 }
 
@@ -100,5 +104,88 @@ describe('WithoutOverlapping', () => {
     let thirdRan = false
     await mw3.handle(new StubJob(), async () => { thirdRan = true })
     assert.strictEqual(thirdRan, true)
+  })
+})
+
+describe('RateLimited', () => {
+  let fake: FakeCacheAdapter
+  beforeEach(() => { fake = FakeCacheAdapter.fake() })
+  afterEach(()  => fake.restore())
+
+  it('runs next() and increments the counter on each call', async () => {
+    const mw = new RateLimited('api-calls', 5)
+    let ran = false
+    await mw.handle(new StubJob(), async () => { ran = true })
+
+    assert.strictEqual(ran, true)
+    fake.assertSet('rudderjs:job-rate:api-calls', v => v === 1)
+  })
+
+  it('throws "rate limit exceeded" when the counter reaches the max', async () => {
+    // Pre-seed the counter at the limit.
+    await fake.set('rudderjs:job-rate:api-calls', 5, 60)
+
+    const mw = new RateLimited('api-calls', 5)
+    let ran = false
+    await assert.rejects(
+      mw.handle(new StubJob(), async () => { ran = true }),
+      /rate limit exceeded/,
+    )
+    assert.strictEqual(ran, false, 'next() must NOT run when rate limit is hit')
+  })
+
+  it('fails open and runs next() when no cache adapter is registered', async () => {
+    fake.restore()
+    const mw = new RateLimited('api-calls', 5)
+    let ran = false
+    await mw.handle(new StubJob(), async () => { ran = true })
+    assert.strictEqual(ran, true)
+  })
+})
+
+describe('ThrottlesExceptions', () => {
+  let fake: FakeCacheAdapter
+  beforeEach(() => { fake = FakeCacheAdapter.fake() })
+  afterEach(()  => fake.restore())
+
+  it('runs next() and forgets the counter on success', async () => {
+    // Pre-seed a non-zero counter to verify it gets cleared on success.
+    await fake.set('rudderjs:job-throttle:NamedJob', 2, 300)
+
+    const mw = new ThrottlesExceptions(3, 5)
+    let ran = false
+    await mw.handle(new NamedJob(), async () => { ran = true })
+
+    assert.strictEqual(ran, true)
+    fake.assertForgotten('rudderjs:job-throttle:NamedJob')
+  })
+
+  it('increments the counter and re-throws when next() throws', async () => {
+    const mw = new ThrottlesExceptions(3, 5)
+    await assert.rejects(
+      mw.handle(new NamedJob(), async () => { throw new Error('boom') }),
+      /boom/,
+    )
+    fake.assertSet('rudderjs:job-throttle:NamedJob', v => v === 1)
+  })
+
+  it('throws "throttled" when the exception count reaches max', async () => {
+    await fake.set('rudderjs:job-throttle:NamedJob', 3, 300)
+
+    const mw = new ThrottlesExceptions(3, 5)
+    let ran = false
+    await assert.rejects(
+      mw.handle(new NamedJob(), async () => { ran = true }),
+      /throttled/,
+    )
+    assert.strictEqual(ran, false, 'next() must NOT run when throttled')
+  })
+
+  it('runs next() unguarded when no cache adapter is registered', async () => {
+    fake.restore()
+    const mw = new ThrottlesExceptions(3, 5)
+    let ran = false
+    await mw.handle(new NamedJob(), async () => { ran = true })
+    assert.strictEqual(ran, true)
   })
 })
