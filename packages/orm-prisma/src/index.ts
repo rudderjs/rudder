@@ -28,6 +28,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
+  RelationExistencePredicate,
 } from '@rudderjs/contracts'
 
 // ─── Prisma Query Builder ──────────────────────────────────
@@ -42,6 +43,14 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   private _withTrashed   = false
   private _onlyTrashed   = false
   private _softDeletes   = false
+  /** Direct (non-polymorphic, non-pivot) relation predicates — translated
+   *  to Prisma `{ [relation]: { some|none: filter } }` filters in buildWhere. */
+  private _relationFilters: Array<{ relation: string; polarity: 'some' | 'none'; filter: Record<string, unknown> }> = []
+  /** Constrained eager-load — Prisma's nested `include: { rel: { where } }`. */
+  private _withConstrained: Array<{ relation: string; filter: Record<string, unknown> }> = []
+  /** Predicates with `extraEquals` (polymorphic) or `through` (pivot) — resolved
+   *  via a 2-step lookup in `_resolveDeferred()` before each terminal call. */
+  private _deferredPredicates: RelationExistencePredicate[] = []
 
   constructor(
     private prisma: PrismaClient,
@@ -90,6 +99,98 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   /** @internal — called by Model to enable automatic soft delete filtering */
   _enableSoftDeletes(): this { this._softDeletes = true; return this }
 
+  whereRelationExists(p: RelationExistencePredicate): this {
+    if (p.extraEquals === undefined && p.through === undefined) {
+      // Direct relation — assumes the relation is declared in the Prisma
+      // schema with the same name. Prisma resolves the join itself.
+      this._relationFilters.push({
+        relation: p.relation,
+        polarity: p.exists ? 'some' : 'none',
+        filter:   this._wheresToPrismaFilter(p.constraintWheres),
+      })
+      return this
+    }
+    // Polymorphic or pivot — defer to a 2-step lookup at terminal time.
+    this._deferredPredicates.push(p)
+    return this
+  }
+
+  withConstrained(relation: string, constraintWheres: WhereClause[]): this {
+    this._withConstrained.push({
+      relation,
+      filter: this._wheresToPrismaFilter(constraintWheres),
+    })
+    return this
+  }
+
+  /** @internal — translate a flat WhereClause[] into a single Prisma
+   *  `where` filter object. Mirrors clauseToFilter(); same caveat —
+   *  multiple clauses on the same column override (last-wins). */
+  private _wheresToPrismaFilter(clauses: WhereClause[]): Record<string, unknown> {
+    if (clauses.length === 0) return {}
+    return Object.assign({}, ...clauses.map(c => this.clauseToFilter(c))) as Record<string, unknown>
+  }
+
+  /** @internal — resolve any deferred (polymorphic / pivot) predicates into
+   *  flat IN/NOT IN clauses on `_wheres`. Runs once per terminal call. */
+  private async _resolveDeferred(): Promise<void> {
+    if (this._deferredPredicates.length === 0) return
+    const pending = this._deferredPredicates
+    this._deferredPredicates = []
+    for (const p of pending) {
+      const ids = await this._resolveDeferredIds(p)
+      this._wheres.push({
+        column:   p.parentColumn,
+        operator: p.exists ? 'IN' : 'NOT IN',
+        value:    ids,
+      })
+    }
+  }
+
+  /** @internal — for deferred predicates, return the list of parent-column
+   *  values that satisfy the relation predicate (polymorphic or pivot path). */
+  private async _resolveDeferredIds(p: RelationExistencePredicate): Promise<unknown[]> {
+    const through = p.through
+    if (through) {
+      // Pivot mediated — step A: find related rows matching the constraint,
+      // step B: find pivot rows pointing at those related ids (plus the
+      // pivot-side discriminator from extraEquals), project foreignPivotKey.
+      const relatedFilter = this._wheresToPrismaFilter(p.constraintWheres)
+      const relatedDelegate = this.delegateFor(p.relatedTable)
+      const relatedRows = await relatedDelegate.findMany({ where: relatedFilter }) as Array<Record<string, unknown>>
+      const relatedIds  = relatedRows.map(r => r[p.relatedColumn])
+      // Empty matching set — short-circuit so we don't issue a wasted pivot query.
+      if (relatedIds.length === 0) return []
+
+      const pivotFilter: Record<string, unknown> = {
+        [through.relatedPivotKey]: { in: relatedIds },
+        ...(p.extraEquals ?? {}),
+      }
+      const pivotDelegate = this.delegateFor(through.pivotTable)
+      const pivotRows = await pivotDelegate.findMany({ where: pivotFilter }) as Array<Record<string, unknown>>
+      return pivotRows.map(r => r[through.foreignPivotKey])
+    }
+    // Direct polymorphic relation — constraint AND extraEquals on related.
+    const filter: Record<string, unknown> = {
+      ...this._wheresToPrismaFilter(p.constraintWheres),
+      ...(p.extraEquals ?? {}),
+    }
+    const delegate = this.delegateFor(p.relatedTable)
+    const rows = await delegate.findMany({ where: filter }) as Array<Record<string, unknown>>
+    return rows.map(r => r[p.relatedColumn])
+  }
+
+  /** @internal — resolve a Prisma delegate by table name (camelCase Prisma
+   *  model name). Same shape as `delegate` but parameterised by table. */
+  private delegateFor(table: string): PrismaModelDelegate {
+    const d = this.prisma[table]
+    if (!d) throw new Error(
+      `[RudderJS ORM] Prisma has no delegate for table "${table}". ` +
+      `Did you run "prisma generate" after adding the model to your schema?`,
+    )
+    return d as PrismaModelDelegate
+  }
+
   private clauseToFilter(clause: WhereClause): Record<string, unknown> {
     switch (clause.operator) {
       case '=':      return { [clause.column]: clause.value }
@@ -122,6 +223,11 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     const andFilters = this._wheres.map(c => this.clauseToFilter(c))
     const orFilters  = this._orWheres.map(c => this.clauseToFilter(c))
 
+    // Direct relation predicates → { [relation]: { some|none: filter } }
+    for (const r of this._relationFilters) {
+      andFilters.push({ [r.relation]: { [r.polarity]: r.filter } })
+    }
+
     // Soft delete filtering
     if (this._softDeletes && !this._withTrashed) {
       if (this._onlyTrashed) {
@@ -140,9 +246,14 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     return where
   }
 
-  private buildInclude(): Record<string, boolean> | undefined {
-    if (!this._withs.length) return undefined
-    return Object.fromEntries(this._withs.map(r => [r, true]))
+  private buildInclude(): Record<string, unknown> | undefined {
+    if (!this._withs.length && this._withConstrained.length === 0) return undefined
+    const include: Record<string, unknown> = {}
+    for (const r of this._withs) include[r] = true
+    // Constrained eager-loads override unconstrained for the same relation —
+    // `withWhereHas` is the canonical source when both are present.
+    for (const c of this._withConstrained) include[c.relation] = { where: c.filter }
+    return include
   }
 
   private buildOrderBy(): Record<string, string>[] {
@@ -150,6 +261,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async first(): Promise<T | null> {
+    await this._resolveDeferred()
     return (await this.delegate.findFirst({
       where:   this.buildWhere(),
       include: this.buildInclude(),
@@ -158,10 +270,12 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async find(id: number | string): Promise<T | null> {
+    await this._resolveDeferred()
     return (await this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) ?? null) as T | null
   }
 
   async get(): Promise<T[]> {
+    await this._resolveDeferred()
     return this.delegate.findMany({
       where:   this.buildWhere(),
       include: this.buildInclude(),
@@ -172,6 +286,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async all(): Promise<T[]> {
+    await this._resolveDeferred()
     return this.delegate.findMany({
       where:   this.buildWhere(),
       include: this.buildInclude(),
@@ -182,6 +297,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async count(): Promise<number> {
+    await this._resolveDeferred()
     return this.delegate.count({ where: this.buildWhere() })
   }
 
@@ -215,6 +331,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async deleteAll(): Promise<number> {
+    await this._resolveDeferred()
     const result = await this.delegate.deleteMany({ where: this.buildWhere() })
     return result.count
   }
@@ -234,6 +351,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
+    await this._resolveDeferred()
     const [data, total] = await Promise.all([
       this.delegate.findMany({
         where:   this.buildWhere(),

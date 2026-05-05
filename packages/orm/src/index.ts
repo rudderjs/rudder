@@ -1,8 +1,8 @@
-import type { QueryBuilder, OrmAdapter, PaginatedResult, ModelLike } from '@rudderjs/contracts'
+import type { QueryBuilder, OrmAdapter, PaginatedResult, ModelLike, WhereClause, WhereOperator, RelationExistencePredicate } from '@rudderjs/contracts'
 import { castGet, castSet, type CastDefinition } from './cast.js'
 import { type Attribute } from './attribute.js'
 
-export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState } from '@rudderjs/contracts'
+export type { QueryBuilder, OrmAdapter, OrmAdapterProvider, PaginatedResult, WhereOperator, WhereClause, OrderClause, QueryState, RelationExistencePredicate } from '@rudderjs/contracts'
 export type { CastDefinition, CastUsing, BuiltInCast } from './cast.js'
 export { Attribute }                               from './attribute.js'
 export { JsonResource, ResourceCollection }        from './resource.js'
@@ -660,6 +660,33 @@ export abstract class Model {
 
     const proxy: QueryBuilder<InstanceType<T>> = new Proxy(qb as object, {
       get(target, prop, receiver): unknown {
+        // ORM-side chainables that don't exist on the adapter QB itself —
+        // intercept before the existence check below, since `whereHas` etc.
+        // are added by this proxy, not by the adapter.
+        if (prop === 'whereHas') {
+          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+            _attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, true, constrain)
+            return proxy
+          }
+        }
+        if (prop === 'whereDoesntHave') {
+          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+            _attachWhereHas(ModelClass, target as QueryBuilder<Model>, relation, false, constrain)
+            return proxy
+          }
+        }
+        if (prop === 'withWhereHas') {
+          return (relation: string, constrain?: (q: QueryBuilder<Model>) => void): QueryBuilder<InstanceType<T>> => {
+            _attachWithWhereHas(ModelClass, target as QueryBuilder<Model>, relation, constrain)
+            return proxy
+          }
+        }
+        if (prop === 'whereBelongsTo') {
+          return (parent: Model, relation?: string): QueryBuilder<InstanceType<T>> => {
+            _attachWhereBelongsTo(ModelClass, target as QueryBuilder<Model>, parent, relation)
+            return proxy
+          }
+        }
         const value = Reflect.get(target, prop, receiver) as unknown
         if (typeof value !== 'function') return value
 
@@ -813,6 +840,80 @@ export abstract class Model {
 
   static where<T extends typeof Model>(this: T, column: string, value: unknown): QueryBuilder<InstanceType<T>> {
     return Model._q(this).where(column, value)
+  }
+
+  /**
+   * Filter rows where the named relation has at least one matching child.
+   * The optional callback receives a sub-QueryBuilder scoped to the related
+   * model — chain `.where()` etc. on it to narrow the relation predicate
+   * further.
+   *
+   * Resolves the relation declaration on `static relations`, builds a
+   * {@link RelationExistencePredicate}, and dispatches it to the adapter via
+   * `whereRelationExists`. `morphTo` relations are not supported (the related
+   * table is dynamic) — call sites should filter on the discriminator
+   * columns directly.
+   *
+   * @example
+   * await User.whereHas('posts').get()                                         // users with at least one post
+   * await User.whereHas('posts', q => q.where('published', true)).get()        // users with at least one published post
+   * await Post.whereHas('tags', q => q.where('name', 'featured')).get()        // belongsToMany pivot path
+   * await Post.whereHas('comments').get()                                      // morphMany — adds the {morph}Type filter automatically
+   */
+  static whereHas<T extends typeof Model>(
+    this:      T,
+    relation:  string,
+    constrain?: (q: QueryBuilder<Model>) => void,
+  ): QueryBuilder<InstanceType<T>> {
+    return _attachWhereHas(this as typeof Model, Model._q(this), relation, true, constrain) as QueryBuilder<InstanceType<T>>
+  }
+
+  /**
+   * Inverse of {@link Model.whereHas} — rows whose named relation has zero
+   * matching children. Same constrain-callback semantics: when present,
+   * narrows the "matching" set so `whereDoesntHave` matches "no children
+   * matching the constraint" rather than "no children at all".
+   */
+  static whereDoesntHave<T extends typeof Model>(
+    this:      T,
+    relation:  string,
+    constrain?: (q: QueryBuilder<Model>) => void,
+  ): QueryBuilder<InstanceType<T>> {
+    return _attachWhereHas(this as typeof Model, Model._q(this), relation, false, constrain) as QueryBuilder<InstanceType<T>>
+  }
+
+  /**
+   * `whereHas` + `with` — filter by the relation predicate AND eager-load the
+   * matching rows under the same constraint when the adapter supports it
+   * (`withConstrained`). Adapters without constrained eager-load fall back to
+   * unconstrained `with(relation)` — every related row is returned even if
+   * the parent was matched on a narrower predicate.
+   */
+  static withWhereHas<T extends typeof Model>(
+    this:      T,
+    relation:  string,
+    constrain?: (q: QueryBuilder<Model>) => void,
+  ): QueryBuilder<InstanceType<T>> {
+    return _attachWithWhereHas(this as typeof Model, Model._q(this), relation, constrain) as QueryBuilder<InstanceType<T>>
+  }
+
+  /**
+   * Filter rows whose `belongsTo` relation points at `parent`. Sugar for
+   * `where(fk, parent.primaryKeyValue)` with the FK column resolved from the
+   * relation declaration. When `relation` is omitted, looks up the single
+   * `belongsTo` relation pointing at `parent.constructor` and throws if zero
+   * or more-than-one match.
+   *
+   * @example
+   * await Post.whereBelongsTo(user).get()             // posts whose author belongsTo this user (single FK)
+   * await Comment.whereBelongsTo(post, 'post').get()  // explicit relation name when ambiguous
+   */
+  static whereBelongsTo<T extends typeof Model>(
+    this:      T,
+    parent:    Model,
+    relation?: string,
+  ): QueryBuilder<InstanceType<T>> {
+    return _attachWhereBelongsTo(this as typeof Model, Model._q(this), parent, relation) as QueryBuilder<InstanceType<T>>
   }
 
   /**
@@ -1858,6 +1959,285 @@ function _resolveMorphedByManyMeta(
     parentKey:       def.parentKey       ?? Parent.primaryKey,
     relatedKey:      def.relatedKey      ?? Related.primaryKey,
   }
+}
+
+// ─── whereHas internals ────────────────────────────────────
+
+/**
+ * Run the constrain callback against a recording-only QueryBuilder that
+ * captures `.where()` calls into a flat `WhereClause[]` and treats every
+ * other chainable method as a no-op. Nested `whereHas` inside the callback
+ * throws — recursive predicates are deferred to v2.
+ */
+function _captureConstraintWheres(
+  constrain: (q: QueryBuilder<Model>) => void,
+): WhereClause[] {
+  const wheres: WhereClause[] = []
+  const recorder: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
+    get(_t, prop): unknown {
+      const name = String(prop)
+      if (name === 'where') {
+        return (col: string, opOrVal: unknown, maybeVal?: unknown): QueryBuilder<Model> => {
+          if (maybeVal === undefined) {
+            wheres.push({ column: col, operator: '=', value: opOrVal })
+          } else {
+            wheres.push({ column: col, operator: opOrVal as WhereOperator, value: maybeVal })
+          }
+          return recorder
+        }
+      }
+      if (name === 'whereHas' || name === 'whereDoesntHave' || name === 'withWhereHas') {
+        return (): QueryBuilder<Model> => {
+          throw new Error(
+            `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is deferred to v2. ` +
+            `Filter on flat columns inside the callback for now.`,
+          )
+        }
+      }
+      // All other chainable methods record nothing and return the recorder so
+      // `q.orderBy('x').limit(1)` chains through silently. Terminal methods
+      // (find/get/etc.) don't make sense in a constrain callback — they'd
+      // execute mid-build — but we don't intercept them here; they'd just
+      // return the recorder which then fails downstream. Keep the contract
+      // simple.
+      return (): QueryBuilder<Model> => recorder
+    },
+  })
+  constrain(recorder)
+  return wheres
+}
+
+/**
+ * Variant shape of `RelationDefinition` for `hasOne | hasMany | belongsTo`.
+ * Those three live in a single union member with a literal-union `type`
+ * field, so `Extract<RelationDefinition, { type: 'belongsTo' }>` evaluates
+ * to `never` (the wider literal union doesn't extend the narrower one). We
+ * model the merged variant explicitly and runtime-check `type === 'belongsTo'`.
+ */
+type _HasOrBelongsToDef = Exclude<RelationDefinition, { type: 'belongsToMany' | 'morphMany' | 'morphOne' | 'morphTo' | 'morphToMany' | 'morphedByMany' }>
+
+/**
+ * Resolve the `belongsTo` relation declaration on `Self` that points at
+ * `ParentCtor`. When `relation` is given, looks it up directly. Otherwise
+ * scans `Self.relations` for a single `belongsTo` whose `model()` resolves
+ * to `ParentCtor` — throws on zero or multiple candidates.
+ */
+function _resolveBelongsToFor(
+  Self:        typeof Model,
+  ParentCtor:  typeof Model,
+  relation?:   string,
+): _HasOrBelongsToDef {
+  if (relation !== undefined) {
+    const def = Self.relations[relation]
+    if (!def) throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Self.name}.`)
+    if (def.type !== 'belongsTo') {
+      throw new Error(`[RudderJS ORM] Relation "${relation}" on ${Self.name} is "${def.type}", not "belongsTo".`)
+    }
+    return def as _HasOrBelongsToDef
+  }
+  const candidates: Array<[string, _HasOrBelongsToDef]> = []
+  for (const [name, def] of Object.entries(Self.relations)) {
+    if (def.type !== 'belongsTo') continue
+    const btDef = def as _HasOrBelongsToDef
+    if (btDef.model() === ParentCtor) candidates.push([name, btDef])
+  }
+  if (candidates.length === 0) {
+    throw new Error(
+      `[RudderJS ORM] whereBelongsTo: ${Self.name} has no belongsTo relation pointing at ${ParentCtor.name}. ` +
+      `Pass a relation name explicitly.`,
+    )
+  }
+  if (candidates.length > 1) {
+    const names = candidates.map(([n]) => n).join(', ')
+    throw new Error(
+      `[RudderJS ORM] whereBelongsTo: ${Self.name} has multiple belongsTo relations pointing at ${ParentCtor.name} (${names}). ` +
+      `Pass the relation name explicitly.`,
+    )
+  }
+  return candidates[0]![1]
+}
+
+/**
+ * Build the {@link RelationExistencePredicate} for a relation declared on
+ * `Parent` by `relation` and dispatch it to the adapter via
+ * `q.whereRelationExists(predicate)`. Returns the same QueryBuilder for
+ * chaining (the adapter mutates in place).
+ *
+ * `morphTo` throws — the related table isn't statically known so a single
+ * EXISTS subquery can't represent it. Filter on the discriminator + id
+ * columns directly when you need that semantic.
+ */
+function _attachWhereHas<TQ>(
+  Parent:    typeof Model,
+  q:         QueryBuilder<TQ>,
+  relation:  string,
+  exists:    boolean,
+  constrain?: (q: QueryBuilder<Model>) => void,
+): QueryBuilder<TQ> {
+  const def = Parent.relations[relation]
+  if (!def) {
+    throw new Error(`[RudderJS ORM] Relation "${relation}" is not defined on ${Parent.name}.`)
+  }
+  if (def.type === 'morphTo') {
+    throw new Error(
+      `[RudderJS ORM] morphTo "${relation}" cannot be used with whereHas — the related table is dynamic. ` +
+      `Filter on ${def.morphName}Id / ${def.morphName}Type directly instead.`,
+    )
+  }
+
+  const constraintWheres = constrain ? _captureConstraintWheres(constrain) : []
+  const predicate        = _buildRelationPredicate(Parent, relation, def, exists, constraintWheres)
+  return q.whereRelationExists(predicate)
+}
+
+function _buildRelationPredicate(
+  Parent:           typeof Model,
+  relation:         string,
+  def:              Exclude<RelationDefinition, { type: 'morphTo' }>,
+  exists:           boolean,
+  constraintWheres: WhereClause[],
+): RelationExistencePredicate {
+  const Related = def.model() as typeof Model
+
+  if (def.type === 'belongsToMany') {
+    const meta = _resolveBelongsToManyMeta(Parent, Related, def)
+    return {
+      relation,
+      exists,
+      relatedTable:  Related.getTable(),
+      parentColumn:  meta.parentKey,
+      relatedColumn: meta.relatedKey,
+      constraintWheres,
+      through: {
+        pivotTable:      meta.pivotTable,
+        foreignPivotKey: meta.foreignPivotKey,
+        relatedPivotKey: meta.relatedPivotKey,
+      },
+    }
+  }
+
+  if (def.type === 'morphToMany') {
+    const meta = _resolveMorphToManyMeta(Parent, Related, def)
+    return {
+      relation,
+      exists,
+      relatedTable:  Related.getTable(),
+      parentColumn:  meta.parentKey,
+      relatedColumn: meta.relatedKey,
+      constraintWheres,
+      extraEquals:  { [meta.morphTypeKey]: meta.morphTypeValue },
+      through: {
+        pivotTable:      meta.pivotTable,
+        foreignPivotKey: meta.foreignPivotKey,
+        relatedPivotKey: meta.relatedPivotKey,
+      },
+    }
+  }
+
+  if (def.type === 'morphedByMany') {
+    const meta = _resolveMorphedByManyMeta(Parent, Related, def)
+    return {
+      relation,
+      exists,
+      relatedTable:  Related.getTable(),
+      parentColumn:  meta.parentKey,
+      relatedColumn: meta.relatedKey,
+      constraintWheres,
+      extraEquals:  { [meta.morphTypeKey]: meta.morphTypeValue },
+      through: {
+        pivotTable:      meta.pivotTable,
+        foreignPivotKey: meta.foreignPivotKey,
+        relatedPivotKey: meta.relatedPivotKey,
+      },
+    }
+  }
+
+  if (def.type === 'morphMany' || def.type === 'morphOne') {
+    const idCol    = `${def.morphName}Id`
+    const typeCol  = `${def.morphName}Type`
+    const localCol = def.localKey ?? Parent.primaryKey
+    const typeVal  = def.morphType ?? Parent.morphAlias ?? Parent.name
+    return {
+      relation,
+      exists,
+      relatedTable:  Related.getTable(),
+      parentColumn:  localCol,
+      relatedColumn: idCol,
+      constraintWheres,
+      extraEquals: { [typeCol]: typeVal },
+    }
+  }
+
+  if (def.type === 'belongsTo') {
+    const fk       = def.foreignKey ?? `${_camelHead(Related.name)}Id`
+    const localCol = def.localKey   ?? fk
+    return {
+      relation,
+      exists,
+      relatedTable:  Related.getTable(),
+      parentColumn:  localCol,
+      relatedColumn: Related.primaryKey,
+      constraintWheres,
+    }
+  }
+
+  // hasOne / hasMany — related table holds the FK pointing back to Parent.
+  const fk       = def.foreignKey ?? `${_camelHead(Parent.name)}Id`
+  const localCol = def.localKey   ?? Parent.primaryKey
+  return {
+    relation,
+    exists,
+    relatedTable:  Related.getTable(),
+    parentColumn:  localCol,
+    relatedColumn: fk,
+    constraintWheres,
+  }
+}
+
+/**
+ * `withWhereHas` — run `whereHas` AND eager-load the relation under the
+ * same constraint when the adapter implements `withConstrained`. Adapters
+ * without it fall back to plain `with(relation)` (constraint applies only
+ * to the parent filter, not the eagerly loaded children).
+ */
+function _attachWithWhereHas<TQ>(
+  Parent:    typeof Model,
+  q:         QueryBuilder<TQ>,
+  relation:  string,
+  constrain?: (q: QueryBuilder<Model>) => void,
+): QueryBuilder<TQ> {
+  const constraintWheres = constrain ? _captureConstraintWheres(constrain) : []
+  // Reuse _attachWhereHas for the parent-side filter — it re-runs the
+  // constrain callback against a fresh recorder, so the WhereClause[] we
+  // capture above and the one captured inside _attachWhereHas come from
+  // distinct recorder instances. That's intentional: each captures the
+  // same constraint independently and neither is mutated by the adapter.
+  _attachWhereHas(Parent, q, relation, true, constrain)
+  const withConstrained = (q as unknown as { withConstrained?: (rel: string, ws: WhereClause[]) => QueryBuilder<TQ> }).withConstrained
+  if (constraintWheres.length > 0 && typeof withConstrained === 'function') {
+    return withConstrained.call(q, relation, constraintWheres)
+  }
+  return q.with(relation)
+}
+
+function _attachWhereBelongsTo<TQ>(
+  Self:      typeof Model,
+  q:         QueryBuilder<TQ>,
+  parent:    Model,
+  relation?: string,
+): QueryBuilder<TQ> {
+  const ParentCtor = parent.constructor as typeof Model
+  const def        = _resolveBelongsToFor(Self, ParentCtor, relation)
+  const Related    = def.model() as typeof Model
+  const fk         = def.foreignKey ?? `${_camelHead(Related.name)}Id`
+  const localCol   = def.localKey   ?? fk
+  const parentVal  = (parent as unknown as Record<string, unknown>)[ParentCtor.primaryKey]
+  if (parentVal === undefined || parentVal === null) {
+    throw new Error(
+      `[RudderJS ORM] whereBelongsTo: parent.${ParentCtor.primaryKey} is unset on ${ParentCtor.name}.`,
+    )
+  }
+  return q.where(localCol, parentVal)
 }
 
 const _CHAIN_METHODS = new Set([
