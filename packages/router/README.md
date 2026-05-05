@@ -258,6 +258,91 @@ Mismatched hosts return 404. Subdomain `:param` and path `:param` of the same na
 
 ---
 
+## Resource controllers (`router.resource()`)
+
+Wire the seven canonical CRUD routes from a plain controller class — Laravel's `Route::resource` for RudderJS. No decorators; methods are matched by name.
+
+```ts
+import { router } from '@rudderjs/router'
+
+class PostController {
+  async index   (_ctx) { /* GET    /posts            → list   */ }
+  async create  (_ctx) { /* GET    /posts/create     → form   */ }
+  async store   (_ctx) { /* POST   /posts            → persist */ }
+  async show    (_ctx) { /* GET    /posts/:post      → one    */ }
+  async edit    (_ctx) { /* GET    /posts/:post/edit → form   */ }
+  async update  (_ctx) { /* PUT|PATCH /posts/:post   → update */ }
+  async destroy (_ctx) { /* DELETE /posts/:post      → delete */ }
+}
+
+router.resource('posts', PostController)
+```
+
+| Verb | Method | Path | Route name |
+|--------|--------|------|------------|
+| index   | `GET`    | `/posts`            | `posts.index`   |
+| create  | `GET`    | `/posts/create`     | `posts.create`  |
+| store   | `POST`   | `/posts`            | `posts.store`   |
+| show    | `GET`    | `/posts/:post`      | `posts.show`    |
+| edit    | `GET`    | `/posts/:post/edit` | `posts.edit`    |
+| update  | `PUT`+`PATCH` | `/posts/:post` | `posts.update` |
+| destroy | `DELETE` | `/posts/:post`      | `posts.destroy` |
+
+Methods the controller doesn't implement are silently skipped, so partial controllers work with no `only`/`except` boilerplate.
+
+### `apiResource()` — drops the HTML form pages
+
+```ts
+router.apiResource('posts', PostController)
+// no posts.create, no posts.edit
+```
+
+### `singleton()` — for "the one of these"
+
+```ts
+router.singleton('profile', ProfileController)
+// GET    /profile          posts.show (named profile.show)
+// GET    /profile/edit     profile.edit
+// PUT    /profile          profile.update
+// PATCH  /profile          (alias)
+
+router.singleton('profile', ProfileController).creatable()    // adds GET /profile/create + POST /profile
+router.singleton('profile', ProfileController).destroyable()  // adds DELETE /profile
+```
+
+### Options
+
+```ts
+router.resource('posts', PostController, {
+  only:       ['index', 'show'],
+  except:     ['destroy'],
+  parameters: { posts: 'article' },        // /posts/:article instead of /posts/:post
+  names:      { show: 'posts.detail' },
+  middleware: [authMw],
+})
+```
+
+### Per-route customisation via `.builders[]`
+
+The registration object exposes the underlying `RouteBuilder[]` — apply `where*()`, additional `.middleware()`, or rename one route in isolation:
+
+```ts
+const reg = router.resource('posts', PostController)
+reg.builders[3].whereNumber('post')       // constrain show route only
+```
+
+Builders are in declaration order: `index`, `create`, `store`, `show`, `edit`, `update` (PUT), `update` (PATCH alias), `destroy` — minus any verb the controller skipped.
+
+### Scaffolder
+
+```bash
+pnpm rudder make:controller PostController --resource    # full 7-verb stub
+pnpm rudder make:controller PostController --api         # API-only (no create/edit)
+pnpm rudder make:controller ProfileController --singleton
+```
+
+---
+
 ## Mounting onto a server adapter
 
 ```ts
@@ -284,6 +369,9 @@ router.mount(serverAdapter)
 | `bind(name, resolver, opts?)` | `this` | Bind a `:param` to a `RouteResolver` (e.g. an ORM Model) for auto-resolution |
 | `listBindings()` | `Record<string, RouteResolver>` | All registered route bindings |
 | `group(opts, fn)` | `this` | Apply prefix/domain/middleware to every route registered inside `fn` |
+| `resource(name, Ctrl, opts?)` | `ResourceRegistration` | Register the seven canonical RESTful routes |
+| `apiResource(name, Ctrl, opts?)` | `ResourceRegistration` | Resource minus `create`/`edit` |
+| `singleton(name, Ctrl, opts?)` | `SingletonRegistration` | `show`/`edit`/`update` for a single-instance resource |
 | `registerController(Class)` | `this` | Register decorator-based controller |
 | `mount(serverAdapter)` | `void` | Apply middleware + routes to adapter |
 | `list()` | `RouteDefinition[]` | All registered routes |

@@ -22,8 +22,8 @@ export interface MakeSpec {
   suffix?:     string
   /** Destination directory under the app root, e.g. `app/Http/Controllers` */
   directory:   string
-  /** Stub generator — receives the normalized class name */
-  stub:        (className: string) => string
+  /** Stub generator — receives the normalized class name and parsed CLI opts */
+  stub:        (className: string, opts: Record<string, unknown>) => string
   /** Optional extra flags this command exposes (rendered in --help). */
   extraOptions?: ExtraOption[]
   /** Optional hook printed after the success line. Receives all parsed opts. */
@@ -54,7 +54,7 @@ export function registerMake(program: Command, spec: MakeSpec): void {
       }
 
       await mkdir(dirname(outPath), { recursive: true })
-      await writeFile(outPath, spec.stub(className))
+      await writeFile(outPath, spec.stub(className, opts))
 
       console.log(chalk.green(`  ✔ ${spec.label}:`), chalk.cyan(relPath))
       await spec.afterCreate?.(className, relPath, opts)
