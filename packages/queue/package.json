@@ -33,21 +33,26 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js dist-test/job-middleware.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@rudderjs/core": "workspace:^"
   },
   "peerDependencies": {
+    "@rudderjs/cache": "workspace:^",
     "@rudderjs/router": "workspace:^"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/cache": {
+      "optional": true
+    },
     "@rudderjs/router": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@rudderjs/cache": "workspace:^",
     "@rudderjs/router": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"

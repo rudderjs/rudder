@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict'
 import { CacheRegistry } from './index.js'
 import type { CacheAdapter } from './index.js'
+import { BaseLock, newOwnerToken, type Lock } from './lock.js'
 
 // ─── Types ────────────────────────────────────────────────
 
 export interface CacheOperation {
-  type: 'get' | 'set' | 'forget' | 'has' | 'flush'
-  key?: string | undefined
+  type:   'get' | 'set' | 'forget' | 'has' | 'flush' | 'lock-acquire' | 'lock-release' | 'lock-force-release'
+  key?:   string | undefined
   value?: unknown
-  ttl?: number | undefined
+  ttl?:   number | undefined
+  owner?: string | undefined
 }
 
 // ─── Fake Adapter ─────────────────────────────────────────
@@ -80,6 +82,14 @@ export class FakeCacheAdapter implements CacheAdapter {
     this._store.clear()
   }
 
+  lock(name: string, seconds: number): Lock {
+    return new FakeLock(name, seconds, newOwnerToken(), this._store, this._operations)
+  }
+
+  restoreLock(name: string, owner: string): Lock {
+    return new FakeLock(name, 0, owner, this._store, this._operations)
+  }
+
   // ─── Assertions ─────────────────────────────────────────
 
   /** Assert that `set` was called for the given key. Optionally check the stored value with a predicate. */
@@ -126,6 +136,18 @@ export class FakeCacheAdapter implements CacheAdapter {
     assert.ok(exists, `[RudderJS Cache] Expected key "${key}" to exist in the store, but it does not.`)
   }
 
+  /** Assert that a lock with this name was acquired at least once. */
+  assertLockAcquired(name: string): void {
+    const op = this._operations.find(o => o.type === 'lock-acquire' && o.key === name)
+    assert.ok(op, `[RudderJS Cache] Expected lock "${name}" to be acquired, but it was not.`)
+  }
+
+  /** Assert that a lock with this name was released at least once. */
+  assertLockReleased(name: string): void {
+    const op = this._operations.find(o => (o.type === 'lock-release' || o.type === 'lock-force-release') && o.key === name)
+    assert.ok(op, `[RudderJS Cache] Expected lock "${name}" to be released, but it was not.`)
+  }
+
   // ─── Access ─────────────────────────────────────────────
 
   /** Return all recorded operations. */
@@ -147,5 +169,59 @@ export class FakeCacheAdapter implements CacheAdapter {
   /** Restore the cache registry to its original state (no adapter). */
   restore(): void {
     CacheRegistry.reset()
+  }
+}
+
+// ─── Fake Lock ────────────────────────────────────────────
+
+class FakeLock extends BaseLock {
+  constructor(
+    name:    string,
+    seconds: number,
+    owner:   string,
+    private readonly store: Map<string, FakeEntry>,
+    private readonly ops:   CacheOperation[],
+  ) {
+    super(name, seconds, owner)
+  }
+
+  private key(): string { return `__lock__:${this._name}` }
+
+  private readEntry(): FakeEntry | null {
+    const k = this.key()
+    const entry = this.store.get(k)
+    if (!entry) return null
+    if (entry.expiresAt !== null && Date.now() > entry.expiresAt) {
+      this.store.delete(k)
+      return null
+    }
+    return entry
+  }
+
+  protected async acquire(): Promise<boolean> {
+    if (this.readEntry()) {
+      this.ops.push({ type: 'lock-acquire', key: this._name, owner: this._owner, value: false })
+      return false
+    }
+    const expiresAt = this._seconds > 0 ? Date.now() + this._seconds * 1_000 : null
+    this.store.set(this.key(), { value: this._owner, expiresAt })
+    this.ops.push({ type: 'lock-acquire', key: this._name, owner: this._owner, value: true, ttl: this._seconds })
+    return true
+  }
+
+  async release(): Promise<boolean> {
+    const entry = this.readEntry()
+    if (!entry || entry.value !== this._owner) {
+      this.ops.push({ type: 'lock-release', key: this._name, owner: this._owner, value: false })
+      return false
+    }
+    this.store.delete(this.key())
+    this.ops.push({ type: 'lock-release', key: this._name, owner: this._owner, value: true })
+    return true
+  }
+
+  async forceRelease(): Promise<void> {
+    this.store.delete(this.key())
+    this.ops.push({ type: 'lock-force-release', key: this._name, owner: this._owner })
   }
 }

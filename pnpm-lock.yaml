@@ -725,6 +725,9 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/cache':
+        specifier: workspace:^
+        version: link:../cache
       '@rudderjs/router':
         specifier: workspace:^
         version: link:../router
@@ -817,6 +820,9 @@ importers:
         specifier: ^9.0.0
         version: 9.1.0
     devDependencies:
+      '@rudderjs/cache':
+        specifier: workspace:^
+        version: link:../cache
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35
