@@ -36,9 +36,20 @@
     "@rudderjs/core": "workspace:^"
   },
   "optionalDependencies": {
-    "@aws-sdk/client-s3": "^3.0.0"
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/lib-storage": "^3.0.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0"
+  },
+  "peerDependencies": {
+    "@rudderjs/router": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/router": { "optional": true }
   },
   "devDependencies": {
+    "@aws-sdk/lib-storage": "^3.0.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0",
+    "@rudderjs/router": "workspace:*",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },
