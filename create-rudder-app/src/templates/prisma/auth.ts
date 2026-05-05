@@ -4,7 +4,7 @@ export function prismaAuth(): string {
   name          String
   email         String    @unique
   password      String?
-  emailVerified Boolean   @default(false)
+  emailVerifiedAt DateTime?
   image         String?
   role          String    @default("user")
   rememberToken String?

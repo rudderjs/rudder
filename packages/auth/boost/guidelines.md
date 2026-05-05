@@ -61,7 +61,7 @@ Implement `MustVerifyEmail` on your User model:
 ```ts
 class User extends Model implements Authenticatable, MustVerifyEmail {
   hasVerifiedEmail() { return this.emailVerifiedAt !== null }
-  markEmailAsVerified() { this.emailVerifiedAt = new Date().toISOString(); return Promise.resolve() }
+  async markEmailAsVerified() { await User.update(this.id, { emailVerifiedAt: new Date() }) }
   getEmailForVerification() { return this.email }
 }
 ```

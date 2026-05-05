@@ -1,14 +1,14 @@
-import { mysqlTable, varchar, boolean, datetime, text } from 'drizzle-orm/mysql-core'
+import { mysqlTable, varchar, datetime, text } from 'drizzle-orm/mysql-core'
 
 export const user = mysqlTable('user', {
-  id:            varchar('id', { length: 36 }).primaryKey(),
-  name:          varchar('name', { length: 255 }).notNull(),
-  email:         varchar('email', { length: 255 }).notNull().unique(),
-  emailVerified: boolean('emailVerified').notNull().default(false),
-  image:         text('image'),
-  role:          varchar('role', { length: 50 }).notNull().default('user'),
-  createdAt:     datetime('createdAt').notNull().$defaultFn(() => new Date()),
-  updatedAt:     datetime('updatedAt').notNull().$defaultFn(() => new Date()),
+  id:              varchar('id', { length: 36 }).primaryKey(),
+  name:            varchar('name', { length: 255 }).notNull(),
+  email:           varchar('email', { length: 255 }).notNull().unique(),
+  emailVerifiedAt: datetime('emailVerifiedAt'),
+  image:           text('image'),
+  role:            varchar('role', { length: 50 }).notNull().default('user'),
+  createdAt:       datetime('createdAt').notNull().$defaultFn(() => new Date()),
+  updatedAt:       datetime('updatedAt').notNull().$defaultFn(() => new Date()),
 })
 
 export const session = mysqlTable('session', {

@@ -140,7 +140,7 @@ import type { Authenticatable, MustVerifyEmail } from '@rudderjs/auth'
 class User extends Model implements Authenticatable, MustVerifyEmail {
   hasVerifiedEmail()  { return this.emailVerifiedAt !== null }
   async markEmailAsVerified() {
-    await User.update(this.id, { emailVerifiedAt: new Date().toISOString() })
+    await User.update(this.id, { emailVerifiedAt: new Date() })
   }
   getEmailForVerification() { return this.email }
 }
