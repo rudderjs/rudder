@@ -45,11 +45,10 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { localization } from '@rudderjs/localization'
-import configs from '../config/index.js'
+import { LocalizationProvider } from '@rudderjs/localization'
 
 export default [
-  localization(configs.localization),
+  LocalizationProvider,
 ]
 ```
 

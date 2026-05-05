@@ -28,8 +28,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { socialite } from '@rudderjs/socialite'
-export default [..., socialite(configs.socialite)]
+import { SocialiteProvider } from '@rudderjs/socialite'
+export default [SocialiteProvider]
 ```
 
 ## Usage

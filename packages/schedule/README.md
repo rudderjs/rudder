@@ -12,8 +12,8 @@ pnpm add @rudderjs/schedule
 
 ```ts
 // bootstrap/providers.ts
-import { scheduler } from '@rudderjs/schedule'
-export default [scheduler()]
+import { ScheduleProvider } from '@rudderjs/schedule'
+export default [ScheduleProvider]
 ```
 
 ```ts

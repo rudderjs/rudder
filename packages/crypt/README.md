@@ -32,8 +32,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { crypt } from '@rudderjs/crypt'
-export default [crypt(configs.crypt), ...]
+import { CryptProvider } from '@rudderjs/crypt'
+export default [CryptProvider]
 ```
 
 ## Usage

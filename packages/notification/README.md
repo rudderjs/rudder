@@ -12,13 +12,12 @@ pnpm add @rudderjs/notification
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@rudderjs/mail'
-import { notifications } from '@rudderjs/notification'
-import configs from '../config/index.js'
+import { MailProvider } from '@rudderjs/mail'
+import { NotificationProvider } from '@rudderjs/notification'
 
 export default [
-  mail(configs.mail),      // required before notifications() when using mail channel
-  notifications(),         // registers built-in mail + database channels
+  MailProvider,           // required before NotificationProvider when using mail channel
+  NotificationProvider,   // registers built-in mail + database + broadcast channels
 ]
 ```
 

@@ -49,8 +49,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { ai } from '@rudderjs/ai'
-export default [ai(configs.ai), ...]
+import { AiProvider } from '@rudderjs/ai/server'
+export default [AiProvider]
 ```
 
 ## Usage

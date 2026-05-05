@@ -12,9 +12,8 @@ pnpm add @rudderjs/cache
 
 ```ts
 // bootstrap/providers.ts
-import { cache } from '@rudderjs/cache'
-import configs from '../config/index.js'
-export default [cache(configs.cache)]
+import { CacheProvider } from '@rudderjs/cache'
+export default [CacheProvider]
 ```
 
 ## Cache Facade

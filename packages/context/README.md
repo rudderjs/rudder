@@ -13,11 +13,11 @@ pnpm add @rudderjs/context
 Register the provider in `bootstrap/providers.ts`:
 
 ```ts
-import { context } from '@rudderjs/context'
+import { ContextProvider } from '@rudderjs/context'
 
 export default [
   // ...other providers
-  context(),
+  ContextProvider,
 ]
 ```
 

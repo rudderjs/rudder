@@ -14,11 +14,10 @@ pnpm add @rudderjs/log
 
 ```ts
 // bootstrap/providers.ts
-import { log } from '@rudderjs/log'
-import configs from '../config/index.js'
+import { LogProvider } from '@rudderjs/log'
 
 export default [
-  log(configs.log),
+  LogProvider,
   // ...other providers
 ]
 ```
