@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/storage",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "rudderjs": {
     "provider": "StorageProvider",
     "stage": "feature"
@@ -44,7 +44,9 @@
     "@rudderjs/router": "workspace:^"
   },
   "peerDependenciesMeta": {
-    "@rudderjs/router": { "optional": true }
+    "@rudderjs/router": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@aws-sdk/lib-storage": "^3.0.0",

@@ -1,5 +1,163 @@
 # @rudderjs/orm
 
+## 1.7.0
+
+### Minor Changes
+
+- 1805d0c: Aggregate eager loading — `withCount` / `withSum` / `withMin` / `withMax` / `withAvg` / `withExists` on the QueryBuilder + `loadCount` / `loadSum` / `loadMin` / `loadMax` / `loadAvg` / `loadExists` / `loadMissing` on instances (Laravel parity #2 plan #3).
+
+  Closes the N+1 footgun for hot list pages without dropping into the adapter. Result columns are stamped onto each parent under deterministic camelCase aliases (`postsCount`, `postsSumViews`, `subscriptionExists`).
+
+  ```ts
+  // Multi-row aggregate (parent query)
+  await User.query().withCount("posts").get(); // user.postsCount
+  await User.query().withSum("posts", "views").paginate(1); // user.postsSumViews
+  await User.query()
+    .withCount({
+      posts: (q) => q.where("published", true).as("publishedPosts"),
+    })
+    .get(); // user.publishedPostsCount
+
+  // Per-instance aggregate
+  const user = await User.find(1);
+  await user!.loadCount("posts");
+  console.log(user!.postsCount);
+
+  // Eager-load only what's missing
+  await user!.loadMissing("profile", "posts");
+  ```
+
+  **Notes:**
+
+  - `withCount` on `belongsTo` throws (always 0 or 1; use `withExists` instead). On `morphTo` throws (related table is dynamic).
+  - Aggregate columns are tagged on a `Symbol.for('rudderjs.orm.aggregates')` Set so `model.save()` strips them before write — they never reach the underlying schema.
+  - Soft deletes on the related model are applied automatically — the adapter ANDs `deleted_at IS NULL` into the aggregate subquery.
+  - Closure constraints (`q => q.where(...).as(...)`) cover the same surface as `whereHas` constraints.
+
+  **Adapter changes:**
+
+  - New `withAggregate(requests: AggregateRequest[])` method on `QueryBuilder<T>` (required). Out-of-tree adapters implement this single normalized shape — the public `withCount` / `withSum` / etc. overloads collapse into `AggregateRequest[]` in the orm Model layer.
+  - New `_aggregate(fn, column?)` method on `QueryBuilder<T>` (required, `@internal`) — single-scalar terminal used by the per-instance `loadCount` / `loadSum` / etc.
+  - `QueryState.aggregates: AggregateRequest[]` extends the existing state shape.
+  - `@rudderjs/orm-prisma` uses Prisma's native `_count.select` for direct count/exists (no second round-trip) and second-batch `groupBy` for polymorphic / pivot / numeric aggregates.
+  - `@rudderjs/orm-drizzle` emits one correlated subselect per aggregate in the SELECT list. Pivot-mediated aggregates JOIN through the pivot table when soft-deletes / constraints / numeric columns are involved.
+
+  Additive — no migration needed for existing calls.
+
+- a089110: Eloquent-style dirty tracking on Model instances (Laravel parity #2 PR1).
+
+  Every Model instance now keeps an attribute snapshot as of the last
+  `hydrate()` / `save()` / `refresh()` and exposes six methods over it:
+
+  - `isDirty(key?)` / `isClean(key?)` — whether any (or the named) attribute
+    has been changed since the last save / load / refresh.
+  - `wasChanged(key?)` — whether the most recent `save()` actually
+    persisted a change. Stays true until the next save / refresh.
+  - `getOriginal(key?)` — snapshot value(s) as of the last save / load /
+    refresh.
+  - `getChanges()` — diff of attributes that changed during the most
+    recent `save()`.
+  - `getDirty()` — diff of attributes currently dirty (unsaved).
+
+  Equality is strict for primitives, `getTime()` for Date, and structural
+  JSON for arrays / plain objects (matching Eloquent's
+  `originalIsEquivalent`). `refresh()` discards pending writes and
+  re-baselines. `increment()` / `decrement()` re-baseline so the bumped
+  counter is not reported as dirty.
+
+  Additive — no existing API changes, no migration needed. See the orm
+  README's "Dirty Tracking" section for full semantics and edge-case
+  coverage.
+
+- 5703439: Pruning — `Prunable` / `MassPrunable` markers + `pnpm rudder model:prune` (Laravel parity #2 plan #8).
+
+  Models declaring `static prunable()` are picked up by the new `model:prune` command. Default `pruneMode = 'instance'` re-queries each chunk and calls `instance.delete()` per row — soft-deletes apply, `deleting` / `deleted` observers fire, optional `static pruning(model)` runs first. `pruneMode = 'mass'` (`MassPrunable`) runs a single `qb.deleteAll()` per chunk — no observers, no hooks, soft-deletes bypassed (mirrors the existing bulk-delete primitive).
+
+  CLI flags: `--model=A,B`, `--except=A`, `--chunk=N`, `--pretend`. Schedule it with `scheduler.command('model:prune').daily()` — first-class retention hook with zero per-model wiring.
+
+  Programmatic entry: `pruneModels({ models?, except?, chunk?, pretend? })` returns one `{ model, mode, count }` report per pruned model. Re-queries instead of `offset()` paging because deletions shift the cursor.
+
+- ad3a531: Eloquent-style quiet event ops + `instance.restore()` (Laravel parity #2 PR2).
+
+  Three instance methods that mute observer + listener events for a single
+  operation, mirroring Eloquent's quiet variants:
+
+  - `saveQuietly()` — persists without firing `saving` / `saved` /
+    `creating` / `created` / `updating` / `updated`.
+  - `deleteQuietly()` — deletes (or soft-deletes) without firing
+    `deleting` / `deleted`.
+  - `restoreQuietly()` — restores a soft-deleted row without firing
+    `restoring` / `restored`.
+
+  Plus `instance.restore()` — non-quiet symmetric counterpart to
+  `instance.delete()`. Routes through the static `Model.restore()` so
+  observers fire, refreshes the instance in place, and re-baselines the
+  dirty-tracking snapshot.
+
+  **Per-class isolation:** quiet ops mute only the calling class.
+  Cascading observers that touch other classes still fire — wrap the
+  cascade in a broader `Model.withoutEvents()` block if you need full
+  silence.
+
+  Additive — no existing API changes, no migration needed.
+
+- fcc57f9: Eloquent-style relation predicates — `whereHas` / `whereDoesntHave` /
+  `withWhereHas` / `whereBelongsTo` (Laravel parity #2 PR3).
+
+  Filter a query by whether a relation has at least one matching row.
+  The optional callback narrows the relation predicate further — chain
+  plain `where()` calls inside it.
+
+  ```ts
+  await User.whereHas("posts", (q) => q.where("published", true)).get();
+  await User.whereDoesntHave("posts").get();
+  await User.withWhereHas("posts", (q) => q.where("published", true)).get();
+  await Post.whereBelongsTo(user).get();
+  await Comment.whereBelongsTo(post, "post").get();
+  ```
+
+  Supported relation types: `hasMany`, `hasOne`, `belongsTo`,
+  `belongsToMany`, `morphMany`, `morphOne`, `morphToMany`, `morphedByMany`.
+  `morphTo` is intentionally not supported — the related table is dynamic,
+  so a single subquery can't represent it. Filter on `{morphName}Id` /
+  `{morphName}Type` directly when you need that semantic.
+
+  The four chainable methods are also exposed on `QueryBuilder` so
+  they compose with flat `where()`/`orderBy()`/etc.
+
+  **Adapter changes:**
+
+  - New `RelationExistencePredicate` type in `@rudderjs/contracts` —
+    carries the structural metadata adapters need (related table, parent /
+    related columns, constraint wheres, optional `extraEquals` for morph
+    discriminators, optional `through` for pivot relations).
+  - New `whereRelationExists(predicate)` method on `QueryBuilder<T>`
+    (required). Out-of-tree adapters need to implement it.
+  - New optional `withConstrained(relation, wheres)` method on
+    `QueryBuilder<T>` for constrained eager-load.
+  - `@rudderjs/orm-prisma` uses native `some` / `none` filters for direct
+    relations (`hasMany`/`hasOne`/`belongsTo`) — those relations must be
+    declared in `schema.prisma` with the same name. Polymorphic and pivot
+    paths route through a 2-step lookup so they work without a Prisma-
+    declared relation. `withConstrained` maps to nested `include: { rel:
+{ where } }`.
+  - `@rudderjs/orm-drizzle` builds correlated `EXISTS (...)` /
+    `NOT EXISTS (...)` subqueries via `exists()` / `notExists()`. Every
+    related table referenced from a `whereHas` call must be registered via
+    `tables: { ... }` on `drizzle()` config or
+    `DrizzleTableRegistry.register(name, table)`. `withConstrained` is not
+    yet implemented on Drizzle — `withWhereHas` falls back to plain
+    `with(relation)`.
+
+  Additive — no migration needed for existing calls.
+
+### Patch Changes
+
+- Updated dependencies [1805d0c]
+- Updated dependencies [fcc57f9]
+- Updated dependencies [a0b96f9]
+  - @rudderjs/contracts@1.2.0
+
 ## 1.6.0
 
 ### Minor Changes

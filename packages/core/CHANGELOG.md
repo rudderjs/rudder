@@ -1,5 +1,53 @@
 # @rudderjs/core
 
+## 1.1.0
+
+### Minor Changes
+
+- 6c03c74: Add container `extend` / `rebinding` / `@Tag` decorator + `tagToken` (Laravel parity #7, PR2).
+
+  - `container.extend<T>(token, fn)` — wrap the value resolved for `token`. Chains in registration order, applied eagerly to any cached singleton/instance so existing consumers see the wrap on the next `make()`. Singletons cache the wrapped form; transient bindings re-wrap per `make()`; scoped bindings re-wrap per scope.
+  - `container.rebinding<T>(token, fn)` — register a listener that fires whenever an existing binding is replaced via `bind` / `singleton` / `scoped` / `instance`. Listeners receive the freshly-resolved value (not the stale singleton cache). Does not fire on the initial bind. Useful for test hot-swaps and `app->refresh()` parity.
+  - `@Tag(name)` parameter decorator — inject the array of bindings tagged with `name` directly into a constructor parameter. Constructor-only (esbuild drops `design:paramtypes` on method decorators).
+  - `tagToken(name)` — stable `Symbol.for`-backed sentinel for `when().needs(tagToken('group')).give(...)` contextual bindings.
+  - `bind` / `singleton` / `scoped` now drop any cached singleton instance when overwriting an existing binding (previously the stale instance survived the rebind).
+  - `reset()` clears extenders and rebinders.
+
+  Pure additions; existing API unchanged.
+
+- 3ccac5d: Add container tagging and conditional binding helpers (Laravel parity #7, PR1).
+
+  - `container.tag(tokens, tags)` — group bindings under one or more tag names. Both args accept either single values or arrays. Additive; tagging the same token twice is a no-op. Tagging an unbound token is allowed.
+  - `container.tagged<T>(tag)` — resolve every token under a tag via `make()`. Returns `[]` for unknown tags. Insertion order. Singletons stay singletons across calls.
+  - `container.bindIf` / `singletonIf` / `scopedIf` — bind only if the token is currently unbound. Lets framework providers register defaults that app providers can override by binding first.
+  - `reset()` clears tags.
+
+  Pure additions; existing API unchanged. Decorator (`@Tag`) + `extend` + `rebinding` ship in the next PR.
+
+- 5447fa9: Add `FormRequest` lifecycle hooks (Laravel parity #6).
+
+  `FormRequest` now supports five optional protected methods that mirror Laravel's lifecycle:
+
+  - `prepareForValidation(input)` — mutate merged input pre-parse (sync). Lowercase emails, trim strings, etc.
+  - `messages()` — per-request error message overrides keyed by dot-path. Static string or `(issue) => string`.
+  - `after()` — array of cross-field check closures with `addError(path, msg)`. Run serially after parse; all errors collected in one round-trip.
+  - `passedValidation(data)` — final transform on parsed data (sync or async); return value replaces resolved data.
+  - `failedValidation(errors)` — override the throw. Default throws `ValidationError`; return a Web `Response` to short-circuit (wrapped in a new `ValidationResponse` sentinel that the framework's exception handler unwraps).
+
+  Existing `FormRequest` subclasses keep working unchanged — the hooks have empty default implementations.
+
+  The `make:request` stub now includes commented-out hook signatures to aid discovery.
+
+### Patch Changes
+
+- Updated dependencies [1805d0c]
+- Updated dependencies [fcc57f9]
+- Updated dependencies [a0b96f9]
+- Updated dependencies [ca63e78]
+- Updated dependencies [fcca26b]
+  - @rudderjs/contracts@1.2.0
+  - @rudderjs/router@1.1.0
+
 ## 1.0.1
 
 ### Patch Changes

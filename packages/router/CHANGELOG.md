@@ -1,5 +1,137 @@
 # @rudderjs/router
 
+## 1.1.0
+
+### Minor Changes
+
+- a0b96f9: Add Laravel-style `router.group()`, subdomain routing, and `.missing()` 404 customisation (Laravel parity #5, PR2 of 3).
+
+  **`router.group(opts, fn)`** — apply a `prefix`, `domain`, or `middleware` stack to every route registered in the callback. Nested groups concatenate prefixes and middleware; the innermost defined `domain` wins.
+
+  ```ts
+  router.group({ prefix: "/admin", middleware: [adminAuth] }, () => {
+    router.get("/users", listUsers); // GET /admin/users (with adminAuth)
+  });
+
+  router.group({ domain: ":tenant.example.com", prefix: "/api" }, () => {
+    router.get("/me", me); // GET :tenant.example.com/api/me
+  });
+  ```
+
+  Distinct from `runWithGroup('web' | 'api', …)` — that tags routes with their middleware-group label, this is the user-facing scoping primitive. Both can be active at the same time.
+
+  **`RouteBuilder.domain(template)`** — restrict a route to a host. Templates accept `:param` segments that capture into `req.params` alongside path params. Mismatched hosts return 404. Per-route `.domain()` overrides any `domain` set by an active group.
+
+  ```ts
+  router.get("/users", listUsers).domain("api.example.com");
+  router.get("/me", me).domain(":tenant.example.com"); // req.params.tenant
+  ```
+
+  **`RouteBuilder.missing(fn)`** — custom response when an explicit `router.bind('user', User)` resolves to `null`. Receives `(req, err)` and returns any value a route handler may return: `Response`, plain object → JSON, string → body, or `undefined` (callback wrote to `res` directly). Optional bindings do NOT trigger `.missing()`.
+
+  ```ts
+  router
+    .get("/users/:user", show)
+    .missing((_req, err) =>
+      Response.json({ error: err.message }, { status: 404 })
+    );
+  ```
+
+  **Contract additions (`@rudderjs/contracts`)** — `RouteDefinition` gains two optional fields: `host?: string` and `missing?: (req, err) => unknown | Promise<unknown>`. The `err` is duck-typed (`httpStatus`, `param`, `value`, `model`) so contracts stays free of `@rudderjs/router`.
+
+  **`@rudderjs/server-hono`** — pre-handler host gate (`matchHost()`) returns 404 on host mismatch and stashes captured subdomain `:param` segments on the Hono context. `normalizeRequest()` merges them into `req.params`; path params win on collision.
+
+  This is PR2 of the router parity sweep. `Route::resource` / `apiResource` / `singleton` and `make:controller --resource` follow in PR3.
+
+- ca63e78: Add Laravel-style `Route::resource` / `apiResource` / `singleton` to `@rudderjs/router` and `make:controller --resource`/`--api`/`--singleton` flags to `@rudderjs/cli` (Laravel parity #5, PR3 of 3).
+
+  **Public API on `Router`:**
+
+  - `router.resource(name, Ctrl, opts?)` — registers the seven canonical RESTful routes (`index`/`create`/`store`/`show`/`edit`/`update`/`destroy`). The `update` route is registered for both `PUT` and `PATCH` at the same path.
+  - `router.apiResource(name, Ctrl, opts?)` — same as `resource` but skips `create` + `edit` (no HTML form pages).
+  - `router.singleton(name, Ctrl, opts?)` — registers `show`/`edit`/`update` only. The returned `SingletonRegistration` exposes `.creatable()` (adds `GET /<name>/create` + `POST /<name>`) and `.destroyable()` (adds `DELETE /<name>`).
+
+  ```ts
+  class PostController {
+    async index(ctx) {
+      /* … */
+    }
+    async show(ctx) {
+      /* … */
+    }
+    async store(ctx) {
+      /* … */
+    }
+    // …
+  }
+
+  router.resource("posts", PostController);
+  router.apiResource("posts", PostController, { only: ["index", "show"] });
+  router.singleton("profile", ProfileController).creatable().destroyable();
+  ```
+
+  **Controller convention:** plain class, no decorators. Methods are matched by name to the canonical verbs. **Methods the controller doesn't implement are silently skipped** — a controller with only `index`/`show` works without an `only` or `except` filter.
+
+  **`ResourceOptions`:** `only`, `except`, `parameters` (override `:param` segment name), `names` (override generated route names), `middleware`.
+
+  **Default route names:** `<resource>.<verb>` (e.g. `posts.index`, `posts.show`). Default `:param` name is a naive singular of `name` (`posts → post`, `categories → category`, `boxes → box`); irregular plurals must use the `parameters` option.
+
+  **Per-route customisation:** the returned `ResourceRegistration` exposes the underlying `RouteBuilder[]` in declaration order. Apply `where*()` or per-route middleware to a single verb without affecting the rest:
+
+  ```ts
+  const reg = router.resource("posts", PostController);
+  reg.builders[3].whereNumber("post"); // constrain show route only
+  ```
+
+  **Scaffolder support:** `make:controller` accepts three mutually-exclusive flags:
+
+  ```bash
+  pnpm rudder make:controller PostController --resource     # full 7-verb plain class
+  pnpm rudder make:controller PostController --api          # 5-verb (no create/edit)
+  pnpm rudder make:controller ProfileController --singleton # show/edit/update only
+  ```
+
+  Default `make:controller` (no flag) still emits the decorator-based stub.
+
+  This completes the router parity sweep (#5). PR1 added `where*()` constraints; PR2 added `router.group()` / subdomain routing / `.missing()`. No changes to the public surface of any other package.
+
+  **Internal note:** `MakeSpec.stub` callback now receives the parsed CLI opts as a second argument (`(className, opts) => string`), enabling per-flag stub dispatch. Existing single-arg callbacks continue to type-check.
+
+- fcca26b: Add Laravel-style `where*()` constraint shortcuts to `RouteBuilder` (Laravel parity #5, PR1 of 3).
+
+  **Public API on `RouteBuilder`:**
+
+  - `where(param, regex)` — base method; accepts a string pattern or a `RegExp` (uses `.source`).
+  - `whereNumber(param)` — `[0-9]+`.
+  - `whereAlpha(param)` — `[A-Za-z]+`.
+  - `whereAlphaNumeric(param)` — `[A-Za-z0-9]+`.
+  - `whereUuid(param)` — UUID of any version.
+  - `whereUlid(param)` — Crockford base32 ULID (26 chars).
+  - `whereIn(param, values)` — alternation over regex-escaped literal values.
+
+  ```ts
+  router.get("/users/:id", handler).whereNumber("id").name("users.show");
+  // → /users/:id{[0-9]+}, named users.show
+  router
+    .get("/posts/:status", handler)
+    .whereIn("status", ["draft", "published"]);
+  ```
+
+  Mutates `definition.path` in place to Hono's `:param{regex}` syntax. Throws when the path has no `:param` segment, or when `whereIn` is given an empty values array. Order-independent against `.name()`: chaining `where*()` after `.name()` still updates the registered named-route path.
+
+  **Exported pattern constants** — `ROUTE_PATTERN_NUMBER`, `_ALPHA`, `_ALPHANUM`, `_UUID`, `_ULID` — for apps that need to compose their own Hono constraint strings.
+
+  **Internal:** `route()` URL generator and the route-binding param scanner now use a balanced-brace stripper so nested quantifier braces inside constraints (e.g. UUID's `{8}`/`{4}`) don't trip the `:param` regex.
+
+  This is PR1 of the router parity sweep. Subdomain routing, `missing()`, `Route::resource`, and `make:controller --resource` follow in PR2/PR3.
+
+### Patch Changes
+
+- Updated dependencies [1805d0c]
+- Updated dependencies [fcc57f9]
+- Updated dependencies [a0b96f9]
+  - @rudderjs/contracts@1.2.0
+
 ## 1.0.0
 
 ### Major Changes
