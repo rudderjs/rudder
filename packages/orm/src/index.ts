@@ -1149,6 +1149,48 @@ export abstract class Model {
   }
 
   /**
+   * Restore this soft-deleted instance — clears `deletedAt` and routes through
+   * the static `restore()` so observers fire. Refreshes in-place with the
+   * canonical row returned from the database.
+   */
+  async restore(): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    const id = this._getKey()
+    if (id === undefined) {
+      throw new Error(`[RudderJS ORM] Cannot restore a ${ctor.name} without a primary key.`)
+    }
+    const restored = await (ctor as typeof Model & {
+      restore(i: string | number): Promise<Model>
+    }).restore(id)
+    Object.assign(this, restored)
+    this._syncOriginal()
+    return this
+  }
+
+  /**
+   * Persist this instance without firing observer / listener events.
+   * Equivalent to `await Model.withoutEvents(() => instance.save())`.
+   *
+   * Per-class — observers cascading into child classes still fire normally.
+   */
+  async saveQuietly(): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    return ctor.withoutEvents(() => this.save())
+  }
+
+  /** Delete this instance without firing observer / listener events. */
+  async deleteQuietly(): Promise<void> {
+    const ctor = this.constructor as typeof Model
+    await ctor.withoutEvents(() => this.delete())
+  }
+
+  /** Restore this soft-deleted instance without firing observer / listener events. */
+  async restoreQuietly(): Promise<this> {
+    const ctor = this.constructor as typeof Model
+    return ctor.withoutEvents(() => this.restore())
+  }
+
+  /**
    * Atomically add `amount` to `column` on this instance. The row is updated
    * via SQL `UPDATE col = col + amount` and the new value is merged back into
    * `this` for direct access. Returns `this` for chaining.

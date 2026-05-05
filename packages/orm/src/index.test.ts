@@ -1022,6 +1022,163 @@ describe('Model.withoutEvents()', () => {
   })
 })
 
+// ─── Quiet event ops ─────────────────────────────────────────────────────────
+
+describe('Model quiet event ops', () => {
+  beforeEach(() => ModelRegistry.reset())
+
+  it('saveQuietly() persists without firing observers/listeners', async () => {
+    const events: string[] = []
+    let updatePayload: unknown = null
+    const qb = makeQb({
+      update: async (id, data) => { updatePayload = data; return { id, ...(data as object) } as unknown },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; name!: string }
+    User.on('saving',  () => { events.push('saving') })
+    User.on('saved',   () => { events.push('saved') })
+    User.on('updating', () => { events.push('updating') })
+    User.on('updated',  () => { events.push('updated') })
+
+    const u = User.hydrate({ id: 1, name: 'Old' })!
+    u.name = 'New'
+    await u.saveQuietly()
+
+    assert.deepStrictEqual(events, [])
+    assert.deepStrictEqual(updatePayload, { id: 1, name: 'New' })
+    User.clearObservers()
+  })
+
+  it('deleteQuietly() removes the row without firing observers', async () => {
+    const events: string[] = []
+    let deleteId: unknown = null
+    const qb = makeQb({
+      delete: async (id) => { deleteId = id; return undefined },
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number }
+    User.on('deleting', () => { events.push('deleting') })
+    User.on('deleted',  () => { events.push('deleted') })
+
+    const u = User.hydrate({ id: 7 })!
+    await u.deleteQuietly()
+
+    assert.deepStrictEqual(events, [])
+    assert.equal(deleteId, 7)
+    User.clearObservers()
+  })
+
+  it('restoreQuietly() restores the row without firing observers', async () => {
+    const events: string[] = []
+    const qb = makeQb({
+      restore: async (id) => ({ id, deletedAt: null }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; deletedAt!: string | null }
+    User.on('restoring', () => { events.push('restoring') })
+    User.on('restored',  () => { events.push('restored') })
+
+    const u = User.hydrate({ id: 5, deletedAt: '2026-04-01' })!
+    await u.restoreQuietly()
+
+    assert.deepStrictEqual(events, [])
+    assert.equal(u.deletedAt, null)
+    User.clearObservers()
+  })
+
+  it('non-quiet save() after a quiet save() fires observers normally', async () => {
+    const events: string[] = []
+    const qb = makeQb({
+      update: async (id, data) => ({ id, ...(data as object) }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; name!: string }
+    User.on('saving', () => { events.push('saving') })
+
+    const u = User.hydrate({ id: 1, name: 'A' })!
+    u.name = 'B'
+    await u.saveQuietly()
+    u.name = 'C'
+    await u.save()
+
+    assert.deepStrictEqual(events, ['saving'])
+    User.clearObservers()
+  })
+
+  it('nested quiet ops on the same class cooperate (both silent)', async () => {
+    const events: string[] = []
+    const qb = makeQb({
+      update: async (id, data) => ({ id, ...(data as object) }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; name!: string }
+    User.on('saving', () => { events.push('saving') })
+
+    const u = User.hydrate({ id: 1, name: 'A' })!
+    await User.withoutEvents(async () => {
+      u.name = 'B'
+      await u.saveQuietly()  // nested
+    })
+    // After both blocks exit, events fire normally again
+    u.name = 'C'
+    await u.save()
+
+    assert.deepStrictEqual(events, ['saving'])
+    User.clearObservers()
+  })
+
+  it('per-class isolation: quiet on Parent does not silence Child observers', async () => {
+    const events: string[] = []
+    const parentQb = makeQb({
+      update: async (id, data) => ({ id, ...(data as object) }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(parentQb as QueryBuilder<unknown>))
+    class Parent extends Model { id!: number; name!: string }
+    class Child  extends Model { id!: number; name!: string }
+    Parent.on('saving', () => { events.push('parent.saving') })
+    Child.on('saving',  () => { events.push('child.saving') })
+
+    const p = Parent.hydrate({ id: 1, name: 'A' })!
+    p.name = 'B'
+    await Parent.withoutEvents(async () => {
+      await p.saveQuietly()
+      // Child save inside Parent's quiet block — Child observer still fires.
+      const c = Child.hydrate({ id: 9, name: 'X' })!
+      c.name = 'Y'
+      await c.save()
+    })
+
+    assert.deepStrictEqual(events, ['child.saving'])
+    Parent.clearObservers()
+    Child.clearObservers()
+  })
+
+  it('instance.restore() (non-quiet) fires observers and updates the row', async () => {
+    const events: string[] = []
+    const qb = makeQb({
+      restore: async (id) => ({ id, deletedAt: null }) as unknown,
+    })
+    ModelRegistry.set(makeAdapter(qb as QueryBuilder<unknown>))
+    class User extends Model { id!: number; deletedAt!: string | null }
+    User.on('restoring', () => { events.push('restoring') })
+    User.on('restored',  () => { events.push('restored') })
+
+    const u = User.hydrate({ id: 1, deletedAt: '2026-04-01' })!
+    await u.restore()
+
+    assert.deepStrictEqual(events, ['restoring', 'restored'])
+    assert.equal(u.deletedAt, null)
+    User.clearObservers()
+  })
+
+  it('instance.restore() throws without a primary key', async () => {
+    ModelRegistry.set(makeAdapter())
+    class User extends Model { id?: number }
+    const u = new User()
+    await assert.rejects(() => u.restore(), /Cannot restore a User without a primary key/)
+  })
+})
+
 // ─── Hydration ────────────────────────────────────────────────────────────────
 
 describe('Model.hydrate()', () => {
