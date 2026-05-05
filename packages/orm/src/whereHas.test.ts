@@ -342,6 +342,19 @@ describe('Model.whereHas — nested whereHas inside callback', () => {
       /Nested whereHas inside a whereHas constrain callback is deferred to v2/,
     )
   })
+
+  it('throws when orWhere is used inside the constrain callback', () => {
+    const { adapter } = recordingAdapter()
+    ModelRegistry.set(adapter)
+
+    assert.throws(
+      () => User.whereHas('posts', (q) => {
+        q.where('approved', true)
+        ;(q as unknown as { orWhere: (c: string, v: unknown) => unknown }).orWhere('featured', true)
+      }),
+      /orWhere inside a whereHas constrain callback is not supported in v1/,
+    )
+  })
 })
 
 // ─── withWhereHas ────────────────────────────────────────────────────────────

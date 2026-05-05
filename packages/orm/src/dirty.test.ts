@@ -213,4 +213,48 @@ describe('Model dirty tracking', () => {
     assert.equal(u.wasChanged('id'), true)
     assert.equal(u.wasChanged('name'), true)
   })
+
+  it('instance.delete() on a soft-delete model sets deletedAt locally and resets baseline', async () => {
+    let deletedId: number | string | undefined
+    const qb = makeQb({ delete: async (id) => { deletedId = id } })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class Post extends Model {
+      static override softDeletes = true
+      id!: number
+      title!: string
+      deletedAt!: Date | null
+    }
+
+    const post = Post.hydrate({ id: 7, title: 'Hello', deletedAt: null })!
+    assert.equal(post.trashed(), false)
+    assert.equal(post.isDirty(), false)
+
+    const before = Date.now()
+    await post.delete()
+    const after = Date.now()
+
+    assert.equal(deletedId, 7, 'static delete is called with the instance pk')
+    assert.ok(post.deletedAt instanceof Date, 'deletedAt is set on the instance')
+    assert.ok((post.deletedAt as Date).getTime() >= before && (post.deletedAt as Date).getTime() <= after)
+    assert.equal(post.trashed(), true, 'trashed() reflects the soft-delete')
+    assert.equal(post.isDirty(), false, 'baseline is refreshed; not dirty')
+  })
+
+  it('instance.delete() on a hard-delete model leaves the instance state alone', async () => {
+    const qb = makeQb({ delete: async () => undefined })
+    ModelRegistry.set(makeAdapter(qb))
+
+    class User extends Model {
+      id!: number
+      name!: string
+    }
+
+    const u = User.hydrate({ id: 1, name: 'Alice' })!
+    await u.delete()
+
+    // No deletedAt mutation on hard-delete models — the instance is essentially orphaned.
+    assert.equal((u as unknown as { deletedAt?: Date }).deletedAt, undefined)
+    assert.equal(u.name, 'Alice', 'other fields are untouched')
+  })
 })
