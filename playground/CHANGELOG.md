@@ -1,5 +1,27 @@
 # rudderjs-playground
 
+## 0.0.49
+
+### Patch Changes
+
+- Updated dependencies [dfba4df]
+- Updated dependencies [4c8cd07]
+  - @rudderjs/broadcast@1.0.2
+  - @rudderjs/cache@1.1.1
+  - @rudderjs/hash@1.0.1
+  - @rudderjs/localization@1.0.2
+  - @rudderjs/log@1.0.1
+  - @rudderjs/mail@1.0.1
+  - @rudderjs/middleware@1.0.1
+  - @rudderjs/notification@1.0.1
+  - @rudderjs/pennant@1.0.1
+  - @rudderjs/schedule@1.0.3
+  - @rudderjs/server-hono@1.0.3
+  - @rudderjs/session@1.0.3
+  - @rudderjs/ai@1.0.1
+  - @rudderjs/auth@4.0.3
+  - @rudderjs/core@1.1.2
+
 ## 0.0.48
 
 ### Patch Changes
