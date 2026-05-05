@@ -101,6 +101,99 @@ describe('HonoAdapter', () => {
   })
 })
 
+// ─── Subdomain (host) routing ──────────────────────────────
+//
+// Host header note: Node's synthetic `new Request(url)` does NOT auto-populate
+// the Host header (browsers and `@hono/node-server` do, but undici fetch leaves
+// it blank). Tests pass `Host` explicitly via the request init.
+
+describe('HonoAdapter — host gate', () => {
+  function setupHost(host: string) {
+    const adapter = hono().create()
+    let captured: { params: Record<string, string> } | null = null
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/users',
+      host,
+      handler: async (req, res) => {
+        captured = { params: req.params }
+        return res.json({ ok: true })
+      },
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    return { app, getCaptured: () => captured }
+  }
+
+  function withHost(url: string, host: string): Request {
+    return new Request(url, { headers: { host } })
+  }
+
+  it('matches an exact host header → handler runs', async () => {
+    const { app, getCaptured } = setupHost('api.example.com')
+    const res = await app.fetch(withHost('http://api.example.com/users', 'api.example.com'))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), { params: {} })
+  })
+
+  it('returns 404 when host does not match', async () => {
+    const { app } = setupHost('api.example.com')
+    const res = await app.fetch(withHost('http://web.example.com/users', 'web.example.com'))
+    assert.strictEqual(res.status, 404)
+  })
+
+  it('captures :param segments into req.params', async () => {
+    const { app, getCaptured } = setupHost(':tenant.example.com')
+    const res = await app.fetch(withHost('http://acme.example.com/users', 'acme.example.com'))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), { params: { tenant: 'acme' } })
+  })
+
+  it('strips the :port from the Host header before matching', async () => {
+    const { app } = setupHost('api.example.com')
+    const res = await app.fetch(withHost('http://api.example.com:3000/users', 'api.example.com:3000'))
+    assert.strictEqual(res.status, 200)
+  })
+
+  it('is case-insensitive', async () => {
+    const { app } = setupHost('api.example.com')
+    const res = await app.fetch(withHost('http://API.Example.COM/users', 'API.Example.COM'))
+    assert.strictEqual(res.status, 200)
+  })
+
+  it('routes without a host gate run on any host (regression check)', async () => {
+    const adapter = hono().create()
+    adapter.registerRoute({
+      method:     'GET',
+      path:       '/health',
+      handler:    async (_req, res) => res.json({ ok: true }),
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const a = await app.fetch(withHost('http://api.example.com/health', 'api.example.com'))
+    const b = await app.fetch(withHost('http://web.example.com/health', 'web.example.com'))
+    assert.strictEqual(a.status, 200)
+    assert.strictEqual(b.status, 200)
+  })
+
+  it('subdomain :param does not collide with a same-name path :param', async () => {
+    const adapter = hono().create()
+    let captured: Record<string, string> = {}
+    adapter.registerRoute({
+      method:  'GET',
+      path:    '/users/:tenant',  // path uses same name → path wins
+      host:    ':tenant.example.com',
+      handler: async (req, res) => { captured = req.params; return res.json({ ok: true }) },
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    const res = await app.fetch(withHost('http://acme.example.com/users/bob', 'acme.example.com'))
+    assert.strictEqual(res.status, 200)
+    // Path :tenant ('bob') wins over subdomain :tenant ('acme') on collision
+    assert.strictEqual(captured['tenant'], 'bob')
+  })
+})
+
 // ─── renderErrorPage() ──────────────────────────────────────
 
 describe('renderErrorPage()', () => {

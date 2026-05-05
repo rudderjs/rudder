@@ -272,6 +272,54 @@ export class RouteBuilder {
     const escaped = values.map(v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     return this.where(param, `(?:${escaped.join('|')})`)
   }
+
+  /**
+   * Restrict this route to a specific subdomain. The template is matched against
+   * the request's `Host` header (port stripped, case-insensitive); `:param`
+   * segments capture into `req.params` alongside path params.
+   *
+   * @example
+   * router.get('/users', listUsers).domain('api.example.com')
+   * router.get('/admin', dash).domain(':tenant.example.com')  // captures req.params.tenant
+   */
+  domain(template: string): this {
+    this.definition.host = template
+    return this
+  }
+
+  /**
+   * Custom response when an explicit route binding (`router.bind('user', User)`)
+   * resolves to `null`. Receives the request and the not-found error; return any
+   * value a handler may return (`Response`, plain object → JSON, string → body,
+   * or `undefined` after writing to `res` directly). Does not fire for optional
+   * bindings — those quietly resolve to `null` instead.
+   *
+   * @example
+   * router.get('/users/:user', show)
+   *   .missing((_req, err) => Response.json({ error: err.message }, { status: 404 }))
+   */
+  missing(fn: NonNullable<RouteDefinition['missing']>): this {
+    this.definition.missing = fn
+    return this
+  }
+}
+
+// ─── Route Group Options ───────────────────────────────────
+
+/**
+ * Options accepted by `router.group(opts, fn)`. Each route registered inside
+ * `fn` inherits the prefix, domain, and middleware. Nested groups concatenate
+ * prefixes and middleware; the innermost defined `domain` wins (hosts can't
+ * compose). Distinct from `runWithGroup('web' | 'api', …)`, which only tags
+ * routes with their middleware-group label.
+ */
+export interface RouteGroupOptions {
+  /** Path prefix applied to every route registered in the group. */
+  prefix?:     string
+  /** Subdomain template applied to every route registered in the group. */
+  domain?:     string
+  /** Middleware prepended to every route's chain (before per-route middleware). */
+  middleware?: MiddlewareHandler[]
 }
 
 // ─── Route Model Binding ───────────────────────────────────
@@ -335,6 +383,12 @@ export class Router {
   private globalMiddleware: MiddlewareHandler[] = []
   private namedRoutes = new Map<string, RouteDefinition>()
   private bindings = new Map<string, RouteBinding>()
+  /**
+   * Active `group()` scopes, outermost first. Synchronous module-level state
+   * is fine — route loaders execute synchronously at module evaluation, and
+   * `group()` only mutates the stack inside its own callback's lifetime.
+   */
+  private _groupStack: RouteGroupOptions[] = []
 
   /** @internal — called by RouteBuilder */
   _registerName(name: string, def: RouteDefinition): void {
@@ -373,7 +427,64 @@ export class Router {
     this.globalMiddleware = []
     this.namedRoutes.clear()
     this.bindings.clear()
+    this._groupStack = []
     return this
+  }
+
+  /**
+   * Run `fn` with a group scope active. Every route registered (via fluent
+   * `.get()`/`.post()`/etc. or `registerController()`) inside `fn` inherits
+   * the group's `prefix`, `domain`, and `middleware`. Nested calls compose:
+   * prefixes concatenate, middleware stacks accumulate, the innermost defined
+   * `domain` wins.
+   *
+   * Distinct from `runWithGroup('web' | 'api', …)` — that tags routes with
+   * their middleware-group label (web vs api) and is called once by the
+   * framework's route loader. `router.group()` is the user-facing scoping
+   * primitive; both can be active at the same time.
+   *
+   * @example
+   * router.group({ prefix: '/admin', middleware: [adminAuth] }, () => {
+   *   router.get('/users', listUsers)        // GET /admin/users (with adminAuth)
+   *   router.get('/posts', listPosts)        // GET /admin/posts (with adminAuth)
+   * })
+   *
+   * router.group({ domain: ':tenant.example.com', prefix: '/api' }, () => {
+   *   router.get('/me', me)                  // GET :tenant.example.com/api/me
+   * })
+   */
+  group(opts: RouteGroupOptions, fn: () => void): this {
+    this._groupStack = [...this._groupStack, opts]
+    try { fn() } finally { this._groupStack = this._groupStack.slice(0, -1) }
+    return this
+  }
+
+  /**
+   * Compose the active group stack into the values used to register a route.
+   * Path prefixes concatenate (and collapse `/+` to `/`), middleware stacks
+   * concatenate, the innermost defined `host` wins.
+   */
+  private _applyGroupStack(
+    path: string,
+    middleware: MiddlewareHandler[],
+  ): { path: string; middleware: MiddlewareHandler[]; host: string | undefined } {
+    if (this._groupStack.length === 0) {
+      return { path, middleware, host: undefined }
+    }
+    let prefix = ''
+    let host: string | undefined
+    const groupMw: MiddlewareHandler[] = []
+    for (const g of this._groupStack) {
+      if (g.prefix)     prefix += g.prefix
+      if (g.domain)     host = g.domain
+      if (g.middleware) groupMw.push(...g.middleware)
+    }
+    const composedPath = `${prefix}${path}`.replace(/\/+/g, '/')
+    return {
+      path:       composedPath,
+      middleware: [...groupMw, ...middleware],
+      host,
+    }
   }
 
   /** Register a global middleware (runs on every route). */
@@ -422,15 +533,18 @@ export class Router {
 
   /**
    * Build the per-route binding middleware. Walks the route's `:param` segments,
-   * looks them up in the binding map, and resolves each in parallel before
-   * calling `next()`. No-op for routes whose path contains no bound params.
+   * looks them up in the binding map, and resolves each before calling `next()`.
+   * No-op for routes whose path contains no bound params.
+   *
+   * Takes the full `RouteDefinition` (not just path) so the closure can capture
+   * `def.missing` — the per-route 404 customisation set via `RouteBuilder.missing()`.
    */
-  private _buildBindingMiddleware(path: string): MiddlewareHandler | null {
+  private _buildBindingMiddleware(def: RouteDefinition): MiddlewareHandler | null {
     // Strip `{regex}` constraint segments from `where*()` before scanning for
     // param names — otherwise a `:` inside a custom pattern could be misread
     // as a route param. Uses balanced-brace stripping to support nested `{n}`
     // quantifiers (e.g. UUID's `[0-9a-f]{8}-...`).
-    const stripped = stripRegexSegments(path)
+    const stripped = stripRegexSegments(def.path)
     const paramNames = [...stripped.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)\??/g)].map(m => m[1] as string)
     const matches: Array<[string, RouteBinding]> = []
     for (const name of paramNames) {
@@ -439,23 +553,44 @@ export class Router {
     }
     if (matches.length === 0) return null
 
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       // Lazy-init bound bag so handlers always see an object.
       const bound = (req as unknown as { bound?: Record<string, unknown> }).bound ?? {}
       ;(req as unknown as { bound: Record<string, unknown> }).bound = bound
 
       for (const [name, binding] of matches) {
         const raw = req.params[name]
+        let err: RouteModelNotFoundError | null = null
+
         if (raw === undefined || raw === '') {
           if (binding.optional) { bound[name] = null; continue }
-          throw new RouteModelNotFoundError(binding.resolver.name, name, '')
+          err = new RouteModelNotFoundError(binding.resolver.name, name, '')
+        } else {
+          const resolved = await binding.resolver.findForRoute(raw)
+          if (resolved === null || resolved === undefined) {
+            if (binding.optional) { bound[name] = null; continue }
+            err = new RouteModelNotFoundError(binding.resolver.name, name, raw)
+          } else {
+            bound[name] = resolved
+          }
         }
-        const resolved = await binding.resolver.findForRoute(raw)
-        if (resolved === null || resolved === undefined) {
-          if (binding.optional) { bound[name] = null; continue }
-          throw new RouteModelNotFoundError(binding.resolver.name, name, raw)
+
+        if (err) {
+          if (def.missing) {
+            // Route opted into a custom 404 — dispatch the result the same
+            // way registerRoute() handles a route handler's return value.
+            const result = await def.missing(req, err)
+            if (result instanceof Response) {
+              ;(res.raw as { res?: Response }).res = result
+              return
+            }
+            if (typeof result === 'string') { res.send(result); return }
+            if (result !== undefined && result !== null) { res.json(result); return }
+            // undefined → callback wrote to res directly; trust that.
+            return
+          }
+          throw err
         }
-        bound[name] = resolved
       }
       await next()
     }
@@ -468,7 +603,14 @@ export class Router {
     handler: RouteHandler,
     middleware: MiddlewareHandler[] = [],
   ): this {
-    const def: RouteDefinition = { method, path, handler, middleware }
+    const composed = this._applyGroupStack(path, middleware)
+    const def: RouteDefinition = {
+      method,
+      path:       composed.path,
+      handler,
+      middleware: composed.middleware,
+    }
+    if (composed.host) def.host = composed.host
     const group = currentGroup()
     if (group) def.group = group
     this.routes.push(def)
@@ -485,7 +627,14 @@ export class Router {
   all   (path: string, handler: RouteHandler, middleware?: MiddlewareHandler[]): RouteBuilder { return this._rb('ALL',    path, handler, middleware) }
 
   private _rb(method: HttpMethod, path: string, handler: RouteHandler, middleware: MiddlewareHandler[] = []): RouteBuilder {
-    const def: RouteDefinition = { method, path, handler, middleware }
+    const composed = this._applyGroupStack(path, middleware)
+    const def: RouteDefinition = {
+      method,
+      path:       composed.path,
+      handler,
+      middleware: composed.middleware,
+    }
+    if (composed.host) def.host = composed.host
     const group = currentGroup()
     if (group) def.group = group
     this.routes.push(def)
@@ -511,12 +660,14 @@ export class Router {
         value:        `${ControllerClass.name}@${String(route.handlerKey)}`,
         configurable: true,
       })
+      const composed = this._applyGroupStack(fullPath, [...ctrlMw, ...route.middleware])
       const def: RouteDefinition = {
         method:     route.method,
-        path:       fullPath,
+        path:       composed.path,
         handler,
-        middleware: [...ctrlMw, ...route.middleware],
+        middleware: composed.middleware,
       }
+      if (composed.host) def.host = composed.host
       if (group) def.group = group
       this.routes.push(def)
     }
@@ -528,7 +679,7 @@ export class Router {
   mount(server: ServerAdapter): void {
     for (const mw of this.globalMiddleware) server.applyMiddleware(mw)
     for (const route of this.routes) {
-      const bindingMw = this._buildBindingMiddleware(route.path)
+      const bindingMw = this._buildBindingMiddleware(route)
       if (bindingMw) {
         server.registerRoute({
           ...route,

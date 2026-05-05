@@ -330,6 +330,23 @@ export interface RouteDefinition {
   middleware: MiddlewareHandler[]
   /** Middleware group this route belongs to. Undefined = no group middleware applied. */
   group?:     RouteGroup
+  /**
+   * Subdomain match template. Plain hosts (`'api.example.com'`) match exact;
+   * `:param` segments capture into `req.params` (`':tenant.example.com'`).
+   * The server adapter must 404 on host mismatch and merge captured params.
+   */
+  host?:      string
+  /**
+   * Custom 404 handler when an explicit route binding (`router.bind(...)`) fails
+   * to resolve. The error has duck-typed fields (`httpStatus`, `param`, `value`,
+   * `model`) so contracts stays free of `@rudderjs/router`. Return any value the
+   * route handler may return — `Response`, plain object → JSON, string → body,
+   * or `undefined` if the callback wrote to `res` directly.
+   */
+  missing?:   (
+    req: AppRequest,
+    err: Error & { httpStatus: number; param: string; value: string; model: string },
+  ) => unknown | Promise<unknown>
 }
 
 // ─── Server Adapter Contract ───────────────────────────────

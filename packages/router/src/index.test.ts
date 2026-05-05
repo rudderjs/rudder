@@ -697,3 +697,304 @@ describe('RouteBuilder.where()', () => {
   })
 })
 
+// ─── RouteBuilder.domain() — subdomain routing ─────────────
+
+describe('RouteBuilder.domain()', () => {
+  let r: Router
+  beforeEach(() => { r = new Router() })
+
+  it('sets definition.host on a route', () => {
+    r.get('/users', handler).domain('api.example.com')
+    assert.strictEqual(r.list()[0]?.host, 'api.example.com')
+  })
+
+  it('accepts subdomain templates with :param segments', () => {
+    r.get('/me', handler).domain(':tenant.example.com')
+    assert.strictEqual(r.list()[0]?.host, ':tenant.example.com')
+  })
+
+  it('returns the builder for chaining', () => {
+    const b = r.get('/users', handler).domain('api.example.com').name('users.index')
+    assert.ok(b)
+    assert.strictEqual(r.list()[0]?.host, 'api.example.com')
+    assert.strictEqual(r.getNamedRoute('users.index'), '/users')
+  })
+})
+
+// ─── Router.group() — Laravel-style grouping ───────────────
+
+describe('Router.group()', () => {
+  let r: Router
+  beforeEach(() => { r = new Router() })
+
+  it('applies prefix to every route inside the callback', () => {
+    r.group({ prefix: '/admin' }, () => {
+      r.get('/users', handler)
+      r.get('/posts', handler)
+    })
+    assert.deepStrictEqual(r.list().map(rt => rt.path), ['/admin/users', '/admin/posts'])
+  })
+
+  it('applies domain to every route inside the callback', () => {
+    r.group({ domain: 'api.example.com' }, () => {
+      r.get('/users', handler)
+      r.post('/users', handler)
+    })
+    assert.ok(r.list().every(rt => rt.host === 'api.example.com'))
+  })
+
+  it('prepends middleware to every route inside the callback', () => {
+    r.group({ middleware: [noop] }, () => {
+      r.get('/x', handler, [noop2])
+    })
+    assert.deepStrictEqual(r.list()[0]?.middleware, [noop, noop2])
+  })
+
+  it('routes outside the group are unaffected', () => {
+    r.get('/a', handler)
+    r.group({ prefix: '/admin' }, () => { r.get('/b', handler) })
+    r.get('/c', handler)
+    assert.deepStrictEqual(r.list().map(rt => rt.path), ['/a', '/admin/b', '/c'])
+  })
+
+  it('nested groups concatenate prefixes', () => {
+    r.group({ prefix: '/api' }, () => {
+      r.group({ prefix: '/v1' }, () => {
+        r.get('/users', handler)
+      })
+    })
+    assert.strictEqual(r.list()[0]?.path, '/api/v1/users')
+  })
+
+  it('nested groups stack middleware (outer first)', () => {
+    r.group({ middleware: [noop] }, () => {
+      r.group({ middleware: [noop2] }, () => {
+        r.get('/x', handler)
+      })
+    })
+    assert.deepStrictEqual(r.list()[0]?.middleware, [noop, noop2])
+  })
+
+  it('innermost defined domain wins over outer', () => {
+    r.group({ domain: 'outer.example.com' }, () => {
+      r.group({ domain: 'inner.example.com' }, () => {
+        r.get('/x', handler)
+      })
+    })
+    assert.strictEqual(r.list()[0]?.host, 'inner.example.com')
+  })
+
+  it('outer domain inherits when inner group does not define one', () => {
+    r.group({ domain: 'api.example.com' }, () => {
+      r.group({ prefix: '/v1' }, () => {
+        r.get('/users', handler)
+      })
+    })
+    assert.strictEqual(r.list()[0]?.host, 'api.example.com')
+    assert.strictEqual(r.list()[0]?.path, '/v1/users')
+  })
+
+  it('per-route .domain() overrides the group domain', () => {
+    r.group({ domain: 'api.example.com' }, () => {
+      r.get('/admin', handler).domain('admin.example.com')
+    })
+    assert.strictEqual(r.list()[0]?.host, 'admin.example.com')
+  })
+
+  it('collapses double slashes in composed paths', () => {
+    r.group({ prefix: '/api/' }, () => {
+      r.get('/users', handler)
+    })
+    assert.strictEqual(r.list()[0]?.path, '/api/users')
+  })
+
+  it('group state is restored after callback throws', () => {
+    assert.throws(() => {
+      r.group({ prefix: '/admin' }, () => {
+        throw new Error('boom')
+      })
+    }, /boom/)
+    r.get('/health', handler)
+    assert.strictEqual(r.list()[0]?.path, '/health')
+  })
+
+  it('reset() clears the group stack', () => {
+    // Forcing a stack mid-callback: simulate state leak by pushing then resetting.
+    r.group({ prefix: '/api' }, () => {
+      r.reset()
+    })
+    r.get('/health', handler)
+    assert.strictEqual(r.list()[0]?.path, '/health')
+  })
+
+  it('returns the router for chaining', () => {
+    const result = r.group({ prefix: '/x' }, () => { r.get('/a', handler) })
+    assert.strictEqual(result, r)
+  })
+
+  it('composes with registerController (group prefix wraps controller prefix)', () => {
+    @Controller('/users')
+    class C { @Get('/:id') show() {} }
+    r.group({ prefix: '/api' }, () => { r.registerController(C) })
+    assert.strictEqual(r.list()[0]?.path, '/api/users/:id')
+  })
+})
+
+// ─── RouteBuilder.missing() — explicit binding 404 ─────────
+
+describe('RouteBuilder.missing()', () => {
+  let r: Router
+  beforeEach(() => { r = new Router() })
+
+  function makeReq(params: Record<string, string>): import('@rudderjs/contracts').AppRequest {
+    return {
+      method: 'GET', url: '/', path: '/',
+      query: {}, params, headers: {},
+      body: null, raw: null,
+      input: () => undefined as never,
+      string: () => '', integer: () => 0, float: () => 0,
+      boolean: () => false, date: () => new Date(),
+      array: () => [], has: () => false, missing: () => true, filled: () => false,
+    }
+  }
+
+  function makeRes(): import('@rudderjs/contracts').AppResponse & {
+    _json?: unknown; _send?: string; _status?: number
+  } {
+    const r: import('@rudderjs/contracts').AppResponse & {
+      _json?: unknown; _send?: string; _status?: number
+    } = {
+      statusCode: 200,
+      status(code) { (this as unknown as { _status: number })._status = code; this.statusCode = code; return this },
+      header() { return this },
+      json(data) { (this as unknown as { _json: unknown })._json = data },
+      send(data) { (this as unknown as { _send: string })._send = data },
+      redirect() {},
+      raw: { res: undefined as Response | undefined },
+    }
+    return r
+  }
+
+  it('stores the callback on definition.missing', () => {
+    const cb = () => 'ok'
+    r.get('/users/:user', handler).missing(cb)
+    assert.strictEqual(r.list()[0]?.missing, cb)
+  })
+
+  it('callback fires when binding resolves to null and returns plain object → res.json()', async () => {
+    const { RouteModelNotFoundError } = await import('./index.js')
+    const receivedErr: { value: Error | null } = { value: null }
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    r.get('/users/:user', handler).missing((_req, err) => {
+      receivedErr.value = err
+      return { error: 'not found', param: err.param }
+    })
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ user: '99' })
+    const res = makeRes()
+    let nextCalled = false
+    await mw(req, res, async () => { nextCalled = true })
+
+    assert.equal(nextCalled, false)
+    assert.ok(receivedErr.value instanceof RouteModelNotFoundError)
+    assert.deepStrictEqual(res._json, { error: 'not found', param: 'user' })
+  })
+
+  it('callback returning a string → res.send()', async () => {
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    r.get('/users/:user', handler).missing(() => 'gone')
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const res = makeRes()
+    await mw(makeReq({ user: '99' }), res, async () => {})
+    assert.strictEqual(res._send, 'gone')
+  })
+
+  it('callback returning a Response sets res.raw.res', async () => {
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    const customResponse = new Response('custom body', { status: 410 })
+    r.get('/users/:user', handler).missing(() => customResponse)
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const res = makeRes()
+    await mw(makeReq({ user: '99' }), res, async () => {})
+    assert.strictEqual((res.raw as { res?: Response }).res, customResponse)
+  })
+
+  it('callback returning undefined trusts the callback wrote to res directly', async () => {
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    r.get('/users/:user', handler).missing((_req, _err) => {
+      // no return — pretend the callback called res.json() etc itself
+    })
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const res = makeRes()
+    let nextCalled = false
+    await mw(makeReq({ user: '99' }), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.strictEqual(res._json, undefined)
+    assert.strictEqual(res._send, undefined)
+  })
+
+  it('routes without .missing() still throw RouteModelNotFoundError', async () => {
+    const { RouteModelNotFoundError } = await import('./index.js')
+    r.bind('user', { name: 'User', findForRoute: async () => null })
+    r.get('/users/:user', handler)
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    await assert.rejects(
+      async () => { await mw(makeReq({ user: '99' }), makeRes(), async () => {}) },
+      (err: unknown) => err instanceof RouteModelNotFoundError,
+    )
+  })
+
+  it('optional binding does NOT trigger .missing()', async () => {
+    let called = false
+    r.bind('user', { name: 'User', findForRoute: async () => null }, { optional: true })
+    r.get('/users/:user', handler).missing(() => { called = true; return 'never' })
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    const req = makeReq({ user: '99' })
+    let nextCalled = false
+    await mw(req, makeRes(), async () => { nextCalled = true })
+    assert.equal(called, false)
+    assert.equal(nextCalled, true)
+    assert.strictEqual((req as unknown as { bound: Record<string, unknown> }).bound['user'], null)
+  })
+
+  it('also fires when raw param value is empty', async () => {
+    let firedWith: string | null = null
+    r.bind('user', { name: 'User', findForRoute: async () => ({ id: 1 }) })
+    r.get('/users/:user', handler).missing((_req, err) => {
+      firedWith = err.value
+      return { ok: false }
+    })
+
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+
+    await mw(makeReq({ user: '' }), makeRes(), async () => {})
+    assert.strictEqual(firedWith, '')
+  })
+})
+

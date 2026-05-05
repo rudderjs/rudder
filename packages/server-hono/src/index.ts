@@ -82,12 +82,22 @@ function extractIp(c: Context): string | undefined {
 
 function normalizeRequest(c: Context): AppRequest {
   const url = new URL(c.req.url)
+  // Subdomain params captured by the route's `host` template are stashed by
+  // registerRoute() before the chain runs. Merge them into `req.params` so
+  // bindings, view props, and handlers see them alongside path params. Path
+  // params win on collision (an explicit `:tenant` segment in the path
+  // overrides a subdomain-captured `:tenant`).
+  const hostParams = (c as unknown as Record<string, unknown>)['__rjs_host_params'] as
+    | Record<string, string>
+    | undefined
+  const pathParams = c.req.param() ?? {}
+  const params = hostParams ? { ...hostParams, ...pathParams } : pathParams
   const req: Record<string, unknown> = {
     method:  c.req.method,
     url:     c.req.url,
     path:    url.pathname,
     query:   Object.fromEntries(url.searchParams.entries()),
-    params:  c.req.param() ?? {},
+    params,
     headers: Object.fromEntries(
       Object.entries(c.req.header() ?? {}).map(([k, v]) => [k, String(v)])
     ),
@@ -274,6 +284,33 @@ function logPath(path: string): string | null {
   return path
 }
 
+// ─── Host (subdomain) matching ─────────────────────────────
+
+/**
+ * Match a request's `Host` header against a route's `host` template. Strips
+ * `:port` and lowercases both sides; `:param` segments in the template
+ * capture into `params` (delimited by `.`). Returns `null` on mismatch.
+ *
+ * @example
+ * matchHost('api.example.com',     'api.example.com:3000') // → { params: {} }
+ * matchHost(':tenant.example.com', 'acme.example.com')     // → { params: { tenant: 'acme' } }
+ * matchHost('api.example.com',     'web.example.com')      // → null
+ */
+function matchHost(template: string, host: string): { params: Record<string, string> } | null {
+  const hostname = host.split(':')[0]!.toLowerCase()
+  const names: string[] = []
+  const re = new RegExp('^' +
+    template.toLowerCase()
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/:([a-z_][a-z0-9_]*)/gi, (_, n) => { names.push(n); return '([^.]+)' })
+    + '$', 'i')
+  const m = re.exec(hostname)
+  if (!m) return null
+  const params: Record<string, string> = {}
+  names.forEach((n, i) => { params[n] = m[i + 1]! })
+  return { params }
+}
+
 // ─── Hono Adapter ─────────────────────────────────────────
 
 class HonoAdapter implements ServerAdapter {
@@ -319,6 +356,17 @@ class HonoAdapter implements ServerAdapter {
     }
 
     this.app[method](route.path, async (c: Context) => {
+      // Subdomain gate — Hono routes by path only, so we filter on Host here.
+      // Mismatch returns 404 (matches Laravel: a route scoped to a subdomain
+      // simply isn't registered for other hosts). Captured `:param` segments
+      // are stashed on the context so normalizeRequest() can merge them into
+      // `req.params` alongside path params.
+      if (route.host) {
+        const m = matchHost(route.host, c.req.header('host') ?? '')
+        if (!m) return c.notFound()
+        ;(c as unknown as Record<string, unknown>)['__rjs_host_params'] = m.params
+      }
+
       const req = normalizeRequest(c)
       const res = normalizeResponse(c)
 

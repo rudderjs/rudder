@@ -49,6 +49,44 @@ Available shortcuts: `whereNumber` / `whereAlpha` / `whereAlphaNumeric` / `where
 
 > Fluent-only — decorator routes (`@Get('/users/:id')`) don't return a `RouteBuilder`.
 
+### Route groups
+
+```ts
+import { router } from '@rudderjs/router'
+
+router.group({ prefix: '/admin', middleware: [adminAuth] }, () => {
+  router.get('/users', listUsers)            // GET /admin/users (with adminAuth)
+})
+
+router.group({ domain: ':tenant.example.com', prefix: '/api' }, () => {
+  router.get('/me', me)                      // GET :tenant.example.com/api/me
+})
+```
+
+Nested groups concatenate prefixes and middleware; innermost defined `domain` wins. `router.group()` is the user-facing scoping primitive — distinct from `runWithGroup('web' | 'api', …)` (the framework's web/api middleware-group tag).
+
+### Subdomain routing
+
+```ts
+router.get('/users', listUsers).domain('api.example.com')
+router.get('/me', me).domain(':tenant.example.com')
+// req.params.tenant === 'acme' for Host: acme.example.com
+```
+
+Mismatched hosts return 404. Subdomain `:param` and path `:param` of the same name collide — path wins.
+
+### Route binding 404 customisation
+
+```ts
+router.get('/users/:user', show)
+  .missing((_req, err) => Response.json({ error: err.message }, { status: 404 }))
+
+router.get('/posts/:post', show)
+  .missing((_req, err) => ({ message: `Post ${err.value} not found` }))
+```
+
+Returns: `Response`, plain object → JSON, string → body, or `undefined` (callback wrote to `res` directly). Optional bindings do NOT trigger `.missing()`.
+
 ### Route-level middleware
 
 ```ts
