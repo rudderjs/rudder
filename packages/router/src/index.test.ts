@@ -6,6 +6,12 @@ import {
   Router, router, Route,
   Controller, Middleware,
   Get, Post, Put, Patch, Delete, Options,
+  route,
+  ROUTE_PATTERN_NUMBER,
+  ROUTE_PATTERN_ALPHA,
+  ROUTE_PATTERN_ALPHANUM,
+  ROUTE_PATTERN_UUID,
+  ROUTE_PATTERN_ULID,
 } from './index.js'
 
 // ─── Test helpers ───────────────────────────────────────────
@@ -583,3 +589,111 @@ describe('Router.bind() — route model binding', () => {
     assert.equal(server.routes[0]?.middleware.length, 1)
   })
 })
+
+// ─── RouteBuilder.where*() — constraint shortcuts ──────────
+
+describe('RouteBuilder.where()', () => {
+  let r: Router
+  beforeEach(() => { r = new Router() })
+
+  it('rewrites :param to :param{pattern} via Hono regex syntax', () => {
+    r.get('/users/:id', handler).whereNumber('id')
+    assert.strictEqual(r.list()[0]?.path, `/users/:id{${ROUTE_PATTERN_NUMBER}}`)
+  })
+
+  it('whereAlpha applies the letter pattern', () => {
+    r.get('/users/:slug', handler).whereAlpha('slug')
+    assert.strictEqual(r.list()[0]?.path, `/users/:slug{${ROUTE_PATTERN_ALPHA}}`)
+  })
+
+  it('whereAlphaNumeric applies the alphanum pattern', () => {
+    r.get('/code/:c', handler).whereAlphaNumeric('c')
+    assert.strictEqual(r.list()[0]?.path, `/code/:c{${ROUTE_PATTERN_ALPHANUM}}`)
+  })
+
+  it('whereUuid applies the UUID pattern', () => {
+    r.get('/u/:id', handler).whereUuid('id')
+    assert.strictEqual(r.list()[0]?.path, `/u/:id{${ROUTE_PATTERN_UUID}}`)
+  })
+
+  it('whereUlid applies the ULID pattern', () => {
+    r.get('/u/:id', handler).whereUlid('id')
+    assert.strictEqual(r.list()[0]?.path, `/u/:id{${ROUTE_PATTERN_ULID}}`)
+  })
+
+  it('whereIn alternates supplied literal values, regex-escaped', () => {
+    r.get('/posts/:status', handler).whereIn('status', ['draft', 'published'])
+    assert.strictEqual(r.list()[0]?.path, '/posts/:status{(?:draft|published)}')
+  })
+
+  it('whereIn escapes regex metacharacters in values', () => {
+    r.get('/file/:ext', handler).whereIn('ext', ['png', 'jpg.bak'])
+    assert.strictEqual(r.list()[0]?.path, '/file/:ext{(?:png|jpg\\.bak)}')
+  })
+
+  it('where() accepts a RegExp and uses its .source', () => {
+    r.get('/n/:n', handler).where('n', /\d+/)
+    assert.strictEqual(r.list()[0]?.path, '/n/:n{\\d+}')
+  })
+
+  it('repeat where*() calls overwrite (last wins)', () => {
+    r.get('/x/:id', handler).whereNumber('id').where('id', '[a-f0-9]+')
+    assert.strictEqual(r.list()[0]?.path, '/x/:id{[a-f0-9]+}')
+  })
+
+  it('chains with .name() in either order', () => {
+    r.get('/u/:id', handler).whereNumber('id').name('users.show')
+    r.get('/p/:id', handler).name('posts.show').whereNumber('id')
+    assert.strictEqual(r.getNamedRoute('users.show'), `/u/:id{${ROUTE_PATTERN_NUMBER}}`)
+    assert.strictEqual(r.getNamedRoute('posts.show'), `/p/:id{${ROUTE_PATTERN_NUMBER}}`)
+  })
+
+  it('throws when path has no :param segment', () => {
+    assert.throws(() => r.get('/users', handler).whereNumber('id'), /no :id segment/)
+  })
+
+  it('throws when whereIn is given an empty values array', () => {
+    assert.throws(() => r.get('/x/:s', handler).whereIn('s', []), /must be non-empty/)
+  })
+
+  it('does not match :id inside :identifier (longest segment-name wins)', () => {
+    r.get('/u/:identifier', handler).whereAlpha('identifier')
+    assert.strictEqual(r.list()[0]?.path, `/u/:identifier{${ROUTE_PATTERN_ALPHA}}`)
+    // throws because `:id` segment doesn't exist standalone
+    assert.throws(() => r.get('/v/:identifier', handler).whereNumber('id'), /no :id segment/)
+  })
+
+  it('route() URL generator handles paths with {regex} segments', () => {
+    router.get('/users/:id', handler).whereNumber('id').name('rb.users.show')
+    assert.strictEqual(route('rb.users.show', { id: 42 }), '/users/42')
+    router.reset()
+  })
+
+  it('route() works with multiple constrained params + extra query', () => {
+    router.get('/posts/:postId/comments/:cid', handler)
+      .whereNumber('postId').whereUuid('cid').name('rb.posts.comments.show')
+    const url = route('rb.posts.comments.show', {
+      postId: 7,
+      cid: '550e8400-e29b-41d4-a716-446655440000',
+      page: 2,
+    })
+    assert.strictEqual(url, '/posts/7/comments/550e8400-e29b-41d4-a716-446655440000?page=2')
+    router.reset()
+  })
+
+  it('route binding extraction ignores params named inside {regex} bodies', async () => {
+    let called = false
+    const resolver = { name: 'X', findForRoute: () => { called = true; return { ok: true } } }
+    r.bind('id', resolver)
+    // `:foo` inside the regex pattern must NOT be picked up as a route param
+    r.get('/x/:id', handler).where('id', '(?::foo|\\d+)')
+    const server = new FakeServer()
+    r.mount(server)
+    const mw = server.routes[0]!.middleware[0]!
+    const req = { params: { id: '5' }, query: {}, headers: {}, body: undefined, url: '/x/5' }
+    await mw(req as unknown as Parameters<MiddlewareHandler>[0], {} as unknown as Parameters<MiddlewareHandler>[1], async () => {})
+    assert.strictEqual(called, true)
+    assert.deepStrictEqual((req as unknown as { bound: Record<string, unknown> }).bound, { id: { ok: true } })
+  })
+})
+

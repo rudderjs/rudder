@@ -39,6 +39,33 @@ router.get('/invoices/:id/download', handler, [ValidateSignature()]).name('invoi
 
 ---
 
+## Parameter constraints (`where*()`)
+
+Constrain `:param` segments to a regex with Laravel-style `where*()` shortcuts. Internally, the path is rewritten to Hono's `:param{regex}` syntax so non-matching requests 404 before they reach the handler.
+
+```ts
+router.get('/users/:id', handler).whereNumber('id').name('users.show')
+router.get('/u/:id', handler).whereUuid('id')
+router.get('/posts/:status', handler).whereIn('status', ['draft', 'published'])
+router.get('/n/:n', handler).where('n', /\d{3,5}/)
+```
+
+| Method | Pattern |
+|--------|---------|
+| `where(param, regex)` | Custom — string or `RegExp` (uses `.source`) |
+| `whereNumber(param)` | `[0-9]+` |
+| `whereAlpha(param)` | `[A-Za-z]+` |
+| `whereAlphaNumeric(param)` | `[A-Za-z0-9]+` |
+| `whereUuid(param)` | UUID, any version |
+| `whereUlid(param)` | Crockford base32 ULID (26 chars) |
+| `whereIn(param, values)` | Alternation over regex-escaped literals |
+
+Chains in any order with `.name()`; calling another `where*()` for the same param overwrites. Throws if the route path has no `:param` segment. The patterns are also exported as constants — `ROUTE_PATTERN_NUMBER`, `ROUTE_PATTERN_ALPHA`, `ROUTE_PATTERN_ALPHANUM`, `ROUTE_PATTERN_UUID`, `ROUTE_PATTERN_ULID`.
+
+> Decorator routes (`@Get('/users/:id')`) don't return a `RouteBuilder`, so `where*()` is fluent-only in v1.
+
+---
+
 ## `route()` — URL generation
 
 Generate a URL from a named route. Route parameters are substituted; unused params are appended as a query string.
@@ -205,11 +232,18 @@ router.mount(serverAdapter)
 
 ### `RouteBuilder`
 
-Returned by the shorthand route methods. Allows naming the registered route.
+Returned by the shorthand route methods. Allows naming the registered route and constraining `:param` segments.
 
 | Method | Description |
 |--------|-------------|
 | `.name(n)` | Assign a name to the route |
+| `.where(param, regex)` | Constrain `:param` to a custom regex (string or `RegExp`) |
+| `.whereNumber(param)` | Shortcut for `[0-9]+` |
+| `.whereAlpha(param)` | Shortcut for `[A-Za-z]+` |
+| `.whereAlphaNumeric(param)` | Shortcut for `[A-Za-z0-9]+` |
+| `.whereUuid(param)` | Shortcut for any-version UUID |
+| `.whereUlid(param)` | Shortcut for Crockford base32 ULID |
+| `.whereIn(param, values)` | Constrain `:param` to one of the supplied literals |
 
 ### `Url`
 

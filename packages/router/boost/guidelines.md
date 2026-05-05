@@ -34,6 +34,21 @@ route('posts.show', { slug: 'hello' })    // optional ':id?' segment omitted
 
 Throws if a required parameter is missing or the name is not registered.
 
+### Parameter constraints
+
+```ts
+import { Route } from '@rudderjs/router'
+
+Route.get('/users/:id', handler).whereNumber('id').name('users.show')
+Route.get('/u/:id', handler).whereUuid('id')
+Route.get('/posts/:status', handler).whereIn('status', ['draft', 'published'])
+Route.get('/n/:n', handler).where('n', /\d{3,5}/)
+```
+
+Available shortcuts: `whereNumber` / `whereAlpha` / `whereAlphaNumeric` / `whereUuid` / `whereUlid` / `whereIn(param, values)`. Base method `.where(param, regex)` accepts a string or `RegExp`. Throws when the path has no `:param` segment, or when `whereIn` gets an empty values array. Order-independent against `.name()`.
+
+> Fluent-only — decorator routes (`@Get('/users/:id')`) don't return a `RouteBuilder`.
+
 ### Route-level middleware
 
 ```ts
