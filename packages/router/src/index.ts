@@ -123,13 +123,54 @@ export const Patch   = createMethodDecorator('PATCH')
 export const Delete  = createMethodDecorator('DELETE')
 export const Options = createMethodDecorator('OPTIONS')
 
+// ─── Path utilities ────────────────────────────────────────
+
+/**
+ * Remove every balanced `{...}` block from a path. Used to peel off
+ * `where*()` regex constraint segments before scanning the path for `:param`
+ * names. Brace nesting is honoured so quantifier braces (`{8}`, `{4}`) inside
+ * a constraint don't terminate the block early.
+ */
+function stripRegexSegments(path: string): string {
+  let out = ''
+  let i = 0
+  while (i < path.length) {
+    if (path[i] !== '{') { out += path[i]; i++; continue }
+    let depth = 1
+    i++
+    while (i < path.length && depth > 0) {
+      if      (path[i] === '{') depth++
+      else if (path[i] === '}') depth--
+      i++
+    }
+  }
+  return out
+}
+
+// ─── Route param constraint patterns ──────────────────────
+//
+// Reusable regex shards consumed by `RouteBuilder.where*()` and exported so
+// app code can compose its own Hono `:param{pattern}` strings if needed.
+
+/** Matches one or more digits — `[0-9]+`. */
+export const ROUTE_PATTERN_NUMBER   = '[0-9]+'
+/** Matches one or more ASCII letters — `[A-Za-z]+`. */
+export const ROUTE_PATTERN_ALPHA    = '[A-Za-z]+'
+/** Matches one or more ASCII letters or digits — `[A-Za-z0-9]+`. */
+export const ROUTE_PATTERN_ALPHANUM = '[A-Za-z0-9]+'
+/** Matches a UUID of any version (case-insensitive). */
+export const ROUTE_PATTERN_UUID     = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+/** Matches a Crockford base32 ULID (26 chars). */
+export const ROUTE_PATTERN_ULID     = '[0-7][0-9A-HJKMNP-TV-Z]{25}'
+
 // ─── RouteBuilder ──────────────────────────────────────────
 
 /**
- * Returned by `router.get/post/etc` — allows naming the registered route.
+ * Returned by `router.get/post/etc` — allows naming the registered route and
+ * constraining `:param` segments via Laravel-style `where*` shortcuts.
  *
  * @example
- * router.get('/users/:id', handler).name('users.show')
+ * router.get('/users/:id', handler).name('users.show').whereNumber('id')
  * route('users.show', { id: 1 })  // → '/users/1'
  */
 export class RouteBuilder {
@@ -140,8 +181,96 @@ export class RouteBuilder {
 
   /** Assign a name to this route for use with `route()` and `Url.signedRoute()`. */
   name(n: string): this {
-    this._router._registerName(n, this.definition.path)
+    // Pass the definition itself so later `where*()` calls (which mutate
+    // `definition.path`) are reflected when the named route is looked up.
+    this._router._registerName(n, this.definition)
     return this
+  }
+
+  /**
+   * Constrain a `:param` segment with a custom regex. Accepts either a string
+   * (used verbatim) or a `RegExp` (its `.source` is taken — `/^/`, `/$/`, and
+   * flags are ignored, since Hono anchors per-segment).
+   *
+   * Mutates the route's path in place to `:param{pattern}` (Hono regex syntax).
+   * Calling `where*` again on the same param overwrites the previous pattern.
+   *
+   * Throws if the route path has no `:param` segment.
+   */
+  where(param: string, regex: string | RegExp): this {
+    const pattern = regex instanceof RegExp ? regex.source : regex
+    const path    = this.definition.path
+    let out       = ''
+    let matched   = false
+    let i         = 0
+
+    while (i < path.length) {
+      if (path[i] !== ':') { out += path[i]; i++; continue }
+
+      // Scan a `:paramName(?)?{balanced regex}?` segment.
+      let j = i + 1
+      while (j < path.length && /[A-Za-z0-9_]/.test(path[j] ?? '')) j++
+      const name = path.slice(i + 1, j)
+      let opt = ''
+      if (path[j] === '?') { opt = '?'; j++ }
+
+      // Consume a balanced `{ ... }` block (handles `[0-9]{8}`-style nesting).
+      let bodyEnd = j
+      if (path[j] === '{') {
+        let depth = 1
+        bodyEnd = j + 1
+        while (bodyEnd < path.length && depth > 0) {
+          if      (path[bodyEnd] === '{') depth++
+          else if (path[bodyEnd] === '}') depth--
+          bodyEnd++
+        }
+      }
+
+      if (name === param) {
+        out += `:${name}${opt}{${pattern}}`
+        matched = true
+      } else {
+        out += path.slice(i, bodyEnd)
+      }
+      i = bodyEnd
+    }
+
+    if (!matched) {
+      throw new Error(`[RudderJS Router] where("${param}", ...) — route path "${path}" has no :${param} segment.`)
+    }
+    this.definition.path = out
+    return this
+  }
+
+  /** Constrain `:param` to one or more digits. */
+  whereNumber(param: string): this { return this.where(param, ROUTE_PATTERN_NUMBER) }
+
+  /** Constrain `:param` to one or more ASCII letters. */
+  whereAlpha(param: string): this { return this.where(param, ROUTE_PATTERN_ALPHA) }
+
+  /** Constrain `:param` to one or more ASCII letters or digits. */
+  whereAlphaNumeric(param: string): this { return this.where(param, ROUTE_PATTERN_ALPHANUM) }
+
+  /** Constrain `:param` to a UUID of any version. */
+  whereUuid(param: string): this { return this.where(param, ROUTE_PATTERN_UUID) }
+
+  /** Constrain `:param` to a Crockford base32 ULID. */
+  whereUlid(param: string): this { return this.where(param, ROUTE_PATTERN_ULID) }
+
+  /**
+   * Constrain `:param` to one of the supplied literal values. Each value is
+   * regex-escaped, so `'a.b'` matches the literal string `a.b`, not "a then any
+   * char then b". Throws when `values` is empty.
+   *
+   * @example
+   * router.get('/posts/:status', handler).whereIn('status', ['draft', 'published'])
+   */
+  whereIn(param: string, values: readonly (string | number)[]): this {
+    if (values.length === 0) {
+      throw new Error(`[RudderJS Router] whereIn("${param}", []) — values must be non-empty.`)
+    }
+    const escaped = values.map(v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    return this.where(param, `(?:${escaped.join('|')})`)
   }
 }
 
@@ -204,17 +333,17 @@ export class RouteModelNotFoundError extends Error {
 export class Router {
   private routes: RouteDefinition[] = []
   private globalMiddleware: MiddlewareHandler[] = []
-  private namedRoutes = new Map<string, string>()
+  private namedRoutes = new Map<string, RouteDefinition>()
   private bindings = new Map<string, RouteBinding>()
 
   /** @internal — called by RouteBuilder */
-  _registerName(name: string, path: string): void {
-    this.namedRoutes.set(name, path)
+  _registerName(name: string, def: RouteDefinition): void {
+    this.namedRoutes.set(name, def)
   }
 
-  /** Look up a named route's path. */
+  /** Look up a named route's path. Reflects any `where*()` mutations. */
   getNamedRoute(name: string): string | undefined {
-    return this.namedRoutes.get(name)
+    return this.namedRoutes.get(name)?.path
   }
 
   /**
@@ -233,7 +362,9 @@ export class Router {
 
   /** All registered named routes. */
   listNamed(): Record<string, string> {
-    return Object.fromEntries(this.namedRoutes)
+    const out: Record<string, string> = {}
+    for (const [name, def] of this.namedRoutes) out[name] = def.path
+    return out
   }
 
   /** Clear registered routes, middleware, named routes, and route bindings. */
@@ -295,7 +426,12 @@ export class Router {
    * calling `next()`. No-op for routes whose path contains no bound params.
    */
   private _buildBindingMiddleware(path: string): MiddlewareHandler | null {
-    const paramNames = [...path.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)\??/g)].map(m => m[1] as string)
+    // Strip `{regex}` constraint segments from `where*()` before scanning for
+    // param names — otherwise a `:` inside a custom pattern could be misread
+    // as a route param. Uses balanced-brace stripping to support nested `{n}`
+    // quantifiers (e.g. UUID's `[0-9a-f]{8}-...`).
+    const stripped = stripRegexSegments(path)
+    const paramNames = [...stripped.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)\??/g)].map(m => m[1] as string)
     const matches: Array<[string, RouteBinding]> = []
     for (const name of paramNames) {
       const binding = this.bindings.get(name)
@@ -436,7 +572,10 @@ export function route(name: string, params: Record<string, string | number> = {}
 
   const used = new Set<string>()
 
-  let result = path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)(\?)?/g, (_match, key: string, optional: string | undefined) => {
+  // Strip `:param{regex}` constraint segments before substitution so the
+  // simple param-name regex doesn't get confused by nested braces (UUID's
+  // `[0-9a-f]{8}-...{12}` etc.).
+  let result = stripRegexSegments(path).replace(/:([a-zA-Z_][a-zA-Z0-9_]*)(\?)?/g, (_match, key: string, optional: string | undefined) => {
     if (key in params) {
       used.add(key)
       return String(params[key])
