@@ -94,20 +94,19 @@ pnpm rudder db:generate    # regenerate the Prisma client
 
 ## Register the provider
 
-The `database()` factory handles connection, `ModelRegistry.set()`, and DI binding in one call:
+`DatabaseProvider` handles connection, `ModelRegistry.set()`, and DI binding:
 
 ```ts
 // bootstrap/providers.ts
-import { database } from '@rudderjs/orm-prisma'
-import configs from '../config/index.js'
+import { DatabaseProvider } from '@rudderjs/orm-prisma'
 
 export default [
-  database(configs.database),    // first
+  DatabaseProvider,    // first
   // ...other providers
 ]
 ```
 
-`database()` binds the raw `PrismaClient` to DI as `'prisma'` so other packages (`@rudderjs/auth`, `@rudderjs/notification`) can auto-discover it. Auto-discovery picks up `database()` automatically when `@rudderjs/orm-prisma` is installed — the explicit import is only needed when you skip auto-discovery.
+`DatabaseProvider` binds the raw `PrismaClient` to DI as `'prisma'` so other packages (`@rudderjs/auth`, `@rudderjs/notification`) can auto-discover it. Auto-discovery picks up `DatabaseProvider` automatically when `@rudderjs/orm-prisma` is installed — the explicit import is only needed when you skip auto-discovery.
 
 ## The `User` model
 

@@ -25,7 +25,7 @@ export default {
 } satisfies HashConfig
 ```
 
-The provider is auto-discovered. When `@rudderjs/auth` is also installed, `hash()` must boot before `authProvider()` — auto-discovery orders this correctly via the `infrastructure` stage.
+The provider is auto-discovered. When `@rudderjs/auth` is also installed, `HashProvider` must boot before `AuthProvider` — auto-discovery orders this correctly via the `infrastructure` stage.
 
 ## The Hash facade
 
@@ -115,6 +115,6 @@ HashRegistry.set(new ScryptDriver())
 
 ## Pitfalls
 
-- **Provider order.** `hash()` must boot before `authProvider()` — auth depends on the hash driver for password verification. Auto-discovery handles this; manual orderings need it spelled out.
+- **Provider order.** `HashProvider` must boot before `AuthProvider` — auth depends on the hash driver for password verification. Auto-discovery handles this; manual orderings need it spelled out.
 - **Argon2 native build failures.** Some platforms (Cloudflare Workers, Deno without `--allow-ffi`) can't load native modules. Use bcrypt for portable deployments.
 - **Increasing rounds in production.** Raise the cost factor and ship — old hashes still validate, and `Hash.needsRehash()` flags them for migration on next login.

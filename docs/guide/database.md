@@ -96,8 +96,10 @@ Production deploys run only `pnpm rudder migrate` — never `db:push` or `migrat
 The database provider must boot **before any provider whose `boot()` queries models**. The auto-discovery system already orders this correctly — `orm-prisma` (or `orm-drizzle`) sits in the `infrastructure` stage and runs ahead of `feature` providers like queues and notifications. If you list providers manually, put the database first:
 
 ```ts
+import { DatabaseProvider } from '@rudderjs/orm-prisma'
+
 export default [
-  database(configs.database),    // first
+  DatabaseProvider,               // first
   AppServiceProvider,             // last
 ]
 ```

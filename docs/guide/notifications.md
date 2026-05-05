@@ -8,17 +8,18 @@
 pnpm add @rudderjs/notification
 ```
 
-The notification provider depends on `@rudderjs/mail` (for the mail channel) and `@rudderjs/orm` with a database provider (for the database channel). Auto-discovery boots them in the right order. For manual ordering, list `mail()` before `notifications()`:
+The notification provider depends on `@rudderjs/mail` (for the mail channel) and `@rudderjs/orm` with a database provider (for the database channel). Auto-discovery boots them in the right order. For manual ordering, list `MailProvider` before `NotificationProvider`:
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@rudderjs/mail'
-import { notifications } from '@rudderjs/notification'
+import { DatabaseProvider } from '@rudderjs/orm-prisma'
+import { MailProvider } from '@rudderjs/mail'
+import { NotificationProvider } from '@rudderjs/notification'
 
 export default [
-  database(configs.database),
-  mail(configs.mail),
-  notifications(),
+  DatabaseProvider,
+  MailProvider,
+  NotificationProvider,
 ]
 ```
 
@@ -159,6 +160,6 @@ Notification.assertNothingSent()
 
 ## Pitfalls
 
-- **Provider order.** Auto-discovery handles this; manual orderings need `mail()` before `notifications()`. The mail channel resolves `Mail` from DI at dispatch time and fails if no mailer exists.
+- **Provider order.** Auto-discovery handles this; manual orderings need `MailProvider` before `NotificationProvider`. The mail channel resolves `Mail` from DI at dispatch time and fails if no mailer exists.
 - **`email` missing.** `toMail()` requires the notifiable's `email` field. The channel throws if `'mail'` is in `via()` but `notifiable.email` is undefined — handle the missing case in `via()` by branching on the recipient.
 - **Database channel without the migration.** Publish the schema (`pnpm rudder vendor:publish --tag=notification-schema`) and run `pnpm rudder migrate` before sending the first database notification.

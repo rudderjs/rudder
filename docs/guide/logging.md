@@ -26,16 +26,15 @@ Register the provider:
 
 ```ts
 // bootstrap/providers.ts
-import { log } from '@rudderjs/log'
-import configs from '../config/index.js'
+import { LogProvider } from '@rudderjs/log'
 
 export default [
   ...(await defaultProviders()),
-  log(configs.logging),
+  LogProvider,
 ]
 ```
 
-The `log` provider is auto-discovered when `@rudderjs/log` is installed, so the explicit import is only needed when you want to skip auto-discovery. Either way, registering it wires the global exception reporter — unhandled errors flow through your default channel automatically.
+`LogProvider` is auto-discovered when `@rudderjs/log` is installed, so the explicit import is only needed when you want to skip auto-discovery. Either way, registering it wires the global exception reporter — unhandled errors flow through your default channel automatically.
 
 ## Writing logs
 

@@ -12,13 +12,13 @@ pnpm add yjs y-websocket
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@rudderjs/broadcast'
-import { sync }         from '@rudderjs/sync'
+import { BroadcastingProvider } from '@rudderjs/broadcast'
+import { SyncProvider }         from '@rudderjs/sync'
 
 export default [
   ...(await defaultProviders()),
-  broadcasting(),  // /ws       — channel pub/sub (optional, common pairing)
-  sync(),           // /ws-sync  — Yjs document sync
+  BroadcastingProvider,  // /ws       — channel pub/sub (optional, common pairing)
+  SyncProvider,           // /ws-sync  — Yjs document sync
 ]
 ```
 
@@ -40,16 +40,22 @@ These are the same Yjs primitives you'd use without RudderJS — the framework h
 
 ## Persistence
 
-By default documents live in memory and reset when the server restarts. For production, attach a persistence adapter:
+By default documents live in memory and reset when the server restarts. For production, attach a persistence adapter via `config/sync.ts`:
 
 ```ts
-import { sync, syncRedis, syncPrisma } from '@rudderjs/sync'
+// config/sync.ts
+import { syncRedis, syncPrisma } from '@rudderjs/sync'
+import type { SyncConfig } from '@rudderjs/sync'
 
 // Redis — append-only update log per document
-sync({ persistence: syncRedis({ url: process.env.REDIS_URL }) })
+export default {
+  persistence: syncRedis({ url: process.env.REDIS_URL }),
+} satisfies SyncConfig
 
-// Prisma — store updates in a database table
-sync({ persistence: syncPrisma() })
+// Or Prisma — store updates in a database table
+export default {
+  persistence: syncPrisma(),
+} satisfies SyncConfig
 ```
 
 The Prisma adapter requires the `sync_documents` schema:
@@ -105,10 +111,10 @@ The core `@rudderjs/sync` package handles transport and persistence. For server-
 | Tiptap  | `@rudderjs/sync/tiptap`  | Scaffolded — implementation forthcoming |
 
 ```ts
-import { sync } from '@rudderjs/sync'
+import { Sync } from '@rudderjs/sync'
 import { editBlock, insertBlock } from '@rudderjs/sync/lexical'
 
-const doc = await sync.document('article:42:body')
+const doc = await Sync.document('article:42:body')
 insertBlock(doc, 'callToAction', { title: 'Subscribe' })
 ```
 
