@@ -114,6 +114,60 @@ const exporters = container.tagged<Exporter>('reports.exporters')
 
 `tagged()` returns `[]` for unknown tags (no throw). Singletons stay singletons across `tagged()` calls. Tagging an unbound token is allowed — `tagged()` will throw the standard "cannot resolve" error when one is asked for, matching Laravel's behavior.
 
+For constructor-time injection, decorate a parameter with `@Tag(name)`:
+
+```ts
+import { Injectable, Tag } from '@rudderjs/core'
+
+@Injectable()
+class ReportRunner {
+  constructor(@Tag('reports.exporters') private exporters: Exporter[]) {}
+}
+```
+
+For contextual binding, pair the `tagToken()` sentinel with `when().needs().give()`:
+
+```ts
+import { tagToken } from '@rudderjs/core'
+
+container.when(ReportRunner)
+  .needs(tagToken('reports.exporters'))
+  .give(c => c.tagged<Exporter>('reports.exporters').filter(e => e.enabled))
+```
+
+`@Tag` is constructor-only — `design:paramtypes` metadata is dropped on method parameters by esbuild/Vite.
+
+### Extending bindings
+
+`extend()` wraps the resolved value with a decorator function. Useful for telemetry, tracing, or feature flags without subclassing:
+
+```ts
+container.singleton(Logger, () => new ConsoleLogger())
+
+container.extend<Logger>(Logger, (logger, c) =>
+  new TelescopeLoggerProxy(logger, c.make(Telescope))
+)
+```
+
+Multiple `extend()` calls chain in registration order. Singletons cache the wrapped value (extenders run once); transient bindings re-wrap on every `make()`; scoped bindings re-wrap once per scope. If a value is already cached when `extend()` is called, the new extender wraps it eagerly so consumers that already resolved the token see the wrap on their next `make()`.
+
+### Rebinding hooks
+
+`rebinding()` registers a listener that fires when an existing binding is replaced — useful for test hot-swaps and `app->refresh()` parity:
+
+```ts
+container.singleton(Mailer, () => new SesMailer())
+
+container.rebinding<Mailer>(Mailer, (newInstance, c) => {
+  c.make(MailQueue).rewire(newInstance)
+})
+
+// In a test:
+container.instance(Mailer, new FakeMailer())   // listener fires synchronously with the FakeMailer
+```
+
+Listeners do **not** fire on the initial bind — only when an already-bound token is rebound via `bind` / `singleton` / `scoped` / `instance`. The listener receives the freshly-resolved value, not the stale singleton cache.
+
 ## Middleware Groups
 
 Routes loaded via `withRouting({ web })` are tagged `web`; via `withRouting({ api })` tagged `api`. The server adapter prepends the matching group's middleware stack before per-route middleware — Laravel-style.
