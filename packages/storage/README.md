@@ -42,11 +42,12 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { storage } from '@rudderjs/storage'
-import configs from '../config/index.js'
+import { defaultProviders } from '@rudderjs/core'
 
-export default [storage(configs.storage)]
+export default [...(await defaultProviders())]
 ```
+
+`StorageProvider` is auto-discovered — it boots all configured disks and registers the storage facade in the DI container as `storage` (default disk) and `storage.<name>` (each named disk).
 
 ## Storage Facade
 
@@ -95,6 +96,16 @@ await Storage.disk('public').put('images/banner.png', buffer)
 | `url(path)` | `string` | Public URL for the file. |
 | `path(path)` | `string` | Absolute filesystem path. Throws for S3 disks. |
 | `disk(name)` | `StorageAdapter` | Access a named disk directly. |
+| `copy(from, to)` | `Promise<void>` | Copy a file within the same disk. |
+| `move(from, to)` | `Promise<void>` | Rename / move a file within the same disk. |
+| `append(path, contents)` | `Promise<void>` | Append `contents` to a file. Creates the file if it doesn't exist. |
+| `prepend(path, contents)` | `Promise<void>` | Prepend `contents` to a file. Creates the file if it doesn't exist. |
+| `setVisibility(path, v)` | `Promise<void>` | Set per-file visibility (`'public'` or `'private'`). |
+| `getVisibility(path)` | `Promise<Visibility>` | Read per-file visibility. Defaults to `'private'`. |
+| `readStream(path)` | `Promise<Readable>` | Read a file as a Node `Readable` stream. |
+| `writeStream(path, stream)` | `Promise<void>` | Pipe a `Readable` into a file. |
+| `temporaryUrl(path, expiresAt, opts?)` | `Promise<string>` | Short-lived signed download URL. |
+| `temporaryUploadUrl(path, expiresAt)` | `Promise<{url, headers}>` | Short-lived signed upload URL. |
 
 ## Configuration
 
@@ -207,10 +218,97 @@ const disk = new LocalAdapter({ driver: 'local', root: '/tmp/uploads' })
 await disk.put('file.txt', 'hello')
 ```
 
+## Pre-signed URLs
+
+### S3
+
+S3 disks issue real pre-signed URLs through `@aws-sdk/s3-request-presigner` (an optional dep — install only if you use S3).
+
+```ts
+const url = await Storage.disk('s3').temporaryUrl(
+  'invoices/2026-05.pdf',
+  new Date(Date.now() + 60_000),
+  { responseContentDisposition: 'attachment; filename="may.pdf"' },
+)
+
+const { url, headers } = await Storage.disk('s3').temporaryUploadUrl(
+  'uploads/u-42/avatar.jpg',
+  new Date(Date.now() + 5 * 60_000),
+)
+// Browser PUTs the file to `url` with `headers`.
+```
+
+### Local
+
+The Local adapter has no bucket of its own, so it issues HMAC-signed URLs that point at a controller route the framework registers for you. Wire it once in your bootstrap:
+
+```ts
+import { router } from '@rudderjs/router'
+import { serveTemporaryUrls } from '@rudderjs/storage'
+
+await serveTemporaryUrls(router, { disk: 'local', routePath: '/storage/temp/*' })
+```
+
+After that, `Storage.disk('local').temporaryUrl(...)` returns URLs of the form `/storage/temp/<path>?expires=...&signature=...` and the registered handler validates the signature + streams the file.
+
+`LocalAdapter.temporaryUploadUrl()` throws `StorageNotSupportedError` — there is no signed-POST equivalent in v1. Use a normal `POST /api/upload` route with multipart middleware in dev.
+
+## Visibility
+
+```ts
+await Storage.disk('s3').setVisibility('avatars/u-1.jpg', 'public')
+const v = await Storage.disk('s3').getVisibility('avatars/u-1.jpg')   // 'public' | 'private'
+```
+
+S3 maps `public` to the `public-read` ACL and `private` to the `private` ACL via `PutObjectAclCommand` / `GetObjectAclCommand`. The Local adapter writes mode bits (`0o644` for public, `0o600` for private) plus a sidecar entry in `<root>/.visibility/<path>` so Windows / FUSE volumes still report correctly. `delete()` removes the sidecar too.
+
+## Streams
+
+```ts
+const stream = await Storage.disk('s3').readStream('big.zip')
+stream.pipe(res)                                          // 200 MB safe — no buffering
+
+await Storage.disk('local').writeStream('uploads/u.zip', uploadStream)   // resolves on flush
+```
+
+S3 reads return the SDK's `GetObjectCommand` `Body` (a Node `Readable`) directly; uploads use `@aws-sdk/lib-storage`'s `Upload` helper (multipart automatic). Local uses `node:fs` `createReadStream` / `createWriteStream` with `pipeline()` for back-pressure.
+
+## File operations
+
+```ts
+await Storage.copy('avatars/u-1.jpg', 'avatars/backup/u-1.jpg')
+await Storage.move('tmp/upload.jpg', 'avatars/u-1.jpg')   // S3: copy + delete; Local: rename (EXDEV → copy + unlink)
+await Storage.append('logs/app.log', 'request 42 OK\n')
+await Storage.prepend('changelog.md', '# 1.2.0\n')
+```
+
+`copy / move` are single-disk in v1 — cross-disk moves throw an explicit error (deferred to v2).
+
+## Testing with `Storage.fake()`
+
+```ts
+import { Storage } from '@rudderjs/storage'
+
+let disk: ReturnType<typeof Storage.fake>
+
+beforeEach(() => { disk = Storage.fake() })           // swaps the default disk for an in-memory FakeAdapter
+afterEach(()  => { Storage.restoreFakes() })          // puts the original adapter back
+
+it('uploads an avatar', async () => {
+  await Storage.put('avatars/u-1.jpg', Buffer.from([0xff]))
+  disk.assertExists('avatars/u-1.jpg')
+  disk.assertCount('avatars', 1)
+  disk.assertDirectoryEmpty('logs')
+})
+```
+
+`Storage.fake('s3')` swaps a specific disk; `Storage.fake()` defaults to whatever disk is currently configured as default. Calling `Storage.fake()` twice keeps the same `FakeAdapter` instance and resets its in-memory store. Both `fake()` and `restoreFakes()` re-bind the DI container (`storage.<name>`) so consumers that injected the disk see the swap too.
+
 ## Notes
 
 - `local` driver creates parent directories automatically — no need to `mkdir` first.
 - `delete()` is a no-op if the file does not exist.
 - `list()` returns only files (not subdirectories) in the given directory.
 - `path()` throws for S3 disks — use `url()` for a public reference instead.
-- S3 requires `pnpm add @aws-sdk/client-s3` — it is an optional dependency.
+- S3 requires `pnpm add @aws-sdk/client-s3` — it is an optional dependency. Pre-signed URLs additionally need `@aws-sdk/s3-request-presigner`; streamed uploads need `@aws-sdk/lib-storage`. All three are optional.
+- `temporaryUrl()` / `temporaryUploadUrl()` throw if `expiresAt <= Date.now()`.

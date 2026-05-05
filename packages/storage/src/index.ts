@@ -1,67 +1,44 @@
-import { ServiceProvider, rudder, config } from '@rudderjs/core'
+import { ServiceProvider, rudder, config, app } from '@rudderjs/core'
 import nodePath from 'node:path'
 import fs from 'node:fs/promises'
+import type { Readable } from 'node:stream'
 
-// ─── Adapter Contract ──────────────────────────────────────
+import { LocalAdapter, type LocalDiskConfig } from './adapters/local.js'
+import { S3Adapter, type S3DiskConfig } from './adapters/s3.js'
+import { FakeAdapter } from './adapters/fake.js'
+import { StorageRegistry } from './registry.js'
+import type {
+  StorageAdapter,
+  TemporaryUrlOptions,
+  TemporaryUploadUrl,
+  Visibility,
+} from './contracts.js'
 
-export interface StorageAdapter {
-  /** Write a file. Creates parent directories as needed. */
-  put(filePath: string, contents: Buffer | string): Promise<void>
+// ─── Re-exports ────────────────────────────────────────────
 
-  /** Read a file. Returns null if it doesn't exist. */
-  get(filePath: string): Promise<Buffer | null>
-
-  /** Read a file as a UTF-8 string. Returns null if it doesn't exist. */
-  text(filePath: string): Promise<string | null>
-
-  /** Delete a file. No-op if it doesn't exist. */
-  delete(filePath: string): Promise<void>
-
-  /** Check if a file exists. */
-  exists(filePath: string): Promise<boolean>
-
-  /** List files in a directory (relative paths). */
-  list(directory?: string): Promise<string[]>
-
-  /** Public URL for the file. */
-  url(filePath: string): string
-
-  /** Absolute filesystem path. Throws for remote drivers. */
-  path(filePath: string): string
-}
-
-export interface StorageAdapterProvider {
-  create(): StorageAdapter | Promise<StorageAdapter>
-}
-
-// ─── Storage Registry ──────────────────────────────────────
-
-export class StorageRegistry {
-  private static readonly adapters = new Map<string, StorageAdapter>()
-  private static defaultDisk = 'local'
-
-  static set(name: string, adapter: StorageAdapter): void { this.adapters.set(name, adapter) }
-  static setDefault(name: string): void                   { this.defaultDisk = name }
-
-  static get(name?: string): StorageAdapter {
-    const key = name ?? this.defaultDisk
-    const a   = this.adapters.get(key)
-    if (!a) throw new Error(`[RudderJS Storage] Disk "${key}" not found. Check your storage config.`)
-    return a
-  }
-
-  /** @internal — clears all registered disks. Used for testing. */
-  static reset(): void {
-    this.adapters.clear()
-    this.defaultDisk = 'local'
-  }
-}
+export { BaseAdapter } from './base.js'
+export { LocalAdapter, type LocalDiskConfig } from './adapters/local.js'
+export { S3Adapter, type S3DiskConfig } from './adapters/s3.js'
+export { FakeAdapter } from './adapters/fake.js'
+export { StorageRegistry } from './registry.js'
+export { StorageNotSupportedError } from './errors.js'
+export { serveTemporaryUrls, type ServeTemporaryUrlsOptions } from './serveTemporaryUrls.js'
+export type {
+  StorageAdapter,
+  StorageAdapterProvider,
+  TemporaryUrlOptions,
+  TemporaryUploadUrl,
+  Visibility,
+} from './contracts.js'
 
 // ─── Storage Facade ────────────────────────────────────────
 
 export class Storage {
+  private static _originalDisks = new Map<string, StorageAdapter>()
+  private static _fakes         = new Map<string, FakeAdapter>()
+
   /** Access a named disk, e.g. Storage.disk('s3').put(...) */
-  static disk(name: string): StorageAdapter    { return StorageRegistry.get(name) }
+  static disk(name?: string): StorageAdapter { return StorageRegistry.get(name) }
 
   static put(filePath: string, contents: Buffer | string): Promise<void> {
     return StorageRegistry.get().put(filePath, contents)
@@ -73,181 +50,78 @@ export class Storage {
   static list(directory?: string): Promise<string[]>     { return StorageRegistry.get().list(directory) }
   static url(filePath: string): string                   { return StorageRegistry.get().url(filePath) }
   static path(filePath: string): string                  { return StorageRegistry.get().path(filePath) }
-}
 
-// ─── Local Driver ──────────────────────────────────────────
-
-export interface LocalDiskConfig {
-  driver:   'local'
-  root:     string    // absolute or relative path to the storage root
-  baseUrl?: string    // public URL prefix, e.g. '/storage' or 'https://cdn.example.com'
-}
-
-export class LocalAdapter implements StorageAdapter {
-  private readonly root:    string
-  private readonly baseUrl: string
-
-  constructor(config: LocalDiskConfig) {
-    this.root    = nodePath.resolve(config.root)
-    this.baseUrl = config.baseUrl?.replace(/\/$/, '') ?? '/storage'
+  static temporaryUrl(filePath: string, expiresAt: Date, opts?: TemporaryUrlOptions): Promise<string> {
+    return StorageRegistry.get().temporaryUrl(filePath, expiresAt, opts)
+  }
+  static temporaryUploadUrl(filePath: string, expiresAt: Date): Promise<TemporaryUploadUrl> {
+    return StorageRegistry.get().temporaryUploadUrl(filePath, expiresAt)
+  }
+  static setVisibility(filePath: string, visibility: Visibility): Promise<void> {
+    return StorageRegistry.get().setVisibility(filePath, visibility)
+  }
+  static getVisibility(filePath: string): Promise<Visibility> {
+    return StorageRegistry.get().getVisibility(filePath)
+  }
+  static readStream(filePath: string): Promise<Readable> {
+    return StorageRegistry.get().readStream(filePath)
+  }
+  static writeStream(filePath: string, stream: Readable): Promise<void> {
+    return StorageRegistry.get().writeStream(filePath, stream)
+  }
+  static copy(from: string, to: string): Promise<void> {
+    return StorageRegistry.get().copy(from, to)
+  }
+  static move(from: string, to: string): Promise<void> {
+    return StorageRegistry.get().move(from, to)
+  }
+  static append(filePath: string, contents: string | Buffer): Promise<void> {
+    return StorageRegistry.get().append(filePath, contents)
+  }
+  static prepend(filePath: string, contents: string | Buffer): Promise<void> {
+    return StorageRegistry.get().prepend(filePath, contents)
   }
 
-  private abs(filePath: string): string {
-    return nodePath.join(this.root, filePath)
-  }
-
-  async put(filePath: string, contents: Buffer | string): Promise<void> {
-    const abs = this.abs(filePath)
-    await fs.mkdir(nodePath.dirname(abs), { recursive: true })
-    await fs.writeFile(abs, contents)
-  }
-
-  async get(filePath: string): Promise<Buffer | null> {
-    try   { return await fs.readFile(this.abs(filePath)) }
-    catch { return null }
-  }
-
-  async text(filePath: string): Promise<string | null> {
-    const buf = await this.get(filePath)
-    return buf ? buf.toString('utf8') : null
-  }
-
-  async delete(filePath: string): Promise<void> {
-    try { await fs.unlink(this.abs(filePath)) } catch { /* no-op */ }
-  }
-
-  async exists(filePath: string): Promise<boolean> {
-    try { await fs.access(this.abs(filePath)); return true } catch { return false }
-  }
-
-  async list(directory = ''): Promise<string[]> {
-    try {
-      const entries = await fs.readdir(this.abs(directory), { withFileTypes: true })
-      return entries
-        .filter(e => e.isFile())
-        .map(e => nodePath.join(directory, e.name).replace(/\\/g, '/'))
-    } catch { return [] }
-  }
-
-  url(filePath: string): string  { return `${this.baseUrl}/${filePath.replace(/^\//, '')}` }
-  path(filePath: string): string { return this.abs(filePath) }
-}
-
-// ─── S3 Driver ─────────────────────────────────────────────
-
-export interface S3DiskConfig {
-  driver:           's3'
-  bucket:           string
-  region?:          string
-  endpoint?:        string    // S3-compatible endpoint (MinIO, Cloudflare R2, etc.)
-  accessKeyId?:     string
-  secretAccessKey?: string
-  baseUrl?:         string    // public base URL override
-  forcePathStyle?:  boolean   // required for MinIO
-}
-
-type S3Commands = {
-  GetObjectCommand:     typeof import('@aws-sdk/client-s3').GetObjectCommand
-  PutObjectCommand:     typeof import('@aws-sdk/client-s3').PutObjectCommand
-  DeleteObjectCommand:  typeof import('@aws-sdk/client-s3').DeleteObjectCommand
-  HeadObjectCommand:    typeof import('@aws-sdk/client-s3').HeadObjectCommand
-  ListObjectsV2Command: typeof import('@aws-sdk/client-s3').ListObjectsV2Command
-}
-
-interface S3GetObjectResult {
-  Body?: AsyncIterable<Uint8Array>
-}
-
-interface S3ListObjectsResult {
-  Contents?: Array<{ Key?: string }>
-}
-
-class S3Adapter implements StorageAdapter {
-  private client:  unknown
-  private readonly bucket:  string
-  private readonly baseUrl: string
-
-  constructor(private readonly config: S3DiskConfig) {
-    this.bucket  = config.bucket
-    this.baseUrl = config.baseUrl?.replace(/\/$/, '') ?? ''
-  }
-
-  private async getClient(): Promise<{
-    send: (cmd: unknown) => Promise<unknown>
-  }> {
-    if (!this.client) {
-      const {
-        S3Client, GetObjectCommand, PutObjectCommand,
-        DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command,
-      } = await import('@aws-sdk/client-s3') as typeof import('@aws-sdk/client-s3')
-      this.client = new S3Client({
-        region: this.config.region ?? 'us-east-1',
-        ...(this.config.endpoint       && { endpoint:       this.config.endpoint }),
-        ...(this.config.forcePathStyle && { forcePathStyle: this.config.forcePathStyle }),
-        ...(this.config.accessKeyId    && {
-          credentials: { accessKeyId: this.config.accessKeyId, secretAccessKey: this.config.secretAccessKey ?? '' },
-        }),
-      })
-      ;(this as unknown as { _cmds: S3Commands })._cmds = { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command }
+  /**
+   * Replace a disk with an in-memory `FakeAdapter` for tests. Returns the
+   * `FakeAdapter` instance so assertion helpers (`assertExists`, etc.) can
+   * be called fluently. Idempotent: calling `fake()` twice returns the same
+   * instance with its in-memory store reset.
+   *
+   * @example
+   * const disk = Storage.fake()
+   * await Storage.put('a.txt', 'hi')
+   * disk.assertExists('a.txt')
+   * Storage.restoreFakes()      // afterEach
+   */
+  static fake(name?: string): FakeAdapter {
+    const key = name ?? StorageRegistry.defaultName()
+    if (!Storage._originalDisks.has(key)) {
+      try { Storage._originalDisks.set(key, StorageRegistry.get(key)) }
+      catch { /* disk wasn't registered — fake fills the slot */ }
     }
-    return this.client as { send: (cmd: unknown) => Promise<unknown> }
+    const existing = Storage._fakes.get(key)
+    if (existing) {
+      existing.reset()
+      StorageRegistry.set(key, existing)
+      try { app().instance(`storage.${key}`, existing) } catch { /* no app bound */ }
+      return existing
+    }
+    const fake = new FakeAdapter()
+    Storage._fakes.set(key, fake)
+    StorageRegistry.set(key, fake)
+    try { app().instance(`storage.${key}`, fake) } catch { /* no app bound */ }
+    return fake
   }
 
-  private cmds(): S3Commands { return (this as unknown as { _cmds: S3Commands })._cmds }
-
-  async put(filePath: string, contents: Buffer | string): Promise<void> {
-    const client = await this.getClient()
-    await client.send(new (this.cmds().PutObjectCommand)({
-      Bucket: this.bucket, Key: filePath,
-      Body: typeof contents === 'string' ? Buffer.from(contents) : contents,
-    }))
-  }
-
-  async get(filePath: string): Promise<Buffer | null> {
-    try {
-      const client = await this.getClient()
-      const res = await client.send(new (this.cmds().GetObjectCommand)({ Bucket: this.bucket, Key: filePath })) as S3GetObjectResult
-      if (!res.Body) return null
-      const chunks: Uint8Array[] = []
-      for await (const chunk of res.Body) chunks.push(chunk)
-      return Buffer.concat(chunks)
-    } catch { return null }
-  }
-
-  async text(filePath: string): Promise<string | null> {
-    const buf = await this.get(filePath)
-    return buf ? buf.toString('utf8') : null
-  }
-
-  async delete(filePath: string): Promise<void> {
-    const client = await this.getClient()
-    await client.send(new (this.cmds().DeleteObjectCommand)({ Bucket: this.bucket, Key: filePath }))
-  }
-
-  async exists(filePath: string): Promise<boolean> {
-    try {
-      const client = await this.getClient()
-      await client.send(new (this.cmds().HeadObjectCommand)({ Bucket: this.bucket, Key: filePath }))
-      return true
-    } catch { return false }
-  }
-
-  async list(directory = ''): Promise<string[]> {
-    const prefix = directory ? `${directory.replace(/\/$/, '')}/` : ''
-    const client = await this.getClient()
-    const res = await client.send(new (this.cmds().ListObjectsV2Command)({ Bucket: this.bucket, Prefix: prefix })) as S3ListObjectsResult
-    return (res.Contents ?? []).map(o => o.Key ?? '').filter(Boolean)
-  }
-
-  url(filePath: string): string {
-    if (this.baseUrl) return `${this.baseUrl}/${filePath.replace(/^\//, '')}`
-    const endpoint = this.config.endpoint?.replace(/\/$/, '')
-    if (endpoint && this.config.forcePathStyle) return `${endpoint}/${this.bucket}/${filePath}`
-    return `https://${this.bucket}.s3.${this.config.region ?? 'us-east-1'}.amazonaws.com/${filePath}`
-  }
-
-  path(_filePath: string): string {
-    throw new Error('[RudderJS Storage] path() is not available for S3 disks.')
+  /** Reverse all `Storage.fake()` swaps. Call in `afterEach`. */
+  static restoreFakes(): void {
+    for (const [k, orig] of Storage._originalDisks) {
+      StorageRegistry.set(k, orig)
+      try { app().instance(`storage.${k}`, orig) } catch { /* no app bound */ }
+    }
+    Storage._originalDisks.clear()
+    Storage._fakes.clear()
   }
 }
 
@@ -265,17 +139,16 @@ export interface StorageConfig {
   disks: Record<string, StorageDiskConfig>
 }
 
-// ─── Service Provider Factory ──────────────────────────────
+// ─── Service Provider ──────────────────────────────────────
 
 /**
- * Returns a StorageServiceProvider that boots all configured disks.
+ * Boots all configured disks and registers the storage facade in the DI container.
  *
  * Built-in drivers:  local (writes to filesystem), s3 (AWS S3, MinIO, Cloudflare R2)
  *
  * Usage in bootstrap/providers.ts:
- *   import { storage } from '@rudderjs/storage'
- *   import configs from '../config/index.js'
- *   export default [..., storage(configs.storage), ...]
+ *   import { defaultProviders } from '@rudderjs/core'
+ *   export default [...(await defaultProviders())]
  */
 export class StorageProvider extends ServiceProvider {
   register(): void {}
@@ -285,35 +158,36 @@ export class StorageProvider extends ServiceProvider {
     StorageRegistry.setDefault(cfg.default)
 
     for (const [name, diskConfig] of Object.entries(cfg.disks)) {
-        const driver = diskConfig['driver'] as string
-        let adapter: StorageAdapter
+      const driver = diskConfig['driver'] as string
+      let adapter: StorageAdapter
 
-        if (driver === 'local') {
-          adapter = new LocalAdapter(diskConfig as unknown as LocalDiskConfig)
-        } else if (driver === 's3') {
-          adapter = new S3Adapter(diskConfig as unknown as S3DiskConfig)
-        } else {
-          throw new Error(`[RudderJS Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
-        }
-
-        StorageRegistry.set(name, adapter)
+      if (driver === 'local') {
+        adapter = new LocalAdapter(diskConfig as unknown as LocalDiskConfig)
+      } else if (driver === 's3') {
+        adapter = new S3Adapter(diskConfig as unknown as S3DiskConfig)
+      } else {
+        throw new Error(`[RudderJS Storage] Unknown driver "${driver}" for disk "${name}". Available: local, s3`)
       }
 
-      this.app.instance('storage', StorageRegistry.get())
+      StorageRegistry.set(name, adapter)
+      this.app.instance(`storage.${name}`, adapter)
+    }
 
-      // storage:link — creates public/storage → storage/app/public symlink
-      rudder.command('storage:link', async () => {
-        const target = nodePath.resolve(process.cwd(), 'storage/app/public')
-        const link   = nodePath.resolve(process.cwd(), 'public/storage')
-        await fs.mkdir(target, { recursive: true })
-        try {
-          await fs.symlink(target, link)
-          console.log(`Linked: public/storage → storage/app/public`)
-        } catch (err: unknown) {
-          const e = err as NodeJS.ErrnoException
-          if (e.code === 'EEXIST') console.log('Link already exists.')
-          else throw err
-        }
+    this.app.instance('storage', StorageRegistry.get())
+
+    // storage:link — creates public/storage → storage/app/public symlink
+    rudder.command('storage:link', async () => {
+      const target = nodePath.resolve(process.cwd(), 'storage/app/public')
+      const link   = nodePath.resolve(process.cwd(), 'public/storage')
+      await fs.mkdir(target, { recursive: true })
+      try {
+        await fs.symlink(target, link)
+        console.log(`Linked: public/storage → storage/app/public`)
+      } catch (err: unknown) {
+        const e = err as NodeJS.ErrnoException
+        if (e.code === 'EEXIST') console.log('Link already exists.')
+        else throw err
+      }
     }).description('Create a symbolic link from public/storage to storage/app/public')
   }
 }
