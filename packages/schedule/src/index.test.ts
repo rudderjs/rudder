@@ -1,7 +1,8 @@
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { rudder } from '@rudderjs/core'
-import { ScheduledTask, schedule, Schedule, ScheduleProvider } from './index.js'
+import { FakeCacheAdapter, type CacheOperation } from '@rudderjs/cache'
+import { ScheduledTask, schedule, Schedule, ScheduleProvider, _executeTask } from './index.js'
 
 function makeTask(cb: () => void = () => {}): ScheduledTask {
   return new ScheduledTask(cb)
@@ -212,5 +213,155 @@ describe('scheduler() provider', () => {
     console.log = orig
 
     assert.ok(logs.some(l => l.includes('task(s) completed')))
+  })
+})
+
+// ─── _executeTask lock behavior ────────────────────────────
+
+describe('_executeTask — onOneServer / withoutOverlapping locks', () => {
+  let fake: FakeCacheAdapter
+  let logs: string[]
+  let originalLog: typeof console.log
+  let originalErr: typeof console.error
+  let originalWrite: typeof process.stdout.write
+
+  // The release ops we care about. Filter rather than raw `assertLockReleased`
+  // so we can assert the *absence* of a release.
+  const releaseOpsFor = (key: string): CacheOperation[] =>
+    fake.operations().filter(op =>
+      (op.type === 'lock-release' || op.type === 'lock-force-release') &&
+      'key' in op && op.key === key)
+
+  beforeEach(() => {
+    fake = FakeCacheAdapter.fake()
+    logs = []
+    originalLog   = console.log
+    originalErr   = console.error
+    originalWrite = process.stdout.write
+    console.log     = (...a: unknown[]) => { logs.push(a.join(' ')) }
+    console.error   = () => {}
+    process.stdout.write = (() => true) as typeof process.stdout.write
+  })
+
+  afterEach(() => {
+    fake.restore()
+    console.log = originalLog
+    console.error = originalErr
+    process.stdout.write = originalWrite
+  })
+
+  it('onOneServer holds the server lock for the full TTL — not released when the task finishes', async () => {
+    let ran = false
+    const task = new ScheduledTask(() => { ran = true })
+      .description('cluster-task')
+      .onOneServer()
+
+    await _executeTask(task)
+
+    assert.strictEqual(ran, true)
+    fake.assertLockAcquired('rudderjs:schedule:server:cluster-task')
+    assert.deepStrictEqual(
+      releaseOpsFor('rudderjs:schedule:server:cluster-task'),
+      [],
+      'server lock must NOT be released — its 60s TTL is what guarantees one server per minute',
+    )
+  })
+
+  it('onOneServer holds the server lock even when the task throws', async () => {
+    const task = new ScheduledTask(() => { throw new Error('boom') })
+      .description('cluster-task')
+      .onOneServer()
+
+    await _executeTask(task) // _executeTask catches inside try/finally
+
+    assert.deepStrictEqual(
+      releaseOpsFor('rudderjs:schedule:server:cluster-task'),
+      [],
+      'server lock must remain held even after a task error',
+    )
+  })
+
+  it('withoutOverlapping releases its lock after the task completes', async () => {
+    let ran = false
+    const task = new ScheduledTask(() => { ran = true })
+      .description('overlap-task')
+      .withoutOverlapping()
+
+    await _executeTask(task)
+
+    assert.strictEqual(ran, true)
+    fake.assertLockAcquired('rudderjs:schedule:overlap:overlap-task')
+    fake.assertLockReleased('rudderjs:schedule:overlap:overlap-task')
+  })
+
+  it('with both onOneServer + withoutOverlapping: overlap lock released, server lock held', async () => {
+    let ran = false
+    const task = new ScheduledTask(() => { ran = true })
+      .description('combo-task')
+      .onOneServer()
+      .withoutOverlapping()
+
+    await _executeTask(task)
+
+    assert.strictEqual(ran, true)
+    fake.assertLockReleased('rudderjs:schedule:overlap:combo-task')
+    assert.deepStrictEqual(
+      releaseOpsFor('rudderjs:schedule:server:combo-task'),
+      [],
+      'server lock release on completion would let a peer with a delayed cron tick re-run within the same minute',
+    )
+  })
+
+  it('onOneServer: when a peer already holds the lock, the task is skipped', async () => {
+    // Pre-acquire on a separate handle to simulate another server holding it.
+    const holder = fake.lock('rudderjs:schedule:server:cluster-task', 60)
+    assert.strictEqual(await holder.get(), true)
+
+    let ran = false
+    const task = new ScheduledTask(() => { ran = true })
+      .description('cluster-task')
+      .onOneServer()
+
+    await _executeTask(task)
+
+    assert.strictEqual(ran, false, 'callback must NOT run when peer holds the server lock')
+  })
+
+  it('onOneServer with no cache adapter: skips with a clear log message', async () => {
+    fake.restore() // wipes CacheRegistry
+
+    let ran = false
+    const task = new ScheduledTask(() => { ran = true })
+      .description('cluster-task')
+      .onOneServer()
+
+    await _executeTask(task)
+
+    assert.strictEqual(ran, false)
+    assert.ok(
+      logs.some(l => l.includes('onOneServer() requires @rudderjs/cache')),
+      'must explain why the task was skipped',
+    )
+  })
+
+  it('withoutOverlapping: when the overlap lock is held, task is skipped without releasing the server lock', async () => {
+    // Simulate a stale / in-progress overlap lock from a previous tick.
+    const overlapHolder = fake.lock('rudderjs:schedule:overlap:combo-task', 60)
+    assert.strictEqual(await overlapHolder.get(), true)
+
+    let ran = false
+    const task = new ScheduledTask(() => { ran = true })
+      .description('combo-task')
+      .onOneServer()
+      .withoutOverlapping()
+
+    await _executeTask(task)
+
+    assert.strictEqual(ran, false, 'callback must NOT run when overlap lock collides')
+    assert.deepStrictEqual(
+      releaseOpsFor('rudderjs:schedule:server:combo-task'),
+      [],
+      'server lock must remain held — releasing it would invite a peer to re-attempt the colliding task',
+    )
   })
 })
