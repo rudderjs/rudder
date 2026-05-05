@@ -1,5 +1,114 @@
 # @rudderjs/orm-prisma
 
+## 1.4.0
+
+### Minor Changes
+
+- 1805d0c: Aggregate eager loading — `withCount` / `withSum` / `withMin` / `withMax` / `withAvg` / `withExists` on the QueryBuilder + `loadCount` / `loadSum` / `loadMin` / `loadMax` / `loadAvg` / `loadExists` / `loadMissing` on instances (Laravel parity #2 plan #3).
+
+  Closes the N+1 footgun for hot list pages without dropping into the adapter. Result columns are stamped onto each parent under deterministic camelCase aliases (`postsCount`, `postsSumViews`, `subscriptionExists`).
+
+  ```ts
+  // Multi-row aggregate (parent query)
+  await User.query().withCount("posts").get(); // user.postsCount
+  await User.query().withSum("posts", "views").paginate(1); // user.postsSumViews
+  await User.query()
+    .withCount({
+      posts: (q) => q.where("published", true).as("publishedPosts"),
+    })
+    .get(); // user.publishedPostsCount
+
+  // Per-instance aggregate
+  const user = await User.find(1);
+  await user!.loadCount("posts");
+  console.log(user!.postsCount);
+
+  // Eager-load only what's missing
+  await user!.loadMissing("profile", "posts");
+  ```
+
+  **Notes:**
+
+  - `withCount` on `belongsTo` throws (always 0 or 1; use `withExists` instead). On `morphTo` throws (related table is dynamic).
+  - Aggregate columns are tagged on a `Symbol.for('rudderjs.orm.aggregates')` Set so `model.save()` strips them before write — they never reach the underlying schema.
+  - Soft deletes on the related model are applied automatically — the adapter ANDs `deleted_at IS NULL` into the aggregate subquery.
+  - Closure constraints (`q => q.where(...).as(...)`) cover the same surface as `whereHas` constraints.
+
+  **Adapter changes:**
+
+  - New `withAggregate(requests: AggregateRequest[])` method on `QueryBuilder<T>` (required). Out-of-tree adapters implement this single normalized shape — the public `withCount` / `withSum` / etc. overloads collapse into `AggregateRequest[]` in the orm Model layer.
+  - New `_aggregate(fn, column?)` method on `QueryBuilder<T>` (required, `@internal`) — single-scalar terminal used by the per-instance `loadCount` / `loadSum` / etc.
+  - `QueryState.aggregates: AggregateRequest[]` extends the existing state shape.
+  - `@rudderjs/orm-prisma` uses Prisma's native `_count.select` for direct count/exists (no second round-trip) and second-batch `groupBy` for polymorphic / pivot / numeric aggregates.
+  - `@rudderjs/orm-drizzle` emits one correlated subselect per aggregate in the SELECT list. Pivot-mediated aggregates JOIN through the pivot table when soft-deletes / constraints / numeric columns are involved.
+
+  Additive — no migration needed for existing calls.
+
+- fcc57f9: Eloquent-style relation predicates — `whereHas` / `whereDoesntHave` /
+  `withWhereHas` / `whereBelongsTo` (Laravel parity #2 PR3).
+
+  Filter a query by whether a relation has at least one matching row.
+  The optional callback narrows the relation predicate further — chain
+  plain `where()` calls inside it.
+
+  ```ts
+  await User.whereHas("posts", (q) => q.where("published", true)).get();
+  await User.whereDoesntHave("posts").get();
+  await User.withWhereHas("posts", (q) => q.where("published", true)).get();
+  await Post.whereBelongsTo(user).get();
+  await Comment.whereBelongsTo(post, "post").get();
+  ```
+
+  Supported relation types: `hasMany`, `hasOne`, `belongsTo`,
+  `belongsToMany`, `morphMany`, `morphOne`, `morphToMany`, `morphedByMany`.
+  `morphTo` is intentionally not supported — the related table is dynamic,
+  so a single subquery can't represent it. Filter on `{morphName}Id` /
+  `{morphName}Type` directly when you need that semantic.
+
+  The four chainable methods are also exposed on `QueryBuilder` so
+  they compose with flat `where()`/`orderBy()`/etc.
+
+  **Adapter changes:**
+
+  - New `RelationExistencePredicate` type in `@rudderjs/contracts` —
+    carries the structural metadata adapters need (related table, parent /
+    related columns, constraint wheres, optional `extraEquals` for morph
+    discriminators, optional `through` for pivot relations).
+  - New `whereRelationExists(predicate)` method on `QueryBuilder<T>`
+    (required). Out-of-tree adapters need to implement it.
+  - New optional `withConstrained(relation, wheres)` method on
+    `QueryBuilder<T>` for constrained eager-load.
+  - `@rudderjs/orm-prisma` uses native `some` / `none` filters for direct
+    relations (`hasMany`/`hasOne`/`belongsTo`) — those relations must be
+    declared in `schema.prisma` with the same name. Polymorphic and pivot
+    paths route through a 2-step lookup so they work without a Prisma-
+    declared relation. `withConstrained` maps to nested `include: { rel:
+{ where } }`.
+  - `@rudderjs/orm-drizzle` builds correlated `EXISTS (...)` /
+    `NOT EXISTS (...)` subqueries via `exists()` / `notExists()`. Every
+    related table referenced from a `whereHas` call must be registered via
+    `tables: { ... }` on `drizzle()` config or
+    `DrizzleTableRegistry.register(name, table)`. `withConstrained` is not
+    yet implemented on Drizzle — `withWhereHas` falls back to plain
+    `with(relation)`.
+
+  Additive — no migration needed for existing calls.
+
+### Patch Changes
+
+- Updated dependencies [6c03c74]
+- Updated dependencies [3ccac5d]
+- Updated dependencies [5447fa9]
+- Updated dependencies [1805d0c]
+- Updated dependencies [a089110]
+- Updated dependencies [5703439]
+- Updated dependencies [ad3a531]
+- Updated dependencies [fcc57f9]
+- Updated dependencies [a0b96f9]
+  - @rudderjs/core@1.1.0
+  - @rudderjs/orm@1.7.0
+  - @rudderjs/contracts@1.2.0
+
 ## 1.3.0
 
 ### Minor Changes

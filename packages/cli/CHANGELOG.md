@@ -1,5 +1,96 @@
 # @rudderjs/cli
 
+## 4.1.0
+
+### Minor Changes
+
+- 5447fa9: Add `FormRequest` lifecycle hooks (Laravel parity #6).
+
+  `FormRequest` now supports five optional protected methods that mirror Laravel's lifecycle:
+
+  - `prepareForValidation(input)` — mutate merged input pre-parse (sync). Lowercase emails, trim strings, etc.
+  - `messages()` — per-request error message overrides keyed by dot-path. Static string or `(issue) => string`.
+  - `after()` — array of cross-field check closures with `addError(path, msg)`. Run serially after parse; all errors collected in one round-trip.
+  - `passedValidation(data)` — final transform on parsed data (sync or async); return value replaces resolved data.
+  - `failedValidation(errors)` — override the throw. Default throws `ValidationError`; return a Web `Response` to short-circuit (wrapped in a new `ValidationResponse` sentinel that the framework's exception handler unwraps).
+
+  Existing `FormRequest` subclasses keep working unchanged — the hooks have empty default implementations.
+
+  The `make:request` stub now includes commented-out hook signatures to aid discovery.
+
+- 5703439: Pruning — `Prunable` / `MassPrunable` markers + `pnpm rudder model:prune` (Laravel parity #2 plan #8).
+
+  Models declaring `static prunable()` are picked up by the new `model:prune` command. Default `pruneMode = 'instance'` re-queries each chunk and calls `instance.delete()` per row — soft-deletes apply, `deleting` / `deleted` observers fire, optional `static pruning(model)` runs first. `pruneMode = 'mass'` (`MassPrunable`) runs a single `qb.deleteAll()` per chunk — no observers, no hooks, soft-deletes bypassed (mirrors the existing bulk-delete primitive).
+
+  CLI flags: `--model=A,B`, `--except=A`, `--chunk=N`, `--pretend`. Schedule it with `scheduler.command('model:prune').daily()` — first-class retention hook with zero per-model wiring.
+
+  Programmatic entry: `pruneModels({ models?, except?, chunk?, pretend? })` returns one `{ model, mode, count }` report per pruned model. Re-queries instead of `offset()` paging because deletions shift the cursor.
+
+### Patch Changes
+
+- ca63e78: Add Laravel-style `Route::resource` / `apiResource` / `singleton` to `@rudderjs/router` and `make:controller --resource`/`--api`/`--singleton` flags to `@rudderjs/cli` (Laravel parity #5, PR3 of 3).
+
+  **Public API on `Router`:**
+
+  - `router.resource(name, Ctrl, opts?)` — registers the seven canonical RESTful routes (`index`/`create`/`store`/`show`/`edit`/`update`/`destroy`). The `update` route is registered for both `PUT` and `PATCH` at the same path.
+  - `router.apiResource(name, Ctrl, opts?)` — same as `resource` but skips `create` + `edit` (no HTML form pages).
+  - `router.singleton(name, Ctrl, opts?)` — registers `show`/`edit`/`update` only. The returned `SingletonRegistration` exposes `.creatable()` (adds `GET /<name>/create` + `POST /<name>`) and `.destroyable()` (adds `DELETE /<name>`).
+
+  ```ts
+  class PostController {
+    async index(ctx) {
+      /* … */
+    }
+    async show(ctx) {
+      /* … */
+    }
+    async store(ctx) {
+      /* … */
+    }
+    // …
+  }
+
+  router.resource("posts", PostController);
+  router.apiResource("posts", PostController, { only: ["index", "show"] });
+  router.singleton("profile", ProfileController).creatable().destroyable();
+  ```
+
+  **Controller convention:** plain class, no decorators. Methods are matched by name to the canonical verbs. **Methods the controller doesn't implement are silently skipped** — a controller with only `index`/`show` works without an `only` or `except` filter.
+
+  **`ResourceOptions`:** `only`, `except`, `parameters` (override `:param` segment name), `names` (override generated route names), `middleware`.
+
+  **Default route names:** `<resource>.<verb>` (e.g. `posts.index`, `posts.show`). Default `:param` name is a naive singular of `name` (`posts → post`, `categories → category`, `boxes → box`); irregular plurals must use the `parameters` option.
+
+  **Per-route customisation:** the returned `ResourceRegistration` exposes the underlying `RouteBuilder[]` in declaration order. Apply `where*()` or per-route middleware to a single verb without affecting the rest:
+
+  ```ts
+  const reg = router.resource("posts", PostController);
+  reg.builders[3].whereNumber("post"); // constrain show route only
+  ```
+
+  **Scaffolder support:** `make:controller` accepts three mutually-exclusive flags:
+
+  ```bash
+  pnpm rudder make:controller PostController --resource     # full 7-verb plain class
+  pnpm rudder make:controller PostController --api          # 5-verb (no create/edit)
+  pnpm rudder make:controller ProfileController --singleton # show/edit/update only
+  ```
+
+  Default `make:controller` (no flag) still emits the decorator-based stub.
+
+  This completes the router parity sweep (#5). PR1 added `where*()` constraints; PR2 added `router.group()` / subdomain routing / `.missing()`. No changes to the public surface of any other package.
+
+  **Internal note:** `MakeSpec.stub` callback now receives the parsed CLI opts as a second argument (`(className, opts) => string`), enabling per-flag stub dispatch. Existing single-arg callbacks continue to type-check.
+
+- Updated dependencies [6c03c74]
+- Updated dependencies [3ccac5d]
+- Updated dependencies [5447fa9]
+- Updated dependencies [a0b96f9]
+- Updated dependencies [ca63e78]
+- Updated dependencies [fcca26b]
+  - @rudderjs/core@1.1.0
+  - @rudderjs/router@1.1.0
+
 ## 4.0.2
 
 ### Patch Changes
