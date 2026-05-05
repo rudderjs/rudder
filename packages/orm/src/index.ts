@@ -534,6 +534,19 @@ export abstract class Model {
   /** @internal */
   #instanceVisible?: string[]
 
+  // ── Dirty Tracking ─────────────────────────────────────
+  //
+  // Snapshot of attribute values as of the last load / save / refresh.
+  // Used by isDirty / isClean / wasChanged / getOriginal / getChanges /
+  // getDirty. Captured by hydrate(), save(), refresh(), and increment/
+  // decrement so the baseline always matches the persisted state.
+
+  /** @internal — own enumerable column values as of last load/save/refresh. */
+  #original: Record<string, unknown> = {}
+
+  /** @internal — diff of attributes that changed during the most recent save. */
+  #changes: Record<string, unknown> = {}
+
   // ── Scopes ─────────────────────────────────────────────
 
   static globalScopes: Record<string, ScopeFn> = {}
@@ -634,6 +647,7 @@ export abstract class Model {
     const Ctor = this as unknown as new () => InstanceType<T>
     const instance = new Ctor()
     Object.assign(instance, record)
+    ;(instance as unknown as { _syncOriginal(): void })._syncOriginal()
     return instance
   }
 
@@ -1020,11 +1034,11 @@ export abstract class Model {
   }
 
   /**
-   * @internal — own enumerable data fields, with framework-internal `_` keys
-   * stripped and `undefined` values dropped so a class-declared but never-set
-   * field (`id!: number`) doesn't leak into a create/update payload.
+   * @internal — current own-property column attributes, with framework `_`
+   * keys + `undefined` placeholders dropped. Single source of truth shared
+   * by `_toData()` and dirty-tracking baselines.
    */
-  private _toData(): Record<string, unknown> {
+  private _currentAttrs(): Record<string, unknown> {
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(this)) {
       if (k.startsWith('_')) continue
@@ -1032,6 +1046,20 @@ export abstract class Model {
       out[k] = v
     }
     return out
+  }
+
+  /**
+   * @internal — own enumerable data fields, with framework-internal `_` keys
+   * stripped and `undefined` values dropped so a class-declared but never-set
+   * field (`id!: number`) doesn't leak into a create/update payload.
+   */
+  private _toData(): Record<string, unknown> {
+    return this._currentAttrs()
+  }
+
+  /** @internal — capture current attrs as the new dirty-tracking baseline. */
+  private _syncOriginal(): void {
+    this.#original = this._currentAttrs()
   }
 
   /**
@@ -1051,6 +1079,13 @@ export abstract class Model {
       ? await Model._doCreate.call(ctor, data)
       : await Model._doUpdate.call(ctor, id, data)
     Object.assign(this, persisted)
+    const next: Record<string, unknown> = this._currentAttrs()
+    const diff: Record<string, unknown> = {}
+    for (const k of new Set([...Object.keys(next), ...Object.keys(this.#original)])) {
+      if (!_attrEqual(next[k], this.#original[k])) diff[k] = next[k]
+    }
+    this.#changes  = diff
+    this.#original = next
     return this
   }
 
@@ -1095,6 +1130,8 @@ export abstract class Model {
       if (!k.startsWith('_')) delete (this as unknown as Record<string, unknown>)[k]
     }
     Object.assign(this, fresh)
+    this.#changes = {}
+    this._syncOriginal()
     return this
   }
 
@@ -1129,6 +1166,7 @@ export abstract class Model {
       increment(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
     }).increment(id, column, amount, extra as Record<string, unknown>)
     Object.assign(this, updated)
+    this._syncOriginal()
     return this
   }
 
@@ -1146,6 +1184,7 @@ export abstract class Model {
       decrement(i: string | number, c: string, a?: number, e?: Record<string, unknown>): Promise<Model>
     }).decrement(id, column, amount, extra as Record<string, unknown>)
     Object.assign(this, updated)
+    this._syncOriginal()
     return this
   }
 
@@ -1178,6 +1217,58 @@ export abstract class Model {
       ;(clone as unknown as Record<string, unknown>)[k] = v
     }
     return clone
+  }
+
+  // ── Dirty Tracking ─────────────────────────────────────
+
+  /**
+   * Whether any attribute (or the named attribute) has been changed since
+   * the last save / load / refresh.
+   */
+  isDirty(key?: string): boolean {
+    const dirty = this.getDirty()
+    return key === undefined ? Object.keys(dirty).length > 0 : key in dirty
+  }
+
+  /** Inverse of {@link isDirty}. */
+  isClean(key?: string): boolean {
+    return !this.isDirty(key)
+  }
+
+  /**
+   * Whether the named attribute (or any attribute) was actually changed on
+   * the most recent {@link save}. Stays true until the next save or refresh.
+   */
+  wasChanged(key?: string): boolean {
+    return key === undefined
+      ? Object.keys(this.#changes).length > 0
+      : key in this.#changes
+  }
+
+  /**
+   * Snapshot value(s) as of the last save / load / refresh. With a key,
+   * returns that single original value; without, returns the full snapshot.
+   */
+  getOriginal<T = unknown>(key: string): T
+  getOriginal(): Record<string, unknown>
+  getOriginal<T = unknown>(key?: string): T | Record<string, unknown> {
+    if (key === undefined) return { ...this.#original }
+    return this.#original[key] as T
+  }
+
+  /** Diff map of attributes that changed during the most recent {@link save}. */
+  getChanges(): Record<string, unknown> {
+    return { ...this.#changes }
+  }
+
+  /** Diff map of attributes currently dirty (unsaved). */
+  getDirty(): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
+    const current = this._currentAttrs()
+    for (const k of new Set([...Object.keys(current), ...Object.keys(this.#original)])) {
+      if (!_attrEqual(current[k], this.#original[k])) out[k] = current[k]
+    }
+    return out
   }
 
   /**
@@ -1591,6 +1682,28 @@ export abstract class Model {
       Object.entries(result).filter(([k]) => !effectiveHidden.includes(k))
     )
   }
+}
+
+// ─── Dirty tracking equality ───────────────────────────────
+
+/**
+ * @internal — value equality used by dirty tracking. Mirrors Eloquent's
+ * `originalIsEquivalent`: strict for primitives, `getTime()` for Date,
+ * structural-by-JSON for arrays / plain objects (covers `json` / `array`
+ * casts), null/undefined collapsed.
+ *
+ * Caveat: JSON.stringify is key-order sensitive, so `{a:1,b:2}` vs
+ * `{b:2,a:1}` compares unequal. Same posture Laravel takes — documented
+ * in the Dirty Tracking section of the orm README.
+ */
+function _attrEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a == null && b == null) return true
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime()
+  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+    try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false }
+  }
+  return false
 }
 
 // ─── belongsToMany internals ───────────────────────────────

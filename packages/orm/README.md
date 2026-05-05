@@ -599,6 +599,58 @@ await Article.query().scope('byAuthor', userId).get()
 
 ---
 
+## Dirty Tracking
+
+Every Model instance keeps a snapshot of its attributes as of the last
+`hydrate()` / `save()` / `refresh()`. Use it to inspect what changed before
+or after persistence.
+
+```ts
+const user = await User.find(1)         // hydrated → not dirty
+user.email = 'new@x.com'
+user.isDirty()                          // → true
+user.isDirty('email')                   // → true
+user.isClean('name')                    // → true
+user.getDirty()                         // → { email: 'new@x.com' }
+user.getOriginal('email')               // → 'old@x.com'
+
+await user.save()
+user.isDirty()                          // → false (baseline reset)
+user.wasChanged()                       // → true
+user.wasChanged('email')                // → true
+user.getChanges()                       // → { email: 'new@x.com', updatedAt: ... }
+```
+
+| Method | Returns |
+|---|---|
+| `isDirty(key?)` | true when any (or the named) attribute has changed since the last save / load / refresh. |
+| `isClean(key?)` | inverse of `isDirty`. |
+| `wasChanged(key?)` | true when the most recent `save()` actually persisted a change to that attribute. Stays true until the next save / refresh. |
+| `getOriginal(key?)` | snapshot value(s) as of the last save / load / refresh. With a key, that single value; without, a full copy of the snapshot. |
+| `getChanges()` | diff of attributes that changed during the most recent `save()`. |
+| `getDirty()` | diff of attributes currently dirty (unsaved). |
+
+**Equality semantics.** Primitives use `===`. Dates compare by `getTime()`.
+Plain objects and arrays (typically `json` / `array` cast columns) compare
+by `JSON.stringify` — key-order sensitive, so `{ a: 1, b: 2 }` and
+`{ b: 2, a: 1 }` are considered different. This matches Eloquent's posture.
+
+**`refresh()` discards pending writes.** A `refresh()` re-reads the row,
+re-baselines `getOriginal()`, and clears `getChanges()`. Eloquent retains
+`wasChanged` past a refresh; we don't — refresh is "throw away pending
+state, re-read from DB."
+
+**`increment()` / `decrement()` re-baseline.** After an instance counter
+update, `isDirty('viewCount')` is `false` — the new value becomes the
+baseline. Counter updates are pure data-plane and intentionally don't
+fire observers (see `static increment` notes); dirty tracking matches.
+
+**`replicate()` clones are unsaved.** A replicated instance has values
+on it but an empty `getOriginal()`, so `isDirty()` is `true` until the
+clone is saved.
+
+---
+
 ## Soft Deletes
 
 ```ts
