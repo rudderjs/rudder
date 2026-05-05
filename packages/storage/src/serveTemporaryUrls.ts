@@ -53,7 +53,10 @@ export async function serveTemporaryUrls(
     )
   }
 
-  const prefix = opts.routePath.replace(/\*+$/, '').replace(/:?path\*$/, '')
+  // Strip the trailing splat in either documented form: `/foo/*` or `/foo/:path*`.
+  // The two-step replace previously here was order-sensitive — the first regex
+  // ate the `*` so the second one could no longer match `:path*`.
+  const prefix = opts.routePath.replace(/(?::path)?\*+$/, '')
   if (!prefix.endsWith('/')) {
     throw new Error(
       `[RudderJS Storage] serveTemporaryUrls: routePath must end in "/*" or "/:path*" — got "${opts.routePath}".`,
