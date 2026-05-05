@@ -102,7 +102,9 @@ container.when(PhotoController).needs('storage').give(() => new S3Storage())
 
 Conditional binding helpers (`bindIf` / `singletonIf` / `scopedIf`) register only when the token is currently unbound — used by framework providers so app providers can override defaults by binding first.
 
-Tagging groups bindings under one or more tag names: `container.tag(['csv.exporter', 'xlsx.exporter'], 'reports.exporters')`, then `container.tagged<Exporter>('reports.exporters')` resolves all of them in insertion order. Singletons stay singletons across `tagged()` calls.
+Tagging groups bindings under one or more tag names: `container.tag(['csv.exporter', 'xlsx.exporter'], 'reports.exporters')`, then `container.tagged<Exporter>('reports.exporters')` resolves all of them in insertion order. Singletons stay singletons across `tagged()` calls. Inject the array directly with `@Tag('reports.exporters')` on a constructor parameter, or use `tagToken('reports.exporters')` as a token in `when().needs().give()`.
+
+`extend(token, fn)` wraps the resolved value with a decorator function — chained in registration order, applied eagerly to any cached singleton/instance. `rebinding(token, fn)` registers a listener that fires when an existing binding is replaced (not on the initial bind), useful for test hot-swaps and `app->refresh()` parity.
 
 ### Middleware
 
@@ -138,7 +140,7 @@ Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.ob
 ## Key Imports
 
 ```ts
-import { Application, app, resolve, ServiceProvider, Injectable, Inject } from '@rudderjs/core'
+import { Application, app, resolve, ServiceProvider, Injectable, Inject, Tag, tagToken } from '@rudderjs/core'
 import { FormRequest, ValidationError, ValidationResponse, z } from '@rudderjs/core'
 import { Listener, dispatch, events } from '@rudderjs/core'
 import { HttpException, abort, abort_if, report } from '@rudderjs/core'

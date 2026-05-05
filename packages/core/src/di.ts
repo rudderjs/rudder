@@ -19,11 +19,15 @@ if (typeof globalThis.process !== 'undefined') {
 type Constructor<T = unknown> = new (...args: never) => T
 type Factory<T = unknown> = (container: Container) => T
 type Binding<T = unknown> = { factory: Factory<T>; singleton: boolean; scoped?: boolean }
+type Extender<T = unknown> = (resolved: T, container: Container) => T
+type Rebinder<T = unknown> = (instance: T, container: Container) => void
 
 // ─── Decorators ────────────────────────────────────────────
 
 const INJECTABLE_METADATA = 'rudderjs:injectable'
 const INJECT_METADATA     = 'rudderjs:inject'
+const TAG_METADATA        = 'rudderjs:tag'
+const TAG_TOKEN_PREFIX    = 'rudderjs:tag:'
 
 /** Mark a class as injectable (auto-resolved by the container) */
 export function Injectable(): ClassDecorator {
@@ -39,6 +43,26 @@ export function Inject(token: string | symbol): ParameterDecorator {
       Reflect.getMetadata(INJECT_METADATA, target) ?? []
     Reflect.defineMetadata(INJECT_METADATA, [...existing, { index, token }], target)
   }
+}
+
+/**
+ * Inject the array of bindings tagged with `name` into a constructor parameter.
+ * Constructor-only — esbuild drops `design:paramtypes` for method decorators.
+ */
+export function Tag(name: string): ParameterDecorator {
+  return (target, _, index) => {
+    const existing: Array<{ index: number; tag: string }> =
+      Reflect.getMetadata(TAG_METADATA, target) ?? []
+    Reflect.defineMetadata(TAG_METADATA, [...existing, { index, tag: name }], target)
+  }
+}
+
+/**
+ * Stable token sentinel for `when().needs(tagToken('group')).give(...)`.
+ * Backed by `Symbol.for()` so cross-bundle plugin authors share the same token.
+ */
+export function tagToken(name: string): symbol {
+  return Symbol.for(TAG_TOKEN_PREFIX + name)
 }
 
 // ─── Container ─────────────────────────────────────────────
@@ -71,6 +95,16 @@ export class Container {
   // the standard "cannot resolve" error when one is asked for.
   private _tags = new Map<string, Set<string | symbol>>()
 
+  // ── Extenders ─────────────────────────────────────────────
+  // Wrappers chained in registration order, applied to resolved values.
+  // Keyed on resolved-alias key so aliases share extender state.
+  private _extenders = new Map<string | symbol, Array<Extender>>()
+
+  // ── Rebinding listeners ───────────────────────────────────
+  // Listeners that fire when a token is *re*-bound (not on initial bind).
+  // Keyed on resolved-alias key.
+  private _rebinders = new Map<string | symbol, Array<Rebinder>>()
+
   // ── Missing handler (for deferred providers) ──────────────
   private _missingHandler: ((token: string | symbol) => void) | null = null
 
@@ -80,17 +114,27 @@ export class Container {
     this.aliases.clear()
     this._contextual.clear()
     this._tags.clear()
+    this._extenders.clear()
+    this._rebinders.clear()
     this._missingHandler = null
     return this
   }
 
   bind<T>(token: string | symbol | Constructor<T>, factory: Factory<T>): this {
-    this.bindings.set(this.toToken(token), { factory, singleton: false })
+    const key = this.toToken(token)
+    const wasBound = this.bindings.has(key) || this.instances.has(key)
+    this.instances.delete(key)
+    this.bindings.set(key, { factory, singleton: false })
+    if (wasBound) this.fireRebinders(this.resolveAlias(key))
     return this
   }
 
   singleton<T>(token: string | symbol | Constructor<T>, factory: Factory<T>): this {
-    this.bindings.set(this.toToken(token), { factory, singleton: true })
+    const key = this.toToken(token)
+    const wasBound = this.bindings.has(key) || this.instances.has(key)
+    this.instances.delete(key)
+    this.bindings.set(key, { factory, singleton: true })
+    if (wasBound) this.fireRebinders(this.resolveAlias(key))
     return this
   }
 
@@ -99,7 +143,11 @@ export class Container {
    * The factory runs once per `runScoped()` call and is cached for that scope.
    */
   scoped<T>(token: string | symbol | Constructor<T>, factory: Factory<T>): this {
-    this.bindings.set(this.toToken(token), { factory, singleton: false, scoped: true })
+    const key = this.toToken(token)
+    const wasBound = this.bindings.has(key) || this.instances.has(key)
+    this.instances.delete(key)
+    this.bindings.set(key, { factory, singleton: false, scoped: true })
+    if (wasBound) this.fireRebinders(this.resolveAlias(key))
     return this
   }
 
@@ -113,7 +161,45 @@ export class Container {
 
   instance<T>(token: string | symbol | Constructor<T>, value: T): this {
     const key = this.toToken(token)
-    this.instances.set(key, value)
+    const resolvedKey = this.resolveAlias(key)
+    const wasBound = this.bindings.has(key) || this.instances.has(key)
+    const wrapped = this.runExtenders(resolvedKey, value)
+    this.instances.set(key, wrapped)
+    if (wasBound) this.fireRebinders(resolvedKey)
+    return this
+  }
+
+  /**
+   * Wrap the value resolved for `token` with `extender`. Multiple extenders
+   * chain in registration order. Applies eagerly to any currently cached
+   * instance — only the newly registered extender wraps the cached value
+   * (the chain was already applied to it). Singletons and `instance()`-bound
+   * values cache the wrapped form; transient bindings re-wrap on each
+   * `make()`; scoped bindings re-wrap once per scope.
+   */
+  extend<T>(token: string | symbol | Constructor<T>, extender: Extender<T>): this {
+    const key = this.resolveAlias(this.toToken(token))
+    const list = this._extenders.get(key) ?? []
+    list.push(extender as Extender)
+    this._extenders.set(key, list)
+    if (this.instances.has(key)) {
+      const current = this.instances.get(key)
+      this.instances.set(key, (extender as Extender)(current, this))
+    }
+    return this
+  }
+
+  /**
+   * Register a listener that fires whenever `token` is *re*-bound. Listeners
+   * do not fire on the initial bind — only when an existing binding is
+   * replaced via `bind`/`singleton`/`scoped`/`instance`. The listener
+   * receives the freshly-resolved value, not the stale singleton cache.
+   */
+  rebinding<T>(token: string | symbol | Constructor<T>, listener: Rebinder<T>): this {
+    const key = this.resolveAlias(this.toToken(token))
+    const list = this._rebinders.get(key) ?? []
+    list.push(listener as Rebinder)
+    this._rebinders.set(key, list)
     return this
   }
 
@@ -195,18 +281,18 @@ export class Container {
           )
         }
         if (scope.has(key)) return scope.get(key) as T
-        const value = binding.factory(this) as T
+        const value = this.runExtenders(key, binding.factory(this) as T)
         scope.set(key, value)
         return value
       }
 
-      const value = binding.factory(this) as T
+      const value = this.runExtenders(key, binding.factory(this) as T)
       if (binding.singleton) this.instances.set(key, value)
       return value
     }
 
     if (typeof token === 'function') {
-      return this.autoResolve(token as Constructor<T>)
+      return this.runExtenders(key, this.autoResolve(token as Constructor<T>))
     }
 
     // Deferred provider hook — give the missing handler a chance to register the binding
@@ -216,7 +302,7 @@ export class Container {
       if (this.instances.has(key)) return this.instances.get(key) as T
       const retryBinding = this.bindings.get(key)
       if (retryBinding) {
-        const value = retryBinding.factory(this) as T
+        const value = this.runExtenders(key, retryBinding.factory(this) as T)
         if (retryBinding.singleton) this.instances.set(key, value)
         return value
       }
@@ -293,23 +379,46 @@ export class Container {
     const tokenOverrides: Array<{ index: number; token: string | symbol }> =
       Reflect.getMetadata(INJECT_METADATA, target) ?? []
 
+    const tagOverrides: Array<{ index: number; tag: string }> =
+      Reflect.getMetadata(TAG_METADATA, target) ?? []
+
     // Check contextual bindings for this target class
     const ctxMap = this._contextual.get(target.name)
 
     const args = paramTypes.map((type, i) => {
-      const override = tokenOverrides.find(o => o.index === i)
-      const needToken = override ? override.token : this.toToken(type)
+      const tagOverride = tagOverrides.find(o => o.index === i)
+      const override    = tokenOverrides.find(o => o.index === i)
+      const needToken   = override ? override.token : this.toToken(type)
 
-      // Contextual override takes priority
+      // Contextual override takes priority over decorators
       if (ctxMap) {
         const ctxFactory = ctxMap.get(needToken)
         if (ctxFactory) return ctxFactory(this)
       }
 
+      // @Tag wins over @Inject — they should not coexist on the same param,
+      // but if they do, the more specific intent (tagged array) takes precedence.
+      if (tagOverride) return this.tagged(tagOverride.tag)
+
       return override ? this.make(override.token) : this.make(type)
     })
 
     return new (target as new (...a: unknown[]) => T)(...args)
+  }
+
+  private runExtenders<T>(key: string | symbol, value: T): T {
+    const exts = this._extenders.get(key)
+    if (!exts || exts.length === 0) return value
+    let v: unknown = value
+    for (const ext of exts) v = ext(v, this)
+    return v as T
+  }
+
+  private fireRebinders(key: string | symbol): void {
+    const listeners = this._rebinders.get(key)
+    if (!listeners?.length) return
+    const fresh = this.make(key)
+    for (const fn of listeners) fn(fresh, this)
   }
 
   private toToken(token: string | symbol | Constructor): string | symbol {
