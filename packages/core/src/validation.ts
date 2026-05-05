@@ -52,7 +52,9 @@ export abstract class FormRequest<T extends ZodType = ZodType> {
 
   // ─── Lifecycle hooks (default no-ops; override in subclass) ──
 
-  protected prepareForValidation(_input: Record<string, unknown>): Record<string, unknown> | void {
+  protected prepareForValidation(
+    _input: Record<string, unknown>,
+  ): Record<string, unknown> | void | Promise<Record<string, unknown> | void> {
     // default: no-op
   }
 
@@ -77,18 +79,24 @@ export abstract class FormRequest<T extends ZodType = ZodType> {
   async validate(req: AppRequest): Promise<z.infer<T>> {
     this.req = req
 
-    if (!this.authorize()) {
-      return this.fail({ auth: ['Unauthorized'] })
-    }
-
     let input: Record<string, unknown> = {
       ...(typeof req.body === 'object' && req.body !== null ? req.body as Record<string, unknown> : {}),
       ...req.query,
       ...req.params,
     }
 
-    const prepared = this.prepareForValidation(input)
+    // prepareForValidation runs first so subclasses can normalize input that
+    // authorize() then reads (matches Laravel's FormRequest::validateResolved
+    // ordering). Awaited so async overrides work — without the await, a
+    // returned Promise would pass `typeof === 'object'` and be assigned to
+    // `input`, then the schema would fail with a confusing "expected object,
+    // received object" error.
+    const prepared = await this.prepareForValidation(input)
     if (prepared && typeof prepared === 'object') input = prepared
+
+    if (!this.authorize()) {
+      return this.fail({ auth: ['Unauthorized'] })
+    }
 
     const errorMap = buildErrorMap(this.messages())
     const result = errorMap
@@ -133,7 +141,10 @@ function buildErrorMap(messages: MessagesMap): z.core.$ZodErrorMap | undefined {
   const keys = Object.keys(messages)
   if (keys.length === 0) return undefined
   return (issue) => {
-    const path = (issue.path ?? []).join('.')
+    // Match the key shape that ValidationError.errors uses — top-level
+    // (no-path) issues land under `'root'`, not `''`. Override maps need to
+    // use the same key the user sees in the rendered errors.
+    const path = (issue.path ?? []).join('.') || 'root'
     const entry = messages[path]
     if (entry === undefined) return undefined
     return { message: typeof entry === 'function' ? entry(issue) : entry }

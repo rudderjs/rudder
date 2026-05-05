@@ -566,6 +566,89 @@ describe('FormRequest', () => {
     const data = await new Req().validate(makeReq({ body: { x: 'ok' } })) as { x: string }
     assert.strictEqual(data.x, 'ok')
   })
+
+  // ─── Pipeline ordering: prepareForValidation runs before authorize ───
+
+  it('prepareForValidation runs BEFORE authorize() — Laravel parity', async () => {
+    const order: string[] = []
+    class Req extends FormRequest {
+      override prepareForValidation() { order.push('prepare') }
+      override authorize() { order.push('authorize'); return true }
+      rules() { return z.object({ x: z.string() }) }
+    }
+    await new Req().validate(makeReq({ body: { x: 'ok' } }))
+    assert.deepStrictEqual(order, ['prepare', 'authorize'])
+  })
+
+  it('authorize() can read state set up by prepareForValidation', async () => {
+    class Req extends FormRequest {
+      private _normalizedRole = ''
+      override prepareForValidation(input: Record<string, unknown>) {
+        this._normalizedRole = String(input['role'] ?? '').toLowerCase()
+      }
+      override authorize() {
+        // The agent example: a permission check that reads a normalized
+        // identifier set up by prepareForValidation.
+        return this._normalizedRole === 'admin'
+      }
+      rules() { return z.object({ role: z.string() }) }
+    }
+    // 'ADMIN' is normalized to 'admin' before authorize fires → allowed.
+    const data = await new Req().validate(makeReq({ body: { role: 'ADMIN' } })) as { role: string }
+    assert.strictEqual(data.role, 'ADMIN')
+
+    // 'user' fails the lowered-case check.
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { role: 'user' } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['auth'], ['Unauthorized'])
+        return true
+      },
+    )
+  })
+
+  // ─── prepareForValidation: async ───
+
+  it('prepareForValidation: async return is awaited (Promise no longer treated as object)', async () => {
+    class Req extends FormRequest {
+      override async prepareForValidation(input: Record<string, unknown>) {
+        await new Promise((r) => setTimeout(r, 1))
+        return { ...input, email: String(input['email'] ?? '').toLowerCase() }
+      }
+      rules() { return z.object({ email: z.string().email() }) }
+    }
+    const data = await new Req().validate(makeReq({ body: { email: 'BOB@EXAMPLE.COM' } })) as { email: string }
+    assert.strictEqual(data.email, 'bob@example.com')
+  })
+
+  // ─── messages() top-level errors ───
+
+  it("messages: 'root' key overrides top-level (path-less) errors", async () => {
+    // A schema-level refine produces an issue with empty path. Both the
+    // ValidationError output and the messages() override must use the same
+    // canonical 'root' key — previously the override map looked up by `''`
+    // while the error output reported under `'root'`, so users could see the
+    // error key but never override its message.
+    class Req extends FormRequest {
+      rules() {
+        // No `message` on refine — leaves the issue without a pre-attached
+        // message so Zod consults the errorMap.
+        return z.object({ from: z.string(), to: z.string() }).refine(
+          (v) => v.from !== v.to,
+        )
+      }
+      override messages() { return { root: 'Custom top-level message' } }
+    }
+    await assert.rejects(
+      async () => new Req().validate(makeReq({ body: { from: 'a', to: 'a' } })),
+      (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.deepStrictEqual(err.errors['root'], ['Custom top-level message'])
+        return true
+      },
+    )
+  })
 })
 
 // ─── z re-export ───────────────────────────────────────────
