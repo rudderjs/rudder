@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/pennant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Feature flags for RudderJS — define, check, scope, Lottery rollout, database/memory drivers",
   "rudderjs": {
     "provider": "PennantProvider",

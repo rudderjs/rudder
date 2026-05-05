@@ -1,5 +1,13 @@
 # @rudderjs/testing
 
+## 1.0.1
+
+### Patch Changes
+
+- dfba4df: Include `boost/` directory in the published npm tarball so `@rudderjs/boost`'s MCP server can resolve `guidelines://<pkg>` resources from `node_modules/@rudderjs/<pkg>/boost/guidelines.md` in user apps. Previously only `ai`, `auth`, and `core` shipped their guidelines — the other 17 framework packages had `boost/guidelines.md` in the workspace but excluded from publish, leaving Boost-aware AI assistants with empty guideline resources for ~85% of the framework. No code change; manifest-only.
+- Updated dependencies [4c8cd07]
+  - @rudderjs/core@1.1.2
+
 ## 1.0.0
 
 ### Major Changes
