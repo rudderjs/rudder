@@ -195,15 +195,21 @@ async function _getCache(): Promise<CacheAdapter | null> {
   }
 }
 
-async function _executeTask(task: ScheduledTask): Promise<void> {
+/** @internal — exported for tests. */
+export async function _executeTask(task: ScheduledTask): Promise<void> {
   const label = task.getDescription() || task.getCron()
   const cache = await _getCache()
 
   // ── onOneServer + withoutOverlapping use cache locks ────
-  const acquired: Lock[] = []
+  // The onOneServer lock is held — its 60s TTL is what guarantees one server
+  // per scheduled minute. Releasing it on task-finish (which can happen well
+  // under 60s) lets a peer with a slightly delayed cron tick re-acquire and
+  // run the same scheduled minute. Only the overlap lock is released after
+  // the task completes.
+  const releaseOnExit: Lock[] = []
 
   const releaseAll = async (): Promise<void> => {
-    for (const l of acquired) await l.release()
+    for (const l of releaseOnExit) await l.release()
   }
 
   if (task.isOnOneServer()) {
@@ -213,7 +219,7 @@ async function _executeTask(task: ScheduledTask): Promise<void> {
     }
     const serverLock = cache.lock(`rudderjs:schedule:server:${label}`, 60)
     if (!await serverLock.get()) return // another server is handling it
-    acquired.push(serverLock)
+    // Intentionally NOT pushed to releaseOnExit — let the 60s TTL expire.
   }
 
   if (task.isWithoutOverlapping()) {
@@ -221,10 +227,9 @@ async function _executeTask(task: ScheduledTask): Promise<void> {
       const overlapLock = cache.lock(task.getOverlapKey(), task.getOverlapExpiresAt() * 60)
       if (!await overlapLock.get()) {
         console.log(`[Schedule] Skipping "${label}" — already running (overlap lock)`)
-        await releaseAll()
         return
       }
-      acquired.push(overlapLock)
+      releaseOnExit.push(overlapLock)
     }
   }
 
