@@ -1,7 +1,8 @@
 import 'reflect-metadata'
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import type { RouteDefinition, ServerAdapter, MiddlewareHandler } from '@rudderjs/contracts'
+import type { RouteDefinition, ServerAdapter, MiddlewareHandler, AppRequest } from '@rudderjs/contracts'
+import { attachInputAccessors } from '@rudderjs/contracts'
 import {
   Router, router, Route,
   Controller, Middleware,
@@ -12,6 +13,7 @@ import {
   ROUTE_PATTERN_ALPHANUM,
   ROUTE_PATTERN_UUID,
   ROUTE_PATTERN_ULID,
+  Url,
 } from './index.js'
 
 // ─── Test helpers ───────────────────────────────────────────
@@ -1039,6 +1041,83 @@ describe('RouteBuilder.missing()', () => {
 
     await mw(makeReq({ user: '' }), makeRes(), async () => {})
     assert.strictEqual(firedWith, '')
+  })
+})
+
+// ─── Url signed-URL signing + verification ──────────────────
+
+describe('Url — signed URLs', () => {
+  // Deterministic key so signatures are stable across runs.
+  Url.setKey('test-signing-key')
+
+  // server-hono populates req.url with the FULL URL (protocol + host + path
+  // + query) and req.path with just the pathname. Verification must hash
+  // the same pathname Url.sign() hashed — i.e. the path-only form.
+  const makeReq = (urlOrPath: string): AppRequest => {
+    const u = new URL(urlOrPath, 'http://placeholder.local')
+    const r: Record<string, unknown> = {
+      method:  'GET',
+      url:     urlOrPath,
+      path:    u.pathname,
+      query:   Object.fromEntries(u.searchParams.entries()),
+      params:  {},
+      headers: {},
+      body:    null,
+      raw:     null,
+    }
+    attachInputAccessors(r)
+    return r as unknown as AppRequest
+  }
+
+  it('isValidSignature accepts a request whose req.url is a full URL', () => {
+    const signed = Url.sign('/invoice/42')
+    const fullUrl = `http://localhost:3000${signed}`
+    assert.strictEqual(Url.isValidSignature(makeReq(fullUrl)), true)
+  })
+
+  it('isValidSignature accepts a request whose req.url is a bare path', () => {
+    const signed = Url.sign('/invoice/42')
+    // Some adapters may pass the bare signed path as req.url instead of a full URL.
+    assert.strictEqual(Url.isValidSignature(makeReq(signed)), true)
+  })
+
+  it('isValidSignature rejects a tampered pathname', () => {
+    const signed = Url.sign('/invoice/42')
+    const tampered = signed.replace('/invoice/42', '/invoice/43')
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${tampered}`)), false)
+  })
+
+  it('isValidSignature rejects a tampered query parameter', () => {
+    const signed = Url.sign('/invoice/42?amount=10')
+    const tampered = signed.replace('amount=10', 'amount=99')
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${tampered}`)), false)
+  })
+
+  it('isValidSignature rejects an expired signature', () => {
+    const past = new Date(Date.now() - 60_000)
+    const signed = Url.sign('/invoice/42', past)
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${signed}`)), false)
+  })
+
+  it('isValidSignature accepts a fresh temporary signature', () => {
+    const future = new Date(Date.now() + 60_000)
+    const signed = Url.sign('/invoice/42', future)
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${signed}`)), true)
+  })
+
+  it('isValidSignature rejects a request missing the signature param', () => {
+    assert.strictEqual(Url.isValidSignature(makeReq('http://x/invoice/42')), false)
+  })
+
+  it('signedRoute round-trips through isValidSignature', () => {
+    router.reset()
+    router.get('/invoice/:id', handler).name('signed.invoice.show')
+    router.mount(new FakeServer())
+
+    const signed = Url.signedRoute('signed.invoice.show', { id: 42 })
+    assert.match(signed, /^\/invoice\/42\?signature=/)
+    assert.strictEqual(Url.isValidSignature(makeReq(`http://x${signed}`)), true)
+    router.reset()
   })
 })
 
