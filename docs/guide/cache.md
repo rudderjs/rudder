@@ -74,6 +74,57 @@ await Cache.store('redis').set('key', value, 60)
 
 This is useful when you want one store for short-lived response caching (memory) and another for cross-process state (Redis).
 
+## Atomic locks
+
+`Cache.lock(name, seconds)` builds a distributed lock backed by the configured cache driver — `SET NX EX` + Lua compare-and-delete on Redis, a segregated `__lock__:` prefix on memory. Use it to serialize cross-process work (job processing, scheduled tasks, third-party sync).
+
+```ts
+import { Cache } from '@rudderjs/cache'
+
+// Auto-release callback form — preferred.
+await Cache.lock('process-podcast:42', 120).get(async () => {
+  await processPodcast(42)
+})
+
+// Block until the lock frees (or throw LockTimeoutError after N seconds).
+await Cache.lock('process-podcast:42', 120).block(10, async () => {
+  await processPodcast(42)
+})
+
+// Manual try/finally form when you need explicit control.
+const lock = Cache.lock('process-podcast:42', 120)
+if (await lock.get()) {
+  try { await processPodcast(42) }
+  finally { await lock.release() }
+}
+```
+
+`block()` polls every ~250ms; acquisition order is roughly first-come but not strict FIFO. Pick a TTL longer than the worst-case callback — there is no auto-extend, and a crashed holder must wait for the TTL to expire before another process can acquire.
+
+### Cross-process release
+
+`release()` is owner-checked — only the original holder can release the lock. To hand a lock off to a worker, capture the owner token before serialising:
+
+```ts
+const lock  = Cache.lock('process-podcast:42', 120)
+await lock.get()
+const owner = lock.owner()                // 128-bit hex token
+
+// In the worker, restore by owner:
+await Cache.restoreLock('process-podcast:42', owner).release()
+// No-op if the lock TTL'd out and someone else acquired in between.
+```
+
+`forceRelease()` bypasses the owner check — reserve it for operator tooling that clears stuck locks left behind by crashed holders.
+
+### What uses locks under the hood
+
+- **`WithoutOverlapping` middleware** on queued jobs — serializes per-key job execution across workers.
+- **`schedule.withoutOverlapping()` / `schedule.onOneServer()`** — see [Scheduling](/guide/scheduling).
+- **Rate-limiter "atomic increment" path** — see below.
+
+Switching from `memory` to `redis` is the single biggest correctness gain when you graduate from one process to many: memory locks are scoped to a single process, so two `pm2` workers will both think they own the lock.
+
 ## Drivers
 
 ### Memory
@@ -152,3 +203,6 @@ Cache.assertMissing('user:42')
 - **Memory driver in production with multiple processes.** Each process has its own `Map`. Cache hits become inconsistent. Use Redis (or another shared store) for any deployment with more than one Node process.
 - **Forgetting to install `ioredis`.** The provider throws at boot — `ioredis` is an optional peer dependency, not bundled with `@rudderjs/cache`.
 - **TTL in milliseconds.** It's not — TTL is in **seconds**. `Cache.set('k', v, 60)` lasts one minute, not 60 ms.
+- **Memory-driver locks across `pm2 cluster`.** Each Node process has its own `Map`, so every worker thinks it owns the lock. Use Redis (or another shared store) for any deployment that runs more than one process.
+- **Reentrant `lock.get()` returns `false`.** Calling `get()` twice on the same `Lock` instance returns `false` the second time — the lock is held (by you). Locks are not reentrant; pass the same `lock` reference around or restructure the code.
+- **Crashed holders block the lock for the full TTL.** There is no auto-extend or heartbeat. If a process dies mid-callback the lock auto-releases when the TTL expires. Choose a TTL slightly longer than the worst-case execution time, not 10× longer.

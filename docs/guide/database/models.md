@@ -124,6 +124,35 @@ The base `Model` ships with the persistence and identity methods you'd expect fr
 
 `Model.hydrate(record)` is the escape hatch when you need to wrap a plain record from outside the ORM (cached JSON, fixtures, an external API response).
 
+## Dirty tracking
+
+Every hydrated instance keeps an "original" snapshot of the row as loaded. After mutating fields you can ask whether anything changed, what changed, and what the previous values were:
+
+```ts
+const user = await User.find(id)
+user.name  = 'Sue'
+user.email = 'sue@example.com'
+
+user.isDirty()                  // true
+user.isDirty('name')            // true
+user.isClean('role')            // true (role is unchanged)
+
+user.getDirty()                 // { name: 'Sue', email: 'sue@example.com' }
+user.getOriginal('name')        // the original name as loaded
+user.getOriginal()              // full original snapshot
+
+await user.save()
+
+user.isDirty()                  // false — original snapshot now reflects post-save state
+user.wasChanged()               // true — fields changed during the just-completed save
+user.wasChanged('name')         // true
+user.getChanges()               // { name: 'Sue', email: 'sue@example.com' }
+```
+
+`isDirty()` / `getDirty()` reflect **pending** changes that haven't been persisted yet. `wasChanged()` / `getChanges()` reflect changes that were just persisted by the most recent `save()` / `update()` — useful in observers' `*ed` hooks (e.g. `userObserver.updated(user)` checking `user.wasChanged('email')` before re-sending verification mail).
+
+Both surfaces compare with `Object.is`, so coercion-equal values (`1 === '1'`) are treated as different. Date columns are compared by reference identity from the original snapshot — if the adapter returns a fresh `Date` per read, an unset field can still appear dirty. Pass an explicit key (`isDirty('name')`) when you want a precise check.
+
 ## Counters: increment / decrement
 
 For counter columns, `Model.increment()` / `Model.decrement()` issue a single SQL `UPDATE col = col ± amount` so the change is atomic — safe under concurrent writes, no read-modify-write race. Prisma maps to `{ increment: n }` / `{ decrement: n }`; Drizzle to a `sql\`${col} + ${n}\`` expression.
@@ -327,6 +356,65 @@ Don't use a class-field annotation (`tags!: () => ...`) — it creates an own pr
 - No `withTimestamps` — pass `attach(ids, { createdAt: new Date() })` or use schema defaults.
 - Each `morphedByMany` relation targets one concrete inverse class. To query *every* taggable for a tag, declare one relation per concrete class and merge results in app code (or drop to the adapter).
 
+### Querying parents by related rows
+
+Filter parent records by the existence (or absence) of a related row, optionally with a constraint on the relation:
+
+```ts
+// Posts that have at least one comment
+const commented = await Post.whereHas('comments').get()
+
+// Posts whose comments include one approved by Alice
+const aliceApproved = await Post.whereHas('comments', (q) =>
+  q.where('approved', true).where('authorId', alice.id)
+).get()
+
+// Posts that have NO comments
+const lonely = await Post.whereDoesntHave('comments').get()
+
+// withWhereHas — same constraint applied to BOTH the parent filter and the eager-loaded relation
+const recentlyActive = await Post.withWhereHas('comments', (q) =>
+  q.where('createdAt', '>', last24h)
+).get()
+
+// whereBelongsTo — inverse of whereHas for belongsTo relations
+const myPosts = await Post.whereBelongsTo(currentUser).get()
+// shorthand for Post.where('userId', currentUser.id)
+```
+
+`whereHas` works on every relation type; **on Prisma**, direct `hasMany` / `hasOne` / `belongsTo` relations need an `@relation` declared in `schema.prisma` so the adapter can use native `some` / `none`. Polymorphic and pivot relations route through a 2-step lookup so they work without a Prisma-declared relation. **On Drizzle**, every related table referenced from `whereHas` must be registered via `tables: { ... }` on `drizzle()` config or `DrizzleTableRegistry.register(name, table)` — missing tables surface a clear error.
+
+`whereHas` has two limitations in v1: nested `whereHas` inside a constrain callback throws (deferred), and `morphTo` cannot be used with `whereHas` since the related table is dynamic — filter on `{morphName}Id` / `{morphName}Type` directly instead. `withWhereHas` falls back to plain `with(relation)` on adapters that don't yet implement constrained eager loading (Drizzle today).
+
+### Aggregate eager loading
+
+Stamp counts, sums, or existence flags from related rows onto each parent without loading the full collection:
+
+```ts
+const posts = await Post
+  .withCount('comments')
+  .withSum('comments', 'helpfulVotes')
+  .withExists('comments')           // boolean — does this post have any comments?
+  .get()
+
+posts[0].commentsCount               // number
+posts[0].commentsSumHelpfulVotes     // number
+posts[0].commentsExists              // boolean
+```
+
+The full set: `withCount`, `withSum`, `withMin`, `withMax`, `withAvg`, `withExists`. Each returns a derived column on the parent: `<relation>Count`, `<relation>Sum<Column>`, `<relation>Exists`, etc. (camelCase). The aggregates are enumerable on the instance for `JSON.stringify` / `Object.entries`, but tagged so they don't reach `save()` / `update()` writes.
+
+For per-instance loading after the fact, use `loadCount` / `loadSum` / `loadMissing`:
+
+```ts
+const post = await Post.find(id)
+await post.loadCount('comments')           // sets post.commentsCount
+await post.loadSum('comments', 'votes')    // sets post.commentsSumVotes
+await post.loadMissing('author', 'tags')   // load only relations not already eager-loaded
+```
+
+`loadMissing` is the lazy companion to `with()`: skip what's already there, fetch what isn't.
+
 ## Route model binding
 
 Routes that resolve a parameter into a Model instance (`/users/:user`, `/posts/:post`) can opt in to automatic resolution via `router.bind(name, ModelClass)`. The router's per-route binding middleware reads `req.params.user`, calls `User.findForRoute(value)`, and exposes the result as `req.bound!.user`. A 404-equivalent `RouteModelNotFoundError` is thrown when no record matches.
@@ -520,6 +608,71 @@ await User.withoutEvents(async () => {
 ```
 
 The mute is class-scoped and restored even if `fn` throws.
+
+For one-off operations, instances expose `*Quietly` variants that mute events for that single call without wrapping a callback:
+
+```ts
+await user.saveQuietly()      // skip saving/saved/updating/updated
+await user.deleteQuietly()    // skip deleting/deleted
+await user.restoreQuietly()   // skip restoring/restored
+```
+
+Quiet ops route through the same `withoutEvents` machinery — observers, instance-level `Model.on(...)` listeners, and dispatched event-bus events are all suppressed. They're the right tool for audit-log writes, soft cascade cleanup, and other "I know what I'm doing — please don't recursively fire observers" cases. For static-method paths (`Model.create`, `Model.update`, etc.), wrap the call in `Model.withoutEvents(() => ...)`.
+
+## Pruning
+
+Models that accumulate stale rows — read notifications, expired tokens, soft-deleted records past retention — can declare a pruning policy and let `pnpm rudder model:prune` sweep them on a schedule.
+
+Declare a static `prunable()` returning a query builder for stale rows. The optional static `pruning(model)` hook fires per row before each delete:
+
+```ts
+import { Model } from '@rudderjs/orm'
+
+class Notification extends Model {
+  static prunable() {
+    return Notification.where('readAt', '<', sub30d())
+  }
+
+  static pruning(record: Notification) {
+    // Optional: per-row hook — log, archive, fire an observer-equivalent
+  }
+}
+```
+
+`pnpm rudder model:prune` calls `prunable()`, walks the result in chunks (default 1000), and deletes each row through the normal `Model.delete()` path so observers fire and soft-delete semantics apply. Pass `--pretend` for a dry-run, `--chunk` to tune batch size, `--model` / `--except` to scope:
+
+```bash
+pnpm rudder model:prune                         # all Prunable models
+pnpm rudder model:prune --pretend               # dry-run
+pnpm rudder model:prune --model Notification    # one model
+pnpm rudder model:prune --except User           # everything except User
+pnpm rudder model:prune --chunk 500             # smaller batches
+```
+
+For high-volume tables where firing observers per row is too expensive, opt into mass-pruning — `pruning()` is skipped, soft-deletes are bypassed, and the runner issues a single bulk `DELETE` per chunk against the `prunable()` query:
+
+```ts
+import { Model } from '@rudderjs/orm'
+
+class WebhookDelivery extends Model {
+  static override pruneMode = 'mass' as const
+
+  static prunable() {
+    return WebhookDelivery.where('completedAt', '<', sub7d())
+  }
+}
+```
+
+`pruneMode` defaults to `'instance'` on the base `Model`. The runtime mode is read from this static field; the `Prunable` and `MassPrunable` interfaces exported from `@rudderjs/orm` are typing aids if you want to assert intent at the class level.
+
+Schedule daily pruning in `routes/console.ts`:
+
+```ts
+import { schedule } from '@rudderjs/schedule'
+import { pruneModels } from '@rudderjs/orm'
+
+schedule.call(() => pruneModels()).daily().description('Prune stale rows')
+```
 
 ## Pitfalls
 

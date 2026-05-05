@@ -87,6 +87,75 @@ router.post('/api/users', async (req, res) => {
 
 `authorize()` is synchronous and returns `boolean`. Returning `false` rejects with a 403-equivalent error. Generate stubs with `pnpm rudder make:request CreateUser`.
 
+## Lifecycle hooks
+
+`FormRequest` exposes five optional hooks that run around `rules()`. Pipeline order:
+
+```
+authorize → prepareForValidation → rules.parse → after → passedValidation
+              ↓                       ↓             ↓
+              ─────── failedValidation(errors) ───────
+```
+
+Both Zod parse failures and `after()`-collected errors converge through `failedValidation(errors)`.
+
+```ts
+import { FormRequest, ValidationError, z } from '@rudderjs/core'
+
+const schema = z.object({
+  email:    z.string().email(),
+  password: z.string().min(8),
+})
+
+export class CreateUserRequest extends FormRequest<typeof schema> {
+  rules() { return schema }
+
+  // Sync. Mutate the merged input before parsing — normalize, trim, lowercase, etc.
+  protected override prepareForValidation(input: Record<string, unknown>) {
+    if (typeof input['email'] === 'string') {
+      input['email'] = input['email'].toLowerCase().trim()
+    }
+  }
+
+  // Per-request error message overrides keyed by dot-path. Static string OR function of the Zod issue.
+  protected override messages() {
+    return {
+      email:    'Please enter a valid email address.',
+      password: (issue: z.core.$ZodRawIssue) =>
+        issue.code === 'too_small' ? 'Min 8 characters.' : 'Invalid password.',
+    }
+  }
+
+  // Cross-field checks against the parsed data. Each callback runs serially; all errors are collected.
+  protected override after() {
+    return [
+      ({ data, addError }) => {
+        if (data.email.endsWith('@example.com')) {
+          addError('email', 'Sample addresses are not allowed')
+        }
+      },
+    ]
+  }
+
+  // Final transform after all checks pass. Return value replaces the resolved data.
+  protected override async passedValidation(data: z.infer<typeof schema>) {
+    return { ...data, password: await Bcrypt.hash(data.password) }
+  }
+
+  // Customize the failure path. Default throws ValidationError; return a Response to short-circuit
+  // the framework's 422 renderer.
+  protected override failedValidation(errors: Record<string, string[]>) {
+    throw new ValidationError(errors)
+  }
+}
+```
+
+**Type inference.** Parameterize the class with the schema type (`extends FormRequest<typeof schema>`) so `data` in `after()` and `passedValidation()` is inferred. Without the parameter, `data` is `unknown`.
+
+**Short-circuit responses.** `failedValidation()` may `return` a Web `Response` directly to bypass the default 422 — the exception handler unwraps it via the `ValidationResponse` sentinel and emits the wrapped Response unchanged. Useful for redirecting back with flash errors on form submissions.
+
+**`messages()` vs Zod's `.message(...)`.** Zod schema-level messages still apply. `messages()` is a per-request override that takes precedence and supports per-issue functions, which Zod schema messages cannot.
+
 ## Validation errors
 
 `validate()` and `FormRequest.validate()` throw a `ValidationError`. The framework's error handler catches it and returns a 422 with a structured body:
@@ -140,8 +209,9 @@ const { page, perPage } = await validate(PaginationSchema, req)
 |---|---|
 | `validate(schema, req)` | Validates merged params/query/body; throws `ValidationError` on failure |
 | `validateWith(schema)` | Returns a middleware handler that validates the request |
-| `FormRequest` | Base class with `rules()` (required) and `authorize()` (optional) |
+| `FormRequest` | Base class — `rules()` required; optional hooks: `authorize`, `prepareForValidation`, `messages`, `after`, `passedValidation`, `failedValidation` |
 | `ValidationError` | `Error` subclass with `errors: Record<string, string[]>` and `toJSON()` |
+| `ValidationResponse` | Sentinel wrapping a Web `Response` returned from `failedValidation()` |
 | `z` | Re-export of Zod's `z` namespace |
 
 ## Pitfalls
@@ -149,3 +219,5 @@ const { page, perPage } = await validate(PaginationSchema, req)
 - **`validateWith()` doesn't attach to `req.body`.** Re-parse inside the handler with `validate()` to get the typed value, or use `FormRequest` if you only want to write the schema once.
 - **Merge priority surprises.** `params` wins over `body` wins over `query`. If you have `:id` in the path *and* `id` in the body, the path value wins.
 - **`authorize()` is sync.** Don't make it async — the result is read synchronously by `validate()`. For async authorization checks (DB lookup), do them in middleware before the validator runs.
+- **`prepareForValidation()` is sync.** Async normalization (DB lookups, remote calls) belongs in middleware before validation runs — the hook is for in-memory mutation only.
+- **`after()` returns an array of callbacks, not a single callback.** Each callback gets `{ data, req, addError }`. Returning a single function from `after()` is a type error; wrap it: `return [({ data, addError }) => …]`.

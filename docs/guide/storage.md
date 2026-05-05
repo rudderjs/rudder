@@ -124,6 +124,51 @@ For pre-signed URLs (temporary direct browser access):
 const url = await Storage.disk('s3').temporaryUrl('uploads/file.pdf', 3600)  // 1-hour link
 ```
 
+## Temporary URLs on the local disk
+
+The local disk has no bucket of its own, so `temporaryUrl()` issues an HMAC-signed URL that points at a controller route the framework registers for you. Wire it once in your bootstrap:
+
+```ts
+import { router } from '@rudderjs/router'
+import { serveTemporaryUrls } from '@rudderjs/storage'
+
+await serveTemporaryUrls(router, { disk: 'local', routePath: '/storage/temp/*' })
+```
+
+After that, `Storage.disk('local').temporaryUrl('uploads/file.pdf', 3600)` returns a URL of the form `/storage/temp/uploads/file.pdf?expires=...&signature=...`. The registered handler validates the signature and streams the file. Useful in dev so the same `temporaryUrl()` call works locally without S3.
+
+`serveTemporaryUrls()` is `async` because it dynamic-imports `@rudderjs/router` to read `Url.isValidSignature`. Don't forget to `await` it. `temporaryUploadUrl()` on the local disk throws `StorageNotSupportedError` — there is no signed-POST equivalent in v1.
+
+## Visibility
+
+Set or read per-file visibility independently of the disk's defaults:
+
+```ts
+await Storage.disk('s3').setVisibility('avatars/u-1.jpg', 'public')
+const v = await Storage.disk('s3').getVisibility('avatars/u-1.jpg')   // 'public' | 'private'
+```
+
+S3 maps `public` → `public-read` ACL and `private` → `private` ACL via `PutObjectAcl`/`GetObjectAcl`. The local adapter writes mode bits (`0o644` / `0o600`) **and** a sidecar at `<root>/.visibility/<path>` so Windows and FUSE volumes still report correctly. `delete()` removes the sidecar.
+
+You can also set the initial visibility at write time via the `put()` options:
+
+```ts
+await Storage.put('reports/q1.pdf', buffer, { visibility: 'public' })
+```
+
+## Streams
+
+For files larger than a few MB, prefer streams over `get()` / `put()` to avoid buffering the whole payload in memory:
+
+```ts
+const stream = await Storage.disk('s3').readStream('big.zip')
+stream.pipe(res)                                              // 200 MB safe — no buffering
+
+await Storage.disk('local').writeStream('uploads/u.zip', uploadStream)   // resolves on flush
+```
+
+S3 reads return the SDK's `GetObject` `Body` directly; uploads route through `@aws-sdk/lib-storage`'s `Upload` helper (multipart is automatic). The local adapter uses `node:fs` `createReadStream` / `createWriteStream` with `pipeline()` for back-pressure.
+
 ## File uploads
 
 Multipart uploads parse into `req.body` as a structure with named files. Persist them with `Storage.put()`:
@@ -162,3 +207,6 @@ Storage.assertMissing('avatars/user-2.jpg')
 - **Missing `@aws-sdk/client-s3`.** It's an optional peer dependency. The S3 disk throws at boot if not installed.
 - **Calling `Storage.path(...)` on an S3 disk.** Throws — there's no filesystem path for remote files. Use `url()` or `temporaryUrl()` instead.
 - **Public disk with sensitive files.** Anything written to the public disk is reachable by URL. For access-controlled files, use the local disk and serve through an authenticated route.
+- **Forgetting `await serveTemporaryUrls(...)`.** It's `async` (dynamic-imports `@rudderjs/router`). Without `await`, the route never registers and `temporaryUrl()` returns 404s.
+- **Cross-disk `move()` / `copy()`.** These are single-disk in v1 — calls that span disks throw an explicit error. Use `get()` + `put()` to bridge disks.
+- **`temporaryUploadUrl()` on local disk.** Throws `StorageNotSupportedError` — there is no signed-POST equivalent for the local adapter. In dev, use a normal `POST /api/upload` with multipart middleware.

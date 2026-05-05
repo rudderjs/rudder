@@ -49,6 +49,29 @@ router.get('/api/posts/:slug', async (req, res) => {
 
 Optional segments end with `?` (`/posts/:category?/:slug`).
 
+## Parameter constraints
+
+Constrain a parameter to a regex or one of the built-in shortcuts. Non-matching requests fall through to the next route or 404 — they do not 422.
+
+```ts
+router.get('/users/:id',     handler).whereNumber('id')
+router.get('/u/:id',         handler).whereUuid('id')
+router.get('/posts/:status', handler).whereIn('status', ['draft', 'published'])
+router.get('/n/:n',          handler).where('n', /\d{3,5}/)   // custom — string or RegExp
+```
+
+| Method | Pattern |
+|---|---|
+| `where(param, regex)` | Custom — string or `RegExp` (the regex's `.source` is used) |
+| `whereNumber(param)` | `[0-9]+` |
+| `whereAlpha(param)` | `[A-Za-z]+` |
+| `whereAlphaNumeric(param)` | `[A-Za-z0-9]+` |
+| `whereUuid(param)` | UUID, any version |
+| `whereUlid(param)` | Crockford base32 ULID (26 chars) |
+| `whereIn(param, values)` | Alternation over regex-escaped literals |
+
+You can also embed a regex inline in the path: `/post/:slug{[a-z][a-z0-9-]*}`. The brace form is balanced so quantifiers like `{8}` inside the regex work — `:id{[0-9a-f]{8}-[0-9a-f]{4}}` is parsed correctly.
+
 ## Named routes
 
 Chain `.name()` to assign a name. Pair with `route()` for URL generation:
@@ -190,6 +213,79 @@ router.get('/posts/:post', show)
 ```
 
 The callback receives the request and the binding error; return a `Response`, plain object → JSON, string → body, or `undefined` (callback wrote to `res` directly). Optional bindings do NOT trigger `.missing()`.
+
+## Resource controllers
+
+`router.resource()` wires the seven canonical CRUD verbs from a plain controller class — no decorators required. Methods are matched by name; methods the controller doesn't implement are silently skipped:
+
+```ts
+class PostController {
+  async index   (_ctx) { /* GET    /posts            */ }
+  async create  (_ctx) { /* GET    /posts/create     */ }
+  async store   (_ctx) { /* POST   /posts            */ }
+  async show    (_ctx) { /* GET    /posts/:post      */ }
+  async edit    (_ctx) { /* GET    /posts/:post/edit */ }
+  async update  (_ctx) { /* PUT|PATCH /posts/:post   */ }
+  async destroy (_ctx) { /* DELETE /posts/:post      */ }
+}
+
+router.resource('posts', PostController)
+```
+
+| Verb | Method | Path | Route name |
+|--------|--------|------|------------|
+| index   | `GET`    | `/posts`            | `posts.index`   |
+| create  | `GET`    | `/posts/create`     | `posts.create`  |
+| store   | `POST`   | `/posts`            | `posts.store`   |
+| show    | `GET`    | `/posts/:post`      | `posts.show`    |
+| edit    | `GET`    | `/posts/:post/edit` | `posts.edit`    |
+| update  | `PUT`+`PATCH` | `/posts/:post` | `posts.update` |
+| destroy | `DELETE` | `/posts/:post`      | `posts.destroy` |
+
+For JSON APIs that don't render forms, use `apiResource()` to drop `create` and `edit`:
+
+```ts
+router.apiResource('posts', PostController)
+```
+
+For a one-of-its-kind resource (current user's profile, account settings), use `singleton()` — same handlers, no `:id` segment:
+
+```ts
+router.singleton('profile', ProfileController)
+// GET    /profile         → profile.show
+// GET    /profile/edit    → profile.edit
+// PUT    /profile         → profile.update (PATCH alias)
+
+router.singleton('profile', ProfileController).creatable()    // adds GET /profile/create + POST /profile
+router.singleton('profile', ProfileController).destroyable()  // adds DELETE /profile
+```
+
+Filter, rename, or attach middleware to the whole set:
+
+```ts
+router.resource('posts', PostController, {
+  only:       ['index', 'show'],
+  except:     ['destroy'],
+  parameters: { posts: 'article' },     // /posts/:article instead of /posts/:post
+  names:      { show: 'posts.detail' }, // override the auto-generated name
+  middleware: [authMw],
+})
+```
+
+For per-verb tweaks (constrain just `show`, add middleware to one route), the registration object exposes the raw `RouteBuilder[]` in declaration order — `index`, `create`, `store`, `show`, `edit`, `update` (PUT), `update` (PATCH alias), `destroy` minus any verb the controller skipped:
+
+```ts
+const reg = router.resource('posts', PostController)
+reg.builders[3].whereNumber('post')  // constrain show route only
+```
+
+Scaffold a stub:
+
+```bash
+pnpm rudder make:controller PostController --resource     # full 7-verb stub
+pnpm rudder make:controller PostController --api          # API-only (no create/edit)
+pnpm rudder make:controller ProfileController --singleton
+```
 
 ## Decorator controllers
 
