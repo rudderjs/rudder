@@ -57,11 +57,10 @@ Per-request state lives on the Hono `c` context via getters — `req.body`, `req
 ### IP extraction
 
 ```ts
-import { clientIp } from '@rudderjs/middleware'
-
 const ip = req.ip                // set by server-hono's extractIp()
-const also = clientIp(req)       // same thing via middleware helper
 ```
+
+`req.ip` is the canonical accessor — populated by `extractIp(c)` in `normalizeRequest()`. Custom rate-limit `.by()` callbacks should read `req.ip`, not raw headers.
 
 Trust-proxy mode (`trustProxy: true`) reads `X-Forwarded-For` + `X-Real-IP`. Without it, the direct socket address is used. Dev-mode `x-real-ip` injection from `@rudderjs/vite`'s `rudderjs:ip` plugin populates the header from `req.socket.remoteAddress` before universal-middleware converts to Web Request.
 
@@ -81,7 +80,10 @@ When a route returns a `ViewResponse` (from `view('id', props)`), server-hono du
 ## Key Imports
 
 ```ts
-import { hono, serve } from '@rudderjs/server-hono'
+import { hono } from '@rudderjs/server-hono'
 
-import type { ServerConfig } from '@rudderjs/server-hono'
+import type { HonoConfig } from '@rudderjs/server-hono'
+
+// Standalone Node listener (no Vike)
+import { serve } from '@hono/node-server'
 ```

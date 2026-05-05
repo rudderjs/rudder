@@ -20,8 +20,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { socialite } from '@rudderjs/socialite'
-export default [..., socialite(configs.socialite)]
+import { SocialiteProvider } from '@rudderjs/socialite'
+export default [SocialiteProvider]
 ```
 
 ### OAuth flow
@@ -69,7 +69,7 @@ State (CSRF) is handled automatically — stored in the session and verified on 
 ### Custom providers
 
 ```ts
-import { SocialiteDriver, registerDriver } from '@rudderjs/socialite'
+import { Socialite, SocialiteDriver } from '@rudderjs/socialite'
 
 class DiscordDriver extends SocialiteDriver {
   protected authUrl  = 'https://discord.com/api/oauth2/authorize'
@@ -86,7 +86,7 @@ class DiscordDriver extends SocialiteDriver {
   }
 }
 
-registerDriver('discord', (cfg) => new DiscordDriver(cfg))
+Socialite.extend('discord', (cfg) => new DiscordDriver(cfg))
 ```
 
 ### SocialUser interface
@@ -112,7 +112,7 @@ socialUser.getRaw()      // full raw provider response
 ## Key Imports
 
 ```ts
-import { socialite, Socialite, SocialiteDriver, registerDriver } from '@rudderjs/socialite'
+import { SocialiteProvider, Socialite, SocialiteDriver } from '@rudderjs/socialite'
 
 import type { SocialiteConfig, SocialUser } from '@rudderjs/socialite'
 ```

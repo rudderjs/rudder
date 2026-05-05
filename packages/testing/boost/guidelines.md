@@ -94,15 +94,18 @@ await t.actingAs(user, 'api').get('/api/me')  // specific guard
 ### Faking framework services
 
 ```ts
-import { MailFake, QueueFake, NotificationFake, EventFake } from '@rudderjs/testing'
+import { Mail } from '@rudderjs/mail'
+import { Queue } from '@rudderjs/queue'
+import { NotificationFake } from '@rudderjs/notification'
+import { EventFake } from '@rudderjs/core'
 
-MailFake.fake()           // record Mail.to(...).send() calls
-QueueFake.fake()          // record job dispatches
-NotificationFake.fake()   // record notify() calls
-EventFake.fake()          // record dispatch() calls
+const mailFake = Mail.fake()                  // record Mail.to(...).send() calls
+const queueFake = Queue.fake()                // record job dispatches
+const notificationFake = NotificationFake.fake() // record notify() calls
+const eventFake = EventFake.fake()            // record dispatch() calls
 ```
 
-Each exposes matching assertions: `assertSent`, `assertDispatched`, `assertNotified`, etc.
+Each fake exposes matching assertions on the returned instance: `assertSent`, `assertDispatched`, `assertNotified`, etc. Import the fake from its owning package — `@rudderjs/testing` does not re-export them.
 
 ### Running tests
 
@@ -121,7 +124,7 @@ The framework packages use `tsx --test`. Your app can use whatever — node:test
 - **Forgetting `t.teardown()` between tests.** `TestCase.create()` boots a fresh app; `teardown()` disposes it. Without teardown, DI singletons, scheduled tasks, or WS connections leak across tests. Always call in `afterEach`.
 - **Shared DB without `RefreshDatabase`.** Tests pollute each other. Always include the trait when running against a persistent driver — or point `database.url` at a memory-only SQLite.
 - **Parallel tests writing the same SQLite file.** Node's `node:test --test-concurrency=N` runs files in parallel. Either serialize (`--test-concurrency=1`) or give each test a unique DB path.
-- **Not restoring fakes.** `MailFake.fake()` patches globally. Without `MailFake.restore()` in `afterEach`, subsequent tests still see the stub (or the wrong stub). Restore after each test.
+- **Not restoring fakes.** `Mail.fake()` patches globally. Without `fake.restore()` in `afterEach`, subsequent tests still see the stub (or the wrong stub). Restore after each test — same applies to `Queue.fake()`, `NotificationFake.fake()`, `EventFake.fake()`.
 - **`actingAs` with mismatched guard.** If your config's default guard is `'web'` and the route uses `'api'`, `t.actingAs(user)` sets up `web` auth — the api guard won't see it. Pass the guard name: `t.actingAs(user, 'api')`.
 - **Long-running tests spinning up providers.** Each `TestCase.create()` runs `register()` + `boot()` for every provider. For speed, provide only the minimal providers your test needs — not the full app's provider list.
 - **Testing WebSocket flows.** Tests run through `app.fetch`, which handles HTTP only. For WS coverage, mock `broadcast()` via the observer registry rather than spinning up a real socket.
@@ -134,11 +137,14 @@ import {
   TestResponse,
   RefreshDatabase,
   WithFaker,
-  MailFake,
-  QueueFake,
-  NotificationFake,
-  EventFake,
+  withTestConfig,
 } from '@rudderjs/testing'
 
-import type { TestCaseOptions } from '@rudderjs/testing'
+import type { TestTrait, TestTraitClass } from '@rudderjs/testing'
+
+// Fakes live in their owning packages
+import { Mail, FakeMailAdapter } from '@rudderjs/mail'
+import { Queue, FakeQueueAdapter } from '@rudderjs/queue'
+import { NotificationFake } from '@rudderjs/notification'
+import { EventFake } from '@rudderjs/core'
 ```

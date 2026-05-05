@@ -10,8 +10,8 @@ Native WebSocket server — public/private/presence channels with pub/sub messag
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@rudderjs/broadcast'
-export default [broadcasting(), ...]
+import { BroadcastingProvider } from '@rudderjs/broadcast'
+export default [BroadcastingProvider]
 
 // bootstrap/app.ts — add channels loader
 .withRouting({
@@ -92,7 +92,7 @@ If `@rudderjs/telescope` is installed, every connection, subscribe, unsubscribe,
 ## Key Imports
 
 ```ts
-import { broadcasting, broadcast, Broadcast, broadcastStats } from '@rudderjs/broadcast'
+import { BroadcastingProvider, broadcast, Broadcast, broadcastStats } from '@rudderjs/broadcast'
 import { Channel, PrivateChannel, PresenceChannel } from '@rudderjs/broadcast'
 
 import type { BroadcastConfig, ChannelAuthRequest } from '@rudderjs/broadcast'

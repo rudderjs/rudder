@@ -24,8 +24,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { crypt } from '@rudderjs/crypt'
-export default [crypt(configs.crypt), ...]
+import { CryptProvider } from '@rudderjs/crypt'
+export default [CryptProvider]
 ```
 
 ### Usage
@@ -80,7 +80,7 @@ The ORM calls `Crypt.encrypt()` on write and `Crypt.decrypt()` on read. Requires
 ## Key Imports
 
 ```ts
-import { crypt, Crypt } from '@rudderjs/crypt'
+import { CryptProvider, Crypt } from '@rudderjs/crypt'
 
 import type { CryptConfig } from '@rudderjs/crypt'
 ```

@@ -10,11 +10,11 @@ Lightweight API token authentication — SHA-256 hashed tokens with per-token ab
 
 ```ts
 // bootstrap/providers.ts
-import { authProvider } from '@rudderjs/auth'
+import { AuthProvider } from '@rudderjs/auth'
 import { sanctum }      from '@rudderjs/sanctum'
 
 export default [
-  authProvider(configs.auth),
+  AuthProvider,
   sanctum({ tokenPrefix: '', expiration: null }),
 ]
 ```
@@ -58,13 +58,14 @@ if (result) {
 ### Middleware
 
 ```ts
-import { SanctumMiddleware, RequireAbility } from '@rudderjs/sanctum'
+import { SanctumMiddleware, RequireToken } from '@rudderjs/sanctum'
 
 // Validate the bearer token, populate req.user + req.token
 Route.get('/api/me', handler, [SanctumMiddleware()])
 
-// Enforce ability
-Route.post('/api/posts', handler, [SanctumMiddleware(), RequireAbility('write')])
+// Enforce one or more abilities
+Route.post('/api/posts', handler, [SanctumMiddleware(), RequireToken('write')])
+Route.delete('/api/posts/:id', handler, [SanctumMiddleware(), RequireToken('write', 'admin')])
 ```
 
 ### Sanctum vs Passport
@@ -81,7 +82,7 @@ Use Sanctum for "my own app's tokens." Use Passport when third parties need to a
 
 ## Common Pitfalls
 
-- **`sanctum()` before `authProvider()`.** Sanctum depends on the auth user resolver — auth must boot first.
+- **`sanctum()` before `AuthProvider`.** Sanctum depends on the auth user resolver — auth must boot first.
 - **Expecting the DB schema to auto-create.** Publish the Prisma schema: `pnpm rudder vendor:publish --tag=sanctum-schema`.
 - **Abilities as scopes.** Abilities check equality or wildcard `*`. No hierarchical scopes (`admin.users.read`) — pick flat abilities like `['read', 'write', 'admin']`.
 - **Forgetting `tokenable_type` on plural user models.** The default assumes the `User` model. If you have multiple authenticatable models (e.g. `User` + `ApiClient`), use `tokenable_type` to disambiguate.
@@ -91,7 +92,7 @@ Use Sanctum for "my own app's tokens." Use Passport when third parties need to a
 ## Key Imports
 
 ```ts
-import { sanctum, Sanctum, SanctumMiddleware, RequireAbility } from '@rudderjs/sanctum'
+import { sanctum, Sanctum, SanctumMiddleware, RequireToken } from '@rudderjs/sanctum'
 
 import type { SanctumConfig, PersonalAccessToken } from '@rudderjs/sanctum'
 ```

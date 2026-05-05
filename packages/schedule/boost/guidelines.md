@@ -10,8 +10,8 @@ Cron-based task scheduler with fluent API. Register tasks in `routes/console.ts`
 
 ```ts
 // bootstrap/providers.ts
-import { scheduler } from '@rudderjs/schedule'
-export default [scheduler(), ...]
+import { ScheduleProvider } from '@rudderjs/schedule'
+export default [ScheduleProvider]
 ```
 
 ### Registering tasks
@@ -83,7 +83,7 @@ Defaults to the server's local timezone. Use named timezones (IANA format) for d
 ## Key Imports
 
 ```ts
-import { scheduler, schedule } from '@rudderjs/schedule'
+import { ScheduleProvider, schedule } from '@rudderjs/schedule'
 
 import type { ScheduledTask, Frequency } from '@rudderjs/schedule'
 ```

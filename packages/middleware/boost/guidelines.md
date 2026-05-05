@@ -111,9 +111,6 @@ import { CsrfMiddleware, getCsrfToken } from '@rudderjs/middleware'
 import { RateLimit } from '@rudderjs/middleware'
 import { CorsMiddleware, LoggerMiddleware, ThrottleMiddleware } from '@rudderjs/middleware'
 
-// Utils
-import { clientIp } from '@rudderjs/middleware'
-
 // Types
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 ```

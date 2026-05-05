@@ -10,8 +10,8 @@ Request-scoped context — an AsyncLocalStorage-backed data bag that **auto-prop
 
 ```ts
 // bootstrap/providers.ts
-import { context } from '@rudderjs/context'
-export default [..., context()]
+import { ContextProvider } from '@rudderjs/context'
+export default [ContextProvider]
 
 // bootstrap/app.ts — middleware installs the ALS store per request
 import { ContextMiddleware } from '@rudderjs/context'
@@ -105,7 +105,7 @@ The queue package does this automatically. Do it yourself when you're implementi
 ## Key Imports
 
 ```ts
-import { context, Context, ContextMiddleware } from '@rudderjs/context'
+import { ContextProvider, Context, ContextMiddleware } from '@rudderjs/context'
 
 import type { DehydratedContext } from '@rudderjs/context'
 ```

@@ -10,12 +10,12 @@ Multi-channel notification system — send the same notification via `mail`, `da
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@rudderjs/mail'
-import { notifications } from '@rudderjs/notification'
+import { MailProvider } from '@rudderjs/mail'
+import { NotificationProvider } from '@rudderjs/notification'
 
 export default [
-  mail(configs.mail),     // required BEFORE notifications() when using the mail channel
-  notifications(),         // registers built-in mail + database channels
+  MailProvider,           // required BEFORE NotificationProvider when using the mail channel
+  NotificationProvider,   // registers built-in mail + database + broadcast channels
 ]
 ```
 
@@ -92,7 +92,7 @@ Publish the schema: `pnpm rudder vendor:publish --tag=notification-schema`.
 ### Custom channels
 
 ```ts
-import { NotificationChannel, registerChannel } from '@rudderjs/notification'
+import { NotificationChannel, ChannelRegistry } from '@rudderjs/notification'
 
 class SlackChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
@@ -101,7 +101,7 @@ class SlackChannel implements NotificationChannel {
   }
 }
 
-registerChannel('slack', new SlackChannel())
+ChannelRegistry.register('slack', new SlackChannel())
 
 // Then in notifications:
 class OrderShipped extends Notification {
@@ -112,7 +112,7 @@ class OrderShipped extends Notification {
 
 ## Common Pitfalls
 
-- **`notifications()` before `mail()`.** Notifications with mail channel throw at send-time. Order: `mail()` → `notifications()` in providers array.
+- **`NotificationProvider` before `MailProvider`.** Notifications with mail channel throw at send-time. Order: `MailProvider` → `NotificationProvider` in providers array.
 - **`via()` returning channels without matching `toChannel()` method.** Silent — the channel registry throws "no handler for channel X". Every channel name in `via()` must have a matching method or be a registered custom channel.
 - **`toMail()` returning a plain object.** Must return a `Mailable` instance. Return `new WelcomeMail(notifiable)`, not `{ subject: ..., body: ... }`.
 - **Database channel without the Prisma model.** The `database` channel writes to `DatabaseNotification`. Publish the schema (`vendor:publish --tag=notification-schema`) and `prisma db push` before sending.
@@ -122,7 +122,7 @@ class OrderShipped extends Notification {
 ## Key Imports
 
 ```ts
-import { notifications, notify, Notification, registerChannel } from '@rudderjs/notification'
+import { NotificationProvider, notify, Notification, ChannelRegistry } from '@rudderjs/notification'
 
 import type { Notifiable, NotificationChannel } from '@rudderjs/notification'
 ```

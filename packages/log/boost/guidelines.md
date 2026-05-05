@@ -21,8 +21,8 @@ export default {
 } satisfies LogConfig
 
 // bootstrap/providers.ts
-import { log } from '@rudderjs/log'
-export default [log(configs.log), ...]
+import { LogProvider } from '@rudderjs/log'
+export default [LogProvider]
 ```
 
 ### Usage
@@ -57,13 +57,15 @@ Uses AsyncLocalStorage — scoped to the async chain, not global. Middleware tha
 ### Testing
 
 ```ts
-import { LogFake } from '@rudderjs/log'
+import { LogFake, LogRegistry } from '@rudderjs/log'
 
-const fake = LogFake.fake()
+const fake = new LogFake()
+LogRegistry.register('fake', fake, 'debug')
+LogRegistry.setDefault('fake')
+
 Log.info('hello')
-fake.assertLogged('info', msg => msg.includes('hello'))
-fake.assertNothingLogged()
-fake.restore()
+fake.assertLogged('info', 'hello')
+fake.assertNotLogged('error', 'unexpected')
 ```
 
 ## Common Pitfalls
@@ -72,13 +74,13 @@ fake.restore()
 - **`stack` driver referencing unknown channels.** The array must reference channel keys that exist in the same config. Typo = silent no-op for the bad channel.
 - **Logging sensitive data.** Passwords, tokens, raw credit card numbers. `Log` does not redact — filter at the call site or use a custom formatter. `@rudderjs/telescope` does redact, but Log doesn't.
 - **Log in hot paths.** The `daily` driver writes synchronously by default. High-throughput endpoints should log to `console` (fast) and ship off-process with a collector, not write to disk per-request.
-- **`report()` without `log` provider.** `@rudderjs/core`'s `report()` tries `Log` first, falls back to `console.error`. Registering `log()` in providers routes reports through the log channel automatically — no manual wiring needed.
+- **`report()` without `LogProvider`.** `@rudderjs/core`'s `report()` tries `Log` first, falls back to `console.error`. Registering `LogProvider` routes reports through the log channel automatically — no manual wiring needed.
 - **Logger timestamp vs app timestamp.** Log entries use the wall clock at log-time, not the request start time. If you need correlated timestamps, pass them explicitly in the context object.
 
 ## Key Imports
 
 ```ts
-import { log, Log, LogFake } from '@rudderjs/log'
+import { LogProvider, Log, LogFake, LogRegistry, logger } from '@rudderjs/log'
 
 import type { LogConfig, LogLevel, LogEntry, LogChannel } from '@rudderjs/log'
 ```

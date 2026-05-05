@@ -19,8 +19,8 @@ export default {
 } satisfies CacheConfig
 
 // bootstrap/providers.ts — register BEFORE middleware that uses cache (RateLimit, ThrottleMiddleware)
-import { cache } from '@rudderjs/cache'
-export default [cache(configs.cache), ...]
+import { CacheProvider } from '@rudderjs/cache'
+export default [CacheProvider]
 ```
 
 ### Facade
@@ -77,7 +77,7 @@ await cache.set('key', 'value', 60)
 
 ```ts
 // Provider + facade
-import { cache, Cache } from '@rudderjs/cache'
+import { CacheProvider, Cache } from '@rudderjs/cache'
 
 // Standalone adapter
 import { MemoryAdapter } from '@rudderjs/cache'
