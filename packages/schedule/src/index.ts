@@ -1,5 +1,6 @@
 import { ServiceProvider, rudder } from '@rudderjs/core'
 import { Cron } from 'croner'
+import type { CacheAdapter, Lock } from '@rudderjs/cache'
 
 // ─── Scheduled Task ────────────────────────────────────────
 
@@ -183,20 +184,11 @@ class Scheduler {
 export const schedule = new Scheduler()
 export const Schedule = schedule
 
-// ─── Helpers ───────────────────────────────────────────────
-
 // ─── Task execution with hooks/overlap/oneServer ──────────
 
-interface CacheLike {
-  get(key: string): Promise<unknown>
-  put(key: string, value: unknown, ttl?: number): Promise<void>
-  forget(key: string): Promise<void>
-}
-
-function _getCache(): CacheLike | null {
+async function _getCache(): Promise<CacheAdapter | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@rudderjs/cache') as { CacheRegistry?: { get(): CacheLike | null } }
+    const mod = await import('@rudderjs/cache')
     return mod.CacheRegistry?.get() ?? null
   } catch {
     return null
@@ -205,30 +197,34 @@ function _getCache(): CacheLike | null {
 
 async function _executeTask(task: ScheduledTask): Promise<void> {
   const label = task.getDescription() || task.getCron()
-  const cache = _getCache()
+  const cache = await _getCache()
 
-  // ── onOneServer: acquire distributed lock ──────────
+  // ── onOneServer + withoutOverlapping use cache locks ────
+  const acquired: Lock[] = []
+
+  const releaseAll = async (): Promise<void> => {
+    for (const l of acquired) await l.release()
+  }
+
   if (task.isOnOneServer()) {
     if (!cache) {
       console.log(`[Schedule] Skipping "${label}" — onOneServer() requires @rudderjs/cache`)
       return
     }
-    const lockKey = `rudderjs:schedule:server:${label}`
-    const existing = await cache.get(lockKey)
-    if (existing) return // another server is handling it
-    await cache.put(lockKey, '1', 60) // 60s lock
+    const serverLock = cache.lock(`rudderjs:schedule:server:${label}`, 60)
+    if (!await serverLock.get()) return // another server is handling it
+    acquired.push(serverLock)
   }
 
-  // ── withoutOverlapping: acquire overlap lock ───────
   if (task.isWithoutOverlapping()) {
-    const overlapKey = task.getOverlapKey()
     if (cache) {
-      const locked = await cache.get(overlapKey)
-      if (locked) {
+      const overlapLock = cache.lock(task.getOverlapKey(), task.getOverlapExpiresAt() * 60)
+      if (!await overlapLock.get()) {
         console.log(`[Schedule] Skipping "${label}" — already running (overlap lock)`)
+        await releaseAll()
         return
       }
-      await cache.put(overlapKey, '1', task.getOverlapExpiresAt() * 60)
+      acquired.push(overlapLock)
     }
   }
 
@@ -253,10 +249,8 @@ async function _executeTask(task: ScheduledTask): Promise<void> {
     // ── after hook ───────────────────────────────────
     if (task.getAfterFn()) await task.getAfterFn()!()
 
-    // ── release overlap lock ─────────────────────────
-    if (task.isWithoutOverlapping() && cache) {
-      await cache.forget(task.getOverlapKey())
-    }
+    // ── release acquired locks ───────────────────────
+    await releaseAll()
   }
 }
 

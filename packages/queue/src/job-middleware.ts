@@ -1,4 +1,5 @@
 import type { Job } from './index.js'
+import type { CacheAdapter } from '@rudderjs/cache'
 
 // ─── Job Middleware Contract ────────────────────────────────
 
@@ -50,7 +51,7 @@ export class RateLimited implements JobMiddleware {
   ) {}
 
   async handle(_job: Job, next: () => Promise<void>): Promise<void> {
-    const cache = _getCache()
+    const cache = await _getCache()
     if (!cache) {
       // No cache — fail open (allow execution)
       return next()
@@ -74,7 +75,12 @@ export class RateLimited implements JobMiddleware {
 
 /**
  * Prevent concurrent execution of jobs with the same key.
- * If a lock exists, the job is released back to the queue.
+ * If the lock is already held, the job is released back to the queue.
+ *
+ * Backed by `Cache.lock()` — atomic across processes when using a shared
+ * driver (Redis). Requires `@rudderjs/cache` to be installed and registered;
+ * throws a clear error otherwise (overlap protection without a cache adapter
+ * is silently broken under contention, so we fail fast).
  *
  * @example
  * middleware() { return [new WithoutOverlapping(`import-${this.userId}`)] }
@@ -86,25 +92,23 @@ export class WithoutOverlapping implements JobMiddleware {
   ) {}
 
   async handle(_job: Job, next: () => Promise<void>): Promise<void> {
-    const lockKey = `rudderjs:job-lock:${this._key}`
-    const cache   = _getCache()
+    const cache = await _getCacheAdapter()
+    if (!cache) {
+      throw new Error(
+        '[RudderJS Queue] WithoutOverlapping requires a cache adapter. Install @rudderjs/cache and add CacheProvider.'
+      )
+    }
 
-    if (cache) {
-      const locked = await cache.get(lockKey)
-      if (locked) {
-        throw new Error(
-          `[RudderJS Queue] Job "${this._key}" is already running. Releasing back to queue.`
-        )
-      }
-      await cache.put(lockKey, '1', this._expiresAfter)
-      try {
-        await next()
-      } finally {
-        await cache.forget(lockKey)
-      }
-    } else {
-      // No cache — just run (no overlap protection)
+    const lock = cache.lock(`rudderjs:job-lock:${this._key}`, this._expiresAfter)
+    let ran = false
+    const result = await lock.get(async () => {
+      ran = true
       await next()
+    })
+    if (!ran && result === false) {
+      throw new Error(
+        `[RudderJS Queue] Job "${this._key}" is already running. Releasing back to queue.`
+      )
     }
   }
 }
@@ -127,7 +131,7 @@ export class ThrottlesExceptions implements JobMiddleware {
 
   async handle(job: Job, next: () => Promise<void>): Promise<void> {
     const key   = `rudderjs:job-throttle:${job.constructor.name}`
-    const cache = _getCache()
+    const cache = await _getCache()
 
     if (cache) {
       const count = Number(await cache.get(key) ?? 0)
@@ -184,7 +188,7 @@ export class Skip implements JobMiddleware {
   }
 }
 
-// ─── Cache helper ───────────────────────────────────────────
+// ─── Cache helpers ──────────────────────────────────────────
 
 interface CacheLike {
   get(key: string): Promise<unknown>
@@ -192,10 +196,18 @@ interface CacheLike {
   forget(key: string): Promise<void>
 }
 
-function _getCache(): CacheLike | null {
+async function _getCache(): Promise<CacheLike | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@rudderjs/cache') as { CacheRegistry?: { get(): CacheLike | null } }
+    const mod = await import('@rudderjs/cache') as unknown as { CacheRegistry?: { get(): CacheLike | null } }
+    return mod.CacheRegistry?.get() ?? null
+  } catch {
+    return null
+  }
+}
+
+async function _getCacheAdapter(): Promise<CacheAdapter | null> {
+  try {
+    const mod = await import('@rudderjs/cache')
     return mod.CacheRegistry?.get() ?? null
   } catch {
     return null

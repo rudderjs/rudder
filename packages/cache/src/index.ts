@@ -1,7 +1,9 @@
 import { ServiceProvider, config } from '@rudderjs/core'
 
 import { FakeCacheAdapter } from './fake.js'
+import { MemoryLock, RedisLock, newOwnerToken, type Lock, type RedisLockClient } from './lock.js'
 export { FakeCacheAdapter, type CacheOperation } from './fake.js'
+export { type Lock, LockTimeoutError, MemoryLock, RedisLock, BaseLock } from './lock.js'
 
 // ─── Adapter Contract ──────────────────────────────────────
 
@@ -11,6 +13,10 @@ export interface CacheAdapter {
   forget(key: string): Promise<void>
   has(key: string): Promise<boolean>
   flush(): Promise<void>
+  /** Build a lock backed by this driver. Does NOT acquire — call .get() or .block(). */
+  lock(name: string, seconds: number): Lock
+  /** Rebuild a lock with a specific owner token (cross-process release). */
+  restoreLock(name: string, owner: string): Lock
 }
 
 export interface CacheAdapterProvider {
@@ -102,6 +108,33 @@ export class Cache {
   /** Remove all cached entries. */
   static flush(): Promise<void>              { return this.store().flush() }
 
+  /**
+   * Build a lock handle for the given name. Does NOT acquire — call `.get()` or `.block()`.
+   *
+   * @param seconds Lock TTL once acquired. Required.
+   *
+   * @example
+   *   await Cache.lock('process-podcast:42', 120).get(async () => {
+   *     await processPodcast(42)
+   *   })
+   */
+  static lock(name: string, seconds: number): Lock {
+    return this.store().lock(name, seconds)
+  }
+
+  /**
+   * Rebuild a lock handle owned by a specific token (cross-process release).
+   * The first call (`release`/`forceRelease`) is what makes the network round-trip.
+   *
+   * @example
+   *   const owner = lock.owner()      // capture before serialising into a job
+   *   // ...later, possibly in a different process:
+   *   await Cache.restoreLock('process-podcast:42', owner).release()
+   */
+  static restoreLock(name: string, owner: string): Lock {
+    return this.store().restoreLock(name, owner)
+  }
+
   /** Replace the cache adapter with a fake for testing. */
   static fake(): FakeCacheAdapter {
     return FakeCacheAdapter.fake()
@@ -115,6 +148,14 @@ interface MemoryEntry {
   expiresAt: number | null   // epoch ms; null = never expires
 }
 
+/**
+ * In-process cache driver — the default if no other driver is configured.
+ *
+ * Resets on restart. Single-process only: locks built via `lock()` coordinate
+ * within ONE Node process. Across `pm2 cluster`, multiple containers, or
+ * multiple `tsx` invocations they are independent — each process holds its
+ * own copy of the Map. Use the `redis` driver for real cross-process locks.
+ */
 export class MemoryAdapter implements CacheAdapter {
   private readonly store = new Map<string, MemoryEntry>()
 
@@ -144,6 +185,14 @@ export class MemoryAdapter implements CacheAdapter {
   }
 
   async flush(): Promise<void> { this.store.clear() }
+
+  lock(name: string, seconds: number): Lock {
+    return new MemoryLock(name, seconds, newOwnerToken(), this.store)
+  }
+
+  restoreLock(name: string, owner: string): Lock {
+    return new MemoryLock(name, 0, owner, this.store)
+  }
 }
 
 // ─── Redis Driver (built-in, requires ioredis) ─────────────
@@ -173,6 +222,7 @@ class RedisAdapter implements CacheAdapter {
     exists(...keys: string[]): Promise<number>
     keys(pattern: string): Promise<string[]>
     flushdb(): Promise<unknown>
+    eval(script: string, numKeys: number, ...args: unknown[]): Promise<unknown>
   }> {
     if (!this.client) {
       const ioredisModule = await import('ioredis') as unknown as { Redis?: typeof import('ioredis').Redis; default?: { Redis?: typeof import('ioredis').Redis } }
@@ -226,6 +276,26 @@ class RedisAdapter implements CacheAdapter {
     } else {
       await client.flushdb()
     }
+  }
+
+  lock(name: string, seconds: number): Lock {
+    return new RedisLock(
+      name,
+      seconds,
+      newOwnerToken(),
+      () => this.getClient() as unknown as Promise<RedisLockClient>,
+      this.prefix,
+    )
+  }
+
+  restoreLock(name: string, owner: string): Lock {
+    return new RedisLock(
+      name,
+      0,
+      owner,
+      () => this.getClient() as unknown as Promise<RedisLockClient>,
+      this.prefix,
+    )
   }
 }
 

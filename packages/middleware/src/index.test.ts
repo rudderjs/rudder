@@ -52,6 +52,9 @@ function makeRes() {
 /** Minimal in-memory cache adapter for RateLimit tests */
 function makeMemoryCache() {
   const store = new Map<string, { value: unknown; expiresAt: number }>()
+  const lockNotImplemented = (): never => {
+    throw new Error('makeMemoryCache: lock() is not exercised by RateLimit tests')
+  }
   return {
     async get<T>(key: string): Promise<T | null> {
       const rec = store.get(key)
@@ -67,6 +70,8 @@ function makeMemoryCache() {
       return !!rec && Date.now() <= rec.expiresAt
     },
     async flush(): Promise<void> { store.clear() },
+    lock:        lockNotImplemented,
+    restoreLock: lockNotImplemented,
     _store: store,
   }
 }
