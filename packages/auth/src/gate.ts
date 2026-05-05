@@ -2,13 +2,13 @@ import type { Authenticatable } from './contracts.js'
 import { currentAuth } from './auth-manager.js'
 import type { GateObserverRegistry } from './gate-observers.js'
 
-// Lazy accessor — reads the process-wide singleton set by gate-observers.ts.
-let _gateObs: GateObserverRegistry | null | undefined
+// Reads the process-wide singleton set by gate-observers.ts on every call.
+// Caching the result would trap an early null when Gate.allows() runs before
+// gate-observers.ts is imported — a later subscription (e.g. Telescope's
+// GateCollector) would never see events. The lookup is a single property
+// read; cost is negligible compared to the auth decision it surrounds.
 function _getGateObservers(): GateObserverRegistry | null {
-  if (_gateObs === undefined) {
-    _gateObs = (globalThis as Record<string, unknown>)['__rudderjs_gate_observers__'] as GateObserverRegistry | undefined ?? null
-  }
-  return _gateObs
+  return (globalThis as Record<string, unknown>)['__rudderjs_gate_observers__'] as GateObserverRegistry | undefined ?? null
 }
 
 // ─── Types ────────────────────────────────────────────────
@@ -266,7 +266,9 @@ class GateForUser {
             if (result === false) return { allowed: false, resolvedVia: 'before' }
           }
           const method = (policy as Record<string, unknown>)[ability]
-          if (typeof method !== 'function') return { allowed: false, resolvedVia: 'default' }
+          if (typeof method !== 'function') {
+            return { allowed: false, resolvedVia: 'policy', policy: PolicyCtor.name }
+          }
           const allowed = await (method as (...a: unknown[]) => boolean | Promise<boolean>).call(policy, this.user, ...args)
           return { allowed, resolvedVia: 'policy', policy: PolicyCtor.name }
         }
