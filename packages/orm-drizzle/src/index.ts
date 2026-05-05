@@ -2,6 +2,7 @@ import {
   eq, ne, gt, gte, lt, lte, like, inArray, notInArray,
   isNull, isNotNull,
   and, or, asc, desc, count as sqlCount, sql,
+  exists, notExists,
   type Column, type SQL,
 } from 'drizzle-orm'
 import type {
@@ -12,6 +13,7 @@ import type {
   WhereOperator,
   OrderClause,
   PaginatedResult,
+  RelationExistencePredicate,
 } from '@rudderjs/contracts'
 
 // ─── Minimal Drizzle DB interface ──────────────────────────
@@ -51,6 +53,15 @@ export class DrizzleTableRegistry {
   }
 }
 
+/** @internal — combine SQL exprs with AND. Single-element returns as-is so
+ *  callers don't pay an extra wrap. Empty input returns a tautology so
+ *  EXISTS subqueries with no inner predicate stay valid. */
+function _andSql(exprs: SQL[]): SQL {
+  if (exprs.length === 0) return sql`1 = 1` as SQL
+  if (exprs.length === 1) return exprs[0]!
+  return and(...exprs) as SQL
+}
+
 // ─── Drizzle Query Builder ─────────────────────────────────
 
 class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
@@ -62,11 +73,18 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _withTrashed  = false
   private _onlyTrashed  = false
   private _softDeletes  = false
+  /** Extra SQL expressions AND-merged into buildConditions(). Populated by
+   *  whereRelationExists with `EXISTS` / `NOT EXISTS` correlated subqueries. */
+  private _extraExprs:  SQL[] = []
 
   constructor(
     private readonly db:         DrizzleDb,
     private readonly table:      unknown,
     private readonly primaryKey: string,
+    /** Resolves a table name to its drizzle table object. Required for
+     *  whereRelationExists to build correlated subqueries against the
+     *  related (and pivot) tables. */
+    private readonly resolveTable: (name: string) => unknown,
   ) {}
 
   where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
@@ -112,8 +130,20 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     return (this.table as Record<string, unknown>)[column]
   }
 
+  /** @internal — resolve a column on an arbitrary table; shared with the
+   *  whereRelationExists subquery builder. */
+  private colOf(table: unknown, column: string): Column {
+    return (table as Record<string, unknown>)[column] as Column
+  }
+
   private clauseToExpr(clause: WhereClause): SQL {
-    const col = this.col(clause.column) as Column
+    return this.clauseToExprOn(this.table, clause)
+  }
+
+  /** Same shape as clauseToExpr but parameterised by the column owner —
+   *  used to AND constraint clauses into a whereHas inner subquery. */
+  private clauseToExprOn(table: unknown, clause: WhereClause): SQL {
+    const col = this.colOf(table, clause.column)
     switch (clause.operator) {
       case '=':      return eq(col, clause.value) as SQL
       case '!=':     return ne(col, clause.value) as SQL
@@ -131,6 +161,76 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     }
   }
 
+  whereRelationExists(p: RelationExistencePredicate): this {
+    const Related = this.resolveTable(p.relatedTable)
+    if (!Related) {
+      throw new Error(
+        `[RudderJS ORM Drizzle] whereRelationExists: no table schema registered for "${p.relatedTable}". ` +
+        `Pass tables: { ${p.relatedTable}: ... } in drizzle() config.`,
+      )
+    }
+
+    const parentCol = this.col(p.parentColumn) as Column
+
+    if (p.through) {
+      // Pivot path — two-step EXISTS:
+      //   EXISTS (
+      //     SELECT 1 FROM pivot
+      //     WHERE pivot.foreignPivotKey = parent.parentColumn
+      //       AND <extraEquals>
+      //       AND EXISTS (
+      //         SELECT 1 FROM related
+      //         WHERE related.relatedColumn = pivot.relatedPivotKey
+      //           AND <constraintWheres>
+      //       )
+      //   )
+      const Pivot = this.resolveTable(p.through.pivotTable)
+      if (!Pivot) {
+        throw new Error(
+          `[RudderJS ORM Drizzle] whereRelationExists: no table schema registered for pivot "${p.through.pivotTable}".`,
+        )
+      }
+      const pivotForeignCol = this.colOf(Pivot, p.through.foreignPivotKey)
+      const pivotRelatedCol = this.colOf(Pivot, p.through.relatedPivotKey)
+      const relatedRelCol   = this.colOf(Related, p.relatedColumn)
+
+      const innerExprs: SQL[] = [eq(relatedRelCol, pivotRelatedCol) as SQL]
+      for (const w of p.constraintWheres) innerExprs.push(this.clauseToExprOn(Related, w))
+      const innerSelect = this.db.select().from(Related).where(_andSql(innerExprs))
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pivotExprs: SQL[] = [eq(pivotForeignCol, parentCol) as SQL, exists(innerSelect as any) as SQL]
+      for (const [k, v] of Object.entries(p.extraEquals ?? {})) {
+        pivotExprs.push(eq(this.colOf(Pivot, k), v) as SQL)
+      }
+      const pivotSelect = this.db.select().from(Pivot).where(_andSql(pivotExprs))
+
+      // Cast through `unknown` to side-step the local DrizzleQB type — the
+      // real drizzle select implements SQLWrapper, but our stripped interface
+      // doesn't expose `getSQL`. exists()/notExists() runtime accepts it.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this._extraExprs.push((p.exists ? exists(pivotSelect as any) : notExists(pivotSelect as any)) as SQL)
+      return this
+    }
+
+    // Direct path — single correlated EXISTS.
+    const relatedRelCol = this.colOf(Related, p.relatedColumn)
+    const exprs: SQL[] = [eq(relatedRelCol, parentCol) as SQL]
+    for (const w of p.constraintWheres) exprs.push(this.clauseToExprOn(Related, w))
+    for (const [k, v] of Object.entries(p.extraEquals ?? {})) {
+      exprs.push(eq(this.colOf(Related, k), v) as SQL)
+    }
+    const inner = this.db.select().from(Related).where(_andSql(exprs))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this._extraExprs.push((p.exists ? exists(inner as any) : notExists(inner as any)) as SQL)
+    return this
+  }
+
+  // withConstrained intentionally not implemented yet — Drizzle's relational
+  // query API has its own `with(..., { where })` shape we don't currently
+  // surface. `withWhereHas` falls back to plain `with()` until we wire it up.
+
+
   private softDeleteExpr(): SQL | undefined {
     if (!this._softDeletes || this._withTrashed) return undefined
     const deletedAtCol = this.col('deletedAt') as Column | undefined
@@ -145,6 +245,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
 
     const softExpr = this.softDeleteExpr()
     if (softExpr) andExprs.push(softExpr)
+
+    // EXISTS / NOT EXISTS subqueries from whereRelationExists are AND-merged.
+    for (const e of this._extraExprs) andExprs.push(e)
 
     const hasAnd = andExprs.length > 0
     const hasOr  = orExprs.length > 0
@@ -395,7 +498,14 @@ export class DrizzleAdapter implements OrmAdapter {
         `DrizzleTableRegistry.register("${table}", myTable).`
       )
     }
-    return new DrizzleQueryBuilder<T>(this.db, schema, this.primaryKey)
+    return new DrizzleQueryBuilder<T>(this.db, schema, this.primaryKey, (name) => this.resolveTable(name))
+  }
+
+  /** @internal — resolve a table by name across both the constructor-provided
+   *  `tables` map and the global `DrizzleTableRegistry`. Returns `undefined`
+   *  when unknown so callers can throw a relation-aware error. */
+  resolveTable(name: string): unknown {
+    return this.tables[name] ?? DrizzleTableRegistry.get(name)
   }
 
   async connect(): Promise<void> {

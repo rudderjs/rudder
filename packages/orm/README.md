@@ -197,6 +197,42 @@ The discriminator stored in `{morphName}Type` defaults to the parent's class nam
 
 `belongsToMany` and polymorphic v1 limitations: pivot columns are not surfaced on read results (write side only), no `withTimestamps`, no fluent eager-load (`User.with('comments.commentable')`) — drop to the adapter (Prisma `include`) for that. Mutations on the deferred read query (`create`/`update`/`delete`/`insertMany`/`deleteAll`) throw — write through the related model directly. `morphToMany` / `morphedByMany` are supported with the same `attach` / `detach` / `sync` accessor as `belongsToMany`, plus discriminator-scoped pivot reads/writes — see the [polymorphic many-to-many guide](https://rudderjs.com/docs/database/models#polymorphic-many-to-many-morphtomany-morphedbymany).
 
+### Filtering by relation predicate — `whereHas` / `whereDoesntHave` / `withWhereHas` / `whereBelongsTo`
+
+Filter a query by whether a relation has at least one matching row. The optional callback narrows the relation predicate further — chain plain `where()` calls inside it.
+
+```ts
+// Users with at least one post
+await User.whereHas('posts').get()
+
+// Users with at least one published post
+await User.whereHas('posts', q => q.where('published', true)).get()
+
+// Inverse — users with zero published posts
+await User.whereDoesntHave('posts', q => q.where('published', true)).get()
+
+// Filter AND eager-load under the same constraint (constrained eager-load
+// via the adapter's `withConstrained` when supported, falls back to plain
+// `with(relation)` otherwise — Drizzle today)
+await User.withWhereHas('posts', q => q.where('published', true)).get()
+
+// Sugar over `where(fk, parent.id)` — looks up the FK column from the
+// belongsTo declaration. Pass the relation name when the calling class
+// has multiple belongsTo to the same parent.
+await Post.whereBelongsTo(user).get()
+await Comment.whereBelongsTo(post, 'post').get()
+```
+
+Supported relation types: `hasMany`, `hasOne`, `belongsTo`, `belongsToMany`, `morphMany`, `morphOne`, `morphToMany`, `morphedByMany`. **`morphTo` is intentionally not supported** — the related table is dynamic, so a single subquery can't represent it. Filter on the `{morphName}Id` / `{morphName}Type` columns directly when you need that semantic.
+
+**Adapter notes:**
+
+- **Prisma** uses native `some` / `none` filters for direct relations (`hasMany`/`hasOne`/`belongsTo`) — those relations must be declared in `schema.prisma` with the same name. Polymorphic and pivot relations route through a 2-step lookup (related → pivot → IN list) so they work without a Prisma-declared relation.
+- **Drizzle** uses correlated `EXISTS (...)` / `NOT EXISTS (...)` subqueries. Every related table referenced from a `whereHas` call must be registered via `tables: { ... }` on `drizzle()` config or `DrizzleTableRegistry.register(name, table)`.
+- **`withWhereHas`** uses `withConstrained` when the adapter implements it (Prisma → nested `include: { rel: { where } }`). The Drizzle adapter doesn't yet — `withWhereHas` falls back to plain `with(relation)` there.
+- **Nested `whereHas` inside the constrain callback throws** — recursive predicates are deferred to v2. Filter on flat columns inside the callback for now.
+- **Soft deletes inside the relation predicate** — apply `q.where('deletedAt', null)` explicitly inside the constrain callback when needed.
+
 ---
 
 ## Route model binding

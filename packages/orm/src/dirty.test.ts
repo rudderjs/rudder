@@ -28,6 +28,7 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     decrement: async (_id, _col, _amount, _extra) => ({} as T),
     insertMany: async () => undefined,
     deleteAll:  async () => 0,
+    whereRelationExists: () => qb,
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     ...overrides,
   }

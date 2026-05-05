@@ -21,6 +21,54 @@ export interface QueryState {
   withs:   string[]
 }
 
+/**
+ * Relation predicate passed by `@rudderjs/orm`'s Model layer to the adapter
+ * via {@link QueryBuilder.whereRelationExists}. Carries everything an adapter
+ * needs to express "rows whose named relation has (or doesn't have) at least
+ * one matching child" without leaking ORM-package types.
+ *
+ * - Name-based adapters (Prisma) usually only need `relation`, `exists`, and
+ *   `constraintWheres` to build a `{ [relation]: { some|none: ... } }` filter.
+ * - SQL-based adapters (Drizzle) need the structural columns + tables to
+ *   build a correlated `EXISTS (...)` subquery.
+ *
+ * `extraEquals` carries the polymorphic discriminator (`{morph}Type`) for
+ * morph relations and the pivot-side discriminator for `morphToMany`.
+ *
+ * `through` is set when the relation passes through a pivot table
+ * (`belongsToMany` / `morphToMany` / `morphedByMany`). When set, the EXISTS
+ * subquery is two-step: pivot rows by parent + extras → project related ids,
+ * then the related table is filtered by `relatedKey IN (...)` plus
+ * `constraintWheres`.
+ */
+export interface RelationExistencePredicate {
+  /** Relation name on the parent model (used for clearer error messages). */
+  relation:        string
+  /** True for `whereHas`, false for `whereDoesntHave`. */
+  exists:          boolean
+  /** Related table name (already resolved from the relation declaration). */
+  relatedTable:    string
+  /** Column on the parent table joined against `relatedColumn`. */
+  parentColumn:    string
+  /** Column on the related table joined against `parentColumn`. */
+  relatedColumn:   string
+  /** Where clauses to AND into the relation subquery. */
+  constraintWheres: WhereClause[]
+  /** Optional equality filter — used by morph relations to add the
+   *  discriminator (`{morph}Type`), and by morph pivots to add the pivot-side
+   *  type discriminator. */
+  extraEquals?:    Record<string, unknown>
+  /** Optional pivot table the relation passes through. When set, the subquery
+   *  is two-step (pivot → related) instead of a single direct EXISTS. */
+  through?: {
+    pivotTable:      string
+    /** Pivot column compared against the parent's `parentColumn`. */
+    foreignPivotKey: string
+    /** Pivot column projected as the inner select for the second step. */
+    relatedPivotKey: string
+  }
+}
+
 export interface QueryBuilder<T> {
   where(column: string, value: unknown): this
   where(column: string, operator: WhereOperator, value: unknown): this
@@ -70,6 +118,24 @@ export interface QueryBuilder<T> {
    */
   decrement(id: number | string, column: string, amount?: number, extra?: Record<string, unknown>): Promise<T>
   paginate(page: number, perPage?: number): Promise<PaginatedResult<T>>
+  /**
+   * Add an EXISTS / NOT EXISTS subquery filter representing a relation
+   * predicate. Adapters translate to their native shape (Prisma → `some`/
+   * `none`; Drizzle → correlated subquery via `exists()`/`notExists()`).
+   *
+   * Called by `@rudderjs/orm`'s `Model.whereHas` / `whereDoesntHave` /
+   * `withWhereHas`. Apps don't call this directly.
+   */
+  whereRelationExists(predicate: RelationExistencePredicate): this
+  /**
+   * Eager-load `relation` constrained to rows matching `constraintWheres`.
+   * Adapters that don't support a constrained include (Drizzle today) may
+   * apply the filter in JS or throw a clear "not yet supported" error.
+   *
+   * Optional — adapters may omit it and `Model.withWhereHas` falls back to
+   * unconstrained `with(relation)`.
+   */
+  withConstrained?(relation: string, constraintWheres: WhereClause[]): this
 }
 
 export interface PaginatedResult<T> {
