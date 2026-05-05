@@ -24,18 +24,18 @@ export default {
 } satisfies AuthConfig
 ```
 
-`hash()` must boot before `authProvider()`, and `session()` must be installed — both are peer dependencies. Auto-discovery wires this correctly when all three packages are installed.
+`HashProvider` must boot before `AuthProvider`, and `SessionProvider` must be installed — both are peer dependencies. Auto-discovery wires this correctly when all three packages are installed.
 
 ```ts
 // bootstrap/providers.ts (manual order, when not using auto-discovery)
-import { session } from '@rudderjs/session'
-import { hash } from '@rudderjs/hash'
-import { authProvider } from '@rudderjs/auth'
+import { SessionProvider } from '@rudderjs/session'
+import { HashProvider } from '@rudderjs/hash'
+import { AuthProvider } from '@rudderjs/auth'
 
 export default [
-  session(configs.session),
-  hash(configs.hash),
-  authProvider(configs.auth),
+  SessionProvider,
+  HashProvider,
+  AuthProvider,
 ]
 ```
 
@@ -176,7 +176,7 @@ For lighter token auth without OAuth, `@rudderjs/sanctum` (simple API token issu
 
 ## Pitfalls
 
-- **Provider order.** `hash()` must precede `authProvider()`; `session()` must be installed. Auto-discovery handles this — manual orderings need it spelled out.
+- **Provider order.** `HashProvider` must precede `AuthProvider`; `SessionProvider` must be installed. Auto-discovery handles this — manual orderings need it spelled out.
 - **`Auth.user()` outside a request.** `auth()` reads from AsyncLocalStorage and only works inside `AuthMiddleware`. Calling it from a script or a `boot()` hook throws.
 - **`req.user` undefined on API routes.** Expected — the auth middleware is on the `web` group only. Use `RequireBearer()` from `@rudderjs/passport`.
 - **Ghost user across requests.** `AuthManager` must not cache `SessionGuard` instances — the manager is process-wide, and a cached guard's `_user` field leaks between requests. Don't reintroduce the `_guards` Map (the framework dropped it for this reason).

@@ -10,11 +10,11 @@ pnpm add @rudderjs/broadcast
 
 ```ts
 // bootstrap/providers.ts
-import { broadcasting } from '@rudderjs/broadcast'
+import { BroadcastingProvider } from '@rudderjs/broadcast'
 
 export default [
   ...(await defaultProviders()),
-  broadcasting(),
+  BroadcastingProvider,
 ]
 ```
 
