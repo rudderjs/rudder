@@ -13,11 +13,11 @@ pnpm add @rudderjs/pennant
 Register the provider in `bootstrap/providers.ts`:
 
 ```ts
-import { pennant } from '@rudderjs/pennant'
+import { PennantProvider } from '@rudderjs/pennant'
 
 export default [
   // ...other providers
-  pennant(),
+  PennantProvider,
 ]
 ```
 

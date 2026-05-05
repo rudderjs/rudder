@@ -200,9 +200,7 @@ Providers can register other providers at runtime — useful for modules, condit
 
 ```ts
 import { ServiceProvider } from '@rudderjs/core'
-import { cache } from '@rudderjs/cache'
-import { panels } from '@rudderjs/panels'
-import { adminPanel } from '../Panels/Admin/AdminPanel.js'
+import { CacheProvider } from '@rudderjs/cache'
 
 export class AppServiceProvider extends ServiceProvider {
   register() {
@@ -210,13 +208,10 @@ export class AppServiceProvider extends ServiceProvider {
   }
 
   async boot() {
-    // Register panels from your own provider
-    await this.app.register(panels([adminPanel]))
-
-    // Conditional features
+    // Conditional features — register a sub-provider only when configured
     const config = this.app.make<{ get(k: string): unknown }>('config')
     if (config.get('cache.enabled')) {
-      await this.app.register(cache(cacheConfig))
+      await this.app.register(CacheProvider)
     }
   }
 }

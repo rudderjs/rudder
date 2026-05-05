@@ -41,11 +41,10 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { session } from '@rudderjs/session'
-import configs from '../config/index.js'
+import { SessionProvider } from '@rudderjs/session'
 
 export default [
-  session(configs.session),
+  SessionProvider,
 ]
 ```
 

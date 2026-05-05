@@ -36,10 +36,9 @@ export default {
 
 ```ts
 // bootstrap/providers.ts
-import { mail } from '@rudderjs/mail'
-import configs from '../config/index.js'
+import { MailProvider } from '@rudderjs/mail'
 
-export default [mail(configs.mail)]
+export default [MailProvider]
 ```
 
 ## Defining Mailables

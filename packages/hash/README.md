@@ -25,8 +25,8 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { hash } from '@rudderjs/hash'
-export default [hash(configs.hash), ...]
+import { HashProvider } from '@rudderjs/hash'
+export default [HashProvider]
 ```
 
 ## Usage

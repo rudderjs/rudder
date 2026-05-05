@@ -27,18 +27,18 @@ export default {
 }
 
 // bootstrap/providers.ts
-import { session } from '@rudderjs/session'
-import { hash } from '@rudderjs/hash'
-import { authProvider } from '@rudderjs/auth'
+import { SessionProvider } from '@rudderjs/session'
+import { HashProvider } from '@rudderjs/hash'
+import { AuthProvider } from '@rudderjs/auth'
 
 export default [
-  session(configs.session),
-  hash(configs.hash),
-  authProvider(configs.auth),
+  SessionProvider,
+  HashProvider,
+  AuthProvider,
 ]
 ```
 
-> `authProvider()` is the service-provider factory.
+> `AuthProvider` is the service-provider class — list it directly in the providers array.
 > `auth()` (lowercase) is the per-request helper — see below.
 
 ## Usage
@@ -65,7 +65,7 @@ Route.get('/profile', async (req) => {
 })
 ```
 
-**No per-route wiring needed on web routes.** `authProvider()` auto-installs
+**No per-route wiring needed on web routes.** `AuthProvider` auto-installs
 `AuthMiddleware` on the `web` route group during `boot()`, so every request
 matched by `withRouting({ web })` has the auth context populated before your
 handler runs.
@@ -107,7 +107,7 @@ Route.get('/login', showLoginPage, [RequireGuest('/')])
 import { AuthMiddleware } from '@rudderjs/auth'
 ```
 
-**You don't normally attach this on web routes.** `authProvider()` already
+**You don't normally attach this on web routes.** `AuthProvider` already
 installs `AuthMiddleware()` on the `web` route group, so `req.user` and `auth()`
 work automatically on every web request. Reach for it manually in two cases:
 
