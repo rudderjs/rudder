@@ -14,7 +14,8 @@
   "type": "module",
   "files": [
     "dist",
-    "client"
+    "client",
+    "boost"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
