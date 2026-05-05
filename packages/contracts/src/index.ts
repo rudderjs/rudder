@@ -19,6 +19,69 @@ export interface QueryState {
   limitN:  number | null
   offsetN: number | null
   withs:   string[]
+  aggregates: AggregateRequest[]
+}
+
+/**
+ * Scalar aggregate function. Used both as the discriminator in
+ * {@link AggregateRequest} and as the parameter to the internal
+ * {@link QueryBuilder._aggregate} terminal for single-scalar reads.
+ */
+export type AggregateFn = 'count' | 'sum' | 'min' | 'max' | 'avg' | 'exists'
+
+/**
+ * One normalized aggregate-eager-load entry. The orm Model layer translates
+ * every `withCount(...)` / `withSum(...)` / etc. overload — including the
+ * map-form constraint shape — into one or more of these and pushes them
+ * onto {@link QueryState.aggregates} for the adapter to consume.
+ *
+ * `relation` is the relation name on the parent Model. `column` is required
+ * for `sum`/`min`/`max`/`avg` and ignored for `count`/`exists`.
+ *
+ * `alias` is the property name stamped onto the parent row in result hydration.
+ * Default = `<relation><FnSuffix>`: `posts` + count → `postsCount`,
+ * `posts` + sumViews → `postsSumViews`. The orm layer fills `alias` from
+ * `<aliasOverride ?? relation><FnSuffix>` where `aliasOverride` is the
+ * `.as(name)` setter on the constraint builder.
+ *
+ * `joinShape` carries the fully-resolved join layout — the adapter uses it to
+ * build the COUNT/SUM subquery without re-deriving foreign keys, pivot tables,
+ * or polymorphic discriminators. Same {@link RelationExistencePredicate}-style
+ * decomposition; reusing those fields keeps the adapter mechanics single-shape.
+ */
+export interface AggregateRequest {
+  relation:    string
+  fn:          AggregateFn
+  alias:       string
+  /** Required for sum/min/max/avg; absent for count/exists. */
+  column?:     string
+  joinShape:   AggregateJoinShape
+  /** Recorded `where`/`orWhere` calls captured from the constraint callback. */
+  constraintWheres: WhereClause[]
+}
+
+/**
+ * Join layout for an {@link AggregateRequest}. Mirrors the
+ * {@link RelationExistencePredicate} fields adapters already understand for
+ * `whereHas` so a single subquery shape covers both.
+ */
+export interface AggregateJoinShape {
+  relatedTable:    string
+  parentColumn:    string
+  relatedColumn:   string
+  /** Polymorphic discriminator(s) (`{morphName}Type` for morph relations,
+   *  pivot-side type discriminator for `morphToMany`/`morphedByMany`). */
+  extraEquals?:    Record<string, unknown>
+  /** Pivot table the relation passes through (`belongsToMany` /
+   *  `morphToMany` / `morphedByMany`). Two-step subquery when set. */
+  through?: {
+    pivotTable:      string
+    foreignPivotKey: string
+    relatedPivotKey: string
+  }
+  /** True when the related Model has soft deletes enabled — adapters AND
+   *  `deleted_at IS NULL` (or its camelCase `deletedAt`) into the subquery. */
+  softDeletes?: boolean
 }
 
 /**
@@ -136,6 +199,40 @@ export interface QueryBuilder<T> {
    * unconstrained `with(relation)`.
    */
   withConstrained?(relation: string, constraintWheres: WhereClause[]): this
+
+  /**
+   * Append one or more aggregate eager-load requests. Adapters translate to
+   * their native shape (Prisma → `_count` selector for count/exists +
+   * `groupBy` second-batch for sum/min/max/avg; Drizzle → correlated subselect
+   * in the SELECT list).
+   *
+   * Called by `@rudderjs/orm`'s Model layer with already-normalized
+   * {@link AggregateRequest} entries — apps don't call this directly. The
+   * Model proxy translates the typed `withCount`/`withSum`/etc. overloads
+   * into requests and forwards them here.
+   *
+   * Aggregate values are stamped onto the result row under `alias` and
+   * the orm hydration layer copies them onto the Model instance.
+   */
+  withAggregate(requests: AggregateRequest[]): this
+
+  /**
+   * Single-scalar aggregate terminal — runs `SELECT fn(column) FROM table
+   * WHERE …` against the QB's accumulated wheres and returns the value.
+   *
+   * Used by `Model#loadSum`/`loadMin`/`loadMax`/`loadAvg` for the per-instance
+   * aggregate-load path. Apps don't call this directly; use the typed
+   * `Model.query().withSum(...)` overloads on the parent or the instance
+   * `loadSum` helper instead.
+   *
+   * `column` is required for `sum`/`min`/`max`/`avg`; ignored for
+   * `count`/`exists`. Returns `null` when no rows match (sum/avg on empty
+   * sets) — adapters coerce numeric `null` to `0` for `count` to match
+   * SQL semantics. `exists` returns a boolean.
+   *
+   * @internal
+   */
+  _aggregate(fn: AggregateFn, column?: string): Promise<unknown>
 }
 
 export interface PaginatedResult<T> {

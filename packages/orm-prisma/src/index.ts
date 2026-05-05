@@ -5,6 +5,11 @@ type PrismaModelDelegate = {
   findUnique(args: Record<string, unknown>): Promise<unknown>
   findMany(args?: Record<string, unknown>): Promise<unknown[]>
   count(args?: Record<string, unknown>): Promise<number>
+  /** Optional on the structural type so test fixtures don't have to stub them.
+   *  Real `@prisma/client` delegates always provide both. The adapter only
+   *  invokes them through `withAggregate` / `_aggregate`. */
+  aggregate?(args: Record<string, unknown>): Promise<unknown>
+  groupBy?(args: Record<string, unknown>): Promise<unknown[]>
   create(args: Record<string, unknown>): Promise<unknown>
   createMany(args: { data: Record<string, unknown>[] }): Promise<{ count: number }>
   update(args: Record<string, unknown>): Promise<unknown>
@@ -21,6 +26,8 @@ type PrismaClientWithEvents = PrismaClient & {
 }
 
 import type {
+  AggregateFn,
+  AggregateRequest,
   OrmAdapter,
   OrmAdapterProvider,
   QueryBuilder,
@@ -51,6 +58,10 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   /** Predicates with `extraEquals` (polymorphic) or `through` (pivot) — resolved
    *  via a 2-step lookup in `_resolveDeferred()` before each terminal call. */
   private _deferredPredicates: RelationExistencePredicate[] = []
+  /** Aggregate eager-loads. Direct (no extraEquals, no through) count/exists
+   *  go through Prisma's native `_count.select`; everything else routes through
+   *  a second-batch query in `_stampAggregates`. */
+  private _aggregates: AggregateRequest[] = []
 
   constructor(
     private prisma: PrismaClient,
@@ -121,6 +132,31 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       filter: this._wheresToPrismaFilter(constraintWheres),
     })
     return this
+  }
+
+  withAggregate(requests: AggregateRequest[]): this {
+    this._aggregates.push(...requests)
+    return this
+  }
+
+  async _aggregate(fn: AggregateFn, column?: string): Promise<unknown> {
+    await this._resolveDeferred()
+    const where = this.buildWhere()
+    if (fn === 'count') return this.delegate.count({ where })
+    if (fn === 'exists') {
+      const n = await this.delegate.count({ where })
+      return n > 0
+    }
+    if (column === undefined) {
+      throw new Error(`[RudderJS ORM Prisma] _aggregate("${fn}") requires a column.`)
+    }
+    const args: Record<string, unknown> = { where }
+    args[`_${fn}`] = { [column]: true }
+    if (!this.delegate.aggregate) {
+      throw new Error(`[RudderJS ORM Prisma] delegate "${this.table}" has no aggregate() method.`)
+    }
+    const raw = await this.delegate.aggregate(args) as Record<string, Record<string, unknown> | undefined>
+    return raw[`_${fn}`]?.[column] ?? null
   }
 
   /** @internal — translate a flat WhereClause[] into a single Prisma
@@ -246,14 +282,214 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     return where
   }
 
+  /** @internal — direct count/exists requests go through Prisma's native
+   *  `_count.select` selector (saves a round-trip). Polymorphic / pivot /
+   *  numeric aggregates fall through to `_stampAggregates`. */
+  private _directCountReqs(): AggregateRequest[] {
+    return this._aggregates.filter(r =>
+      (r.fn === 'count' || r.fn === 'exists') &&
+      !r.joinShape.extraEquals &&
+      !r.joinShape.through,
+    )
+  }
+
   private buildInclude(): Record<string, unknown> | undefined {
-    if (!this._withs.length && this._withConstrained.length === 0) return undefined
+    const directCounts = this._directCountReqs()
+    if (
+      this._withs.length === 0 &&
+      this._withConstrained.length === 0 &&
+      directCounts.length === 0
+    ) return undefined
+
     const include: Record<string, unknown> = {}
     for (const r of this._withs) include[r] = true
     // Constrained eager-loads override unconstrained for the same relation —
     // `withWhereHas` is the canonical source when both are present.
     for (const c of this._withConstrained) include[c.relation] = { where: c.filter }
+
+    if (directCounts.length > 0) {
+      const countSelect: Record<string, unknown> = {}
+      for (const r of directCounts) {
+        // Multiple withCount/withExists on the same relation collide on the
+        // Prisma `_count.select.{relation}` key. The orm normalization layer
+        // requires distinct .as() aliases, but two requests for the *same*
+        // relation produce the same Prisma selector either way — last-wins on
+        // the filter. Document and rely on user discipline (the orm Symbol-
+        // tagged alias copy preserves both result keys).
+        const filter = r.constraintWheres.length > 0
+          ? this._wheresToPrismaFilter(r.constraintWheres)
+          : undefined
+        countSelect[r.relation] = filter ? { where: filter } : true
+      }
+      include['_count'] = { select: countSelect }
+    }
+
     return include
+  }
+
+  /** @internal — translate the `_count` field on each result row into the
+   *  caller-facing aliases, then run a second-batch query for any aggregate
+   *  that didn't fit the `_count.select` shape (polymorphic, pivot,
+   *  numeric). Mutates rows in place. */
+  private async _stampAggregates(rows: Array<Record<string, unknown>>): Promise<void> {
+    if (this._aggregates.length === 0) return
+
+    // Step 1: copy `_count.{relation}` → row[alias] for direct count/exists.
+    const directCounts = this._directCountReqs()
+    if (directCounts.length > 0) {
+      for (const row of rows) {
+        const counts = row['_count'] as Record<string, number> | undefined
+        for (const r of directCounts) {
+          const n = counts?.[r.relation] ?? 0
+          row[r.alias] = r.fn === 'exists' ? n > 0 : n
+        }
+      }
+      // Strip `_count` so callers don't see the Prisma artifact.
+      for (const row of rows) {
+        if ('_count' in row) delete row['_count']
+      }
+    }
+
+    // Step 2: every other aggregate → second-batch query, JS-stamp.
+    const directSet = new Set(directCounts)
+    const batchReqs = this._aggregates.filter(r => !directSet.has(r))
+    for (const r of batchReqs) await this._runBatchAggregate(r, rows)
+  }
+
+  /** @internal — second-batch path for one aggregate request. Called once
+   *  per polymorphic / pivot / numeric aggregate; no fan-out across rows. */
+  private async _runBatchAggregate(
+    req:        AggregateRequest,
+    parentRows: Array<Record<string, unknown>>,
+  ): Promise<void> {
+    const js        = req.joinShape
+    const parentIds = parentRows.map(r => r[js.parentColumn])
+    if (parentIds.length === 0) {
+      // No parents — leave rows untouched. (Stamping defaults isn't needed
+      // since there's nothing to iterate.)
+      return
+    }
+
+    const constraintFilter = this._wheresToPrismaFilter(req.constraintWheres)
+    const softFilter: Record<string, unknown> = js.softDeletes ? { deletedAt: null } : {}
+
+    if (!js.through) {
+      // Single-step: groupBy on the related table, joining
+      // relatedColumn ↔ parentColumn (or polymorphic discriminator filter).
+      const relatedDelegate = this.delegateFor(js.relatedTable)
+      const where: Record<string, unknown> = {
+        [js.relatedColumn]: { in: parentIds },
+        ...constraintFilter,
+        ...(js.extraEquals ?? {}),
+        ...softFilter,
+      }
+      const groupArgs: Record<string, unknown> = { by: [js.relatedColumn], where }
+      if (req.fn === 'count' || req.fn === 'exists') {
+        groupArgs['_count'] = { _all: true }
+      } else {
+        groupArgs[`_${req.fn}`] = { [req.column!]: true }
+      }
+      if (!relatedDelegate.groupBy) {
+        throw new Error(`[RudderJS ORM Prisma] delegate "${js.relatedTable}" has no groupBy() method.`)
+      }
+      const groups = await relatedDelegate.groupBy(groupArgs) as Array<Record<string, unknown>>
+
+      const lookup = new Map<unknown, unknown>()
+      for (const g of groups) {
+        const parentVal = g[js.relatedColumn]
+        let value: unknown
+        if (req.fn === 'count') {
+          value = (g['_count'] as Record<string, unknown> | undefined)?.['_all'] ?? 0
+        } else if (req.fn === 'exists') {
+          const n = ((g['_count'] as Record<string, unknown> | undefined)?.['_all'] as number) ?? 0
+          value = n > 0
+        } else {
+          value = (g[`_${req.fn}`] as Record<string, unknown> | undefined)?.[req.column!] ?? null
+        }
+        lookup.set(parentVal, value)
+      }
+
+      for (const row of parentRows) {
+        const v = lookup.get(row[js.parentColumn])
+        row[req.alias] = v ?? _aggregateDefault(req.fn)
+      }
+      return
+    }
+
+    // Pivot path: 2-step JS aggregation. Polymorphic-pivot (`extraEquals` on
+    // the pivot table) handled here too.
+    const through = js.through
+    const pivotDelegate = this.delegateFor(through.pivotTable)
+    const pivotWhere: Record<string, unknown> = {
+      [through.foreignPivotKey]: { in: parentIds },
+      ...(js.extraEquals ?? {}),
+    }
+    const pivotRows = await pivotDelegate.findMany({ where: pivotWhere }) as Array<Record<string, unknown>>
+
+    if (req.fn === 'count' || req.fn === 'exists') {
+      // Apply the constraint by filtering related rows first (when present),
+      // then count surviving pivot rows per parent.
+      let acceptable: Set<unknown> | null = null
+      if (req.constraintWheres.length > 0 || js.softDeletes) {
+        const relatedDelegate = this.delegateFor(js.relatedTable)
+        const pivotRelatedIds = pivotRows.map(p => p[through.relatedPivotKey])
+        const relatedWhere: Record<string, unknown> = {
+          [js.relatedColumn]: { in: pivotRelatedIds },
+          ...constraintFilter,
+          ...softFilter,
+        }
+        const relatedRows = await relatedDelegate.findMany({ where: relatedWhere }) as Array<Record<string, unknown>>
+        acceptable = new Set(relatedRows.map(r => r[js.relatedColumn]))
+      }
+      const counts = new Map<unknown, number>()
+      for (const p of pivotRows) {
+        const fk = p[through.foreignPivotKey]
+        const rk = p[through.relatedPivotKey]
+        if (acceptable && !acceptable.has(rk)) continue
+        counts.set(fk, (counts.get(fk) ?? 0) + 1)
+      }
+      for (const row of parentRows) {
+        const n = counts.get(row[js.parentColumn]) ?? 0
+        row[req.alias] = req.fn === 'exists' ? n > 0 : n
+      }
+      return
+    }
+
+    // Pivot sum/min/max/avg: fetch related rows and JS-aggregate per parent.
+    const relatedDelegate = this.delegateFor(js.relatedTable)
+    const pivotRelatedIds = pivotRows.map(p => p[through.relatedPivotKey])
+    const relatedWhere: Record<string, unknown> = {
+      [js.relatedColumn]: { in: pivotRelatedIds },
+      ...constraintFilter,
+      ...softFilter,
+    }
+    const relatedRows = await relatedDelegate.findMany({ where: relatedWhere }) as Array<Record<string, unknown>>
+    const relatedById = new Map<unknown, Record<string, unknown>>()
+    for (const r of relatedRows) relatedById.set(r[js.relatedColumn], r)
+
+    const groups = new Map<unknown, number[]>()
+    for (const p of pivotRows) {
+      const fk = p[through.foreignPivotKey]
+      const r  = relatedById.get(p[through.relatedPivotKey])
+      if (!r) continue
+      const v = Number(r[req.column!])
+      if (Number.isNaN(v)) continue
+      const list = groups.get(fk)
+      if (list) list.push(v); else groups.set(fk, [v])
+    }
+    for (const row of parentRows) {
+      const list = groups.get(row[js.parentColumn])
+      if (!list || list.length === 0) {
+        row[req.alias] = _aggregateDefault(req.fn)
+        continue
+      }
+      switch (req.fn) {
+        case 'sum': row[req.alias] = list.reduce((a, b) => a + b, 0); break
+        case 'min': row[req.alias] = Math.min(...list); break
+        case 'max': row[req.alias] = Math.max(...list); break
+        case 'avg': row[req.alias] = list.reduce((a, b) => a + b, 0) / list.length; break
+      }
+    }
   }
 
   private buildOrderBy(): Record<string, string>[] {
@@ -262,38 +498,48 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async first(): Promise<T | null> {
     await this._resolveDeferred()
-    return (await this.delegate.findFirst({
+    const row = await this.delegate.findFirst({
       where:   this.buildWhere(),
       include: this.buildInclude(),
       orderBy: this.buildOrderBy(),
-    }) ?? null) as T | null
+    }) as Record<string, unknown> | null
+    if (!row) return null
+    await this._stampAggregates([row])
+    return row as T
   }
 
   async find(id: number | string): Promise<T | null> {
     await this._resolveDeferred()
-    return (await this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) ?? null) as T | null
+    const row = await this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) as Record<string, unknown> | null
+    if (!row) return null
+    await this._stampAggregates([row])
+    return row as T
   }
 
   async get(): Promise<T[]> {
     await this._resolveDeferred()
-    return this.delegate.findMany({
+    const rows = await this.delegate.findMany({
       where:   this.buildWhere(),
       include: this.buildInclude(),
       orderBy: this.buildOrderBy(),
       take:    this._limitN  ?? undefined,
       skip:    this._offsetN ?? undefined,
-    }) as Promise<T[]>
+    }) as Array<Record<string, unknown>>
+    await this._stampAggregates(rows)
+    return rows as unknown as T[]
   }
 
   async all(): Promise<T[]> {
     await this._resolveDeferred()
-    return this.delegate.findMany({
+    const rows = await this.delegate.findMany({
       where:   this.buildWhere(),
       include: this.buildInclude(),
       orderBy: this.buildOrderBy(),
       take:    this._limitN  ?? undefined,
       skip:    this._offsetN ?? undefined,
-    }) as Promise<T[]>
+    }) as Array<Record<string, unknown>>
+    await this._stampAggregates(rows)
+    return rows as unknown as T[]
   }
 
   async count(): Promise<number> {
@@ -352,20 +598,22 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
 
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
     await this._resolveDeferred()
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.delegate.findMany({
         where:   this.buildWhere(),
         include: this.buildInclude(),
         orderBy: this.buildOrderBy(),
         take:    perPage,
         skip:    (page - 1) * perPage,
-      }) as Promise<T[]>,
+      }) as Promise<Array<Record<string, unknown>>>,
       this.delegate.count({ where: this.buildWhere() }),
     ])
 
+    await this._stampAggregates(rows)
+
     const lastPage = Math.ceil(total / perPage)
     return {
-      data,
+      data: rows as unknown as T[],
       total,
       perPage,
       currentPage: page,
@@ -373,6 +621,18 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       from: (page - 1) * perPage + 1,
       to:   Math.min(page * perPage, total),
     }
+  }
+}
+
+/** @internal — default value to stamp when an aggregate has no matching rows. */
+function _aggregateDefault(fn: AggregateFn): unknown {
+  switch (fn) {
+    case 'count':  return 0
+    case 'exists': return false
+    case 'sum':    return 0
+    case 'min':    return null
+    case 'max':    return null
+    case 'avg':    return null
   }
 }
 

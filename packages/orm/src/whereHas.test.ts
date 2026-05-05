@@ -53,6 +53,8 @@ function recordingAdapter(): { adapter: OrmAdapter; latest: () => RecordedQb } {
       paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
       whereRelationExists: (predicate) => { rec.predicates.push(predicate); return qb },
       withConstrained: (rel, ws) => { rec.withConstraineds.push([rel, ws]); return qb },
+      withAggregate: () => qb,
+      _aggregate: async () => 0,
     }
     return qb
   }
