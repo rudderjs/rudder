@@ -137,6 +137,28 @@ export class LocalAdapter extends BaseAdapter {
       await fs.copyFile(src, dst)
       await fs.unlink(src)
     }
+
+    // Move the visibility sidecar alongside the file, so getVisibility(to)
+    // returns whatever setVisibility(from) had set, and a later put(from) on
+    // the freed path doesn't surface a stale value through a leaked sidecar.
+    // Missing sidecar (no prior setVisibility) is the common case — silently no-op.
+    const srcSidecar = this.sidecarAbs(from)
+    const dstSidecar = this.sidecarAbs(to)
+    try {
+      await fs.mkdir(nodePath.dirname(dstSidecar), { recursive: true })
+      await fs.rename(srcSidecar, dstSidecar)
+    } catch (err: unknown) {
+      const e = err as NodeJS.ErrnoException
+      if (e.code === 'ENOENT') return
+      if (e.code !== 'EXDEV') throw err
+      try {
+        await fs.copyFile(srcSidecar, dstSidecar)
+        await fs.unlink(srcSidecar)
+      } catch (err2: unknown) {
+        const e2 = err2 as NodeJS.ErrnoException
+        if (e2.code !== 'ENOENT') throw err2
+      }
+    }
   }
 
   override async append(filePath: string, contents: string | Buffer): Promise<void> {

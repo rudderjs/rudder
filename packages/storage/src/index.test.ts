@@ -13,6 +13,7 @@ import {
   StorageRegistry,
   StorageProvider,
   StorageNotSupportedError,
+  serveTemporaryUrls,
   type StorageConfig,
   type Visibility,
 } from './index.js'
@@ -235,6 +236,34 @@ describe('LocalAdapter', () => {
     assert.strictEqual(await adapter.text('b.txt'), 'cross-device')
   })
 
+  it('move() carries the visibility sidecar to the new path', async () => {
+    await adapter.put('a.txt', 'data')
+    await adapter.setVisibility('a.txt', 'private')
+
+    await adapter.move('a.txt', 'b.txt')
+
+    // The destination must report the same visibility the source had.
+    assert.strictEqual(await adapter.getVisibility('b.txt'), 'private')
+
+    // The source sidecar must NOT be left behind — otherwise a future
+    // put(from) at the freed path would surface a stale visibility.
+    await assert.rejects(
+      () => fs.access(nodePath.join(root, '.visibility', 'a.txt')),
+      /ENOENT/,
+    )
+  })
+
+  it('move() with no source sidecar does not throw and leaves no destination sidecar', async () => {
+    await adapter.put('a.txt', 'data')
+    // Never called setVisibility — no sidecar exists.
+    await adapter.move('a.txt', 'b.txt')
+    assert.strictEqual(await adapter.text('b.txt'), 'data')
+    await assert.rejects(
+      () => fs.access(nodePath.join(root, '.visibility', 'b.txt')),
+      /ENOENT/,
+    )
+  })
+
   it('append() creates a new file or appends to an existing one', async () => {
     await adapter.append('log.txt', 'one\n')
     await adapter.append('log.txt', 'two\n')
@@ -260,6 +289,58 @@ describe('LocalAdapter', () => {
     await assert.rejects(
       () => adapter.temporaryUploadUrl('a.txt', new Date(Date.now() + 60_000)),
       StorageNotSupportedError,
+    )
+  })
+})
+
+// ─── serveTemporaryUrls() routePath shapes ─────────────────
+
+describe('serveTemporaryUrls()', () => {
+  let root: string
+  let adapter: LocalAdapter
+
+  beforeEach(async () => {
+    root    = await makeTmpDir()
+    adapter = new LocalAdapter({ driver: 'local', root })
+    StorageRegistry.set('local-temp-test', adapter)
+  })
+
+  afterEach(async () => {
+    StorageRegistry.reset()
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  // Minimal RouterLike — the function only needs `get(path, handler)`.
+  type Registered = { path: string; handler: (req: { url: string; params?: Record<string, string> }) => Promise<unknown> | unknown }
+  const makeRouter = (): { calls: Registered[]; get: Registered['handler'] extends infer H ? (path: string, handler: H) => unknown : never } => {
+    const calls: Registered[] = []
+    return {
+      calls,
+      get(path, handler) { calls.push({ path, handler }); return undefined },
+    }
+  }
+
+  it('accepts a `/foo/*` routePath and stores the prefix without the splat', async () => {
+    const router = makeRouter()
+    await serveTemporaryUrls(router, { disk: 'local-temp-test', routePath: '/storage/temp/*' })
+
+    assert.strictEqual(adapter._tempUrlConfig?.routePrefix, '/storage/temp/')
+    assert.strictEqual(router.calls[0]?.path, '/storage/temp/*')
+  })
+
+  it('accepts the documented `/foo/:path*` form (regression — previously threw)', async () => {
+    const router = makeRouter()
+    await serveTemporaryUrls(router, { disk: 'local-temp-test', routePath: '/storage/temp/:path*' })
+
+    assert.strictEqual(adapter._tempUrlConfig?.routePrefix, '/storage/temp/')
+    assert.strictEqual(router.calls[0]?.path, '/storage/temp/:path*')
+  })
+
+  it('rejects a routePath that does not end in a splat', async () => {
+    const router = makeRouter()
+    await assert.rejects(
+      () => serveTemporaryUrls(router, { disk: 'local-temp-test', routePath: '/storage/temp' }),
+      /must end in/,
     )
   })
 })
