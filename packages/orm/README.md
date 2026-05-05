@@ -712,6 +712,34 @@ Article.on('deleting', (id) => { if (id === protectedId) return false })
 > Use `Model.create()`/`Model.update()`/`Model.delete()` to trigger events.
 > `Model.query().create()` does NOT fire events.
 
+### Quiet Events
+
+Persist, delete, or restore an instance without firing observers or
+listeners — useful inside seeders, observer cascades, or any path that
+shouldn't trigger lifecycle work twice.
+
+```ts
+const user = await User.find(1)
+user.email = 'new@x.com'
+await user.saveQuietly()         // persists, observers silent
+
+await user.deleteQuietly()       // removes / soft-deletes silently
+
+const trashed = await User.withTrashed().find(2)
+await trashed.restoreQuietly()   // clears deletedAt silently
+```
+
+Sugar over `Model.withoutEvents()` — `await ctor.withoutEvents(() => instance.save())`.
+
+**Per-class isolation.** Quiet ops mute only the *current* class.
+A `User.saveQuietly()` whose observer cascades into `Comment.delete()`
+still fires `Comment` observers — same posture as Eloquent's
+`saveQuietly`. Wrap the cascade in a broader `withoutEvents` block if
+you need full silence.
+
+`instance.restore()` (the non-quiet form) is also available — symmetric
+to `instance.delete()` — and fires `restoring` / `restored` normally.
+
 ---
 
 ## toJSON()
