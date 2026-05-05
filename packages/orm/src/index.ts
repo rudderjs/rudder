@@ -24,6 +24,8 @@ export { Seeder }                                  from './seeder.js'
 export type { SeederConstructor }                  from './seeder.js'
 export { AggregateConstraintBuilder, AGGREGATES_SYMBOL }    from './aggregate.js'
 export type { AggregateConstraint, AggregateSumSpec } from './aggregate.js'
+export { pruneModels }                              from './prune.js'
+export type { PruneOptions, PruneReport }           from './prune.js'
 
 // ─── Global ORM Registry ───────────────────────────────────
 
@@ -140,6 +142,34 @@ export interface ModelObserver {
   deleted?(id: string | number): void | Promise<void>
   restoring?(id: string | number): false | void | Promise<false | void>
   restored?(record: Record<string, unknown>): void | Promise<void>
+}
+
+/**
+ * Models implementing `Prunable` are eligible for `pnpm rudder model:prune`.
+ * Each matching record is hydrated, the optional static `pruning()` hook
+ * fires, then the standard `deleting` / `deleted` observers run and the
+ * record is removed via `instance.delete()` (so soft-deletes are honored).
+ *
+ * Use when you need observer hooks, per-row reactions, or cleanup side
+ * effects (S3 delete, search-index removal). For high-volume retention with
+ * no per-row work, prefer {@link MassPrunable}.
+ */
+export interface Prunable {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prunable(): QueryBuilder<any>
+  pruning?(model: Model): void | Promise<void>
+}
+
+/**
+ * Bulk-pruned via a single `deleteAll()` per chunk. Faster than
+ * {@link Prunable}, but observers do NOT fire, `pruning()` is NOT called,
+ * and `softDeletes` is NOT applied (mirrors Laravel; `deleteAll()` is the
+ * existing bulk DELETE primitive). Use for append-only retention
+ * (analytics events, expired tokens, job-batch records).
+ */
+export interface MassPrunable {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prunable(): QueryBuilder<any>
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -376,6 +406,14 @@ export abstract class Model {
    * }
    */
   static morphAlias?: string
+
+  /**
+   * Pruning mode for `pnpm rudder model:prune`. Override to `'mass'` for
+   * {@link MassPrunable}. The runner only considers models that also define
+   * `static prunable()`; this static just disambiguates instance- vs
+   * bulk-mode for those that do.
+   */
+  static pruneMode: 'instance' | 'mass' = 'instance'
 
   /**
    * Column used to resolve a route parameter into a Model instance via

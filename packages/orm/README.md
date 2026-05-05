@@ -768,6 +768,52 @@ Post.query().onlyTrashed().get()   // only soft-deleted
 
 ---
 
+## Pruning
+
+Models can opt into `pnpm rudder model:prune` by declaring `static prunable()`. The runner walks the registered models and deletes everything the query returns, in chunks. Two modes:
+
+```ts
+import { Model } from '@rudderjs/orm'
+
+// Per-instance — observers fire, soft-deletes honored
+class Session extends Model {
+  static override table = 'sessions'
+  static prunable() { return this.where('expiresAt', '<', new Date()) }
+  static pruning(s: Session) { /* optional pre-delete hook */ }
+}
+
+// Bulk — single deleteAll() per chunk; no observers, no pruning() hook,
+// soft-deletes bypassed (mirrors the deleteAll() primitive)
+class FailedJob extends Model {
+  static override table = 'failed_jobs'
+  static override pruneMode = 'mass' as const
+  static prunable() { return this.where('failedAt', '<', new Date(Date.now() - 7 * 86_400_000)) }
+}
+```
+
+Run from the CLI:
+
+```bash
+pnpm rudder model:prune                          # prune everything
+pnpm rudder model:prune --pretend                # dry-run; runs count() only
+pnpm rudder model:prune --model=Session,FailedJob
+pnpm rudder model:prune --except=AuditLog
+pnpm rudder model:prune --chunk=500
+```
+
+Or schedule it from `routes/console.ts`:
+
+```ts
+scheduler.command('model:prune').daily()
+scheduler.command('model:prune --pretend').weeklyOn(0, '09:00')
+```
+
+`Prunable` (default) calls `instance.delete()` per row — observers fire, soft-deletes apply. `MassPrunable` (`pruneMode = 'mass'`) is faster but bypasses both. Index the columns your `prunable()` filter touches; the runner re-queries per chunk because deletions shift the offset. `pruning()` exceptions are logged and the run continues — one bad row doesn't abort the sweep.
+
+For programmatic use, `pruneModels({ models, except, chunk, pretend })` returns one `{ model, mode, count }` report per pruned model.
+
+---
+
 ## Observers
 
 Register lifecycle hooks on a model to transform data, log events, or cancel operations.

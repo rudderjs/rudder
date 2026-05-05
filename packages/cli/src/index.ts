@@ -154,6 +154,12 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerMigrateCommands'] as (r: typeof rudder) => void
       register(rudder)
     },
+    // @rudderjs/orm → model:prune
+    async () => {
+      const mod = await tryImport('@rudderjs/orm', 'commands/prune')
+      const register = mod['registerPruneCommand'] as (r: typeof rudder) => void
+      register(rudder)
+    },
     // @rudderjs/router → route:list
     async () => {
       const mod = await tryImport('@rudderjs/router', 'commands/route-list')
