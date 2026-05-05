@@ -4,7 +4,14 @@ import fs from 'node:fs/promises'
 import nodePath from 'node:path'
 import os from 'node:os'
 
-import { stub as controllerStub, derivePrefix } from './commands/make/controller.js'
+import {
+  stub as controllerStub,
+  derivePrefix,
+  resourceStub,
+  apiResourceStub,
+  singletonStub,
+  pickStub,
+} from './commands/make/controller.js'
 import { stub as modelStub, deriveTable } from './commands/make/model.js'
 import { stub as jobStub } from './commands/make/job.js'
 import { stub as middlewareStub } from './commands/make/middleware.js'
@@ -54,6 +61,68 @@ describe('make:controller — stub()', () => {
   it('imports Controller and Get from @rudderjs/router', () => {
     const out = controllerStub('UserController', '/users')
     assert.ok(out.includes("from '@rudderjs/router'"))
+  })
+})
+
+describe('make:controller — resource stubs', () => {
+  it('resourceStub() emits all seven RESTful methods', () => {
+    const out = resourceStub('PostController')
+    for (const verb of ['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']) {
+      assert.ok(out.includes(`async ${verb} `), `expected resourceStub to include async ${verb}(...)`)
+    }
+    // No decorators — wired via router.resource()
+    assert.ok(!out.includes('@Controller'))
+    assert.ok(out.includes("router.resource('posts', PostController)"))
+  })
+
+  it('apiResourceStub() drops create + edit', () => {
+    const out = apiResourceStub('PostController')
+    assert.ok(!out.includes('async create'))
+    assert.ok(!out.includes('async edit'))
+    for (const verb of ['index', 'store', 'show', 'update', 'destroy']) {
+      assert.ok(out.includes(`async ${verb} `))
+    }
+    assert.ok(out.includes("router.apiResource('posts', PostController)"))
+  })
+
+  it('singletonStub() keeps only show/edit/update', () => {
+    const out = singletonStub('ProfileController')
+    for (const verb of ['show', 'edit', 'update']) {
+      assert.ok(out.includes(`async ${verb} `))
+    }
+    for (const skipped of ['index', 'create', 'store', 'destroy']) {
+      assert.ok(!out.includes(`async ${skipped} `), `singleton stub should not include ${skipped}`)
+    }
+    assert.ok(out.includes("router.singleton('profile', ProfileController)"))
+  })
+
+  it('pickStub() — no flags returns the plain decorator stub', () => {
+    const { kind, body } = pickStub('PostController', {})
+    assert.strictEqual(kind, 'plain')
+    assert.ok(body.includes('@Controller'))
+  })
+
+  it('pickStub() — --resource picks the resource stub', () => {
+    const { kind, body } = pickStub('PostController', { resource: true })
+    assert.strictEqual(kind, 'resource')
+    assert.ok(body.includes('async destroy'))
+  })
+
+  it('pickStub() — --api picks the api stub', () => {
+    const { kind, body } = pickStub('PostController', { api: true })
+    assert.strictEqual(kind, 'api')
+    assert.ok(!body.includes('async create'))
+  })
+
+  it('pickStub() — --singleton picks the singleton stub', () => {
+    const { kind, body } = pickStub('ProfileController', { singleton: true })
+    assert.strictEqual(kind, 'singleton')
+    assert.ok(!body.includes('async index'))
+  })
+
+  it('pickStub() — flag precedence resource > api > singleton', () => {
+    const both = pickStub('PostController', { resource: true, api: true })
+    assert.strictEqual(both.kind, 'resource')
   })
 })
 

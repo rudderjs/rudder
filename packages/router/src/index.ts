@@ -695,6 +695,224 @@ export class Router {
   list(): RouteDefinition[] {
     return [...this.routes]
   }
+
+  // ── Resource controllers ───────────────────────────────────
+
+  /**
+   * Register the canonical seven CRUD routes for a plain controller class:
+   * `index`, `create`, `store`, `show`, `edit`, `update`, `destroy`. Methods
+   * the controller doesn't implement are silently skipped, so a partial
+   * controller works without `only`/`except` boilerplate.
+   *
+   * The `update` route is registered for both `PUT` and `PATCH`. Route names
+   * default to `<name>.<verb>` (`posts.show`, `posts.update`). The path param
+   * defaults to a naive singular (`posts` → `:post`); pass
+   * `{ parameters: { posts: 'article' } }` to override.
+   *
+   * Use plain method names — no decorators. Call `router.registerController()`
+   * for decorator-driven controllers instead.
+   *
+   * @example
+   * router.resource('posts', PostController)
+   * router.resource('posts', PostController, { only: ['index', 'show'] })
+   * router.resource('posts', PostController, { middleware: [authMw] })
+   */
+  resource(name: string, Ctrl: new () => object, opts: ResourceOptions = {}): ResourceRegistration {
+    return this._registerResource(name, Ctrl, RESOURCE_VERBS, opts)
+  }
+
+  /**
+   * Register an API-only resource — the same routes as `resource()` minus
+   * `create` and `edit`, since those render HTML forms and have no JSON
+   * equivalent.
+   *
+   * @example
+   * router.apiResource('posts', PostController)
+   */
+  apiResource(name: string, Ctrl: new () => object, opts: ResourceOptions = {}): ResourceRegistration {
+    return this._registerResource(name, Ctrl, RESOURCE_VERBS, {
+      ...opts,
+      except: [...(opts.except ?? []), 'create', 'edit'],
+    })
+  }
+
+  /**
+   * Register a singleton resource — `show`, `edit`, `update` only. Use for
+   * "the current user's profile" / "the application's settings" style
+   * resources where there's only ever one of the thing.
+   *
+   * Add a creation flow with `.creatable()` (registers `create` + `store`) or
+   * a deletion flow with `.destroyable()` (registers `destroy`).
+   *
+   * @example
+   * router.singleton('profile', ProfileController)            // /profile + /profile/edit
+   * router.singleton('profile', ProfileController).creatable() // also /profile/create + POST /profile
+   */
+  singleton(name: string, Ctrl: new () => object, opts: ResourceOptions = {}): SingletonRegistration {
+    const reg = this._registerResource(name, Ctrl, SINGLETON_VERBS, opts)
+    return new SingletonRegistration(reg.builders, this, name, Ctrl, opts)
+  }
+
+  /** @internal — shared registration loop for resource/apiResource/singleton. */
+  _registerResource(
+    name: string,
+    Ctrl: new () => object,
+    table: readonly ResourceVerbSpec[],
+    opts: ResourceOptions,
+  ): ResourceRegistration {
+    const instance  = new Ctrl() as Record<string, unknown>
+    const verbs     = filterVerbs(table, opts)
+    const paramName = opts.parameters?.[name] ?? singularize(name)
+    const builders: RouteBuilder[] = []
+
+    for (const spec of verbs) {
+      const fn = instance[spec.verb]
+      if (typeof fn !== 'function') continue                              // partial controller — skip
+      const path    = spec.path(name, paramName)
+      const handler = (fn as RouteHandler).bind(instance)
+      Object.defineProperty(handler, 'name', {
+        value:        `${Ctrl.name}@${spec.verb}`,
+        configurable: true,
+      })
+
+      const builder = this._rb(spec.method, path, handler, opts.middleware ?? [])
+      builder.name(opts.names?.[spec.verb] ?? `${name}.${spec.nameSuffix}`)
+      builders.push(builder)
+
+      if (spec.verb === 'update') {
+        // `update` registers PUT + PATCH at the same path. The PATCH route
+        // doesn't get a name to avoid a collision with the PUT route's name —
+        // both verbs resolve the same path, so `route('posts.update')` works
+        // for either.
+        const patch = this._rb('PATCH', path, handler, opts.middleware ?? [])
+        builders.push(patch)
+      }
+    }
+    return new ResourceRegistration(builders)
+  }
+}
+
+// ─── Resource verb tables / helpers ────────────────────────
+
+/** The seven canonical RESTful verbs Laravel's `Route::resource` exposes. */
+export type ResourceVerb = 'index' | 'create' | 'store' | 'show' | 'edit' | 'update' | 'destroy'
+
+interface ResourceVerbSpec {
+  verb:       ResourceVerb
+  method:     HttpMethod
+  path:       (name: string, param: string) => string
+  nameSuffix: string
+}
+
+const RESOURCE_VERBS: readonly ResourceVerbSpec[] = [
+  { verb: 'index',   method: 'GET',    path: (n)    => `/${n}`,            nameSuffix: 'index'   },
+  { verb: 'create',  method: 'GET',    path: (n)    => `/${n}/create`,     nameSuffix: 'create'  },
+  { verb: 'store',   method: 'POST',   path: (n)    => `/${n}`,            nameSuffix: 'store'   },
+  { verb: 'show',    method: 'GET',    path: (n, p) => `/${n}/:${p}`,      nameSuffix: 'show'    },
+  { verb: 'edit',    method: 'GET',    path: (n, p) => `/${n}/:${p}/edit`, nameSuffix: 'edit'    },
+  { verb: 'update',  method: 'PUT',    path: (n, p) => `/${n}/:${p}`,      nameSuffix: 'update'  },
+  { verb: 'destroy', method: 'DELETE', path: (n, p) => `/${n}/:${p}`,      nameSuffix: 'destroy' },
+]
+
+const SINGLETON_VERBS: readonly ResourceVerbSpec[] = [
+  { verb: 'show',   method: 'GET', path: (n) => `/${n}`,       nameSuffix: 'show'   },
+  { verb: 'edit',   method: 'GET', path: (n) => `/${n}/edit`,  nameSuffix: 'edit'   },
+  { verb: 'update', method: 'PUT', path: (n) => `/${n}`,       nameSuffix: 'update' },
+]
+
+const SINGLETON_CREATE_VERBS: readonly ResourceVerbSpec[] = [
+  { verb: 'create', method: 'GET',  path: (n) => `/${n}/create`, nameSuffix: 'create' },
+  { verb: 'store',  method: 'POST', path: (n) => `/${n}`,        nameSuffix: 'store'  },
+]
+
+const SINGLETON_DESTROY_VERBS: readonly ResourceVerbSpec[] = [
+  { verb: 'destroy', method: 'DELETE', path: (n) => `/${n}`, nameSuffix: 'destroy' },
+]
+
+function filterVerbs(table: readonly ResourceVerbSpec[], opts: ResourceOptions): readonly ResourceVerbSpec[] {
+  let verbs = table
+  if (opts.only)   { const allow = new Set(opts.only);   verbs = verbs.filter(v => allow.has(v.verb)) }
+  if (opts.except) { const deny  = new Set(opts.except); verbs = verbs.filter(v => !deny.has(v.verb)) }
+  return verbs
+}
+
+/**
+ * Naive English singularizer for the default resource param name. Handles the
+ * three patterns Laravel users hit constantly (`posts → post`,
+ * `categories → category`, `boxes → box`). Anything irregular — `people`,
+ * `data`, etc. — should be overridden via the `parameters` option, exactly
+ * as in Laravel.
+ */
+function singularize(name: string): string {
+  if (/[^aeiou]ies$/i.test(name))     return name.slice(0, -3) + 'y'   // categories → category
+  if (/(s|x|z|ch|sh)es$/i.test(name)) return name.slice(0, -2)         // boxes → box
+  if (/s$/i.test(name) && !/ss$/i.test(name)) return name.slice(0, -1) // posts → post
+  return name
+}
+
+// ─── Resource options + registrations ──────────────────────
+
+/**
+ * Options accepted by `router.resource`/`apiResource`/`singleton`.
+ *
+ * - `only`/`except` — restrict the verbs registered.
+ * - `parameters` — override the `:param` segment name for a given resource
+ *   (e.g. `{ posts: 'article' }` → `/posts/:article`).
+ * - `names` — override the generated route names per verb.
+ * - `middleware` — applied to every route registered by the resource.
+ */
+export interface ResourceOptions {
+  only?:       readonly ResourceVerb[]
+  except?:     readonly ResourceVerb[]
+  parameters?: Record<string, string>
+  names?:      Partial<Record<ResourceVerb, string>>
+  middleware?: MiddlewareHandler[]
+}
+
+/**
+ * Returned by `router.resource()`/`apiResource()`. The `builders` array holds
+ * one `RouteBuilder` per registered route in declaration order — apply
+ * `where*()`, additional middleware, or rename individual routes by indexing
+ * directly. The `update` PATCH alias is included as a separate builder
+ * immediately after its PUT counterpart.
+ */
+export class ResourceRegistration {
+  constructor(public readonly builders: RouteBuilder[]) {}
+}
+
+/**
+ * Returned by `router.singleton()`. Adds two opt-in helpers on top of
+ * `ResourceRegistration` for resources that also expose a creation flow
+ * (`.creatable()`) or deletion flow (`.destroyable()`).
+ */
+export class SingletonRegistration extends ResourceRegistration {
+  constructor(
+    builders: RouteBuilder[],
+    private readonly _router: Router,
+    private readonly _name: string,
+    private readonly _Ctrl: new () => object,
+    private readonly _opts: ResourceOptions,
+  ) { super(builders) }
+
+  /**
+   * Add `GET /<name>/create` and `POST /<name>` — the create/store half of a
+   * full resource. Skipped for any verb the controller doesn't implement.
+   */
+  creatable(): this {
+    const reg = this._router._registerResource(this._name, this._Ctrl, SINGLETON_CREATE_VERBS, this._opts)
+    this.builders.push(...reg.builders)
+    return this
+  }
+
+  /**
+   * Add `DELETE /<name>` — the destroy half of a full resource. Skipped if
+   * the controller doesn't implement `destroy()`.
+   */
+  destroyable(): this {
+    const reg = this._router._registerResource(this._name, this._Ctrl, SINGLETON_DESTROY_VERBS, this._opts)
+    this.builders.push(...reg.builders)
+    return this
+  }
 }
 
 // ─── Global router instance ────────────────────────────────
