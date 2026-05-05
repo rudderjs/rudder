@@ -1422,6 +1422,10 @@ export abstract class Model {
   /**
    * Delete this instance from the database. Soft-deletes when `static softDeletes`
    * is enabled. Routes through the static `delete()` so observers fire.
+   *
+   * On soft-delete, the instance's `deletedAt` is set locally and the
+   * dirty-tracking baseline is refreshed — so `trashed()` returns `true`
+   * and `isDirty()` returns `false` immediately after.
    */
   async delete(): Promise<void> {
     const ctor = this.constructor as typeof Model
@@ -1430,6 +1434,10 @@ export abstract class Model {
       throw new Error(`[RudderJS ORM] Cannot delete a ${ctor.name} without a primary key.`)
     }
     await (ctor as typeof Model & { delete(i: string | number): Promise<void> }).delete(id)
+    if (ctor.softDeletes) {
+      ;(this as unknown as { deletedAt: Date }).deletedAt = new Date()
+      this._syncOriginal()
+    }
   }
 
   /**
@@ -2241,6 +2249,15 @@ function _captureConstraintWheres(
           throw new Error(
             `[RudderJS ORM] Nested ${name} inside a whereHas constrain callback is deferred to v2. ` +
             `Filter on flat columns inside the callback for now.`,
+          )
+        }
+      }
+      if (name === 'orWhere') {
+        return (): QueryBuilder<Model> => {
+          throw new Error(
+            `[RudderJS ORM] orWhere inside a whereHas constrain callback is not supported in v1 — ` +
+            `the WhereClause contract has no boolean flag, so the OR semantic can't round-trip to the adapter. ` +
+            `Compose the predicate with where() (AND), or run two queries and merge in app code.`,
           )
         }
       }
