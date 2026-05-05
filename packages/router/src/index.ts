@@ -1083,8 +1083,13 @@ export class Url {
    * Return `true` if the request has a valid (and non-expired) signature.
    */
   static isValidSignature(req: AppRequest): boolean {
-    const [pathname, search] = _splitPath(req.url)
-    const params = new URLSearchParams(search)
+    // `req.url` may be a full URL (Hono adapter populates protocol+host+path+query)
+    // or a bare path. `Url.sign(path)` only ever signs the pathname, so verification
+    // must hash the same shape. Use the URL parser so both forms collapse to a
+    // pathname + searchParams pair.
+    const u = new URL(req.url, 'http://placeholder.local')
+    const pathname = u.pathname
+    const params = u.searchParams
 
     const signature = params.get('signature')
     if (!signature) return false
