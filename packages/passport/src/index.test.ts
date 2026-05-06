@@ -2699,6 +2699,84 @@ describe('resolveClientGrantTypes — passport:client CLI flag mapping (L2)', ()
   })
 })
 
+describe('PassportRouteOptions.tokenMiddleware (E8)', () => {
+  // Regression guard for E8 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // The token endpoint is the brute-force target for client_secret guessing
+  // — apps need to be able to mount a per-route rate limiter on it. The
+  // option accepts either a single handler or an array; both shapes route
+  // through `asMiddlewareArray` and end up positionally after the handler
+  // on `router.post(path, handler, ...middleware)`.
+
+  test('omitted tokenMiddleware → router receives no extra middleware', () => {
+    Passport.reset()
+    const captured: { middleware: any[] } = { middleware: [] }
+    const fakeRouter = {
+      get: () => {},
+      post: (p: string, _h: any, mw?: any) => {
+        if (p.endsWith('/token')) captured.middleware = mw ?? []
+      },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.deepEqual(captured.middleware, [])
+  })
+
+  test('tokenMiddleware as a single handler is wrapped in an array', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: { middleware: any[] } = { middleware: [] }
+    const fakeRouter = {
+      get: () => {},
+      post: (p: string, _h: any, mw?: any) => {
+        if (p.endsWith('/token')) captured.middleware = mw ?? []
+      },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter, { tokenMiddleware: sentinel })
+    assert.equal(captured.middleware.length, 1)
+    assert.equal(captured.middleware[0], sentinel)
+  })
+
+  test('tokenMiddleware as an array preserves order on the token endpoint', () => {
+    Passport.reset()
+    const a = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const b = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: { middleware: any[] } = { middleware: [] }
+    const fakeRouter = {
+      get: () => {},
+      post: (p: string, _h: any, mw?: any) => {
+        if (p.endsWith('/token')) captured.middleware = mw ?? []
+      },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter, { tokenMiddleware: [a, b] })
+    assert.deepEqual(captured.middleware, [a, b])
+  })
+
+  test('tokenMiddleware does NOT leak onto other endpoints', () => {
+    // Belt-and-braces guard against a future refactor that accidentally
+    // applies the rate limiter globally — the option is named for the
+    // token endpoint specifically, and other endpoints should not inherit.
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: Record<string, any[]> = {}
+    const fakeRouter = {
+      get:    (p: string, _h: any, mw?: any) => { captured[`GET ${p}`] = mw ?? [] },
+      post:   (p: string, _h: any, mw?: any) => { captured[`POST ${p}`] = mw ?? [] },
+      delete: (p: string, _h: any, mw?: any) => { captured[`DELETE ${p}`] = mw ?? [] },
+    }
+    registerPassportRoutes(fakeRouter, { tokenMiddleware: [sentinel] })
+    assert.deepEqual(captured['POST /oauth/token'], [sentinel])
+    assert.deepEqual(captured['POST /oauth/authorize'], [], 'tokenMiddleware must not bleed onto authorize')
+    assert.deepEqual(captured['POST /oauth/device/code'], [], 'tokenMiddleware must not bleed onto device/code')
+    assert.deepEqual(captured['POST /oauth/device/approve'], [], 'tokenMiddleware must not bleed onto device/approve')
+    // DELETE /oauth/tokens/:id legitimately receives [RequireBearer()] —
+    // not the sentinel.
+    assert.equal(captured['DELETE /oauth/tokens/:id']?.includes(sentinel), false,
+      'tokenMiddleware must not bleed onto tokens/:id')
+  })
+})
+
 describe('mechanical cleanup bundle — L7 / L8 / P12 / E12', () => {
   // Regression guards for the four findings closed in this PR. Tests are
   // colocated rather than split per finding so the describe block matches
