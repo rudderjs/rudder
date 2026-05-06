@@ -194,5 +194,27 @@ describe('Passport Phase 6 customization hooks', () => {
     // authorize (GET/POST/DELETE) + token + tokens/:id + scopes + device/code + device/approve
     assert.equal(registered.length, 8)
   })
+
+  test('DELETE /oauth/tokens/:id is registered with RequireBearer middleware', () => {
+    // Token ids are semi-public (they appear in JWT `jti` claims). Without
+    // bearer auth + ownership enforcement, anyone with one captured JWT can
+    // DoS arbitrary users by revoking their tokens by id. Regression guard
+    // for E2 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+    Passport.reset()
+    let revokeMiddleware: unknown[] | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   () => {},
+      delete: (p: string, _h: unknown, mw?: unknown[]) => {
+        if (p.endsWith('/tokens/:id')) revokeMiddleware = mw
+      },
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.ok(Array.isArray(revokeMiddleware), 'revoke route must be registered with a middleware array')
+    assert.equal(revokeMiddleware!.length, 1, 'revoke route should have exactly one middleware (RequireBearer)')
+    const mw = revokeMiddleware![0] as { name?: string }
+    assert.equal(typeof mw, 'function', 'middleware entry should be a function (RequireBearer)')
+    assert.equal(mw.name, 'RequireBearer')
+  })
 })
 

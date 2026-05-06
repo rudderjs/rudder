@@ -1,5 +1,6 @@
 import { Passport } from './Passport.js'
 import type { AccessToken } from './models/AccessToken.js'
+import { RequireBearer } from './middleware/bearer.js'
 import {
   validateAuthorizationRequest,
   issueAuthCode,
@@ -229,18 +230,26 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
   }
 
   // ── DELETE /oauth/tokens/:id — revoke a specific token ──
+  // Requires a valid bearer token AND ownership of the token being revoked.
+  // Token ids appear in JWT `jti` claims (semi-public), so without an
+  // ownership check anyone with a single captured JWT could DoS arbitrary
+  // users. Returns 404 (not 403) on ownership mismatch to avoid leaking
+  // whether a given id exists.
   if (!skip.has('revoke')) {
     router.delete(`${prefix}/tokens/:id`, async (req: any, res: any) => {
       const tokenId = req.params?.['id'] ?? ''
       const AccessTokenCls = await Passport.tokenModel()
       const token = await AccessTokenCls.where('id', tokenId).first() as AccessToken | null
-      if (!token) {
+
+      const requesterId = (req.raw as any)?.__rjs_user?.id ?? (req as any).user?.id
+      if (!token || !requesterId || token.userId !== requesterId) {
         res.status(404).json({ error: 'not_found', error_description: 'Token not found.' })
         return
       }
+
       await AccessTokenCls.update((token as any).id as string, { revoked: true } as any)
       res.status(204).send()
-    })
+    }, [RequireBearer()])
   }
 
   // ── GET /oauth/scopes ────────────────────────────────────
