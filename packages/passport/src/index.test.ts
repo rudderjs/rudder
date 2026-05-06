@@ -22,6 +22,7 @@ import {
   validateAuthorizationRequest,
   issueAuthCode,
   exchangeAuthCode,
+  validateScopes,
   OAuthError,
   clientCredentialsGrant,
   refreshTokenGrant,
@@ -1368,6 +1369,217 @@ describe('HTTP Basic client authentication (E9)', () => {
     assert.equal(res.bodyValue.error, 'invalid_request')
     assert.match(res.bodyValue.error_description, /client_secret is required/)
     assert.equal(res.headersValue['WWW-Authenticate'], 'Basic realm="oauth"', 'WWW-Authenticate header on 401')
+
+    Passport.reset()
+  })
+})
+
+describe('scope validation (E6) — registry + per-client allow-list', () => {
+  // Regression guards for E6 — RFC 6749 §3.3 requires that requested scopes
+  // outside the server's known set raise `invalid_scope`. We enforce two
+  // gates: (1) the global registry declared via `Passport.tokensCan()`, and
+  // (2) the per-client `client.scopes` allow-list. Each gate is only enforced
+  // when populated — empty registry / empty client allow-list means
+  // "no constraint configured".
+
+  function clientWith(scopes: string[]): any {
+    // Confidential by default so the auth-code path doesn't trip the
+    // public-client PKCE requirement before scope validation runs. Tests
+    // that need a hashed secret override `secret` + `confidential` after.
+    return {
+      id: 'C-1', name: 'app', secret: 'unused', confidential: true, revoked: false,
+      redirectUris: '["https://app.example.com/cb"]',
+      grantTypes: '["authorization_code","client_credentials","urn:ietf:params:oauth:grant-type:device_code"]',
+      scopes: JSON.stringify(scopes),
+    }
+  }
+
+  // ── validateScopes (direct) ──────────────────────────────
+
+  test('no-op when no scopes requested — caller passed empty array', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read access' })
+    assert.doesNotThrow(() => validateScopes(clientWith([]), []))
+    Passport.reset()
+  })
+
+  test('global gate — unknown scope is rejected when registry has entries', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read access', write: 'Write access' })
+    assert.throws(
+      () => validateScopes(clientWith([]), ['read', 'admin']),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /admin/.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  test('global gate — passes for fully-registered scope set', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read access', write: 'Write access' })
+    assert.doesNotThrow(() => validateScopes(clientWith([]), ['read', 'write']))
+    Passport.reset()
+  })
+
+  test('global gate — wildcard "*" is always allowed (mirrors Passport.validScopes)', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read access' })
+    assert.doesNotThrow(() => validateScopes(clientWith([]), ['*']))
+    Passport.reset()
+  })
+
+  test('global gate — empty registry skips the gate (back-compat with apps that never call tokensCan)', () => {
+    Passport.reset()
+    // Registry left empty on purpose. Pre-fix scaffolding never called
+    // `tokensCan`, so any non-empty scope request must pass through —
+    // otherwise we break every existing playground/scaffolder install.
+    assert.doesNotThrow(() => validateScopes(clientWith([]), ['anything']))
+    Passport.reset()
+  })
+
+  test('per-client gate — scope outside client allow-list is rejected', () => {
+    Passport.reset()
+    // Register globally so the global gate passes; client narrows further.
+    Passport.tokensCan({ read: 'Read', write: 'Write' })
+    assert.throws(
+      () => validateScopes(clientWith(['read']), ['read', 'write']),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /not authorized for this client/.test(e.errorDescription) && /write/.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  test('per-client gate — empty client.scopes means "no client-level restriction"', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read', write: 'Write' })
+    // client.scopes = [] → gate skipped; only the global gate runs.
+    assert.doesNotThrow(() => validateScopes(clientWith([]), ['read', 'write']))
+    Passport.reset()
+  })
+
+  test('per-client gate — wildcard "*" survives the client allow-list', () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read' })
+    assert.doesNotThrow(() => validateScopes(clientWith(['read']), ['*']))
+    Passport.reset()
+  })
+
+  // ── validateAuthorizationRequest integration ─────────────
+
+  function fakeClientModel(record: Record<string, unknown> | null) {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => record as any }
+      }
+    }
+    return FakeClient as any
+  }
+
+  test('GET /oauth/authorize — invalid_scope raised when request asks for an unknown scope', async () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read access' })
+    Passport.useClientModel(fakeClientModel(clientWith([])))
+
+    await assert.rejects(
+      () => validateAuthorizationRequest({
+        clientId:     'C-1',
+        redirectUri:  'https://app.example.com/cb',
+        responseType: 'code',
+        scope:        'read admin',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /admin/.test(e.errorDescription),
+    )
+
+    Passport.reset()
+  })
+
+  test('GET /oauth/authorize — invalid_scope raised when request exceeds client allow-list', async () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read', write: 'Write' })
+    // Client only permits "read" — requesting "write" must be rejected even
+    // though "write" is in the global registry.
+    Passport.useClientModel(fakeClientModel(clientWith(['read'])))
+
+    await assert.rejects(
+      () => validateAuthorizationRequest({
+        clientId:     'C-1',
+        redirectUri:  'https://app.example.com/cb',
+        responseType: 'code',
+        scope:        'read write',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /not authorized for this client/.test(e.errorDescription),
+    )
+
+    Passport.reset()
+  })
+
+  test('GET /oauth/authorize — passes when scopes are valid + within client allow-list', async () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read', write: 'Write' })
+    Passport.useClientModel(fakeClientModel(clientWith(['read', 'write'])))
+
+    const result = await validateAuthorizationRequest({
+      clientId:     'C-1',
+      redirectUri:  'https://app.example.com/cb',
+      responseType: 'code',
+      scope:        'read',
+    })
+    assert.deepEqual(result.scopes, ['read'])
+
+    Passport.reset()
+  })
+
+  // ── clientCredentialsGrant integration ───────────────────
+
+  test('client_credentials — invalid_scope raised on unknown scope', async () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read' })
+
+    // Hash matches sha256('s') so the secret check passes first; we want
+    // scope validation to be the failure point, not the credential check.
+    const { createHash } = await import('node:crypto')
+    const hashedSecret = createHash('sha256').update('s').digest('hex')
+
+    Passport.useClientModel(fakeClientModel({
+      ...clientWith([]),
+      secret: hashedSecret, confidential: true,
+    }))
+
+    await assert.rejects(
+      () => clientCredentialsGrant({
+        grantType:    'client_credentials',
+        clientId:     'C-1',
+        clientSecret: 's',
+        scope:        'read admin',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /admin/.test(e.errorDescription),
+    )
+
+    Passport.reset()
+  })
+
+  // ── requestDeviceCode integration ────────────────────────
+
+  test('device_code — invalid_scope raised when request exceeds client allow-list', async () => {
+    Passport.reset()
+    Passport.tokensCan({ read: 'Read', write: 'Write' })
+
+    Passport.useClientModel(fakeClientModel(clientWith(['read'])))
+
+    // We don't expect to reach DeviceCode.create — scope validation should
+    // throw first. If the test ever fails because create() is hit, the
+    // helper is being skipped on this code path.
+    class FailIfReached {
+      static async create() { throw new Error('device-code create() should not have been called') }
+    }
+    Passport.useDeviceCodeModel(FailIfReached as any)
+
+    await assert.rejects(
+      () => requestDeviceCode({
+        clientId: 'C-1',
+        scope:    'read write',
+        verificationUri: 'https://example.com/oauth/device',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_scope' && /not authorized for this client/.test(e.errorDescription),
+    )
 
     Passport.reset()
   })

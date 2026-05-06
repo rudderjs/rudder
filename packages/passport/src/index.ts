@@ -28,6 +28,7 @@ export {
   validateAuthorizationRequest,
   issueAuthCode,
   exchangeAuthCode,
+  validateScopes,
   OAuthError,
   clientCredentialsGrant,
   refreshTokenGrant,

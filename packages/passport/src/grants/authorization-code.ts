@@ -69,6 +69,7 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
   }
 
   const scopes = params.scope ? params.scope.split(' ').filter(Boolean) : []
+  validateScopes(client, scopes)
 
   const result: ValidatedAuthRequest = {
     client,
@@ -225,6 +226,58 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     scopes:   authCodeHelpers.getScopes(authCode as any),
     includeRefresh: true,
   })
+}
+
+// ─── Scope validation ─────────────────────────────────────
+
+/**
+ * Validate requested scopes against two gates and throw `invalid_scope` per
+ * RFC 6749 §3.3 if any requested scope fails either:
+ *
+ *   1. **Global registry** — declared via `Passport.tokensCan({...})`.
+ *      Rejects scopes the operator hasn't acknowledged exist.
+ *   2. **Per-client allow-list** — `client.scopes`. Rejects scopes outside
+ *      the operator-configured subset for this specific client.
+ *
+ * Each gate is **only enforced when populated**:
+ *   - Empty global registry → no global gate (treated as "scopes not yet
+ *     declared"). Matches Laravel Passport's "no scopes defined → permissive"
+ *     default; existing apps that haven't called `tokensCan()` won't break.
+ *   - Empty `client.scopes` → no per-client gate ("client may request any
+ *     globally-known scope"). The vast majority of clients leave this empty.
+ *
+ * Used by the auth-code, device-code, and client-credentials grants. Refresh
+ * token already has its own narrowing logic (can only narrow vs. the original
+ * issuance, never widen) and skips this helper.
+ *
+ * The `*` wildcard is always allowed — same convention as `Passport.validScopes()`.
+ */
+export function validateScopes(client: OAuthClient, requested: string[]): void {
+  if (requested.length === 0) return
+
+  const registered = Passport.scopes()
+  if (registered.length > 0) {
+    const validIds = new Set(registered.map(s => s.id))
+    const unknown = requested.filter(s => s !== '*' && !validIds.has(s))
+    if (unknown.length > 0) {
+      throw new OAuthError(
+        'invalid_scope',
+        `The requested scope is invalid, unknown, or malformed: ${unknown.join(' ')}.`,
+      )
+    }
+  }
+
+  const clientScopes = clientHelpers.getScopes(client as any)
+  if (clientScopes.length > 0) {
+    const allow = new Set(clientScopes)
+    const denied = requested.filter(s => s !== '*' && !allow.has(s))
+    if (denied.length > 0) {
+      throw new OAuthError(
+        'invalid_scope',
+        `The requested scope is not authorized for this client: ${denied.join(' ')}.`,
+      )
+    }
+  }
 }
 
 // ─── OAuth Error ──────────────────────────────────────────
