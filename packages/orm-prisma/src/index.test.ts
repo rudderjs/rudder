@@ -20,6 +20,7 @@ function makeCapturingClient() {
     create:     async () => ({}),
     createMany: async () => ({ count: 0 }),
     update:     async () => ({}),
+    updateMany: async () => ({ count: 0 }),
     delete:     async () => undefined,
     deleteMany: async () => ({ count: 0 }),
   }
@@ -108,6 +109,7 @@ describe('PrismaQueryBuilder — increment / decrement', () => {
       create:     async () => ({}),
       createMany: async () => ({ count: 0 }),
       update:     async (args: Record<string, unknown>) => { lastArgs = args; return { id: 1 } },
+      updateMany: async () => ({ count: 0 }),
       delete:     async () => undefined,
       deleteMany: async () => ({ count: 0 }),
     }

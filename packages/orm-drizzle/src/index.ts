@@ -126,6 +126,12 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   // directly when you need eager loading.
   with(..._relations: string[]): this { return this }
 
+  // No-op at the adapter level — pivot column projection is handled in the
+  // ORM's deferred-QB closure (see `_belongsToManyDeferredQb` and morph
+  // siblings). Apps calling `Model.query().withPivot(...)` outside a pivot
+  // relation get a silent no-op.
+  withPivot(..._columns: string[]): this { return this }
+
   withTrashed(): this  { this._withTrashed = true; return this }
   onlyTrashed(): this  { this._onlyTrashed = true; return this }
 
@@ -536,6 +542,16 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     // and the count comes back zero — adapter consumers needing precise MySQL
     // counts should switch to a Postgres or SQLite Drizzle driver until we
     // surface driver capability flags.
+    const result = await ((q as unknown as { returning?: () => DrizzleQB }).returning?.() ?? q) as unknown as Array<unknown>
+    return Array.isArray(result) ? result.length : 0
+  }
+
+  async updateAll(data: Partial<T>): Promise<number> {
+    const cond = this.buildConditions()
+    let q = this.db.update(this.table).set(data)
+    if (cond) q = q.where(cond)
+    // Same .returning() rationale as deleteAll — count via returning where the
+    // driver supports it (Postgres/SQLite). MySQL returns zero.
     const result = await ((q as unknown as { returning?: () => DrizzleQB }).returning?.() ?? q) as unknown as Array<unknown>
     return Array.isArray(result) ? result.length : 0
   }
