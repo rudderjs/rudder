@@ -33,6 +33,8 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     whereRelationExists: () => qb,
     withAggregate: () => qb,
     _aggregate: async () => 0,
+    whereGroup:   () => qb,
+    orWhereGroup: () => qb,
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     ...overrides,
   }

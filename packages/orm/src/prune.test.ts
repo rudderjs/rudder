@@ -42,6 +42,8 @@ function makeQb<T>(hooks: QbHooks = {}): QueryBuilder<T> {
     whereRelationExists: () => qb,
     withAggregate: () => qb,
     _aggregate: async () => 0,
+    whereGroup:   () => qb,
+    orWhereGroup: () => qb,
   }
   return qb
 }

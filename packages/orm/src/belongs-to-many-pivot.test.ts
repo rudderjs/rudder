@@ -112,6 +112,8 @@ function memoryAdapter(): {
         return { data: all, total: all.length, perPage: 15, currentPage: 1, lastPage: 1, from: 1, to: all.length }
       },
       whereRelationExists: () => qb,
+      whereGroup:   () => qb,
+      orWhereGroup: () => qb,
       withAggregate: () => qb,
       _aggregate: async () => 0,
     }

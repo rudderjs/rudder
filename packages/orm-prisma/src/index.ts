@@ -63,11 +63,30 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
    *  go through Prisma's native `_count.select`; everything else routes through
    *  a second-batch query in `_stampAggregates`. */
   private _aggregates: AggregateRequest[] = []
+  /** AND-rooted nested groups — each entry is a Prisma where filter object
+   *  produced by a sub-builder's `buildWhere()`. Spliced into the top-level
+   *  `AND` array in `buildWhere()`. */
+  private _andGroups: Record<string, unknown>[] = []
+  /** OR-rooted nested groups — each entry is added to the top-level `OR` array. */
+  private _orGroups: Record<string, unknown>[] = []
+  /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
+  private _isSubBuilder = false
 
   constructor(
     private prisma: PrismaClient,
     private table:  string
   ) {}
+
+  /** @internal — mark this builder as a sub-builder so terminals throw. */
+  _markSubBuilder(): this { this._isSubBuilder = true; return this }
+
+  private _assertNotSubBuilder(): void {
+    if (this._isSubBuilder) {
+      throw new Error(
+        '[RudderJS ORM] Sub-builder is for where* chaining only — call get() on the parent builder.',
+      )
+    }
+  }
 
   private get delegate(): PrismaModelDelegate {
     const d = this.prisma[this.table]
@@ -93,6 +112,22 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
     } else {
       this._orWheres.push({ column, operator: operatorOrValue as WhereOperator, value })
     }
+    return this
+  }
+
+  whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    const sub = new PrismaQueryBuilder<T>(this.prisma, this.table)._markSubBuilder()
+    fn(sub)
+    const filter = sub.buildWhere()
+    if (Object.keys(filter).length > 0) this._andGroups.push(filter)
+    return this
+  }
+
+  orWhereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    const sub = new PrismaQueryBuilder<T>(this.prisma, this.table)._markSubBuilder()
+    fn(sub)
+    const filter = sub.buildWhere()
+    if (Object.keys(filter).length > 0) this._orGroups.push(filter)
     return this
   }
 
@@ -148,6 +183,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async _aggregate(fn: AggregateFn, column?: string): Promise<unknown> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const where = this.buildWhere()
     if (fn === 'count') return this.delegate.count({ where })
@@ -281,11 +317,24 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
       }
     }
 
-    if (andFilters.length === 0 && orFilters.length === 0) return {}
+    const hasAndGroups = this._andGroups.length > 0
+    const hasOrGroups  = this._orGroups.length > 0
+
+    if (
+      andFilters.length === 0 && orFilters.length === 0 &&
+      !hasAndGroups && !hasOrGroups
+    ) return {}
 
     const where: Record<string, unknown> = {}
-    if (andFilters.length > 0) Object.assign(where, ...andFilters)
-    if (orFilters.length > 0)  where['OR'] = orFilters
+    if (hasAndGroups) {
+      // Use AND-array form so groups don't clobber sibling keys via Object.assign.
+      where['AND'] = [...andFilters, ...this._andGroups]
+    } else if (andFilters.length > 0) {
+      Object.assign(where, ...andFilters)
+    }
+    if (hasOrGroups || orFilters.length > 0) {
+      where['OR'] = [...orFilters, ...this._orGroups]
+    }
 
     return where
   }
@@ -505,6 +554,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async first(): Promise<T | null> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const row = await this.delegate.findFirst({
       where:   this.buildWhere(),
@@ -517,6 +567,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async find(id: number | string): Promise<T | null> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const row = await this.delegate.findUnique({ where: { id }, include: this.buildInclude() }) as Record<string, unknown> | null
     if (!row) return null
@@ -525,6 +576,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async get(): Promise<T[]> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const rows = await this.delegate.findMany({
       where:   this.buildWhere(),
@@ -538,6 +590,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async all(): Promise<T[]> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const rows = await this.delegate.findMany({
       where:   this.buildWhere(),
@@ -551,19 +604,23 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async count(): Promise<number> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     return this.delegate.count({ where: this.buildWhere() })
   }
 
   async create(data: Partial<T>): Promise<T> {
+    this._assertNotSubBuilder()
     return this.delegate.create({ data }) as Promise<T>
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
+    this._assertNotSubBuilder()
     return this.delegate.update({ where: { id }, data }) as Promise<T>
   }
 
   async delete(id: number | string): Promise<void> {
+    this._assertNotSubBuilder()
     if (this._softDeletes) {
       await this.delegate.update({ where: { id }, data: { deletedAt: new Date() } })
     } else {
@@ -572,19 +629,23 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async restore(id: number | string): Promise<T> {
+    this._assertNotSubBuilder()
     return this.delegate.update({ where: { id }, data: { deletedAt: null } }) as Promise<T>
   }
 
   async forceDelete(id: number | string): Promise<void> {
+    this._assertNotSubBuilder()
     await this.delegate.delete({ where: { id } })
   }
 
   async insertMany(rows: Partial<T>[]): Promise<void> {
+    this._assertNotSubBuilder()
     if (rows.length === 0) return
     await this.delegate.createMany({ data: rows as Record<string, unknown>[] })
   }
 
   async deleteAll(): Promise<number> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const result = await this.delegate.deleteMany({ where: this.buildWhere() })
     return result.count
@@ -600,6 +661,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    this._assertNotSubBuilder()
     return this.delegate.update({
       where: { id },
       data:  { [column]: { increment: amount }, ...extra },
@@ -607,6 +669,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    this._assertNotSubBuilder()
     return this.delegate.update({
       where: { id },
       data:  { [column]: { decrement: amount }, ...extra },
@@ -614,6 +677,7 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
+    this._assertNotSubBuilder()
     await this._resolveDeferred()
     const [rows, total] = await Promise.all([
       this.delegate.findMany({

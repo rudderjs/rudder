@@ -57,6 +57,8 @@ function recordingAdapter(): { adapter: OrmAdapter; latest: () => RecordedQb } {
       withConstrained: (rel, ws) => { rec.withConstraineds.push([rel, ws]); return qb },
       withAggregate: () => qb,
       _aggregate: async () => 0,
+      whereGroup:   () => qb,
+      orWhereGroup: () => qb,
     }
     return qb
   }

@@ -77,11 +77,17 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   private _onlyTrashed  = false
   private _softDeletes  = false
   /** Extra SQL expressions AND-merged into buildConditions(). Populated by
-   *  whereRelationExists with `EXISTS` / `NOT EXISTS` correlated subqueries. */
+   *  whereRelationExists with `EXISTS` / `NOT EXISTS` correlated subqueries
+   *  and by `whereGroup` with the sub-builder's combined SQL. */
   private _extraExprs:  SQL[] = []
+  /** OR-merged SQL expressions. Populated by `orWhereGroup` — each entry is
+   *  added to the top-level OR list alongside flat `_orWheres`. */
+  private _orExtraExprs: SQL[] = []
   /** Aggregate eager-load requests. Each becomes one correlated subselect in
    *  the SELECT list of the main query (run once per terminal call). */
   private _aggregates: AggregateRequest[] = []
+  /** When true, terminal methods throw — sub-builders are for `where*` chaining only. */
+  private _isSubBuilder = false
 
   constructor(
     private readonly db:         DrizzleDb,
@@ -92,6 +98,17 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
      *  related (and pivot) tables. */
     private readonly resolveTable: (name: string) => unknown,
   ) {}
+
+  /** @internal — mark this builder as a sub-builder so terminals throw. */
+  _markSubBuilder(): this { this._isSubBuilder = true; return this }
+
+  private _assertNotSubBuilder(): void {
+    if (this._isSubBuilder) {
+      throw new Error(
+        '[RudderJS ORM] Sub-builder is for where* chaining only — call get() on the parent builder.',
+      )
+    }
+  }
 
   where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): this {
     if (value === undefined) {
@@ -108,6 +125,24 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     } else {
       this._orWheres.push({ column, operator: operatorOrValue as WhereOperator, value })
     }
+    return this
+  }
+
+  whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable)
+      ._markSubBuilder()
+    fn(sub)
+    const expr = sub.buildConditions()
+    if (expr) this._extraExprs.push(expr)
+    return this
+  }
+
+  orWhereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this {
+    const sub = new DrizzleQueryBuilder<T>(this.db, this.table, this.primaryKey, this.resolveTable)
+      ._markSubBuilder()
+    fn(sub)
+    const expr = sub.buildConditions()
+    if (expr) this._orExtraExprs.push(expr)
     return this
   }
 
@@ -248,6 +283,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async _aggregate(fn: AggregateFn, column?: string): Promise<unknown> {
+    this._assertNotSubBuilder()
     const cond = this.buildConditions()
 
     const valueExpr = (() => {
@@ -398,8 +434,11 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
     const softExpr = this.softDeleteExpr()
     if (softExpr) andExprs.push(softExpr)
 
-    // EXISTS / NOT EXISTS subqueries from whereRelationExists are AND-merged.
+    // EXISTS / NOT EXISTS subqueries from whereRelationExists + AND-rooted
+    // whereGroup blocks.
     for (const e of this._extraExprs) andExprs.push(e)
+    // OR-rooted whereGroup blocks join the flat orWhere list.
+    for (const e of this._orExtraExprs) orExprs.push(e)
 
     const hasAnd = andExprs.length > 0
     const hasOr  = orExprs.length > 0
@@ -425,6 +464,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async first(): Promise<T | null> {
+    this._assertNotSubBuilder()
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
     const fields  = this.buildAggregateSelectFields()
@@ -439,6 +479,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async find(id: number | string): Promise<T | null> {
+    this._assertNotSubBuilder()
     const pkCol    = this.col(this.primaryKey) as Column
     const softExpr = this.softDeleteExpr()
     const pkExpr   = eq(pkCol, id) as SQL
@@ -453,6 +494,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async get(): Promise<T[]> {
+    this._assertNotSubBuilder()
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
     const fields  = this.buildAggregateSelectFields()
@@ -471,6 +513,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async count(): Promise<number> {
+    this._assertNotSubBuilder()
     const cond = this.buildConditions()
 
     let q = this.db.select({ value: sqlCount() }).from(this.table)
@@ -481,6 +524,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async create(data: Partial<T>): Promise<T> {
+    this._assertNotSubBuilder()
     const result = await (this.db
       .insert(this.table)
       .values(data)
@@ -490,6 +534,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async update(id: number | string, data: Partial<T>): Promise<T> {
+    this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const result = await (this.db
       .update(this.table)
@@ -501,6 +546,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async delete(id: number | string): Promise<void> {
+    this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     if (this._softDeletes) {
       await (this.db.update(this.table).set({ deletedAt: new Date() }).where(eq(pkCol, id)) as unknown as Promise<void>)
@@ -512,6 +558,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async restore(id: number | string): Promise<T> {
+    this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const result = await (this.db
       .update(this.table)
@@ -522,6 +569,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async forceDelete(id: number | string): Promise<void> {
+    this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     await (this.db
       .delete(this.table)
@@ -529,11 +577,13 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async insertMany(rows: Partial<T>[]): Promise<void> {
+    this._assertNotSubBuilder()
     if (rows.length === 0) return
     await (this.db.insert(this.table).values(rows) as unknown as Promise<void>)
   }
 
   async deleteAll(): Promise<number> {
+    this._assertNotSubBuilder()
     const cond = this.buildConditions()
     let q = this.db.delete(this.table)
     if (cond) q = q.where(cond)
@@ -557,6 +607,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async increment(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const col   = this.col(column) as Column
     const result = await (this.db
@@ -569,6 +620,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async decrement(id: number | string, column: string, amount = 1, extra: Record<string, unknown> = {}): Promise<T> {
+    this._assertNotSubBuilder()
     const pkCol = this.col(this.primaryKey) as Column
     const col   = this.col(column) as Column
     const result = await (this.db
@@ -581,6 +633,7 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
   }
 
   async paginate(page = 1, perPage = 15): Promise<PaginatedResult<T>> {
+    this._assertNotSubBuilder()
     const cond    = this.buildConditions()
     const orderBy = this.buildOrderBy()
     const fields  = this.buildAggregateSelectFields()
