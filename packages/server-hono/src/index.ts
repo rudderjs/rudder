@@ -126,6 +126,11 @@ function normalizeRequest(c: Context): AppRequest {
     enumerable: true,
     configurable: true,
   })
+  Object.defineProperty(req, 'token', {
+    get: () => ctx['__rjs_token'],
+    enumerable: true,
+    configurable: true,
+  })
   attachInputAccessors(req)
   return req as unknown as AppRequest
 }

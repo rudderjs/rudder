@@ -17,6 +17,7 @@ import {
   MemoryTokenRepository,
   runWithAuth,
   toAuthenticatable,
+  userToPlain,
   BaseAuthController,
   type AuthConfig,
   type Authenticatable,
@@ -89,6 +90,52 @@ describe('toAuthenticatable', () => {
     const auth = toAuthenticatable(record)
     auth.setRememberToken('abc')
     assert.strictEqual(auth.getRememberToken(), 'abc')
+  })
+})
+
+// ─── userToPlain ──────────────────────────────────────────
+
+describe('userToPlain', () => {
+  it('strips password by default', () => {
+    const plain = userToPlain(fakeUser())
+    assert.strictEqual(plain['password'], undefined)
+  })
+
+  it('strips both rememberToken (Prisma) and remember_token (Drizzle / raw Laravel)', () => {
+    // Both naming conventions appear in our shipped schemas — strip both
+    // unconditionally so callers don't have to remember which ORM they wired.
+    const plain = userToPlain({
+      id: '1', name: 'A', email: 'a@x', password: 'p',
+      rememberToken: 'rt-camel',
+      remember_token: 'rt-snake',
+    })
+    assert.strictEqual(plain['rememberToken'], undefined)
+    assert.strictEqual(plain['remember_token'], undefined)
+  })
+
+  it('strips functions (so prototype methods don\'t leak across the request boundary)', () => {
+    const plain = userToPlain({ id: '1', name: 'A', email: 'a@x', someMethod() { return 'x' } })
+    assert.strictEqual(plain['someMethod'], undefined)
+  })
+
+  it('honors getHidden() — strips app-specific sensitive columns', () => {
+    const plain = userToPlain({
+      id: '1', name: 'A', email: 'a@x',
+      two_factor_secret: 'OTPAUTH://...',
+      email_verification_token: 'evt',
+      bio: 'public',
+      getHidden() { return ['two_factor_secret', 'email_verification_token'] },
+    })
+    assert.strictEqual(plain['two_factor_secret'], undefined)
+    assert.strictEqual(plain['email_verification_token'], undefined)
+    assert.strictEqual(plain['bio'], 'public')
+  })
+
+  it('keeps the AuthUser shape (id/name/email always strings)', () => {
+    const plain = userToPlain({ id: 42, name: 'Jane', email: 'j@x' })
+    assert.strictEqual(plain.id, '42')
+    assert.strictEqual(plain.name, 'Jane')
+    assert.strictEqual(plain.email, 'j@x')
   })
 })
 
@@ -311,6 +358,50 @@ describe('AuthManager', () => {
     }
     const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
     assert.throws(() => manager.guard(), /User provider "missing" is not defined/)
+  })
+
+  it('createProvider() returns the default guard\'s provider', () => {
+    const sess = fakeSession()
+    const config = makeConfig(fakeModel([fakeUser()]))
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    const provider = manager.createProvider()
+    assert.ok(provider instanceof EloquentUserProvider)
+  })
+
+  it('createProvider("name") returns a provider by name without instantiating a guard', () => {
+    // Pure-API setup: sanctum needs a UserProvider but never wants the
+    // SessionGuard / @rudderjs/session machinery wired up.
+    const sess = fakeSession()
+    const config: AuthConfig = {
+      defaults: { guard: 'unused' },
+      guards: {}, // no guards registered — pure-API
+      providers: { api: { driver: 'eloquent', model: fakeModel([fakeUser()]) } },
+    }
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    const provider = manager.createProvider('api')
+    assert.ok(provider instanceof EloquentUserProvider)
+  })
+
+  it('createProvider() throws a clear error when the default guard is missing', () => {
+    const sess = fakeSession()
+    const config: AuthConfig = {
+      defaults: { guard: 'web' },
+      guards: {}, // no guards at all
+      providers: { users: { driver: 'eloquent', model: fakeModel([]) } },
+    }
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    assert.throws(() => manager.createProvider(), /Cannot resolve a default provider/)
+  })
+
+  it('createProvider("missing") throws "not defined"', () => {
+    const sess = fakeSession()
+    const config = makeConfig(fakeModel([]))
+    const manager = new AuthManager(config, alwaysTrue, () => sess.instance)
+
+    assert.throws(() => manager.createProvider('missing'), /User provider "missing" is not defined/)
   })
 })
 

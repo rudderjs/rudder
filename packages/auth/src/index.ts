@@ -33,19 +33,44 @@ export type { SessionStore } from './session-guard.js'
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function userToPlain(user: unknown): AuthUser {
+/**
+ * Always-stripped column names. `password` is the obvious one; both
+ * naming conventions for the remember-me token (`rememberToken` from our
+ * Prisma schema, `remember_token` from Drizzle / raw Laravel schemas)
+ * are stripped because either may appear depending on the ORM and
+ * column-mapping choices. App-specific sensitive columns
+ * (`two_factor_secret`, `email_verification_token`, …) should be added
+ * via `Authenticatable.getHidden()`.
+ */
+const ALWAYS_HIDDEN = new Set(['password', 'rememberToken', 'remember_token'])
+
+/**
+ * Serialize an `Authenticatable` for `req.user`. Drops:
+ *   - all functions (so prototype methods don't leak across the request boundary)
+ *   - the always-hidden columns above
+ *   - any column listed by the user's optional `getHidden()` method
+ */
+export function userToPlain(user: unknown): AuthUser {
   const u = user as Record<string, unknown>
+  const hidden = new Set(ALWAYS_HIDDEN)
+  const getHidden = (u['getHidden'] as undefined | (() => string[]))
+  if (typeof getHidden === 'function') {
+    for (const k of getHidden.call(u)) hidden.add(k)
+  }
   const plain: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(u)) {
     if (typeof v === 'function') continue
-    if (k === 'password') continue
+    if (hidden.has(k)) continue
     plain[k] = v
   }
+  // Spread first so the explicit String(...) conversions below always win on
+  // collision. The previous order had `...plain` last, which silently kept a
+  // numeric `id: 42` instead of the string '42' the AuthUser type promises.
   return {
+    ...plain,
     id:    String(plain['id'] ?? ''),
     name:  String(plain['name'] ?? ''),
     email: String(plain['email'] ?? ''),
-    ...plain,
   }
 }
 
