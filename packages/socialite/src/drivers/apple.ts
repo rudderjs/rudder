@@ -66,7 +66,7 @@ export class AppleProvider extends SocialiteDriver {
 
   private async getIdToken(code: string): Promise<Record<string, unknown> | null> {
     try {
-      const res = await fetch(this.tokenUrl(), {
+      const res = await this.fetchWithTimeout(this.tokenUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
