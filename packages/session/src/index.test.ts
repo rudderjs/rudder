@@ -354,7 +354,7 @@ function fakeRedisClient(): {
 function makeRedisDriver(secret = 'test-secret-32-chars-exactly!!xx'): { driver: RedisDriver; client: ReturnType<typeof fakeRedisClient> } {
   const driver = new RedisDriver({ prefix: 'session:' }, secret)
   const client = fakeRedisClient()
-  ;(driver as unknown as { client: unknown }).client = client
+  ;(driver as unknown as { clientPromise: Promise<unknown> }).clientPromise = Promise.resolve(client)
   return { driver, client }
 }
 
@@ -391,7 +391,7 @@ describe('RedisDriver — S1: HMAC signing', () => {
   it('load() rejects a value with a different secret and returns a fresh session', async () => {
     const { driver } = makeRedisDriver('secret-A')
     const otherDriver = new RedisDriver({ prefix: 'session:' }, 'secret-B')
-    ;(otherDriver as unknown as { client: unknown }).client = (driver as unknown as { client: unknown }).client
+    ;(otherDriver as unknown as { clientPromise: Promise<unknown> }).clientPromise = (driver as unknown as { clientPromise: Promise<unknown> }).clientPromise
     const cookieFromB = await otherDriver.persist({ id: 'cross', data: {}, flash_next: {} }, 60)
     const loaded = await driver.load(cookieFromB)
     assert.notStrictEqual(loaded.id, 'cross')
@@ -461,6 +461,93 @@ describe('sessionMiddleware — S3: save on error', () => {
       async () => mw(req, res, async () => { throw original }),
       (err: unknown) => err === original,
     )
+  })
+})
+
+// ─── S4: getClient promise caching ───────────────────────────────────────────
+
+describe('RedisDriver — S4: cached client promise', () => {
+  it('concurrent persist() calls share a single client (no orphaned connections)', async () => {
+    const { driver, client } = makeRedisDriver()
+    // Hammer the driver from many concurrent callers; if getClient() were
+    // racy, two of them would each have constructed a Redis instance.
+    await Promise.all([
+      driver.persist({ id: 'a', data: {}, flash_next: {} }, 60),
+      driver.persist({ id: 'b', data: {}, flash_next: {} }, 60),
+      driver.persist({ id: 'c', data: {}, flash_next: {} }, 60),
+    ])
+    assert.strictEqual(client.store.size, 3)
+  })
+
+  it('caches a Promise<Client>, not a raw client (concurrent first-call safety)', () => {
+    const driver = new RedisDriver({ prefix: 'session:' }, 'secret')
+    const client = fakeRedisClient()
+    ;(driver as unknown as { clientPromise: Promise<unknown> }).clientPromise = Promise.resolve(client)
+    const stored = (driver as unknown as { clientPromise: unknown }).clientPromise
+    assert.ok(stored instanceof Promise, 'clientPromise must be a Promise so concurrent callers await the same connect')
+  })
+})
+
+// ─── S5: SessionMiddleware() resolves from container ──────────────────────────
+
+describe('SessionMiddleware() — S5: per-route opt-in reuses the bound singleton', () => {
+  it('returns the same handler instance bound to session.middleware', async () => {
+    const { SessionMiddleware: SessionMiddlewareFn } = await import('./index.js')
+    const sentinel: import('@rudderjs/contracts').MiddlewareHandler = (async () => undefined) as never
+    const calls: string[] = []
+    const fakeApp = {
+      make<T>(key: string): T {
+        calls.push(key)
+        if (key === 'session.middleware') return sentinel as unknown as T
+        throw new Error('unexpected token: ' + key)
+      },
+    }
+    const g = globalThis as Record<string, unknown>
+    const previous = g['__rudderjs_app__']
+    g['__rudderjs_app__'] = fakeApp
+    try {
+      const m1 = SessionMiddlewareFn()
+      const m2 = SessionMiddlewareFn()
+      assert.strictEqual(m1, sentinel, 'must resolve from container, not build a fresh middleware')
+      assert.strictEqual(m1, m2, 'two calls must return the identical reference')
+      assert.deepStrictEqual(calls, ['session.middleware', 'session.middleware'])
+    } finally {
+      if (previous === undefined) delete g['__rudderjs_app__']
+      else g['__rudderjs_app__'] = previous
+    }
+  })
+})
+
+// ─── S6: missing flash_next / data on load ────────────────────────────────────
+
+describe('SessionInstance — S6: tolerates legacy/corrupt payloads', () => {
+  it('constructor handles a payload missing flash_next', () => {
+    const driver = { load: async () => ({} as never), persist: async () => '', destroy: async () => undefined }
+    assert.doesNotThrow(() => {
+      const s = new SessionInstance(
+        { id: 'x', data: { k: 'v' } } as never,  // intentionally missing flash_next
+        driver,
+        config,
+      )
+      assert.strictEqual(s.get('k'), 'v')
+      assert.strictEqual(s.getFlash('anything'), undefined)
+    })
+  })
+
+  it('constructor handles a payload missing both data and flash_next', () => {
+    const driver = { load: async () => ({} as never), persist: async () => '', destroy: async () => undefined }
+    const s = new SessionInstance({ id: 'x' } as never, driver, config)
+    assert.deepStrictEqual(s.all(), {})
+  })
+
+  it('redis driver round-trips a legacy payload (missing flash_next) without crashing', async () => {
+    const { driver, client } = makeRedisDriver()
+    // Pre-sign a real cookie value, then corrupt the redis entry to drop flash_next.
+    const cookieValue = await driver.persist({ id: 'legacy', data: { user: 'alice' }, flash_next: {} }, 60)
+    client.store.set('session:legacy', JSON.stringify({ id: 'legacy', data: { user: 'alice' } }))
+    const loaded = await driver.load(cookieValue)
+    assert.strictEqual(loaded.id, 'legacy')
+    assert.strictEqual(loaded.data['user'], 'alice')
   })
 })
 

@@ -143,7 +143,7 @@ Session data is JSON-serialised, base64url-encoded, and signed with HMAC-SHA256.
 
 ### `redis`
 
-Session ID is stored in the cookie; data lives in Redis under `{prefix}{id}`. Requires `ioredis`.
+The cookie holds the HMAC-signed session ID; the data lives in Redis under `{prefix}{id}`. Requires `ioredis`.
 
 ```ts
 {
@@ -154,6 +154,18 @@ Session ID is stored in the cookie; data lives in Redis under `{prefix}{id}`. Re
   },
 }
 ```
+
+### Driver tradeoffs
+
+| | cookie | redis |
+| --- | --- | --- |
+| Server-side store | none — payload lives in the cookie | required |
+| Max size | ~4 KB | bounded by Redis |
+| `regenerate()` invalidates the old cookie | **no** — old signed cookie remains valid until its `Max-Age` | yes — old key is deleted from Redis |
+| `destroy()` after logout | no-op (statelessness is the tradeoff) | actual delete |
+| Survives a redis outage | n/a | sessions become unreadable |
+
+If you need true post-logout invalidation, a stolen-cookie kill switch, or full session-fixation defense beyond rotating the ID on login, **use the redis driver**. The cookie driver is the right choice when statelessness is the goal and the data fits — flash messages, CSRF tokens, simple "is logged in" markers — and you can accept that revocation only happens at TTL.
 
 ---
 
