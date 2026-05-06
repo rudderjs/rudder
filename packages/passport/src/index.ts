@@ -106,10 +106,16 @@ export class PassportProvider extends ServiceProvider {
       rudder.command('passport:keys', async (args: string[]) => {
         const force = args.includes('--force')
         const { generateKeys } = await import('./commands/keys.js')
-        const { privatePath, publicPath } = await generateKeys({ force })
+        const { privatePath, publicPath, backup } = await generateKeys({ force })
         console.log(`  RSA keys generated:`)
         console.log(`    Private: ${privatePath}`)
         console.log(`    Public:  ${publicPath}`)
+        if (backup) {
+          console.log(`  Previous keys backed up to:`)
+          console.log(`    Private: ${backup.privatePath}`)
+          console.log(`    Public:  ${backup.publicPath}`)
+          console.log(`  WARNING: every JWT signed by the old key now fails verification.`)
+        }
       }).description('Generate RSA encryption keys for OAuth tokens')
 
       rudder.command('passport:client', async (args: string[]) => {

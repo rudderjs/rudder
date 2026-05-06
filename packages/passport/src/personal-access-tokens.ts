@@ -93,10 +93,12 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
 
     /**
      * Check if this user's current token has a specific scope.
-     * Only works inside a request that went through BearerMiddleware.
+     * Only works inside a request that went through BearerMiddleware —
+     * `__passport_token` is stamped onto the resolved user model and
+     * propagates onto `req.user` via the plain-copy step.
      */
     tokenCan(scope: string): boolean {
-      const token = (this as any).__currentToken as AccessToken | undefined
+      const token = (this as any).__passport_token as AccessToken | undefined
       if (!token) return false
       return accessTokenHelpers.can(token as any, scope)
     }
