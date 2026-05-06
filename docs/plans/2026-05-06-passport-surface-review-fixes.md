@@ -225,9 +225,9 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - Per CLAUDE.md PR #111 (2026-04-30), all read paths return Model instances.
 - Fix: update the comment; consider deleting `helpers.ts` entirely in favor of model methods (`getScopes`, `can`, `isExpired` already exist on the Model classes); route every grant through instance methods.
 
-**M-L3. No `prunable()` on AuthCode/DeviceCode/AccessToken/RefreshToken** ✅ VERIFIED REAL
+**M-L3. No `prunable()` on AuthCode/DeviceCode/AccessToken/RefreshToken** ✅ FIXED
 - `passport:purge` exists but only the user invokes it; no automatic pruning via `model:prune`.
-- Fix: implement `static prunable()` on each so the framework prune scheduler works out of the box.
+- **Fixed**: each token model now exposes `static prunable()` + `static pruneMode = 'mass'`. Predicates mirror `passport:purge` (`expiresAt < now OR revoked = true` for tokens, `expiresAt < now` for codes), so `pnpm rudder model:prune` and `passport:purge` are interchangeable and idempotent. `PassportProvider.boot()` eagerly registers the four classes with `ModelRegistry` so a fresh install can prune passport rows before any oauth flow has run.
 
 **M-L4. `helpers.ts:60` — `JSON.parse(raw)` swallows errors silently; corrupt data returns `[]`** ✅ VERIFIED REAL (intentional, but worth a log)
 - Fails-closed for authorization, fails-open for token validity depending on caller.

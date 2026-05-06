@@ -29,6 +29,16 @@ export class AccessToken extends Model {
 
   static override fillable = ['userId', 'clientId', 'name', 'scopes', 'revoked', 'expiresAt']
 
+  /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
+  static pruneMode = 'mass' as const
+
+  /** Rows safe to remove: expired OR revoked. Same predicate as `passport:purge`. */
+  static prunable() {
+    return this.query()
+      .where('expiresAt', '<', new Date())
+      .orWhere('revoked', true)
+  }
+
   declare userId: string | null
   declare clientId: string
   declare name: string | null

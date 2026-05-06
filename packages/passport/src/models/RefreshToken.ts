@@ -5,6 +5,16 @@ export class RefreshToken extends Model {
 
   static override fillable = ['accessTokenId', 'familyId', 'revoked', 'expiresAt']
 
+  /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
+  static pruneMode = 'mass' as const
+
+  /** Rows safe to remove: expired OR revoked. Same predicate as `passport:purge`. */
+  static prunable() {
+    return this.query()
+      .where('expiresAt', '<', new Date())
+      .orWhere('revoked', true)
+  }
+
   declare accessTokenId: string
   declare familyId: string | null
   declare revoked: boolean

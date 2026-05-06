@@ -5,6 +5,19 @@ export class AuthCode extends Model {
 
   static override fillable = ['userId', 'clientId', 'scopes', 'revoked', 'expiresAt', 'redirectUri', 'codeChallenge', 'codeChallengeMethod']
 
+  /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
+  static pruneMode = 'mass' as const
+
+  /**
+   * Rows safe to remove: expired only. Auth codes are single-use and revoked
+   * on exchange, so a revoked-but-unexpired row is still informative for
+   * replay-detection diagnostics; we wait for the natural 10-minute TTL
+   * before reaping. Mirrors the `passport:purge` predicate.
+   */
+  static prunable() {
+    return this.query().where('expiresAt', '<', new Date())
+  }
+
   declare userId: string
   declare clientId: string
   declare revoked: boolean

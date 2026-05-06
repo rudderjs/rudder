@@ -33,6 +33,7 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - **Refresh tokens revoke the old pair** — prevents replay attacks
 - **Device codes rate-limited** — 5-second polling interval enforced server-side
 - **Personal access tokens** — auto-create an internal `__personal_access__` OAuth client on first use
+- **Token models are `MassPrunable`** — `AuthCode`, `DeviceCode`, `AccessToken`, `RefreshToken` each define `static prunable()` (same predicates as `passport:purge`) + `pruneMode = 'mass'`, so `pnpm rudder model:prune` reaps expired/revoked rows automatically without the operator needing to invoke `passport:purge`. `PassportProvider.boot()` eagerly registers the four classes with `ModelRegistry` so the prune walker sees them on day-1 fresh apps before any oauth flow has fired.
 
 ## Why we don't store hashed access tokens
 
