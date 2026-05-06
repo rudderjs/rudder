@@ -42,6 +42,70 @@ async function validateClientRedirect(clientId: unknown, redirectUri: unknown): 
   return client
 }
 
+/**
+ * Resolve client credentials at the token endpoint per RFC 6749 §2.3.
+ *
+ * Confidential clients can authenticate via:
+ *   1. `Authorization: Basic base64(client_id:client_secret)` (§2.3.1, MUST support)
+ *   2. `client_id` + `client_secret` in the request body (alternative)
+ *
+ * §2.3 forbids using both at once — clients MUST NOT pass credentials in
+ * the body when the header is present. We reject that combination with
+ * `invalid_request` so SDK bugs surface loudly instead of silently
+ * accepting one set and ignoring the other.
+ *
+ * Public clients send only `client_id` in the body; both Basic creds and
+ * a body `client_id` mismatch is also rejected.
+ */
+function resolveClientCredentials(
+  req: { headers?: Record<string, unknown> },
+  body: Record<string, unknown>,
+): { clientId: string; clientSecret?: string } {
+  const authHeader = req.headers?.['authorization']
+  const bodyClientId     = body['client_id']     as string | undefined
+  const bodyClientSecret = body['client_secret'] as string | undefined
+
+  if (typeof authHeader === 'string' && authHeader.length >= 6 && authHeader.slice(0, 6).toLowerCase() === 'basic ') {
+    const encoded = authHeader.slice(6).trim()
+    let decoded: string
+    try {
+      decoded = Buffer.from(encoded, 'base64').toString('utf8')
+    } catch {
+      throw new OAuthError('invalid_request', 'Malformed HTTP Basic credentials.', 401)
+    }
+    const sep = decoded.indexOf(':')
+    if (sep === -1) {
+      throw new OAuthError('invalid_request', 'Malformed HTTP Basic credentials.', 401)
+    }
+    // RFC 6749 §2.3.1 — client_id and client_secret in Basic are
+    // application/x-www-form-urlencoded-encoded before base64. SDKs in
+    // the wild often skip the percent-encoding step; we accept the raw
+    // form because requiring percent-decoding here would reject every
+    // ASCII-only credential pair (which is the overwhelming majority).
+    const headerClientId     = decoded.slice(0, sep)
+    const headerClientSecret = decoded.slice(sep + 1)
+
+    if (!headerClientId) {
+      throw new OAuthError('invalid_request', 'Malformed HTTP Basic credentials.', 401)
+    }
+    if (bodyClientSecret !== undefined) {
+      throw new OAuthError('invalid_request', 'client_secret must not be sent in both Authorization header and request body.', 401)
+    }
+    if (bodyClientId !== undefined && bodyClientId !== headerClientId) {
+      throw new OAuthError('invalid_request', 'client_id in Authorization header does not match request body.', 401)
+    }
+
+    return { clientId: headerClientId, clientSecret: headerClientSecret }
+  }
+
+  if (typeof bodyClientId !== 'string' || !bodyClientId) {
+    throw new OAuthError('invalid_request', 'client_id is required.')
+  }
+  return bodyClientSecret !== undefined
+    ? { clientId: bodyClientId, clientSecret: bodyClientSecret }
+    : { clientId: bodyClientId }
+}
+
 type RouteHandler = (req: any, res: any) => Promise<any> | any
 
 interface Router {
@@ -201,6 +265,12 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
         const body = req.body ?? {}
         const grantType = body['grant_type'] as string
 
+        // RFC 6749 §2.3.1 — confidential clients MUST be able to
+        // authenticate via HTTP Basic; body params are an alternative.
+        // §2.3 forbids using both at once. Resolve credentials once for
+        // all grants instead of repeating the parsing in each branch.
+        const credentials = resolveClientCredentials(req, body)
+
         let result
 
         switch (grantType) {
@@ -208,18 +278,24 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
             result = await exchangeAuthCode({
               grantType,
               code:          body['code'],
-              clientId:      body['client_id'],
-              clientSecret:  body['client_secret'],
+              ...credentials,
               redirectUri:   body['redirect_uri'],
               codeVerifier:  body['code_verifier'],
             })
             break
 
           case 'client_credentials':
+            // ClientCredentialsRequest requires clientSecret (the grant
+            // is confidential-only by spec). Surface the missing-secret
+            // case as invalid_request rather than letting it surface
+            // downstream as "Invalid client secret."
+            if (credentials.clientSecret === undefined) {
+              throw new OAuthError('invalid_request', 'client_secret is required for the client_credentials grant.', 401)
+            }
             result = await clientCredentialsGrant({
               grantType,
-              clientId:     body['client_id'],
-              clientSecret: body['client_secret'],
+              clientId:     credentials.clientId,
+              clientSecret: credentials.clientSecret,
               scope:        body['scope'],
             })
             break
@@ -228,8 +304,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
             result = await refreshTokenGrant({
               grantType,
               refreshToken: body['refresh_token'],
-              clientId:     body['client_id'],
-              clientSecret: body['client_secret'],
+              ...credentials,
               scope:        body['scope'],
             })
             break
@@ -238,7 +313,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
             const pollResult = await pollDeviceCode({
               grantType,
               deviceCode: body['device_code'],
-              clientId:   body['client_id'],
+              clientId:   credentials.clientId,
             })
             if (pollResult.status === 'authorized') {
               result = pollResult.tokens

@@ -156,10 +156,10 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - Generic 60/min global RateLimit insufficient where each request guesses one client_secret.
 - Fix: per-route `RateLimit.perMinute(10).by((req) => \`${req.ip}:${req.body?.client_id}\`).toHandler()`, or document that apps must add it.
 
-**E9. Token endpoint — No support for HTTP Basic client authentication** ✅ VERIFIED REAL
-- All grants only accept `client_id` / `client_secret` from the request body. RFC 6749 §2.3.1 says servers **MUST** support Basic; body params are an alternative.
-- §2.3 says clients MUST NOT use both at once; server should reject if both present.
-- Fix: parse `Authorization: Basic base64(id:secret)` in routes.ts before grant dispatch; fall back to body; reject `invalid_request` if both supplied.
+**E9. Token endpoint — No support for HTTP Basic client authentication** ✅ FIXED — PR follow-up to #262
+- All grants previously only accepted `client_id` / `client_secret` from the request body. RFC 6749 §2.3.1 says servers **MUST** support Basic; body params are an alternative.
+- §2.3 says clients MUST NOT use both at once; server now rejects if both present.
+- **Fixed**: `resolveClientCredentials()` helper in `routes.ts` parses `Authorization: Basic base64(id:secret)` (case-insensitive prefix), falls back to body params, and rejects mixed credentials with `invalid_request`. `client_credentials` grant now surfaces missing `client_secret` early with a clear error.
 
 **E10. `authorization-code.ts:131,137,142` — `invalid_client` returns 400, not 401 with `WWW-Authenticate`** ✅ VERIFIED REAL
 - RFC 6749 §5.2: client auth failure MUST be 401 with `WWW-Authenticate`. `refresh-token.ts:33,38,44` and `client-credentials.ts:27,40` correctly use 401 — but `authorization-code.ts:131,137,142` defaults to 400. Inconsistent + non-conformant for the auth_code grant.
