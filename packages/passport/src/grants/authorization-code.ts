@@ -2,6 +2,7 @@ import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import type { AuthCode }    from '../models/AuthCode.js'
 import { clientHelpers, authCodeHelpers } from '../models/helpers.js'
+import { safeCompare } from './safe-compare.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 
 // ─── Authorization Request Validation ─────────────────────
@@ -50,8 +51,17 @@ export async function validateAuthorizationRequest(params: AuthorizationRequest)
 
   // PKCE validation
   if (params.codeChallenge) {
-    if (params.codeChallengeMethod && params.codeChallengeMethod !== 'S256' && params.codeChallengeMethod !== 'plain') {
+    const method = params.codeChallengeMethod ?? 'S256'
+    if (method !== 'S256' && method !== 'plain') {
       throw new OAuthError('invalid_request', 'Unsupported code_challenge_method. Use S256 or plain.')
+    }
+    // Public clients must use S256. RFC 7636 §4.4.1 + OAuth 2.0 BCP recommend
+    // S256 over `plain` because `plain` makes verifier == challenge — a stolen
+    // authorization code is already enough to mint tokens, defeating PKCE's
+    // entire purpose. Confidential clients keep the `plain` option for
+    // backward-compat with non-RFC-7636-compliant integrations.
+    if (method === 'plain' && clientHelpers.isPublic(client as any)) {
+      throw new OAuthError('invalid_request', 'Public clients must use code_challenge_method=S256.')
     }
   } else if (clientHelpers.isPublic(client as any)) {
     // Public clients MUST use PKCE
@@ -138,7 +148,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     }
     const { createHash } = await import('node:crypto')
     const hashed = createHash('sha256').update(params.clientSecret).digest('hex')
-    if (hashed !== client.secret) {
+    if (!(await safeCompare(hashed, client.secret))) {
       throw new OAuthError('invalid_client', 'Invalid client secret.')
     }
   }
@@ -176,7 +186,11 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
       expected = params.codeVerifier
     }
 
-    if (expected !== authCode.codeChallenge) {
+    // Constant-time compare; both sides are equal-length encodings (S256 →
+    // base64url SHA-256, plain → identity). On mismatch the helper short-
+    // circuits the length check first, but the equal-length common path
+    // runs the full timingSafeEqual.
+    if (!(await safeCompare(expected, authCode.codeChallenge))) {
       throw new OAuthError('invalid_grant', 'PKCE code_verifier does not match.')
     }
   }

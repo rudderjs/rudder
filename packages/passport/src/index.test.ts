@@ -32,6 +32,7 @@ import {
   resetPersonalAccessClient,
   registerPassportRoutes,
 } from './index.js'
+import { safeCompare } from './grants/safe-compare.js'
 
 describe('@rudderjs/passport exports', () => {
   test('Passport singleton is exported', () => {
@@ -215,6 +216,47 @@ describe('Passport Phase 6 customization hooks', () => {
     const mw = revokeMiddleware![0] as { name?: string }
     assert.equal(typeof mw, 'function', 'middleware entry should be a function (RequireBearer)')
     assert.equal(mw.name, 'RequireBearer')
+  })
+})
+
+describe('safeCompare — constant-time string comparison', () => {
+  test('returns true for two equal hex strings', async () => {
+    const a = 'a3b4c5d6e7f80123456789abcdef0123'
+    assert.equal(await safeCompare(a, a), true)
+  })
+
+  test('returns true for two equal base64url strings', async () => {
+    const a = 'q3RBZw7iOWB6XlxK6vFy_g'
+    assert.equal(await safeCompare(a, a), true)
+  })
+
+  test('returns false on mismatch (same length)', async () => {
+    assert.equal(await safeCompare('aaaaaa', 'bbbbbb'), false)
+  })
+
+  test('returns false on length mismatch', async () => {
+    assert.equal(await safeCompare('abc', 'abcd'), false)
+  })
+
+  test('returns false when first arg is null', async () => {
+    assert.equal(await safeCompare(null, 'abc'), false)
+  })
+
+  test('returns false when second arg is null', async () => {
+    assert.equal(await safeCompare('abc', null), false)
+  })
+
+  test('returns false when both args are null', async () => {
+    assert.equal(await safeCompare(null, null), false)
+  })
+
+  test('returns false when either arg is undefined', async () => {
+    assert.equal(await safeCompare(undefined, 'abc'), false)
+    assert.equal(await safeCompare('abc', undefined), false)
+  })
+
+  test('returns true for two empty strings (callers must guard against empty credentials)', async () => {
+    assert.equal(await safeCompare('', ''), true)
   })
 })
 
