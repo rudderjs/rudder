@@ -90,6 +90,18 @@ export class PassportProvider extends ServiceProvider {
       Passport.loadKeysFrom(cfg.keyPath)
     }
 
+    // Surface a startup warning when no keys are reachable — env vars
+    // unset AND no keypair on disk under the configured path. Without this,
+    // the first `/oauth/*` request fails deep inside `Passport.keys()` with
+    // a generic ENOENT that doesn't point at the missing-bootstrap-step.
+    if (!(await Passport.keysAvailable())) {
+      console.warn(
+        `[@rudderjs/passport] No RSA keypair found at "${Passport.keyPath()}/oauth-{private,public}.key" ` +
+        `and no PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY env vars set. ` +
+        `Run \`rudder passport:keys\` to generate one — token issuance and verification will fail until keys are present.`
+      )
+    }
+
     // Configure lifetimes
     if (cfg.tokensExpireIn) Passport.tokensExpireIn(cfg.tokensExpireIn)
     if (cfg.refreshTokensExpireIn) Passport.refreshTokensExpireIn(cfg.refreshTokensExpireIn)

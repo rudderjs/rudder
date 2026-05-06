@@ -93,6 +93,31 @@ export class Passport {
     this._publicKey = publicKey
   }
 
+  /**
+   * Probe whether an RSA keypair is reachable — either explicitly set via
+   * `setKeys()` (env vars) or readable on disk under the configured key path.
+   * Used by `PassportProvider.boot()` to surface a startup warning when keys
+   * are missing, before the first `/oauth/*` request fails with a confusing
+   * file-not-found error.
+   *
+   * Does NOT load or cache the keys; it only stats the files.
+   */
+  static async keysAvailable(): Promise<boolean> {
+    if (this._privateKey && this._publicKey) return true
+
+    const { stat } = await import('node:fs/promises')
+    const { join } = await import('node:path')
+
+    const privatePath = join(process.cwd(), this._keyPath, 'oauth-private.key')
+    const publicPath  = join(process.cwd(), this._keyPath, 'oauth-public.key')
+
+    const [priv, pub] = await Promise.all([
+      stat(privatePath).then(() => true, () => false),
+      stat(publicPath).then(() => true, () => false),
+    ])
+    return priv && pub
+  }
+
   /** Load keys from files or env. Returns { privateKey, publicKey }. */
   static async keys(): Promise<{ privateKey: string; publicKey: string }> {
     // Prefer explicitly set keys (from env vars)
