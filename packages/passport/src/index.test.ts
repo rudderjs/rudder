@@ -212,8 +212,9 @@ describe('Passport Phase 6 customization hooks', () => {
     registerPassportRoutes(fakeRouter)
     assert.ok(Array.isArray(revokeMiddleware), 'revoke route must be registered with a middleware array')
     assert.equal(revokeMiddleware!.length, 1, 'revoke route should have exactly one middleware (RequireBearer)')
-    assert.equal(typeof revokeMiddleware![0], 'function', 'middleware entry should be a function (RequireBearer)')
-    assert.equal((revokeMiddleware![0] as Function).name, 'RequireBearer')
+    const mw = revokeMiddleware![0] as { name?: string }
+    assert.equal(typeof mw, 'function', 'middleware entry should be a function (RequireBearer)')
+    assert.equal(mw.name, 'RequireBearer')
   })
 })
 
