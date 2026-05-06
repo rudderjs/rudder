@@ -43,6 +43,7 @@ function memoryAdapter(): {
       limit:   () => qb,
       offset:  () => qb,
       with:    () => qb,
+      withPivot: () => qb,
       withTrashed: () => qb,
       onlyTrashed: () => qb,
       first: async () => {
@@ -87,6 +88,7 @@ function memoryAdapter(): {
       decrement:  async () => ({} as T),
       insertMany: async () => undefined,
       deleteAll:  async () => 0,
+      updateAll:  async () => 0,
       paginate:   async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
       whereRelationExists: () => qb,
       withAggregate: () => qb,

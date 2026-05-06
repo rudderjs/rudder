@@ -2514,7 +2514,7 @@ const _TERMINAL_METHODS = new Set([
   'first', 'find', 'get', 'all', 'count', 'paginate',
 ])
 const _UNSUPPORTED_TERMINALS = new Set([
-  'create', 'update', 'delete', 'restore', 'forceDelete', 'increment', 'decrement', 'insertMany', 'deleteAll',
+  'create', 'update', 'delete', 'restore', 'forceDelete', 'increment', 'decrement', 'insertMany', 'deleteAll', 'updateAll',
 ])
 
 /**
@@ -2537,14 +2537,34 @@ function _replayChain(q: QueryBuilder<Model>, recorded: ReadonlyArray<[string, u
   return cur
 }
 
+interface DeferredProxyHooks {
+  /** Called when `withPivot(...cols)` is invoked. Throws when no cols are
+   *  provided (mirrors the contract). The implementation captures the column
+   *  list into the deferred-QB closure for post-terminal stamping. */
+  onWithPivot?(columns: string[]): void
+  /** Called after a terminal returns a result. Lets the deferred-QB stamp
+   *  `pivot` onto each row using the in-memory pivot rows from the lookup. */
+  postProcess?<R>(result: R, terminal: string): R
+}
+
 function _makeDeferredProxy(
   buildResolved: () => Promise<QueryBuilder<Model>>,
   recorded:      Array<[string, unknown[]]>,
   relationKind:  'belongsToMany' | 'morphToMany' | 'morphedByMany',
+  hooks:         DeferredProxyHooks = {},
 ): QueryBuilder<Model> {
   const proxy: QueryBuilder<Model> = new Proxy({} as QueryBuilder<Model>, {
     get(_t, prop): unknown {
       const name = String(prop)
+      if (name === 'withPivot') {
+        return (...cols: string[]) => {
+          if (cols.length === 0) {
+            throw new Error('[RudderJS ORM] withPivot() requires at least one column name.')
+          }
+          hooks.onWithPivot?.(cols)
+          return proxy
+        }
+      }
       if (_CHAIN_METHODS.has(name)) {
         return (...args: unknown[]) => {
           recorded.push([name, args])
@@ -2555,7 +2575,8 @@ function _makeDeferredProxy(
         return async (...args: unknown[]) => {
           const q = await buildResolved()
           const fn = (q as unknown as QbAsDict)[name]
-          return fn ? fn.apply(q, args) : undefined
+          const raw = fn ? await fn.apply(q, args) : undefined
+          return hooks.postProcess ? hooks.postProcess(raw, name) : raw
         }
       }
       if (_UNSUPPORTED_TERMINALS.has(name)) {
@@ -2572,13 +2593,72 @@ function _makeDeferredProxy(
   return proxy
 }
 
+/**
+ * Stamp `row.pivot = { col: value, ... }` for every row in `rows` whose
+ * `relatedKey` matches a pivot row. Used by the three deferred QBs after the
+ * second-step `Related` query resolves. Mutates rows in place; rows whose
+ * pivot row is absent are left untouched (`pivot` stays undefined).
+ */
+function _stampPivotOnRows(
+  rows:               ReadonlyArray<Record<string, unknown>>,
+  relatedKey:         string,
+  pivotRows:          ReadonlyArray<Record<string, unknown>>,
+  relatedPivotKey:    string,
+  pivotColumns:       ReadonlyArray<string>,
+): void {
+  if (pivotColumns.length === 0) return
+  const byId = new Map<unknown, Record<string, unknown>>()
+  for (const p of pivotRows) byId.set(p[relatedPivotKey], p)
+  for (const row of rows) {
+    if (row === null || row === undefined) continue
+    const pivot = byId.get(row[relatedKey])
+    if (!pivot) continue
+    const projected: Record<string, unknown> = {}
+    for (const col of pivotColumns) projected[col] = pivot[col]
+    ;(row as Record<string, unknown>)['pivot'] = projected
+  }
+}
+
+/**
+ * Stamp `pivot` onto a single result (object or array). Used by the deferred
+ * proxy's `postProcess` hook — the terminal name (`first` / `find` / `get` /
+ * `all` / `paginate`) determines whether to walk the result.
+ */
+function _stampPivotOnResult(
+  result:          unknown,
+  terminal:        string,
+  relatedKey:      string,
+  pivotRows:       ReadonlyArray<Record<string, unknown>>,
+  relatedPivotKey: string,
+  pivotColumns:    ReadonlyArray<string>,
+): unknown {
+  if (pivotColumns.length === 0) return result
+  if (result === null || result === undefined) return result
+  if (terminal === 'first' || terminal === 'find') {
+    _stampPivotOnRows([result as Record<string, unknown>], relatedKey, pivotRows, relatedPivotKey, pivotColumns)
+    return result
+  }
+  if (terminal === 'get' || terminal === 'all') {
+    _stampPivotOnRows(result as ReadonlyArray<Record<string, unknown>>, relatedKey, pivotRows, relatedPivotKey, pivotColumns)
+    return result
+  }
+  if (terminal === 'paginate') {
+    const page = result as { data: ReadonlyArray<Record<string, unknown>> }
+    _stampPivotOnRows(page.data, relatedKey, pivotRows, relatedPivotKey, pivotColumns)
+    return result
+  }
+  return result
+}
+
 function _belongsToManyDeferredQb(
   Related:    typeof Model,
   _def:       BelongsToManyDef,
   meta:       BelongsToManyMeta,
   parentVal:  unknown,
 ): QueryBuilder<Model> {
-  const recorded: Array<[string, unknown[]]> = []
+  const recorded:     Array<[string, unknown[]]> = []
+  const pivotColumns: string[] = []
+  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
 
   const buildResolved = async (): Promise<QueryBuilder<Model>> => {
     const adapter = ModelRegistry.getAdapter()
@@ -2586,6 +2666,7 @@ function _belongsToManyDeferredQb(
       .query<Record<string, unknown>>(meta.pivotTable)
       .where(meta.foreignPivotKey, parentVal)
       .get()
+    lastPivotRows = pivotRows
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     // Empty IN list — short-circuit with a guaranteed-empty query so
     // adapters don't have to handle the edge case.
@@ -2594,7 +2675,12 @@ function _belongsToManyDeferredQb(
     return _replayChain(q, recorded)
   }
 
-  return _makeDeferredProxy(buildResolved, recorded, 'belongsToMany')
+  return _makeDeferredProxy(buildResolved, recorded, 'belongsToMany', {
+    onWithPivot(cols) { pivotColumns.push(...cols) },
+    postProcess(result, terminal) {
+      return _stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
+    },
+  })
 }
 
 function _morphToManyDeferredQb(
@@ -2603,7 +2689,9 @@ function _morphToManyDeferredQb(
   meta:       MorphToManyMeta,
   parentVal:  unknown,
 ): QueryBuilder<Model> {
-  const recorded: Array<[string, unknown[]]> = []
+  const recorded:     Array<[string, unknown[]]> = []
+  const pivotColumns: string[] = []
+  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
 
   const buildResolved = async (): Promise<QueryBuilder<Model>> => {
     const adapter = ModelRegistry.getAdapter()
@@ -2612,13 +2700,19 @@ function _morphToManyDeferredQb(
       .where(meta.foreignPivotKey, parentVal)
       .where(meta.morphTypeKey,    meta.morphTypeValue)
       .get()
+    lastPivotRows = pivotRows
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
     return _replayChain(q, recorded)
   }
 
-  return _makeDeferredProxy(buildResolved, recorded, 'morphToMany')
+  return _makeDeferredProxy(buildResolved, recorded, 'morphToMany', {
+    onWithPivot(cols) { pivotColumns.push(...cols) },
+    postProcess(result, terminal) {
+      return _stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
+    },
+  })
 }
 
 function _morphedByManyDeferredQb(
@@ -2627,7 +2721,9 @@ function _morphedByManyDeferredQb(
   meta:       MorphedByManyMeta,
   parentVal:  unknown,
 ): QueryBuilder<Model> {
-  const recorded: Array<[string, unknown[]]> = []
+  const recorded:     Array<[string, unknown[]]> = []
+  const pivotColumns: string[] = []
+  let lastPivotRows: ReadonlyArray<Record<string, unknown>> = []
 
   const buildResolved = async (): Promise<QueryBuilder<Model>> => {
     const adapter = ModelRegistry.getAdapter()
@@ -2636,13 +2732,19 @@ function _morphedByManyDeferredQb(
       .where(meta.foreignPivotKey, parentVal)
       .where(meta.morphTypeKey,    meta.morphTypeValue)
       .get()
+    lastPivotRows = pivotRows
     const ids = pivotRows.map(r => r[meta.relatedPivotKey])
     const q = (Related.query() as unknown as QueryBuilder<Model>)
       .where(meta.relatedKey, 'IN', ids.length === 0 ? [] : ids)
     return _replayChain(q, recorded)
   }
 
-  return _makeDeferredProxy(buildResolved, recorded, 'morphedByMany')
+  return _makeDeferredProxy(buildResolved, recorded, 'morphedByMany', {
+    onWithPivot(cols) { pivotColumns.push(...cols) },
+    postProcess(result, terminal) {
+      return _stampPivotOnResult(result, terminal, meta.relatedKey, lastPivotRows, meta.relatedPivotKey, pivotColumns) as typeof result
+    },
+  })
 }
 
 /**
@@ -2697,7 +2799,8 @@ function _idsFromAttachInput(input: AttachInput): unknown[] {
  *
  * `attach` writes new pivot rows. `detach` removes pivot rows. `sync`
  * diffs the current pivot ids against the requested set and runs
- * `attach`/`detach` for the difference.
+ * `attach`/`detach` for the difference. `updatePivot` writes new
+ * extras onto an existing pivot row without touching either side.
  */
 export interface BelongsToManyAccessor {
   /**
@@ -2714,16 +2817,32 @@ export interface BelongsToManyAccessor {
    */
   detach(ids?: ReadonlyArray<number | string>): Promise<number>
   /**
+   * Update extras on an existing pivot row without touching the parent or
+   * related row. Locates the pivot row by `(parent, relatedId)` and applies
+   * `data`. Returns the number of rows updated (0 when no match — does NOT
+   * throw; the caller decides whether absence is an error).
+   */
+  updatePivot(relatedId: number | string, data: Record<string, unknown>): Promise<number>
+  /**
    * Diff the current pivot set against `desiredIds` — attach the missing,
    * detach what's no longer present. Optional flat pivot data is written
    * onto the *new* pivot rows only; existing rows are not modified.
+   *
+   * The map form (`sync({ id1: { col: val }, id2: { col: val } })`) carries
+   * per-id pivot data: `desiredIds = Object.keys(map)`, attached rows go in
+   * with their own pivot data, and ids that already exist with changed
+   * pivot data go through `updatePivot` to reconcile their extras. The
+   * `updated` array on the return value lists those reconciled ids.
    *
    * Returns counts of what changed.
    */
   sync(
     desiredIds: ReadonlyArray<number | string>,
     flatPivot?: Record<string, unknown>,
-  ): Promise<{ attached: unknown[]; detached: unknown[] }>
+  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
+  sync(
+    perIdPivot: Record<string | number, Record<string, unknown>>,
+  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
 }
 
 function _makeBelongsToManyAccessor(
@@ -2733,6 +2852,14 @@ function _makeBelongsToManyAccessor(
   parentVal: unknown,
 ): BelongsToManyAccessor {
   const meta = _resolveBelongsToManyMeta(Parent, Related, def)
+
+  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
+    return ModelRegistry.getAdapter()
+      .query<Record<string, unknown>>(meta.pivotTable)
+      .where(meta.foreignPivotKey, parentVal)
+      .where(meta.relatedPivotKey, relatedId)
+      .updateAll(data)
+  }
 
   return {
     async attach(input, flatPivot) {
@@ -2756,8 +2883,19 @@ function _makeBelongsToManyAccessor(
       return q.deleteAll()
     },
 
-    async sync(desiredIds, flatPivot) {
-      const adapter = ModelRegistry.getAdapter()
+    updatePivot,
+
+    async sync(
+      arg1:      ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>,
+      flatPivot?: Record<string, unknown>,
+    ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }> {
+      const adapter   = ModelRegistry.getAdapter()
+      const isMap     = !Array.isArray(arg1)
+      const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
+      const desiredIds: unknown[] = isMap
+        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
+        : [...(arg1 as ReadonlyArray<number | string>)]
+
       const currentRows = await adapter
         .query<Record<string, unknown>>(meta.pivotTable)
         .where(meta.foreignPivotKey, parentVal)
@@ -2766,15 +2904,20 @@ function _makeBelongsToManyAccessor(
       const desired = new Set<unknown>(desiredIds)
       const attached: unknown[] = []
       const detached: unknown[] = []
+      const updated:  unknown[] = []
       for (const id of desired) if (!current.has(id)) attached.push(id)
       for (const id of current) if (!desired.has(id)) detached.push(id)
 
       if (attached.length > 0) {
-        const rows = attached.map(id => ({
-          ...(flatPivot ?? {}),
-          [meta.foreignPivotKey]: parentVal,
-          [meta.relatedPivotKey]: id,
-        }))
+        const rows = attached.map(id => {
+          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
+          return {
+            ...(flatPivot ?? {}),
+            ...(perIdPivot ?? {}),
+            [meta.foreignPivotKey]: parentVal,
+            [meta.relatedPivotKey]: id,
+          }
+        })
         await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
       }
       if (detached.length > 0) {
@@ -2784,8 +2927,20 @@ function _makeBelongsToManyAccessor(
           .where(meta.relatedPivotKey, 'IN', detached)
           .deleteAll()
       }
+      if (perIdMap) {
+        // Reconcile extras on still-present ids by overwriting with the
+        // requested pivot data — matches Filament's posture (the form
+        // value wins). Skip when the supplied pivot is empty.
+        for (const id of desired) {
+          if (!current.has(id)) continue
+          const perIdPivot = perIdMap[id as string | number]
+          if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
+          await updatePivot(id as number | string, perIdPivot)
+          updated.push(id)
+        }
+      }
 
-      return { attached, detached }
+      return { attached, detached, updated }
     },
   }
 }
@@ -2823,10 +2978,17 @@ function _installBelongsToManyMethods(ModelClass: typeof Model): void {
 export interface MorphToManyAccessor {
   attach(input: AttachInput, flatPivot?: Record<string, unknown>): Promise<void>
   detach(ids?: ReadonlyArray<number | string>): Promise<number>
+  /** Update extras on an existing pivot row. Same posture as
+   *  {@link BelongsToManyAccessor.updatePivot}; the morph discriminator is
+   *  implicitly included in the WHERE clause. */
+  updatePivot(relatedId: number | string, data: Record<string, unknown>): Promise<number>
   sync(
     desiredIds: ReadonlyArray<number | string>,
     flatPivot?: Record<string, unknown>,
-  ): Promise<{ attached: unknown[]; detached: unknown[] }>
+  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
+  sync(
+    perIdPivot: Record<string | number, Record<string, unknown>>,
+  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
 }
 
 /**
@@ -2836,10 +2998,17 @@ export interface MorphToManyAccessor {
 export interface MorphedByManyAccessor {
   attach(input: AttachInput, flatPivot?: Record<string, unknown>): Promise<void>
   detach(ids?: ReadonlyArray<number | string>): Promise<number>
+  /** Update extras on an existing pivot row. Same posture as
+   *  {@link BelongsToManyAccessor.updatePivot}; the morph discriminator is
+   *  implicitly included in the WHERE clause. */
+  updatePivot(relatedId: number | string, data: Record<string, unknown>): Promise<number>
   sync(
     desiredIds: ReadonlyArray<number | string>,
     flatPivot?: Record<string, unknown>,
-  ): Promise<{ attached: unknown[]; detached: unknown[] }>
+  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
+  sync(
+    perIdPivot: Record<string | number, Record<string, unknown>>,
+  ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }>
 }
 
 function _makeMorphToManyAccessor(
@@ -2849,6 +3018,15 @@ function _makeMorphToManyAccessor(
   parentVal: unknown,
 ): MorphToManyAccessor {
   const meta = _resolveMorphToManyMeta(Parent, Related, def)
+
+  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
+    return ModelRegistry.getAdapter()
+      .query<Record<string, unknown>>(meta.pivotTable)
+      .where(meta.foreignPivotKey, parentVal)
+      .where(meta.morphTypeKey,    meta.morphTypeValue)
+      .where(meta.relatedPivotKey, relatedId)
+      .updateAll(data)
+  }
 
   return {
     async attach(input, flatPivot) {
@@ -2874,8 +3052,19 @@ function _makeMorphToManyAccessor(
       return q.deleteAll()
     },
 
-    async sync(desiredIds, flatPivot) {
-      const adapter = ModelRegistry.getAdapter()
+    updatePivot,
+
+    async sync(
+      arg1:      ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>,
+      flatPivot?: Record<string, unknown>,
+    ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }> {
+      const adapter   = ModelRegistry.getAdapter()
+      const isMap     = !Array.isArray(arg1)
+      const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
+      const desiredIds: unknown[] = isMap
+        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
+        : [...(arg1 as ReadonlyArray<number | string>)]
+
       const currentRows = await adapter
         .query<Record<string, unknown>>(meta.pivotTable)
         .where(meta.foreignPivotKey, parentVal)
@@ -2885,16 +3074,21 @@ function _makeMorphToManyAccessor(
       const desired = new Set<unknown>(desiredIds)
       const attached: unknown[] = []
       const detached: unknown[] = []
+      const updated:  unknown[] = []
       for (const id of desired) if (!current.has(id)) attached.push(id)
       for (const id of current) if (!desired.has(id)) detached.push(id)
 
       if (attached.length > 0) {
-        const rows = attached.map(id => ({
-          ...(flatPivot ?? {}),
-          [meta.foreignPivotKey]: parentVal,
-          [meta.relatedPivotKey]: id,
-          [meta.morphTypeKey]:    meta.morphTypeValue,
-        }))
+        const rows = attached.map(id => {
+          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
+          return {
+            ...(flatPivot ?? {}),
+            ...(perIdPivot ?? {}),
+            [meta.foreignPivotKey]: parentVal,
+            [meta.relatedPivotKey]: id,
+            [meta.morphTypeKey]:    meta.morphTypeValue,
+          }
+        })
         await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
       }
       if (detached.length > 0) {
@@ -2905,8 +3099,17 @@ function _makeMorphToManyAccessor(
           .where(meta.relatedPivotKey, 'IN', detached)
           .deleteAll()
       }
+      if (perIdMap) {
+        for (const id of desired) {
+          if (!current.has(id)) continue
+          const perIdPivot = perIdMap[id as string | number]
+          if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
+          await updatePivot(id as number | string, perIdPivot)
+          updated.push(id)
+        }
+      }
 
-      return { attached, detached }
+      return { attached, detached, updated }
     },
   }
 }
@@ -2918,6 +3121,15 @@ function _makeMorphedByManyAccessor(
   parentVal: unknown,
 ): MorphedByManyAccessor {
   const meta = _resolveMorphedByManyMeta(Parent, Related, def)
+
+  const updatePivot = async (relatedId: number | string, data: Record<string, unknown>): Promise<number> => {
+    return ModelRegistry.getAdapter()
+      .query<Record<string, unknown>>(meta.pivotTable)
+      .where(meta.foreignPivotKey, parentVal)
+      .where(meta.morphTypeKey,    meta.morphTypeValue)
+      .where(meta.relatedPivotKey, relatedId)
+      .updateAll(data)
+  }
 
   return {
     async attach(input, flatPivot) {
@@ -2945,8 +3157,19 @@ function _makeMorphedByManyAccessor(
       return q.deleteAll()
     },
 
-    async sync(desiredIds, flatPivot) {
-      const adapter = ModelRegistry.getAdapter()
+    updatePivot,
+
+    async sync(
+      arg1:      ReadonlyArray<number | string> | Record<string | number, Record<string, unknown>>,
+      flatPivot?: Record<string, unknown>,
+    ): Promise<{ attached: unknown[]; detached: unknown[]; updated: unknown[] }> {
+      const adapter   = ModelRegistry.getAdapter()
+      const isMap     = !Array.isArray(arg1)
+      const perIdMap  = isMap ? (arg1 as Record<string | number, Record<string, unknown>>) : null
+      const desiredIds: unknown[] = isMap
+        ? Object.keys(perIdMap!).map(k => /^\d+$/.test(k) ? Number(k) : k)
+        : [...(arg1 as ReadonlyArray<number | string>)]
+
       const currentRows = await adapter
         .query<Record<string, unknown>>(meta.pivotTable)
         .where(meta.foreignPivotKey, parentVal)
@@ -2956,16 +3179,21 @@ function _makeMorphedByManyAccessor(
       const desired = new Set<unknown>(desiredIds)
       const attached: unknown[] = []
       const detached: unknown[] = []
+      const updated:  unknown[] = []
       for (const id of desired) if (!current.has(id)) attached.push(id)
       for (const id of current) if (!desired.has(id)) detached.push(id)
 
       if (attached.length > 0) {
-        const rows = attached.map(id => ({
-          ...(flatPivot ?? {}),
-          [meta.foreignPivotKey]: parentVal,
-          [meta.relatedPivotKey]: id,
-          [meta.morphTypeKey]:    meta.morphTypeValue,
-        }))
+        const rows = attached.map(id => {
+          const perIdPivot = perIdMap ? perIdMap[id as string | number] : undefined
+          return {
+            ...(flatPivot ?? {}),
+            ...(perIdPivot ?? {}),
+            [meta.foreignPivotKey]: parentVal,
+            [meta.relatedPivotKey]: id,
+            [meta.morphTypeKey]:    meta.morphTypeValue,
+          }
+        })
         await adapter.query<Record<string, unknown>>(meta.pivotTable).insertMany(rows)
       }
       if (detached.length > 0) {
@@ -2976,8 +3204,17 @@ function _makeMorphedByManyAccessor(
           .where(meta.relatedPivotKey, 'IN', detached)
           .deleteAll()
       }
+      if (perIdMap) {
+        for (const id of desired) {
+          if (!current.has(id)) continue
+          const perIdPivot = perIdMap[id as string | number]
+          if (!perIdPivot || Object.keys(perIdPivot).length === 0) continue
+          await updatePivot(id as number | string, perIdPivot)
+          updated.push(id)
+        }
+      }
 
-      return { attached, detached }
+      return { attached, detached, updated }
     },
   }
 }

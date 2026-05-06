@@ -47,6 +47,7 @@ function memoryAdapter(): {
       limit:   () => qb,
       offset:  () => qb,
       with:    () => qb,
+      withPivot: () => qb,
       withTrashed: () => qb,
       onlyTrashed: () => qb,
       first: async () => {
@@ -104,6 +105,17 @@ function memoryAdapter(): {
         }
         tables.set(table, keep)
         return removed
+      },
+      updateAll: async (data) => {
+        const list = ensure(table)
+        let updated = 0
+        for (const r of list) {
+          if (matches(r, wheres)) {
+            Object.assign(r, data as Record<string, unknown>)
+            updated++
+          }
+        }
+        return updated
       },
       paginate:   async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
       whereRelationExists: () => qb,

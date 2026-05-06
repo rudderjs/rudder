@@ -13,6 +13,7 @@ type PrismaModelDelegate = {
   create(args: Record<string, unknown>): Promise<unknown>
   createMany(args: { data: Record<string, unknown>[] }): Promise<{ count: number }>
   update(args: Record<string, unknown>): Promise<unknown>
+  updateMany(args: { where?: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>
   delete(args: Record<string, unknown>): Promise<unknown>
   deleteMany(args: { where?: Record<string, unknown> }): Promise<{ count: number }>
 }
@@ -103,6 +104,13 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   limit(n: number):  this { this._limitN  = n; return this }
   offset(n: number): this { this._offsetN = n; return this }
   with(...relations: string[]): this { this._withs.push(...relations); return this }
+
+  // No-op at the adapter level — pivot column projection is handled in the
+  // ORM's deferred-QB closure (see `_belongsToManyDeferredQb` and morph
+  // siblings). Apps calling `Model.query().withPivot(...)` outside a pivot
+  // relation get a silent no-op, which matches Prisma's posture for unknown
+  // chainables on a regular query.
+  withPivot(..._columns: string[]): this { return this }
 
   withTrashed(): this  { this._withTrashed = true; return this }
   onlyTrashed(): this  { this._onlyTrashed = true; return this }
@@ -579,6 +587,15 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
   async deleteAll(): Promise<number> {
     await this._resolveDeferred()
     const result = await this.delegate.deleteMany({ where: this.buildWhere() })
+    return result.count
+  }
+
+  async updateAll(data: Partial<T>): Promise<number> {
+    await this._resolveDeferred()
+    const result = await this.delegate.updateMany({
+      where: this.buildWhere(),
+      data:  data as Record<string, unknown>,
+    })
     return result.count
   }
 

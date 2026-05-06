@@ -34,6 +34,7 @@ function makeRecorder(seed: Record<string, unknown[]> = {}) {
     create:     async () => ({}),
     createMany: async () => ({ count: 0 }),
     update:     async () => ({}),
+    updateMany: async () => ({ count: 0 }),
     delete:     async () => undefined,
     deleteMany: async () => ({ count: 0 }),
   })

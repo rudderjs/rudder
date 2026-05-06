@@ -12,6 +12,7 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     limit: () => qb,
     offset: () => qb,
     with: () => qb,
+    withPivot: () => qb,
     first: async () => null,
     find: async () => null,
     get: async () => [],
@@ -28,6 +29,7 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     decrement: async (_id, _col, _amount, _extra) => ({} as T),
     insertMany: async () => undefined,
     deleteAll:  async () => 0,
+    updateAll:  async () => 0,
     paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
     whereRelationExists: () => qb,
     withAggregate: () => qb,
@@ -2004,6 +2006,7 @@ function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record
       limit:   () => qb,
       offset:  () => qb,
       with:    () => qb,
+      withPivot: () => qb,
       withTrashed: () => qb,
       onlyTrashed: () => qb,
       first: async () => (ensure(table).find(r => matches(r, wheres)) ?? null) as T | null,
@@ -2051,6 +2054,17 @@ function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record
         list.length = 0
         list.push(...keep)
         return removed
+      },
+      updateAll: async (data) => {
+        const list = ensure(table)
+        let updated = 0
+        for (const r of list) {
+          if (matches(r, wheres)) {
+            Object.assign(r, data as Record<string, unknown>)
+            updated++
+          }
+        }
+        return updated
       },
       paginate: async () => ({ data: [], total: 0, perPage: 15, currentPage: 1, lastPage: 0, from: 0, to: 0 }),
       whereRelationExists: () => qb,

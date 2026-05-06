@@ -141,6 +141,18 @@ export interface QueryBuilder<T> {
   limit(n: number): this
   offset(n: number): this
   with(...relations: string[]): this
+  /**
+   * Project pivot-table columns onto each related row when the query is
+   * a deferred `belongsToMany` / `morphToMany` / `morphedByMany` lookup.
+   *
+   * Each returned related row carries `row.pivot = { col: value, ... }` for
+   * the requested columns. No-op on non-pivot queries (the column list is
+   * discarded by adapters that don't run a pivot lookup).
+   *
+   * Throws when called with no arguments — the column list is required so
+   * the contract is explicit, not "all pivot columns".
+   */
+  withPivot(...columns: string[]): this
   /** Include soft-deleted records in query results. */
   withTrashed(): this
   /** Return only soft-deleted records. */
@@ -166,6 +178,14 @@ export interface QueryBuilder<T> {
    * (most adapters apply the soft-delete filter automatically otherwise).
    */
   deleteAll(): Promise<number>
+  /**
+   * Update every row matching the chained `where`/`orWhere` clauses with
+   * the given partial. Returns the number of rows updated. Used by the
+   * `belongsToMany` / `morphToMany` / `morphedByMany` accessors'
+   * `updatePivot()` to write extras on a composite-keyed pivot row, and
+   * available for any bulk-update need beyond pivots.
+   */
+  updateAll(data: Partial<T>): Promise<number>
   /** Restore a soft-deleted record. */
   restore(id: number | string): Promise<T>
   /** Permanently delete a record, bypassing soft deletes. */
