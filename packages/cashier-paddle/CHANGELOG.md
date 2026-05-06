@@ -1,5 +1,16 @@
 # @rudderjs/cashier-paddle
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [e8cee45]
+- Updated dependencies [942bd78]
+- Updated dependencies [015e16e]
+- Updated dependencies [231d7f6]
+- Updated dependencies [015e16e]
+  - @rudderjs/auth@5.0.0
+
 ## 2.0.0
 
 ### Patch Changes

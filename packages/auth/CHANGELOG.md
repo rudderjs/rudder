@@ -1,5 +1,60 @@
 # @rudderjs/auth
 
+## 5.0.0
+
+### Major Changes
+
+- e8cee45: `BaseAuthController` is now mounted at `/auth/*` instead of `/api/auth/*` (BREAKING).
+
+  The `/api/*` namespace is reserved for token-based API auth (Sanctum / Passport bearer routes); session-based auth lives on the `web` middleware group, matching Laravel's `/login` convention. The previous `/api/auth/*` prefix was a footgun — the URL implied the controller belonged in `routes/api.ts`, but its handlers depend on session/auth ALS context that's only auto-installed on the `web` group.
+
+  What changed:
+
+  - `@Controller('/api/auth')` → `@Controller('/auth')` on `BaseAuthController`. Subclasses inherit the new prefix.
+  - The published auth views (`Login`, `Register`, `ForgotPassword`, `ResetPassword`) now default `submitUrl` to `/auth/sign-in/email` / `/auth/sign-up/email` / `/auth/request-password-reset` / `/auth/reset-password`.
+
+  Upgrading an existing app:
+
+  - If you vendored `@rudderjs/auth/views/react/*` into `app/Views/Auth/`, re-publish them (or do a quick find-and-replace from `/api/auth/` → `/auth/` on those files).
+  - If you call `BaseAuthController` directly without any subclass URL override, you don't need to do anything else — the controller now serves `POST /auth/sign-in/email` etc. and the bundled views point at the new paths by default.
+  - If you depend on the old `/api/auth/*` paths (e.g. external mobile clients, custom front-ends), pass explicit `submitUrl` props to the auth views, or add backwards-compatible alias routes in your `routes/web.ts`.
+
+  `create-rudder-app`'s Welcome view + scaffolded `pages/index` sign-out fetch are updated to match the new paths.
+
+- 231d7f6: Fix two bugs in email verification (`@rudderjs/auth`):
+
+  - **Schema → interface alignment (BREAKING)**: published schemas (`schema/auth.prisma` + Drizzle PG / MySQL / SQLite) now expose a nullable `emailVerifiedAt` timestamp instead of the `emailVerified: boolean` they previously declared. The `EnsureEmailIsVerified` middleware and `MustVerifyEmail` interface have always documented `emailVerifiedAt`, so verified users would get 403s under the old schemas. Apps upgrading need to migrate the column (e.g. `ALTER TABLE user RENAME COLUMN emailVerified TO emailVerifiedAt; ALTER TABLE user ALTER COLUMN emailVerifiedAt TYPE timestamp USING (CASE WHEN emailVerifiedAt THEN now() ELSE NULL END);`) — adapt to your dialect.
+  - **ESM `require()` removed**: `verification.ts` previously called `require('@rudderjs/router')` and `require('node:crypto')`, which throw `ReferenceError: require is not defined` in pure ESM consumers — making `verificationUrl()` and `handleEmailVerification()` non-functional. Both are now static ESM imports. `@rudderjs/router` is already a non-optional peer of `@rudderjs/auth`, so the previous try/catch fallback was unnecessary.
+
+  `create-rudder-app`'s scaffolded Prisma + User-model templates are updated to match the new column.
+
+### Minor Changes
+
+- 015e16e: Stop leaking sensitive user columns into `req.user` (T5).
+
+  - `userToPlain(user)` is now exported from `@rudderjs/auth`. Always strips functions plus `password`, `rememberToken`, and `remember_token` (the last two cover both Prisma camelCase and Drizzle/raw-Laravel snake_case schema choices). The previous filter only removed functions and `password`, so columns like `remember_token`, `two_factor_secret`, and `email_verification_token` could surface in `req.user`.
+  - `Authenticatable.getHidden?(): string[]` is a new optional method on the contract — Laravel's `$hidden` array. User models that implement it can name app-specific sensitive columns (`two_factor_secret`, `email_verification_token`, …) and `userToPlain` will strip them on top of the always-hidden defaults.
+  - `@rudderjs/sanctum`'s middleware now delegates to the shared `userToPlain` instead of inlining a near-duplicate filter loop, so sanctum-authenticated requests inherit the same protection.
+  - Fixed a pre-existing bug in `userToPlain` where the spread of the original record was placed _after_ the explicit `String(...)` conversions for `id` / `name` / `email`, silently overriding them. The conversions now win on collision so `id`, `name`, and `email` are guaranteed strings as the `AuthUser` type promises.
+
+- 015e16e: Fix Sanctum's hardwiring to the session driver (T2/T7).
+
+  - `AuthManager.createProvider(name?)` is now public. With no `name`, it falls back to the default guard's configured provider; with a `name`, it resolves any provider in `auth.providers` independently of any guard. Pure-API apps can now use Sanctum without registering `@rudderjs/session` or a session guard.
+  - `SanctumServiceProvider.boot()` resolves the user provider through `manager.createProvider(config.provider)` instead of `manager.guard().provider`. The previous code instantiated a `SessionGuard` just to read its provider, which threw on any non-session default guard. The catch around `app.make('auth.manager')` now narrows to "binding not found" only — provider-resolution errors propagate verbatim instead of being rewritten to "No auth manager found".
+  - `SanctumConfig.provider?: string` overrides which entry in `auth.providers` Sanctum uses. Required for pure-API apps; optional in mixed (web + API) setups.
+
+### Patch Changes
+
+- 942bd78: Fix two observability inconsistencies in `Gate`:
+
+  - `_getGateObservers()` no longer caches `null`. The previous lazy accessor cached the global lookup on first call; if `Gate.allows()` ran before `gate-observers.ts` was imported, the cache trapped `null` permanently and downstream subscribers (e.g. Telescope's `GateCollector`) never received events even after they subscribed. The lookup is one property read, so dropping the cache costs nothing measurable.
+  - `Gate.forUser(user).allows(ability, model)` now reports `resolvedVia: 'policy'` (with the policy name) when the policy is registered but the ability method is missing — matching the static `Gate.allows()` path. The previous `resolvedVia: 'default'` contradicted the static path and miscategorised the event in Telescope.
+
+- Updated dependencies [b436a02]
+- Updated dependencies [5bafd13]
+- Updated dependencies [d2d3e2d]
+  - @rudderjs/session@1.0.4
+
 ## 4.0.3
 
 ### Patch Changes

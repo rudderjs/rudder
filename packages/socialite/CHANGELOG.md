@@ -1,5 +1,69 @@
 # @rudderjs/socialite
 
+## 1.1.0
+
+### Minor Changes
+
+- 28bee3d: Fix Sign-in-with-Apple: the previous driver was non-functional in production and unsafe by design. Three findings closed (O2–O4 from the auth-surface review).
+
+  - **O2 — Sign `client_secret` as an ES256 JWT per Apple's spec.** Apple rejects raw `client_secret` strings with `invalid_client`. The driver now mints a freshly-signed ES256 JWT (claims: `iss=teamId`, `sub=clientId`, `aud=https://appleid.apple.com`, `iat`/`exp`) just-in-time on each token exchange. New required config fields:
+    - `teamId`: Apple Developer Team ID (10 chars)
+    - `keyId`: Sign-in-with-Apple Key ID (the JWS `kid`)
+    - `privateKey`: PEM contents of the `.p8` file from the Apple Developer portal
+    - `clientSecretTtl?` (optional): JWT lifetime override in seconds; defaults to 5 minutes
+      Signatures use IEEE P-1363 raw `r||s` encoding (64 bytes), as required by JWS — node:crypto's default DER encoding for EC keys won't work and is explicitly opted out of with `dsaEncoding: 'ieee-p1363'`.
+  - **O3 — Verify `id_token` signature + claims.** The previous driver decoded Apple's id_token JWT payload via `Buffer.from(payload, 'base64url')` with no signature or claim verification — meaning a crafted id_token could supply any `sub`, becoming the app's primary user identifier (account-takeover risk). The driver now:
+    - Fetches Apple's JWKS from `https://appleid.apple.com/auth/keys` and caches it for 1h (refetched on cache miss to handle key rotation).
+    - Verifies the RS256 signature against the kid-matched public key.
+    - Validates `iss === https://appleid.apple.com`, `aud` matches `clientId` (string or array form), `exp` is in the future, and `sub` is non-empty.
+    - Rejects unexpected `alg` values (defends against `alg=none` confusion).
+  - **Token exchange consolidated into one POST.** The previous driver POSTed the auth code twice — once via the inherited `getAccessToken`, then again in `getIdToken` — which Apple rejects because authorization codes are single-use. The override fetches `access_token` + `id_token` from the same response.
+  - **O4 (related) — `getRedirectUrl` now inherits stateful CSRF state generation** introduced in O5 instead of skipping it. `response_mode=form_post` is preserved via a new `extraAuthParams()` hook on the base driver.
+
+  **Breaking for any app currently configuring Apple via socialite (none on npm, since the driver was broken end-to-end):** `clientSecret` in `config('socialite.apple')` is no longer used. Add `teamId`, `keyId`, and `privateKey` to your Apple config.
+
+  Exports `AppleSocialiteConfig` for typed Apple config in `config/socialite.ts`.
+
+- 04b371e: Harden OAuth driver fetches against four review findings (O6–O9):
+
+  - **O6 — Sanitize provider error messages.** Token exchange + user-info errors no longer interpolate the full response body into `Error.message`. Body is attached on `Error.cause` (`{ status, body }`) so callers that need it can still inspect, but log/error-tracking destinations stop receiving provider-echoed `client_id`, hints, or PII.
+  - **O7 — Per-request timeout via `AbortSignal`.** All four built-in drivers (GitHub user-emails, Google/Facebook/GitHub token + user-info, Apple id_token) now fetch through a shared `fetchWithTimeout` helper on the base driver. Default 10s per request; override via `SocialiteDriverConfig.timeout` (milliseconds). Stops a hung provider endpoint from keeping a request handler alive indefinitely.
+  - **O8 — Type-check the token-exchange response.** `access_token` must be a non-empty string (rejected if number / null / empty). `refresh_token` and `expires_in` fall back to `null` on type mismatch instead of being cast and exposed downstream.
+  - **O9 — `Socialite.extend(name, factory)` invalidates the cached driver.** Previously, calling `extend()` after the driver had been resolved was silent: `_instances` kept the old instance. Now `extend()` drops the cached entry so the next `driver(name)` call uses the new factory. Helps hot-reload + runtime-override workflows.
+
+  No breaking changes — `timeout` is additive, error semantics tighten only at the message-vs-cause split, and type-checking only rejects responses that would have produced runtime crashes downstream anyway.
+
+- d2d3e2d: Add OAuth state generation/validation to `@rudderjs/socialite` (O5 — closes the login-CSRF / state-fixation gap across every provider).
+
+  Previously, `getRedirectUrl(state?)` accepted an optional `state` but the framework neither generated nor validated it — `user(req)` ignored `query.state` entirely. Laravel Socialite (the inspiration) auto-generates and validates by default; this port had dropped that. Without state validation, an attacker can swap their authorization code into a victim's callback and link the victim's session to the attacker's social account.
+
+  What changed:
+
+  - **Stateful by default.** `redirect()` / `getRedirectUrl()` mints a 40-hex-char CSPRNG token, stores it on the session under `socialite_state:<provider>`, and embeds it in the OAuth URL. `user(req)` extracts the returned `state` from the query (or, for Apple's `form_post` callback, from the request body), compares with `crypto.timingSafeEqual` against the session-stored value, and throws `InvalidStateException` on mismatch / missing state / no session in context.
+  - **One-time use.** Both successful and failed validation clear the session slot — a leaked or sniffed `state` cannot be replayed.
+  - **Per-provider namespace.** `socialite_state:github`, `socialite_state:google`, etc. — concurrent OAuth flows on the same session don't collide.
+  - **`.stateless()` opt-out.** For OAuth flows that can't reach the session (mobile, S2S token grants), `.stateless()` returns `this` and disables both generation and validation. Call-site equivalent of Laravel's `->stateless()`.
+  - **`@rudderjs/session` is now a peer dep.** Stateful default needs the session in context. Apps using `@rudderjs/socialite` on the `web` group already have it (auto-installed by `SessionProvider`).
+
+  `@rudderjs/session`: adds `_runWithSession(session, fn)` test-only helper so other packages can exercise code that goes through the `Session` static facade in unit tests without standing up the full middleware. Marked `@internal`; not part of the runtime contract.
+
+  Migration notes:
+
+  - Apps already on the `web` group with `@rudderjs/session` registered get the protection automatically — no code changes.
+  - Apps that mount Socialite routes in the `api` group (no session) need to either opt into session-per-route or call `.stateless()` on each driver call. Stateless mode is appropriate for token-grant flows but **don't** use it on browser-initiated OAuth redirects without your own state implementation.
+  - Existing callers passing `state` explicitly to `getRedirectUrl(state)` keep working — caller-supplied state always wins and skips the generator.
+
+### Patch Changes
+
+- c4c4a5d: Fix OAuth token endpoint encoding — `SocialiteDriver.getAccessToken()` now sends `application/x-www-form-urlencoded` per RFC 6749 §4.1.3 instead of `application/json`. GitHub, Google, and Facebook reject (or inconsistently accept) JSON bodies on `/token`, which made every non-Apple login fragile or fully broken depending on the provider's mood. Apple's driver already overrode this and is unchanged.
+
+  No API change for callers — the public `getAccessToken(code)` signature and return shape are identical.
+
+- Updated dependencies [b436a02]
+- Updated dependencies [5bafd13]
+- Updated dependencies [d2d3e2d]
+  - @rudderjs/session@1.0.4
+
 ## 1.0.1
 
 ### Patch Changes
