@@ -39,6 +39,12 @@ export class AppleProvider extends SocialiteDriver {
 
   /** Apple sends user data as form POST on callback. Parse the id_token JWT for user info. */
   async user(codeOrRequest: string | { query: Record<string, string>; body?: unknown }): Promise<SocialUser> {
+    if (typeof codeOrRequest !== 'string') {
+      // Apple's `state` arrives in the form_post body, not the query — the
+      // base validator already checks both, no Apple-specific override.
+      this.validateRequestState(codeOrRequest)
+    }
+
     const code = typeof codeOrRequest === 'string'
       ? codeOrRequest
       : (codeOrRequest.query['code'] ?? (codeOrRequest.body as Record<string, string> | undefined)?.['code'])

@@ -8,13 +8,13 @@ import { AppleProvider } from './drivers/apple.js'
 // ─── Re-exports ───────────────────────────────────────────
 
 export { SocialUser } from './social-user.js'
-export { SocialiteDriver } from './driver.js'
+export { SocialiteDriver, InvalidStateException } from './driver.js'
 export { GitHubProvider } from './drivers/github.js'
 export { GoogleProvider } from './drivers/google.js'
 export { FacebookProvider } from './drivers/facebook.js'
 export { AppleProvider } from './drivers/apple.js'
 
-export type { SocialiteDriverConfig } from './driver.js'
+export type { SocialiteDriverConfig, SocialiteCallbackRequest, SocialiteHttpErrorCause } from './driver.js'
 
 // ─── Built-in driver registry ─────────────────────────────
 

@@ -881,6 +881,9 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@rudderjs/session':
+        specifier: workspace:^
+        version: link:../session
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.35

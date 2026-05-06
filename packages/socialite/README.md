@@ -64,6 +64,50 @@ Route.get('/auth/github/callback', async (req) => {
 })
 ```
 
+## CSRF state — stateful by default
+
+Socialite mints a CSPRNG `state` parameter on every redirect, persists it
+on the session, and validates the `state` returned in the callback before
+exchanging the code. A mismatch (or a missing session) throws
+`InvalidStateException` — same defense Laravel Socialite ships out of the
+box. No code changes needed: the routes above are already protected, as
+long as `@rudderjs/session`'s middleware is mounted (auto-installed on
+the `web` group).
+
+For flows that legitimately can't reach the session — mobile clients,
+machine-to-machine token grants, server-side OAuth where the round-trip
+happens entirely off-browser — opt out per call:
+
+```ts
+Route.get('/auth/github', () => {
+  return Socialite.driver('github').stateless().redirect()
+})
+
+Route.get('/auth/github/callback', async (req) => {
+  const user = await Socialite.driver('github').stateless().user(req)
+  // …
+})
+```
+
+`InvalidStateException` is exported for `instanceof`-checks in your
+exception handler:
+
+```ts
+import { InvalidStateException } from '@rudderjs/socialite'
+
+try {
+  await Socialite.driver('github').user(req)
+} catch (err) {
+  if (err instanceof InvalidStateException) return abort(403, 'Auth failed.')
+  throw err
+}
+```
+
+State is namespaced per provider (`socialite_state:github`,
+`socialite_state:google`, …) so concurrent OAuth flows on the same
+session don't collide. State is one-time use — successful or failed
+validation clears the slot, so a leaked value can't be replayed.
+
 ## Providers
 
 | Provider | Driver | Auth URL |

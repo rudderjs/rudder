@@ -9,8 +9,10 @@ import {
   FacebookProvider,
   AppleProvider,
   SocialiteProvider,
+  InvalidStateException,
   type SocialiteDriverConfig,
 } from './index.js'
+import { SessionInstance, _runWithSession } from '@rudderjs/session'
 
 const baseConfig: SocialiteDriverConfig = {
   clientId:     'test-client-id',
@@ -52,7 +54,9 @@ describe('SocialUser', () => {
 // ─── GitHubProvider ───────────────────────────────────────
 
 describe('GitHubProvider', () => {
-  const provider = new GitHubProvider(baseConfig)
+  // .stateless() throughout this block — these tests target URL-generation
+  // shape, not the new stateful default (covered separately below).
+  const provider = new GitHubProvider(baseConfig).stateless()
 
   it('generates a redirect URL with correct params', () => {
     const url = provider.getRedirectUrl('test-state')
@@ -70,14 +74,14 @@ describe('GitHubProvider', () => {
   })
 
   it('withScopes adds scopes', () => {
-    const p = new GitHubProvider(baseConfig).withScopes(['repo'])
+    const p = new GitHubProvider(baseConfig).stateless().withScopes(['repo'])
     const url = p.getRedirectUrl()
     assert.ok(url.includes('repo'))
     assert.ok(url.includes('read'))
   })
 
   it('setScopes replaces scopes', () => {
-    const p = new GitHubProvider(baseConfig).setScopes(['repo'])
+    const p = new GitHubProvider(baseConfig).stateless().setScopes(['repo'])
     const url = p.getRedirectUrl()
     assert.ok(url.includes('repo'))
     assert.ok(!url.includes('read%3Auser'))
@@ -87,7 +91,7 @@ describe('GitHubProvider', () => {
 // ─── GoogleProvider ───────────────────────────────────────
 
 describe('GoogleProvider', () => {
-  const provider = new GoogleProvider(baseConfig)
+  const provider = new GoogleProvider(baseConfig).stateless()
 
   it('generates a redirect URL to Google', () => {
     const url = provider.getRedirectUrl()
@@ -107,7 +111,7 @@ describe('GoogleProvider', () => {
 // ─── FacebookProvider ─────────────────────────────────────
 
 describe('FacebookProvider', () => {
-  const provider = new FacebookProvider(baseConfig)
+  const provider = new FacebookProvider(baseConfig).stateless()
 
   it('generates a redirect URL to Facebook', () => {
     const url = provider.getRedirectUrl()
@@ -124,7 +128,7 @@ describe('FacebookProvider', () => {
 // ─── AppleProvider ────────────────────────────────────────
 
 describe('AppleProvider', () => {
-  const provider = new AppleProvider(baseConfig)
+  const provider = new AppleProvider(baseConfig).stateless()
 
   it('generates a redirect URL to Apple with response_mode=form_post', () => {
     const url = provider.getRedirectUrl()
@@ -382,5 +386,188 @@ describe('SocialiteProvider', () => {
   it('is a class', () => {
     assert.strictEqual(typeof SocialiteProvider, 'function')
     assert.strictEqual(SocialiteProvider.name, 'SocialiteProvider')
+  })
+})
+
+// ─── O5: OAuth state — stateful default + .stateless() opt-out ─
+
+describe('SocialiteDriver — OAuth state (CSRF defense)', () => {
+  // Minimal stub session — `put`/`get`/`forget` are the only methods the
+  // driver touches. Driver/config aren't used since we never call save().
+  const fakeDriver  = { load: async () => ({} as never), persist: async () => '', destroy: async () => undefined }
+  const fakeConfig  = { name: 'test', secret: 'test', lifetime: 60, secure: false, sameSite: 'lax' as const, httpOnly: true }
+  const makeSession = (): SessionInstance =>
+    new SessionInstance({ id: 'sess-1', data: {}, flash_next: {} } as never, fakeDriver, fakeConfig as never)
+
+  // Token endpoint always 200 OK with a tok — these tests target state, not
+  // token exchange, but user() goes through both.
+  let originalFetch: typeof fetch
+  beforeEach(() => {
+    originalFetch = global.fetch
+    global.fetch = (async () =>
+      new Response(
+        JSON.stringify({ access_token: 'tok', refresh_token: null, expires_in: 3600 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    ) as typeof fetch
+  })
+  function restoreFetch(): void { global.fetch = originalFetch }
+
+  it('getRedirectUrl() generates + persists a CSPRNG state when no state passed (stateful default)', () => {
+    try {
+      const session = makeSession()
+      const provider = new GitHubProvider(baseConfig)
+
+      const url = _runWithSession(session, () => provider.getRedirectUrl())
+      const stateMatch = url.match(/state=([a-f0-9]{40})/)
+      assert.ok(stateMatch, 'URL must include a generated state param')
+      assert.strictEqual(session.get<string>('socialite_state:github'), stateMatch![1])
+    } finally { restoreFetch() }
+  })
+
+  it('getRedirectUrl(explicit) honors caller-supplied state and skips generation', () => {
+    try {
+      const session = makeSession()
+      const provider = new GitHubProvider(baseConfig)
+
+      const url = _runWithSession(session, () => provider.getRedirectUrl('caller-state'))
+      assert.ok(url.includes('state=caller-state'))
+      assert.strictEqual(session.get('socialite_state:github'), undefined,
+        'session should not be touched when state is caller-supplied')
+    } finally { restoreFetch() }
+  })
+
+  it('getRedirectUrl() throws when stateful and no session is in context', () => {
+    try {
+      const provider = new GitHubProvider(baseConfig)
+      assert.throws(() => provider.getRedirectUrl(), /no session in context/i)
+    } finally { restoreFetch() }
+  })
+
+  it('.stateless() omits state and skips session', () => {
+    try {
+      const provider = new GitHubProvider(baseConfig).stateless()
+      const url = provider.getRedirectUrl()
+      assert.ok(!url.includes('state='), 'stateless URL must not embed state')
+      assert.strictEqual(provider.isStateless(), true)
+    } finally { restoreFetch() }
+  })
+
+  it('user() validates query.state against session-stored state on success', async () => {
+    try {
+      const session = makeSession()
+      session.put('socialite_state:github', 'matching-state')
+      const provider = new GitHubProvider(baseConfig)
+
+      const user = await _runWithSession(session, () =>
+        provider.user({ query: { code: 'auth-code', state: 'matching-state' } }),
+      )
+      assert.ok(user instanceof SocialUser)
+      assert.strictEqual(session.get('socialite_state:github'), undefined,
+        'state must be one-time use (forgotten after successful validate)')
+    } finally { restoreFetch() }
+  })
+
+  it('user() throws InvalidStateException when query.state does not match session', async () => {
+    try {
+      const session = makeSession()
+      session.put('socialite_state:github', 'real-state')
+      const provider = new GitHubProvider(baseConfig)
+
+      await assert.rejects(
+        async () => _runWithSession(session, () =>
+          provider.user({ query: { code: 'auth-code', state: 'attacker-state' } }),
+        ),
+        InvalidStateException,
+      )
+      assert.strictEqual(session.get('socialite_state:github'), undefined,
+        'failed validation also clears state — prevents replay against the same slot')
+    } finally { restoreFetch() }
+  })
+
+  it('user() throws InvalidStateException when query.state is missing', async () => {
+    try {
+      const session = makeSession()
+      session.put('socialite_state:github', 'real-state')
+      const provider = new GitHubProvider(baseConfig)
+
+      await assert.rejects(
+        async () => _runWithSession(session, () =>
+          provider.user({ query: { code: 'auth-code' } }),
+        ),
+        InvalidStateException,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('user() throws InvalidStateException when no session is in context', async () => {
+    try {
+      const provider = new GitHubProvider(baseConfig)
+      await assert.rejects(
+        async () => provider.user({ query: { code: 'auth-code', state: 'whatever' } }),
+        InvalidStateException,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('.stateless() user() skips state validation entirely', async () => {
+    try {
+      const provider = new GitHubProvider(baseConfig).stateless()
+      // No session, no state — would fail in stateful mode
+      const user = await provider.user({ query: { code: 'auth-code' } })
+      assert.ok(user instanceof SocialUser)
+    } finally { restoreFetch() }
+  })
+
+  it('Apple validates state from form_post body when query is empty', async () => {
+    try {
+      const session = makeSession()
+      session.put('socialite_state:apple', 'apple-state')
+      const provider = new AppleProvider(baseConfig)
+
+      // Apple posts back to the redirect_uri as form_post — state lives in
+      // the body, not the query. Token + user fetches mocked above.
+      const user = await _runWithSession(session, () =>
+        provider.user({
+          query: {},
+          body:  { code: 'auth-code', state: 'apple-state' },
+        }),
+      )
+      assert.ok(user instanceof SocialUser)
+      assert.strictEqual(session.get('socialite_state:apple'), undefined)
+    } finally { restoreFetch() }
+  })
+
+  it('Apple rejects mismatched state in form_post body', async () => {
+    try {
+      const session = makeSession()
+      session.put('socialite_state:apple', 'real')
+      const provider = new AppleProvider(baseConfig)
+
+      await assert.rejects(
+        async () => _runWithSession(session, () =>
+          provider.user({ query: {}, body: { code: 'c', state: 'fake' } }),
+        ),
+        InvalidStateException,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('different providers use independent state slots', () => {
+    try {
+      const session = makeSession()
+      const github   = new GitHubProvider(baseConfig)
+      const google   = new GoogleProvider(baseConfig)
+
+      _runWithSession(session, () => {
+        github.getRedirectUrl()
+        google.getRedirectUrl()
+      })
+      const ghState = session.get<string>('socialite_state:github')
+      const ggState = session.get<string>('socialite_state:google')
+      assert.ok(ghState && ggState)
+      assert.notStrictEqual(ghState, ggState,
+        'distinct CSPRNG draws — concurrent OAuth flows mustn\'t collide')
+    } finally { restoreFetch() }
   })
 })
