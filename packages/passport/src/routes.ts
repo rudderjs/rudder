@@ -1,4 +1,5 @@
 import { config, report } from '@rudderjs/core'
+import type { MiddlewareHandler } from '@rudderjs/contracts'
 import { Passport } from './Passport.js'
 import type { AccessToken } from './models/AccessToken.js'
 import type { OAuthClient } from './models/OAuthClient.js'
@@ -182,6 +183,41 @@ export interface PassportRouteOptions {
   verificationUri?: string
   /** Route groups to skip when registering. */
   except?: PassportRouteGroup[]
+  /**
+   * Middleware applied to `POST /oauth/token`. The token endpoint is the
+   * canonical brute-force target for client_secret guessing — every
+   * production app SHOULD mount a per-route rate limiter here.
+   *
+   * Recommended setup:
+   *
+   * ```ts
+   * import { RateLimit } from '@rudderjs/middleware'
+   * import { registerPassportRoutes } from '@rudderjs/passport'
+   *
+   * registerPassportRoutes(router, {
+   *   tokenMiddleware: [
+   *     RateLimit.perMinute(10).by((req) => `${req.ip}:${req.body?.client_id}`),
+   *   ],
+   * })
+   * ```
+   *
+   * The composite key (`ip + client_id`) prevents one noisy client from
+   * exhausting the budget for legitimate co-tenants behind a shared NAT,
+   * and prevents a single IP from churning through every client_id in the
+   * registry. RateLimit also requires a cache provider to be registered —
+   * see `@rudderjs/cache`. Without one the middleware silently passes
+   * through.
+   *
+   * Accepts a single handler or an array. Empty / omitted means no
+   * additional middleware is applied (the same as before this option
+   * existed).
+   */
+  tokenMiddleware?: MiddlewareHandler | MiddlewareHandler[]
+}
+
+function asMiddlewareArray(input: MiddlewareHandler | MiddlewareHandler[] | undefined): MiddlewareHandler[] {
+  if (!input) return []
+  return Array.isArray(input) ? input : [input]
 }
 
 /**
@@ -203,6 +239,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
   const prefix = opts.prefix ?? '/oauth'
   const skip = new Set(opts.except ?? [])
+  const tokenMiddleware = asMiddlewareArray(opts.tokenMiddleware)
 
   // ── /oauth/authorize ─────────────────────────────────────
   if (!skip.has('authorize')) {
@@ -304,6 +341,10 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
   // ── POST /oauth/token ────────────────────────────────────
   if (!skip.has('token')) {
+    // `tokenMiddleware` runs ahead of the handler — primary intended use is
+    // a per-route rate limiter so client_secret guessing can't churn through
+    // the registry without backoff. See PassportRouteOptions.tokenMiddleware
+    // jsdoc for the recommended config.
     router.post(`${prefix}/token`, async (req: any, res: any) => {
       try {
         const body = req.body ?? {}
@@ -396,7 +437,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
         }
       }
-    })
+    }, tokenMiddleware)
   }
 
   // ── DELETE /oauth/tokens/:id — revoke a specific token ──
