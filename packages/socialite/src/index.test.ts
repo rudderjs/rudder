@@ -136,7 +136,423 @@ describe('AppleProvider', () => {
     assert.ok(url.includes('response_mode=form_post'))
     assert.ok(url.includes('client_id=test-client-id'))
   })
+
+  it('generates a redirect URL with a CSPRNG state by default (stateful)', () => {
+    // Apple's getRedirectUrl must inherit O5's stateful generation, not skip it.
+    const session = makeSession()
+    const stateful = new AppleProvider(baseConfig)
+    const url = _runWithSession(session, () => stateful.getRedirectUrl())
+    const stateMatch = url.match(/state=([a-f0-9]{40})/)
+    assert.ok(stateMatch, 'Apple redirect URL must include a generated state param')
+    assert.ok(url.includes('response_mode=form_post'), 'response_mode preserved alongside state')
+  })
 })
+
+// ─── O2/O3: Apple ES256 client_secret + id_token verification ──
+
+import { generateKeyPairSync, createSign, createPublicKey } from 'node:crypto'
+
+/** Generate fresh test keys once per test run. EC for client_secret, RSA for id_token. */
+const _ecKey  = generateKeyPairSync('ec', {
+  namedCurve: 'P-256',
+  publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+})
+const _rsaKey = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+})
+const _APPLE_KID = 'test-apple-kid'
+const _APPLE_JWK = (() => {
+  const jwk = createPublicKey(_rsaKey.publicKey).export({ format: 'jwk' }) as Record<string, unknown>
+  return { ...jwk, kid: _APPLE_KID, alg: 'RS256', use: 'sig' }
+})()
+
+const appleConfig = {
+  clientId:     'com.test.app',
+  clientSecret: '',  // unused; Apple uses ES256 JWT
+  redirectUrl:  'http://localhost:3000/auth/callback',
+  teamId:       'TEAMTEAMID',
+  keyId:        'KEYIDKEYID',
+  privateKey:   _ecKey.privateKey,
+}
+
+/** Sign an RS256 id_token with the test RSA key, defaulting to valid Apple claims. */
+function signTestIdToken(claims: Record<string, unknown> = {}, opts: { kid?: string; alg?: string } = {}): string {
+  const now = Math.floor(Date.now() / 1000)
+  const merged = {
+    iss:   'https://appleid.apple.com',
+    aud:   appleConfig.clientId,
+    sub:   '001234.apple.user.test',
+    iat:   now,
+    exp:   now + 3600,
+    email: 'apple-user@example.com',
+    ...claims,
+  }
+  const header = { alg: opts.alg ?? 'RS256', kid: opts.kid ?? _APPLE_KID, typ: 'JWT' }
+  const headerB64  = Buffer.from(JSON.stringify(header)).toString('base64url')
+  const payloadB64 = Buffer.from(JSON.stringify(merged)).toString('base64url')
+  const signingInput = `${headerB64}.${payloadB64}`
+  const signer = createSign('SHA256')
+  signer.update(signingInput)
+  const sig = signer.sign(_rsaKey.privateKey, 'base64url')
+  return `${signingInput}.${sig}`
+}
+
+/**
+ * Mock global.fetch so Apple's token endpoint returns the supplied id_token
+ * and Apple's JWKS endpoint returns our test public key. Also lets the test
+ * inspect the body posted to the token endpoint (to assert client_secret JWT).
+ */
+function mockAppleEndpoints(opts: {
+  idToken?:        string
+  tokenStatus?:    number
+  tokenBody?:      Record<string, unknown>
+  jwksKeys?:       unknown[]  // override JWKS keys (e.g. wrong kid)
+  jwksStatus?:     number
+} = {}): { tokenCall: { body: URLSearchParams } | null } {
+  const captured: { tokenCall: { body: URLSearchParams } | null } = { tokenCall: null }
+  const tokenStatus = opts.tokenStatus ?? 200
+  const idToken     = opts.idToken     ?? signTestIdToken()
+  const tokenBody   = opts.tokenBody   ?? { access_token: 'apple-access-tok', refresh_token: 'apple-refresh-tok', id_token: idToken }
+  const jwksStatus  = opts.jwksStatus  ?? 200
+  const jwksKeys    = opts.jwksKeys    ?? [_APPLE_JWK]
+
+  global.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.includes('/auth/token')) {
+      captured.tokenCall = { body: init.body as URLSearchParams }
+      return new Response(JSON.stringify(tokenBody), {
+        status: tokenStatus,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    if (url.includes('/auth/keys')) {
+      return new Response(JSON.stringify({ keys: jwksKeys }), {
+        status: jwksStatus,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    throw new Error(`Unmocked fetch: ${url}`)
+  }) as typeof fetch
+
+  return captured
+}
+
+describe('AppleProvider — ES256 client_secret JWT (O2)', () => {
+  let originalFetch: typeof fetch
+  beforeEach(() => {
+    originalFetch = global.fetch
+    AppleProvider._resetJwksCache()
+  })
+  function restoreFetch(): void { global.fetch = originalFetch }
+
+  it('signs a fresh ES256 JWT and posts it as client_secret', async () => {
+    try {
+      const captured = mockAppleEndpoints()
+      const provider = new AppleProvider(appleConfig).stateless()
+      await provider.user('apple-auth-code')
+
+      assert.ok(captured.tokenCall, 'token endpoint must have been called')
+      const sentSecret = captured.tokenCall!.body.get('client_secret')
+      assert.ok(sentSecret, 'client_secret must be present')
+      const parts = sentSecret!.split('.')
+      assert.strictEqual(parts.length, 3, 'client_secret must be a JWT (3 segments)')
+
+      const header  = JSON.parse(Buffer.from(parts[0]!, 'base64url').toString('utf8'))
+      const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'))
+
+      assert.strictEqual(header.alg, 'ES256')
+      assert.strictEqual(header.kid, appleConfig.keyId)
+      assert.strictEqual(header.typ, 'JWT')
+
+      assert.strictEqual(payload.iss, appleConfig.teamId)
+      assert.strictEqual(payload.sub, appleConfig.clientId)
+      assert.strictEqual(payload.aud, 'https://appleid.apple.com')
+      assert.ok(typeof payload.iat === 'number')
+      assert.ok(typeof payload.exp === 'number' && payload.exp > payload.iat)
+    } finally { restoreFetch() }
+  })
+
+  it('produces a JWS signature in IEEE-P1363 format (64 bytes), not DER', async () => {
+    try {
+      const captured = mockAppleEndpoints()
+      const provider = new AppleProvider(appleConfig).stateless()
+      await provider.user('apple-auth-code')
+      const parts = captured.tokenCall!.body.get('client_secret')!.split('.')
+      const sig = Buffer.from(parts[2]!, 'base64url')
+      // ES256 JWS: r||s, each 32 bytes → 64 bytes total. DER would be ~70-72.
+      assert.strictEqual(sig.length, 64, 'ES256 JWS signatures must be 64 bytes (IEEE P-1363)')
+    } finally { restoreFetch() }
+  })
+
+  it('throws a clear error when teamId/keyId/privateKey are missing', async () => {
+    try {
+      mockAppleEndpoints()
+      // baseConfig lacks all three Apple JWT params
+      const provider = new AppleProvider(baseConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /requires `teamId`, `keyId`, and `privateKey`/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('throws a clear error when privateKey is not a valid EC PEM', async () => {
+    try {
+      mockAppleEndpoints()
+      const provider = new AppleProvider({ ...appleConfig, privateKey: 'not-a-pem' }).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /not a valid PEM-encoded EC private key/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('throws when privateKey is RSA, not EC', async () => {
+    try {
+      mockAppleEndpoints()
+      const provider = new AppleProvider({ ...appleConfig, privateKey: _rsaKey.privateKey }).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /expects an EC P-256 private key; got rsa/,
+      )
+    } finally { restoreFetch() }
+  })
+})
+
+describe('AppleProvider — id_token verification (O3)', () => {
+  let originalFetch: typeof fetch
+  beforeEach(() => {
+    originalFetch = global.fetch
+    AppleProvider._resetJwksCache()
+  })
+  function restoreFetch(): void { global.fetch = originalFetch }
+
+  it('verifies a valid id_token end-to-end and returns SocialUser from claims', async () => {
+    try {
+      mockAppleEndpoints({ idToken: signTestIdToken({ sub: 'apple-user-001', email: 'sub@example.com' }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      const user = await provider.user('apple-auth-code')
+      assert.ok(user instanceof SocialUser)
+      assert.strictEqual(user.getId(),    'apple-user-001')
+      assert.strictEqual(user.getEmail(), 'sub@example.com')
+      assert.strictEqual(user.token,      'apple-access-tok')
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token whose signature was tampered with', async () => {
+    try {
+      const tampered = signTestIdToken().split('.')
+      // Flip a byte in the payload — signature no longer matches
+      const badPayload = Buffer.from('{"iss":"https://appleid.apple.com","aud":"com.test.app","sub":"x","exp":9999999999}').toString('base64url')
+      const badIdToken = `${tampered[0]}.${badPayload}.${tampered[2]}`
+      mockAppleEndpoints({ idToken: badIdToken })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /signature verification failed/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token signed by a different key (kid not in JWKS)', async () => {
+    try {
+      const otherKey = generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } })
+      // Build a token whose header advertises `_APPLE_KID` (will resolve our test JWK)
+      // but whose signature was made with a different key.
+      const header = { alg: 'RS256', kid: _APPLE_KID, typ: 'JWT' }
+      const payload = { iss: 'https://appleid.apple.com', aud: appleConfig.clientId, sub: 'x', iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000) + 3600 }
+      const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url')
+      const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url')
+      const signer = createSign('SHA256')
+      signer.update(`${headerB64}.${payloadB64}`)
+      const badSig = signer.sign(otherKey.privateKey, 'base64url')
+      mockAppleEndpoints({ idToken: `${headerB64}.${payloadB64}.${badSig}` })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /signature verification failed/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token whose kid is not in the JWKS', async () => {
+    try {
+      mockAppleEndpoints({ idToken: signTestIdToken({}, { kid: 'unknown-kid' }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /no signing key for kid/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token with non-RS256 alg (alg=none confusion attack)', async () => {
+    try {
+      const header = { alg: 'none', kid: _APPLE_KID, typ: 'JWT' }
+      const payload = { iss: 'https://appleid.apple.com', aud: appleConfig.clientId, sub: 'x', exp: 9999999999 }
+      const idToken = [
+        Buffer.from(JSON.stringify(header)).toString('base64url'),
+        Buffer.from(JSON.stringify(payload)).toString('base64url'),
+        '',
+      ].join('.')
+      mockAppleEndpoints({ idToken })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /unexpected alg "none"/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token with wrong issuer', async () => {
+    try {
+      mockAppleEndpoints({ idToken: signTestIdToken({ iss: 'https://evil.example.com' }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /iss .* does not match/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token whose aud does not match clientId', async () => {
+    try {
+      mockAppleEndpoints({ idToken: signTestIdToken({ aud: 'com.attacker.app' }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /aud does not match clientId/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('accepts an id_token whose aud is an array including clientId', async () => {
+    try {
+      mockAppleEndpoints({ idToken: signTestIdToken({ aud: ['some.other.client', appleConfig.clientId] }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      const user = await provider.user('apple-auth-code')
+      assert.ok(user instanceof SocialUser)
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an expired id_token', async () => {
+    try {
+      mockAppleEndpoints({ idToken: signTestIdToken({ exp: Math.floor(Date.now() / 1000) - 60 }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /token expired/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects an id_token with missing sub', async () => {
+    try {
+      // signTestIdToken merges defaults; explicitly null the sub
+      mockAppleEndpoints({ idToken: signTestIdToken({ sub: '' }) })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /missing sub/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('throws when token endpoint returns no id_token', async () => {
+    try {
+      mockAppleEndpoints({ tokenBody: { access_token: 'a' } })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /missing id_token/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('throws when JWKS fetch fails', async () => {
+    try {
+      mockAppleEndpoints({ jwksStatus: 503 })
+      const provider = new AppleProvider(appleConfig).stateless()
+      await assert.rejects(
+        async () => provider.user('apple-auth-code'),
+        /JWKS fetch failed/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('caches JWKS across calls (only fetches once for two id_tokens with same kid)', async () => {
+    try {
+      let jwksFetchCount = 0
+      const idToken = signTestIdToken()
+      global.fetch = (async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/auth/token')) {
+          return new Response(JSON.stringify({ access_token: 'a', id_token: idToken }), { status: 200 })
+        }
+        if (url.includes('/auth/keys')) {
+          jwksFetchCount += 1
+          return new Response(JSON.stringify({ keys: [_APPLE_JWK] }), { status: 200 })
+        }
+        throw new Error(`Unmocked: ${url}`)
+      }) as typeof fetch
+
+      const provider = new AppleProvider(appleConfig).stateless()
+      await provider.user('code-1')
+      await provider.user('code-2')
+      assert.strictEqual(jwksFetchCount, 1, 'JWKS must be cached for repeated kid hits')
+    } finally { restoreFetch() }
+  })
+
+  it('refetches JWKS when an already-cached lookup misses (Apple rotation handling)', async () => {
+    try {
+      AppleProvider._resetJwksCache()
+      let jwksFetchCount = 0
+      // Two id_tokens signed with the same RSA key but advertising different kids.
+      // After the first call populates the cache with kid-A, a second call with
+      // kid-B should fall through and refetch (rather than treat the missing kid
+      // as a permanent failure).
+      const idTokenA = signTestIdToken({ sub: 'user-a' }, { kid: 'kid-A' })
+      const idTokenB = signTestIdToken({ sub: 'user-b' }, { kid: 'kid-B' })
+      global.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/auth/token')) {
+          // Pick which id_token based on the auth code in the body
+          const body = init.body as URLSearchParams
+          const code = body.get('code')
+          const tok  = code === 'code-2' ? idTokenB : idTokenA
+          return new Response(JSON.stringify({ access_token: 'a', id_token: tok }), { status: 200 })
+        }
+        if (url.includes('/auth/keys')) {
+          jwksFetchCount += 1
+          // First fetch only knows about kid-A. Second fetch (after rotation)
+          // returns kid-B too.
+          const keys = jwksFetchCount === 1
+            ? [{ ..._APPLE_JWK, kid: 'kid-A' }]
+            : [{ ..._APPLE_JWK, kid: 'kid-A' }, { ..._APPLE_JWK, kid: 'kid-B' }]
+          return new Response(JSON.stringify({ keys }), { status: 200 })
+        }
+        throw new Error(`Unmocked: ${url}`)
+      }) as typeof fetch
+
+      const provider = new AppleProvider(appleConfig).stateless()
+      await provider.user('code-1')                              // first call → fetch #1 (kid-A only)
+      assert.strictEqual(jwksFetchCount, 1)
+      const userB = await provider.user('code-2')                // second call → kid-B miss → fetch #2
+      assert.ok(userB instanceof SocialUser)
+      assert.strictEqual(jwksFetchCount, 2, 'cache miss on rotated kid must refetch JWKS')
+    } finally { restoreFetch() }
+  })
+})
+
+// helper used by the new redirect-state test above
+function makeSession(): SessionInstance {
+  const fakeDriver  = { load: async () => ({} as never), persist: async () => '', destroy: async () => undefined }
+  const fakeConfig  = { name: 'test', secret: 'test', lifetime: 60, secure: false, sameSite: 'lax' as const, httpOnly: true }
+  return new SessionInstance({ id: 'sess-1', data: {}, flash_next: {} } as never, fakeDriver, fakeConfig as never)
+}
 
 // ─── Token endpoint encoding (RFC 6749 §4.1.3) ────────────
 
@@ -521,12 +937,27 @@ describe('SocialiteDriver — OAuth state (CSRF defense)', () => {
 
   it('Apple validates state from form_post body when query is empty', async () => {
     try {
+      // Apple's user() now requires a verified id_token; mock both endpoints
+      // and use the proper appleConfig (teamId/keyId/privateKey).
+      AppleProvider._resetJwksCache()
+      const idToken = signTestIdToken({ sub: 'apple-state-test' })
+      global.fetch = (async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/auth/token')) {
+          return new Response(JSON.stringify({ access_token: 'tok', id_token: idToken }), { status: 200 })
+        }
+        if (url.includes('/auth/keys')) {
+          return new Response(JSON.stringify({ keys: [_APPLE_JWK] }), { status: 200 })
+        }
+        throw new Error(`Unmocked: ${url}`)
+      }) as typeof fetch
+
       const session = makeSession()
       session.put('socialite_state:apple', 'apple-state')
-      const provider = new AppleProvider(baseConfig)
+      const provider = new AppleProvider(appleConfig)
 
       // Apple posts back to the redirect_uri as form_post — state lives in
-      // the body, not the query. Token + user fetches mocked above.
+      // the body, not the query.
       const user = await _runWithSession(session, () =>
         provider.user({
           query: {},
@@ -540,6 +971,8 @@ describe('SocialiteDriver — OAuth state (CSRF defense)', () => {
 
   it('Apple rejects mismatched state in form_post body', async () => {
     try {
+      // State mismatch throws InvalidStateException before any HTTP call —
+      // baseConfig is fine here; no token/JWKS mocking needed.
       const session = makeSession()
       session.put('socialite_state:apple', 'real')
       const provider = new AppleProvider(baseConfig)

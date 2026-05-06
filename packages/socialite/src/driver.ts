@@ -103,6 +103,15 @@ export abstract class SocialiteDriver {
     return this._stateless
   }
 
+  /**
+   * Provider-specific extra params to merge into the authorize URL. Apple
+   * needs `response_mode=form_post`; other drivers may want `prompt=consent`
+   * etc. Override on subclasses — base returns `{}`.
+   */
+  protected extraAuthParams(): Record<string, string> {
+    return {}
+  }
+
   /** Get the redirect URL to the OAuth provider. */
   getRedirectUrl(state?: string): string {
     // Caller-supplied state always wins (test-friendly + advanced override).
@@ -115,6 +124,7 @@ export abstract class SocialiteDriver {
       response_type: 'code',
       scope:         this.scopes.join(' '),
       ...(stateValue ? { state: stateValue } : {}),
+      ...this.extraAuthParams(),
     })
     return `${this.authUrl()}?${params.toString()}`
   }
@@ -294,7 +304,7 @@ export abstract class SocialiteDriver {
    * that need it can still inspect — without leaking provider-echoed
    * client_id / hints / PII into top-level error tracking.
    */
-  private async httpError(prefix: string, res: Response): Promise<Error> {
+  protected async httpError(prefix: string, res: Response): Promise<Error> {
     const body = await res.text().catch(() => '')
     const cause: SocialiteHttpErrorCause = { status: res.status, body }
     return new Error(`[RudderJS Socialite] ${prefix}: ${res.status} ${res.statusText}`.trimEnd(), { cause })

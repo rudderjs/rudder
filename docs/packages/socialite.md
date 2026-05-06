@@ -101,6 +101,33 @@ Socialite.driver('github').withScopes(['repo', 'gist'])        // append
 | `facebook` | `email` |
 | `apple` | `name`, `email` |
 
+## Sign-in-with-Apple
+
+Apple's OAuth flow has two non-standard requirements the driver handles automatically — but you have to provide extra config.
+
+`client_secret` must be a freshly-signed ES256 JWT (not a static string), so add three Apple-specific fields:
+
+```ts
+// config/socialite.ts
+import { readFileSync } from 'node:fs'
+import type { AppleSocialiteConfig } from '@rudderjs/socialite'
+
+export default {
+  apple: {
+    clientId:    Env.get('APPLE_CLIENT_ID', ''),  // Service ID, e.g. com.example.app
+    redirectUrl: Env.get('APPLE_REDIRECT_URL', ''),
+    teamId:      Env.get('APPLE_TEAM_ID', ''),    // 10-char Team ID
+    keyId:       Env.get('APPLE_KEY_ID', ''),     // 10-char Key ID for the .p8
+    privateKey:  readFileSync(Env.get('APPLE_PRIVATE_KEY_PATH', ''), 'utf8'),
+    clientSecret: '',                             // unused; left for type compat
+  } satisfies AppleSocialiteConfig,
+}
+```
+
+Download the `.p8` file once from the Apple Developer portal. The driver mints a fresh JWT per token exchange (5-minute lifetime by default; override with `clientSecretTtl`).
+
+`id_token` returned from Apple is verified end-to-end before any user data is trusted: signature against Apple's JWKS (`https://appleid.apple.com/auth/keys`, cached for 1h), `iss === https://appleid.apple.com`, `aud` matches your `clientId`, `exp` in the future, and `sub` non-empty.
+
 ## State parameter
 
 Pass a state string for CSRF protection — generate it before redirect, store it in the session, verify on callback:
