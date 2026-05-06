@@ -39,6 +39,12 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     if (!params.clientSecret) {
       throw new OAuthError('invalid_client', 'Client secret required.', 401)
     }
+    // Schema allows `client.secret` to be null; explicit guard so a future
+    // refactor can't mask `secret = null` as authenticating. See
+    // `client-credentials.ts` for the longer-form rationale.
+    if (client.secret == null) {
+      throw new OAuthError('invalid_client', 'Confidential client has no secret on file.', 401)
+    }
     if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
       throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
     }
@@ -85,9 +91,12 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     scopes = requested
   }
 
-  // Revoke old tokens
-  await RefreshTokenCls.update((refreshToken as any).id, { revoked: true } as any)
-  await AccessTokenCls.update((accessToken as any).id, { revoked: true } as any)
+  // Revoke old tokens. Goes through QueryBuilder.updateAll() — bypasses the
+  // mass-assignment filter (`revoked` is no longer in fillable on either
+  // model) and avoids paying for a second hydration round-trip per
+  // refresh.
+  await RefreshTokenCls.where('id', (refreshToken as any).id).updateAll({ revoked: true } as Record<string, unknown>)
+  await AccessTokenCls.where('id', (accessToken as any).id).updateAll({ revoked: true } as Record<string, unknown>)
 
   // Issue new pair — propagate the existing familyId so the rotation chain
   // is preserved. Legacy rows with null get a fresh family on next rotation.
@@ -113,15 +122,24 @@ async function revokeFamily(
   familyId: string,
 ): Promise<void> {
   try {
+    // Two bulk QueryBuilder.updateAll() calls — one per table — replace
+    // the prior read-then-N+1-update loop. Each is idempotent: refresh
+    // tokens already revoked are filtered by the inner where, and access
+    // tokens scoped by family-membership via their refresh tokens'
+    // accessTokenId list. Bypasses the mass-assignment filter (`revoked`
+    // is no longer in fillable on either model).
     const family = await RefreshTokenCls.where('familyId', familyId).get() as RefreshToken[]
-    for (const rt of family) {
-      const id = (rt as any).id as string
-      const accessTokenId = (rt as any).accessTokenId as string
-      if (!rt.revoked) {
-        await RefreshTokenCls.update(id, { revoked: true } as any)
-      }
-      await AccessTokenCls.update(accessTokenId, { revoked: true } as any)
-    }
+    if (family.length === 0) return
+
+    await RefreshTokenCls.where('familyId', familyId)
+      .where('revoked', false)
+      .updateAll({ revoked: true } as Record<string, unknown>)
+
+    const accessTokenIds = family.map(rt => (rt as any).accessTokenId as string)
+    // `Model.where(col, val)` is 2-arg only; operator overloads live on the
+    // QueryBuilder returned by `query()`. Use that to express IN(...).
+    await AccessTokenCls.query().where('id', 'IN', accessTokenIds)
+      .updateAll({ revoked: true } as Record<string, unknown>)
   } catch {
     // Swallow — the outer handler always throws invalid_grant on reuse.
   }

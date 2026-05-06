@@ -35,6 +35,16 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
     throw new OAuthError('invalid_client', 'Client credentials grant requires a confidential client.')
   }
 
+  // Schema allows `client.secret` to be null (public clients), but reaching
+  // this branch with a confidential client should always have a hashed secret
+  // on file. Catching the null case explicitly prevents a future refactor
+  // from masking `secret = null` as authenticating against
+  // `verifyClientSecret(_, null)` (which fails closed today, but the guard
+  // makes the contract obvious to readers and hardens against drift).
+  if (client.secret == null) {
+    throw new OAuthError('invalid_client', 'Confidential client has no secret on file.', 401)
+  }
+
   if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
     throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
   }

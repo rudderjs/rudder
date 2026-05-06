@@ -372,7 +372,10 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
         return
       }
 
-      await AccessTokenCls.update((token as any).id as string, { revoked: true } as any)
+      // QueryBuilder.updateAll() bypasses the mass-assignment filter;
+      // `revoked` is no longer in `AccessToken.fillable`.
+      await AccessTokenCls.where('id', (token as any).id as string)
+        .updateAll({ revoked: true } as Record<string, unknown>)
       res.status(204).send()
     }, [RequireBearer()])
   }

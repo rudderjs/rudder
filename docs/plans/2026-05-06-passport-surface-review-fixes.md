@@ -195,10 +195,9 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 
 ### MEDIUM
 
-**M1. `personal-access-tokens.ts:78-82` — `tokens()` returns full AccessToken records; no `@Hidden` on AccessToken columns** ✅ VERIFIED REAL
+**M1. `personal-access-tokens.ts:78-82` — `tokens()` returns full AccessToken records; no `@Hidden` on AccessToken columns** ✅ FIXED
 - `AccessToken` has no `@Hidden` on any column. `JSON.stringify(token)` exposes `userId`, `clientId`, `name`, scopes, `revoked`, `expiresAt`. None are secrets per se (the JWT is never stored), but listing reveals other users' `userId` if the route ever exposes another user's tokens.
-- No public route currently calls `user.tokens()`, but the mixin invites consumers to expose it.
-- Fix: project a safe column list (`select(['id','name','scopes','revoked','expiresAt','createdAt'])`) in the mixin; document that consumers must scope by `userId`.
+- **Fixed**: `userId` and `clientId` carry `@Hidden`, so `toJSON()` strips them by default. `tokens()` JSDoc warns consumers about per-user scoping and points at `instance.makeVisible(['userId', 'clientId'])` for opt-in admin views. The original recommendation suggested a `select()` projection — the ORM doesn't expose a column-projection method on QueryBuilder, and `@Hidden` is the right Eloquent-shaped knob anyway.
 
 **M3. `authorization-code.ts:147-186` — Auth-code consumption is not atomic; race window between read and revoke allows double-spend** ✅ FIXED — PR follow-up to #264
 - Two concurrent token-exchange requests with the same code each found `revoked=false`, both proceeded past PKCE, both called the unconditional `update` last → two access-token pairs minted from one auth code (RFC 6749 §4.1.2 prohibits).
@@ -211,35 +210,35 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 
 **M5. Same as P6** — refresh tokens / auth codes stored as DB id plaintext. Listed under grants.
 
-**M6. `client-credentials.ts:40, refresh-token.ts:43, authorization-code.ts:141` — Comparison can run with `client.secret === null` (schema allows null for public clients)** ✅ VERIFIED REAL
+**M6. `client-credentials.ts:40, refresh-token.ts:43, authorization-code.ts:141` — Comparison can run with `client.secret === null` (schema allows null for public clients)** ✅ FIXED
 - Non-confidential clients skip the secret check (good), but the typing `string | null` is vulnerable to a future refactor that could mask `null` as authenticating with `secret = sha256('')`.
-- Fix: explicit `if (client.secret == null) throw new OAuthError('invalid_client', ...)` before hashing/comparison.
+- **Fixed**: each grant that authenticates via `verifyClientSecret` now checks `client.secret == null` and throws `invalid_client` ("Confidential client has no secret on file.") before reaching the comparison. Catches drift if a future change ever short-circuits past `verifyClientSecret`'s own fail-closed branch on `null` stored values.
 
 ### LOW
 
-**M-L1. `AccessToken.ts:33-36, RefreshToken.ts:13-16` — `revoke()` uses `(this as any).id` + static `update` instead of `this.save()`** ✅ VERIFIED REAL
+**M-L1. `AccessToken.ts:33-36, RefreshToken.ts:13-16` — `revoke()` uses `(this as any).id` + static `update` instead of `this.save()`** ✅ FIXED
 - Functional today; observers still fire; pattern is fragile to future refactors.
-- Fix: `this.revoked = true; await this.save()`.
+- **Fixed**: both instance methods now `this.revoked = true; await this.save()`. Observers fire as before, the in-memory instance reflects the new state without a re-read, and the `(this as any).id` cast is gone.
 
-**M-L2. `helpers.ts` — comment "ORM returns plain objects, not instances" is stale** ✅ VERIFIED REAL
+**M-L2. `helpers.ts` — comment "ORM returns plain objects, not instances" is stale** ✅ FIXED (partial)
 - Per CLAUDE.md PR #111 (2026-04-30), all read paths return Model instances.
-- Fix: update the comment; consider deleting `helpers.ts` entirely in favor of model methods (`getScopes`, `can`, `isExpired` already exist on the Model classes); route every grant through instance methods.
+- **Fixed**: rewrote the leading comment to reflect Model-instance reality and document that helpers stay around for raw-record paths (cached JSON, fixtures, adapter snapshots) and grant-side legibility while migration continues. Deferred the larger "delete helpers.ts entirely and route every grant through instance methods" cleanup — that touches every grant call site and is its own focused PR.
 
 **M-L3. No `prunable()` on AuthCode/DeviceCode/AccessToken/RefreshToken** ✅ FIXED
 - `passport:purge` exists but only the user invokes it; no automatic pruning via `model:prune`.
 - **Fixed**: each token model now exposes `static prunable()` + `static pruneMode = 'mass'`. Predicates mirror `passport:purge` (`expiresAt < now OR revoked = true` for tokens, `expiresAt < now` for codes), so `pnpm rudder model:prune` and `passport:purge` are interchangeable and idempotent. `PassportProvider.boot()` eagerly registers the four classes with `ModelRegistry` so a fresh install can prune passport rows before any oauth flow has run.
 
-**M-L4. `helpers.ts:60` — `JSON.parse(raw)` swallows errors silently; corrupt data returns `[]`** ✅ VERIFIED REAL (intentional, but worth a log)
+**M-L4. `helpers.ts:60` — `JSON.parse(raw)` swallows errors silently; corrupt data returns `[]`** ✅ FIXED
 - Fails-closed for authorization, fails-open for token validity depending on caller.
-- Fix: log a warning when parsing fails — silent corruption is hard to diagnose later.
+- **Fixed**: `parseJsonArray` now logs a `[@rudderjs/passport]` warning (with truncated raw value + parse error) before returning `[]`. Behavior stays fail-closed; persistent corruption is no longer invisible.
 
-**M-L5. `OAuthClient.ts` — `redirectUris`/`grantTypes`/`scopes` stored as JSON-stringified strings without `@Cast(json)`** ✅ VERIFIED REAL
+**M-L5. `OAuthClient.ts` — `redirectUris`/`grantTypes`/`scopes` stored as JSON-stringified strings without `@Cast(json)`** ✅ FIXED
 - Cosmetic: every consumer must remember `getRedirectUris()` etc.
-- Fix: apply `@Cast(json)` so they hydrate as arrays.
+- **Fixed**: `@Cast('json')` applied to `redirectUris`, `grantTypes`, `scopes`. Hydration produces `string[]` automatically. Existing `JSON.stringify([...])` write callsites continue to work — `castSet('json')` returns string inputs verbatim — so no callsite changes were needed in this PR. The `getRedirectUris()`/`getGrantTypes()`/`getScopes()` accessors stay for back-compat with their existing `Array.isArray(raw)` fast path.
 
-**M-L6. `revoked` is in `static fillable` on every token model** ✅ VERIFIED REAL
+**M-L6. `revoked` is in `static fillable` on every token model** ✅ FIXED
 - An attacker-controllable `create` payload could pre-revoke records. No such surface today; defense-in-depth.
-- Fix: drop `revoked` from `fillable`; use `forceFill({ revoked: true })` or direct property + `save()` in revocation paths.
+- **Fixed**: removed `revoked` from `AccessToken.fillable`, `RefreshToken.fillable`, and `AuthCode.fillable`. Revocation paths updated to bypass mass-assignment: `revoke()` instance methods use direct property + `save()`, the refresh-token rotation + family-revoke paths use `QueryBuilder.where(...).updateAll({ revoked: true })`, and `DELETE /oauth/tokens/:id` uses the same QueryBuilder pattern. `revokeAllTokens()` collapsed from a read-then-N+1-update loop into a single bulk `updateAll`.
 
 **M-L7. Prisma delegate names** — confirmed correct (camelCase delegates, NOT `@@map`'d SQL `oauth_*`). No issue.
 

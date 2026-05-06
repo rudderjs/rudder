@@ -3,7 +3,12 @@ import { Model } from '@rudderjs/orm'
 export class AuthCode extends Model {
   static override table = 'oAuthAuthCode'
 
-  static override fillable = ['userId', 'clientId', 'scopes', 'revoked', 'expiresAt', 'redirectUri', 'codeChallenge', 'codeChallengeMethod']
+  // `revoked` is intentionally NOT fillable — see AccessToken.ts for the
+  // rationale. Auth codes are revoked atomically through
+  // `QueryBuilder.where(...).updateAll(...)` in `exchangeAuthCode` (see M3
+  // atomic consumption fix), which bypasses mass-assignment, so removing
+  // it from fillable is non-breaking.
+  static override fillable = ['userId', 'clientId', 'scopes', 'expiresAt', 'redirectUri', 'codeChallenge', 'codeChallengeMethod']
 
   /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
   static pruneMode = 'mass' as const
