@@ -179,7 +179,11 @@ import {
 import { OAuthClient, AccessToken, RefreshToken, AuthCode, DeviceCode } from '@rudderjs/passport'
 
 // JWT primitives
-import { createToken, verifyToken, decodeToken } from '@rudderjs/passport'
+import { createToken, verifyToken, unsafeDecodeToken } from '@rudderjs/passport'
+// `decodeToken` is kept as a deprecated alias for `unsafeDecodeToken`. The
+// `unsafe` prefix is intentional — the function does NOT verify the
+// signature, so its output cannot be trusted for auth decisions. Use
+// `verifyToken` whenever you need an authenticated payload.
 
 // Types
 import type { PassportConfig, PassportScope, NewPersonalAccessToken } from '@rudderjs/passport'
