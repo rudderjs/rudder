@@ -43,6 +43,7 @@ model OAuthAuthCode {
   scopes              String   @default("[]")
   revoked             Boolean  @default(false)
   expiresAt           DateTime
+  redirectUri         String?
   codeChallenge       String?
   codeChallengeMethod String?
 

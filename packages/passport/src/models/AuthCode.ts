@@ -3,12 +3,13 @@ import { Model } from '@rudderjs/orm'
 export class AuthCode extends Model {
   static override table = 'oAuthAuthCode'
 
-  static override fillable = ['userId', 'clientId', 'scopes', 'revoked', 'expiresAt', 'codeChallenge', 'codeChallengeMethod']
+  static override fillable = ['userId', 'clientId', 'scopes', 'revoked', 'expiresAt', 'redirectUri', 'codeChallenge', 'codeChallengeMethod']
 
   declare userId: string
   declare clientId: string
   declare revoked: boolean
   declare expiresAt: Date
+  declare redirectUri: string | null
   declare codeChallenge: string | null
   declare codeChallengeMethod: string | null
 

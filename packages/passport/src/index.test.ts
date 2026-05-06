@@ -260,6 +260,247 @@ describe('safeCompare — constant-time string comparison', () => {
   })
 })
 
+describe('redirect_uri binding (P1) + re-validation (E3)', () => {
+  // Regression guards for P1/E3/E4 from the passport-surface review.
+  // - issueAuthCode persists redirect_uri on the AuthCode record.
+  // - exchangeAuthCode rejects mismatching redirect_uri at token-exchange time.
+  // - POST/DELETE /oauth/authorize re-validate redirect_uri against the
+  //   client's whitelist (not just the GET handler).
+
+  function fakeAuthCodeModel(stored: Record<string, unknown>) {
+    const created: Record<string, unknown>[] = []
+    const updates: Array<{ id: string; data: Record<string, unknown> }> = []
+    class FakeAuthCode {
+      static created = created
+      static updates = updates
+      static async create(data: Record<string, unknown>) {
+        created.push(data)
+        return { ...data, id: 'AC-NEW' }
+      }
+      static where(_col: string, _val: unknown) {
+        return { first: async () => stored as any }
+      }
+      static async update(id: string, data: Record<string, unknown>) {
+        updates.push({ id, data })
+      }
+    }
+    return FakeAuthCode as any
+  }
+
+  function fakeClientModel(record: Record<string, unknown> | null) {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => record as any }
+      }
+    }
+    return FakeClient as any
+  }
+
+  test('issueAuthCode persists redirect_uri on the AuthCode record', async () => {
+    Passport.reset()
+    const Fake = fakeAuthCodeModel({})
+    Passport.useAuthCodeModel(Fake)
+
+    await issueAuthCode({
+      userId:      'U-1',
+      clientId:    'C-1',
+      scopes:      ['read'],
+      redirectUri: 'https://app.example.com/callback',
+    })
+
+    assert.equal(Fake.created.length, 1)
+    assert.equal(Fake.created[0].redirectUri, 'https://app.example.com/callback')
+    Passport.reset()
+  })
+
+  test('exchangeAuthCode rejects mismatched redirect_uri with invalid_grant', async () => {
+    Passport.reset()
+    const stored = {
+      id: 'AC-1', userId: 'U-1', clientId: 'C-PUBLIC',
+      scopes: '["read"]', revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+      redirectUri: 'https://app.example.com/callback',
+      codeChallenge: null, codeChallengeMethod: null,
+    }
+    Passport.useAuthCodeModel(fakeAuthCodeModel(stored))
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback","https://attacker.example.com/cb"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType: 'authorization_code',
+        code:      'AC-1',
+        clientId:  'C-PUBLIC',
+        redirectUri: 'https://attacker.example.com/cb', // whitelisted on the client, but NOT what was bound at issuance
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /redirect_uri does not match/.test(e.errorDescription),
+    )
+
+    Passport.reset()
+  })
+
+  test('exchangeAuthCode rejects missing redirect_uri when stored value is non-null', async () => {
+    Passport.reset()
+    Passport.useAuthCodeModel(fakeAuthCodeModel({
+      id: 'AC-1', userId: 'U-1', clientId: 'C-PUBLIC',
+      scopes: '["read"]', revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+      redirectUri: 'https://app.example.com/callback',
+      codeChallenge: null, codeChallengeMethod: null,
+    }))
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType: 'authorization_code',
+        code:      'AC-1',
+        clientId:  'C-PUBLIC',
+        redirectUri: '',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /redirect_uri is required/.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  test('exchangeAuthCode allows null stored redirect_uri (legacy compat window)', async () => {
+    // Auth codes minted before this column existed must still be exchangeable
+    // until they expire (≤10 minutes). When the stored value is null, the
+    // redirect_uri branch is skipped; we prove the bypass by advancing to the
+    // next check (PKCE — missing code_verifier on a code with codeChallenge set).
+    Passport.reset()
+    Passport.useAuthCodeModel(fakeAuthCodeModel({
+      id: 'AC-LEGACY', userId: 'U-1', clientId: 'C-PUBLIC',
+      scopes: '["read"]', revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+      redirectUri: null,
+      codeChallenge: 'irrelevant-challenge',
+      codeChallengeMethod: 'S256',
+    }))
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType: 'authorization_code',
+        code:      'AC-LEGACY',
+        clientId:  'C-PUBLIC',
+        redirectUri: 'https://app.example.com/callback',
+        // no codeVerifier — next check after redirect_uri will throw
+      }),
+      (e: any) => e instanceof OAuthError && /code_verifier required/.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  test('POST /oauth/authorize rejects redirect_uri not on client whitelist', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.ok(postHandler, 'POST /oauth/authorize must be registered')
+
+    let status = 0
+    let payload: any
+    const res = {
+      status(s: number) { status = s; return this },
+      json(p: any)      { payload = p },
+    }
+    const req = {
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: {
+        client_id:    'C-PUBLIC',
+        redirect_uri: 'https://attacker.example.com/cb',
+        scopes:       ['read'],
+      },
+    }
+    await postHandler!(req, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'invalid_request')
+    assert.match(payload.error_description, /Invalid redirect_uri/)
+    Passport.reset()
+  })
+
+  test('DELETE /oauth/authorize rejects redirect_uri not on client whitelist', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    let deleteHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   () => {},
+      delete: (p: string, h: any) => { if (p.endsWith('/authorize')) deleteHandler = h },
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.ok(deleteHandler, 'DELETE /oauth/authorize must be registered')
+
+    let status = 0
+    let payload: any
+    const res = {
+      status(s: number) { status = s; return this },
+      json(p: any)      { payload = p },
+    }
+    const req = {
+      body: {
+        client_id:    'C-PUBLIC',
+        redirect_uri: 'https://attacker.example.com/cb',
+      },
+    }
+    await deleteHandler!(req, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'invalid_request')
+    Passport.reset()
+  })
+
+  test('DELETE /oauth/authorize rejects missing redirect_uri (no localhost default)', async () => {
+    // Previous behavior defaulted to 'http://localhost' when no redirect_uri
+    // was supplied — a footgun. The handler must now require the field.
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    let deleteHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   () => {},
+      delete: (p: string, h: any) => { if (p.endsWith('/authorize')) deleteHandler = h },
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let status = 0
+    const res = { status(s: number) { status = s; return this }, json() {} }
+    await deleteHandler!({ body: {} }, res)
+    assert.equal(status, 400)
+    Passport.reset()
+  })
+})
+
 describe('HasApiTokens.tokenCan — wired to __passport_token', () => {
   // Regression guard for P2 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
   // Previously the mixin read `__currentToken`, which BearerMiddleware never wrote.

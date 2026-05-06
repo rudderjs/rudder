@@ -106,6 +106,7 @@ export async function issueAuthCode(opts: {
     scopes:              JSON.stringify(opts.scopes),
     revoked:             false,
     expiresAt,
+    redirectUri:         opts.redirectUri,
     codeChallenge:       opts.codeChallenge ?? null,
     codeChallengeMethod: opts.codeChallengeMethod ?? null,
   } as Record<string, unknown>) as AuthCode
@@ -166,6 +167,21 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   }
   if (authCode.clientId !== params.clientId) {
     throw new OAuthError('invalid_grant', 'Authorization code was not issued to this client.')
+  }
+
+  // RFC 6749 §4.1.3 — if a redirect_uri was bound at issuance, the exchange
+  // MUST present an identical value. Without this binding, an auth code
+  // obtained through one approved redirect can be exchanged via any other
+  // redirect registered to the same client, breaking the OAuth threat model.
+  // `redirectUri` is null only for codes issued before this column existed
+  // (≤10-minute legacy compat window after the migration lands).
+  if (authCode.redirectUri !== null && authCode.redirectUri !== undefined) {
+    if (!params.redirectUri) {
+      throw new OAuthError('invalid_grant', 'redirect_uri is required for this authorization code.')
+    }
+    if (authCode.redirectUri !== params.redirectUri) {
+      throw new OAuthError('invalid_grant', 'redirect_uri does not match the value used at authorization time.')
+    }
   }
 
   // PKCE verification
