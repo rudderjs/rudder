@@ -134,6 +134,72 @@ describe('AppleProvider', () => {
   })
 })
 
+// ─── Token endpoint encoding (RFC 6749 §4.1.3) ────────────
+
+describe('SocialiteDriver.getAccessToken — token endpoint', () => {
+  let captured: { url: string; init: RequestInit } | null = null
+  let originalFetch: typeof fetch
+
+  beforeEach(() => {
+    originalFetch = global.fetch
+    captured = null
+    global.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
+      captured = { url: typeof input === 'string' ? input : input.toString(), init }
+      return new Response(
+        JSON.stringify({ access_token: 'tok', refresh_token: 'rtok', expires_in: 3600 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as typeof fetch
+  })
+
+  function restoreFetch(): void { global.fetch = originalFetch }
+
+  it('uses application/x-www-form-urlencoded Content-Type', async () => {
+    try {
+      const provider = new GitHubProvider(baseConfig)
+      await provider.getAccessToken('auth-code-xyz')
+      assert.ok(captured, 'fetch must have been called')
+      const headers = new Headers(captured!.init.headers)
+      assert.strictEqual(headers.get('content-type'), 'application/x-www-form-urlencoded')
+    } finally { restoreFetch() }
+  })
+
+  it('serializes the body as URL-encoded form params', async () => {
+    try {
+      const provider = new GitHubProvider(baseConfig)
+      await provider.getAccessToken('auth-code-xyz')
+      const body = captured!.init.body
+      assert.ok(body instanceof URLSearchParams, 'body must be URLSearchParams')
+      assert.strictEqual(body.get('client_id'),     'test-client-id')
+      assert.strictEqual(body.get('client_secret'), 'test-client-secret')
+      assert.strictEqual(body.get('code'),          'auth-code-xyz')
+      assert.strictEqual(body.get('redirect_uri'),  'http://localhost:3000/auth/callback')
+      assert.strictEqual(body.get('grant_type'),    'authorization_code')
+    } finally { restoreFetch() }
+  })
+
+  it('returns parsed token, refresh, and expiry from the response', async () => {
+    try {
+      const provider = new GoogleProvider(baseConfig)
+      const result = await provider.getAccessToken('code')
+      assert.strictEqual(result.accessToken,  'tok')
+      assert.strictEqual(result.refreshToken, 'rtok')
+      assert.strictEqual(result.expiresIn,    3600)
+    } finally { restoreFetch() }
+  })
+
+  it('throws when the provider responds with non-2xx', async () => {
+    try {
+      global.fetch = (async () => new Response('bad', { status: 401 })) as typeof fetch
+      const provider = new GitHubProvider(baseConfig)
+      await assert.rejects(
+        async () => provider.getAccessToken('code'),
+        /Token exchange failed: 401/,
+      )
+    } finally { restoreFetch() }
+  })
+})
+
 // ─── Socialite Facade ─────────────────────────────────────
 
 describe('Socialite', () => {
