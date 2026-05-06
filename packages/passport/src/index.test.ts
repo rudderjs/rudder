@@ -1712,3 +1712,106 @@ describe('scope validation (E6) — registry + per-client allow-list', () => {
   })
 })
 
+describe('purgeTokens — bulk delete via QueryBuilder', () => {
+  /**
+   * Records every where/orWhere chain emitted on the model and returns a
+   * fixed delete count from `deleteAll()`. Lets us assert on:
+   *   - that exactly ONE deleteAll() call lands per model (no N+1 loop)
+   *   - that the chained predicates match what the purge contract promises
+   *     (`expiresAt < now` OR `revoked = true` for tokens; expiry only for codes)
+   */
+  function makeFakeModel(name: string, deleteCount: number) {
+    const calls: { wheres: Array<[string, string, unknown]>, deleted: boolean }[] = []
+    class Fake {
+      static get __purgeCalls() { return calls }
+      static get __name() { return name }
+      static query() {
+        const chain: { wheres: Array<[string, string, unknown]>, deleted: boolean } = { wheres: [], deleted: false }
+        calls.push(chain)
+        const builder: any = {
+          where(col: string, op: string, val?: unknown) {
+            if (arguments.length === 2) { chain.wheres.push([col, '=', op]) }
+            else                        { chain.wheres.push([col, op, val]) }
+            return builder
+          },
+          orWhere(col: string, op: string, val?: unknown) {
+            if (arguments.length === 2) { chain.wheres.push(['OR:'+col, '=', op]) }
+            else                        { chain.wheres.push(['OR:'+col, op, val]) }
+            return builder
+          },
+          async deleteAll() { chain.deleted = true; return deleteCount },
+        }
+        return builder
+      }
+    }
+    return Fake as any
+  }
+
+  test('issues one deleteAll() per model and returns its count', async () => {
+    Passport.reset()
+    const Access  = makeFakeModel('access', 7)
+    const Refresh = makeFakeModel('refresh', 3)
+    const Auth    = makeFakeModel('auth', 2)
+    const Device  = makeFakeModel('device', 1)
+    Passport.useTokenModel(Access)
+    Passport.useRefreshTokenModel(Refresh)
+    Passport.useAuthCodeModel(Auth)
+    Passport.useDeviceCodeModel(Device)
+
+    const counts = await purgeTokens()
+
+    assert.deepEqual(counts, { accessTokens: 7, refreshTokens: 3, authCodes: 2, deviceCodes: 1 })
+    for (const Cls of [Access, Refresh, Auth, Device]) {
+      assert.equal(Cls.__purgeCalls.length, 1, `${Cls.__name} should issue exactly one query() chain`)
+      assert.equal(Cls.__purgeCalls[0].deleted, true, `${Cls.__name} should call deleteAll()`)
+    }
+    Passport.reset()
+  })
+
+  test('access + refresh tokens scope by expiresAt < now OR revoked = true', async () => {
+    Passport.reset()
+    const Access  = makeFakeModel('access', 0)
+    const Refresh = makeFakeModel('refresh', 0)
+    const Auth    = makeFakeModel('auth', 0)
+    const Device  = makeFakeModel('device', 0)
+    Passport.useTokenModel(Access)
+    Passport.useRefreshTokenModel(Refresh)
+    Passport.useAuthCodeModel(Auth)
+    Passport.useDeviceCodeModel(Device)
+
+    await purgeTokens()
+
+    for (const Cls of [Access, Refresh]) {
+      const wheres = Cls.__purgeCalls[0].wheres
+      assert.equal(wheres.length, 2, `${Cls.__name} expected 2 predicates`)
+      assert.equal(wheres[0][0], 'expiresAt')
+      assert.equal(wheres[0][1], '<')
+      assert.ok(wheres[0][2] instanceof Date)
+      assert.deepEqual(wheres[1], ['OR:revoked', '=', true])
+    }
+    Passport.reset()
+  })
+
+  test('auth + device codes scope by expiresAt < now only (no revoked column)', async () => {
+    Passport.reset()
+    const Access  = makeFakeModel('access', 0)
+    const Refresh = makeFakeModel('refresh', 0)
+    const Auth    = makeFakeModel('auth', 0)
+    const Device  = makeFakeModel('device', 0)
+    Passport.useTokenModel(Access)
+    Passport.useRefreshTokenModel(Refresh)
+    Passport.useAuthCodeModel(Auth)
+    Passport.useDeviceCodeModel(Device)
+
+    await purgeTokens()
+
+    for (const Cls of [Auth, Device]) {
+      const wheres = Cls.__purgeCalls[0].wheres
+      assert.equal(wheres.length, 1, `${Cls.__name} expected 1 predicate`)
+      assert.deepEqual([wheres[0][0], wheres[0][1]], ['expiresAt', '<'])
+      assert.ok(wheres[0][2] instanceof Date)
+    }
+    Passport.reset()
+  })
+})
+
