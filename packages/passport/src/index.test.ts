@@ -20,6 +20,7 @@ import {
   scopeAny,
   generateKeys,
   createClient,
+  resolveClientGrantTypes,
   purgeTokens,
   issueTokens,
   validateAuthorizationRequest,
@@ -73,6 +74,7 @@ describe('@rudderjs/passport exports', () => {
   test('command helpers are functions', () => {
     assert.equal(typeof generateKeys, 'function')
     assert.equal(typeof createClient, 'function')
+    assert.equal(typeof resolveClientGrantTypes, 'function')
     assert.equal(typeof purgeTokens, 'function')
   })
 
@@ -2532,6 +2534,40 @@ describe('storage hygiene — fillable / hidden / casts / null guards', () => {
     assert.ok(warnings.length >= 1, 'expected at least one console.warn call')
     assert.ok(/Failed to parse JSON-array/.test(warnings[0] ?? ''),
       `expected helpful warning, got: ${warnings[0]}`)
+  })
+})
+
+describe('resolveClientGrantTypes — passport:client CLI flag mapping (L2)', () => {
+  // Regression guard for L2 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // The previous mapping shipped --device clients with ONLY `device_code` in
+  // their grants array — once a device exchanged its user_code for tokens,
+  // the bundled refresh token couldn't actually be used at /oauth/token
+  // because the token endpoint checks the client's grantTypes for
+  // `refresh_token`. The pure helper makes the new mapping
+  // unit-testable without booting the full provider.
+
+  test('default (no flags) → authorization_code + refresh_token', () => {
+    assert.deepEqual(resolveClientGrantTypes({}), ['authorization_code', 'refresh_token'])
+  })
+
+  test('--device → device_code + refresh_token (regression guard for L2)', () => {
+    assert.deepEqual(
+      resolveClientGrantTypes({ isDevice: true }),
+      ['urn:ietf:params:oauth:grant-type:device_code', 'refresh_token'],
+    )
+  })
+
+  test('--client-credentials → client_credentials only', () => {
+    assert.deepEqual(resolveClientGrantTypes({ isM2M: true }), ['client_credentials'])
+  })
+
+  test('--device wins over --client-credentials when both are passed', () => {
+    // Mirrors the if-else order in the CLI handler — device_code is the
+    // narrower / more specific intent and takes precedence.
+    assert.deepEqual(
+      resolveClientGrantTypes({ isDevice: true, isM2M: true }),
+      ['urn:ietf:params:oauth:grant-type:device_code', 'refresh_token'],
+    )
   })
 })
 

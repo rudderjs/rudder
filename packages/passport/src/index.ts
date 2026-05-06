@@ -18,7 +18,7 @@ export { BearerMiddleware, RequireBearer } from './middleware/bearer.js'
 export { scope, scopeAny } from './middleware/scope.js'
 
 export { generateKeys } from './commands/keys.js'
-export { createClient } from './commands/client.js'
+export { createClient, resolveClientGrantTypes } from './commands/client.js'
 export type { CreateClientOpts } from './commands/client.js'
 export { purgeTokens } from './commands/purge.js'
 export { hashClientSecret, verifyClientSecret } from './client-secret.js'
@@ -159,15 +159,27 @@ export class PassportProvider extends ServiceProvider {
       const isPersonal = args.includes('--personal')
       const isM2M = args.includes('--client-credentials')
 
-      const grantTypes = isDevice
-        ? ['urn:ietf:params:oauth:grant-type:device_code']
-        : isPersonal
-          ? ['personal_access']
-          : isM2M
-            ? ['client_credentials']
-            : ['authorization_code', 'refresh_token']
+      // `--personal` previously created an OAuth client with `personal_access`
+      // as the only grant type — but `personal_access` is not an HTTP grant
+      // (`/oauth/token` rejects it), and personal access tokens go through
+      // `HasApiTokens.createToken()` which auto-manages an internal
+      // `__personal_access__` client. So the row a user got from
+      // `passport:client --personal` was an orphan — present in the DB,
+      // never reachable through any flow. Print a hint instead of creating
+      // it; this is a CLI ergonomics fix, no user-data migration needed.
+      if (isPersonal) {
+        console.log('Personal access tokens don\'t need a hand-rolled OAuth client.')
+        console.log('They\'re minted by HasApiTokens.createToken() against an auto-managed')
+        console.log('internal client; mix `HasApiTokens` into your User model and call:')
+        console.log('')
+        console.log('  const { plainTextToken } = await user.createToken(\'cli\', [\'read\'])')
+        console.log('')
+        console.log('See packages/passport/CLAUDE.md for the full setup.')
+        return
+      }
 
-      const { createClient } = await import('./commands/client.js')
+      const { createClient, resolveClientGrantTypes } = await import('./commands/client.js')
+      const grantTypes = resolveClientGrantTypes({ isDevice, isM2M })
       const { client, secret } = await createClient({
         name,
         confidential: !isPublic && !isDevice,
