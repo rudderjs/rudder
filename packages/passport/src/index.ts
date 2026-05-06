@@ -5,7 +5,7 @@ import { ServiceProvider, config } from '@rudderjs/core'
 export { Passport } from './Passport.js'
 export type { PassportScope, AuthorizationViewContext, AuthorizationViewFn } from './Passport.js'
 
-export { createToken, verifyToken, decodeToken } from './token.js'
+export { createToken, verifyToken, unsafeDecodeToken, decodeToken } from './token.js'
 export type { JwtHeader, JwtPayload } from './token.js'
 
 export { OAuthClient } from './models/OAuthClient.js'

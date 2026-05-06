@@ -75,14 +75,20 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
     }
 
     /**
-     * Get all personal access tokens for this user.
+     * Get the **personal access** tokens for this user.
      *
-     * Returns AccessToken Model instances scoped to the calling user's id.
-     * `AccessToken.toJSON()` hides `userId` and `clientId` by default, so
-     * exposing the result over an API leaks only `id`, `name`, `scopes`,
-     * `revoked`, `expiresAt`. If you need to surface ownership info on a
-     * privileged route, opt in via `t.makeVisible(['userId', 'clientId'])`
-     * per token.
+     * Filters on both `userId` AND `clientId === personalAccessClient.id`,
+     * so OAuth-app session tokens (issued by third-party clients on this
+     * user's behalf) are excluded. The previous implementation returned
+     * every access-token row owned by the user — a UI listing personal
+     * tokens would surface unrelated third-party authorizations and a
+     * "log out all my dev tokens" button would have revoked them.
+     *
+     * Returns AccessToken Model instances. `AccessToken.toJSON()` hides
+     * `userId` and `clientId` by default, so exposing the result over an
+     * API leaks only `id`, `name`, `scopes`, `revoked`, `expiresAt`. If
+     * you need ownership info on a privileged route, opt in via
+     * `t.makeVisible(['userId', 'clientId'])` per token.
      *
      * Consumers MUST keep this method scoped to the authenticated user —
      * exposing other users' tokens via this same accessor (e.g. an admin
@@ -92,17 +98,31 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
     async tokens(): Promise<AccessToken[]> {
       const userId = (this as any).id as string
       const AccessTokenCls = await Passport.tokenModel()
-      return AccessTokenCls.where('userId', userId).get() as Promise<AccessToken[]>
+      const personalClientId = await getPersonalAccessClientId()
+      return AccessTokenCls
+        .where('userId', userId)
+        .where('clientId', personalClientId)
+        .get() as Promise<AccessToken[]>
     }
 
-    /** Revoke all personal access tokens for this user. */
+    /**
+     * Revoke this user's **personal access** tokens.
+     *
+     * Filters on the personal-access client (same scope as `tokens()`), so
+     * third-party OAuth app authorizations are not collateral. Returns the
+     * count of rows that flipped `revoked = true` — already-revoked rows
+     * are skipped by the inner `.where('revoked', false)` predicate.
+     */
     async revokeAllTokens(): Promise<number> {
       // Single bulk QueryBuilder.updateAll() — bypasses mass-assignment
       // (`revoked` is no longer in `fillable`) and replaces the prior
       // read-then-N+1-update loop with one round-trip.
       const userId = (this as any).id as string
       const AccessTokenCls = await Passport.tokenModel()
-      return AccessTokenCls.where('userId', userId)
+      const personalClientId = await getPersonalAccessClientId()
+      return AccessTokenCls
+        .where('userId', userId)
+        .where('clientId', personalClientId)
         .where('revoked', false)
         .updateAll({ revoked: true } as Record<string, unknown>)
     }

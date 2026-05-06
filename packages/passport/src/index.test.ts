@@ -8,6 +8,7 @@ import {
   verifyClientSecret,
   createToken,
   verifyToken,
+  unsafeDecodeToken,
   decodeToken,
   OAuthClient,
   AccessToken,
@@ -52,7 +53,11 @@ describe('@rudderjs/passport exports', () => {
   test('token helpers are functions', () => {
     assert.equal(typeof createToken, 'function')
     assert.equal(typeof verifyToken, 'function')
-    assert.equal(typeof decodeToken, 'function')
+    assert.equal(typeof unsafeDecodeToken, 'function')
+    // `decodeToken` is kept as a deprecated alias for back-compat — both
+    // names must reach the same function.
+    assert.equal(decodeToken, unsafeDecodeToken,
+      '`decodeToken` must remain an alias for `unsafeDecodeToken`')
   })
 
   test('models are exported', () => {
@@ -544,6 +549,129 @@ describe('HasApiTokens.tokenCan — wired to __passport_token', () => {
     const u = new Mixed()
     u.__currentToken = { scopes: JSON.stringify(['*']), revoked: false }
     assert.equal(u.tokenCan('write'), false)
+  })
+})
+
+describe('HasApiTokens.tokens / revokeAllTokens — personal-access scoping (P10)', () => {
+  // Regression guard for P10 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // Previously `tokens()` returned every access-token row owned by the user
+  // (including OAuth-app session tokens), and `revokeAllTokens()` revoked
+  // them all. Both must now filter by `clientId === personalAccessClient.id`
+  // so a UI listing personal tokens / "log out of all my dev tokens" stays
+  // out of unrelated third-party authorizations.
+
+  /**
+   * Build a fake AccessToken model that records every chained `where()`
+   * predicate, returns a fixed array on `.get()`, and a fixed count on
+   * `.updateAll()`. The recorded chain is what the assertions check —
+   * proves both `userId` AND `clientId` are filtered, regardless of the
+   * order the mixin applies them.
+   */
+  function fakeAccessTokenModel(matching: any[], updateCount: number) {
+    const chains: Array<Array<[string, unknown]>> = []
+    let current: Array<[string, unknown]> = []
+    class FakeAccessToken {
+      static __chains = chains
+      static where(col: string, val: unknown) {
+        if (current.length === 0) chains.push(current)
+        current.push([col, val])
+        return this as any
+      }
+      static async get() {
+        const captured = current
+        current = []
+        return captured.find(([c]) => c === 'clientId') ? matching : []
+      }
+      static async updateAll() {
+        current = []
+        return updateCount
+      }
+    }
+    return FakeAccessToken as any
+  }
+
+  /** Fake OAuthClient model that returns a known personal-access client. */
+  function fakePersonalClientModel(personalId: string) {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({ id: personalId, name: '__personal_access__', confidential: false } as any),
+        }
+      }
+      static async create() {
+        return { id: personalId, name: '__personal_access__' } as any
+      }
+    }
+    return FakeClient as any
+  }
+
+  test('tokens() filters by both userId and personal-access clientId', async () => {
+    Passport.reset()
+    resetPersonalAccessClient()
+    const personalRows = [
+      { id: 'AT-1', userId: 'U-1', clientId: 'PAC-1', name: 'cli', revoked: false },
+      { id: 'AT-2', userId: 'U-1', clientId: 'PAC-1', name: 'editor', revoked: false },
+    ]
+    const FakeAT = fakeAccessTokenModel(personalRows, 0)
+    Passport.useTokenModel(FakeAT)
+    Passport.useClientModel(fakePersonalClientModel('PAC-1'))
+
+    class FakeUser {
+      id = 'U-1'
+    }
+    const Mixed = HasApiTokens(FakeUser as any) as any
+    const user = new Mixed()
+    const result = await user.tokens()
+
+    // The returned rows are the personal-access ones — proves clientId
+    // was applied (the fake's get() returns [] when clientId is missing).
+    assert.equal(result.length, 2)
+    // The chain must include both userId and personal-access clientId.
+    const lastChain = FakeAT.__chains[FakeAT.__chains.length - 1] as Array<[string, unknown]>
+    assert.deepEqual(
+      lastChain.find(([c]) => c === 'userId'),
+      ['userId', 'U-1'],
+    )
+    assert.deepEqual(
+      lastChain.find(([c]) => c === 'clientId'),
+      ['clientId', 'PAC-1'],
+    )
+    Passport.reset()
+    resetPersonalAccessClient()
+  })
+
+  test('revokeAllTokens() filters by both userId and personal-access clientId', async () => {
+    Passport.reset()
+    resetPersonalAccessClient()
+    const FakeAT = fakeAccessTokenModel([], 3)
+    Passport.useTokenModel(FakeAT)
+    Passport.useClientModel(fakePersonalClientModel('PAC-2'))
+
+    class FakeUser {
+      id = 'U-9'
+    }
+    const Mixed = HasApiTokens(FakeUser as any) as any
+    const user = new Mixed()
+    const count = await user.revokeAllTokens()
+    assert.equal(count, 3)
+
+    const lastChain = FakeAT.__chains[FakeAT.__chains.length - 1] as Array<[string, unknown]>
+    assert.deepEqual(
+      lastChain.find(([c]) => c === 'userId'),
+      ['userId', 'U-9'],
+    )
+    assert.deepEqual(
+      lastChain.find(([c]) => c === 'clientId'),
+      ['clientId', 'PAC-2'],
+    )
+    // The pre-existing `revoked = false` predicate (skips already-revoked
+    // rows) must still be present.
+    assert.deepEqual(
+      lastChain.find(([c]) => c === 'revoked'),
+      ['revoked', false],
+    )
+    Passport.reset()
+    resetPersonalAccessClient()
   })
 })
 

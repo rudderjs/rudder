@@ -124,13 +124,32 @@ export async function verifyToken(jwt: string): Promise<JwtPayload> {
 // ─── Decode without verification (for inspection) ─────────
 
 /**
- * Decode a JWT payload without verifying the signature.
- * Useful for reading token metadata (e.g., jti for revocation check).
+ * Decode a JWT payload **without verifying the signature**. The returned
+ * `sub` / `aud` / `scopes` claims MUST NOT be trusted for authentication
+ * decisions — an attacker can mint a JWT with any payload, sign it with
+ * their own key, and this function will happily decode it.
+ *
+ * Legitimate uses are read-only and signature-independent — e.g. reading
+ * `jti` to look up a DB row for revocation check, or peeking at `exp` for
+ * client-side scheduling. Anything resembling an auth gate must call
+ * `verifyToken()` instead.
+ *
+ * Naming convention: prefixed `unsafe` so a grep for "auth check" never
+ * accidentally lands on a verification-free path. `decodeToken` is kept
+ * as a deprecated alias for back-compat — see below.
  */
-export function decodeToken(jwt: string): JwtPayload {
+export function unsafeDecodeToken(jwt: string): JwtPayload {
   const parts = jwt.split('.')
   if (parts.length !== 3) {
     throw new Error('Invalid JWT: expected 3 segments')
   }
   return JSON.parse(base64urlDecode(parts[1]!)) as JwtPayload
 }
+
+/**
+ * @deprecated Renamed to `unsafeDecodeToken`. The old name doesn't carry
+ * the security warning the function deserves — callers regularly mistake
+ * "decode" for "verify". Will be kept indefinitely as a thin alias for
+ * back-compat; new code should import `unsafeDecodeToken`.
+ */
+export const decodeToken = unsafeDecodeToken
