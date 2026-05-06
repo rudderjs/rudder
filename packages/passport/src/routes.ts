@@ -243,7 +243,11 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
             if (pollResult.status === 'authorized') {
               result = pollResult.tokens
             } else {
-              res.status(pollResult.status === 'slow_down' ? 429 : 400).json({
+              // RFC 8628 §3.5 — device-flow polling errors (including
+              // slow_down) are §5.2-shaped errors and MUST return HTTP
+              // 400. 429 is for transport-level rate-limiting, not the
+              // OAuth `slow_down` signal.
+              res.status(400).json({
                 error: pollResult.status,
               })
               return
@@ -262,6 +266,11 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
         res.json(result)
       } catch (e) {
         if (e instanceof OAuthError) {
+          // RFC 6749 §5.2 — client-auth failures at the token endpoint
+          // are signalled with WWW-Authenticate alongside the 401 status.
+          if (e.statusCode === 401 && typeof res.header === 'function') {
+            res.header('WWW-Authenticate', 'Basic realm="oauth"')
+          }
           res.status(e.statusCode).json(e.toJSON())
         } else {
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })

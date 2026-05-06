@@ -4,6 +4,20 @@ import { Passport } from '../Passport.js'
 import type { AccessToken } from '../models/AccessToken.js'
 
 /**
+ * Extract the Bearer-scheme credential from an Authorization header.
+ * RFC 6750 §2.1 / RFC 7235 §2.1 — the auth scheme is a token and must be
+ * matched case-insensitively, so `bearer xyz` and `BEARER xyz` are valid.
+ * Returns the trimmed credential, or null if the header is absent or the
+ * scheme is not "Bearer".
+ */
+function extractBearer(authHeader: string | undefined): string | null {
+  if (!authHeader) return null
+  if (authHeader.length < 7) return null
+  if (authHeader.slice(0, 7).toLowerCase() !== 'bearer ') return null
+  return authHeader.slice(7).trim() || null
+}
+
+/**
  * Middleware that authenticates via Bearer token (JWT).
  * Validates the JWT signature, checks expiration, checks revocation in DB.
  * Attaches user to the request if valid. Does not block unauthenticated requests.
@@ -11,12 +25,12 @@ import type { AccessToken } from '../models/AccessToken.js'
 export function BearerMiddleware(): MiddlewareHandler {
   return async function BearerMiddleware(req, _res, next) {
     const authHeader = req.headers['authorization'] as string | undefined
-    if (!authHeader?.startsWith('Bearer ')) {
+    const jwt = extractBearer(authHeader)
+    if (!jwt) {
       await next()
       return
     }
 
-    const jwt = authHeader.slice(7).trim()
     try {
       const payload = await verifyToken(jwt)
 
@@ -68,12 +82,12 @@ export function BearerMiddleware(): MiddlewareHandler {
 export function RequireBearer(): MiddlewareHandler {
   return async function RequireBearer(req, res, next) {
     const authHeader = req.headers['authorization'] as string | undefined
-    if (!authHeader?.startsWith('Bearer ')) {
+    const jwt = extractBearer(authHeader)
+    if (!jwt) {
       res.status(401).json({ error: 'unauthenticated', message: 'Bearer token required.' })
       return
     }
 
-    const jwt = authHeader.slice(7).trim()
     try {
       const payload = await verifyToken(jwt)
 

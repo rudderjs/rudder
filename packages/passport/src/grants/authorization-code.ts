@@ -136,21 +136,25 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   const ClientCls   = await Passport.clientModel()
   const AuthCodeCls = await Passport.authCodeModel()
 
-  // Validate client
+  // Validate client. RFC 6749 §5.2 — client authentication failures at
+  // the token endpoint MUST return HTTP 401 with a `WWW-Authenticate`
+  // header (the latter is set in routes.ts on 401 responses). The
+  // refresh-token and client-credentials grants already return 401 here
+  // — auth-code was the inconsistent outlier.
   const client = await ClientCls.where('id', params.clientId).first() as OAuthClient | null
   if (!client || client.revoked) {
-    throw new OAuthError('invalid_client', 'Client not found.')
+    throw new OAuthError('invalid_client', 'Client not found.', 401)
   }
 
   // Confidential clients must provide a valid secret
   if (client.confidential) {
     if (!params.clientSecret) {
-      throw new OAuthError('invalid_client', 'Client secret required.')
+      throw new OAuthError('invalid_client', 'Client secret required.', 401)
     }
     const { createHash } = await import('node:crypto')
     const hashed = createHash('sha256').update(params.clientSecret).digest('hex')
     if (!(await safeCompare(hashed, client.secret))) {
-      throw new OAuthError('invalid_client', 'Invalid client secret.')
+      throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
     }
   }
 

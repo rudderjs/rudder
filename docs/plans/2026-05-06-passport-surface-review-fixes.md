@@ -1,6 +1,6 @@
 # Passport-surface review sweep findings — 2026-05-06
 
-**Status:** Filed 2026-05-06 by Claude Opus 4.7. Implementation pending.
+**Status:** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). MEDIUM/LOW backlog ongoing — see "Recommended PR strategy" below for grouping.
 **Pattern:** Same shape as `2026-05-06-auth-surface-review-fixes.md` (4-agent partitioned sweep).
 
 Four parallel review agents on `@rudderjs/passport` (RudderJS's Laravel Passport-equivalent OAuth2 server), partitioned by surface:
@@ -57,11 +57,11 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - Cross-flagged as **M2** by the storage agent (with stronger recommendation: ban `plain` outright per OAuth 2.1).
 - Fix: reject `plain` for public clients (allow only S256), or globally require S256 with an opt-in `Passport.allowPlainPkce()` flag.
 
-**P4. `refresh-token.ts:53-54` — No reuse-detection / token-family revocation on a revoked refresh token** ✅ VERIFIED REAL
-- On reuse of a previously-rotated refresh token, the code throws `invalid_grant`. RFC 6749 §10.4 + OAuth 2.0 Security BCP §4.14 require revoking the **entire token family** on detected reuse.
-- Today, an attacker who steals RT1 before legitimate rotation can rotate forever; the legitimate user is locked out silently and the attacker is undetected.
+**P4. `refresh-token.ts:53-54` — No reuse-detection / token-family revocation on a revoked refresh token** ✅ FIXED — PR #261
+- On reuse of a previously-rotated refresh token, the code threw `invalid_grant` only. RFC 6749 §10.4 + OAuth 2.0 Security BCP §4.14 require revoking the **entire token family** on detected reuse.
+- Pre-fix, an attacker who stole RT1 before legitimate rotation could rotate forever; the legitimate user was locked out silently and the attacker was undetected.
 - Cross-flagged as **M(H4)** by the storage agent.
-- Fix: link refresh tokens via `parentId` (or `familyId`); on presentation of an already-revoked refresh, walk and revoke the entire chain (all access + refresh tokens).
+- **Fixed in #261**: nullable `familyId` column on `OAuthRefreshToken` (indexed). `issueTokens()` stamps a fresh UUID when no family is passed; `refreshTokenGrant()` propagates it on rotation. On reuse of a revoked RT with a non-null `familyId`, the grant walks `WHERE familyId = X` and revokes every access + refresh token in the family before throwing `invalid_grant`. Legacy null rows are exempt during the migration window — same approach as the redirect_uri rollout.
 
 **P5. Multiple grants — Non-constant-time comparison of client-secret hashes and PKCE verifier** ✅ VERIFIED REAL
 - `authorization-code.ts:141`, `refresh-token.ts:43`, `client-credentials.ts:40`: `hashed !== client.secret` — JS `!==` short-circuits on first mismatch.
@@ -301,7 +301,7 @@ Mirror the auth-surface review approach: small focused PRs, security-first, no b
 2. **E2 + auth/ownership on `DELETE /oauth/tokens/:id`** — single PR, security.
 3. **P1 + E3 + E4 — redirect_uri binding + open-redirect on POST/DELETE authorize** — single PR, security; touches AuthCode schema (migration).
 4. **P3 — PKCE plain rejection for public clients** — single PR, security; small.
-5. **P4 — refresh-token reuse-chain revocation** — single PR, security; touches RefreshToken schema (parentId/familyId).
+5. **P4 — refresh-token reuse-chain revocation** — single PR, security; touches RefreshToken schema (parentId/familyId). **Shipped: #261.**
 6. **P5 — constant-time comparisons** — single PR, security; trivial.
 7. **P2 — `tokenCan` wiring** — single PR, functional bug.
 8. **L1 — `passport:keys --force` backup** — single PR, ops safety.
