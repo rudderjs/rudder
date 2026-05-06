@@ -2098,3 +2098,138 @@ describe('client-secret hashing (L6) — APP_KEY pepper + back-compat', () => {
   })
 })
 
+describe('M-L3 — token models implement Prunable for `model:prune`', () => {
+  // `pruneModels` (in @rudderjs/orm) walks `ModelRegistry`, picks classes
+  // that expose `static prunable()`, and calls
+  // `ModelClass.prunable().limit(chunk).deleteAll()` (mass mode) or per-row
+  // delete (instance mode). These tests verify each passport token model
+  // exposes the expected predicate + mode without depending on a real DB.
+
+  /**
+   * Subclass each model and override `static query()` to capture the chained
+   * `where`/`orWhere` calls. `prunable()` calls `this.query()`, so a static
+   * override is enough — we don't need to monkey-patch the base class.
+   */
+  function captureChain<T extends { prunable(): any }>(Cls: T): {
+    wheres: Array<[string, string, unknown]>
+  } {
+    const wheres: Array<[string, string, unknown]> = []
+    const builder: any = {
+      where(col: string, op: string, val?: unknown) {
+        if (arguments.length === 2) wheres.push([col, '=', op])
+        else                        wheres.push([col, op, val])
+        return builder
+      },
+      orWhere(col: string, op: string, val?: unknown) {
+        if (arguments.length === 2) wheres.push(['OR:'+col, '=', op])
+        else                        wheres.push(['OR:'+col, op, val])
+        return builder
+      },
+    }
+    ;(Cls as any).query = () => builder
+    Cls.prunable()
+    return { wheres }
+  }
+
+  test('AccessToken — pruneMode mass + expiresAt < now OR revoked = true', () => {
+    class FakeAccess extends AccessToken {}
+    assert.equal((FakeAccess as any).pruneMode, 'mass')
+    assert.equal(typeof (FakeAccess as any).prunable, 'function')
+
+    const { wheres } = captureChain(FakeAccess)
+    assert.equal(wheres.length, 2)
+    assert.equal(wheres[0]?.[0], 'expiresAt')
+    assert.equal(wheres[0]?.[1], '<')
+    assert.ok(wheres[0]?.[2] instanceof Date)
+    assert.deepEqual(wheres[1], ['OR:revoked', '=', true])
+  })
+
+  test('RefreshToken — pruneMode mass + expiresAt < now OR revoked = true', () => {
+    class FakeRefresh extends RefreshToken {}
+    assert.equal((FakeRefresh as any).pruneMode, 'mass')
+    assert.equal(typeof (FakeRefresh as any).prunable, 'function')
+
+    const { wheres } = captureChain(FakeRefresh)
+    assert.equal(wheres.length, 2)
+    assert.equal(wheres[0]?.[0], 'expiresAt')
+    assert.equal(wheres[0]?.[1], '<')
+    assert.ok(wheres[0]?.[2] instanceof Date)
+    assert.deepEqual(wheres[1], ['OR:revoked', '=', true])
+  })
+
+  test('AuthCode — pruneMode mass + expiresAt < now only', () => {
+    // Auth codes are single-use and revoked on exchange, but we keep
+    // revoked-but-unexpired rows for the natural 10-minute TTL window so
+    // replay-detection traces survive long enough to be useful. Mirrors
+    // `passport:purge`.
+    class FakeAuth extends AuthCode {}
+    assert.equal((FakeAuth as any).pruneMode, 'mass')
+
+    const { wheres } = captureChain(FakeAuth)
+    assert.equal(wheres.length, 1)
+    assert.equal(wheres[0]?.[0], 'expiresAt')
+    assert.equal(wheres[0]?.[1], '<')
+    assert.ok(wheres[0]?.[2] instanceof Date)
+  })
+
+  test('DeviceCode — pruneMode mass + expiresAt < now only', () => {
+    class FakeDevice extends DeviceCode {}
+    assert.equal((FakeDevice as any).pruneMode, 'mass')
+
+    const { wheres } = captureChain(FakeDevice)
+    assert.equal(wheres.length, 1)
+    assert.equal(wheres[0]?.[0], 'expiresAt')
+    assert.equal(wheres[0]?.[1], '<')
+    assert.ok(wheres[0]?.[2] instanceof Date)
+  })
+
+  test('predicates match `passport:purge` exactly — no double-counting risk', async () => {
+    // If the operator runs `passport:purge` and `model:prune` back-to-back
+    // (e.g. cron + scheduled task), both must target the same rows so the
+    // second call is a cheap no-op. Exercise both paths against the same
+    // fake model and verify the where chains line up byte-for-byte.
+    Passport.reset()
+    const purgeChain: Array<[string, string, unknown]> = []
+    const pruneChain: Array<[string, string, unknown]> = []
+
+    function recorder(target: Array<[string, string, unknown]>) {
+      const builder: any = {
+        where(col: string, op: string, val?: unknown) {
+          if (arguments.length === 2) target.push([col, '=', op])
+          else                        target.push([col, op, val])
+          return builder
+        },
+        orWhere(col: string, op: string, val?: unknown) {
+          if (arguments.length === 2) target.push(['OR:'+col, '=', op])
+          else                        target.push(['OR:'+col, op, val])
+          return builder
+        },
+        async deleteAll() { return 0 },
+      }
+      return builder
+    }
+
+    class CapturePurge {
+      static query() { return recorder(purgeChain) }
+    }
+    Passport.useTokenModel(CapturePurge as any)
+    Passport.useRefreshTokenModel(class { static query() { return recorder([]) } } as any)
+    Passport.useAuthCodeModel(class    { static query() { return recorder([]) } } as any)
+    Passport.useDeviceCodeModel(class  { static query() { return recorder([]) } } as any)
+    await purgeTokens()
+
+    class CapturePrune extends AccessToken {
+      static override query() { return recorder(pruneChain) as any }
+    }
+    CapturePrune.prunable()
+
+    // Strip the Date payloads (timestamps differ by ms between the two calls);
+    // shape and constants are what matter for the contract.
+    const shape = (chain: Array<[string, string, unknown]>) =>
+      chain.map(([col, op, val]) => [col, op, val instanceof Date ? '<DATE>' : val])
+    assert.deepEqual(shape(pruneChain), shape(purgeChain))
+
+    Passport.reset()
+  })
+})
+

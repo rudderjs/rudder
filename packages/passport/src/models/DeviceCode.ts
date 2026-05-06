@@ -5,6 +5,14 @@ export class DeviceCode extends Model {
 
   static override fillable = ['clientId', 'userCode', 'deviceCode', 'scopes', 'userId', 'approved', 'expiresAt', 'lastPolledAt']
 
+  /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
+  static pruneMode = 'mass' as const
+
+  /** Rows safe to remove: expired only. Mirrors the `passport:purge` predicate. */
+  static prunable() {
+    return this.query().where('expiresAt', '<', new Date())
+  }
+
   declare clientId: string
   declare userCode: string
   declare deviceCode: string

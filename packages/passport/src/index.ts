@@ -113,6 +113,21 @@ export class PassportProvider extends ServiceProvider {
 
     this.app.instance('passport', Passport)
 
+    // Register the four token models with the ORM ModelRegistry so the
+    // `model:prune` scheduler picks up their `static prunable()` definitions
+    // on day-1 fresh apps — without this, the registry only learns about
+    // the models lazily on the first oauth flow that hits them, so a fresh
+    // install running `model:prune` before any client/token activity would
+    // silently skip passport rows. Resolves through the `Passport.*Model()`
+    // accessors so app-level model overrides (`Passport.useTokenModel(...)`)
+    // are respected.
+    const { ModelRegistry } = await import('@rudderjs/orm')
+    ModelRegistry.register(await Passport.clientModel())
+    ModelRegistry.register(await Passport.tokenModel())
+    ModelRegistry.register(await Passport.refreshTokenModel())
+    ModelRegistry.register(await Passport.authCodeModel())
+    ModelRegistry.register(await Passport.deviceCodeModel())
+
     // Register CLI commands. `@rudderjs/core` (which re-exports `rudder`)
     // and `@rudderjs/console` (which exports `registerMakeSpecs`) are both
     // hard deps via the `@rudderjs/core` → `@rudderjs/console` dependency
