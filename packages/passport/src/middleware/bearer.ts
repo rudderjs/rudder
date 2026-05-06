@@ -44,6 +44,7 @@ export function BearerMiddleware(): MiddlewareHandler {
           const manager = app().make<{ guard(): { provider: { retrieveById(id: string): Promise<unknown> } } }>('auth.manager')
           const user = await manager.guard().provider.retrieveById(payload.sub)
           if (user) {
+            ;(user as Record<string, unknown>)['__passport_token'] = token
             const plain: Record<string, unknown> = {}
             for (const [k, v] of Object.entries(user as Record<string, unknown>)) {
               if (typeof v !== 'function' && k !== 'password') plain[k] = v
@@ -98,6 +99,7 @@ export function RequireBearer(): MiddlewareHandler {
           const manager = app().make<{ guard(): { provider: { retrieveById(id: string): Promise<unknown> } } }>('auth.manager')
           const user = await manager.guard().provider.retrieveById(payload.sub)
           if (user) {
+            ;(user as Record<string, unknown>)['__passport_token'] = token
             const plain: Record<string, unknown> = {}
             for (const [k, v] of Object.entries(user as Record<string, unknown>)) {
               if (typeof v !== 'function' && k !== 'password') plain[k] = v

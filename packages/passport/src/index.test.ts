@@ -260,3 +260,137 @@ describe('safeCompare — constant-time string comparison', () => {
   })
 })
 
+describe('HasApiTokens.tokenCan — wired to __passport_token', () => {
+  // Regression guard for P2 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // Previously the mixin read `__currentToken`, which BearerMiddleware never wrote.
+  // The middleware writes `__passport_token` on req.raw and stamps the same key
+  // onto the resolved user model — the mixin must read the matching field.
+
+  class FakeBaseModel {}
+  const Mixed = HasApiTokens(FakeBaseModel as any) as any
+
+  test('returns false when no token has been bound', () => {
+    const u = new Mixed()
+    assert.equal(u.tokenCan('write'), false)
+  })
+
+  test('returns true when __passport_token has the requested scope', () => {
+    const u = new Mixed()
+    u.__passport_token = { scopes: JSON.stringify(['read', 'write']), revoked: false }
+    assert.equal(u.tokenCan('write'), true)
+    assert.equal(u.tokenCan('read'), true)
+  })
+
+  test('returns false when __passport_token lacks the requested scope', () => {
+    const u = new Mixed()
+    u.__passport_token = { scopes: JSON.stringify(['read']), revoked: false }
+    assert.equal(u.tokenCan('write'), false)
+  })
+
+  test('returns true for any scope when token has wildcard "*"', () => {
+    const u = new Mixed()
+    u.__passport_token = { scopes: JSON.stringify(['*']), revoked: false }
+    assert.equal(u.tokenCan('anything'), true)
+  })
+
+  test('legacy __currentToken is no longer consulted', () => {
+    // If a future regression renames the field back, this test catches it.
+    const u = new Mixed()
+    u.__currentToken = { scopes: JSON.stringify(['*']), revoked: false }
+    assert.equal(u.tokenCan('write'), false)
+  })
+})
+
+describe('generateKeys — backup on --force', () => {
+  // Regression guard for L1 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // `--force` previously overwrote the private key with no recovery path.
+
+  test('returns null backup when no existing keys', async () => {
+    const { mkdtemp, readdir, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join, basename } = await import('node:path')
+
+    const dir = await mkdtemp(join(tmpdir(), 'passport-keys-'))
+    const cwd = process.cwd()
+    try {
+      process.chdir(dir)
+      Passport.reset()
+      Passport.loadKeysFrom('.')
+      const { generateKeys } = await import('./commands/keys.js')
+      const result = await generateKeys()
+      assert.equal(result.backup, null)
+      assert.equal(basename(result.privatePath), 'oauth-private.key')
+      assert.equal(basename(result.publicPath),  'oauth-public.key')
+      const files = await readdir(dir)
+      assert.ok(files.includes('oauth-private.key'))
+      assert.ok(files.includes('oauth-public.key'))
+      assert.equal(files.filter(f => f.includes('.bak.')).length, 0)
+    } finally {
+      process.chdir(cwd)
+      Passport.reset()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('without --force, refuses to overwrite existing keys', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+
+    const dir = await mkdtemp(join(tmpdir(), 'passport-keys-'))
+    const cwd = process.cwd()
+    try {
+      process.chdir(dir)
+      Passport.reset()
+      Passport.loadKeysFrom('.')
+      await writeFile(join(dir, 'oauth-private.key'), 'OLD-PRIVATE')
+      const { generateKeys } = await import('./commands/keys.js')
+      await assert.rejects(() => generateKeys(), /already exist/)
+    } finally {
+      process.chdir(cwd)
+      Passport.reset()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('with --force, renames existing keys to .bak.<timestamp> before writing new ones', async () => {
+    const { mkdtemp, writeFile, readFile, readdir, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+
+    const dir = await mkdtemp(join(tmpdir(), 'passport-keys-'))
+    const cwd = process.cwd()
+    try {
+      process.chdir(dir)
+      Passport.reset()
+      Passport.loadKeysFrom('.')
+      await writeFile(join(dir, 'oauth-private.key'), 'OLD-PRIVATE')
+      await writeFile(join(dir, 'oauth-public.key'),  'OLD-PUBLIC')
+
+      const { generateKeys } = await import('./commands/keys.js')
+      const result = await generateKeys({ force: true })
+
+      assert.ok(result.backup, 'backup paths must be returned')
+      assert.match(result.backup!.privatePath, /oauth-private\.key\.bak\./)
+      assert.match(result.backup!.publicPath,  /oauth-public\.key\.bak\./)
+
+      const oldPrivate = await readFile(result.backup!.privatePath, 'utf8')
+      const oldPublic  = await readFile(result.backup!.publicPath,  'utf8')
+      assert.equal(oldPrivate, 'OLD-PRIVATE')
+      assert.equal(oldPublic,  'OLD-PUBLIC')
+
+      const newPrivate = await readFile(join(dir, 'oauth-private.key'), 'utf8')
+      assert.notEqual(newPrivate, 'OLD-PRIVATE')
+      assert.match(newPrivate, /BEGIN PRIVATE KEY/)
+
+      const files = await readdir(dir)
+      const backups = files.filter(f => f.includes('.bak.'))
+      assert.equal(backups.length, 2, 'exactly two backup files (private + public)')
+    } finally {
+      process.chdir(cwd)
+      Passport.reset()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
+
