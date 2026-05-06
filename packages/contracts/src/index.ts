@@ -137,6 +137,22 @@ export interface QueryBuilder<T> {
   where(column: string, operator: WhereOperator, value: unknown): this
   orWhere(column: string, value: unknown): this
   orWhere(column: string, operator: WhereOperator, value: unknown): this
+  /**
+   * Wrap a chain of `where`/`orWhere` (and nested `whereGroup`s) in a single
+   * AND-grouped clause. Composes with surrounding AND/OR like any other where
+   * call. The callback receives a fresh sub-builder; calls inside it compose
+   * among themselves and the resulting grouped clause is spliced back into
+   * this builder. Empty groups (no recorded calls) are a no-op. Terminal
+   * methods (`get`/`find`/`first`/`paginate`/etc.) on the sub-builder throw.
+   *
+   * @example
+   *   q.where('status', 'active')
+   *    .whereGroup(g => g.where('priority', 'high').orWhere('starred', true))
+   *   // WHERE status = 'active' AND (priority = 'high' OR starred = TRUE)
+   */
+  whereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this
+  /** OR-rooted variant of {@link whereGroup}. */
+  orWhereGroup(fn: (q: QueryBuilder<T>) => QueryBuilder<T> | void): this
   orderBy(column: string, direction?: 'ASC' | 'DESC'): this
   limit(n: number): this
   offset(n: number): this

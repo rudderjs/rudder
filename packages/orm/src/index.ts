@@ -755,6 +755,17 @@ export abstract class Model {
             return proxy
           }
         }
+        if (prop === 'whereGroup' || prop === 'orWhereGroup') {
+          const groupName = prop
+          return (
+            fn: (q: QueryBuilder<InstanceType<T>>) => QueryBuilder<InstanceType<T>> | void,
+          ): QueryBuilder<InstanceType<T>> => {
+            ;(target as QueryBuilder<InstanceType<T>>)[groupName]((sub) => {
+              fn(Model._hydratingQb(self, sub))
+            })
+            return proxy
+          }
+        }
         if (prop === 'withCount') {
           return (arg: string | readonly string[] | Record<string, AggregateConstraint>): QueryBuilder<InstanceType<T>> => {
             dispatchAggregates(normalizeWithCount(ModelClass, arg))

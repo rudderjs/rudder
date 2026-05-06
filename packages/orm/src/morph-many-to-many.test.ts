@@ -121,6 +121,8 @@ function memoryAdapter(): {
       whereRelationExists: () => qb,
       withAggregate: () => qb,
       _aggregate: async () => 0,
+      whereGroup:   () => qb,
+      orWhereGroup: () => qb,
     }
     ;(qb as unknown as { _enableSoftDeletes: () => void })._enableSoftDeletes = () => {
       softDeletesEnabled = true

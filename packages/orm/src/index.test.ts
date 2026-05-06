@@ -34,6 +34,8 @@ function makeQb<T>(overrides: Partial<QueryBuilder<T>> = {}): QueryBuilder<T> {
     whereRelationExists: () => qb,
     withAggregate: () => qb,
     _aggregate: async () => 0,
+    whereGroup:   () => qb,
+    orWhereGroup: () => qb,
     ...overrides,
   }
   return qb
@@ -2070,6 +2072,8 @@ function memoryAdapter(): { adapter: OrmAdapter; rows: (table: string) => Record
       whereRelationExists: () => qb,
       withAggregate: () => qb,
       _aggregate: async () => 0,
+      whereGroup:   () => qb,
+      orWhereGroup: () => qb,
     }
     // Workaround: arrow functions don't have `arguments`. Rewrite where().
     qb.where = ((col: string, opOrVal: unknown, maybeVal?: unknown) => {

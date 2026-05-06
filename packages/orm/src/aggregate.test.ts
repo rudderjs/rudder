@@ -104,6 +104,8 @@ function recordingAdapter(): RecordingHandle {
         if (fn === 'sum')    return 0
         return null
       },
+      whereGroup:   () => qb,
+      orWhereGroup: () => qb,
     }
     return qb
   }
