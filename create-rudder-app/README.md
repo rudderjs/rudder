@@ -32,7 +32,7 @@ Skip `[name]` to be prompted for one.
 With the **default choices** (Prisma + SQLite + Auth + React + Tailwind + shadcn/ui + Contact demo), you get a working fullstack app you can register into, log into, and sign out of — without writing any code:
 
 - **Welcome page at `/`** — controller-returned view, Tailwind + shadcn styled, with Log in / Register links or a signed-in user + Sign out button.
-- **Auth flow that works** — `/login`, `/register`, `/forgot-password`, `/reset-password` pages vendored into `app/Views/Auth/` (so you can customize them freely) and wired to `POST /api/auth/sign-in/email` / `sign-up/email` / `sign-out` / `request-password-reset` / `reset-password` endpoints.
+- **Auth flow that works** — `/login`, `/register`, `/forgot-password`, `/reset-password` pages vendored into `app/Views/Auth/` (so you can customize them freely) and wired to `POST /auth/sign-in/email` / `sign-up/email` / `sign-out` / `request-password-reset` / `reset-password` endpoints.
 - **Database ready** — Prisma schema with a `User` + `PasswordResetToken` model, SQLite by default, a `User` ORM model.
 - **Session-based auth** — cookie sessions via `@rudderjs/session`, `AuthMiddleware` applied to the `web` group, ghost-user-safe (see the [Request Lifecycle guide](https://github.com/rudderjs/rudder/blob/main/docs/guide/lifecycle.md)).
 - **Rate limiting** — 60 req/min globally, 10 req/min on auth endpoints out of the box.

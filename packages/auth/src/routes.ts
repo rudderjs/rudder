@@ -33,8 +33,8 @@ export interface RegisterAuthRoutesOptions {
  * hand-vendored from `@rudderjs/auth/views/react/` (v1) or published via
  * `vendor:publish --tag=auth-views` (v2).
  *
- * POST submit handlers are NOT registered here — they live with the consumer's
- * existing `/api/auth/*` endpoints (e.g. `/api/auth/sign-in/email`).
+ * POST submit handlers are NOT registered here — they live on the consumer's
+ * `BaseAuthController` subclass at `/auth/*` (e.g. `/auth/sign-in/email`).
  *
  * Example:
  * ```ts

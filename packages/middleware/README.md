@@ -143,7 +143,7 @@ const loginLimit = RateLimit.perMinute(5)
   .message('Too many login attempts. Try again later.')
   .skipIf(req => req.headers['x-internal'] === '1')
 
-Route.post('/api/auth/sign-in', handler, [loginLimit])
+Route.post('/auth/sign-in', handler, [loginLimit])
 ```
 
 Sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers. Returns `429` when the limit is exceeded.

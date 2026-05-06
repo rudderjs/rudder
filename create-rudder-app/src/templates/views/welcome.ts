@@ -74,7 +74,7 @@ interface Feature {
 ${WELCOME_FEATURES}
 
 export default function Welcome(props: WelcomeProps) {
-  const signOutUrl  = props.signOutUrl  ?? '/api/auth/sign-out'
+  const signOutUrl  = props.signOutUrl  ?? '/auth/sign-out'
   const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
   const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
 
@@ -196,7 +196,7 @@ interface Feature {
 
 ${WELCOME_FEATURES}
 
-const signOutUrl  = props.signOutUrl  ?? '/api/auth/sign-out'
+const signOutUrl  = props.signOutUrl  ?? '/auth/sign-out'
 const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
 const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
 
@@ -303,7 +303,7 @@ interface Feature {
 ${WELCOME_FEATURES}
 
 export default function Welcome(props: WelcomeProps) {
-  const signOutUrl  = () => props.signOutUrl  ?? '/api/auth/sign-out'
+  const signOutUrl  = () => props.signOutUrl  ?? '/auth/sign-out'
   const docsUrl     = () => props.docsUrl     ?? DEFAULT_DOCS
   const githubUrl   = () => props.githubUrl   ?? DEFAULT_GITHUB
 

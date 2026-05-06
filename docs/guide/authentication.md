@@ -108,7 +108,7 @@ registerAuthRoutes(Route)
 | Forgot Password | `/forgot-password` | Request reset email |
 | Reset Password | `/reset-password?token=…` | Set a new password |
 
-POST handlers (`/api/auth/sign-in`, `/api/auth/sign-up`, sign-out) live on your `AuthController`. The published views are yours to edit — the package doesn't own them after publish.
+POST handlers (`/auth/sign-in/email`, `/auth/sign-up/email`, `/auth/sign-out`, `/auth/request-password-reset`, `/auth/reset-password`) live on your `AuthController` (extends `BaseAuthController`). The published views are yours to edit — the package doesn't own them after publish.
 
 ## Password reset
 

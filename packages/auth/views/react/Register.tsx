@@ -13,7 +13,7 @@ export interface RegisterProps {
 }
 
 export default function Register(props: RegisterProps) {
-  const submitUrl = props.submitUrl ?? '/api/auth/sign-up/email'
+  const submitUrl = props.submitUrl ?? '/auth/sign-up/email'
   const loginUrl  = props.loginUrl  ?? '/login'
   const homeUrl   = props.homeUrl   ?? '/'
 

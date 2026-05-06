@@ -185,7 +185,7 @@ export default function Welcome() {
     <div>
       <h1>Welcome to RudderJS</h1>
       {user ? (
-        <p>Signed in as {user.name} <a href="/api/auth/logout">Sign out</a></p>
+        <p>Signed in as {user.name} <a href="/auth/logout">Sign out</a></p>
       ) : (
         <nav>
           <a href="/login">Log in</a>

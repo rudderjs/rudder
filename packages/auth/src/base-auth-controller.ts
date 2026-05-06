@@ -25,7 +25,12 @@ export interface AuthHashLike {
 
 /**
  * Laravel Breeze-style auth controller — subclass it and set `userModel` +
- * `hash` to get the five POST handlers wired to `/api/auth/*`.
+ * `hash` to get the five POST handlers wired to `/auth/*`.
+ *
+ * The controller is mounted under `/auth/*` (not `/api/auth/*`) because
+ * session-based auth lives on the `web` group, matching Laravel's `/login`
+ * convention. The `/api/*` namespace is reserved for token-based API auth
+ * (Sanctum / Passport bearer routes).
  *
  * Subclasses can override any method to customize behavior. Class-level
  * middleware (e.g. rate limiting) applies to all handlers:
@@ -57,7 +62,7 @@ export interface AuthHashLike {
  * `AuthMiddleware` + `SessionMiddleware` auto-install and `Auth.attempt/login`
  * can read and write the session.
  */
-@Controller('/api/auth')
+@Controller('/auth')
 export abstract class BaseAuthController {
   protected abstract userModel: AuthUserModelLike
   protected abstract hash:      AuthHashLike

@@ -97,7 +97,7 @@ import { RateLimit } from '@rudderjs/middleware'
 
 router.post('/api/posts', handler, [RequireAuth()])
 
-router.post('/api/auth/sign-in', handler, [
+router.post('/auth/sign-in', handler, [
   RateLimit.perMinute(5).message('Too many login attempts.'),
 ])
 ```
