@@ -1,5 +1,7 @@
 # Auth-surface review sweep findings — 2026-05-05
 
+**Status:** Done 2026-05-06 — all HIGH/MEDIUM findings shipped across 10 PRs (#238, #240, #241, #242, #243, #244, #245, #247, #249, #250). LOW findings deferred per file.
+
 Three of four agents complete (auth, session, socialite). Sanctum still running.
 Verification status noted per finding.
 

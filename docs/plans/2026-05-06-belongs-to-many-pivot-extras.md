@@ -2,7 +2,7 @@
 
 **Filed:** 2026-05-06 by Claude Opus 4.7
 **Driver:** pilotiq
-**Status:** Not started
+**Status:** Done (PR #251, merged 2026-05-06)
 
 ---
 
