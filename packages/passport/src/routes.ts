@@ -1,5 +1,7 @@
 import { Passport } from './Passport.js'
 import type { AccessToken } from './models/AccessToken.js'
+import type { OAuthClient } from './models/OAuthClient.js'
+import { clientHelpers } from './models/helpers.js'
 import { RequireBearer } from './middleware/bearer.js'
 import {
   validateAuthorizationRequest,
@@ -12,6 +14,33 @@ import {
   approveDeviceCode,
   OAuthError,
 } from './grants/index.js'
+
+/**
+ * Re-validate that `redirect_uri` is on the requesting client's whitelist.
+ * The consent UI sees the validated URI from `GET /oauth/authorize`, but the
+ * subsequent POST/DELETE bodies are attacker-controlled and must be
+ * re-checked — otherwise the response leaks an authorization code (POST) or
+ * an open redirect (DELETE) to a host the client never registered.
+ * Throws `OAuthError` so the surrounding try/catch returns the correct
+ * status + payload.
+ */
+async function validateClientRedirect(clientId: unknown, redirectUri: unknown): Promise<OAuthClient> {
+  if (typeof clientId !== 'string' || !clientId) {
+    throw new OAuthError('invalid_request', 'client_id is required.')
+  }
+  if (typeof redirectUri !== 'string' || !redirectUri) {
+    throw new OAuthError('invalid_request', 'redirect_uri is required.')
+  }
+  const ClientCls = await Passport.clientModel()
+  const client = await ClientCls.where('id', clientId).first() as OAuthClient | null
+  if (!client || client.revoked) {
+    throw new OAuthError('invalid_client', 'Client not found.')
+  }
+  if (!clientHelpers.hasRedirectUri(client as any, redirectUri)) {
+    throw new OAuthError('invalid_request', 'Invalid redirect_uri.')
+  }
+  return client
+}
 
 type RouteHandler = (req: any, res: any) => Promise<any> | any
 
@@ -118,6 +147,8 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
           return
         }
 
+        await validateClientRedirect(body['client_id'], body['redirect_uri'])
+
         const code = await issueAuthCode({
           userId,
           clientId:            body['client_id'],
@@ -143,13 +174,23 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
     // DELETE /oauth/authorize — user denies
     router.delete(`${prefix}/authorize`, async (req: any, res: any) => {
-      const body = req.body ?? {}
-      const redirectUri = new URL(body['redirect_uri'] ?? 'http://localhost')
-      redirectUri.searchParams.set('error', 'access_denied')
-      redirectUri.searchParams.set('error_description', 'The user denied the request.')
-      if (body['state']) redirectUri.searchParams.set('state', body['state'])
+      try {
+        const body = req.body ?? {}
+        await validateClientRedirect(body['client_id'], body['redirect_uri'])
 
-      res.json({ redirect_uri: redirectUri.toString() })
+        const redirectUri = new URL(body['redirect_uri'])
+        redirectUri.searchParams.set('error', 'access_denied')
+        redirectUri.searchParams.set('error_description', 'The user denied the request.')
+        if (body['state']) redirectUri.searchParams.set('state', body['state'])
+
+        res.json({ redirect_uri: redirectUri.toString() })
+      } catch (e) {
+        if (e instanceof OAuthError) {
+          res.status(e.statusCode).json(e.toJSON())
+        } else {
+          res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
+        }
+      }
     })
   }
 

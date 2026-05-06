@@ -45,13 +45,14 @@ model OAuthRefreshToken {
 }
 
 model OAuthAuthCode {
-  id                String   @id @default(cuid())
-  userId            String
-  clientId          String
-  scopes            String   @default("[]")
-  revoked           Boolean  @default(false)
-  expiresAt         DateTime
-  codeChallenge     String?
+  id                  String   @id @default(cuid())
+  userId              String
+  clientId            String
+  scopes              String   @default("[]")
+  revoked             Boolean  @default(false)
+  expiresAt           DateTime
+  redirectUri         String?
+  codeChallenge       String?
   codeChallengeMethod String?
 
   client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)

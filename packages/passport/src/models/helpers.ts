@@ -36,6 +36,7 @@ export interface AuthCodeRecord {
   scopes:              string
   revoked:             boolean
   expiresAt:           Date
+  redirectUri:         string | null
   codeChallenge:       string | null
   codeChallengeMethod: string | null
 }
