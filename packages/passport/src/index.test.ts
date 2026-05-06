@@ -1374,6 +1374,133 @@ describe('HTTP Basic client authentication (E9)', () => {
   })
 })
 
+describe('atomic auth-code consumption (M3)', () => {
+  // Regression guard for M3 — RFC 6749 §4.1.2 requires single-use auth
+  // codes. Pre-fix, exchangeAuthCode read the row, ran every check, then
+  // unconditionally `update(id, { revoked: true })`. Two concurrent
+  // exchanges with the same code each saw `revoked=false`, both passed
+  // PKCE / redirect_uri / client checks, and both minted tokens.
+  // Post-fix uses `where('id', X).where('revoked', false).updateAll(...)`
+  // — the underlying SQL is atomic, so exactly one caller sees `count===1`
+  // and the loser sees `count===0` → `invalid_grant`.
+
+  type Call = { method: 'where' | 'updateAll' | 'update'; args: unknown[] }
+
+  function fakeAuthCodeAtomic(stored: Record<string, unknown>, consumeReturns: number) {
+    const calls: Call[] = []
+    function chain(currentWheres: Array<[string, unknown]>) {
+      return {
+        where(col: string, val: unknown) {
+          calls.push({ method: 'where', args: [col, val] })
+          return chain([...currentWheres, [col, val]])
+        },
+        first: async () => stored as any,
+        updateAll: async (data: Record<string, unknown>) => {
+          calls.push({ method: 'updateAll', args: [data, currentWheres] })
+          return consumeReturns
+        },
+      }
+    }
+    class FakeAuthCode {
+      static calls = calls
+      static where(col: string, val: unknown) {
+        calls.push({ method: 'where', args: [col, val] })
+        return chain([[col, val]])
+      }
+      static async update(id: string, data: Record<string, unknown>) {
+        // Legacy unconditional path. Post-fix this should never be hit —
+        // we assert below that updateAll is the only consume path used.
+        calls.push({ method: 'update', args: [id, data] })
+      }
+    }
+    return FakeAuthCode as any
+  }
+
+  function fakePublicClient() {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'app', secret: null, confidential: false, revoked: false,
+            redirectUris: '["https://app.example.com/cb"]',
+            grantTypes: '["authorization_code"]', scopes: '[]',
+          }) as any,
+        }
+      }
+    }
+    return FakeClient as any
+  }
+
+  test('race loser — updateAll returns 0 → invalid_grant', async () => {
+    Passport.reset()
+    const stored = {
+      id: 'AC-1', userId: 'U-1', clientId: 'C-1',
+      scopes: '["read"]', revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+      redirectUri: 'https://app.example.com/cb',
+      codeChallenge: null, codeChallengeMethod: null,
+    }
+    const Fake = fakeAuthCodeAtomic(stored, 0) // race loser
+    Passport.useAuthCodeModel(Fake)
+    Passport.useClientModel(fakePublicClient())
+
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType:   'authorization_code',
+        code:        'AC-1',
+        clientId:    'C-1',
+        redirectUri: 'https://app.example.com/cb',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /already been used/.test(e.errorDescription),
+    )
+
+    Passport.reset()
+  })
+
+  test('consume gate uses conditional `where(id).where(revoked, false).updateAll`, not the legacy unconditional update', async () => {
+    Passport.reset()
+    const stored = {
+      id: 'AC-2', userId: 'U-1', clientId: 'C-1',
+      scopes: '["read"]', revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+      redirectUri: 'https://app.example.com/cb',
+      codeChallenge: null, codeChallengeMethod: null,
+    }
+    const Fake = fakeAuthCodeAtomic(stored, 0) // count=0 throws before issueTokens
+    Passport.useAuthCodeModel(Fake)
+    Passport.useClientModel(fakePublicClient())
+
+    await assert.rejects(() => exchangeAuthCode({
+      grantType:   'authorization_code',
+      code:        'AC-2',
+      clientId:    'C-1',
+      redirectUri: 'https://app.example.com/cb',
+    }))
+
+    const updateAll = Fake.calls.find((c: Call) => c.method === 'updateAll')
+    assert.ok(updateAll, 'updateAll was called')
+    assert.deepEqual(updateAll!.args[0], { revoked: true }, 'updateAll set revoked=true')
+
+    const wheres = updateAll!.args[1] as Array<[string, unknown]>
+    assert.deepEqual(
+      wheres.find(([col]) => col === 'id'),
+      ['id', 'AC-2'],
+      'where(id, AC-2) was applied',
+    )
+    assert.deepEqual(
+      wheres.find(([col]) => col === 'revoked'),
+      ['revoked', false],
+      'where(revoked, false) was applied — this is the atomicity gate',
+    )
+
+    // Legacy unconditional `Model.update(id, data)` must not be the consume path.
+    const legacyUpdates = Fake.calls.filter((c: Call) => c.method === 'update')
+    assert.equal(legacyUpdates.length, 0, 'legacy unconditional update path bypassed')
+
+    Passport.reset()
+  })
+})
+
 describe('scope validation (E6) — registry + per-client allow-list', () => {
   // Regression guards for E6 — RFC 6749 §3.3 requires that requested scopes
   // outside the server's known set raise `invalid_scope`. We enforce two

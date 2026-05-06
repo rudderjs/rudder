@@ -200,9 +200,9 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - No public route currently calls `user.tokens()`, but the mixin invites consumers to expose it.
 - Fix: project a safe column list (`select(['id','name','scopes','revoked','expiresAt','createdAt'])`) in the mixin; document that consumers must scope by `userId`.
 
-**M3. `authorization-code.ts:147-186` — Auth-code consumption is not atomic; race window between read and revoke allows double-spend** ✅ VERIFIED REAL
-- Two concurrent token-exchange requests with the same code each find `revoked=false`, both proceed past PKCE, both call `update` last → two access-token pairs minted from one auth code (RFC 6749 §4.1.2 prohibits).
-- Fix: conditional update — `prisma.oAuthAuthCode.updateMany({ where: { id, revoked: false }, data: { revoked: true } })` and check `count === 1`. 0 rows → `invalid_grant`.
+**M3. `authorization-code.ts:147-186` — Auth-code consumption is not atomic; race window between read and revoke allows double-spend** ✅ FIXED — PR follow-up to #264
+- Two concurrent token-exchange requests with the same code each found `revoked=false`, both proceeded past PKCE, both called the unconditional `update` last → two access-token pairs minted from one auth code (RFC 6749 §4.1.2 prohibits).
+- **Fixed**: replaced the unconditional `Model.update(id, { revoked: true })` with a conditional `Model.where('id', id).where('revoked', false).updateAll({ revoked: true })` against `QueryBuilder.updateAll()` (returns affected count). The atomic SQL `UPDATE ... WHERE revoked = false` lets exactly one concurrent caller see `count === 1`; the loser sees 0 and throws `invalid_grant("Authorization code has already been used.")` before reaching `issueTokens()`. Subsequent serial reuse keeps surfacing at the existing early-exit `if (authCode.revoked)` check.
 
 **M4. `device-code.ts:46-55` + `schema/passport.prisma:62-75` — `deviceCode` and `userCode` stored in plaintext; lookups use the secret as the lookup key** ✅ VERIFIED REAL
 - `pollDeviceCode` does `where('deviceCode', params.deviceCode)`. A DB compromise yields any in-flight device-code session directly. Same for `userCode`.
