@@ -52,6 +52,14 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     throw new OAuthError('invalid_grant', 'Refresh token not found.')
   }
   if (refreshToken.revoked) {
+    // Reuse detected. RFC 6819 §5.2.2.3 / OAuth 2.0 BCP §4.14: revoke the
+    // entire family so a stolen+rotated refresh token can't keep living
+    // alongside the legitimate user's session. Legacy rows minted before
+    // the familyId column existed have null and are exempt during the
+    // migration window — same approach as the redirect_uri rollout.
+    if (refreshToken.familyId) {
+      await revokeFamily(RefreshTokenCls, AccessTokenCls, refreshToken.familyId)
+    }
     throw new OAuthError('invalid_grant', 'Refresh token has been revoked.')
   }
   if (refreshTokenHelpers.isExpired(refreshToken as any)) {
@@ -83,11 +91,40 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   await RefreshTokenCls.update((refreshToken as any).id, { revoked: true } as any)
   await AccessTokenCls.update((accessToken as any).id, { revoked: true } as any)
 
-  // Issue new pair
+  // Issue new pair — propagate the existing familyId so the rotation chain
+  // is preserved. Legacy rows with null get a fresh family on next rotation.
   return issueTokens({
     userId:         accessToken.userId,
     clientId:       params.clientId,
     scopes,
     includeRefresh: true,
+    familyId:       refreshToken.familyId ?? null,
   })
+}
+
+/**
+ * Revoke every access + refresh token in a rotation family. Called on
+ * detected reuse of an already-revoked refresh token. Best-effort: ORM
+ * errors are not propagated to the caller because the outer flow is
+ * already going to throw `invalid_grant`. Failures here would only mask
+ * the security signal that prompted the family lookup.
+ */
+async function revokeFamily(
+  RefreshTokenCls: typeof RefreshToken,
+  AccessTokenCls:  typeof AccessToken,
+  familyId: string,
+): Promise<void> {
+  try {
+    const family = await RefreshTokenCls.where('familyId', familyId).get() as RefreshToken[]
+    for (const rt of family) {
+      const id = (rt as any).id as string
+      const accessTokenId = (rt as any).accessTokenId as string
+      if (!rt.revoked) {
+        await RefreshTokenCls.update(id, { revoked: true } as any)
+      }
+      await AccessTokenCls.update(accessTokenId, { revoked: true } as any)
+    }
+  } catch {
+    // Swallow — the outer handler always throws invalid_grant on reuse.
+  }
 }

@@ -635,3 +635,258 @@ describe('generateKeys — backup on --force', () => {
   })
 })
 
+describe('refresh-token reuse-chain revocation (P4)', () => {
+  // Regression guard for P4 / M(H4) from the passport-surface review:
+  // RFC 6819 §5.2.2.3 / OAuth 2.0 Security BCP §4.14 — when a previously
+  // rotated refresh token is presented again, revoke the entire family
+  // (every access + refresh token issued through the same rotation chain).
+  // Legacy rows minted before the familyId column existed are exempt
+  // during the migration window — same approach as redirect_uri (P1/E4).
+
+  // Lazily-initialised RSA test keys — issueTokens signs a JWT, so any
+  // test that gets past the early rejection branches needs real keys.
+  let TEST_PRIVATE_KEY: string | null = null
+  let TEST_PUBLIC_KEY:  string | null = null
+  async function ensureTestKeys(): Promise<void> {
+    if (TEST_PRIVATE_KEY && TEST_PUBLIC_KEY) {
+      Passport.setKeys(TEST_PRIVATE_KEY, TEST_PUBLIC_KEY)
+      return
+    }
+    const { generateKeyPairSync } = await import('node:crypto')
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+    })
+    TEST_PRIVATE_KEY = privateKey
+    TEST_PUBLIC_KEY  = publicKey
+    Passport.setKeys(privateKey, publicKey)
+  }
+
+  type Updates = Array<{ id: string; data: Record<string, unknown> }>
+
+  function fakeClient(record: Record<string, unknown>) {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => record as any }
+      }
+    }
+    return FakeClient as any
+  }
+
+  function fakeAccessToken(rows: Record<string, Record<string, unknown>>) {
+    const updates: Updates = []
+    class FakeAccessToken {
+      static updates = updates
+      static where(_col: string, val: unknown) {
+        return { first: async () => (rows[val as string] ?? null) as any }
+      }
+      static async update(id: string, data: Record<string, unknown>) {
+        updates.push({ id, data })
+        const row = rows[id]
+        if (row) Object.assign(row, data)
+      }
+    }
+    return FakeAccessToken as any
+  }
+
+  function fakeRefreshToken(rows: Record<string, Record<string, unknown>>) {
+    const updates: Updates = []
+    const created: Record<string, unknown>[] = []
+    let nextId = 0
+    class FakeRefreshToken {
+      static updates = updates
+      static created = created
+      static where(col: string, val: unknown) {
+        if (col === 'id') {
+          return {
+            first: async () => (rows[val as string] ?? null) as any,
+            get:   async () => [],
+          }
+        }
+        if (col === 'familyId') {
+          return {
+            get: async () => Object.values(rows).filter(r => r['familyId'] === val) as any,
+          }
+        }
+        return { first: async () => null, get: async () => [] }
+      }
+      static async update(id: string, data: Record<string, unknown>) {
+        updates.push({ id, data })
+        const row = rows[id]
+        if (row) Object.assign(row, data)
+      }
+      static async create(data: Record<string, unknown>) {
+        nextId++
+        const id = `RT-NEW-${nextId}`
+        const row = { ...data, id }
+        rows[id] = row
+        created.push(row)
+        return row as any
+      }
+    }
+    return FakeRefreshToken as any
+  }
+
+  // Bypass the access-token write path inside issueTokens — we only care
+  // about the refresh-token bookkeeping for these tests.
+  function fakeAccessTokenForIssue(linkedAccessId: string, accessRows: Record<string, Record<string, unknown>>) {
+    let counter = 0
+    class FakeAccessToken {
+      static where(col: string, val: unknown) {
+        return { first: async () => (col === 'id' ? (accessRows[val as string] ?? null) : null) as any }
+      }
+      static async create(data: Record<string, unknown>) {
+        counter++
+        const id = `AT-NEW-${counter}-${linkedAccessId}`
+        accessRows[id] = { ...data, id }
+        return { ...data, id } as any
+      }
+      static async update(id: string, data: Record<string, unknown>) {
+        const row = accessRows[id]
+        if (row) Object.assign(row, data)
+      }
+    }
+    return FakeAccessToken as any
+  }
+
+  test('legitimate rotation copies familyId from the old refresh token to the new one', async () => {
+    Passport.reset()
+    await ensureTestKeys()
+    Passport.useClientModel(fakeClient({
+      id: 'C-1', name: 'app', secret: null, confidential: false,
+      redirectUris: '[]', grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+    const accessRows = {
+      'AT-1': { id: 'AT-1', userId: 'U-1', clientId: 'C-1', scopes: '["read"]', revoked: false, expiresAt: new Date(Date.now() + 60_000) },
+    }
+    Passport.useTokenModel(fakeAccessTokenForIssue('AT-1', accessRows))
+    const refreshRows = {
+      'RT-1': { id: 'RT-1', accessTokenId: 'AT-1', familyId: 'FAM-1', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+    }
+    const FakeRefresh = fakeRefreshToken(refreshRows)
+    Passport.useRefreshTokenModel(FakeRefresh)
+
+    const result = await refreshTokenGrant({
+      grantType:    'refresh_token',
+      refreshToken: 'RT-1',
+      clientId:     'C-1',
+    })
+
+    assert.ok(result.refresh_token, 'a new refresh token must be issued')
+    assert.equal(FakeRefresh.created.length, 1)
+    assert.equal(FakeRefresh.created[0].familyId, 'FAM-1', 'rotation must preserve the family id')
+    assert.equal(refreshRows['RT-1'].revoked, true, 'old refresh token must be marked revoked')
+
+    Passport.reset()
+  })
+
+  test('reuse of a revoked refresh token cascades to the entire family', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClient({
+      id: 'C-1', name: 'app', secret: null, confidential: false,
+      redirectUris: '[]', grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    const accessRows: Record<string, Record<string, unknown>> = {
+      'AT-OLD':  { id: 'AT-OLD',  clientId: 'C-1', revoked: true,  scopes: '["read"]', expiresAt: new Date(Date.now() + 60_000) },
+      'AT-LIVE': { id: 'AT-LIVE', clientId: 'C-1', revoked: false, scopes: '["read"]', expiresAt: new Date(Date.now() + 60_000) },
+    }
+    const FakeAccess = fakeAccessToken(accessRows)
+    Passport.useTokenModel(FakeAccess)
+
+    // RT-OLD has already been rotated (revoked=true). RT-LIVE is the
+    // current member of the same family. Presenting RT-OLD again is the
+    // attacker scenario — both tokens (and their access tokens) must die.
+    const refreshRows: Record<string, Record<string, unknown>> = {
+      'RT-OLD':  { id: 'RT-OLD',  accessTokenId: 'AT-OLD',  familyId: 'FAM-X', revoked: true,  expiresAt: new Date(Date.now() + 600_000) },
+      'RT-LIVE': { id: 'RT-LIVE', accessTokenId: 'AT-LIVE', familyId: 'FAM-X', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+    }
+    const FakeRefresh = fakeRefreshToken(refreshRows)
+    Passport.useRefreshTokenModel(FakeRefresh)
+
+    await assert.rejects(
+      () => refreshTokenGrant({
+        grantType:    'refresh_token',
+        refreshToken: 'RT-OLD',
+        clientId:     'C-1',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /revoked/.test(e.errorDescription),
+    )
+
+    assert.equal(refreshRows['RT-LIVE']!.revoked, true, 'sibling refresh token in family must be revoked')
+    assert.equal(accessRows['AT-LIVE']!.revoked,  true, 'sibling access token in family must be revoked')
+    // Already-revoked rows aren't double-written (skip the redundant update).
+    assert.ok(
+      !FakeRefresh.updates.some((u: { id: string }) => u.id === 'RT-OLD'),
+      'already-revoked refresh token should not be redundantly updated',
+    )
+
+    Passport.reset()
+  })
+
+  test('legacy null familyId — reuse still throws but no cascade is attempted', async () => {
+    // Auth codes / refresh tokens minted before the familyId column was
+    // added must remain usable until they expire. The reuse path still
+    // throws invalid_grant, but the family lookup is skipped (no rows
+    // share `familyId = null` semantically — every legacy row is its own
+    // unrelated session).
+    Passport.reset()
+    Passport.useClientModel(fakeClient({
+      id: 'C-1', name: 'app', secret: null, confidential: false,
+      redirectUris: '[]', grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+    Passport.useTokenModel(fakeAccessToken({}))
+
+    const refreshRows: Record<string, Record<string, unknown>> = {
+      'RT-LEGACY':   { id: 'RT-LEGACY',   accessTokenId: 'AT-LEGACY',   familyId: null, revoked: true,  expiresAt: new Date(Date.now() + 600_000) },
+      'RT-UNRELATED':{ id: 'RT-UNRELATED',accessTokenId: 'AT-UNRELATED',familyId: null, revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+    }
+    const FakeRefresh = fakeRefreshToken(refreshRows)
+    Passport.useRefreshTokenModel(FakeRefresh)
+
+    await assert.rejects(
+      () => refreshTokenGrant({
+        grantType:    'refresh_token',
+        refreshToken: 'RT-LEGACY',
+        clientId:     'C-1',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /revoked/.test(e.errorDescription),
+    )
+
+    assert.equal(refreshRows['RT-UNRELATED']!.revoked, false, 'unrelated legacy refresh tokens must NOT be revoked')
+    assert.equal(FakeRefresh.updates.length, 0, 'no family-walk writes should occur when familyId is null')
+
+    Passport.reset()
+  })
+
+  test('first issuance generates a fresh familyId on the new refresh token', async () => {
+    // Direct issueTokens() call — proves the contract that any caller
+    // that doesn't pass an existing familyId gets a freshly minted one.
+    // We need real RSA keys here because issueTokens signs a JWT.
+    Passport.reset()
+    await ensureTestKeys()
+
+    const accessRows = {}
+    Passport.useTokenModel(fakeAccessTokenForIssue('AT', accessRows))
+    const refreshRows: Record<string, Record<string, unknown>> = {}
+    const FakeRefresh = fakeRefreshToken(refreshRows)
+    Passport.useRefreshTokenModel(FakeRefresh)
+
+    const { issueTokens } = await import('./grants/issue-tokens.js')
+    await issueTokens({
+      userId:         'U-1',
+      clientId:       'C-1',
+      scopes:         ['read'],
+      includeRefresh: true,
+    })
+
+    assert.equal(FakeRefresh.created.length, 1)
+    const familyId = FakeRefresh.created[0].familyId
+    assert.equal(typeof familyId, 'string', 'familyId must be set on first issuance')
+    assert.ok((familyId as string).length > 0, 'familyId must be a non-empty string')
+
+    Passport.reset()
+  })
+})
+

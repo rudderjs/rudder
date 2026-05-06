@@ -36,11 +36,13 @@ model OAuthAccessToken {
 model OAuthRefreshToken {
   id            String   @id @default(cuid())
   accessTokenId String   @unique
+  familyId      String?
   revoked       Boolean  @default(false)
   expiresAt     DateTime
 
   accessToken OAuthAccessToken @relation(fields: [accessTokenId], references: [id], onDelete: Cascade)
 
+  @@index([familyId])
   @@map("oauth_refresh_tokens")
 }
 

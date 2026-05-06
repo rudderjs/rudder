@@ -25,6 +25,7 @@ export interface AccessTokenRecord {
 export interface RefreshTokenRecord {
   id:            string
   accessTokenId: string
+  familyId:      string | null
   revoked:       boolean
   expiresAt:     Date
 }
