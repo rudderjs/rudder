@@ -3,8 +3,8 @@ import type { OAuthClient }  from '../models/OAuthClient.js'
 import type { AccessToken }  from '../models/AccessToken.js'
 import type { RefreshToken } from '../models/RefreshToken.js'
 import { accessTokenHelpers, refreshTokenHelpers } from '../models/helpers.js'
+import { verifyClientSecret } from '../client-secret.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
-import { safeCompare } from './safe-compare.js'
 import { OAuthError } from './authorization-code.js'
 
 export interface RefreshTokenRequest {
@@ -39,9 +39,7 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     if (!params.clientSecret) {
       throw new OAuthError('invalid_client', 'Client secret required.', 401)
     }
-    const { createHash } = await import('node:crypto')
-    const hashed = createHash('sha256').update(params.clientSecret).digest('hex')
-    if (!(await safeCompare(hashed, client.secret))) {
+    if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
       throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
     }
   }

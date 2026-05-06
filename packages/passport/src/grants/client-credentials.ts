@@ -1,8 +1,8 @@
 import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
+import { verifyClientSecret } from '../client-secret.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
-import { safeCompare } from './safe-compare.js'
 import { OAuthError, validateScopes } from './authorization-code.js'
 
 export interface ClientCredentialsRequest {
@@ -35,10 +35,7 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
     throw new OAuthError('invalid_client', 'Client credentials grant requires a confidential client.')
   }
 
-  // Verify secret
-  const { createHash } = await import('node:crypto')
-  const hashed = createHash('sha256').update(params.clientSecret).digest('hex')
-  if (!(await safeCompare(hashed, client.secret))) {
+  if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
     throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
   }
 

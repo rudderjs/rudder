@@ -21,6 +21,7 @@ export { generateKeys } from './commands/keys.js'
 export { createClient } from './commands/client.js'
 export type { CreateClientOpts } from './commands/client.js'
 export { purgeTokens } from './commands/purge.js'
+export { hashClientSecret, verifyClientSecret } from './client-secret.js'
 
 // Grants
 export {
