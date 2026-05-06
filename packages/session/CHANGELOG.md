@@ -1,5 +1,42 @@
 # @rudderjs/session
 
+## 1.0.4
+
+### Patch Changes
+
+- b436a02: Driver hygiene fixes for `@rudderjs/session`. No API changes; behavior is identical for the happy path.
+
+  - **S4: RedisDriver caches the connect-promise, not the client.** The previous lazy init (`if (!this.client) this.client = new Redis(...)`) was racy — two concurrent first-request callers each fell through the guard and constructed a separate ioredis instance, leaking the first one's FD and retry timer. We now cache `Promise<Client>` so concurrent callers all await the same in-flight connect; rejected promises are dropped so a transient connect failure can be retried on the next call.
+  - **S5: `SessionMiddleware()` reuses the container-bound singleton.** The factory previously called `sessionMiddleware(config)` on each call, building a fresh driver per route — every api-route opt-in spawned an independent RedisDriver. It now returns `app().make('session.middleware')`, the singleton bound by `SessionProvider.boot()`, so per-route mounts share the same connection as the auto-installed web group.
+  - **S6: `SessionInstance` tolerates legacy/corrupt payloads.** The constructor unconditionally read `payload.flash_next`, throwing on entries that omitted the field (legacy redis writes, third-party producers, manual `redis-cli` edits). Missing `flash_next` and `data` now default to `{}`.
+  - **S7: Documented cookie-driver `regenerate()` / `destroy()` limitation.** The cookie driver is stateless — there is no server-side store to delete from, so `regenerate()` cannot invalidate the previous signed cookie before its `Max-Age` expires. JSDoc and a new "Driver tradeoffs" table in the README now spell this out, so apps that need true post-logout invalidation know to use the redis driver.
+
+- 5bafd13: Security fixes for the session middleware. Redis-driver users will be silently logged out once on upgrade — existing unsigned cookies fail verification and a fresh signed cookie is issued on the next request.
+
+  - **Redis driver: HMAC-sign the cookie value.** The redis driver previously stored the raw session UUID in the cookie and used it as the redis key. An attacker who guessed, sniffed, or enumerated a UUID could hijack the session — true bearer-token semantics, despite the README emphasising signed cookies. The cookie value is now `${id}.${hmac}` (HMAC-SHA256 over the id, keyed by `session.secret`) and `RedisDriver.load()` verifies the signature before touching redis.
+  - **Redis driver: cache miss no longer fixates on the cookie-supplied id.** The previous behaviour returned an empty session keyed by the cookie value (`emptyWithId(cookieValue)`), letting an attacker plant an id, wait for the victim to log in under it, and then replay the cookie. Cache misses now mint a fresh UUID, so a planted (or expired-then-replayed) id can never carry forward into a new session.
+  - **Middleware: persist session on error.** `await _als.run(session, next); await session.save(res)` skipped `save()` when `next()` threw, dropping flash messages on error redirects and never writing `Set-Cookie` for new sessions on error responses. `session.save()` now runs in a finally-style block; errors from `save()` only surface when `next()` did not already throw, so the original handler exception is never masked.
+
+- d2d3e2d: Add OAuth state generation/validation to `@rudderjs/socialite` (O5 — closes the login-CSRF / state-fixation gap across every provider).
+
+  Previously, `getRedirectUrl(state?)` accepted an optional `state` but the framework neither generated nor validated it — `user(req)` ignored `query.state` entirely. Laravel Socialite (the inspiration) auto-generates and validates by default; this port had dropped that. Without state validation, an attacker can swap their authorization code into a victim's callback and link the victim's session to the attacker's social account.
+
+  What changed:
+
+  - **Stateful by default.** `redirect()` / `getRedirectUrl()` mints a 40-hex-char CSPRNG token, stores it on the session under `socialite_state:<provider>`, and embeds it in the OAuth URL. `user(req)` extracts the returned `state` from the query (or, for Apple's `form_post` callback, from the request body), compares with `crypto.timingSafeEqual` against the session-stored value, and throws `InvalidStateException` on mismatch / missing state / no session in context.
+  - **One-time use.** Both successful and failed validation clear the session slot — a leaked or sniffed `state` cannot be replayed.
+  - **Per-provider namespace.** `socialite_state:github`, `socialite_state:google`, etc. — concurrent OAuth flows on the same session don't collide.
+  - **`.stateless()` opt-out.** For OAuth flows that can't reach the session (mobile, S2S token grants), `.stateless()` returns `this` and disables both generation and validation. Call-site equivalent of Laravel's `->stateless()`.
+  - **`@rudderjs/session` is now a peer dep.** Stateful default needs the session in context. Apps using `@rudderjs/socialite` on the `web` group already have it (auto-installed by `SessionProvider`).
+
+  `@rudderjs/session`: adds `_runWithSession(session, fn)` test-only helper so other packages can exercise code that goes through the `Session` static facade in unit tests without standing up the full middleware. Marked `@internal`; not part of the runtime contract.
+
+  Migration notes:
+
+  - Apps already on the `web` group with `@rudderjs/session` registered get the protection automatically — no code changes.
+  - Apps that mount Socialite routes in the `api` group (no session) need to either opt into session-per-route or call `.stateless()` on each driver call. Stateless mode is appropriate for token-grant flows but **don't** use it on browser-initiated OAuth redirects without your own state implementation.
+  - Existing callers passing `state` explicitly to `getRedirectUrl(state)` keep working — caller-supplied state always wins and skips the generator.
+
 ## 1.0.3
 
 ### Patch Changes
