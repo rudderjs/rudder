@@ -815,11 +815,11 @@ describe('BaseAuthController', () => {
 
     const paths = router.list().map(r => `${r.method} ${r.path}`).sort()
     assert.deepStrictEqual(paths, [
-      'POST /api/auth/request-password-reset',
-      'POST /api/auth/reset-password',
-      'POST /api/auth/sign-in/email',
-      'POST /api/auth/sign-out',
-      'POST /api/auth/sign-up/email',
+      'POST /auth/request-password-reset',
+      'POST /auth/reset-password',
+      'POST /auth/sign-in/email',
+      'POST /auth/sign-out',
+      'POST /auth/sign-up/email',
     ])
   })
 
@@ -842,7 +842,7 @@ describe('BaseAuthController', () => {
 
     const router = new Router()
     router.registerController(AuthController)
-    const signOut = router.list().find(r => r.path === '/api/auth/sign-out')!
+    const signOut = router.list().find(r => r.path === '/auth/sign-out')!
 
     let body: unknown = null
     await signOut.handler(

@@ -383,7 +383,7 @@ export type RateLimitBuilder = RateLimitHandler
  *   .withMiddleware(m => m.use(RateLimit.perMinute(60)))
  *
  *   // Per-route
- *   Route.post('/api/auth/sign-in', handler, [
+ *   Route.post('/auth/sign-in', handler, [
  *     RateLimit.perMinute(5).message('Too many login attempts.')
  *   ])
  */

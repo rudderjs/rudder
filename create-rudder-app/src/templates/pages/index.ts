@@ -135,7 +135,7 @@ export default function Page() {
   const [user, setUser] = useState(data.user)
 
   async function signOut() {
-    await fetch('/api/auth/sign-out', {
+    await fetch('/auth/sign-out', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    '{}',
@@ -210,7 +210,7 @@ const data = useData<Data>()
 const user = ref(data.user)
 
 async function signOut() {
-  await fetch('/api/auth/sign-out', {
+  await fetch('/auth/sign-out', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    '{}',
@@ -282,7 +282,7 @@ export default function Page() {
   const [user, setUser] = createSignal(data.user)
 
   async function signOut() {
-    await fetch('/api/auth/sign-out', {
+    await fetch('/auth/sign-out', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    '{}',

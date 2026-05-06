@@ -17,7 +17,7 @@ export interface LoginProps {
 }
 
 export default function Login(props: LoginProps) {
-  const submitUrl         = props.submitUrl         ?? '/api/auth/sign-in/email'
+  const submitUrl         = props.submitUrl         ?? '/auth/sign-in/email'
   const registerUrl       = props.registerUrl       ?? '/register'
   const forgotPasswordUrl = props.forgotPasswordUrl ?? '/forgot-password'
   const homeUrl           = props.homeUrl           ?? '/'

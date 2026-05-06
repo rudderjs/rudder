@@ -11,7 +11,7 @@ export interface ResetPasswordProps {
 }
 
 export default function ResetPassword(props: ResetPasswordProps) {
-  const submitUrl        = props.submitUrl        ?? '/api/auth/reset-password'
+  const submitUrl        = props.submitUrl        ?? '/auth/reset-password'
   const loginUrl         = props.loginUrl         ?? '/login'
   const forgotPasswordUrl = props.forgotPasswordUrl ?? '/forgot-password'
 

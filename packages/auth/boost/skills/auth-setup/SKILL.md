@@ -114,7 +114,7 @@ router.get('/api/dashboard', RequireAuth(), async (req, res) => {
 ### 6. Login / logout endpoints
 
 ```ts
-router.post('/api/auth/login', async (req, res) => {
+router.post('/auth/login', async (req, res) => {
   const { email, password } = req.body
   const success = await auth().attempt({ email, password })
   if (!success) {
@@ -124,7 +124,7 @@ router.post('/api/auth/login', async (req, res) => {
   res.json({ user })
 })
 
-router.post('/api/auth/register', async (req, res) => {
+router.post('/auth/register', async (req, res) => {
   const user = await User.create({
     name: req.body.name,
     email: req.body.email,
@@ -134,7 +134,7 @@ router.post('/api/auth/register', async (req, res) => {
   res.json({ user })
 })
 
-router.post('/api/auth/logout', RequireAuth(), async (req, res) => {
+router.post('/auth/logout', RequireAuth(), async (req, res) => {
   await auth().logout()
   res.json({ message: 'Logged out.' })
 })

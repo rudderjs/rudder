@@ -68,7 +68,7 @@ const features: Feature[] = [
 export default function Welcome(props: WelcomeProps) {
   const loginUrl    = props.loginUrl    ?? '/login'
   const registerUrl = props.registerUrl ?? '/register'
-  const signOutUrl  = props.signOutUrl  ?? '/api/auth/sign-out'
+  const signOutUrl  = props.signOutUrl  ?? '/auth/sign-out'
   const docsUrl     = props.docsUrl     ?? DEFAULT_DOCS
   const githubUrl   = props.githubUrl   ?? DEFAULT_GITHUB
 

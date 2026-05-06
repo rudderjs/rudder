@@ -12,7 +12,7 @@ export interface ForgotPasswordProps {
 }
 
 export default function ForgotPassword(props: ForgotPasswordProps) {
-  const submitUrl       = props.submitUrl       ?? '/api/auth/request-password-reset'
+  const submitUrl       = props.submitUrl       ?? '/auth/request-password-reset'
   const loginUrl        = props.loginUrl        ?? '/login'
   const resetPasswordUrl = props.resetPasswordUrl ?? '/reset-password'
 

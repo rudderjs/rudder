@@ -11,7 +11,7 @@ import { RateLimit } from '@rudderjs/middleware'
 m.use(RateLimit.perMinute(60))
 
 // Tighter per-route limit on sign-in
-Route.post('/api/auth/sign-in', handler, [
+Route.post('/auth/sign-in', handler, [
   RateLimit.perMinute(5).message('Too many login attempts.'),
 ])
 
@@ -37,8 +37,8 @@ The builder is immutable — chaining returns a new instance, so it's safe to sh
 ```ts
 const tight = RateLimit.perMinute(5)
 
-Route.post('/api/auth/sign-in',  handler, [tight.message('Too many login attempts.')])
-Route.post('/api/auth/sign-up',  handler, [tight.message('Too many registration attempts.')])
+Route.post('/auth/sign-in',  handler, [tight.message('Too many login attempts.')])
+Route.post('/auth/sign-up',  handler, [tight.message('Too many registration attempts.')])
 ```
 
 ## Keying

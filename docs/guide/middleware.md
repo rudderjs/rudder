@@ -96,7 +96,7 @@ import { RateLimit } from '@rudderjs/middleware'
 
 Route.post('/posts', handler, [RequireAuth()])
 
-Route.post('/api/auth/sign-in', handler, [
+Route.post('/auth/sign-in', handler, [
   RateLimit.perMinute(5).message('Too many login attempts.'),
 ])
 ```
@@ -110,7 +110,7 @@ Cache-backed rate limiter. Returns a `MiddlewareHandler` directly — no `.toHan
 ```ts
 m.use(RateLimit.perMinute(60))
 
-Route.post('/api/auth/sign-in', handler, [
+Route.post('/auth/sign-in', handler, [
   RateLimit.perMinute(5).message('Too many login attempts.'),
 ])
 
