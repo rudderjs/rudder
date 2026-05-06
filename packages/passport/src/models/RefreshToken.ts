@@ -3,9 +3,10 @@ import { Model } from '@rudderjs/orm'
 export class RefreshToken extends Model {
   static override table = 'oAuthRefreshToken'
 
-  static override fillable = ['accessTokenId', 'revoked', 'expiresAt']
+  static override fillable = ['accessTokenId', 'familyId', 'revoked', 'expiresAt']
 
   declare accessTokenId: string
+  declare familyId: string | null
   declare revoked: boolean
   declare expiresAt: Date
 
