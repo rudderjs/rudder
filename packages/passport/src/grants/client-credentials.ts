@@ -3,7 +3,7 @@ import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { safeCompare } from './safe-compare.js'
-import { OAuthError } from './authorization-code.js'
+import { OAuthError, validateScopes } from './authorization-code.js'
 
 export interface ClientCredentialsRequest {
   grantType:    string
@@ -43,6 +43,7 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
   }
 
   const scopes = params.scope ? params.scope.split(' ').filter(Boolean) : []
+  validateScopes(client, scopes)
 
   return issueTokens({
     userId:         null, // no user context

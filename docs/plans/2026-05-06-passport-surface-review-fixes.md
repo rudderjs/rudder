@@ -1,6 +1,6 @@
 # Passport-surface review sweep findings — 2026-05-06
 
-**Status:** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). MEDIUM/LOW backlog ongoing — see "Recommended PR strategy" below for grouping.
+**Status:** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). Endpoint hardening: E5/E10/E11 (#262), E9 (#263), E6 (this PR). MEDIUM/LOW backlog ongoing — see "Recommended PR strategy" below for grouping.
 **Pattern:** Same shape as `2026-05-06-auth-surface-review-fixes.md` (4-agent partitioned sweep).
 
 Four parallel review agents on `@rudderjs/passport` (RudderJS's Laravel Passport-equivalent OAuth2 server), partitioned by surface:
@@ -142,10 +142,9 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 
 ### MEDIUM
 
-**E6. `grants/authorization-code.ts:32-74` — Requested scopes never validated against client/registry** ✅ VERIFIED REAL
-- `validateAuthorizationRequest` parses `scope` and stores it as-is. No check against `clientHelpers.getScopes(client)` or `Passport.validScopes()`. A client can request arbitrary scope strings (including `*`) and they'll be issued if the user approves.
-- RFC 6749 §3.3 wants `invalid_scope` for unknown/disallowed scopes.
-- Fix: filter against `Passport.validScopes()` AND `clientHelpers.getScopes(client)`; throw `invalid_scope` if anything is dropped (or silently narrow, mirroring Laravel Passport).
+**E6. `grants/authorization-code.ts:32-74` — Requested scopes never validated against client/registry** ✅ FIXED — PR follow-up to #263
+- `validateAuthorizationRequest` parsed `scope` and stored it as-is. No check against `clientHelpers.getScopes(client)` or `Passport.validScopes()`. A client could request arbitrary scope strings (including `*`) and they'd be issued if the user approved. RFC 6749 §3.3 wants `invalid_scope` for unknown/disallowed scopes.
+- **Fixed**: shared `validateScopes(client, requested)` helper exported from `grants/authorization-code.ts`, applied in `validateAuthorizationRequest`, `clientCredentialsGrant`, and `requestDeviceCode`. Throws `invalid_scope` when a requested scope is missing from the global `Passport.tokensCan()` registry OR outside the per-client `client.scopes` allow-list. Each gate is only enforced when populated (empty registry / empty client allow-list = "no constraint configured") to preserve back-compat with apps that haven't declared scopes. Wildcard `*` always passes. `refreshTokenGrant` keeps its existing narrowing logic (subset of original-token scopes only).
 
 **E7. `routes.ts:111-141` — POST `/oauth/authorize` lacks CSRF + session and is mounted on api group in default scaffolding** ⚠️ NEEDS VERIFY
 - Playground mounts `registerPassportRoutes(...)` from `routes/api.ts` (line 720). API middleware group has no session, no `AuthMiddleware`, no CSRF. Handler reads `(req.raw as any)?.__rjs_user?.id ?? (req as any).user?.id` — both `undefined` — returns 401. Consent flow can't complete in default scaffolding.

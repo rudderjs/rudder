@@ -5,6 +5,7 @@ export {
   validateAuthorizationRequest,
   issueAuthCode,
   exchangeAuthCode,
+  validateScopes,
   OAuthError,
 } from './authorization-code.js'
 export type {

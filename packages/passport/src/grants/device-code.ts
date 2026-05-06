@@ -3,7 +3,7 @@ import type { OAuthClient } from '../models/OAuthClient.js'
 import type { DeviceCode }  from '../models/DeviceCode.js'
 import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
-import { OAuthError } from './authorization-code.js'
+import { OAuthError, validateScopes } from './authorization-code.js'
 
 // ─── Device Authorization Request ─────────────────────────
 
@@ -37,10 +37,12 @@ export async function requestDeviceCode(params: {
     throw new OAuthError('unauthorized_client', 'Client is not authorized for device authorization grant.')
   }
 
+  const scopes     = params.scope ? params.scope.split(' ').filter(Boolean) : []
+  validateScopes(client, scopes)
+
   const { randomBytes } = await import('node:crypto')
   const deviceCode = randomBytes(32).toString('hex')
   const userCode   = await generateUserCode()
-  const scopes     = params.scope ? params.scope.split(' ').filter(Boolean) : []
   const expiresAt  = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
   await DeviceCodeCls.create({
