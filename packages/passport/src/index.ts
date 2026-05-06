@@ -15,7 +15,7 @@ export { AuthCode } from './models/AuthCode.js'
 export { DeviceCode } from './models/DeviceCode.js'
 
 export { BearerMiddleware, RequireBearer } from './middleware/bearer.js'
-export { scope } from './middleware/scope.js'
+export { scope, scopeAny } from './middleware/scope.js'
 
 export { generateKeys } from './commands/keys.js'
 export { createClient } from './commands/client.js'

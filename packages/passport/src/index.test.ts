@@ -15,6 +15,7 @@ import {
   BearerMiddleware,
   RequireBearer,
   scope,
+  scopeAny,
   generateKeys,
   createClient,
   purgeTokens,
@@ -64,6 +65,7 @@ describe('@rudderjs/passport exports', () => {
     assert.equal(typeof BearerMiddleware, 'function')
     assert.equal(typeof RequireBearer, 'function')
     assert.equal(typeof scope, 'function')
+    assert.equal(typeof scopeAny, 'function')
   })
 
   test('command helpers are functions', () => {
@@ -1868,6 +1870,84 @@ describe('Passport.keysAvailable() — L4 boot warning probe', () => {
       await rm(dir, { recursive: true, force: true })
       Passport.reset()
     }
+  })
+})
+
+describe('scopeAny() — E13 OR-semantic scope guard', () => {
+  /**
+   * Mirrors how BearerMiddleware stamps scopes on the request: the guard
+   * only reads `req.raw.__passport_scopes`, calls `res.status().json()`, and
+   * either invokes `next()` or short-circuits. A hand-rolled stub is enough
+   * to exercise every branch.
+   */
+  function makeReq(tokenScopes: string[] | undefined) {
+    const raw: Record<string, unknown> = {}
+    if (tokenScopes) raw['__passport_scopes'] = tokenScopes
+    return { raw } as any
+  }
+
+  function makeRes() {
+    let statusCode: number | undefined
+    let body: unknown
+    const res: any = {
+      status(code: number) { statusCode = code; return res },
+      json(payload: unknown) { body = payload; return res },
+    }
+    return {
+      res,
+      get statusCode() { return statusCode },
+      get body() { return body },
+    }
+  }
+
+  test('passes through when token has at least one of the listed scopes', async () => {
+    const mw = scopeAny('orders:read', 'orders:write')
+    const { res, statusCode } = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['orders:read']), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+    assert.equal(statusCode, undefined, 'should not respond — should fall through to next()')
+  })
+
+  test('passes through when wildcard "*" is granted regardless of listed scopes', async () => {
+    const mw = scopeAny('admin', 'super')
+    const { res } = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['*']), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
+  })
+
+  test('responds 403 insufficient_scope when token has none of the listed scopes', async () => {
+    const mw = scopeAny('orders:read', 'orders:write')
+    const captured = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['profile:read']), captured.res, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(captured.statusCode, 403)
+    assert.equal((captured.body as any).error, 'insufficient_scope')
+    assert.deepEqual((captured.body as any).required, ['orders:read', 'orders:write'])
+    assert.match((captured.body as any).message, /at least one of/)
+  })
+
+  test('responds 403 when no token scopes are present on the request', async () => {
+    const mw = scopeAny('orders:read')
+    const captured = makeRes()
+    let nextCalled = false
+    await mw(makeReq(undefined), captured.res, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(captured.statusCode, 403)
+    assert.equal((captured.body as any).error, 'insufficient_scope')
+  })
+
+  test('zero-arg call is a no-op safety net (does not 403 on empty list)', async () => {
+    // Mirrors Laravel's tolerant behavior — scopeAny() with no scopes
+    // shouldn't permanently lock the route. AND-style scope() has the same
+    // property because its `missing` filter is empty.
+    const mw = scopeAny()
+    const { res } = makeRes()
+    let nextCalled = false
+    await mw(makeReq(['anything']), res, async () => { nextCalled = true })
+    assert.equal(nextCalled, true)
   })
 })
 
