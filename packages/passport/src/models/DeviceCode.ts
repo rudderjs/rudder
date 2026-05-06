@@ -13,6 +13,7 @@ export class DeviceCode extends Model {
     return this.query().where('expiresAt', '<', new Date())
   }
 
+  declare id: string
   declare clientId: string
   declare userCode: string
   declare deviceCode: string

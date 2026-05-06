@@ -5,6 +5,8 @@ export class OAuthClient extends Model {
 
   static override fillable = ['name', 'secret', 'redirectUris', 'grantTypes', 'scopes', 'confidential']
 
+  declare id: string
+
   @Hidden
   declare secret: string | null
 

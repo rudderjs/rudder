@@ -23,6 +23,7 @@ export class AuthCode extends Model {
     return this.query().where('expiresAt', '<', new Date())
   }
 
+  declare id: string
   declare userId: string
   declare clientId: string
   declare revoked: boolean

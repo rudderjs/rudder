@@ -17,6 +17,7 @@ export class RefreshToken extends Model {
       .orWhere('revoked', true)
   }
 
+  declare id: string
   declare accessTokenId: string
   declare familyId: string | null
   declare revoked: boolean
