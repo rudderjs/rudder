@@ -3,7 +3,9 @@ import { Model } from '@rudderjs/orm'
 export class RefreshToken extends Model {
   static override table = 'oAuthRefreshToken'
 
-  static override fillable = ['accessTokenId', 'familyId', 'revoked', 'expiresAt']
+  // `revoked` is intentionally NOT fillable — see AccessToken.ts for the
+  // rationale. Lifecycle flips happen through `revoke()` or `forceFill`.
+  static override fillable = ['accessTokenId', 'familyId', 'expiresAt']
 
   /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
   static pruneMode = 'mass' as const
@@ -23,7 +25,7 @@ export class RefreshToken extends Model {
   /** Revoke this refresh token. */
   async revoke(): Promise<void> {
     this.revoked = true
-    await (this.constructor as typeof RefreshToken).update((this as any).id as string, { revoked: true } as any)
+    await this.save()
   }
 
   /** Whether this token has expired. */

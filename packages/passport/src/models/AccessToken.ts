@@ -1,4 +1,4 @@
-import { Model } from '@rudderjs/orm'
+import { Model, Hidden } from '@rudderjs/orm'
 
 /**
  * Why we don't store hashed access tokens
@@ -27,7 +27,13 @@ import { Model } from '@rudderjs/orm'
 export class AccessToken extends Model {
   static override table = 'oAuthAccessToken'
 
-  static override fillable = ['userId', 'clientId', 'name', 'scopes', 'revoked', 'expiresAt']
+  // `revoked` is intentionally NOT fillable — flipping it is a privileged
+  // lifecycle operation that should only happen through `revoke()` (instance
+  // method) or `forceFill({ revoked: true })`. Allowing mass-assignment here
+  // would let any caller-controlled payload pre-mark a token as revoked
+  // before it ever sees real traffic. Defense-in-depth — no current route
+  // exposes this surface today.
+  static override fillable = ['userId', 'clientId', 'name', 'scopes', 'expiresAt']
 
   /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
   static pruneMode = 'mass' as const
@@ -39,8 +45,17 @@ export class AccessToken extends Model {
       .orWhere('revoked', true)
   }
 
+  // `userId` and `clientId` are hidden from `toJSON()` so a downstream API
+  // route that surfaces `user.tokens()` doesn't accidentally leak ownership
+  // links — the JWT itself isn't stored, but mapping a token id back to a
+  // user/client is still privileged audit info. Routes that explicitly need
+  // them can opt in via `instance.makeVisible(['userId', 'clientId'])`.
+  @Hidden
   declare userId: string | null
+
+  @Hidden
   declare clientId: string
+
   declare name: string | null
   declare revoked: boolean
   declare expiresAt: Date
@@ -65,8 +80,13 @@ export class AccessToken extends Model {
 
   /** Revoke this token. */
   async revoke(): Promise<void> {
+    // Direct property assignment + save() bypasses the mass-assignment filter
+    // (`revoked` is no longer in `fillable`). Cleaner than the prior static
+    // `Model.update(id, ...)` pattern: observers fire normally, the in-memory
+    // instance reflects the new state without a re-read, and there's no
+    // `(this as any).id` cast that future refactors might silently break.
     this.revoked = true
-    await (this.constructor as typeof AccessToken).update((this as any).id as string, { revoked: true } as any)
+    await this.save()
   }
 
   /** Whether this token has expired. */

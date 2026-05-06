@@ -1,4 +1,4 @@
-import { Model, Hidden } from '@rudderjs/orm'
+import { Model, Hidden, Cast } from '@rudderjs/orm'
 
 export class OAuthClient extends Model {
   static override table = 'oAuthClient'
@@ -7,6 +7,21 @@ export class OAuthClient extends Model {
 
   @Hidden
   declare secret: string | null
+
+  // JSON columns hydrate to arrays on read (and stringify on write).
+  // Existing callsites that already pass `JSON.stringify([...])` keep
+  // working — `castSet`'s `'json'` branch returns string inputs verbatim.
+  // New code can pass arrays directly. The `getRedirectUris()` /
+  // `getGrantTypes()` / `getScopes()` accessors below stay for back-compat;
+  // their `Array.isArray(raw)` fast path skips the parse step on cast rows.
+  @Cast('json')
+  declare redirectUris: string[]
+
+  @Cast('json')
+  declare grantTypes: string[]
+
+  @Cast('json')
+  declare scopes: string[]
 
   declare name: string
   declare confidential: boolean

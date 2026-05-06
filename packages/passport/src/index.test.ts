@@ -681,10 +681,48 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
 
   function fakeAccessToken(rows: Record<string, Record<string, unknown>>) {
     const updates: Updates = []
+    function makeBuilder(initialPredicate: (row: Record<string, unknown>) => boolean): any {
+      let predicate = initialPredicate
+      const builder: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          const op  = hasOp ? (opOrVal as string) : '='
+          const val = hasOp ? maybeVal : opOrVal
+          const prev = predicate
+          predicate = (row) => {
+            if (!prev(row)) return false
+            const cell = row[col]
+            if (op === 'IN' || op === 'NOT IN') {
+              const set = new Set(val as unknown[])
+              return op === 'IN' ? set.has(cell) : !set.has(cell)
+            }
+            return cell === val
+          }
+          return builder
+        },
+        first: async () => Object.values(rows).find(predicate) ?? null,
+        get:   async () => Object.values(rows).filter(predicate),
+        async updateAll(data: Record<string, unknown>) {
+          let count = 0
+          for (const id of Object.keys(rows)) {
+            const row = rows[id]
+            if (!row || !predicate(row)) continue
+            updates.push({ id, data: { ...data } })
+            Object.assign(row, data)
+            count++
+          }
+          return count
+        },
+      }
+      return builder
+    }
     class FakeAccessToken {
       static updates = updates
-      static where(_col: string, val: unknown) {
-        return { first: async () => (rows[val as string] ?? null) as any }
+      static where(col: string, val: unknown) {
+        return makeBuilder((row) => row[col] === val)
+      }
+      static query() {
+        return makeBuilder(() => true)
       }
       static async update(id: string, data: Record<string, unknown>) {
         updates.push({ id, data })
@@ -699,22 +737,49 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
     const updates: Updates = []
     const created: Record<string, unknown>[] = []
     let nextId = 0
+    function makeBuilder(initialPredicate: (row: Record<string, unknown>) => boolean): any {
+      let predicate = initialPredicate
+      const builder: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          const op  = hasOp ? (opOrVal as string) : '='
+          const val = hasOp ? maybeVal : opOrVal
+          const prev = predicate
+          predicate = (row) => {
+            if (!prev(row)) return false
+            const cell = row[col]
+            if (op === 'IN' || op === 'NOT IN') {
+              const set = new Set(val as unknown[])
+              return op === 'IN' ? set.has(cell) : !set.has(cell)
+            }
+            return cell === val
+          }
+          return builder
+        },
+        first: async () => Object.values(rows).find(predicate) ?? null,
+        get:   async () => Object.values(rows).filter(predicate),
+        async updateAll(data: Record<string, unknown>) {
+          let count = 0
+          for (const id of Object.keys(rows)) {
+            const row = rows[id]
+            if (!row || !predicate(row)) continue
+            updates.push({ id, data: { ...data } })
+            Object.assign(row, data)
+            count++
+          }
+          return count
+        },
+      }
+      return builder
+    }
     class FakeRefreshToken {
       static updates = updates
       static created = created
       static where(col: string, val: unknown) {
-        if (col === 'id') {
-          return {
-            first: async () => (rows[val as string] ?? null) as any,
-            get:   async () => [],
-          }
-        }
-        if (col === 'familyId') {
-          return {
-            get: async () => Object.values(rows).filter(r => r['familyId'] === val) as any,
-          }
-        }
-        return { first: async () => null, get: async () => [] }
+        return makeBuilder((row) => row[col] === val)
+      }
+      static query() {
+        return makeBuilder(() => true)
       }
       static async update(id: string, data: Record<string, unknown>) {
         updates.push({ id, data })
@@ -737,9 +802,46 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
   // about the refresh-token bookkeeping for these tests.
   function fakeAccessTokenForIssue(linkedAccessId: string, accessRows: Record<string, Record<string, unknown>>) {
     let counter = 0
+    function makeBuilder(initialPredicate: (row: Record<string, unknown>) => boolean): any {
+      let predicate = initialPredicate
+      const builder: any = {
+        where(col: string, opOrVal: unknown, maybeVal?: unknown) {
+          const hasOp = arguments.length === 3
+          const op  = hasOp ? (opOrVal as string) : '='
+          const val = hasOp ? maybeVal : opOrVal
+          const prev = predicate
+          predicate = (row) => {
+            if (!prev(row)) return false
+            const cell = row[col]
+            if (op === 'IN' || op === 'NOT IN') {
+              const set = new Set(val as unknown[])
+              return op === 'IN' ? set.has(cell) : !set.has(cell)
+            }
+            return cell === val
+          }
+          return builder
+        },
+        first: async () => Object.values(accessRows).find(predicate) ?? null,
+        get:   async () => Object.values(accessRows).filter(predicate),
+        async updateAll(data: Record<string, unknown>) {
+          let count = 0
+          for (const id of Object.keys(accessRows)) {
+            const row = accessRows[id]
+            if (!row || !predicate(row)) continue
+            Object.assign(row, data)
+            count++
+          }
+          return count
+        },
+      }
+      return builder
+    }
     class FakeAccessToken {
       static where(col: string, val: unknown) {
-        return { first: async () => (col === 'id' ? (accessRows[val as string] ?? null) : null) as any }
+        return makeBuilder((row) => row[col] === val)
+      }
+      static query() {
+        return makeBuilder(() => true)
       }
       static async create(data: Record<string, unknown>) {
         counter++
@@ -2230,6 +2332,206 @@ describe('M-L3 — token models implement Prunable for `model:prune`', () => {
     assert.deepEqual(shape(pruneChain), shape(purgeChain))
 
     Passport.reset()
+  })
+})
+
+describe('storage hygiene — fillable / hidden / casts / null guards', () => {
+  // ── M-L6: `revoked` is NOT in fillable ────────────────────────
+
+  test('M-L6 — `revoked` is not in fillable on AccessToken/RefreshToken/AuthCode', () => {
+    // Mass-assignment must NOT let a caller-controlled payload pre-mark a
+    // token as revoked. Lifecycle flips happen through `revoke()`,
+    // `forceFill`, or QueryBuilder.updateAll.
+    assert.ok(!(AccessToken.fillable as readonly string[]).includes('revoked'),
+      'AccessToken.fillable still contains "revoked"')
+    assert.ok(!(RefreshToken.fillable as readonly string[]).includes('revoked'),
+      'RefreshToken.fillable still contains "revoked"')
+    assert.ok(!(AuthCode.fillable as readonly string[]).includes('revoked'),
+      'AuthCode.fillable still contains "revoked"')
+  })
+
+  // ── M-L1: revoke() uses save() ─────────────────────────────────
+
+  test('M-L1 — AccessToken.revoke() goes through save() and bypasses mass-assignment', async () => {
+    // Direct property assignment + save() bypasses the fillable filter,
+    // and the in-memory instance reflects the new state without a re-read.
+    // We capture the save() call to verify the call shape.
+    let saveCalled = false
+    let revokedAtSave: unknown = null
+    class FakeAdapter {
+      static async save(this: any) {
+        saveCalled = true
+        revokedAtSave = this.revoked
+        return this
+      }
+    }
+
+    // Instantiate via Model.hydrate so the prototype method `save` resolves
+    // through the adapter; we override it on the instance for capture.
+    const token = AccessToken.hydrate({
+      id: 'A-1', userId: 'U-1', clientId: 'C-1', name: null,
+      scopes: '[]', revoked: false, expiresAt: new Date(),
+    } as Record<string, unknown>) as AccessToken
+    ;(token as any).save = FakeAdapter.save.bind(token)
+
+    await token.revoke()
+
+    assert.equal(saveCalled, true, 'expected revoke() to call save()')
+    assert.equal(revokedAtSave, true, 'expected revoked=true on save()')
+    assert.equal(token.revoked, true, 'expected in-memory instance.revoked === true')
+  })
+
+  test('M-L1 — RefreshToken.revoke() goes through save()', async () => {
+    let saveCalled = false
+    const token = RefreshToken.hydrate({
+      id: 'R-1', accessTokenId: 'A-1', familyId: null,
+      revoked: false, expiresAt: new Date(),
+    } as Record<string, unknown>) as RefreshToken
+    ;(token as any).save = async function(this: any) { saveCalled = true; return this }
+
+    await token.revoke()
+    assert.equal(saveCalled, true)
+    assert.equal(token.revoked, true)
+  })
+
+  // ── M-L5: @Cast('json') on OAuthClient JSON columns ───────────
+
+  test('M-L5 — OAuthClient declares JSON casts on redirectUris/grantTypes/scopes', () => {
+    // The decorator stamps the cast onto the class's static `casts` map.
+    const casts = (OAuthClient as any).casts as Record<string, string> | undefined
+    assert.ok(casts, 'OAuthClient.casts not defined — @Cast decorator did not run')
+    assert.equal(casts['redirectUris'], 'json')
+    assert.equal(casts['grantTypes'],   'json')
+    assert.equal(casts['scopes'],       'json')
+  })
+
+  test('M-L5 — write callsites passing JSON.stringify still round-trip (no double-encoding)', () => {
+    // `castSet('json', ..., stringValue)` returns the string verbatim — only
+    // arrays/objects get re-stringified. This protects every existing
+    // `JSON.stringify([...])` callsite from double-encoding after the cast
+    // is added.
+    const client = OAuthClient.hydrate({
+      id: 'C-1', name: 'app',
+      redirectUris: '["https://app.example.com/cb"]',
+      grantTypes:   '["authorization_code"]',
+      scopes:       '[]',
+      confidential: true, revoked: false, secret: null,
+    } as Record<string, unknown>) as OAuthClient
+
+    // After hydration, the cast on read should produce arrays.
+    assert.deepEqual(client.getRedirectUris(), ['https://app.example.com/cb'])
+    assert.deepEqual(client.getGrantTypes(),   ['authorization_code'])
+    assert.deepEqual(client.getScopes(),       [])
+  })
+
+  // ── M1: @Hidden on AccessToken.userId/clientId ────────────────
+
+  test('M1 — AccessToken.toJSON() hides userId and clientId by default', () => {
+    const token = AccessToken.hydrate({
+      id: 'A-1', userId: 'U-1', clientId: 'C-1', name: 'cli',
+      scopes: '[]', revoked: false, expiresAt: new Date(),
+    } as Record<string, unknown>) as AccessToken
+    const json = token.toJSON() as Record<string, unknown>
+    assert.equal(json['userId'],   undefined, 'userId leaked into toJSON()')
+    assert.equal(json['clientId'], undefined, 'clientId leaked into toJSON()')
+    assert.equal(json['id'],       'A-1')
+    assert.equal(json['name'],     'cli')
+  })
+
+  test('M1 — makeVisible() opts userId/clientId back into serialization for admin contexts', () => {
+    const token = AccessToken.hydrate({
+      id: 'A-1', userId: 'U-1', clientId: 'C-1', name: null,
+      scopes: '[]', revoked: false, expiresAt: new Date(),
+    } as Record<string, unknown>) as AccessToken
+    const json = (token as any).makeVisible(['userId', 'clientId']).toJSON() as Record<string, unknown>
+    assert.equal(json['userId'],   'U-1')
+    assert.equal(json['clientId'], 'C-1')
+  })
+
+  // ── M6: explicit null-secret guard ────────────────────────────
+
+  test('M6 — client_credentials grant rejects null `client.secret` on a confidential client', async () => {
+    Passport.reset()
+    class FakeClientNullSecret {
+      static where() {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'app',
+            secret: null, // explicit null — schema permits it for non-confidential rows
+            confidential: true, revoked: false,
+            redirectUris: '[]',
+            grantTypes:   '["client_credentials"]',
+            scopes:       '[]',
+          }),
+        }
+      }
+    }
+    Passport.useClientModel(FakeClientNullSecret as any)
+
+    await assert.rejects(
+      () => clientCredentialsGrant({
+        grantType:    'client_credentials',
+        clientId:     'C-1',
+        clientSecret: 'anything',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_client'
+        && /no secret on file/i.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  test('M6 — refresh_token grant rejects null `client.secret` on a confidential client', async () => {
+    Passport.reset()
+    class FakeClientNullSecret {
+      static where() {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'app',
+            secret: null,
+            confidential: true, revoked: false,
+            redirectUris: '[]',
+            grantTypes:   '["refresh_token"]',
+            scopes:       '[]',
+          }),
+        }
+      }
+    }
+    Passport.useClientModel(FakeClientNullSecret as any)
+
+    await assert.rejects(
+      () => refreshTokenGrant({
+        grantType:    'refresh_token',
+        refreshToken: 'rt-1',
+        clientId:     'C-1',
+        clientSecret: 'anything',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_client'
+        && /no secret on file/i.test(e.errorDescription),
+    )
+    Passport.reset()
+  })
+
+  // ── M-L4: parseJsonArray logs on corrupt input ────────────────
+
+  test('M-L4 — clientHelpers.getScopes warns and returns [] on corrupt JSON', async () => {
+    // Direct exercise of the helper that DOES go through parseJsonArray.
+    const { clientHelpers } = await import('./models/helpers.js')
+    const originalWarn = console.warn
+    const warnings: string[] = []
+    console.warn = (msg: string) => { warnings.push(String(msg)) }
+    try {
+      const result = clientHelpers.getScopes({
+        id: 'C-1', name: 'x', secret: null,
+        redirectUris: '[]', grantTypes: '[]', scopes: 'not-json-{',
+        confidential: false, revoked: false,
+      } as any)
+      assert.deepEqual(result, [])
+    } finally {
+      console.warn = originalWarn
+    }
+    assert.ok(warnings.length >= 1, 'expected at least one console.warn call')
+    assert.ok(/Failed to parse JSON-array/.test(warnings[0] ?? ''),
+      `expected helpful warning, got: ${warnings[0]}`)
   })
 })
 

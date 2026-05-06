@@ -34,6 +34,10 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - **Device codes rate-limited** — 5-second polling interval enforced server-side
 - **Personal access tokens** — auto-create an internal `__personal_access__` OAuth client on first use
 - **Token models are `MassPrunable`** — `AuthCode`, `DeviceCode`, `AccessToken`, `RefreshToken` each define `static prunable()` (same predicates as `passport:purge`) + `pruneMode = 'mass'`, so `pnpm rudder model:prune` reaps expired/revoked rows automatically without the operator needing to invoke `passport:purge`. `PassportProvider.boot()` eagerly registers the four classes with `ModelRegistry` so the prune walker sees them on day-1 fresh apps before any oauth flow has fired.
+- **`revoked` is NOT mass-assignable** — `AccessToken`, `RefreshToken`, and `AuthCode` keep `revoked` out of `fillable`. Lifecycle flips happen through `instance.revoke()` (token models) or `QueryBuilder.where(...).updateAll({ revoked: true })` (grants); both bypass the mass-assignment filter. Defense-in-depth so a future caller-controlled `Model.create()` payload can't pre-mark a row as revoked.
+- **`AccessToken.userId` and `clientId` are `@Hidden`** — `toJSON()` strips them by default so `user.tokens()` exposed over an API can't accidentally leak the user/client mapping. Privileged routes (admin views) opt in via `instance.makeVisible(['userId', 'clientId'])`.
+- **`OAuthClient` JSON columns hydrate as arrays** — `redirectUris`, `grantTypes`, `scopes` carry `@Cast('json')`. Read paths (and `getRedirectUris()`/`getGrantTypes()`/`getScopes()` accessors) return `string[]`. Existing `JSON.stringify([...])` callsites continue to work — `castSet('json')` returns string inputs verbatim.
+- **Confidential client secret presence is asserted at the token endpoint** — every grant that authenticates via `verifyClientSecret` first checks `client.secret == null` and throws `invalid_client` ("Confidential client has no secret on file"). Catches a future refactor that could otherwise mask `secret = null` as authenticating against an empty string.
 
 ## Why we don't store hashed access tokens
 

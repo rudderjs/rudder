@@ -74,7 +74,21 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
       return { token: tokenRecord, plainTextToken: jwt }
     }
 
-    /** Get all personal access tokens for this user. */
+    /**
+     * Get all personal access tokens for this user.
+     *
+     * Returns AccessToken Model instances scoped to the calling user's id.
+     * `AccessToken.toJSON()` hides `userId` and `clientId` by default, so
+     * exposing the result over an API leaks only `id`, `name`, `scopes`,
+     * `revoked`, `expiresAt`. If you need to surface ownership info on a
+     * privileged route, opt in via `t.makeVisible(['userId', 'clientId'])`
+     * per token.
+     *
+     * Consumers MUST keep this method scoped to the authenticated user —
+     * exposing other users' tokens via this same accessor (e.g. an admin
+     * endpoint that takes a `userId` parameter) bypasses the per-user scope
+     * implicit in the mixin.
+     */
     async tokens(): Promise<AccessToken[]> {
       const userId = (this as any).id as string
       const AccessTokenCls = await Passport.tokenModel()
@@ -83,12 +97,14 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
 
     /** Revoke all personal access tokens for this user. */
     async revokeAllTokens(): Promise<number> {
+      // Single bulk QueryBuilder.updateAll() — bypasses mass-assignment
+      // (`revoked` is no longer in `fillable`) and replaces the prior
+      // read-then-N+1-update loop with one round-trip.
+      const userId = (this as any).id as string
       const AccessTokenCls = await Passport.tokenModel()
-      const tokens = await this.tokens()
-      for (const t of tokens) {
-        await AccessTokenCls.update((t as any).id, { revoked: true } as any)
-      }
-      return tokens.length
+      return AccessTokenCls.where('userId', userId)
+        .where('revoked', false)
+        .updateAll({ revoked: true } as Record<string, unknown>)
     }
 
     /**

@@ -1,4 +1,10 @@
-// Helper functions that operate on raw OAuth records (ORM returns plain objects, not instances).
+// Helper functions that operate on plain OAuth records — both Model instances
+// (returned from the ORM read paths since PR #111 on 2026-04-30) and raw rows
+// (cached JSON, fixtures, adapter-level snapshots). The Model classes expose
+// equivalent instance methods (`OAuthClient.getRedirectUris()`,
+// `AccessToken.can()`, etc.) and prefer those when you already hold a Model
+// instance — these helpers stay around for the raw-record case and to keep
+// the grants' read paths legible while they migrate over.
 
 export interface OAuthClientRecord {
   id:           string
@@ -59,7 +65,19 @@ export interface DeviceCodeRecord {
 function parseJsonArray(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw as string[]
   if (typeof raw === 'string') {
-    try { return JSON.parse(raw) as string[] } catch { return [] }
+    try { return JSON.parse(raw) as string[] }
+    catch (err) {
+      // Fail-closed: corrupt JSON returns []. We log the failure (instead of
+      // swallowing silently) so persistent corruption isn't a mystery later —
+      // a token row whose `scopes` doesn't parse silently authorizes nothing,
+      // which is the safe default but produces confusing 403s in production.
+      const preview = raw.length > 64 ? `${raw.slice(0, 64)}…` : raw
+      console.warn(
+        `[@rudderjs/passport] Failed to parse JSON-array column from OAuth record. ` +
+        `Returning [] (fail-closed). Raw value: ${JSON.stringify(preview)}. Error: ${(err as Error).message}`
+      )
+      return []
+    }
   }
   return []
 }

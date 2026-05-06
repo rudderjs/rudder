@@ -153,6 +153,12 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     if (!params.clientSecret) {
       throw new OAuthError('invalid_client', 'Client secret required.', 401)
     }
+    // Schema allows `client.secret` to be null; explicit guard so a future
+    // refactor can't mask `secret = null` as authenticating. See
+    // `client-credentials.ts` for the longer-form rationale.
+    if (client.secret == null) {
+      throw new OAuthError('invalid_client', 'Confidential client has no secret on file.', 401)
+    }
     if (!(await verifyClientSecret(params.clientSecret, client.secret))) {
       throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
     }
