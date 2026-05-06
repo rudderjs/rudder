@@ -206,27 +206,41 @@ export class Session {
   }
 }
 
-// ─── Cookie Driver ─────────────────────────────────────────
+// ─── Sign / Verify primitives ──────────────────────────────
 
-function signPayload(payload: SessionPayload, secret: string): string {
-  const b64  = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  const hmac = createHmac('sha256', secret).update(b64).digest('base64url')
-  return `${b64}.${hmac}`
+// Generic HMAC-SHA256 sign+verify shared by both drivers. Cookie driver signs
+// the base64url-encoded JSON payload; redis driver signs the session ID alone
+// so a stolen UUID can't be replayed and an attacker-supplied ID can't fixate
+// onto a victim's session.
+function sign(value: string, secret: string): string {
+  const hmac = createHmac('sha256', secret).update(value).digest('base64url')
+  return `${value}.${hmac}`
 }
 
-function verifyPayload(cookieValue: string, secret: string): SessionPayload | null {
-  const dotIdx = cookieValue.lastIndexOf('.')
+function verify(signed: string, secret: string): string | null {
+  const dotIdx = signed.lastIndexOf('.')
   if (dotIdx === -1) return null
-  const b64  = cookieValue.slice(0, dotIdx)
-  const hmac = cookieValue.slice(dotIdx + 1)
-  const expected = createHmac('sha256', secret).update(b64).digest('base64url')
+  const value = signed.slice(0, dotIdx)
+  const hmac  = signed.slice(dotIdx + 1)
+  const expected = createHmac('sha256', secret).update(value).digest('base64url')
   // Constant-time comparison
   if (expected.length !== hmac.length) return null
   let mismatch = 0
   for (let i = 0; i < expected.length; i++) {
     mismatch |= (expected.codePointAt(i) ?? 0) ^ (hmac.codePointAt(i) ?? 0)
   }
-  if (mismatch !== 0) return null
+  return mismatch === 0 ? value : null
+}
+
+// ─── Cookie Driver ─────────────────────────────────────────
+
+function signPayload(payload: SessionPayload, secret: string): string {
+  return sign(Buffer.from(JSON.stringify(payload)).toString('base64url'), secret)
+}
+
+function verifyPayload(cookieValue: string, secret: string): SessionPayload | null {
+  const b64 = verify(cookieValue, secret)
+  if (b64 === null) return null
   try {
     return JSON.parse(Buffer.from(b64, 'base64url').toString('utf8')) as SessionPayload
   } catch {
@@ -257,12 +271,16 @@ class CookieDriver implements InternalDriver {
 
 // ─── Redis Driver ──────────────────────────────────────────
 
-class RedisDriver implements InternalDriver {
+/** @internal Exported for tests; not part of the public API. */
+export class RedisDriver implements InternalDriver {
   private client: unknown
   private readonly prefix: string
 
-  constructor(private readonly config: NonNullable<SessionConfig['redis']>) {
-    this.prefix = config.prefix ?? 'session:'
+  constructor(
+    private readonly redisConfig: NonNullable<SessionConfig['redis']>,
+    private readonly secret: string,
+  ) {
+    this.prefix = redisConfig.prefix ?? 'session:'
   }
 
   private async getClient(): Promise<{
@@ -273,12 +291,12 @@ class RedisDriver implements InternalDriver {
     if (!this.client) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { Redis } = await import('ioredis') as any
-      this.client = this.config.url
-        ? new Redis(this.config.url)
+      this.client = this.redisConfig.url
+        ? new Redis(this.redisConfig.url)
         : new Redis({
-            host:     this.config.host     ?? '127.0.0.1',
-            port:     this.config.port     ?? 6379,
-            password: this.config.password,
+            host:     this.redisConfig.host     ?? '127.0.0.1',
+            port:     this.redisConfig.port     ?? 6379,
+            password: this.redisConfig.password,
           })
     }
     return this.client as Awaited<ReturnType<RedisDriver['getClient']>>
@@ -288,10 +306,16 @@ class RedisDriver implements InternalDriver {
 
   async load(cookieValue: string | undefined): Promise<SessionPayload> {
     if (!cookieValue) return this.empty()
+    // Verify HMAC before touching redis. An attacker who plants an unsigned
+    // ID — or guesses one — never reaches the redis lookup, and a cache miss
+    // on a valid signature still creates a fresh ID rather than fixating on
+    // the cookie-supplied value.
+    const id = verify(cookieValue, this.secret)
+    if (id === null) return this.empty()
     try {
       const client = await this.getClient()
-      const raw    = await client.get(this.key(cookieValue))
-      if (!raw) return this.emptyWithId(cookieValue)
+      const raw    = await client.get(this.key(id))
+      if (!raw) return this.empty()
       return JSON.parse(raw) as SessionPayload
     } catch {
       return this.empty()
@@ -301,7 +325,7 @@ class RedisDriver implements InternalDriver {
   async persist(payload: SessionPayload, ttl: number): Promise<string> {
     const client = await this.getClient()
     await client.set(this.key(payload.id), JSON.stringify(payload), 'EX', ttl)
-    return payload.id
+    return sign(payload.id, this.secret)
   }
 
   async destroy(id: string): Promise<void> {
@@ -315,10 +339,6 @@ class RedisDriver implements InternalDriver {
 
   private empty(): SessionPayload {
     return { id: randomUUID(), data: {}, flash_next: {} }
-  }
-
-  private emptyWithId(id: string): SessionPayload {
-    return { id, data: {}, flash_next: {} }
   }
 }
 
@@ -347,7 +367,7 @@ function buildCookieHeader(name: string, value: string, config: SessionConfig): 
 }
 
 function makeDriver(config: SessionConfig): InternalDriver {
-  if (config.driver === 'redis') return new RedisDriver(config.redis ?? {})
+  if (config.driver === 'redis') return new RedisDriver(config.redis ?? {}, config.secret)
   return new CookieDriver(config.secret)
 }
 
@@ -368,8 +388,27 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
     // normalizeRequest(c) call — including the one in registerRoute — sees it.
     ;(req.raw as Record<string, unknown>)['__rjs_session'] = session
 
-    await _als.run(session, next)
-    await session.save(res)
+    // Persist regardless of whether next() throws — flash messages on error
+    // redirects, new sessions on error responses, and regenerate() must
+    // survive a thrown handler. Save errors only surface when next() did not
+    // already throw, so the original exception isn't masked by a redis blip.
+    let nextErrored = false
+    let nextErr: unknown
+    try {
+      await _als.run(session, next)
+    } catch (err) {
+      nextErrored = true
+      nextErr = err
+    }
+    try {
+      await session.save(res)
+    } catch (saveErr) {
+      if (!nextErrored) {
+        nextErrored = true
+        nextErr = saveErr
+      }
+    }
+    if (nextErrored) throw nextErr
   }
 }
 

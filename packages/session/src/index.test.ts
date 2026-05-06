@@ -2,7 +2,7 @@ import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AppRequest, AppResponse } from '@rudderjs/contracts'
 import { ConfigRepository, setConfigRepository, getConfigRepository } from '@rudderjs/core'
-import { SessionInstance, Session, sessionMiddleware, SessionProvider, type SessionConfig } from './index.js'
+import { SessionInstance, Session, sessionMiddleware, SessionProvider, RedisDriver, type SessionConfig } from './index.js'
 
 function withSessionConfig(cfg: SessionConfig): () => void {
   const previous = getConfigRepository()
@@ -326,6 +326,141 @@ describe('Session facade', () => {
     await s.regenerate()
     const newId = s.id()
     assert.notStrictEqual(oldId, newId)
+  })
+})
+
+// ─── S1+S2: Redis driver security ─────────────────────────────────────────────
+
+/**
+ * Minimal in-memory stand-in for ioredis. Implements only what RedisDriver
+ * touches: get / set / del. We inject it by setting RedisDriver's private
+ * `client` field directly so getClient() returns it without dynamic import.
+ */
+function fakeRedisClient(): {
+  get(key: string): Promise<string | null>
+  set(key: string, value: string, ...args: unknown[]): Promise<unknown>
+  del(...keys: string[]): Promise<unknown>
+  store: Map<string, string>
+} {
+  const store = new Map<string, string>()
+  return {
+    store,
+    async get(key) { return store.get(key) ?? null },
+    async set(key, value) { store.set(key, value); return 'OK' },
+    async del(...keys) { let n = 0; for (const k of keys) if (store.delete(k)) n++; return n },
+  }
+}
+
+function makeRedisDriver(secret = 'test-secret-32-chars-exactly!!xx'): { driver: RedisDriver; client: ReturnType<typeof fakeRedisClient> } {
+  const driver = new RedisDriver({ prefix: 'session:' }, secret)
+  const client = fakeRedisClient()
+  ;(driver as unknown as { client: unknown }).client = client
+  return { driver, client }
+}
+
+describe('RedisDriver — S1: HMAC signing', () => {
+  it('persist() returns a signed cookie value, not the raw session id', async () => {
+    const { driver } = makeRedisDriver()
+    const id = 'fixed-uuid-1111'
+    const cookieValue = await driver.persist({ id, data: { k: 'v' }, flash_next: {} }, 60)
+    assert.notStrictEqual(cookieValue, id, 'cookie value must not be the raw id')
+    assert.ok(cookieValue.startsWith(`${id}.`), 'cookie value must be `${id}.${hmac}`')
+    assert.ok(cookieValue.length > id.length + 1, 'cookie value must include a signature')
+  })
+
+  it('load() rejects an unsigned cookie value (raw id) and returns a fresh session', async () => {
+    const { driver, client } = makeRedisDriver()
+    // Plant a session in redis under a known id
+    const plantedId = 'attacker-supplied-id'
+    client.store.set(`session:${plantedId}`, JSON.stringify({ id: plantedId, data: { admin: true }, flash_next: {} }))
+    // Attacker sends the raw id as the cookie (no signature)
+    const loaded = await driver.load(plantedId)
+    assert.notStrictEqual(loaded.id, plantedId, 'unsigned id must NOT load the planted session')
+    assert.deepStrictEqual(loaded.data, {}, 'load must return a fresh empty session')
+  })
+
+  it('load() rejects a tampered signature and returns a fresh session', async () => {
+    const { driver } = makeRedisDriver()
+    const cookieValue = await driver.persist({ id: 'real-id', data: { x: 1 }, flash_next: {} }, 60)
+    const tampered = cookieValue.slice(0, -2) + 'AA'  // mutate last 2 chars of the hmac
+    const loaded = await driver.load(tampered)
+    assert.notStrictEqual(loaded.id, 'real-id')
+    assert.deepStrictEqual(loaded.data, {})
+  })
+
+  it('load() rejects a value with a different secret and returns a fresh session', async () => {
+    const { driver } = makeRedisDriver('secret-A')
+    const otherDriver = new RedisDriver({ prefix: 'session:' }, 'secret-B')
+    ;(otherDriver as unknown as { client: unknown }).client = (driver as unknown as { client: unknown }).client
+    const cookieFromB = await otherDriver.persist({ id: 'cross', data: {}, flash_next: {} }, 60)
+    const loaded = await driver.load(cookieFromB)
+    assert.notStrictEqual(loaded.id, 'cross')
+  })
+
+  it('load() round-trips a properly signed cookie value', async () => {
+    const { driver } = makeRedisDriver()
+    const cookieValue = await driver.persist({ id: 'good-id', data: { user: 'alice' }, flash_next: {} }, 60)
+    const loaded = await driver.load(cookieValue)
+    assert.strictEqual(loaded.id, 'good-id')
+    assert.strictEqual(loaded.data['user'], 'alice')
+  })
+})
+
+describe('RedisDriver — S2: cache miss does not fixate on cookie id', () => {
+  it('valid signature but no key in redis → fresh ID, not the cookie-supplied one', async () => {
+    const { driver, client } = makeRedisDriver()
+    // Pre-sign an id, then evict the redis key (simulates expiry / eviction).
+    const id = 'evicted-id'
+    const cookieValue = await driver.persist({ id, data: {}, flash_next: {} }, 60)
+    client.store.delete(`session:${id}`)
+    const loaded = await driver.load(cookieValue)
+    assert.notStrictEqual(loaded.id, id, 'cache miss must mint a new ID')
+    assert.deepStrictEqual(loaded.data, {})
+    assert.deepStrictEqual(loaded.flash_next, {})
+  })
+})
+
+// ─── S3: Set-Cookie preserved when next() throws ──────────────────────────────
+
+describe('sessionMiddleware — S3: save on error', () => {
+  it('writes Set-Cookie even when next() throws', async () => {
+    const mw = sessionMiddleware(config)
+    const { req, res, setCookies } = makeReqRes()
+    const boom = new Error('handler exploded')
+    await assert.rejects(
+      async () => mw(req, res, async () => {
+        const s = (req.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
+        s.flash('notice', 'goodbye')  // marks dirty so save() actually writes
+        throw boom
+      }),
+      (err: unknown) => err === boom,
+    )
+    assert.ok(setCookies[0]?.startsWith('rjs_sess='), 'Set-Cookie must be appended despite the throw')
+  })
+
+  it('flash messages set before a thrown next() persist into the next request', async () => {
+    const mw = sessionMiddleware(config)
+    const { req: req1, res: res1, setCookies } = makeReqRes()
+    await assert.rejects(
+      async () => mw(req1, res1, async () => {
+        const s = (req1.raw as Record<string, unknown>)['__rjs_session'] as SessionInstance
+        s.flash('error', 'something broke')
+        throw new Error('boom')
+      }),
+    )
+    const cookieValue = extractCookieValue(setCookies[0]!)
+    const { session: r2 } = await runRequest(`rjs_sess=${cookieValue}`)
+    assert.strictEqual(r2.getFlash('error'), 'something broke')
+  })
+
+  it('rethrows the original error from next(), not a save error', async () => {
+    const mw = sessionMiddleware(config)
+    const { req, res } = makeReqRes()
+    const original = new Error('original')
+    await assert.rejects(
+      async () => mw(req, res, async () => { throw original }),
+      (err: unknown) => err === original,
+    )
   })
 })
 
