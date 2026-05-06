@@ -53,6 +53,10 @@ export class Socialite {
   /** Register a custom OAuth driver. */
   static extend(name: string, factory: DriverFactory): void {
     this._custom.set(name, factory)
+    // Drop any previously cached instance so the next driver(name) call uses
+    // the new factory. Without this, calling extend() after driver() is silent
+    // no-op and the old driver lingers (bites hot-reload + runtime override).
+    this._instances.delete(name)
   }
 
   /** @internal — set config from the service provider. */

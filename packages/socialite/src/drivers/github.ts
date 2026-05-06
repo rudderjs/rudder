@@ -43,7 +43,7 @@ export class GitHubProvider extends SocialiteDriver {
 
   private async fetchPrimaryEmail(token: string): Promise<string | null> {
     try {
-      const res = await fetch('https://api.github.com/user/emails', {
+      const res = await this.fetchWithTimeout('https://api.github.com/user/emails', {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       })
       if (!res.ok) return null

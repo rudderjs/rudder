@@ -198,6 +198,87 @@ describe('SocialiteDriver.getAccessToken — token endpoint', () => {
       )
     } finally { restoreFetch() }
   })
+
+  it('keeps the response body off the error message and exposes it via cause', async () => {
+    try {
+      // Provider sometimes echoes the client_id (or hints, or raw stack
+      // traces) — we don't want any of that surfacing in top-level logs.
+      global.fetch = (async () =>
+        new Response('{"error":"invalid_client","client_id":"echoed-secret"}', { status: 401 })
+      ) as typeof fetch
+      const provider = new GitHubProvider(baseConfig)
+      try {
+        await provider.getAccessToken('code')
+        assert.fail('expected rejection')
+      } catch (err) {
+        assert.ok(err instanceof Error)
+        assert.doesNotMatch(err.message, /echoed-secret/)
+        assert.doesNotMatch(err.message, /invalid_client/)
+        const cause = err.cause as { status: number; body: string }
+        assert.strictEqual(cause.status, 401)
+        assert.match(cause.body, /echoed-secret/)
+      }
+    } finally { restoreFetch() }
+  })
+
+  it('rejects non-string access_token in token-exchange response', async () => {
+    try {
+      global.fetch = (async () =>
+        new Response(JSON.stringify({ access_token: 12345 }), { status: 200 })
+      ) as typeof fetch
+      const provider = new GitHubProvider(baseConfig)
+      await assert.rejects(
+        async () => provider.getAccessToken('code'),
+        /No access_token/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('rejects empty-string access_token', async () => {
+    try {
+      global.fetch = (async () =>
+        new Response(JSON.stringify({ access_token: '' }), { status: 200 })
+      ) as typeof fetch
+      const provider = new GitHubProvider(baseConfig)
+      await assert.rejects(
+        async () => provider.getAccessToken('code'),
+        /No access_token/,
+      )
+    } finally { restoreFetch() }
+  })
+
+  it('coerces non-string refresh_token / non-number expires_in to null', async () => {
+    try {
+      global.fetch = (async () =>
+        new Response(
+          JSON.stringify({ access_token: 'tok', refresh_token: 9001, expires_in: 'soon' }),
+          { status: 200 },
+        )
+      ) as typeof fetch
+      const provider = new GitHubProvider(baseConfig)
+      const result = await provider.getAccessToken('code')
+      assert.strictEqual(result.accessToken, 'tok')
+      assert.strictEqual(result.refreshToken, null)
+      assert.strictEqual(result.expiresIn, null)
+    } finally { restoreFetch() }
+  })
+
+  it('passes a timeout-bound AbortSignal to fetch', async () => {
+    try {
+      let receivedSignal: AbortSignal | undefined
+      global.fetch = ((_input: unknown, init: RequestInit = {}) => {
+        receivedSignal = init.signal as AbortSignal | undefined
+        return Promise.resolve(new Response(
+          JSON.stringify({ access_token: 'tok' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ))
+      }) as unknown as typeof fetch
+
+      const provider = new GitHubProvider({ ...baseConfig, timeout: 5_000 })
+      await provider.getAccessToken('code')
+      assert.ok(receivedSignal instanceof AbortSignal, 'fetch must receive an AbortSignal')
+    } finally { restoreFetch() }
+  })
 })
 
 // ─── Socialite Facade ─────────────────────────────────────
@@ -241,6 +322,37 @@ describe('Socialite', () => {
     Socialite.configure({ custom: baseConfig })
     const driver = Socialite.driver('custom')
     assert.ok(driver instanceof CustomDriver)
+  })
+
+  it('extend() invalidates a previously cached driver instance', () => {
+    class FirstDriver extends SocialiteDriver {
+      protected defaultScopes() { return [] }
+      protected authUrl() { return 'https://first.example.com/auth' }
+      protected tokenUrl() { return 'https://first.example.com/token' }
+      protected userUrl() { return 'https://first.example.com/user' }
+      protected mapToUser(data: Record<string, unknown>, token: string) {
+        return new SocialUser({ id: '1', name: null, email: null, avatar: null, nickname: null, token, raw: data })
+      }
+    }
+    class SecondDriver extends SocialiteDriver {
+      protected defaultScopes() { return [] }
+      protected authUrl() { return 'https://second.example.com/auth' }
+      protected tokenUrl() { return 'https://second.example.com/token' }
+      protected userUrl() { return 'https://second.example.com/user' }
+      protected mapToUser(data: Record<string, unknown>, token: string) {
+        return new SocialUser({ id: '2', name: null, email: null, avatar: null, nickname: null, token, raw: data })
+      }
+    }
+
+    Socialite.extend('twin', (c) => new FirstDriver(c))
+    Socialite.configure({ twin: baseConfig })
+    const before = Socialite.driver('twin')
+    assert.ok(before instanceof FirstDriver)
+
+    Socialite.extend('twin', (c) => new SecondDriver(c))
+    const after = Socialite.driver('twin')
+    assert.ok(after instanceof SecondDriver, 'replacing the factory must surface a new instance')
+    assert.notStrictEqual(before, after)
   })
 
   it('all built-in drivers work', () => {
