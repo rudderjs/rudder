@@ -402,11 +402,21 @@ class HonoAdapter implements ServerAdapter {
           .filter(Boolean),
       }
 
-      // Parse body for mutating methods — JSON only; leave multipart/form-data untouched
+      // Parse body for mutating methods — JSON + form-urlencoded.
+      // Leave multipart/form-data untouched (handlers parse via c.req.parseBody()
+      // when they need it). Form-urlencoded is required by RFC 6749 §3.2 for
+      // OAuth2 token endpoints; without this branch any spec-compliant OAuth
+      // client (curl -d, Postman default, axios URLSearchParams) sends a
+      // request whose body never reaches the handler.
       if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
         const ct = c.req.header('content-type') ?? ''
         if (ct.includes('application/json')) {
           try { req.body = await c.req.json() } catch { req.body = {} }
+        } else if (ct.includes('application/x-www-form-urlencoded')) {
+          try {
+            const text = await c.req.text()
+            req.body = Object.fromEntries(new URLSearchParams(text))
+          } catch { req.body = {} }
         }
       }
 
