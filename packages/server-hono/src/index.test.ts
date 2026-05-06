@@ -194,6 +194,97 @@ describe('HonoAdapter — host gate', () => {
   })
 })
 
+// ─── Body parsing ───────────────────────────────────────────
+
+describe('HonoAdapter — body parsing', () => {
+  function setupCapture() {
+    const adapter = hono().create()
+    let captured: unknown = undefined
+    adapter.registerRoute({
+      method:  'POST',
+      path:    '/echo',
+      handler: async (req, res) => { captured = req.body; return res.json({ ok: true }) },
+      middleware: [],
+    })
+    const app = adapter.getNativeServer() as { fetch: (req: Request) => Promise<Response> }
+    return { app, getCaptured: () => captured }
+  }
+
+  it('parses application/json bodies', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify({ grant_type: 'client_credentials', client_id: 'abc' }),
+    }))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), { grant_type: 'client_credentials', client_id: 'abc' })
+  })
+
+  it('parses application/x-www-form-urlencoded bodies (RFC 6749 §3.2 OAuth token endpoint)', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body:    'grant_type=client_credentials&client_id=abc&client_secret=shh',
+    }))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), {
+      grant_type:    'client_credentials',
+      client_id:     'abc',
+      client_secret: 'shh',
+    })
+  })
+
+  it('parses form-urlencoded with charset suffix on content-type', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded; charset=utf-8' },
+      body:    'a=1&b=2',
+    }))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), { a: '1', b: '2' })
+  })
+
+  it('decodes percent-encoded values in form-urlencoded bodies', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body:    'redirect_uri=https%3A%2F%2Fexample.com%2Fcb&scope=read%20write',
+    }))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), {
+      redirect_uri: 'https://example.com/cb',
+      scope:        'read write',
+    })
+  })
+
+  it('leaves multipart/form-data untouched (handlers parse via c.req.parseBody())', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=----foo' },
+      body:    '------foo\r\nContent-Disposition: form-data; name="x"\r\n\r\n1\r\n------foo--\r\n',
+    }))
+    assert.strictEqual(res.status, 200)
+    // Adapter does not touch req.body for multipart; it stays at the normalizer default (null).
+    assert.strictEqual(getCaptured(), null)
+  })
+
+  it('falls back to {} on malformed JSON', async () => {
+    const { app, getCaptured } = setupCapture()
+    const res = await app.fetch(new Request('http://localhost/echo', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    '{not json',
+    }))
+    assert.strictEqual(res.status, 200)
+    assert.deepStrictEqual(getCaptured(), {})
+  })
+})
+
 // ─── renderErrorPage() ──────────────────────────────────────
 
 describe('renderErrorPage()', () => {
