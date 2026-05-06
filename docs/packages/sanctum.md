@@ -23,10 +23,12 @@ import type { SanctumConfig } from '@rudderjs/sanctum'
 export default {
   expiration:  null,    // token lifetime in minutes (null = no expiry)
   tokenPrefix: '',      // optional prefix on generated tokens
+  // provider: 'users', // override the user provider — required for pure-API
+                        //   apps that don't configure a session guard
 } satisfies SanctumConfig
 ```
 
-The provider is auto-discovered. Sanctum requires `@rudderjs/auth` — register order is enforced by auto-discovery (`auth` → `sanctum`).
+The provider is auto-discovered. Sanctum requires `@rudderjs/auth` — register order is enforced by auto-discovery (`auth` → `sanctum`). Sanctum resolves its user provider directly from `auth.providers` and does **not** require `@rudderjs/session` to be installed.
 
 Add the `PersonalAccessToken` table to your Prisma schema:
 
@@ -153,10 +155,28 @@ interface SanctumConfig {
   stateful?:    string[]      // domains allowed for SPA cookie auth (default: [])
   expiration?:  number | null // minutes; null = no expiry
   tokenPrefix?: string        // optional prefix on generated tokens
+  provider?:    string        // user provider name (default: default guard's provider)
 }
 ```
 
 `stateful` is for first-party SPAs that share a domain with the API — those requests authenticate via the session cookie instead of a Bearer token. Set this to your SPA's domain(s) when applicable.
+
+`provider` overrides which entry in `auth.providers` Sanctum uses to look up users. Set this in pure-API apps that don't configure a session guard, otherwise Sanctum falls back to the default guard's provider.
+
+## Hiding sensitive columns
+
+`req.user` is a serialized snapshot of your authenticatable. Sanctum strips functions, `password`, and both naming conventions of the remember-me token (`rememberToken` + `remember_token`) automatically. To hide app-specific sensitive columns (`two_factor_secret`, `email_verification_token`, etc.), implement `getHidden()` on your User model:
+
+```ts
+class User extends Model implements Authenticatable {
+  // …
+  getHidden(): string[] {
+    return ['two_factor_secret', 'email_verification_token']
+  }
+}
+```
+
+These columns will be omitted from `req.user` (and `req.user`'s JSON serialization) without affecting your DB schema or query results.
 
 ## Pitfalls
 

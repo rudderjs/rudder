@@ -87,9 +87,22 @@ export class AuthManager {
     return this.guard().guest()
   }
 
-  private createProvider(name: string): UserProvider {
-    const providerConfig = this.config.providers[name]
-    if (!providerConfig) throw new Error(`[RudderJS Auth] User provider "${name}" is not defined.`)
+  /**
+   * Resolve a UserProvider by name, independent of any guard. Used by
+   * non-session drivers (e.g. `@rudderjs/sanctum`) that need user lookup
+   * without instantiating a SessionGuard. With no `name`, falls back to
+   * the default guard's configured provider.
+   */
+  createProvider(name?: string): UserProvider {
+    const providerName = name ?? this.config.guards[this.config.defaults.guard]?.provider
+    if (!providerName) {
+      throw new Error(
+        `[RudderJS Auth] Cannot resolve a default provider — set "auth.guards.${this.config.defaults.guard}.provider" or pass an explicit name.`,
+      )
+    }
+
+    const providerConfig = this.config.providers[providerName]
+    if (!providerConfig) throw new Error(`[RudderJS Auth] User provider "${providerName}" is not defined.`)
 
     if (providerConfig.driver === 'eloquent') {
       return new EloquentUserProvider(

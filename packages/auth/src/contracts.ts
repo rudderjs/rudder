@@ -5,6 +5,14 @@ export interface Authenticatable {
   getAuthPassword(): string
   getRememberToken(): string | null
   setRememberToken(token: string): void
+  /**
+   * Optional list of column names to omit from the serialized `req.user`
+   * payload. Mirrors Laravel's `$hidden` array on Eloquent models. The
+   * framework always strips `password` and `remember_token` (both naming
+   * conventions); `getHidden()` extends that list for app-specific
+   * sensitive columns like `two_factor_secret` or `email_verification_token`.
+   */
+  getHidden?(): string[]
 }
 
 // ─── Auth Types ───────────────────────────────────────────

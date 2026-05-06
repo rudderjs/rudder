@@ -100,3 +100,16 @@ guard.tokenCan('read')  // check ability on current token
 | `tokenPrefix` | `''` | Prefix for generated tokens |
 | `expiration` | `null` | Default token lifetime in minutes (null = no expiry) |
 | `stateful` | `[]` | Domains for SPA cookie auth |
+| `provider` | default guard's provider | User provider name in `auth.providers`. Required for pure-API apps that don't configure a session guard. |
+
+## Hiding sensitive user columns
+
+Sanctum strips functions, `password`, and both `rememberToken`/`remember_token` from `req.user` automatically. For app-specific sensitive columns (e.g. `two_factor_secret`, `email_verification_token`), implement `getHidden()` on your User model:
+
+```ts
+class User extends Model implements Authenticatable {
+  getHidden(): string[] {
+    return ['two_factor_secret', 'email_verification_token']
+  }
+}
+```

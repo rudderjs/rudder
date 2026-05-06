@@ -10,7 +10,13 @@ import {
   type PersonalAccessToken,
   type SanctumConfig,
 } from './index.js'
-import { toAuthenticatable, EloquentUserProvider, type Authenticatable } from '@rudderjs/auth'
+import {
+  AuthManager,
+  EloquentUserProvider,
+  toAuthenticatable,
+  type AuthConfig,
+  type Authenticatable,
+} from '@rudderjs/auth'
 
 // ─── Fixtures ─────────────────────────────────────────────
 
@@ -146,6 +152,36 @@ describe('Sanctum.validateToken', () => {
     const exp = new Date(Date.now() - 1000)
     const { plainTextToken } = await sanctum.createToken('1', 'test', undefined, exp)
     assert.strictEqual(await sanctum.validateToken(plainTextToken), null)
+  })
+
+  it('rejects a token whose expiresAt equals "now" (boundary, T3)', async () => {
+    const { sanctum, repo } = makeSanctum()
+    const plain = Sanctum.generateToken()
+    const hashed = Sanctum.hashToken(plain)
+    // Force expiresAt to the exact ms we'll validate at, then freeze Date.now().
+    const expiresAt = new Date(1_700_000_000_000)
+    const token = await repo.create({ userId: '1', name: 'boundary', token: hashed, expiresAt })
+    const realNow = Date.now
+    Date.now = () => expiresAt.getTime()
+    try {
+      assert.strictEqual(await sanctum.validateToken(`${token.id}|${plain}`), null)
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  it('accepts a lowercase "bearer" prefix (T6, RFC 6750 case-insensitive)', async () => {
+    const { sanctum } = makeSanctum()
+    const { plainTextToken } = await sanctum.createToken('1', 'test')
+    const result = await sanctum.validateToken(`bearer ${plainTextToken}`)
+    assert.ok(result)
+  })
+
+  it('accepts an uppercase "BEARER" prefix', async () => {
+    const { sanctum } = makeSanctum()
+    const { plainTextToken } = await sanctum.createToken('1', 'test')
+    const result = await sanctum.validateToken(`BEARER ${plainTextToken}`)
+    assert.ok(result)
   })
 
   it('returns null when user not found', async () => {
@@ -356,7 +392,230 @@ describe('RequireToken()', () => {
   })
 })
 
+// ─── Middleware behavior (req.token wiring + dedupe) ──────
+
+/**
+ * Spy repository that counts updateLastUsed calls.
+ * Lets us assert that stacked middleware doesn't double-write.
+ */
+class SpyRepo extends MemoryTokenRepository {
+  updateLastUsedCalls = 0
+  async updateLastUsed(id: string, date: Date): Promise<void> {
+    this.updateLastUsedCalls++
+    await super.updateLastUsed(id, date)
+  }
+}
+
+function fakeReqRes(authHeader?: string): {
+  req: { headers: Record<string, string>; raw: Record<string, unknown> }
+  res: { statusCode: number; body: unknown; status(c: number): typeof res; json(d: unknown): void }
+} {
+  const raw: Record<string, unknown> = {}
+  const req = {
+    headers: authHeader ? { authorization: authHeader } : {},
+    raw,
+  }
+  const res = {
+    statusCode: 200,
+    body: undefined as unknown,
+    status(code: number) { this.statusCode = code; return this },
+    json(data: unknown) { this.body = data },
+  }
+  return { req, res }
+}
+
+/**
+ * Bind a Sanctum instance into the global Application for `app().make('sanctum')`
+ * to find. Uses a tiny ad-hoc shim to avoid the cost of bootstrapping a full
+ * Application — we only need `make`.
+ */
+function withGlobalSanctum<T>(instance: Sanctum, fn: () => Promise<T>): Promise<T> {
+  const g = globalThis as Record<string, unknown>
+  const prev = g['__rudderjs_app__']
+  g['__rudderjs_app__'] = {
+    make: <X>(key: string): X => {
+      if (key === 'sanctum') return instance as unknown as X
+      throw new Error(`[sanctum test] Unknown binding "${key}"`)
+    },
+  }
+  return fn().finally(() => {
+    g['__rudderjs_app__'] = prev
+  })
+}
+
+describe('SanctumMiddleware behavior', () => {
+  it('attaches token to req.raw["__rjs_token"] and req.token (direct property)', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test')
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      await SanctumMiddleware()(req as never, res as never, async () => {})
+      assert.ok(req.raw['__rjs_token'])
+      // Direct-property fallback path (server-hono's getter is the production path)
+      assert.ok((req as unknown as { token?: PersonalAccessToken }).token)
+    })
+  })
+
+  it('strips sensitive columns from req.user (T5 — uses shared userToPlain)', async () => {
+    // Regression for the T5 leak: prior implementation only filtered "password"
+    // and functions, so remember_token / two_factor_secret leaked into req.user.
+    // Now sanctum delegates to @rudderjs/auth's userToPlain which strips the
+    // always-hidden set + whatever the model lists via getHidden().
+    const model = fakeModel([{
+      id: '1', name: 'John', email: 'john@example.com',
+      password: 'p',
+      remember_token: 'rt',
+      two_factor_secret: 'ts',
+      bio: 'public',
+    }])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test')
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      await SanctumMiddleware()(req as never, res as never, async () => {})
+      const user = req.raw['__rjs_user'] as Record<string, unknown>
+      assert.ok(user)
+      assert.strictEqual(user['password'], undefined)
+      assert.strictEqual(user['remember_token'], undefined)
+      // bio is public; should still be there
+      assert.strictEqual(user['bio'], 'public')
+    })
+  })
+
+  it('does not call updateLastUsed when no auth header is present', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes()
+      let nextCalled = false
+      await SanctumMiddleware()(req as never, res as never, async () => { nextCalled = true })
+      assert.strictEqual(nextCalled, true)
+      assert.strictEqual(repo.updateLastUsedCalls, 0)
+    })
+  })
+})
+
+describe('RequireToken behavior', () => {
+  it('writes lastUsedAt exactly once when stacked behind SanctumMiddleware (T4 regression)', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test', ['write'])
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+
+      // Simulate the framework's middleware chain: SanctumMiddleware runs
+      // first, RequireToken('write') runs second. Each gets the same req/res
+      // and a `next` that advances to the next step.
+      let handlerRan = false
+      const sanctumMw = SanctumMiddleware()
+      const requireMw = RequireToken('write')
+
+      await sanctumMw(req as never, res as never, async () => {
+        await requireMw(req as never, res as never, async () => { handlerRan = true })
+      })
+
+      assert.strictEqual(handlerRan, true)
+      assert.strictEqual(repo.updateLastUsedCalls, 1, 'Expected one DB write — RequireToken should reuse SanctumMiddleware\'s validated token')
+    })
+  })
+
+  it('returns 401 when no auth header is present', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes()
+      await RequireToken()(req as never, res as never, async () => {})
+      assert.strictEqual(res.statusCode, 401)
+    })
+  })
+
+  it('returns 401 when auth header is invalid', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes('Bearer bad|token')
+      await RequireToken()(req as never, res as never, async () => {})
+      assert.strictEqual(res.statusCode, 401)
+    })
+  })
+
+  it('returns 403 when token lacks required ability', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test', ['read'])
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      await RequireToken('write')(req as never, res as never, async () => {})
+      assert.strictEqual(res.statusCode, 403)
+    })
+  })
+
+  it('still validates when used standalone (no SanctumMiddleware ahead of it)', async () => {
+    const model = fakeModel([fakeUser()])
+    const provider = new EloquentUserProvider(model, alwaysTrue)
+    const repo = new SpyRepo()
+    const sanctumInstance = new Sanctum(repo, provider)
+    const { plainTextToken } = await sanctumInstance.createToken('1', 'test')
+
+    await withGlobalSanctum(sanctumInstance, async () => {
+      const { req, res } = fakeReqRes(`Bearer ${plainTextToken}`)
+      let handlerRan = false
+      await RequireToken()(req as never, res as never, async () => { handlerRan = true })
+      assert.strictEqual(handlerRan, true)
+      assert.strictEqual(repo.updateLastUsedCalls, 1)
+    })
+  })
+})
+
 // ─── sanctum() provider ───────────────────────────────────
+
+function fakeApp(bindings: Record<string, unknown>): {
+  app: { make<T>(key: string): T; instance(key: string, value: unknown): void }
+  store: Record<string, unknown>
+} {
+  const store: Record<string, unknown> = { ...bindings }
+  return {
+    store,
+    app: {
+      make<T>(key: string): T {
+        if (!(key in store)) throw new Error(`[fake DI] No binding for "${key}"`)
+        return store[key] as T
+      },
+      instance(key: string, value: unknown) {
+        store[key] = value
+      },
+    },
+  }
+}
+
+const noopHash = async (_p: string, _h: string) => true
+const noopSession = () => ({ get: () => undefined, put: () => {}, forget: () => {}, regenerate: async () => {} } as never)
+
+// `ServiceProvider.boot` is optional on the base class — cast to a known shape
+// so test assertions don't have to deal with the `boot?:` signature.
+type Bootable = { boot(): Promise<void> }
 
 describe('sanctum() provider', () => {
   it('is a function that returns a constructor', () => {
@@ -366,5 +625,63 @@ describe('sanctum() provider', () => {
 
   it('each call returns a different class', () => {
     assert.notStrictEqual(sanctum(), sanctum())
+  })
+
+  it('boot() resolves UserProvider via AuthManager.createProvider — no SessionGuard / session needed', async () => {
+    // Pure-API setup: defaults.guard points to a non-existent guard so that
+    // `manager.guard()` would throw. boot() must NOT call guard() — it should
+    // resolve the provider directly.
+    const config: AuthConfig = {
+      defaults: { guard: 'api' },
+      guards: {}, // no guards at all
+      providers: { tokens: { driver: 'eloquent', model: { find: async () => null, query: () => ({ where() { return this }, async first() { return null } }) } } },
+    }
+    const manager = new AuthManager(config, noopHash, noopSession)
+    const { app, store } = fakeApp({ 'auth.manager': manager })
+
+    const Provider = sanctum({ provider: 'tokens' })
+    const provider = new Provider(app as never) as unknown as Bootable
+    await provider.boot()
+
+    const sanctumInstance = store['sanctum'] as Sanctum
+    assert.ok(sanctumInstance instanceof Sanctum)
+  })
+
+  it('boot() falls back to default guard\'s provider when config.provider is omitted', async () => {
+    const config: AuthConfig = {
+      defaults: { guard: 'web' },
+      guards: { web: { driver: 'session', provider: 'users' } },
+      providers: { users: { driver: 'eloquent', model: { find: async () => null, query: () => ({ where() { return this }, async first() { return null } }) } } },
+    }
+    const manager = new AuthManager(config, noopHash, noopSession)
+    const { app, store } = fakeApp({ 'auth.manager': manager })
+
+    const Provider = sanctum() // no provider override
+    const provider = new Provider(app as never) as unknown as Bootable
+    await provider.boot()
+
+    assert.ok(store['sanctum'] instanceof Sanctum)
+  })
+
+  it('boot() throws "No auth manager found" only when binding is missing', async () => {
+    const { app } = fakeApp({}) // no auth.manager binding
+    const Provider = sanctum()
+    const provider = new Provider(app as never) as unknown as Bootable
+
+    await assert.rejects(provider.boot(), /No auth manager found/)
+  })
+
+  it('boot() propagates provider-resolution errors verbatim (does not swallow into "No auth manager found")', async () => {
+    const config: AuthConfig = {
+      defaults: { guard: 'web' },
+      guards: { web: { driver: 'session', provider: 'users' } },
+      providers: {}, // no providers — createProvider() will throw "User provider … is not defined"
+    }
+    const manager = new AuthManager(config, noopHash, noopSession)
+    const { app } = fakeApp({ 'auth.manager': manager })
+
+    const Provider = sanctum()
+    const provider = new Provider(app as never) as unknown as Bootable
+    await assert.rejects(provider.boot(),/User provider "users" is not defined/)
   })
 })

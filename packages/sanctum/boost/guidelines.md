@@ -19,6 +19,12 @@ export default [
 ]
 ```
 
+In a pure-API app (no `@rudderjs/session`, no session guard) name the user provider explicitly so Sanctum doesn't fall back to the default guard's provider:
+
+```ts
+sanctum({ provider: 'users' })
+```
+
 ### Creating tokens
 
 ```ts
@@ -87,6 +93,7 @@ Use Sanctum for "my own app's tokens." Use Passport when third parties need to a
 - **Abilities as scopes.** Abilities check equality or wildcard `*`. No hierarchical scopes (`admin.users.read`) — pick flat abilities like `['read', 'write', 'admin']`.
 - **Forgetting `tokenable_type` on plural user models.** The default assumes the `User` model. If you have multiple authenticatable models (e.g. `User` + `ApiClient`), use `tokenable_type` to disambiguate.
 - **Revoking.** `sanctum.revokeToken(tokenId)` for one, or `revokeAllTokens(userId)` for all. Reading the current token inside a route after `SanctumMiddleware`: `req.token`.
+- **Hide sensitive columns from `req.user`.** `password` and `remember_token` are stripped automatically. Add `getHidden()` on your User model for app-specific columns (`two_factor_secret`, `email_verification_token`, …) so Sanctum doesn't leak them into handlers.
 - **Mixing with `@rudderjs/passport`.** Both can coexist — Sanctum for first-party API, Passport for third-party OAuth. Don't try to validate Passport JWTs with Sanctum's `validateToken` — different formats.
 
 ## Key Imports

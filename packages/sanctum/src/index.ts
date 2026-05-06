@@ -1,7 +1,20 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { ServiceProvider, type Application, app } from '@rudderjs/core'
-import type { MiddlewareHandler } from '@rudderjs/contracts'
-import type { Authenticatable, Guard, UserProvider } from '@rudderjs/auth'
+import type { AppRequest, MiddlewareHandler } from '@rudderjs/contracts'
+import { userToPlain } from '@rudderjs/auth'
+import type { Authenticatable, AuthManager, Guard, UserProvider } from '@rudderjs/auth'
+
+// ─── Module Augmentation ──────────────────────────────────
+
+// Adds `req.token` so handlers stacked behind `SanctumMiddleware()` /
+// `RequireToken(...)` can read the active personal access token without
+// poking at `req.raw['__rjs_token']`. Server adapters expose this via a
+// getter on the normalized request object.
+declare module '@rudderjs/contracts' {
+  interface AppRequest {
+    token?: PersonalAccessToken
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -145,8 +158,11 @@ export class Sanctum {
    */
   async validateToken(bearerToken: string): Promise<{ user: Authenticatable; token: PersonalAccessToken } | null> {
     const prefix = this.config.tokenPrefix ?? ''
-    const raw = bearerToken.startsWith('Bearer ')
-      ? bearerToken.slice(7).trim()
+    // Case-insensitive Bearer match per RFC 6750 §2.1 — some HTTP libraries
+    // lowercase header values, and "bearer"/"BEARER" are both legitimate.
+    const bearerMatch = /^bearer\s+/i.exec(bearerToken)
+    const raw = bearerMatch
+      ? bearerToken.slice(bearerMatch[0].length).trim()
       : bearerToken.trim()
 
     const unprefixed = prefix && raw.startsWith(prefix) ? raw.slice(prefix.length) : raw
@@ -163,8 +179,12 @@ export class Sanctum {
     if (!token) return null
     if (token.id !== id) return null
 
-    // Check expiry
-    if (token.expiresAt && token.expiresAt.getTime() < Date.now()) return null
+    // Check expiry — `<=` rejects a token whose expiry is exactly `now` (the
+    // millisecond it expires it's no longer valid). The previous `<` allowed
+    // a one-millisecond window of "expired but still accepted" use, which
+    // was both technically wrong and a source of flaky millisecond-boundary
+    // tests.
+    if (token.expiresAt && token.expiresAt.getTime() <= Date.now()) return null
 
     // Resolve user
     const user = await this.users.retrieveById(token.userId)
@@ -245,6 +265,21 @@ export class TokenGuard implements Guard {
 
 // ─── Middleware ────────────────────────────────────────────
 
+function attachUserAndToken(req: AppRequest, user: Authenticatable, token: PersonalAccessToken): void {
+  // Use the shared serializer so sanctum and `@rudderjs/auth` agree on which
+  // columns are sensitive (password, remember_token, plus anything the user
+  // model lists via `getHidden()`).
+  const plain = userToPlain(user)
+  const raw = req.raw as Record<string, unknown>
+  raw['__rjs_user']  = plain
+  raw['__rjs_token'] = token
+  // Direct property set is a fallback for adapters that don't install a getter
+  // for `req.user` / `req.token`. server-hono installs both getters in
+  // normalizeRequest(), so this branch is a no-op there.
+  try { (req as unknown as Record<string, unknown>)['user']  = plain } catch { /* read-only */ }
+  try { (req as unknown as Record<string, unknown>)['token'] = token } catch { /* read-only */ }
+}
+
 /**
  * Middleware that authenticates via Bearer token.
  * Attaches user + token to the request. Does not block unauthenticated requests.
@@ -255,16 +290,7 @@ export function SanctumMiddleware(): MiddlewareHandler {
     const authHeader = req.headers['authorization'] as string | undefined
     if (authHeader) {
       const result = await sanctum.validateToken(authHeader)
-      if (result) {
-        const plain: Record<string, unknown> = {}
-        for (const [k, v] of Object.entries(result.user as unknown as Record<string, unknown>)) {
-          if (typeof v !== 'function' && k !== 'password') plain[k] = v
-        }
-        plain['id'] = result.user.getAuthIdentifier()
-        ;(req.raw as Record<string, unknown>)['__rjs_user']  = plain
-        ;(req.raw as Record<string, unknown>)['__rjs_token'] = result.token
-        try { (req as unknown as Record<string, unknown>)['user'] = plain } catch { /* read-only */ }
-      }
+      if (result) attachUserAndToken(req, result.user, result.token)
     }
     await next()
   }
@@ -284,28 +310,30 @@ export function RequireToken(...abilities: string[]): MiddlewareHandler {
       return
     }
 
-    const result = await sanctum.validateToken(authHeader)
-    if (!result) {
-      res.status(401).json({ message: 'Unauthenticated.' })
-      return
+    // Reuse a token already validated by SanctumMiddleware on the same request.
+    // Without this, stacks like `[SanctumMiddleware(), RequireToken('write')]`
+    // run validateToken() twice — and each call writes lastUsedAt, doubling
+    // every authenticated request's DB writes. The Bearer header is the same
+    // for both middlewares, so trusting the prior result is safe.
+    const raw = req.raw as Record<string, unknown>
+    let token = raw['__rjs_token'] as PersonalAccessToken | undefined
+
+    if (!token) {
+      const result = await sanctum.validateToken(authHeader)
+      if (!result) {
+        res.status(401).json({ message: 'Unauthenticated.' })
+        return
+      }
+      attachUserAndToken(req, result.user, result.token)
+      token = result.token
     }
 
-    // Check abilities
     for (const ability of abilities) {
-      if (!sanctum.tokenCan(result.token, ability)) {
+      if (!sanctum.tokenCan(token, ability)) {
         res.status(403).json({ message: `Token does not have the "${ability}" ability.` })
         return
       }
     }
-
-    const plain: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(result.user as unknown as Record<string, unknown>)) {
-      if (typeof v !== 'function' && k !== 'password') plain[k] = v
-    }
-    plain['id'] = result.user.getAuthIdentifier()
-    ;(req.raw as Record<string, unknown>)['__rjs_user']  = plain
-    ;(req.raw as Record<string, unknown>)['__rjs_token'] = result.token
-    try { (req as unknown as Record<string, unknown>)['user'] = plain } catch { /* read-only */ }
 
     await next()
   }
@@ -320,6 +348,12 @@ export interface SanctumConfig {
   expiration?: number | null
   /** Prefix for generated tokens (default: '') */
   tokenPrefix?: string
+  /**
+   * Name of the user provider to resolve from `auth.providers`. Defaults to
+   * the default guard's provider. Set this in pure-API apps that don't
+   * configure a session guard.
+   */
+  provider?: string
 }
 
 // ─── Service Provider Factory ─────────────────────────────
@@ -339,18 +373,22 @@ export function sanctum(
     register(): void {}
 
     async boot(): Promise<void> {
-      // Resolve user provider from auth config
-      let users: UserProvider
+      // Resolve the auth manager from DI. Only catch the "binding not found"
+      // case — provider resolution errors below should propagate verbatim.
+      let manager: AuthManager
       try {
-        const manager = this.app.make<{ guard(): { ['provider']: UserProvider } }>('auth.manager')
-        // Access the provider from the default guard
-        const guard = manager.guard() as unknown as { provider: UserProvider }
-        users = guard.provider
+        manager = this.app.make<AuthManager>('auth.manager')
       } catch {
         throw new Error(
           '[RudderJS Sanctum] No auth manager found. Register auth() provider before sanctum().',
         )
       }
+
+      // Resolve the user provider directly — does NOT instantiate a
+      // SessionGuard, so pure-API apps can use Sanctum without registering
+      // `@rudderjs/session`. Falls back to the default guard's provider when
+      // `config.provider` is unset.
+      const users: UserProvider = manager.createProvider(config.provider)
 
       const repo = tokenRepository ?? new MemoryTokenRepository()
       const instance = new Sanctum(repo, users, config)
