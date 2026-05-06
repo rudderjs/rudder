@@ -890,3 +890,245 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
   })
 })
 
+describe('endpoint hardening — E5 / E10 / E11', () => {
+  // Regression guards for E5, E10, E11 from the passport-surface review:
+  // - E5  RFC 6750 §2.1 — Bearer scheme is case-insensitive.
+  // - E10 RFC 6749 §5.2 — token-endpoint client-auth failures return 401
+  //       and a `WWW-Authenticate` header. The auth-code grant was
+  //       defaulting to 400; refresh-token / client-credentials were
+  //       already correct.
+  // - E11 RFC 8628 §3.5 — device-flow polling errors (incl. slow_down)
+  //       are §5.2 errors and MUST return 400, not 429.
+
+  function fakeReq(authHeader?: string) {
+    return {
+      headers: authHeader ? { authorization: authHeader } : {},
+      raw: {} as Record<string, unknown>,
+    }
+  }
+
+  function fakeRes() {
+    let status = 200
+    let body: unknown = null
+    return {
+      status(s: number) { status = s; return this },
+      json(b: unknown) { body = b; return this },
+      get statusValue() { return status },
+      get bodyValue() { return body },
+    }
+  }
+
+  test('E5 — Bearer prefix match is case-insensitive', async () => {
+    Passport.reset()
+    // No keys set — verifyToken will throw, but the prefix check happens
+    // first. RequireBearer rejects pre-prefix-check with "Bearer token
+    // required" (the JSON message we assert against). All three casings
+    // must get past that early reject and into the verify path, which
+    // throws and yields the "Invalid or expired token" message.
+    const cases = ['Bearer faux.jwt.x', 'bearer faux.jwt.x', 'BEARER faux.jwt.x']
+    for (const header of cases) {
+      const req = fakeReq(header)
+      const res = fakeRes()
+      let nextCalled = 0
+      await RequireBearer()(req as any, res as any, async () => { nextCalled++ })
+      // verifyToken throws → caught → 401 + "Invalid or expired token".
+      assert.equal(res.statusValue, 401, `${header}: status`)
+      assert.deepEqual(res.bodyValue, { error: 'unauthenticated', message: 'Invalid or expired token.' }, `${header}: body`)
+      assert.equal(nextCalled, 0, `${header}: next not called`)
+    }
+
+    // Sanity: a missing/wrong scheme still hits the early "required" path.
+    const req = fakeReq('Basic abc')
+    const res = fakeRes()
+    await RequireBearer()(req as any, res as any, async () => {})
+    assert.equal(res.statusValue, 401)
+    assert.deepEqual(res.bodyValue, { error: 'unauthenticated', message: 'Bearer token required.' })
+
+    Passport.reset()
+  })
+
+  test('E10 — exchangeAuthCode raises invalid_client at HTTP 401, not 400', async () => {
+    Passport.reset()
+    // No client found → invalid_client. Pre-fix this defaulted to 400 in
+    // the auth-code grant only; refresh-token / client-credentials grants
+    // were already 401. Aligning fixes the inconsistency.
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => null }
+      }
+    }
+    Passport.useClientModel(FakeClient as any)
+
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType:   'authorization_code',
+        code:        'AC-1',
+        clientId:    'C-MISSING',
+        redirectUri: 'https://app.example.com/cb',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_client' && e.statusCode === 401,
+    )
+
+    Passport.reset()
+  })
+
+  test('E10 — confidential client missing/invalid secret raises 401, not 400', async () => {
+    Passport.reset()
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'app', secret: 'badf00d',
+            redirectUris: '["https://app.example.com/cb"]',
+            grantTypes: '["authorization_code"]', scopes: '[]',
+            confidential: true, revoked: false,
+          }) as any,
+        }
+      }
+    }
+    Passport.useClientModel(FakeClient as any)
+
+    // Missing secret on a confidential client.
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType:   'authorization_code',
+        code:        'AC-1',
+        clientId:    'C-1',
+        redirectUri: 'https://app.example.com/cb',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_client' && e.statusCode === 401 && /required/.test(e.errorDescription),
+    )
+
+    // Wrong secret.
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType:    'authorization_code',
+        code:         'AC-1',
+        clientId:     'C-1',
+        clientSecret: 'wrong',
+        redirectUri:  'https://app.example.com/cb',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_client' && e.statusCode === 401 && /Invalid client secret/.test(e.errorDescription),
+    )
+
+    Passport.reset()
+  })
+
+  test('E11 — device-flow slow_down returns HTTP 400 (was 429)', async () => {
+    // Mount the routes with a fake router and probe the token handler.
+    // We bypass the grant by sending grant_type=device_code and stubbing
+    // pollDeviceCode via a faked DeviceCode model that yields a status
+    // we control through the device-code helper paths.
+    Passport.reset()
+
+    // Capture handlers as they're registered.
+    const handlers: Record<string, (req: any, res: any) => Promise<unknown>> = {}
+    const fakeRouter = {
+      get:    () => {},
+      post:   (path: string, handler: (req: any, res: any) => Promise<unknown>) => {
+        if (path.endsWith('/token')) handlers['token'] = handler
+      },
+      delete: () => {},
+    }
+
+    registerPassportRoutes(fakeRouter as any)
+    assert.ok(handlers['token'], 'token handler must be registered')
+
+    // Stub Passport.deviceCodeModel so pollDeviceCode finds a row that
+    // forces a slow_down response (lastPolledAt very recent → throttled).
+    class FakeDeviceCode {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id:           'DC-1',
+            clientId:     'C-1',
+            userCode:     'ABCD-WXYZ',
+            deviceCode:   'DC-1',
+            scopes:       '[]',
+            userId:       null,
+            approved:     null,
+            expiresAt:    new Date(Date.now() + 60_000),
+            lastPolledAt: new Date(), // now → forces slow_down
+            createdAt:    new Date(),
+          }) as any,
+        }
+      }
+      static async update(_id: string, _data: Record<string, unknown>) {}
+    }
+    Passport.useDeviceCodeModel(FakeDeviceCode as any)
+
+    const req = {
+      raw: {} as Record<string, unknown>,
+      body: {
+        grant_type:  'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: 'DC-1',
+        client_id:   'C-1',
+      },
+    }
+    let status = 0
+    let body: any = null
+    const res = {
+      status(s: number) { status = s; return this },
+      json(b: unknown) { body = b; return this },
+      header() { return this },
+    }
+
+    await handlers['token']!(req, res)
+
+    assert.equal(status, 400, 'slow_down must return HTTP 400, not 429')
+    assert.equal(body.error, 'slow_down')
+
+    Passport.reset()
+  })
+
+  test('E10 — token endpoint sets WWW-Authenticate when surfacing a 401 OAuthError', async () => {
+    // Drive the token handler with an unknown client so exchangeAuthCode
+    // throws OAuthError(invalid_client, 401). Confirm the handler appends
+    // a WWW-Authenticate: Basic header before sending the response.
+    Passport.reset()
+
+    const handlers: Record<string, (req: any, res: any) => Promise<unknown>> = {}
+    const fakeRouter = {
+      get:    () => {},
+      post:   (path: string, handler: (req: any, res: any) => Promise<unknown>) => {
+        if (path.endsWith('/token')) handlers['token'] = handler
+      },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter as any)
+
+    class NoClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => null }
+      }
+    }
+    Passport.useClientModel(NoClient as any)
+
+    const headers: Record<string, string> = {}
+    let status = 0
+    let body: any = null
+    const res = {
+      status(s: number) { status = s; return this },
+      json(b: unknown) { body = b; return this },
+      header(k: string, v: string) { headers[k] = v; return this },
+    }
+    const req = {
+      raw: {} as Record<string, unknown>,
+      body: {
+        grant_type:    'authorization_code',
+        code:          'AC-1',
+        client_id:     'C-MISSING',
+        redirect_uri:  'https://app.example.com/cb',
+      },
+    }
+
+    await handlers['token']!(req, res)
+
+    assert.equal(status, 401, 'invalid_client must propagate to HTTP 401')
+    assert.equal(body.error, 'invalid_client')
+    assert.equal(headers['WWW-Authenticate'], 'Basic realm="oauth"', 'WWW-Authenticate header must be set on 401')
+
+    Passport.reset()
+  })
+})
+
