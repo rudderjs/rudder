@@ -2,6 +2,7 @@ import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import { clientHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
+import { safeCompare } from './safe-compare.js'
 import { OAuthError } from './authorization-code.js'
 
 export interface ClientCredentialsRequest {
@@ -37,7 +38,7 @@ export async function clientCredentialsGrant(params: ClientCredentialsRequest): 
   // Verify secret
   const { createHash } = await import('node:crypto')
   const hashed = createHash('sha256').update(params.clientSecret).digest('hex')
-  if (hashed !== client.secret) {
+  if (!(await safeCompare(hashed, client.secret))) {
     throw new OAuthError('invalid_client', 'Invalid client secret.', 401)
   }
 
