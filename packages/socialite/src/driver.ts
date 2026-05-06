@@ -62,13 +62,16 @@ export abstract class SocialiteDriver {
 
   /** Exchange the authorization code for an access token. */
   async getAccessToken(code: string): Promise<{ accessToken: string; refreshToken: string | null; expiresIn: number | null }> {
+    // RFC 6749 §4.1.3 mandates `application/x-www-form-urlencoded` for the
+    // token endpoint. GitHub, Google, and Facebook all reject JSON bodies
+    // (or accept them inconsistently); Apple's override already form-encodes.
     const res = await fetch(this.tokenUrl(), {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'Accept':       'application/json',
       },
-      body: JSON.stringify({
+      body: new URLSearchParams({
         client_id:     this.config.clientId,
         client_secret: this.config.clientSecret,
         code,
