@@ -18,6 +18,7 @@ function makeClient() {
     update:     async () => ({}),
     delete:     async () => undefined,
     deleteMany: async () => ({ count: 0 }),
+    updateMany: async () => ({ count: 0 }),
   }
   const fakeClient = { user: delegate, $connect: async () => {}, $disconnect: async () => {} }
   return { fakeClient, getLastWhere: () => lastWhere }
