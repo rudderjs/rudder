@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import {
   Passport,
   PassportProvider,
+  hashClientSecret,
+  verifyClientSecret,
   createToken,
   verifyToken,
   decodeToken,
@@ -1948,6 +1950,151 @@ describe('scopeAny() — E13 OR-semantic scope guard', () => {
     let nextCalled = false
     await mw(makeReq(['anything']), res, async () => { nextCalled = true })
     assert.equal(nextCalled, true)
+  })
+})
+
+describe('client-secret hashing (L6) — APP_KEY pepper + back-compat', () => {
+  // The hash format is selected at write time based on `process.env.APP_KEY`.
+  // Save/restore it around each test so tests don't bleed state and so we
+  // can assert both code paths (peppered + plain SHA-256) deterministically.
+  const ORIGINAL_APP_KEY = process.env['APP_KEY']
+
+  function setAppKey(value: string | undefined): void {
+    if (value === undefined) delete process.env['APP_KEY']
+    else process.env['APP_KEY'] = value
+  }
+
+  test('hashClientSecret — uses HMAC-SHA256 pepper when APP_KEY is set', async () => {
+    setAppKey('test-pepper-1')
+    const hashed = await hashClientSecret('s3cret')
+    assert.ok(hashed.startsWith('peppered:'), `expected peppered: prefix, got ${hashed}`)
+    // hex-encoded HMAC-SHA256 is 64 chars after the prefix
+    assert.equal(hashed.slice('peppered:'.length).length, 64)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('hashClientSecret — falls back to plain SHA-256 when APP_KEY is unset', async () => {
+    setAppKey(undefined)
+    const hashed = await hashClientSecret('s3cret')
+    // Plain hex SHA-256 — no prefix, exactly 64 chars
+    assert.equal(hashed.length, 64)
+    assert.ok(!hashed.startsWith('peppered:'))
+    const { createHash } = await import('node:crypto')
+    const expected = createHash('sha256').update('s3cret').digest('hex')
+    assert.equal(hashed, expected)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('hashClientSecret — different APP_KEYs produce different ciphertexts', async () => {
+    setAppKey('pepper-A')
+    const a = await hashClientSecret('same-input')
+    setAppKey('pepper-B')
+    const b = await hashClientSecret('same-input')
+    assert.notEqual(a, b)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('verifyClientSecret — peppered hash verifies under matching APP_KEY', async () => {
+    setAppKey('pepper-X')
+    const hashed = await hashClientSecret('s3cret')
+    assert.equal(await verifyClientSecret('s3cret', hashed), true)
+    assert.equal(await verifyClientSecret('wrong', hashed), false)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('verifyClientSecret — peppered hash rejects under different APP_KEY (rotation invalidates)', async () => {
+    setAppKey('pepper-old')
+    const hashed = await hashClientSecret('s3cret')
+    setAppKey('pepper-new')
+    assert.equal(await verifyClientSecret('s3cret', hashed), false)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('verifyClientSecret — peppered hash rejects when APP_KEY becomes unset', async () => {
+    setAppKey('pepper-Y')
+    const hashed = await hashClientSecret('s3cret')
+    setAppKey(undefined)
+    // Without the pepper we can't reproduce the HMAC, so verification must
+    // fail closed (an attacker who sees a peppered row can't bypass the
+    // check by clearing APP_KEY in the environment).
+    assert.equal(await verifyClientSecret('s3cret', hashed), false)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('verifyClientSecret — legacy plain SHA-256 row keeps verifying after APP_KEY is set', async () => {
+    // Existing rows minted before the pepper rolled out are bare hex digests.
+    // They MUST keep verifying once APP_KEY is configured — otherwise every
+    // existing OAuth client breaks the moment the operator sets APP_KEY.
+    const { createHash } = await import('node:crypto')
+    const legacyHash = createHash('sha256').update('s3cret').digest('hex')
+    setAppKey('newly-configured-pepper')
+    assert.equal(await verifyClientSecret('s3cret', legacyHash), true)
+    assert.equal(await verifyClientSecret('wrong', legacyHash), false)
+    setAppKey(ORIGINAL_APP_KEY)
+  })
+
+  test('verifyClientSecret — null/empty stored value rejects', async () => {
+    assert.equal(await verifyClientSecret('any', null), false)
+    assert.equal(await verifyClientSecret('any', undefined), false)
+    assert.equal(await verifyClientSecret('any', ''), false)
+  })
+
+  test('client_credentials grant — accepts peppered secret end-to-end', async () => {
+    // End-to-end: createClient writes a peppered hash; clientCredentialsGrant
+    // reads the row and must verify successfully under the same APP_KEY.
+    setAppKey('e2e-pepper')
+    Passport.reset()
+
+    // Generate ephemeral RSA keypair so issueTokens succeeds (cached at
+    // describe scope would be cleaner; this grant runs once so inline is fine)
+    const { generateKeyPairSync } = await import('node:crypto')
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    })
+    Passport.setKeys(privateKey, publicKey)
+
+    const peppered = await hashClientSecret('plain-secret-value')
+
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'app',
+            secret: peppered, confidential: true, revoked: false,
+            redirectUris: '[]',
+            grantTypes: '["client_credentials"]',
+            scopes: '[]',
+          }),
+        }
+      }
+    }
+    class FakeAccessToken {
+      static async create(record: any) { return { id: record.id ?? 'A-1', ...record } }
+    }
+    Passport.useClientModel(FakeClient as any)
+    Passport.useTokenModel(FakeAccessToken as any)
+
+    const tokens = await clientCredentialsGrant({
+      grantType:    'client_credentials',
+      clientId:     'C-1',
+      clientSecret: 'plain-secret-value',
+    })
+    assert.ok(tokens.access_token)
+
+    // Wrong secret still rejects
+    await assert.rejects(
+      () => clientCredentialsGrant({
+        grantType:    'client_credentials',
+        clientId:     'C-1',
+        clientSecret: 'wrong-secret',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_client',
+    )
+
+    Passport.reset()
+    setAppKey(ORIGINAL_APP_KEY)
   })
 })
 

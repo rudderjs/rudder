@@ -277,9 +277,9 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 
 ### LOW
 
-**L6. `commands/client.ts:26-27` — SHA-256 of `randomBytes(32)` adds no security; client secrets aren't user-chosen** ✅ VERIFIED REAL (parity note)
+**L6. `commands/client.ts:26-27` — SHA-256 of `randomBytes(32)` adds no security; client secrets aren't user-chosen** ✅ FIXED
 - 256 bits CSPRNG is already intractable; SHA-256 adds nothing beyond Laravel parity.
-- Fix (optional): switch to HMAC-SHA256 with a per-app pepper from `APP_KEY` for slightly stronger defense if the DB is dumped, or document the design choice.
+- **Fixed**: extracted `client-secret.ts` with `hashClientSecret()` / `verifyClientSecret()`. When `APP_KEY` is set, secrets store as `peppered:<HMAC-SHA256(secret, APP_KEY)>`; otherwise plain SHA-256 (back-compat). Format is self-describing per row, so legacy plain-SHA-256 rows keep verifying after the operator sets `APP_KEY`. New CLAUDE.md "Pitfalls" entry documents that rotating `APP_KEY` invalidates every peppered row.
 
 **L7. Pervasive `(client as any).id` casts** ⚠️ NEEDS VERIFY
 - 8 sites in lifecycle/routes. Models likely missing `declare id: string`.

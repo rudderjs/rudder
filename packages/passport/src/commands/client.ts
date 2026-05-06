@@ -1,4 +1,5 @@
 import { Passport } from '../Passport.js'
+import { hashClientSecret } from '../client-secret.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 
 export interface CreateClientOpts {
@@ -16,7 +17,7 @@ export async function createClient(opts: CreateClientOpts): Promise<{
   client: OAuthClient
   secret: string | null
 }> {
-  const { randomBytes, createHash } = await import('node:crypto')
+  const { randomBytes } = await import('node:crypto')
 
   const confidential = opts.confidential ?? true
   let plainSecret: string | null = null
@@ -24,7 +25,7 @@ export async function createClient(opts: CreateClientOpts): Promise<{
 
   if (confidential) {
     plainSecret = randomBytes(32).toString('hex')
-    hashedSecret = createHash('sha256').update(plainSecret).digest('hex')
+    hashedSecret = await hashClientSecret(plainSecret)
   }
 
   const ClientCls = await Passport.clientModel()

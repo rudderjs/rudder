@@ -19,6 +19,7 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - `src/middleware/bearer.ts` — `BearerMiddleware()`, `RequireBearer()`
 - `src/middleware/scope.ts` — `scope('read', 'write')` enforcement
 - `src/commands/` — `generateKeys()`, `createClient()`, `purgeTokens()`
+- `src/client-secret.ts` — `hashClientSecret()` / `verifyClientSecret()` (HMAC-SHA256 with `APP_KEY` pepper, plain-SHA-256 fallback)
 - `schema/passport.prisma` — 5 OAuth tables
 
 ## Architecture Rules
@@ -26,7 +27,7 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - **JWT signed with RSA-SHA256** — private key signs, public key verifies. Third parties can verify without calling your server.
 - **Keys from env or filesystem** — `PASSPORT_PRIVATE_KEY`/`PASSPORT_PUBLIC_KEY` env vars, or files at `storage/oauth-{private,public}.key`
 - **Access tokens are JWT-only; the DB row holds metadata, not a hash** — by design (see below)
-- **Client secrets are SHA-256 hashed** — never stored in plain text
+- **Client secrets are hashed at rest** — peppered HMAC-SHA256 (`peppered:<hex>`) when `APP_KEY` is set, plain SHA-256 hex digest otherwise. Format is self-describing per row, so legacy plain-SHA-256 secrets keep verifying after the operator configures `APP_KEY`. Rotating `APP_KEY` invalidates every peppered row — see "Pitfalls".
 - **Auth codes are single-use** — revoked on exchange, expire in 10 minutes
 - **PKCE required for public clients** — enforced in `validateAuthorizationRequest()`
 - **Refresh tokens revoke the old pair** — prevents replay attacks
@@ -85,3 +86,4 @@ const { plainTextToken } = await user.createToken('my-app', ['read'])
 - `exactOptionalPropertyTypes` requires careful handling of optional fields in grant responses
 - **Rotating the RSA keypair invalidates every live token.** `rudder passport:keys --force` writes a new private/public pair (the previous keys are renamed to `*.bak.<ISO-timestamp>`, so recovery is possible) but every JWT signed by the old key fails verification under the new public key on the next request. Plan rotations as a forced sign-out window for users and a coordinated re-issue for third-party integrations. There is no JWKS-style "previous key" verifier yet.
 - **Don't trust `Host` / `X-Forwarded-Host` for OAuth URLs.** The device-flow endpoint falls back to `${req.protocol}://${req.hostname}${prefix}/device` when `verificationUri` isn't configured, so an attacker-controlled `Host` header steers users to a phishing origin. Always pass an explicit `verificationUri` (or, more generally, derive OAuth URLs from `config('app.url')`) when registering passport routes behind a reverse proxy. The same caveat applies to any custom redirect/callback the app builds from request headers.
+- **Rotating `APP_KEY` invalidates every peppered client secret.** When `APP_KEY` is set, `passport:client` stores client secrets as `peppered:<HMAC-SHA256(secret, APP_KEY)>`. Replace `APP_KEY` and the HMAC no longer reproduces — every confidential client fails token-endpoint authentication until you re-issue secrets via `passport:client`. Plan `APP_KEY` rotations as a coordinated re-issuance window with third-party integrations. Legacy plain-SHA-256 rows (minted before `APP_KEY` was set) are unaffected by rotation.
