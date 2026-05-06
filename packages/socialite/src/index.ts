@@ -15,6 +15,7 @@ export { FacebookProvider } from './drivers/facebook.js'
 export { AppleProvider } from './drivers/apple.js'
 
 export type { SocialiteDriverConfig, SocialiteCallbackRequest, SocialiteHttpErrorCause } from './driver.js'
+export type { AppleSocialiteConfig } from './drivers/apple.js'
 
 // ─── Built-in driver registry ─────────────────────────────
 

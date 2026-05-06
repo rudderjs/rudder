@@ -117,6 +117,40 @@ validation clears the slot, so a leaked value can't be replayed.
 | Facebook | `facebook` | `facebook.com/v19.0/dialog/oauth` |
 | Apple | `apple` | `appleid.apple.com/auth/authorize` |
 
+### Sign-in-with-Apple — extra config
+
+Apple's OAuth flow requires a freshly-signed ES256 JWT as `client_secret`
+on every token exchange (a raw string is rejected with `invalid_client`).
+Add three Apple-specific fields to your config:
+
+```ts
+// config/socialite.ts
+import { readFileSync } from 'node:fs'
+import type { AppleSocialiteConfig } from '@rudderjs/socialite'
+
+export default {
+  apple: {
+    clientId:    Env.get('APPLE_CLIENT_ID', ''),     // Service ID, e.g. com.example.app
+    redirectUrl: Env.get('APPLE_REDIRECT_URL', ''),
+    teamId:      Env.get('APPLE_TEAM_ID', ''),       // 10-char Team ID from developer.apple.com
+    keyId:       Env.get('APPLE_KEY_ID', ''),        // 10-char Key ID for the .p8
+    privateKey:  readFileSync(Env.get('APPLE_PRIVATE_KEY_PATH', ''), 'utf8'),
+    clientSecret: '',                                // unused; left for type compat
+  } satisfies AppleSocialiteConfig,
+}
+```
+
+Download the `.p8` file once from the Apple Developer portal and either
+read it from disk (as above) or pass its PEM contents directly. The
+driver verifies returned `id_token`s against Apple's JWKS
+(`https://appleid.apple.com/auth/keys`, cached for 1h) — signature, `iss`,
+`aud`, and `exp` are all checked before any user data is trusted.
+
+Apple's first-authorization callback POSTs the user's `name` once in the
+form-post body. RudderJS reads it automatically when you pass the request
+object to `user(req)`. Your route handler must include the `body` in the
+request shape — `@rudderjs/server-hono` already does this.
+
 ## Custom Providers
 
 ```ts
