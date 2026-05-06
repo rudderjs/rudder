@@ -216,8 +216,25 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     }
   }
 
-  // Revoke the auth code (single-use)
-  await AuthCodeCls.update((authCode as any).id as string, { revoked: true } as any)
+  // Atomically consume the auth code (M3). RFC 6749 §4.1.2 requires
+  // single-use codes. Without a conditional update, two concurrent
+  // exchanges of the same code can BOTH read `revoked=false`, BOTH pass
+  // PKCE / redirect_uri / client checks, and BOTH issue tokens. The
+  // unconditional update used previously was idempotent at the SQL level,
+  // so the second writer didn't see any error. We use a conditional
+  // `where('revoked', false).updateAll(...)` instead — the underlying
+  // `UPDATE ... WHERE revoked = false` is atomic in every SQL backend, so
+  // exactly one caller observes `count === 1`; the rest see `count === 0`
+  // and surface `invalid_grant`. (Tokens already minted from a prior
+  // successful exchange of the same code are NOT retroactively revoked
+  // here — that's a separate hardening, RFC §4.1.2's SHOULD clause.)
+  const consumed = await AuthCodeCls
+    .where('id', (authCode as any).id as string)
+    .where('revoked', false)
+    .updateAll({ revoked: true } as any)
+  if (consumed === 0) {
+    throw new OAuthError('invalid_grant', 'Authorization code has already been used.')
+  }
 
   // Issue tokens
   return issueTokens({
