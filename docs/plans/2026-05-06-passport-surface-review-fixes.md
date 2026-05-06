@@ -271,10 +271,9 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - Provider doesn't validate keys at boot. First `createToken()` (potentially weeks after deploy) throws `ENOENT: ... oauth-private.key`. CLAUDE.md "Pitfalls" already calls this out, confirming users hit it.
 - Fix: at end of `boot()`, `if (!cfg.privateKey && !existsSync(...))` log a `[passport]` warning. Warn, don't throw — runtime-configured keys are valid.
 
-**L5. `index.ts:179-180` — top-level `try { ... } catch {}` swallows real registration failures** ✅ VERIFIED REAL
-- Two nested `try/catch` wrap ~70 lines. Any inline `rudder.command(...)` failure (e.g. duplicate registration after HMR) is silently dropped with the misleading "rudder not available" comment.
-- Per memory `feedback_dynamic_import_silent_catch` and `feedback_trycatch_swallow_exposes_downstream` — known-bad pattern.
-- Fix: narrow to `if (e?.code === 'ERR_MODULE_NOT_FOUND' || e?.code === 'MODULE_NOT_FOUND') return; throw e`. Or let it propagate — `@rudderjs/console` is a dep of `@rudderjs/core`.
+**L5. `index.ts:179-180` — top-level `try { ... } catch {}` swallows real registration failures** ✅ FIXED — PR follow-up to #265
+- Two nested `try/catch`es wrapped ~70 lines of CLI registration with the misleading "rudder not available" comment. Any `rudder.command(...)` / `registerMakeSpecs(...)` failure (HMR duplicate, stub validation error, inner `await import('./commands/X.js')` fault) was silently dropped.
+- **Fixed**: both wrappers removed. `@rudderjs/core` is a hard dep of passport, `@rudderjs/console` is a hard dep of `@rudderjs/core`, so the dynamic imports always resolve and there's no legitimate "module not found" branch to preserve. Errors now propagate with their original stack.
 
 ### LOW
 

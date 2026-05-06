@@ -100,76 +100,80 @@ export class PassportProvider extends ServiceProvider {
 
     this.app.instance('passport', Passport)
 
-    // Register CLI commands
-    try {
-      const { rudder } = await import('@rudderjs/core')
+    // Register CLI commands. `@rudderjs/core` (which re-exports `rudder`)
+    // and `@rudderjs/console` (which exports `registerMakeSpecs`) are both
+    // hard deps via the `@rudderjs/core` → `@rudderjs/console` dependency
+    // chain, so the dynamic imports are guaranteed to resolve. We do NOT
+    // wrap registration in a catch-all — duplicate-registration bugs after
+    // HMR or stub-validation errors should surface, not get swallowed
+    // under a misleading "rudder not available" comment.
+    const { rudder } = await import('@rudderjs/core')
 
-      rudder.command('passport:keys', async (args: string[]) => {
-        const force = args.includes('--force')
-        const { generateKeys } = await import('./commands/keys.js')
-        const { privatePath, publicPath, backup } = await generateKeys({ force })
-        console.log(`  RSA keys generated:`)
-        console.log(`    Private: ${privatePath}`)
-        console.log(`    Public:  ${publicPath}`)
-        if (backup) {
-          console.log(`  Previous keys backed up to:`)
-          console.log(`    Private: ${backup.privatePath}`)
-          console.log(`    Public:  ${backup.publicPath}`)
-          console.log(`  WARNING: every JWT signed by the old key now fails verification.`)
-        }
-      }).description('Generate RSA encryption keys for OAuth tokens')
+    rudder.command('passport:keys', async (args: string[]) => {
+      const force = args.includes('--force')
+      const { generateKeys } = await import('./commands/keys.js')
+      const { privatePath, publicPath, backup } = await generateKeys({ force })
+      console.log(`  RSA keys generated:`)
+      console.log(`    Private: ${privatePath}`)
+      console.log(`    Public:  ${publicPath}`)
+      if (backup) {
+        console.log(`  Previous keys backed up to:`)
+        console.log(`    Private: ${backup.privatePath}`)
+        console.log(`    Public:  ${backup.publicPath}`)
+        console.log(`  WARNING: every JWT signed by the old key now fails verification.`)
+      }
+    }).description('Generate RSA encryption keys for OAuth tokens')
 
-      rudder.command('passport:client', async (args: string[]) => {
-        const name = args[0] ?? 'My App'
-        const isPublic = args.includes('--public')
-        const isDevice = args.includes('--device')
-        const isPersonal = args.includes('--personal')
-        const isM2M = args.includes('--client-credentials')
+    rudder.command('passport:client', async (args: string[]) => {
+      const name = args[0] ?? 'My App'
+      const isPublic = args.includes('--public')
+      const isDevice = args.includes('--device')
+      const isPersonal = args.includes('--personal')
+      const isM2M = args.includes('--client-credentials')
 
-        const grantTypes = isDevice
-          ? ['urn:ietf:params:oauth:grant-type:device_code']
-          : isPersonal
-            ? ['personal_access']
-            : isM2M
-              ? ['client_credentials']
-              : ['authorization_code', 'refresh_token']
+      const grantTypes = isDevice
+        ? ['urn:ietf:params:oauth:grant-type:device_code']
+        : isPersonal
+          ? ['personal_access']
+          : isM2M
+            ? ['client_credentials']
+            : ['authorization_code', 'refresh_token']
 
-        const { createClient } = await import('./commands/client.js')
-        const { client, secret } = await createClient({
-          name,
-          confidential: !isPublic && !isDevice,
-          grantTypes,
-        })
+      const { createClient } = await import('./commands/client.js')
+      const { client, secret } = await createClient({
+        name,
+        confidential: !isPublic && !isDevice,
+        grantTypes,
+      })
 
-        console.log(`  OAuth client created:`)
-        console.log(`    Client ID: ${(client as any).id}`)
-        console.log(`    Name:      ${client.name}`)
-        if (secret) {
-          console.log(`    Secret:    ${secret}`)
-          console.log(`    (Store this secret — it won't be shown again.)`)
-        }
-      }).description('Create a new OAuth client')
+      console.log(`  OAuth client created:`)
+      console.log(`    Client ID: ${(client as any).id}`)
+      console.log(`    Name:      ${client.name}`)
+      if (secret) {
+        console.log(`    Secret:    ${secret}`)
+        console.log(`    (Store this secret — it won't be shown again.)`)
+      }
+    }).description('Create a new OAuth client')
 
-      rudder.command('passport:purge', async () => {
-        const { purgeTokens } = await import('./commands/purge.js')
-        const counts = await purgeTokens()
-        const total = counts.accessTokens + counts.refreshTokens + counts.authCodes + counts.deviceCodes
-        console.log(`  Purged ${total} expired/revoked record(s):`)
-        console.log(`    Access tokens:  ${counts.accessTokens}`)
-        console.log(`    Refresh tokens: ${counts.refreshTokens}`)
-        console.log(`    Auth codes:     ${counts.authCodes}`)
-        console.log(`    Device codes:   ${counts.deviceCodes}`)
-      }).description('Remove expired tokens and auth codes')
+    rudder.command('passport:purge', async () => {
+      const { purgeTokens } = await import('./commands/purge.js')
+      const counts = await purgeTokens()
+      const total = counts.accessTokens + counts.refreshTokens + counts.authCodes + counts.deviceCodes
+      console.log(`  Purged ${total} expired/revoked record(s):`)
+      console.log(`    Access tokens:  ${counts.accessTokens}`)
+      console.log(`    Refresh tokens: ${counts.refreshTokens}`)
+      console.log(`    Auth codes:     ${counts.authCodes}`)
+      console.log(`    Device codes:   ${counts.deviceCodes}`)
+    }).description('Remove expired tokens and auth codes')
 
-      // Register make:* scaffolder for passport
-      try {
-        const { registerMakeSpecs } = await import('@rudderjs/console')
-        registerMakeSpecs({
-          command:     'make:passport-client',
-          description: 'Create a new OAuth client seeder',
-          label:       'Passport client seeder created',
-          directory:   'app/Seeders',
-          stub: (className) => `import { createClient } from '@rudderjs/passport'
+    // Register make:* scaffolder for passport
+    const { registerMakeSpecs } = await import('@rudderjs/console')
+    registerMakeSpecs({
+      command:     'make:passport-client',
+      description: 'Create a new OAuth client seeder',
+      label:       'Passport client seeder created',
+      directory:   'app/Seeders',
+      stub: (className) => `import { createClient } from '@rudderjs/passport'
 
 export async function ${className.replace(/Seeder$/, '').toLowerCase()}Clients(): Promise<void> {
   // Create a confidential client (server-side apps)
@@ -182,8 +186,6 @@ export async function ${className.replace(/Seeder$/, '').toLowerCase()}Clients()
   console.log('Secret:', secret)
 }
 `,
-        })
-      } catch { /* rudder not available */ }
-    } catch { /* rudder not available */ }
+    })
   }
 }
