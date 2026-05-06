@@ -1132,3 +1132,244 @@ describe('endpoint hardening — E5 / E10 / E11', () => {
   })
 })
 
+describe('HTTP Basic client authentication (E9)', () => {
+  // Regression guard for E9 — RFC 6749 §2.3.1 requires servers to support
+  // HTTP Basic for confidential client authentication; §2.3 forbids using
+  // both Basic and body params at once. The /oauth/token route now parses
+  // Basic, falls back to body params, and rejects mixed credentials.
+
+  function tokenHandler(): (req: any, res: any) => Promise<unknown> {
+    let captured: ((req: any, res: any) => Promise<unknown>) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (path: string, handler: (req: any, res: any) => Promise<unknown>) => {
+        if (path.endsWith('/token')) captured = handler
+      },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter as any)
+    return captured!
+  }
+
+  function fakeRes() {
+    let status = 0
+    let body: any = null
+    const headers: Record<string, string> = {}
+    return {
+      status(s: number) { status = s; return this },
+      json(b: unknown) { body = b; return this },
+      header(k: string, v: string) { headers[k] = v; return this },
+      get statusValue() { return status },
+      get bodyValue() { return body },
+      get headersValue() { return headers },
+    }
+  }
+
+  test('E9 — Basic header credentials are accepted (no body params required)', async () => {
+    Passport.reset()
+    // Stub out the client lookup so we get past credential extraction.
+    // The grant will fail with "Invalid client secret" because we don't
+    // pre-hash matching secrets in the fake — that's fine, we just want
+    // to prove the route accepted the Basic header and didn't reject as
+    // "client_id is required."
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id: 'C-1', name: 'app',
+            secret: 'irrelevant', confidential: true, revoked: false,
+            redirectUris: '[]', grantTypes: '["client_credentials"]', scopes: '[]',
+          }) as any,
+        }
+      }
+    }
+    Passport.useClientModel(FakeClient as any)
+
+    const handler = tokenHandler()
+    const basic = Buffer.from('C-1:secret-123', 'utf8').toString('base64')
+    const req = {
+      headers: { authorization: `Basic ${basic}` },
+      raw: {} as Record<string, unknown>,
+      body: { grant_type: 'client_credentials' },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    // Surfaces invalid_client (secret mismatch) which means credential
+    // extraction succeeded — the alternative pre-fix would have been
+    // "client_id is required." (no body, no header parsing yet).
+    assert.equal(res.statusValue, 401)
+    assert.equal(res.bodyValue.error, 'invalid_client')
+    assert.match(res.bodyValue.error_description, /Invalid client secret/)
+
+    Passport.reset()
+  })
+
+  test('E9 — Basic prefix is case-insensitive (basic / BASIC accepted)', async () => {
+    Passport.reset()
+    Passport.useClientModel(class {
+      static where() { return { first: async () => null } }
+    } as any)
+
+    const handler = tokenHandler()
+    for (const prefix of ['basic', 'BASIC', 'Basic']) {
+      const basic = Buffer.from('C-X:s', 'utf8').toString('base64')
+      const req = {
+        headers: { authorization: `${prefix} ${basic}` },
+        raw: {},
+        body: { grant_type: 'authorization_code', code: 'AC' },
+      }
+      const res = fakeRes()
+      await handler(req, res)
+      // No client found → invalid_client with the resolved id 'C-X'.
+      // Pre-fix, only `Basic` would parse; `basic`/`BASIC` would skip
+      // header parsing and fall back to body, throwing "client_id is
+      // required." We assert we did NOT get that fallback message.
+      assert.equal(res.bodyValue.error, 'invalid_client', `${prefix}: must parse as Basic`)
+    }
+
+    Passport.reset()
+  })
+
+  test('E9 — sending client_secret in BOTH Basic header and body is rejected', async () => {
+    // RFC 6749 §2.3 — clients MUST NOT use both at once. Reject with
+    // invalid_request rather than silently picking one.
+    Passport.reset()
+    const handler = tokenHandler()
+    const basic = Buffer.from('C-1:header-secret', 'utf8').toString('base64')
+    const req = {
+      headers: { authorization: `Basic ${basic}` },
+      raw: {},
+      body: {
+        grant_type:    'client_credentials',
+        client_secret: 'body-secret',
+      },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    assert.equal(res.statusValue, 401)
+    assert.equal(res.bodyValue.error, 'invalid_request')
+    assert.match(res.bodyValue.error_description, /must not be sent in both/)
+
+    Passport.reset()
+  })
+
+  test('E9 — Basic header client_id mismatching body client_id is rejected', async () => {
+    Passport.reset()
+    const handler = tokenHandler()
+    const basic = Buffer.from('C-HEADER:s', 'utf8').toString('base64')
+    const req = {
+      headers: { authorization: `Basic ${basic}` },
+      raw: {},
+      body: {
+        grant_type: 'client_credentials',
+        client_id:  'C-BODY',
+      },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    assert.equal(res.statusValue, 401)
+    assert.equal(res.bodyValue.error, 'invalid_request')
+    assert.match(res.bodyValue.error_description, /does not match request body/)
+
+    Passport.reset()
+  })
+
+  test('E9 — malformed Basic credentials (no colon) → invalid_request', async () => {
+    Passport.reset()
+    const handler = tokenHandler()
+    // base64 of "noColonHere" — no separator means no client_id/secret split.
+    const malformed = Buffer.from('noColonHere', 'utf8').toString('base64')
+    const req = {
+      headers: { authorization: `Basic ${malformed}` },
+      raw: {},
+      body: { grant_type: 'client_credentials' },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    assert.equal(res.statusValue, 401)
+    assert.equal(res.bodyValue.error, 'invalid_request')
+    assert.match(res.bodyValue.error_description, /Malformed HTTP Basic/)
+
+    Passport.reset()
+  })
+
+  test('E9 — body-only credentials still work (unchanged path)', async () => {
+    // Backward compat: clients that don't use Basic should keep working.
+    Passport.reset()
+    Passport.useClientModel(class {
+      static where() { return { first: async () => null } }
+    } as any)
+
+    const handler = tokenHandler()
+    const req = {
+      headers: {},
+      raw: {},
+      body: {
+        grant_type:    'authorization_code',
+        code:          'AC-1',
+        client_id:     'C-BODY',
+        client_secret: 'body-secret',
+        redirect_uri:  'https://app.example.com/cb',
+      },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    // No client found → invalid_client (downstream lookup) — proves the
+    // body credentials made it to the grant.
+    assert.equal(res.bodyValue.error, 'invalid_client')
+
+    Passport.reset()
+  })
+
+  test('E9 — missing client_id (no header, no body) → invalid_request', async () => {
+    Passport.reset()
+    const handler = tokenHandler()
+    const req = {
+      headers: {},
+      raw: {},
+      body: { grant_type: 'authorization_code', code: 'AC-1' },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    assert.equal(res.bodyValue.error, 'invalid_request')
+    assert.match(res.bodyValue.error_description, /client_id is required/)
+
+    Passport.reset()
+  })
+
+  test('E9 — client_credentials without secret → invalid_request 401', async () => {
+    // The grant requires a secret (it's confidential-only). Surfacing it
+    // here yields a clearer error than letting the grant lookup the
+    // empty hash and throw "Invalid client secret."
+    Passport.reset()
+    const handler = tokenHandler()
+    const req = {
+      headers: {},
+      raw: {},
+      body: { grant_type: 'client_credentials', client_id: 'C-1' },
+    }
+    const res = fakeRes()
+
+    await handler(req, res)
+
+    assert.equal(res.statusValue, 401)
+    assert.equal(res.bodyValue.error, 'invalid_request')
+    assert.match(res.bodyValue.error_description, /client_secret is required/)
+    assert.equal(res.headersValue['WWW-Authenticate'], 'Basic realm="oauth"', 'WWW-Authenticate header on 401')
+
+    Passport.reset()
+  })
+})
+
