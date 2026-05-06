@@ -64,14 +64,19 @@ export class SessionInstance {
   private readonly _config: SessionConfig
 
   constructor(payload: SessionPayload, driver: InternalDriver, config: SessionConfig) {
+    // Default missing fields rather than trusting the shape — legacy and
+    // corrupt redis entries (or third-party writes) may omit flash_next or
+    // data entirely, and crashing the constructor takes the whole request
+    // down on every load.
+    const flashPrev = payload.flash_next ?? {}
     this._id        = payload.id
-    this._data      = { ...payload.data }
-    this._flash     = { ...payload.flash_next }  // prev flash_next → current flash
+    this._data      = { ...(payload.data ?? {}) }
+    this._flash     = { ...flashPrev }  // prev flash_next → current flash
     this._flashNext = {}
     this._driver    = driver
     this._config    = config
     // Flash data was consumed — mark dirty so save() clears it from the cookie
-    if (Object.keys(payload.flash_next).length > 0) this._dirty = true
+    if (Object.keys(flashPrev).length > 0) this._dirty = true
   }
 
   get<T>(key: string, fallback?: T): T | undefined {
@@ -116,6 +121,17 @@ export class SessionInstance {
     return this._id
   }
 
+  /**
+   * Mint a fresh session id and best-effort destroy the prior one server-side.
+   *
+   * **Cookie driver caveat (`session.driver = 'cookie'`):** the previous
+   * cookie remains valid until its `Max-Age` expires. The cookie driver is
+   * stateless — there is no server-side store to delete from — so a stolen
+   * pre-regenerate cookie can still be replayed within its TTL. Apps that
+   * need true post-logout invalidation (or fixation defense beyond
+   * "rotate the id on login") must use the redis driver, where `destroy()`
+   * actually removes the key. See README "Sessions" → "Driver tradeoffs".
+   */
   async regenerate(): Promise<void> {
     await this._driver.destroy(this._id)
     this._id = randomUUID()
@@ -261,7 +277,10 @@ class CookieDriver implements InternalDriver {
   }
 
   async destroy(_id: string): Promise<void> {
-    // Cookie driver: nothing to destroy server-side
+    // Cookie driver is stateless — there is no server-side store to delete
+    // from. The pre-regenerate cookie therefore remains valid until its
+    // Max-Age expires; this is documented on `SessionInstance.regenerate()`.
+    // Apps that need true post-logout invalidation must use the redis driver.
   }
 
   private empty(): SessionPayload {
@@ -271,9 +290,21 @@ class CookieDriver implements InternalDriver {
 
 // ─── Redis Driver ──────────────────────────────────────────
 
+type RedisClient = {
+  get(key: string): Promise<string | null>
+  set(key: string, value: string, ...args: unknown[]): Promise<unknown>
+  del(...keys: string[]): Promise<unknown>
+}
+
 /** @internal Exported for tests; not part of the public API. */
 export class RedisDriver implements InternalDriver {
-  private client: unknown
+  // Cache the *promise* of a client, not the client itself. With a raw
+  // `if (!this.client)` guard, two concurrent first-request callers would
+  // both fall through and each construct a new ioredis instance — the
+  // second overwrites the first, leaking the first connection's FD and
+  // its retry timer. Caching the promise means concurrent callers all
+  // await the same in-flight connect.
+  private clientPromise: Promise<RedisClient> | null = null
   private readonly prefix: string
 
   constructor(
@@ -283,23 +314,24 @@ export class RedisDriver implements InternalDriver {
     this.prefix = redisConfig.prefix ?? 'session:'
   }
 
-  private async getClient(): Promise<{
-    get(key: string): Promise<string | null>
-    set(key: string, value: string, ...args: unknown[]): Promise<unknown>
-    del(...keys: string[]): Promise<unknown>
-  }> {
-    if (!this.client) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { Redis } = await import('ioredis') as any
-      this.client = this.redisConfig.url
-        ? new Redis(this.redisConfig.url)
-        : new Redis({
-            host:     this.redisConfig.host     ?? '127.0.0.1',
-            port:     this.redisConfig.port     ?? 6379,
-            password: this.redisConfig.password,
-          })
+  private getClient(): Promise<RedisClient> {
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { Redis } = await import('ioredis') as any
+        return this.redisConfig.url
+          ? new Redis(this.redisConfig.url)
+          : new Redis({
+              host:     this.redisConfig.host     ?? '127.0.0.1',
+              port:     this.redisConfig.port     ?? 6379,
+              password: this.redisConfig.password,
+            })
+      })()
+      // If the import or constructor throws, drop the rejected promise so
+      // the next call retries instead of permanently caching the failure.
+      this.clientPromise.catch(() => { this.clientPromise = null })
     }
-    return this.client as Awaited<ReturnType<RedisDriver['getClient']>>
+    return this.clientPromise
   }
 
   private key(id: string): string { return `${this.prefix}${id}` }
@@ -418,13 +450,18 @@ export function sessionMiddleware(config: SessionConfig): MiddlewareHandler {
  * Session middleware that reads its config from the DI container.
  * Requires session() provider to be registered in bootstrap/providers.ts.
  *
+ * Resolves the singleton middleware bound by `SessionProvider.boot()` to
+ * `session.middleware`, so per-route opt-ins on api routes share the same
+ * driver — and the same redis connection — as the auto-installed web group
+ * middleware. Constructing a fresh `sessionMiddleware(cfg)` per call would
+ * spin up a new RedisDriver (and a new ioredis connection) per route.
+ *
  * Usage in routes:
  *   import { SessionMiddleware } from '@rudderjs/session'
  *   Route.get('/path', handler, [SessionMiddleware()])
  */
 export function SessionMiddleware(): MiddlewareHandler {
-  const config = app().make<SessionConfig>('session.config')
-  return sessionMiddleware(config)
+  return app().make<MiddlewareHandler>('session.middleware')
 }
 
 // ─── Service Provider Factory ──────────────────────────────
