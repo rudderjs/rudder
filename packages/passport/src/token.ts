@@ -45,18 +45,26 @@ export async function createToken(payload: {
   clientId: string
   scopes:   string[]
   expiresAt: Date
+  /**
+   * Optional `iat` source in ms. When the caller (e.g. `issueTokens`) has
+   * already snapshotted wall-clock time to derive `expiresAt` and `expires_in`,
+   * passing the same `now` in here keeps `iat`, `exp`, and the API-level
+   * `expires_in` aligned to a single instant. Defaults to `Date.now()` so
+   * direct callers don't have to think about it.
+   */
+  iatMs?:   number
 }): Promise<string> {
   const { createSign } = await import('node:crypto')
   const { privateKey } = await Passport.keys()
 
   const header: JwtHeader = { alg: 'RS256', typ: 'JWT' }
 
-  const now = Math.floor(Date.now() / 1000)
+  const iat = Math.floor((payload.iatMs ?? Date.now()) / 1000)
   const jwtPayload: JwtPayload = {
     jti:    payload.tokenId,
     sub:    payload.userId,
     aud:    payload.clientId,
-    iat:    now,
+    iat,
     exp:    Math.floor(payload.expiresAt.getTime() / 1000),
     scopes: payload.scopes,
   }

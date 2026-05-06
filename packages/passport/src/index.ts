@@ -175,7 +175,7 @@ export class PassportProvider extends ServiceProvider {
       })
 
       console.log(`  OAuth client created:`)
-      console.log(`    Client ID: ${(client as any).id}`)
+      console.log(`    Client ID: ${client.id}`)
       console.log(`    Name:      ${client.name}`)
       if (secret) {
         console.log(`    Secret:    ${secret}`)
@@ -210,7 +210,7 @@ export async function ${className.replace(/Seeder$/, '').toLowerCase()}Clients()
     redirectUri: 'http://localhost:3000/callback',
     grantTypes: ['authorization_code', 'refresh_token'],
   })
-  console.log('Client ID:', (client as any).id)
+  console.log('Client ID:', client.id)
   console.log('Secret:', secret)
 }
 `,

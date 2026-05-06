@@ -2535,3 +2535,300 @@ describe('storage hygiene — fillable / hidden / casts / null guards', () => {
   })
 })
 
+describe('mechanical cleanup bundle — L7 / L8 / P12 / E12', () => {
+  // Regression guards for the four findings closed in this PR. Tests are
+  // colocated rather than split per finding so the describe block matches
+  // the changeset entry — each `test()` notes which finding it covers.
+
+  function fakeClientModel(record: Record<string, unknown> | null) {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => record as any }
+      }
+    }
+    return FakeClient as any
+  }
+
+  // ── L7: declare id on token models ────────────────────────
+
+  test('L7 — token models declare `id` so callers don\'t need (x as any).id casts', () => {
+    // Concrete-class type assertion: if any model removes its `declare id`
+    // the structural assignment fails at typecheck time. Doubles as a smoke
+    // test that property access works at runtime against a hydrated row.
+    const c = OAuthClient.hydrate({ id: 'C-1', name: 'x', confidential: false, redirectUris: '[]', grantTypes: '[]', scopes: '[]', revoked: false } as any) as OAuthClient
+    const a = AccessToken.hydrate({ id: 'A-1', userId: 'U-1', clientId: 'C-1', revoked: false, expiresAt: new Date() } as any) as AccessToken
+    const r = RefreshToken.hydrate({ id: 'R-1', accessTokenId: 'A-1', revoked: false, expiresAt: new Date(), familyId: null } as any) as RefreshToken
+    const x = AuthCode.hydrate({ id: 'AC-1', userId: 'U-1', clientId: 'C-1', revoked: false, expiresAt: new Date(), redirectUri: null, codeChallenge: null, codeChallengeMethod: null } as any) as AuthCode
+    const d = DeviceCode.hydrate({ id: 'D-1', clientId: 'C-1', userCode: 'X', deviceCode: 'Y', userId: null, approved: null, expiresAt: new Date(), lastPolledAt: null } as any) as DeviceCode
+    assert.equal(c.id, 'C-1')
+    assert.equal(a.id, 'A-1')
+    assert.equal(r.id, 'R-1')
+    assert.equal(x.id, 'AC-1')
+    assert.equal(d.id, 'D-1')
+  })
+
+  // ── L8: device-flow verification URI prefers config('app.url') ─
+
+  test('L8 — /oauth/device/code uses config(\'app.url\') when set, not req.hostname', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-DEVICE', name: 'd', secret: null, confidential: false,
+      redirectUris: '[]',
+      grantTypes: '["urn:ietf:params:oauth:grant-type:device_code"]',
+      scopes: '[]', revoked: false,
+    }))
+
+    let captured: { user_code?: string; verification_uri?: string; verification_uri_complete?: string } | undefined
+    class FakeDeviceCode {
+      static async create() {}
+    }
+    Passport.useDeviceCodeModel(FakeDeviceCode as any)
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/device/code')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.ok(postHandler, 'POST /oauth/device/code must be registered')
+
+    // Install a minimal config repo on globalThis with app.url set; the
+    // handler should prefer it over the attacker-controlled Host header.
+    // We construct a duck-typed `{ get(key, fallback) }` shape directly
+    // rather than depending on @rudderjs/support — that's transitive only.
+    const previous = (globalThis as Record<string, unknown>)['__rudderjs_config__']
+    ;(globalThis as Record<string, unknown>)['__rudderjs_config__'] = {
+      get(key: string, fallback?: unknown) {
+        return key === 'app.url' ? 'https://canonical.example.com' : fallback
+      },
+    }
+    try {
+      const res = { json: (p: any) => { captured = p } }
+      const req = {
+        protocol: 'http',
+        hostname: 'attacker.example.com',  // would-be spoofed Host header
+        body: { client_id: 'C-DEVICE' },
+      }
+      await postHandler!(req, res)
+    } finally {
+      ;(globalThis as Record<string, unknown>)['__rudderjs_config__'] = previous
+    }
+
+    assert.ok(captured, 'handler must respond')
+    assert.equal(captured!.verification_uri, 'https://canonical.example.com/oauth/device')
+    assert.match(captured!.verification_uri_complete ?? '', /^https:\/\/canonical\.example\.com\/oauth\/device\?user_code=/)
+    Passport.reset()
+  })
+
+  test('L8 — explicit opts.verificationUri wins over config(\'app.url\')', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-DEVICE', name: 'd', secret: null, confidential: false,
+      redirectUris: '[]',
+      grantTypes: '["urn:ietf:params:oauth:grant-type:device_code"]',
+      scopes: '[]', revoked: false,
+    }))
+    class FakeDeviceCode { static async create() {} }
+    Passport.useDeviceCodeModel(FakeDeviceCode as any)
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/device/code')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter, { verificationUri: 'https://override.example.com/d' })
+
+    const previous = (globalThis as Record<string, unknown>)['__rudderjs_config__']
+    ;(globalThis as Record<string, unknown>)['__rudderjs_config__'] = {
+      get(key: string, fallback?: unknown) {
+        return key === 'app.url' ? 'https://canonical.example.com' : fallback
+      },
+    }
+    try {
+      let captured: any
+      const res = { json: (p: any) => { captured = p } }
+      await postHandler!({ protocol: 'http', hostname: 'attacker.example.com', body: { client_id: 'C-DEVICE' } }, res)
+      assert.equal(captured.verification_uri, 'https://override.example.com/d')
+    } finally {
+      ;(globalThis as Record<string, unknown>)['__rudderjs_config__'] = previous
+    }
+    Passport.reset()
+  })
+
+  // ── P12: single Date.now() snapshot for iat / exp / expires_in ─
+
+  test('P12 — issued JWT satisfies `iat + expires_in === exp` exactly', async () => {
+    Passport.reset()
+
+    // Real RSA keys so createToken produces a verifiable JWT.
+    const { generateKeyPairSync } = await import('node:crypto')
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    })
+    Passport.setKeys(privateKey, publicKey)
+
+    class FakeAccessToken {
+      static async create(data: Record<string, unknown>) { return { id: 'AT-1', ...data } }
+    }
+    class FakeRefreshToken {
+      static async create(data: Record<string, unknown>) { return { id: 'RT-1', ...data } }
+    }
+    Passport.useTokenModel(FakeAccessToken as any)
+    Passport.useRefreshTokenModel(FakeRefreshToken as any)
+
+    const { issueTokens } = await import('./grants/issue-tokens.js')
+    const result = await issueTokens({
+      userId:   'U-1',
+      clientId: 'C-1',
+      scopes:   ['read'],
+      includeRefresh: false,
+    })
+
+    const decoded = decodeToken(result.access_token)
+    // Single `now` snapshot at the top of issueTokens means iat + expires_in
+    // is a closed-form for exp — no off-by-1-second drift across the
+    // intervening async DB writes + key load.
+    assert.equal(decoded.iat + result.expires_in, decoded.exp,
+      `expected iat (${decoded.iat}) + expires_in (${result.expires_in}) === exp (${decoded.exp})`)
+    Passport.reset()
+  })
+
+  // ── E12: state echo + report() on auth-endpoint errors ─
+
+  test('E12 — POST /oauth/authorize echoes `state` on OAuth error responses', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let payload: any
+    const res = { status() { return this }, json(p: any) { payload = p } }
+    await postHandler!({
+      raw: { __rjs_user: { id: 'U-1' } },
+      body: {
+        client_id:    'C-PUBLIC',
+        redirect_uri: 'https://attacker.example.com/cb',  // not whitelisted → invalid_request
+        scopes:       ['read'],
+        state:        'opaque-csrf-123',
+      },
+    }, res)
+    assert.equal(payload.error, 'invalid_request')
+    assert.equal(payload.state, 'opaque-csrf-123', 'state MUST be echoed on auth-endpoint errors (RFC 6749 §4.1.2.1)')
+    Passport.reset()
+  })
+
+  test('E12 — POST /oauth/authorize echoes `state` on the unauthenticated branch', async () => {
+    Passport.reset()
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let payload: any; let status = 0
+    const res = { status(s: number) { status = s; return this }, json(p: any) { payload = p } }
+    await postHandler!({ body: { state: 'csrf-abc' } }, res)
+    assert.equal(status, 401)
+    assert.equal(payload.error, 'unauthenticated')
+    assert.equal(payload.state, 'csrf-abc')
+    Passport.reset()
+  })
+
+  test('E12 — DELETE /oauth/authorize echoes `state` on error responses', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    let deleteHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   () => {},
+      delete: (p: string, h: any) => { if (p.endsWith('/authorize')) deleteHandler = h },
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let payload: any
+    const res = { status() { return this }, json(p: any) { payload = p } }
+    await deleteHandler!({
+      body: {
+        client_id:    'C-PUBLIC',
+        redirect_uri: 'https://attacker.example.com/cb',
+        state:        'csrf-zzz',
+      },
+    }, res)
+    assert.equal(payload.error, 'invalid_request')
+    assert.equal(payload.state, 'csrf-zzz')
+    Passport.reset()
+  })
+
+  test('E12 — server_error path calls report() and still echoes state', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientModel({
+      id: 'C-PUBLIC', name: 'pub', secret: null, confidential: false,
+      redirectUris: '["https://app.example.com/callback"]',
+      grantTypes: '["authorization_code"]', scopes: '[]', revoked: false,
+    }))
+
+    // Force a non-OAuthError throw out of issueAuthCode by failing the
+    // AuthCode.create() call.
+    class ExplodingAuthCode {
+      static async create() { throw new Error('synthetic boom — DB went away') }
+      static where() { return { first: async () => null } }
+    }
+    Passport.useAuthCodeModel(ExplodingAuthCode as any)
+
+    const { setExceptionReporter } = await import('@rudderjs/core')
+    const reported: unknown[] = []
+    setExceptionReporter((e) => { reported.push(e) })
+    try {
+      let postHandler: ((req: any, res: any) => any) | undefined
+      const fakeRouter = {
+        get:    () => {},
+        post:   (p: string, h: any) => { if (p.endsWith('/authorize')) postHandler = h },
+        delete: () => {},
+      }
+      registerPassportRoutes(fakeRouter)
+
+      let status = 0; let payload: any
+      const res = { status(s: number) { status = s; return this }, json(p: any) { payload = p } }
+      await postHandler!({
+        raw: { __rjs_user: { id: 'U-1' } },
+        body: {
+          client_id:    'C-PUBLIC',
+          redirect_uri: 'https://app.example.com/callback',
+          scopes:       ['read'],
+          state:        'state-on-server-error',
+        },
+      }, res)
+      assert.equal(status, 500)
+      assert.equal(payload.error, 'server_error')
+      assert.equal(payload.state, 'state-on-server-error')
+      assert.equal(reported.length, 1, 'non-OAuthError should be passed to report()')
+      assert.match((reported[0] as Error).message, /synthetic boom/)
+    } finally {
+      // Restore default reporter so trailing tests don't capture stray errors.
+      setExceptionReporter((e) => { console.error('[RudderJS]', e) })
+    }
+    Passport.reset()
+  })
+})
+

@@ -45,6 +45,8 @@ export class AccessToken extends Model {
       .orWhere('revoked', true)
   }
 
+  declare id: string
+
   // `userId` and `clientId` are hidden from `toJSON()` so a downstream API
   // route that surfaces `user.tokens()` doesn't accidentally leak ownership
   // links — the JWT itself isn't stored, but mapping a token id back to a

@@ -31,7 +31,14 @@ export async function issueTokens(opts: {
   familyId?:    string | null
 }): Promise<IssuedTokens> {
   const lifetime = opts.lifetime ?? Passport.tokenLifetime()
-  const expiresAt = new Date(Date.now() + lifetime)
+  // Single wall-clock snapshot for the entire issuance — `iat` (in JWT),
+  // `exp` (= expiresAt), `expires_in` (lifetime/1000), and the refresh
+  // token's `expiresAt` all derive from this instant so a downstream
+  // verifier never sees `iat + expires_in !== exp` (sub-second drift between
+  // independent `Date.now()` reads is otherwise possible across the
+  // intervening async DB writes + key load).
+  const now = Date.now()
+  const expiresAt = new Date(now + lifetime)
 
   const AccessTokenCls  = await Passport.tokenModel()
   const RefreshTokenCls = await Passport.refreshTokenModel()
@@ -45,7 +52,7 @@ export async function issueTokens(opts: {
     expiresAt,
   } as Record<string, unknown>) as AccessToken
 
-  const tokenId = (tokenRecord as any).id as string
+  const tokenId = tokenRecord.id
 
   // Sign JWT
   const jwt = await createToken({
@@ -54,6 +61,7 @@ export async function issueTokens(opts: {
     clientId: opts.clientId,
     scopes:   opts.scopes,
     expiresAt,
+    iatMs:    now,
   })
 
   const result: IssuedTokens = {
@@ -64,7 +72,7 @@ export async function issueTokens(opts: {
 
   // Issue refresh token
   if (opts.includeRefresh !== false) {
-    const refreshExpiresAt = new Date(Date.now() + Passport.refreshTokenLifetime())
+    const refreshExpiresAt = new Date(now + Passport.refreshTokenLifetime())
     const familyId = opts.familyId ?? await newFamilyId()
     const refreshRecord = await RefreshTokenCls.create({
       accessTokenId: tokenId,
@@ -73,7 +81,7 @@ export async function issueTokens(opts: {
       expiresAt:     refreshExpiresAt,
     } as Record<string, unknown>) as RefreshToken
 
-    result.refresh_token = (refreshRecord as any).id as string
+    result.refresh_token = refreshRecord.id
   }
 
   return result

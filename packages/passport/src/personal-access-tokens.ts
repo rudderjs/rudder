@@ -61,7 +61,7 @@ export function HasApiTokens<T extends abstract new (...args: any[]) => any>(
         expiresAt,
       } as Record<string, unknown>) as AccessToken
 
-      const tokenId = (tokenRecord as any).id as string
+      const tokenId = tokenRecord.id
 
       const jwt = await createToken({
         tokenId,
@@ -139,7 +139,7 @@ async function getPersonalAccessClientId(): Promise<string> {
   // Look for existing personal access client
   const existing = await ClientCls.where('name', '__personal_access__').first() as OAuthClient | null
   if (existing) {
-    _personalClientId = (existing as any).id as string
+    _personalClientId = existing.id
     return _personalClientId
   }
 
@@ -153,7 +153,7 @@ async function getPersonalAccessClientId(): Promise<string> {
     confidential: false,
   } as Record<string, unknown>) as OAuthClient
 
-  _personalClientId = (client as any).id as string
+  _personalClientId = client.id
   return _personalClientId
 }
 

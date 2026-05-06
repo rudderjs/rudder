@@ -113,7 +113,7 @@ export async function issueAuthCode(opts: {
     codeChallengeMethod: opts.codeChallengeMethod ?? null,
   } as Record<string, unknown>) as AuthCode
 
-  return (code as any).id as string
+  return code.id
 }
 
 // ─── Exchange Authorization Code for Tokens ───────────────
@@ -234,7 +234,7 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
   // successful exchange of the same code are NOT retroactively revoked
   // here — that's a separate hardening, RFC §4.1.2's SHOULD clause.)
   const consumed = await AuthCodeCls
-    .where('id', (authCode as any).id as string)
+    .where('id', authCode.id)
     .where('revoked', false)
     .updateAll({ revoked: true } as any)
   if (consumed === 0) {

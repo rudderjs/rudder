@@ -1,3 +1,4 @@
+import { config, report } from '@rudderjs/core'
 import { Passport } from './Passport.js'
 import type { AccessToken } from './models/AccessToken.js'
 import type { OAuthClient } from './models/OAuthClient.js'
@@ -106,6 +107,58 @@ function resolveClientCredentials(
     : { clientId: bodyClientId }
 }
 
+/**
+ * Resolve the device-flow verification URI in this priority order:
+ *
+ *   1. `opts.verificationUri` — explicit caller override.
+ *   2. `config('app.url')` — `${appUrl}${prefix}/device`. Trailing slash on
+ *      the configured value is tolerated.
+ *   3. `req.protocol` + `req.hostname` — last-resort fallback for dev / when
+ *      neither knob is configured. The `Host` header is attacker-controlled
+ *      behind a reverse proxy without trust-proxy, so we emit a one-shot
+ *      warning the first time we land here. Documented in CLAUDE.md.
+ */
+let _hostHeaderFallbackWarned = false
+function resolveVerificationUri(opts: PassportRouteOptions, req: { protocol?: string; hostname?: string }, prefix: string): string {
+  if (opts.verificationUri) return opts.verificationUri
+
+  const appUrl = config<string | undefined>('app.url', undefined)
+  if (typeof appUrl === 'string' && appUrl) {
+    return `${appUrl.replace(/\/$/, '')}${prefix}/device`
+  }
+
+  if (!_hostHeaderFallbackWarned) {
+    _hostHeaderFallbackWarned = true
+    console.warn(
+      '[@rudderjs/passport] Falling back to req.protocol/req.hostname for the device-flow verification URI. ' +
+      'The Host header is attacker-controlled behind a reverse proxy without trust-proxy. ' +
+      'Set APP_URL (config(\'app.url\')) or pass an explicit `verificationUri` to registerPassportRoutes() to silence this.',
+    )
+  }
+  return `${req.protocol}://${req.hostname}${prefix}/device`
+}
+
+/**
+ * Render an error response from a `/oauth/authorize` handler. RFC 6749
+ * §4.1.2.1 requires that `state` is echoed back on errors (so the client
+ * can reconcile the response against its own session) — independent of
+ * whether the response shape is a redirect or JSON, and independent of
+ * the underlying error code.
+ *
+ * We additionally call `report()` on non-`OAuthError` throws so the root
+ * cause surfaces through the configured exception reporter instead of
+ * being silently collapsed under `server_error`.
+ */
+function authErrorResponse(res: any, err: unknown, state: unknown): void {
+  const stateEcho = typeof state === 'string' && state ? { state } : {}
+  if (err instanceof OAuthError) {
+    res.status(err.statusCode).json({ ...err.toJSON(), ...stateEcho })
+    return
+  }
+  report(err)
+  res.status(500).json({ error: 'server_error', error_description: 'Internal server error.', ...stateEcho })
+}
+
 type RouteHandler = (req: any, res: any) => Promise<any> | any
 
 interface Router {
@@ -155,8 +208,8 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
   if (!skip.has('authorize')) {
     // GET /oauth/authorize — show consent (returns JSON or renders custom view)
     router.get(`${prefix}/authorize`, async (req: any, res: any) => {
+      const query = req.query ?? {}
       try {
-        const query = req.query ?? {}
         const validated = await validateAuthorizationRequest({
           clientId:            query['client_id'] ?? '',
           redirectUri:         query['redirect_uri'] ?? '',
@@ -169,7 +222,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
         const ctx = {
           client: {
-            id:   (validated.client as any).id as string,
+            id:   validated.client.id,
             name: validated.client.name,
           },
           scopes:      validated.scopes,
@@ -193,21 +246,20 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
           redirectUri: ctx.redirectUri,
         })
       } catch (e) {
-        if (e instanceof OAuthError) {
-          res.status(e.statusCode).json(e.toJSON())
-        } else {
-          res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
-        }
+        authErrorResponse(res, e, query['state'])
       }
     })
 
     // POST /oauth/authorize — user approves
     router.post(`${prefix}/authorize`, async (req: any, res: any) => {
+      const body = req.body ?? {}
       try {
-        const body = req.body ?? {}
         const userId = (req.raw as any)?.__rjs_user?.id ?? (req as any).user?.id
         if (!userId) {
-          res.status(401).json({ error: 'unauthenticated', error_description: 'User must be signed in.' })
+          // Echo state on the unauthenticated branch too — the consent UI
+          // round-trips the same payload regardless of the auth gate result.
+          const stateEcho = typeof body['state'] === 'string' && body['state'] ? { state: body['state'] } : {}
+          res.status(401).json({ error: 'unauthenticated', error_description: 'User must be signed in.', ...stateEcho })
           return
         }
 
@@ -228,18 +280,14 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
         res.json({ redirect_uri: redirectUri.toString() })
       } catch (e) {
-        if (e instanceof OAuthError) {
-          res.status(e.statusCode).json(e.toJSON())
-        } else {
-          res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
-        }
+        authErrorResponse(res, e, body['state'])
       }
     })
 
     // DELETE /oauth/authorize — user denies
     router.delete(`${prefix}/authorize`, async (req: any, res: any) => {
+      const body = req.body ?? {}
       try {
-        const body = req.body ?? {}
         await validateClientRedirect(body['client_id'], body['redirect_uri'])
 
         const redirectUri = new URL(body['redirect_uri'])
@@ -249,11 +297,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
         res.json({ redirect_uri: redirectUri.toString() })
       } catch (e) {
-        if (e instanceof OAuthError) {
-          res.status(e.statusCode).json(e.toJSON())
-        } else {
-          res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
-        }
+        authErrorResponse(res, e, body['state'])
       }
     })
   }
@@ -348,6 +392,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
           }
           res.status(e.statusCode).json(e.toJSON())
         } else {
+          report(e)
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
         }
       }
@@ -374,7 +419,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
       // QueryBuilder.updateAll() bypasses the mass-assignment filter;
       // `revoked` is no longer in `AccessToken.fillable`.
-      await AccessTokenCls.where('id', (token as any).id as string)
+      await AccessTokenCls.where('id', token.id)
         .updateAll({ revoked: true } as Record<string, unknown>)
       res.status(204).send()
     }, [RequireBearer()])
@@ -393,7 +438,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
     router.post(`${prefix}/device/code`, async (req: any, res: any) => {
       try {
         const body = req.body ?? {}
-        const verificationUri = opts.verificationUri ?? `${req.protocol}://${req.hostname}${prefix}/device`
+        const verificationUri = resolveVerificationUri(opts, req, prefix)
         const result = await requestDeviceCode({
           clientId: body['client_id'],
           scope:    body['scope'],
@@ -404,6 +449,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
         if (e instanceof OAuthError) {
           res.status(e.statusCode).json(e.toJSON())
         } else {
+          report(e)
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
         }
       }
@@ -424,6 +470,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
         if (e instanceof OAuthError) {
           res.status(e.statusCode).json(e.toJSON())
         } else {
+          report(e)
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
         }
       }

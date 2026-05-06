@@ -84,7 +84,7 @@ export async function approveDeviceCode(userCode: string, userId: string, approv
     throw new OAuthError('invalid_request', 'Device code has already been used.')
   }
 
-  await DeviceCodeCls.update((device as any).id as string, {
+  await DeviceCodeCls.update(device.id, {
     userId,
     approved,
   } as any)
@@ -132,7 +132,7 @@ export async function pollDeviceCode(params: {
   }
 
   // Update last polled time
-  await DeviceCodeCls.update((device as any).id as string, {
+  await DeviceCodeCls.update(device.id, {
     lastPolledAt: new Date(),
   } as any)
 
@@ -153,7 +153,7 @@ export async function pollDeviceCode(params: {
   })
 
   // Clean up the device code
-  await DeviceCodeCls.delete((device as any).id as string)
+  await DeviceCodeCls.delete(device.id)
 
   return { status: 'authorized', tokens }
 }

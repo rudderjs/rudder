@@ -95,8 +95,8 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
   // mass-assignment filter (`revoked` is no longer in fillable on either
   // model) and avoids paying for a second hydration round-trip per
   // refresh.
-  await RefreshTokenCls.where('id', (refreshToken as any).id).updateAll({ revoked: true } as Record<string, unknown>)
-  await AccessTokenCls.where('id', (accessToken as any).id).updateAll({ revoked: true } as Record<string, unknown>)
+  await RefreshTokenCls.where('id', refreshToken.id).updateAll({ revoked: true } as Record<string, unknown>)
+  await AccessTokenCls.where('id', accessToken.id).updateAll({ revoked: true } as Record<string, unknown>)
 
   // Issue new pair — propagate the existing familyId so the rotation chain
   // is preserved. Legacy rows with null get a fresh family on next rotation.
@@ -135,7 +135,7 @@ async function revokeFamily(
       .where('revoked', false)
       .updateAll({ revoked: true } as Record<string, unknown>)
 
-    const accessTokenIds = family.map(rt => (rt as any).accessTokenId as string)
+    const accessTokenIds = family.map(rt => rt.accessTokenId)
     // `Model.where(col, val)` is 2-arg only; operator overloads live on the
     // QueryBuilder returned by `query()`. Use that to express IN(...).
     await AccessTokenCls.query().where('id', 'IN', accessTokenIds)
