@@ -35,7 +35,16 @@
   "dependencies": {
     "@rudderjs/core": "workspace:^"
   },
+  "peerDependencies": {
+    "@rudderjs/session": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/session": {
+      "optional": false
+    }
+  },
   "devDependencies": {
+    "@rudderjs/session": "workspace:^",
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },

@@ -1,3 +1,5 @@
+import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { Session } from '@rudderjs/session'
 import { SocialUser } from './social-user.js'
 
 // ─── Driver Contract ──────────────────────────────────────
@@ -12,6 +14,7 @@ export interface SocialiteDriverConfig {
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000
+const STATE_BYTES        = 20
 
 /** Detail attached to OAuth provider errors via `Error.cause`. */
 export interface SocialiteHttpErrorCause {
@@ -19,8 +22,28 @@ export interface SocialiteHttpErrorCause {
   body:   string
 }
 
+/**
+ * Thrown when an OAuth callback's `state` parameter is missing, doesn't
+ * match the value the framework stored before redirect, or arrives without
+ * a session in context. Indicates a CSRF / state-fixation attempt — apps
+ * should treat as auth failure.
+ */
+export class InvalidStateException extends Error {
+  constructor(message = 'OAuth state mismatch — possible CSRF attack.') {
+    super(`[RudderJS Socialite] ${message}`)
+    this.name = 'InvalidStateException'
+  }
+}
+
+/** Shape of the request object accepted by `user()` and `validateRequestState`. */
+export interface SocialiteCallbackRequest {
+  query: Record<string, string>
+  body?: unknown
+}
+
 export abstract class SocialiteDriver {
   protected scopes: string[]
+  private _stateless = false
 
   constructor(protected readonly config: SocialiteDriverConfig) {
     this.scopes = config.scopes ?? this.defaultScopes()
@@ -41,6 +64,15 @@ export abstract class SocialiteDriver {
   /** Parse the provider's user API response into a SocialUser. */
   protected abstract mapToUser(data: Record<string, unknown>, token: string, refreshToken: string | null): SocialUser
 
+  /**
+   * Provider key used to namespace the session state slot. Defaults to the
+   * lowercase class name with a trailing `provider` stripped (e.g. `GitHubProvider`
+   * → `github`). Override on a subclass if a custom key is preferred.
+   */
+  protected providerName(): string {
+    return this.constructor.name.toLowerCase().replace(/provider$/, '')
+  }
+
   /** Add extra scopes. */
   withScopes(scopes: string[]): this {
     this.scopes = [...new Set([...this.scopes, ...scopes])]
@@ -53,14 +85,36 @@ export abstract class SocialiteDriver {
     return this
   }
 
+  /**
+   * Disable state generation + validation (Laravel `->stateless()`).
+   *
+   * Use for OAuth flows that can't reach the session — e.g. mobile clients,
+   * machine-to-machine auth, or token grants where the round-trip happens
+   * entirely server-to-server. The default (stateful) generates a CSPRNG
+   * `state` on redirect, stores it in the session, and validates it on
+   * callback to prevent CSRF / state-fixation.
+   */
+  stateless(): this {
+    this._stateless = true
+    return this
+  }
+
+  isStateless(): boolean {
+    return this._stateless
+  }
+
   /** Get the redirect URL to the OAuth provider. */
   getRedirectUrl(state?: string): string {
+    // Caller-supplied state always wins (test-friendly + advanced override).
+    // When stateful and no state is supplied, generate + persist one.
+    const stateValue = state ?? (this._stateless ? undefined : this.generateAndStoreState())
+
     const params = new URLSearchParams({
       client_id:     this.config.clientId,
       redirect_uri:  this.config.redirectUrl,
       response_type: 'code',
       scope:         this.scopes.join(' '),
-      ...(state ? { state } : {}),
+      ...(stateValue ? { state: stateValue } : {}),
     })
     return `${this.authUrl()}?${params.toString()}`
   }
@@ -128,7 +182,11 @@ export abstract class SocialiteDriver {
   }
 
   /** Get the authenticated user from the OAuth callback. */
-  async user(codeOrRequest: string | { query: Record<string, string> }): Promise<SocialUser> {
+  async user(codeOrRequest: string | SocialiteCallbackRequest): Promise<SocialUser> {
+    if (typeof codeOrRequest !== 'string') {
+      this.validateRequestState(codeOrRequest)
+    }
+
     const code = typeof codeOrRequest === 'string'
       ? codeOrRequest
       : codeOrRequest.query['code']
@@ -154,6 +212,80 @@ export abstract class SocialiteDriver {
 
     const data = await res.json() as Record<string, unknown>
     return this.mapToUser(data, token, refreshToken ?? null)
+  }
+
+  // ─── State (CSRF defense) ───────────────────────────────
+
+  private get stateKey(): string {
+    return `socialite_state:${this.providerName()}`
+  }
+
+  /**
+   * Generate a CSPRNG state token, store it on the session, and return the
+   * value to embed in the authorize URL. Throws when no session is in
+   * context — the caller can opt out via `.stateless()`.
+   */
+  private generateAndStoreState(): string {
+    if (!Session.active()) {
+      throw new Error(
+        '[RudderJS Socialite] Cannot generate OAuth state: no session in context. ' +
+        'Register session middleware (auto-installed on the web group), or call ' +
+        '`.stateless()` on the driver if state validation is intentionally skipped.',
+      )
+    }
+    const value = randomBytes(STATE_BYTES).toString('hex')
+    Session.put(this.stateKey, value)
+    return value
+  }
+
+  /**
+   * Validate the `state` carried in a callback request against what was
+   * stored at redirect time. Pulls from `query.state` first, falling back
+   * to the request body's `state` (used by Apple's `form_post` callback).
+   * Always forgets the stored value after validation — the state is
+   * one-time use, so a leaked state can't be replayed.
+   */
+  protected validateRequestState(req: SocialiteCallbackRequest): void {
+    if (this._stateless) return
+
+    if (!Session.active()) {
+      throw new InvalidStateException(
+        'No session in context for state validation. Register session middleware ' +
+        'or use `.stateless()` if state validation is intentionally skipped.',
+      )
+    }
+
+    const stored = Session.get<string>(this.stateKey)
+    Session.forget(this.stateKey)
+
+    const provided = this.extractState(req)
+
+    if (
+      typeof stored   !== 'string' || stored.length   === 0 ||
+      typeof provided !== 'string' || provided.length === 0 ||
+      !this.constantTimeStringEqual(stored, provided)
+    ) {
+      throw new InvalidStateException()
+    }
+  }
+
+  private extractState(req: SocialiteCallbackRequest): string | undefined {
+    const fromQuery = req.query['state']
+    if (typeof fromQuery === 'string' && fromQuery.length > 0) return fromQuery
+
+    const body = req.body
+    if (body && typeof body === 'object') {
+      const fromBody = (body as Record<string, unknown>)['state']
+      if (typeof fromBody === 'string' && fromBody.length > 0) return fromBody
+    }
+    return undefined
+  }
+
+  private constantTimeStringEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false
+    const ab = Buffer.from(a, 'utf8')
+    const bb = Buffer.from(b, 'utf8')
+    return timingSafeEqual(ab, bb)
   }
 
   /**

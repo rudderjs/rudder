@@ -222,6 +222,18 @@ export class Session {
   }
 }
 
+/**
+ * Test-only — run `fn` inside a session ALS context populated by `session`.
+ * Lets unit tests in other packages exercise code paths that go through the
+ * `Session` static facade (e.g. CSRF helpers, OAuth state) without standing
+ * up the full request middleware. NOT for production code.
+ *
+ * @internal
+ */
+export function _runWithSession<T>(session: SessionInstance, fn: () => T): T {
+  return _als.run(session, fn)
+}
+
 // ─── Sign / Verify primitives ──────────────────────────────
 
 // Generic HMAC-SHA256 sign+verify shared by both drivers. Cookie driver signs
