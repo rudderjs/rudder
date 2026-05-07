@@ -4,6 +4,7 @@ import type { AccessToken }  from '../models/AccessToken.js'
 import type { RefreshToken } from '../models/RefreshToken.js'
 import { accessTokenHelpers, refreshTokenHelpers } from '../models/helpers.js'
 import { verifyClientSecret } from '../client-secret.js'
+import { hashOpaqueToken } from '../opaque-token.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError } from './authorization-code.js'
 
@@ -50,8 +51,13 @@ export async function refreshTokenGrant(params: RefreshTokenRequest): Promise<Is
     }
   }
 
-  // Find refresh token
-  const refreshToken = await RefreshTokenCls.where('id', params.refreshToken).first() as RefreshToken | null
+  // Find refresh token by hashed plaintext (M5/P6) — the row's `id` is no
+  // longer the bearer secret, so a DB read leak doesn't yield usable tokens.
+  // Pre-migration tokens (which used `id` as the plaintext) won't match
+  // because their hashed form was never persisted; affected sessions force-
+  // relogin on next refresh, same blast radius as RSA keypair rotation.
+  const refreshTokenHash = await hashOpaqueToken(params.refreshToken)
+  const refreshToken = await RefreshTokenCls.where('tokenHash', refreshTokenHash).first() as RefreshToken | null
   if (!refreshToken) {
     throw new OAuthError('invalid_grant', 'Refresh token not found.')
   }

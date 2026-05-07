@@ -1,7 +1,7 @@
 import { Passport } from '../Passport.js'
 import type { AccessToken }  from '../models/AccessToken.js'
-import type { RefreshToken } from '../models/RefreshToken.js'
 import { createToken } from '../token.js'
+import { hashOpaqueToken, newOpaqueToken } from '../opaque-token.js'
 
 export interface IssuedTokens {
   access_token:  string
@@ -70,18 +70,26 @@ export async function issueTokens(opts: {
     expires_in:   Math.floor(lifetime / 1000),
   }
 
-  // Issue refresh token
+  // Issue refresh token. M5/P6: the plaintext returned to the client is a
+  // fresh CSPRNG opaque string; only its SHA-256 is persisted (`tokenHash`).
+  // The previous shape — `result.refresh_token = refreshRecord.id` — handed
+  // every active refresh token to anyone with `SELECT * ON oauth_refresh_tokens`
+  // privilege on the database.
   if (opts.includeRefresh !== false) {
     const refreshExpiresAt = new Date(now + Passport.refreshTokenLifetime())
     const familyId = opts.familyId ?? await newFamilyId()
-    const refreshRecord = await RefreshTokenCls.create({
+    const refreshPlaintext = await newOpaqueToken()
+    const refreshHash      = await hashOpaqueToken(refreshPlaintext)
+
+    await RefreshTokenCls.create({
       accessTokenId: tokenId,
+      tokenHash:     refreshHash,
       familyId,
       revoked:       false,
       expiresAt:     refreshExpiresAt,
-    } as Record<string, unknown>) as RefreshToken
+    } as Record<string, unknown>)
 
-    result.refresh_token = refreshRecord.id
+    result.refresh_token = refreshPlaintext
   }
 
   return result

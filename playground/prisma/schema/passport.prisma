@@ -28,7 +28,10 @@ model OAuthAccessToken {
 }
 
 model OAuthRefreshToken {
+  // tokenHash is SHA-256 of the plaintext refresh token returned to the
+  // client. `id` is internal-only.
   id            String   @id @default(cuid())
+  tokenHash     String   @unique
   accessTokenId String   @unique
   familyId      String?
   revoked       Boolean  @default(false)
@@ -39,7 +42,10 @@ model OAuthRefreshToken {
 }
 
 model OAuthAuthCode {
+  // tokenHash is SHA-256 of the plaintext authorization code returned to
+  // the redirect URI. `id` is internal-only.
   id                  String   @id @default(cuid())
+  tokenHash           String   @unique
   userId              String
   clientId            String
   scopes              String   @default("[]")

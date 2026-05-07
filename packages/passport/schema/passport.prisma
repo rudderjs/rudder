@@ -34,7 +34,12 @@ model OAuthAccessToken {
 }
 
 model OAuthRefreshToken {
+  // tokenHash is SHA-256 of the plaintext refresh token returned to the
+  // client. The plaintext is freshly generated CSPRNG hex; the row's `id`
+  // is internal-only. A DB read leak yields hashes, not usable bearer
+  // credentials. See `opaque-token.ts`.
   id            String   @id @default(cuid())
+  tokenHash     String   @unique
   accessTokenId String   @unique
   familyId      String?
   revoked       Boolean  @default(false)
@@ -47,7 +52,10 @@ model OAuthRefreshToken {
 }
 
 model OAuthAuthCode {
+  // tokenHash is SHA-256 of the plaintext authorization code returned to
+  // the redirect URI. Same shape as OAuthRefreshToken; `id` is internal-only.
   id                  String   @id @default(cuid())
+  tokenHash           String   @unique
   userId              String
   clientId            String
   scopes              String   @default("[]")

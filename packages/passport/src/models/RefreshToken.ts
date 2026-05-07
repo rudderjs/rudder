@@ -5,7 +5,7 @@ export class RefreshToken extends Model {
 
   // `revoked` is intentionally NOT fillable — see AccessToken.ts for the
   // rationale. Lifecycle flips happen through `revoke()` or `forceFill`.
-  static override fillable = ['accessTokenId', 'familyId', 'expiresAt']
+  static override fillable = ['accessTokenId', 'tokenHash', 'familyId', 'expiresAt']
 
   /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
   static pruneMode = 'mass' as const
@@ -19,6 +19,8 @@ export class RefreshToken extends Model {
 
   declare id: string
   declare accessTokenId: string
+  /** SHA-256 hex of the plaintext refresh token. See `opaque-token.ts`. */
+  declare tokenHash: string
   declare familyId: string | null
   declare revoked: boolean
   declare expiresAt: Date
