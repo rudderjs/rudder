@@ -481,9 +481,15 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
               // slow_down) are §5.2-shaped errors and MUST return HTTP
               // 400. 429 is for transport-level rate-limiting, not the
               // OAuth `slow_down` signal.
-              res.status(400).json({
-                error: pollResult.status,
-              })
+              //
+              // On slow_down, forward the escalated `interval` so a
+              // well-behaved client uses the new value instead of having
+              // to add 5 itself. Other variants don't need it.
+              if (pollResult.status === 'slow_down') {
+                res.status(400).json({ error: 'slow_down', interval: pollResult.interval })
+              } else {
+                res.status(400).json({ error: pollResult.status })
+              }
               return
             }
             break

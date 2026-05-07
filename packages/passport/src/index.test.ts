@@ -5,6 +5,7 @@ import {
   Passport,
   PassportProvider,
   hashClientSecret,
+  hashDeviceSecret,
   verifyClientSecret,
   createToken,
   verifyToken,
@@ -1280,20 +1281,22 @@ describe('endpoint hardening — E5 / E10 / E11', () => {
 
     // Stub Passport.deviceCodeModel so pollDeviceCode finds a row that
     // forces a slow_down response (lastPolledAt very recent → throttled).
+    // The stored row carries `*Hash` columns + an `interval` (M4 + P9).
     class FakeDeviceCode {
       static where(_col: string, _val: unknown) {
         return {
           first: async () => ({
-            id:           'DC-1',
-            clientId:     'C-1',
-            userCode:     'ABCD-WXYZ',
-            deviceCode:   'DC-1',
-            scopes:       '[]',
-            userId:       null,
-            approved:     null,
-            expiresAt:    new Date(Date.now() + 60_000),
-            lastPolledAt: new Date(), // now → forces slow_down
-            createdAt:    new Date(),
+            id:             'DC-1',
+            clientId:       'C-1',
+            userCodeHash:   'ucode-hash',
+            deviceCodeHash: 'dcode-hash',
+            scopes:         '[]',
+            userId:         null,
+            approved:       null,
+            interval:       5,
+            expiresAt:      new Date(Date.now() + 60_000),
+            lastPolledAt:   new Date(), // now → forces slow_down
+            createdAt:      new Date(),
           }) as any,
         }
       }
@@ -3041,7 +3044,7 @@ describe('mechanical cleanup bundle — L7 / L8 / P12 / E12', () => {
     const a = AccessToken.hydrate({ id: 'A-1', userId: 'U-1', clientId: 'C-1', revoked: false, expiresAt: new Date() } as any) as AccessToken
     const r = RefreshToken.hydrate({ id: 'R-1', accessTokenId: 'A-1', revoked: false, expiresAt: new Date(), familyId: null } as any) as RefreshToken
     const x = AuthCode.hydrate({ id: 'AC-1', userId: 'U-1', clientId: 'C-1', revoked: false, expiresAt: new Date(), redirectUri: null, codeChallenge: null, codeChallengeMethod: null } as any) as AuthCode
-    const d = DeviceCode.hydrate({ id: 'D-1', clientId: 'C-1', userCode: 'X', deviceCode: 'Y', userId: null, approved: null, expiresAt: new Date(), lastPolledAt: null } as any) as DeviceCode
+    const d = DeviceCode.hydrate({ id: 'D-1', clientId: 'C-1', userCodeHash: 'X', deviceCodeHash: 'Y', userId: null, approved: null, interval: 5, expiresAt: new Date(), lastPolledAt: null } as any) as DeviceCode
     assert.equal(c.id, 'C-1')
     assert.equal(a.id, 'A-1')
     assert.equal(r.id, 'R-1')
@@ -3452,4 +3455,317 @@ describe('verifyToken aud/iss validation (P7)', () => {
     assert.equal(Passport.issuer(), null, 'reset() clears issuer')
   })
 })
+
+describe('oauth_device_codes hashing + interval escalation (P9 + M4)', () => {
+  // Regression guards for P9 + M4 from the findings doc. Bundled because
+  // they share the same Prisma migration on `oauth_device_codes`.
+  //   M4 — deviceCode/userCode hashed at rest; lookups hash before query.
+  //   P9 — `interval` column escalates by 5s on slow_down (capped at 60).
+
+  /**
+   * Build a fake DeviceCode model that:
+   *   - records every where()/update()/create() call so tests can assert
+   *     the mixin hashed the input before lookup,
+   *   - returns a stored row on `.first()` whose state can be tweaked per
+   *     test (lastPolledAt / interval / hash columns).
+   */
+  function makeFake(stored: Record<string, unknown> | null) {
+    const calls: Array<{ kind: 'where' | 'update' | 'create'; args: unknown[] }> = []
+    class FakeDeviceCode {
+      static get __calls() { return calls }
+      static where(col: string, val: unknown) {
+        calls.push({ kind: 'where', args: [col, val] })
+        return { first: async () => stored as any }
+      }
+      static async create(data: Record<string, unknown>) {
+        calls.push({ kind: 'create', args: [data] })
+        return { id: 'D-NEW', ...data }
+      }
+      static async update(id: string, data: Record<string, unknown>) {
+        calls.push({ kind: 'update', args: [id, data] })
+      }
+      static async delete(id: string) {
+        calls.push({ kind: 'update', args: [id, { __deleted: true }] })
+      }
+    }
+    return FakeDeviceCode as any
+  }
+
+  function fakeClientForDevice(scopes: string[] = []) {
+    class FakeClient {
+      static where() {
+        return {
+          first: async () => ({
+            id: 'C-DEVICE', name: 'd', secret: null, confidential: false, revoked: false,
+            redirectUris: '[]',
+            grantTypes:   '["urn:ietf:params:oauth:grant-type:device_code"]',
+            scopes:       JSON.stringify(scopes),
+          }) as any,
+        }
+      }
+    }
+    return FakeClient as any
+  }
+
+  // ── M4 ─────────────────────────────────────────────────
+
+  test('M4 — requestDeviceCode persists hashes only; plaintext returned to caller', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientForDevice())
+    const Fake = makeFake(null)
+    Passport.useDeviceCodeModel(Fake)
+
+    const response = await requestDeviceCode({
+      clientId: 'C-DEVICE',
+      verificationUri: 'https://app.example.com/oauth/device',
+    })
+
+    assert.ok(response.device_code, 'plaintext device_code returned to caller')
+    assert.ok(response.user_code, 'plaintext user_code returned to caller')
+
+    const create = Fake.__calls.find((c: any) => c.kind === 'create')
+    assert.ok(create, 'create() must be called')
+    const data = create.args[0] as Record<string, unknown>
+
+    assert.equal(data['deviceCodeHash'], await hashDeviceSecret(response.device_code),
+      'persisted deviceCodeHash must be SHA-256 of plaintext')
+    assert.equal(data['userCodeHash'], await hashDeviceSecret(response.user_code),
+      'persisted userCodeHash must be SHA-256 of plaintext')
+    // Plaintext columns must NOT be present on the persisted row.
+    assert.equal(data['deviceCode'], undefined)
+    assert.equal(data['userCode'], undefined)
+    Passport.reset()
+  })
+
+  test('M4 — pollDeviceCode hashes the supplied device_code before lookup', async () => {
+    Passport.reset()
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 5, expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: null,
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+    assert.equal(result.status, 'authorization_pending', 'lookup must succeed via hash')
+
+    const where = Fake.__calls.find((c: any) => c.kind === 'where')
+    assert.equal(where.args[0], 'deviceCodeHash')
+    assert.equal(where.args[1], await hashDeviceSecret('plain-device'),
+      'lookup value must be the SHA-256 hash, not the raw plaintext')
+    Passport.reset()
+  })
+
+  test('M4 — approveDeviceCode hashes user_code before lookup', async () => {
+    Passport.reset()
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: 'dchash',
+      userCodeHash:   await hashDeviceSecret('ABCD-WXYZ'),
+      scopes: '[]', userId: null, approved: null,
+      interval: 5, expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: null,
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    await approveDeviceCode('ABCD-WXYZ', 'U-1', true)
+    const where = Fake.__calls.find((c: any) => c.kind === 'where')
+    assert.equal(where.args[0], 'userCodeHash')
+    assert.equal(where.args[1], await hashDeviceSecret('ABCD-WXYZ'))
+    Passport.reset()
+  })
+
+  test('M4 — pollDeviceCode rejects a wrong plaintext (lookup miss)', async () => {
+    Passport.reset()
+    Passport.useDeviceCodeModel(makeFake(null))  // first() returns null
+
+    await assert.rejects(
+      () => pollDeviceCode({
+        grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+        deviceCode: 'wrong',
+        clientId:   'C-1',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant',
+    )
+    Passport.reset()
+  })
+
+  // ── P9 ─────────────────────────────────────────────────
+
+  test('P9 — initial interval is 5 in both response and persisted row', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeClientForDevice())
+    const Fake = makeFake(null)
+    Passport.useDeviceCodeModel(Fake)
+
+    const response = await requestDeviceCode({
+      clientId: 'C-DEVICE',
+      verificationUri: 'https://app.example.com/oauth/device',
+    })
+
+    assert.equal(response.interval, 5, 'response carries initial interval=5')
+    const create = Fake.__calls.find((c: any) => c.kind === 'create')
+    const data = create.args[0] as Record<string, unknown>
+    assert.equal(data['interval'], 5, 'persisted row starts at interval=5')
+    Passport.reset()
+  })
+
+  test('P9 — slow_down escalates interval by 5 and persists the new value', async () => {
+    Passport.reset()
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 5,
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(),  // just now → faster than the 5s window
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+
+    assert.equal(result.status, 'slow_down')
+    if (result.status === 'slow_down') {
+      assert.equal(result.interval, 10, 'escalated by 5s')
+    }
+    const update = Fake.__calls.find((c: any) => c.kind === 'update')
+    assert.ok(update, 'new interval must be persisted')
+    assert.deepEqual(update.args[1], { interval: 10 })
+    Passport.reset()
+  })
+
+  test('P9 — escalation caps at 60s', async () => {
+    Passport.reset()
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 60,  // already at the cap
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(),
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+
+    assert.equal(result.status, 'slow_down')
+    if (result.status === 'slow_down') {
+      assert.equal(result.interval, 60, 'capped at 60s — does not escalate further')
+    }
+    // Already at the cap → no update should fire.
+    const update = Fake.__calls.find((c: any) => c.kind === 'update')
+    assert.equal(update, undefined, 'no DB write when already capped')
+    Passport.reset()
+  })
+
+  test('P9 — poll within current escalated interval slows_down again at the new value', async () => {
+    Passport.reset()
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 10,  // previously escalated
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(Date.now() - 5_000),  // 5s ago — still inside the 10s window
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+    assert.equal(result.status, 'slow_down')
+    if (result.status === 'slow_down') {
+      assert.equal(result.interval, 15, 'escalates from 10 → 15')
+    }
+    Passport.reset()
+  })
+
+  test('P9 — poll after interval has elapsed proceeds normally', async () => {
+    Passport.reset()
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 5,
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(Date.now() - 6_000),  // 6s ago — outside the 5s window
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+    assert.equal(result.status, 'authorization_pending')
+    Passport.reset()
+  })
+
+  test('P9 — token endpoint forwards `interval` on slow_down', async () => {
+    // End-to-end: hits the route handler we updated, verifying the
+    // response body shape `{ error: 'slow_down', interval: N }`.
+    Passport.reset()
+    Passport.useDeviceCodeModel(makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 5,
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(),
+    }))
+
+    let postHandler: ((req: any, res: any) => any) | undefined
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, h: any) => { if (p.endsWith('/token')) postHandler = h },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+
+    let status = 0
+    let payload: any
+    const res = {
+      status(s: number) { status = s; return this },
+      json(p: any)      { payload = p },
+      header() { return this },
+    }
+    const req = {
+      raw: {} as Record<string, unknown>,
+      headers: {},
+      body: {
+        grant_type:  'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: 'plain-device',
+        client_id:   'C-1',
+      },
+    }
+    await postHandler!(req, res)
+    assert.equal(status, 400)
+    assert.equal(payload.error, 'slow_down')
+    assert.equal(payload.interval, 10, 'response body must carry the escalated interval')
+    Passport.reset()
+  })
+})
+
 

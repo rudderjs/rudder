@@ -3,7 +3,7 @@ import { Model } from '@rudderjs/orm'
 export class DeviceCode extends Model {
   static override table = 'oAuthDeviceCode'
 
-  static override fillable = ['clientId', 'userCode', 'deviceCode', 'scopes', 'userId', 'approved', 'expiresAt', 'lastPolledAt']
+  static override fillable = ['clientId', 'userCodeHash', 'deviceCodeHash', 'scopes', 'userId', 'approved', 'interval', 'expiresAt', 'lastPolledAt']
 
   /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
   static pruneMode = 'mass' as const
@@ -15,10 +15,16 @@ export class DeviceCode extends Model {
 
   declare id: string
   declare clientId: string
-  declare userCode: string
-  declare deviceCode: string
+  // SHA-256 hashes of the plaintext codes (M4). The plaintext is generated
+  // and returned once in the `/oauth/device/code` response body; only the
+  // hash is persisted. Lookups in `pollDeviceCode` / `approveDeviceCode`
+  // hash the input first and query against these columns.
+  declare userCodeHash: string
+  declare deviceCodeHash: string
   declare userId: string | null
   declare approved: boolean | null
+  /** Current polling interval in seconds (RFC 8628 §3.5). Escalates on slow_down. */
+  declare interval: number
   declare expiresAt: Date
   declare lastPolledAt: Date | null
 
