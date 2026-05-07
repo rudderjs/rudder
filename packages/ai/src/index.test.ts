@@ -2154,3 +2154,130 @@ describe('AbortSignal support', () => {
     fake.restore()
   })
 })
+
+// ─── Tool durations on observer events ───────────────────────────────────
+
+import { aiObservers } from './observers.js'
+import type { AiEvent } from './observers.js'
+
+describe('tool durations on observer events', () => {
+  let captured: AiEvent[] = []
+  let unsubscribe: (() => void) | undefined
+
+  beforeEach(() => {
+    captured = []
+    aiObservers.reset()
+    unsubscribe = aiObservers.subscribe((e) => captured.push(e))
+  })
+
+  it('captures real wall-clock duration for a tool execute', async () => {
+    const fake = AiFake.fake()
+    const sleeper = toolDefinition({
+      name: 'sleeper',
+      description: 'sleeps briefly',
+      inputSchema: z.object({}),
+    }).server(async () => { await new Promise(r => setTimeout(r, 15)); return 'awake' })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'd1', name: 'sleeper', arguments: {} }] },
+      { text: 'done' },
+    ])
+
+    await agent({ instructions: 's', tools: [sleeper] }).prompt('go')
+
+    const completed = captured.find(e => e.kind === 'agent.completed')
+    assert.ok(completed, 'expected an agent.completed observer event')
+    const observerToolCall = completed.steps[0]!.toolCalls[0]!
+    assert.strictEqual(observerToolCall.id, 'd1')
+    // At least the sleep window. Generous lower bound to avoid CI flake;
+    // the point is "non-zero, not hardcoded".
+    assert.ok(
+      observerToolCall.duration >= 10,
+      `expected duration >= 10ms, got ${observerToolCall.duration}`,
+    )
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('captures duration even when execute throws', async () => {
+    const fake = AiFake.fake()
+    const flaky = toolDefinition({
+      name: 'flaky',
+      description: 'fails after a delay',
+      inputSchema: z.object({}),
+    }).server(async (): Promise<string> => {
+      await new Promise(r => setTimeout(r, 10))
+      throw new Error('boom')
+    })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'd2', name: 'flaky', arguments: {} }] },
+      { text: 'noted' },
+    ])
+
+    await agent({ instructions: 's', tools: [flaky] }).prompt('go')
+
+    const completed = captured.find(e => e.kind === 'agent.completed')
+    assert.ok(completed)
+    const observerToolCall = completed.steps[0]!.toolCalls[0]!
+    assert.ok(
+      observerToolCall.duration >= 5,
+      `expected duration >= 5ms even on error, got ${observerToolCall.duration}`,
+    )
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('streaming variant records duration too', async () => {
+    const fake = AiFake.fake()
+    const sleeper = toolDefinition({
+      name: 'sleeper',
+      description: 'sleeps briefly',
+      inputSchema: z.object({}),
+    }).server(async () => { await new Promise(r => setTimeout(r, 12)); return 'awake' })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'd3', name: 'sleeper', arguments: {} }] },
+      { text: 'streamed done' },
+    ])
+
+    const { stream, response } = agent({ instructions: 's', tools: [sleeper] }).stream('go')
+    for await (const _ of stream) { /* drain */ }
+    await response
+
+    const completed = captured.find(e => e.kind === 'agent.completed')
+    assert.ok(completed)
+    assert.ok(
+      completed.steps[0]!.toolCalls[0]!.duration >= 8,
+      `expected duration >= 8ms in streaming, got ${completed.steps[0]!.toolCalls[0]!.duration}`,
+    )
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('paths that skip execute (validation failure) report duration 0', async () => {
+    const fake = AiFake.fake()
+    let executed = false
+    const tool = toolDefinition({
+      name: 'lookup',
+      description: 'lookup',
+      inputSchema: z.object({ q: z.string() }),
+    }).server(async () => { executed = true; return 'unreached' })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'd4', name: 'lookup', arguments: { q: 99 } }] },
+      { text: 'noted' },
+    ])
+
+    await agent({ instructions: 's', tools: [tool] }).prompt('go')
+    assert.strictEqual(executed, false)
+
+    const completed = captured.find(e => e.kind === 'agent.completed')
+    assert.ok(completed)
+    // Validation rejected the call before execute ran — duration is 0
+    // (no execution to time).
+    assert.strictEqual(completed.steps[0]!.toolCalls[0]!.duration, 0)
+    fake.restore()
+    unsubscribe?.()
+  })
+})
