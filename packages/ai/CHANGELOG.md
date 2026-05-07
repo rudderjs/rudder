@@ -1,5 +1,57 @@
 # @rudderjs/ai
 
+## 1.1.0
+
+### Minor Changes
+
+- 3df432f: Add `AbortSignal` support to `agent.prompt()` / `agent.stream()`. Pass `{ signal }` in `AgentPromptOptions` to cancel an in-flight run from outside:
+
+  ```ts
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 5000);
+  const r = await agent("You are helpful").prompt("long task", {
+    signal: ac.signal,
+  });
+
+  // or just use AbortSignal.timeout
+  const r = await agent("...").prompt("go", {
+    signal: AbortSignal.timeout(5000),
+  });
+  ```
+
+  Behavior:
+
+  - Pre-aborted signal → throws immediately, zero provider calls.
+  - Abort between iterations → loop stops at the next iteration boundary; `prompt()` rejects with the signal's reason.
+  - The signal is forwarded to provider adapters via `ProviderRequestOptions.signal`. Built-in adapters that pass it to the underlying SDK: `openai` (covers itself + azure/deepseek/groq/mistral/ollama/xai via the shared `OpenAIAdapter`), `anthropic`, `google`. Other adapters fall back to the iteration-level cancellation.
+  - Streaming variant: the stream throws and the `response` promise rejects with the same reason. Without `signal`, behavior is unchanged.
+
+  Without `signal`, behavior is identical to today.
+
+- 04ee91c: `AiFake`: add `respondWithSequence(steps)` and `failOnStep(stepIndex, error)` for scripting multi-step provider responses in tests. Each entry maps to one provider call (`{ text?, toolCalls?, finishReason? }`), so a tool-call loop can be exercised end-to-end without a real provider. Sequence exhaustion falls back to `respondWith`. `failOnStep` registers an error to throw on the Nth provider call, useful for testing onError middleware and failover paths. Streaming variant honors the same sequence.
+- 48f5fbb: Run multiple tool calls within a single agent step concurrently. When the model emits >1 tool call in one step, their `execute()` functions now run in parallel by default; the streamed chunk order is preserved as `tool-call A → updates A → tool-result A → tool-call B → ...` so consumers see deterministic sequences regardless of which tool finishes first. Approval gates, client-tool pauses, and `onBeforeToolCall` middleware decisions still resolve serially in tool-call order _before_ any `execute()` runs, matching the prior single-tool semantics.
+
+  Opt out per call (`prompt('…', { parallelTools: false })`) or per agent (override `parallelTools()` to return `false`) when tools share non-idempotent state — counters, file writes, sequential transactions. Single-tool batches always route through the serial path so live `tool-update` streaming for the one tool is unchanged.
+
+- 636433c: Add `agent.step.completed` observer event. Fires after every iteration of the agent loop with the completed step's data plus running totals (cumulative tokens, cumulative duration). Lets observers report incremental progress in real-time without waiting for the full run to finish — useful for live UIs (typing indicators, per-step token counters), pulse instrumentation, or step-level audit logging.
+
+  The terminal events (`agent.completed`, `agent.failed`) still fire after the loop exits and carry the full `steps` array. Step events are additive — existing subscribers see the new event flow through but can ignore it by checking `event.kind`. Telescope's `AiCollector` already does this so the dashboard's one-entry-per-run model is unchanged.
+
+  Closes Copilot review item 20.
+
+- 4770bcb: Validate tool call arguments against `inputSchema` at runtime. Before this, a misbehaving model returning malformed JSON or wrong types silently passed garbage to the tool's `execute`. The agent loop now runs `safeParse` on every tool call's arguments — on failure it skips `execute` and feeds a structured `{ error: 'invalid_arguments', message, issues }` result back to the model so it can correct itself. Applies to non-streaming `prompt()`, `stream()`, and the approval-resume continuation path.
+
+  Behavior change: `execute` now receives the **parsed** value, so zod transforms and defaults take effect (e.g. `z.number().default(10)` on a missing field is now `10` rather than `undefined`). Tools whose schema is permissive (`z.any()` / `z.unknown()` / no transforms) see no change.
+
+  The new `InvalidToolArgumentsError` type is exported from the package root for middleware authors who want to disambiguate a validation failure from a runtime error.
+
+### Patch Changes
+
+- dc95455: Refactor the agent loop: extract shared helpers (`initializeLoop`, `runIterationPrelude`, `runFailover`, `executeToolPhase`, `emitObserverFailed`, `emitObserverCompleted`, `buildAgentResponse`) so `prompt()` and `stream()` share one orchestration path. The two outer functions are now thin wrappers — `prompt()` is ~70 lines, `stream()` ~160 lines (the rest is streaming-specific chunk processing). Pure refactor: zero behavior change, all 122 tests green, observer event payloads / message ordering / abort semantics / stream chunk sequence preserved byte-for-byte. Internal cleanup only — no public API surface changes.
+- eebedee: Fill in the previously-hardcoded `0` for `AiObserverStep.toolCalls[].duration` in agent observer events. The agent loop now wraps each tool's `execute` in a `performance.now()` pair and surfaces the wall-clock duration through `ToolResult.duration` (new, optional field). Telescope/Pulse now show meaningful per-tool latency instead of a flat 0ms.
+
+  Captured for both success and error paths in the streaming and non-streaming loops. Paths where no `execute` ran (unknown tool, rejected, middleware-skipped, validation failure, client-tool placeholder) report `0` since there is nothing to time.
+
 ## 1.0.1
 
 ### Patch Changes
