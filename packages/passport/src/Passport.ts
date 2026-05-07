@@ -31,6 +31,16 @@ export class Passport {
   private static _keyPath = 'storage'
   private static _privateKey: string | null = null
   private static _publicKey: string | null = null
+  /**
+   * Previous public key, retained for verification only after a `passport:keys
+   * --force` rotation. Tokens minted before the rotation keep verifying via
+   * this slot during the grace window; new tokens are signed by the current
+   * private key. Single-slot — one rotation deep — by design (operators who
+   * need a longer history should stage rotations to land outside the
+   * configured access-token lifetime). See JWKS verifier design notes in
+   * `verificationKeys()` below.
+   */
+  private static _previousPublicKey: string | null = null
 
   // Custom model overrides (lazy — resolved at use-site so the defaults aren't eagerly loaded).
   private static _clientModel:       typeof OAuthClient  | null = null
@@ -100,6 +110,18 @@ export class Passport {
   }
 
   /**
+   * Stamp the previous public key for verification grace after a key
+   * rotation. Tokens carrying `kid` for this key — or any token whose
+   * signature happens to verify against it — keep working until they
+   * naturally expire. Pair with the env var `PASSPORT_PREVIOUS_PUBLIC_KEY`
+   * if you don't want to rely on the on-disk `oauth-previous-public.key`
+   * convention. Pass `null` to clear.
+   */
+  static setPreviousPublicKey(publicKey: string | null): void {
+    this._previousPublicKey = publicKey && publicKey.length > 0 ? publicKey : null
+  }
+
+  /**
    * Probe whether an RSA keypair is reachable — either explicitly set via
    * `setKeys()` (env vars) or readable on disk under the configured key path.
    * Used by `PassportProvider.boot()` to surface a startup warning when keys
@@ -147,6 +169,58 @@ export class Passport {
     this._publicKey = publicKey
 
     return { privateKey, publicKey }
+  }
+
+  /**
+   * All public keys that should be considered for JWT signature verification,
+   * ordered current-first. After `passport:keys --force` rotates the
+   * keypair, the previous public key lingers in this list (loaded from
+   * `oauth-previous-public.key` on disk or set via `setPreviousPublicKey()`)
+   * so JWTs signed before the rotation keep verifying during their natural
+   * lifetime — `verifyToken()` walks the list and accepts a match against
+   * any entry. Without this, every rotation forced an immediate global
+   * sign-out.
+   *
+   * Tokens minted by recent versions also carry a `kid` JWT header equal to
+   * the SHA-256 of the public key that signed them, so the verifier can
+   * pick the right key directly without trial-and-error. Legacy tokens with
+   * no `kid` fall through to "try each in order".
+   *
+   * Single previous-slot is intentional: one rotation deep. Operators who
+   * need a multi-step grace should stage rotations to land outside the
+   * configured access-token lifetime — at that point old tokens have
+   * expired anyway and a longer history buys nothing.
+   */
+  static async verificationKeys(): Promise<string[]> {
+    const { publicKey } = await this.keys()
+    const keys: string[] = [publicKey]
+
+    if (this._previousPublicKey) {
+      keys.push(this._previousPublicKey)
+      return keys
+    }
+
+    // Filesystem fallback — `oauth-previous-public.key` is written by
+    // `generateKeys({ force: true })` during a rotation, alongside the
+    // timestamped audit backup.
+    const { readFile } = await import('node:fs/promises')
+    const { join } = await import('node:path')
+    const previousPath = join(process.cwd(), this._keyPath, 'oauth-previous-public.key')
+    try {
+      const previous = await readFile(previousPath, 'utf8')
+      this._previousPublicKey = previous
+      keys.push(previous)
+    } catch {
+      // No previous key on disk — first rotation hasn't happened yet, or
+      // the operator deleted the file to drop the grace window.
+    }
+
+    return keys
+  }
+
+  /** Get the configured previous public key, if any. */
+  static previousPublicKey(): string | null {
+    return this._previousPublicKey
   }
 
   // ── Custom Models ───────────────────────────────────────
@@ -236,6 +310,7 @@ export class Passport {
     this._keyPath    = 'storage'
     this._privateKey = null
     this._publicKey  = null
+    this._previousPublicKey = null
     this._clientModel       = null
     this._tokenModel        = null
     this._refreshTokenModel = null
