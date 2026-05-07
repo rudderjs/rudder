@@ -98,30 +98,34 @@ Generate a typed agent class with `pnpm rudder make:agent Search`.
 
 ## Tools
 
-Tools let the agent call your code. Define a tool with `tool(...)`, declare its input schema with Zod, and implement the body:
+Tools let the agent call your code. Define a tool with `toolDefinition(...)`, declare its input schema with Zod, and attach a `.server()` handler:
 
 ```ts
-import { tool } from '@rudderjs/ai'
+import { toolDefinition } from '@rudderjs/ai'
 import { z } from 'zod'
 import { User } from '../app/Models/User.js'
 
-const searchTool = tool('search_users', 'Search users by name or email')
-  .input(z.object({
+const searchTool = toolDefinition({
+  name:        'search_users',
+  description: 'Search users by name or email',
+  inputSchema: z.object({
     query: z.string().describe('Name or email substring'),
     limit: z.number().int().min(1).max(50).default(10),
-  }))
-  .handle(async ({ query, limit }) => {
-    return User
-      .where('name', 'LIKE', `%${query}%`)
-      .orWhere('email', 'LIKE', `%${query}%`)
-      .limit(limit)
-      .get()
-  })
+  }),
+}).server(async ({ query, limit }) => {
+  return User
+    .where('name', 'LIKE', `%${query}%`)
+    .orWhere('email', 'LIKE', `%${query}%`)
+    .limit(limit)
+    .get()
+})
 ```
 
-The agent decides when to call tools based on the prompt. Tool calls and results both flow through the response object — inspect `response.steps` for the full trace.
+The agent decides when to call tools based on the prompt. Tool calls and results both flow through the response — inspect `response.steps` for the full trace, including each call's `duration` (wall-clock ms in `execute()`).
 
-When a model emits more than one tool call in a single step, their `execute()` functions run **in parallel** by default. The streamed chunk order is preserved (tool A's `tool-call` → updates → `tool-result` always precedes B's), so consumers see deterministic sequences regardless of which tool finishes first. Approval gates and `onBeforeToolCall` middleware decisions still resolve serially in tool-call order before any `execute()` runs. Opt out per call when tools share non-idempotent state (counters, file writes, sequential transactions):
+**Argument validation.** The agent validates each tool call's arguments against `inputSchema` before invoking `.server(...)`, so your handler always receives the parsed value (zod transforms, defaults, and coercion all apply). When validation fails, the agent feeds an `InvalidToolArgumentsError` back to the model as the tool result so it can correct itself on the next step — your handler never runs with malformed input.
+
+**Parallel execution within a step.** When the model emits more than one tool call in a single step, their `.server()` handlers run concurrently by default. Streamed chunk order is still preserved — tool A's `tool-call → tool-update* → tool-result` always precedes B's — so consumers see deterministic sequences regardless of which tool finishes first. Approval gates and `onBeforeToolCall` middleware decisions still resolve serially in tool-call order before any handler runs. Opt out when tools share non-idempotent state:
 
 ```ts
 await agent('…').prompt('go', { parallelTools: false })
@@ -136,23 +140,46 @@ class CounterAgent extends Agent {
 }
 ```
 
-For client-routed tools (dispatched to the browser to execute, e.g. updating form state), use `clientTool(...)` — see the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai).
+**Client tools** — omit `.server()` and the loop pauses, surfacing the call as `pendingClientToolCalls` on the response so the browser can execute it and resume. See the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai) for the resume protocol.
 
 ## Streaming
 
-For UIs that show output as it generates:
+`agent.stream(...)` returns `{ stream, response }` — a chunk iterator plus a promise that resolves to the full `AgentResponse` after the loop finishes:
 
 ```ts
-const stream = agent('You are a helpful assistant.').stream('Tell me a story.')
+const { stream, response } = agent('You are a helpful assistant.').stream('Tell me a story.')
 
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+for await (const chunk of stream) {
+  if (chunk.type === 'text-delta')  process.stdout.write(chunk.text ?? '')
+  if (chunk.type === 'tool-call')   console.log('Tool called:', chunk.toolCall)
+  if (chunk.type === 'tool-update') console.log('Progress:',    chunk.update)
+  if (chunk.type === 'tool-result') console.log('Result:',      chunk.result)
 }
 
-const finalResponse = await stream.finalResponse  // wait for the whole answer
+const final = await response   // resolves after the stream has been consumed
 ```
 
-For server-sent events to a browser client, use `stream.toServerSentEvents(res)`. The Vercel AI SDK adapter at `@rudderjs/ai/vercel` plugs straight into `useChat()` from `ai/react`.
+Chunk types: `text-delta`, `tool-call`, `tool-update` (per-yield progress from streaming tools), `tool-result`, `pending-client-tools`, `pending-approval`, `usage`, `finish`.
+
+For Vercel AI SDK / `useChat()` interop, convert via `toVercelResponse(stream)` from `@rudderjs/ai`.
+
+## Cancellation
+
+Pass an `AbortSignal` to cancel an in-flight run. The signal is honored at iteration boundaries and forwarded to the provider adapter so the underlying network request is also cancelled. When the signal aborts, `prompt()` rejects (and `stream()`'s `response` promise rejects) with the signal's reason:
+
+```ts
+const controller = new AbortController()
+setTimeout(() => controller.abort(), 5_000)
+
+try {
+  await agent('…').prompt('long task', { signal: controller.signal })
+} catch (err) {
+  // DOMException: The operation was aborted (or TimeoutError for AbortSignal.timeout())
+}
+
+// Or the standard timeout helper:
+await agent('…').prompt('…', { signal: AbortSignal.timeout(10_000) })
+```
 
 ## Multi-step agents
 
@@ -172,14 +199,16 @@ Other stop conditions: `until(predicate)`, `tokenLimit(n)`, `noTokensUsed(n)`.
 
 ## Sub-agents
 
-A tool's handler can itself invoke another agent. The framework propagates streaming progress and authorization upstream so the parent agent's UI stays in sync:
+A tool's handler can itself invoke another agent. Streaming progress and approval state propagate upstream so the parent agent's UI stays in sync:
 
 ```ts
-const research = tool('research', 'Research a topic in depth')
-  .input(z.object({ topic: z.string() }))
-  .handle(async ({ topic }) => {
-    return await new ResearchAgent().prompt(topic)
-  })
+const research = toolDefinition({
+  name:        'research',
+  description: 'Research a topic in depth',
+  inputSchema: z.object({ topic: z.string() }),
+}).server(async ({ topic }) => {
+  return await new ResearchAgent().prompt(topic)
+})
 
 await agent({ tools: [research], stopWhen: stepCountIs(5) })
   .prompt('Summarize the transformer paper.')
@@ -187,55 +216,105 @@ await agent({ tools: [research], stopWhen: stepCountIs(5) })
 
 ## Conversation persistence
 
-Pass a `conversation` object to thread messages across calls:
+Register a `ConversationStore`, then call `.forUser(userId)` to start a new conversation or `.continue(conversationId)` to resume one:
 
 ```ts
-import { agent, createConversation } from '@rudderjs/ai'
+import { setConversationStore, MemoryConversationStore } from '@rudderjs/ai'
 
-const conversation = createConversation('user-42')
+setConversationStore(new MemoryConversationStore())   // dev / tests
 
-await agent('You are an assistant.').conversation(conversation).prompt('My name is Alice.')
-const reply = await agent('You are an assistant.').conversation(conversation).prompt('What's my name?')
-// reply.text → 'Your name is Alice.'
+const first  = await new AssistantAgent().forUser('user-42').prompt('My name is Alice.')
+const second = await new AssistantAgent().continue(first.conversationId!).prompt("What's my name?")
+// second.text → 'Your name is Alice.'
 ```
 
-Implement `ConversationStore` to persist threads to your database — Redis or Prisma adapters are the typical choices.
+`MemoryConversationStore` is fine for tests. For production, implement `ConversationStore` against your database — Prisma and Redis adapters are the typical choices.
 
 ## Middleware
 
-Middleware wraps every model call — useful for logging, redaction, retry, caching:
+Middleware is an `AiMiddleware` interface — implement only the lifecycle hooks you care about. Hooks: `onConfig`, `onStart`, `onIteration`, `onChunk`, `onBeforeToolCall`, `onAfterToolCall`, `onToolPhaseComplete`, `onUsage`, `onFinish`, `onAbort`, `onError`.
 
 ```ts
-import { defineMiddleware } from '@rudderjs/ai'
+import type { AiMiddleware } from '@rudderjs/ai'
 
-const logUsage = defineMiddleware(async (ctx, next) => {
-  const start = Date.now()
-  const response = await next()
-  console.log(`${ctx.model} • ${Date.now() - start}ms • ${response.usage.totalTokens} tokens`)
-  return response
-})
+const logging: AiMiddleware = {
+  name: 'logging',
+  onStart(ctx)        { console.log(`[AI] ${ctx.model} started`) },
+  onUsage(_ctx, u)    { console.log(`[AI] ${u.totalTokens} tokens`) },
+  onBeforeToolCall(_ctx, name) {
+    if (name === 'dangerous_tool') return { type: 'skip', result: 'Tool disabled' }
+    return undefined
+  },
+  onChunk(_ctx, chunk) { return chunk },               // transform, or return null to drop
+}
 
-await agent({ middleware: [logUsage] }).prompt('Hello')
+await agent({ instructions: 'You are helpful.', middleware: [logging] }).prompt('Hello')
 ```
 
-The framework ships built-in middleware for retry, redaction, and rate limiting — see the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai).
+`onBeforeToolCall` can return `{ type: 'skip', result }` to short-circuit a tool, `{ type: 'transformArgs', args }` to rewrite arguments, or `{ type: 'abort', reason }` to stop the loop.
+
+## Observability
+
+Subscribe to agent events via the observer registry — this is how `@rudderjs/telescope`'s AiCollector records runs into the dashboard:
+
+```ts
+import { aiObservers } from '@rudderjs/ai/observers'
+
+const unsubscribe = aiObservers.subscribe(event => {
+  if (event.kind === 'agent.step.completed') {
+    console.log(`step ${event.iteration}: ${event.tokens.total} cumulative tokens`)
+  }
+  if (event.kind === 'agent.completed') {
+    console.log(`done in ${event.duration}ms, ${event.steps.length} steps`)
+  }
+})
+```
+
+Event kinds:
+
+- **`agent.step.completed`** — fires after each loop iteration with that step's tools called, finish reason, and cumulative usage. Useful for streaming progress to UIs without waiting for the full run.
+- **`agent.completed`** — fires once after a successful run with the full step history and final usage.
+- **`agent.failed`** — fires once with `error` set when the run throws or aborts.
+
+Each step's `toolCalls[]` carries a `duration` field (wall-clock ms in `.server()`) so you can attribute latency to specific tools.
 
 ## Testing
 
+`AiFake.fake()` swaps the registered provider with a programmable mock — no API key, no network. The fake also restores the real provider on `.restore()` so tests don't leak between cases.
+
 ```ts
-import { AI } from '@rudderjs/ai'
+import { AiFake } from '@rudderjs/ai'
 
-AI.fake().respondWith('Mocked response')
-await myCodeThatCallsAI()
+const fake = AiFake.fake()
+fake.respondWith('Mocked response')
 
-AI.assertCalled()
-AI.assertCalled((call) => call.prompt.includes('summarize'))
+await new MyAgent().prompt('Hello')
+fake.restore()
 ```
 
-`AI.fake()` swaps the provider with a programmable fake — no API calls, no API key needed in tests.
+For multi-step loops (the model returns tool calls, then text, then more tool calls), script each step:
+
+```ts
+fake.respondWithSequence([
+  { toolCalls: [{ id: 't1', name: 'lookup', arguments: { id: 42 } }] },
+  { text: 'The answer is 42.' },
+])
+```
+
+`failOnStep(stepIndex, error)` throws on a specific iteration to exercise failover and error paths:
+
+```ts
+fake.respondWithSequence([
+  { toolCalls: [{ id: 't1', name: 'lookup', arguments: {} }] },
+  { text: 'recovered' },
+])
+fake.failOnStep(0, new Error('Rate limited'))   // first call throws; second succeeds
+```
 
 ## Pitfalls
 
 - **Bare model names.** `model: 'claude-sonnet-4-5'` throws — must be `provider/model`.
 - **Tool handlers throwing.** The agent gets the error message back as the tool result. Catch known errors inside the handler and return a structured failure shape.
-- **Streaming without `finalResponse`.** Iterating `textStream` without awaiting `finalResponse` skips hooks that depend on it (middleware, conversation persistence). Always await it or `await stream.cancel()`.
+- **Streaming `response` not resolving.** `await response` only resolves after the `stream` iterator has been fully consumed. Always iterate the stream first, even if you only care about the final result.
+- **`forUser()` / `continue()` throw.** Conversation methods need a registered store — call `setConversationStore(...)` (or wire one through `AiConfig.conversations`) before they're called.
+- **Provider SDK missing.** Provider adapters lazy-load their SDK on first call. If you see a missing-module error from `@anthropic-ai/sdk` / `openai` / `@google/genai`, install only the one(s) you actually use.
