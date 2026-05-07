@@ -65,11 +65,20 @@ model OAuthAuthCode {
 model OAuthDeviceCode {
   id             String    @id @default(cuid())
   clientId       String
-  userCode       String    @unique
-  deviceCode     String    @unique
+  // SHA-256 hash of the plaintext code returned to the device/user. Stored
+  // hashed so a DB read leak doesn't yield usable codes (RFC 8628 §6.1).
+  // The plaintext is returned once in the `/oauth/device/code` response
+  // body and never persisted. See `device-code-secret.ts` for the rationale
+  // on plain-SHA-256 (no pepper).
+  userCodeHash   String    @unique
+  deviceCodeHash String    @unique
   scopes         String    @default("[]")
   userId         String?
   approved       Boolean?
+  // Polling interval in seconds (RFC 8628 §3.5). Starts at 5; server
+  // increments by 5 on each `slow_down` response and returns the new value
+  // in the error body. Capped at 60 to avoid runaway escalation.
+  interval       Int       @default(5)
   expiresAt      DateTime
   lastPolledAt   DateTime?
   createdAt      DateTime  @default(now())

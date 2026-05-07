@@ -2,8 +2,16 @@ import { Passport } from '../Passport.js'
 import type { OAuthClient } from '../models/OAuthClient.js'
 import type { DeviceCode }  from '../models/DeviceCode.js'
 import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
+import { hashDeviceSecret } from '../device-code-secret.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError, validateScopes } from './authorization-code.js'
+
+/**
+ * Initial polling interval for new device-code rows (RFC 8628 §3.5).
+ * Server escalates by 5s on each `slow_down` response, capped at MAX.
+ */
+const INITIAL_INTERVAL_SECONDS = 5
+const MAX_INTERVAL_SECONDS     = 60
 
 // ─── Device Authorization Request ─────────────────────────
 
@@ -45,15 +53,24 @@ export async function requestDeviceCode(params: {
   const userCode   = await generateUserCode()
   const expiresAt  = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
+  // Hash both codes at rest (M4 / RFC 8628 §6.1) — a DB read leak should
+  // not yield usable codes. The plaintext is returned to the client below
+  // and never persisted.
+  const [deviceCodeHash, userCodeHash] = await Promise.all([
+    hashDeviceSecret(deviceCode),
+    hashDeviceSecret(userCode),
+  ])
+
   await DeviceCodeCls.create({
-    clientId:   params.clientId,
-    deviceCode,
-    userCode,
-    scopes:     JSON.stringify(scopes),
-    userId:     null,
-    approved:   null,
+    clientId:       params.clientId,
+    deviceCodeHash,
+    userCodeHash,
+    scopes:         JSON.stringify(scopes),
+    userId:         null,
+    approved:       null,
+    interval:       INITIAL_INTERVAL_SECONDS,
     expiresAt,
-    lastPolledAt: null,
+    lastPolledAt:   null,
   } as Record<string, unknown>)
 
   return {
@@ -62,7 +79,7 @@ export async function requestDeviceCode(params: {
     verification_uri: params.verificationUri,
     verification_uri_complete: `${params.verificationUri}?user_code=${userCode}`,
     expires_in:       15 * 60, // 15 minutes in seconds
-    interval:         5,       // poll every 5 seconds
+    interval:         INITIAL_INTERVAL_SECONDS,
   }
 }
 
@@ -73,7 +90,11 @@ export async function requestDeviceCode(params: {
  */
 export async function approveDeviceCode(userCode: string, userId: string, approved: boolean): Promise<void> {
   const DeviceCodeCls = await Passport.deviceCodeModel()
-  const device = await DeviceCodeCls.where('userCode', userCode).first() as DeviceCode | null
+  // M4 — look up by hash, not the plaintext the user typed. Same lookup
+  // surface an attacker would attempt against; the hash makes the column
+  // useless to an attacker who got a DB read.
+  const userCodeHash = await hashDeviceSecret(userCode)
+  const device = await DeviceCodeCls.where('userCodeHash', userCodeHash).first() as DeviceCode | null
   if (!device) {
     throw new OAuthError('invalid_request', 'Device code not found.')
   }
@@ -95,7 +116,14 @@ export async function approveDeviceCode(userCode: string, userId: string, approv
 export type DevicePollResult =
   | { status: 'authorized'; tokens: IssuedTokens }
   | { status: 'authorization_pending' }
-  | { status: 'slow_down' }
+  /**
+   * RFC 8628 §3.5: when the device polls faster than the current interval,
+   * the server returns `slow_down` AND increments the required interval by
+   * 5 seconds (capped at 60). The new interval is included in the result so
+   * the route handler can forward it on the wire — well-behaved clients
+   * use it directly instead of guessing at the new value.
+   */
+  | { status: 'slow_down'; interval: number }
   | { status: 'access_denied' }
   | { status: 'expired_token' }
 
@@ -112,7 +140,9 @@ export async function pollDeviceCode(params: {
   }
 
   const DeviceCodeCls = await Passport.deviceCodeModel()
-  const device = await DeviceCodeCls.where('deviceCode', params.deviceCode).first() as DeviceCode | null
+  // M4 — hash the supplied plaintext and look up by hash.
+  const deviceCodeHash = await hashDeviceSecret(params.deviceCode)
+  const device = await DeviceCodeCls.where('deviceCodeHash', deviceCodeHash).first() as DeviceCode | null
   if (!device) {
     throw new OAuthError('invalid_grant', 'Device code not found.')
   }
@@ -123,11 +153,17 @@ export async function pollDeviceCode(params: {
     return { status: 'expired_token' }
   }
 
-  // Rate limiting: enforce 5-second interval
+  // Rate limiting (RFC 8628 §3.5). Enforce against the per-row `interval`
+  // (defaults to 5s, escalates by 5s per slow_down, capped at 60s). Persist
+  // the new interval so subsequent polls see the escalated value.
   if (device.lastPolledAt) {
     const elapsed = Date.now() - new Date(device.lastPolledAt).getTime()
-    if (elapsed < 5000) {
-      return { status: 'slow_down' }
+    if (elapsed < device.interval * 1000) {
+      const nextInterval = Math.min(device.interval + 5, MAX_INTERVAL_SECONDS)
+      if (nextInterval !== device.interval) {
+        await DeviceCodeCls.update(device.id, { interval: nextInterval } as any)
+      }
+      return { status: 'slow_down', interval: nextInterval }
     }
   }
 

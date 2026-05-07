@@ -53,16 +53,17 @@ model OAuthAuthCode {
 }
 
 model OAuthDeviceCode {
-  id           String    @id @default(cuid())
-  clientId     String
-  userCode     String    @unique
-  deviceCode   String    @unique
-  scopes       String    @default("[]")
-  userId       String?
-  approved     Boolean?
-  expiresAt    DateTime
-  lastPolledAt DateTime?
-  createdAt    DateTime  @default(now())
+  id             String    @id @default(cuid())
+  clientId       String
+  userCodeHash   String    @unique
+  deviceCodeHash String    @unique
+  scopes         String    @default("[]")
+  userId         String?
+  approved       Boolean?
+  interval       Int       @default(5)
+  expiresAt      DateTime
+  lastPolledAt   DateTime?
+  createdAt      DateTime  @default(now())
 
   @@map("oauth_device_codes")
 }
