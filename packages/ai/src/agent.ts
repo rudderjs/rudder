@@ -110,6 +110,14 @@ export abstract class Agent {
   /** Max tokens for response */
   maxTokens(): number | undefined { return undefined }
 
+  /**
+   * Default for `AgentPromptOptions.parallelTools`. When `true` (default),
+   * multiple tool calls within a single step run their `execute()` functions
+   * concurrently. Override on a subclass to flip the default for an agent
+   * whose tools share non-idempotent state. Per-call options still win.
+   */
+  parallelTools(): boolean { return true }
+
   /** Run the agent with a prompt (non-streaming) */
   async prompt(input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
     return runAgentLoop(this, input, options)
@@ -596,10 +604,41 @@ async function* executeToolPhase(
   toolCalls:        ToolCall[],
   assistantMessage: AiMessage,
 ): AsyncGenerator<StreamChunk, ToolResult[], void> {
-  const { messages, middlewares, toolMap, options, ctx } = loopCtx
+  const { messages, middlewares, options, ctx } = loopCtx
   const toolResults: ToolResult[] = []
 
   messages.push(assistantMessage)
+
+  // Resolve parallelism setting. Per-call option wins; falls back to the
+  // agent-level override which defaults to `true`. Single-tool batches
+  // route through the serial path either way (no parallelism to gain, and
+  // serial preserves live `tool-update` streaming for that one tool).
+  const parallel = (options?.parallelTools ?? loopCtx.agent.parallelTools()) && toolCalls.length > 1
+
+  if (parallel) {
+    yield* runToolPhaseParallel(loopCtx, toolCalls, toolResults)
+  } else {
+    yield* runToolPhaseSerial(loopCtx, toolCalls, toolResults)
+  }
+
+  // onToolPhaseComplete
+  if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
+
+  return toolResults
+}
+
+/**
+ * Serial tool execution — the original behavior. Runs each tool call's
+ * prelude (approval, before-middleware, validation) and `execute()`
+ * one-after-another, streaming `tool-update` chunks live as the tool
+ * emits them.
+ */
+async function* runToolPhaseSerial(
+  loopCtx:     LoopContext,
+  toolCalls:   ToolCall[],
+  toolResults: ToolResult[],
+): AsyncGenerator<StreamChunk, void, void> {
+  const { messages, middlewares, toolMap, options, ctx } = loopCtx
 
   for (const tc of toolCalls) {
     const tool = toolMap.get(tc.name)
@@ -751,11 +790,275 @@ async function* executeToolPhase(
       if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, errResult)
     }
   }
+}
 
-  // onToolPhaseComplete
-  if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
+/**
+ * Parallel tool execution — three phases:
+ *
+ * 1. **Prelude (serial, in tool-call order):** classify each call. Approval
+ *    decisions, `onBeforeToolCall` middleware, and arg validation all
+ *    resolve here; the next phase only sees calls that cleared every
+ *    gate. `pending-approval` and `mw-abort` short-circuit the prelude
+ *    exactly as they do in serial mode — later calls are never dispatched.
+ *
+ * 2. **Execution (parallel):** for every `ready` outcome, drive
+ *    `executeMaybeStreaming` to completion concurrently. `tool-update`
+ *    chunks (and any pause-for-client-tools mutations to `loopCtx`) are
+ *    captured per-call into a buffer.
+ *
+ * 3. **Replay (serial, in tool-call order):** for each outcome, emit its
+ *    chunks (including buffered `tool-update`s for ready calls), push
+ *    tool messages, and run `onAfterToolCall`. This is the only phase
+ *    that yields chunks to consumers, so streamed output stays
+ *    deterministic regardless of which `execute()` finished first.
+ */
+async function* runToolPhaseParallel(
+  loopCtx:     LoopContext,
+  toolCalls:   ToolCall[],
+  toolResults: ToolResult[],
+): AsyncGenerator<StreamChunk, void, void> {
+  const { messages, middlewares, ctx } = loopCtx
 
-  return toolResults
+  // ─── Phase 1: prelude ──────────────────────────────────
+  const outcomes = await classifyToolCalls(loopCtx, toolCalls)
+
+  // ─── Phase 2: dispatch ready executions concurrently ──
+  const ready = outcomes.filter((o): o is ReadyOutcome => o.kind === 'ready')
+  const executions = await Promise.all(ready.map(o => runToolExecution(loopCtx, o)))
+  const executionByCallId = new Map<string, ToolExecutionResult>()
+  for (let i = 0; i < ready.length; i++) {
+    executionByCallId.set(ready[i]!.tc.id, executions[i]!)
+  }
+
+  // ─── Phase 3: replay chunks + side-effects in order ───
+  for (const outcome of outcomes) {
+    if (outcome.kind === 'unknown-tool') {
+      toolResults.push({ toolCallId: outcome.tc.id, result: outcome.result })
+      messages.push({ role: 'tool', content: outcome.result, toolCallId: outcome.tc.id })
+      yield { type: 'tool-result' as const, toolCall: outcome.tc, result: outcome.result }
+      continue
+    }
+    if (outcome.kind === 'client-tool-stop') {
+      // loopCtx mutations already applied during the prelude.
+      yield { type: 'tool-call' as const, toolCall: outcome.tc }
+      continue
+    }
+    if (outcome.kind === 'client-tool-placeholder') {
+      toolResults.push({ toolCallId: outcome.tc.id, result: outcome.result })
+      messages.push({ role: 'tool', content: outcome.result, toolCallId: outcome.tc.id })
+      yield { type: 'tool-call' as const, toolCall: outcome.tc }
+      yield { type: 'tool-result' as const, toolCall: outcome.tc, result: outcome.result }
+      continue
+    }
+    if (outcome.kind === 'rejected') {
+      toolResults.push({ toolCallId: outcome.tc.id, result: outcome.result })
+      messages.push({ role: 'tool', content: JSON.stringify(outcome.result), toolCallId: outcome.tc.id })
+      yield { type: 'tool-result' as const, toolCall: outcome.tc, result: outcome.result }
+      continue
+    }
+    if (outcome.kind === 'pending-approval') {
+      // loopCtx mutations already applied during the prelude.
+      yield { type: 'tool-call' as const, toolCall: outcome.tc }
+      // Phase 1 stops classifying after pending-approval, so this is the
+      // last outcome — but `break` keeps the intent explicit.
+      break
+    }
+    if (outcome.kind === 'mw-skip') {
+      const resultStr = typeof outcome.result === 'string' ? outcome.result : JSON.stringify(outcome.result)
+      toolResults.push({ toolCallId: outcome.tc.id, result: outcome.result })
+      messages.push({ role: 'tool', content: resultStr, toolCallId: outcome.tc.id })
+      yield { type: 'tool-result' as const, toolCall: outcome.tc, result: outcome.result }
+      if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, outcome.tc.name, outcome.toolArgs, outcome.result)
+      continue
+    }
+    if (outcome.kind === 'validation-error') {
+      yield { type: 'tool-call' as const, toolCall: outcome.tc }
+      toolResults.push({ toolCallId: outcome.tc.id, result: outcome.error })
+      messages.push({ role: 'tool', content: JSON.stringify(outcome.error), toolCallId: outcome.tc.id })
+      yield { type: 'tool-result' as const, toolCall: outcome.tc, result: outcome.error }
+      if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, outcome.tc.name, outcome.toolArgs, outcome.error)
+      continue
+    }
+    // outcome.kind === 'ready'
+    const exec = executionByCallId.get(outcome.tc.id)!
+    yield { type: 'tool-call' as const, toolCall: outcome.tc }
+    for (const chunk of exec.updates) yield chunk
+    if (exec.kind === 'paused') {
+      // Pause-for-client-tools propagated its calls onto `loopCtx` during
+      // execution. Skip tool_result emission + message push — the call
+      // stays orphaned until resume.
+      continue
+    }
+    if (exec.kind === 'error') {
+      const errResult = `Error: ${exec.error.message}`
+      toolResults.push({ toolCallId: outcome.tc.id, result: errResult, duration: exec.duration })
+      messages.push({ role: 'tool', content: errResult, toolCallId: outcome.tc.id })
+      yield { type: 'tool-result' as const, toolCall: outcome.tc, result: errResult }
+      if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, outcome.tc.name, outcome.toolArgs, errResult)
+      continue
+    }
+    // exec.kind === 'ok'
+    toolResults.push({ toolCallId: outcome.tc.id, result: exec.result, duration: exec.duration })
+    const resultStr = await applyToModelOutput(
+      outcome.tool,
+      exec.result,
+      middlewares.length > 0 ? (e) => runOnError(middlewares, ctx, e) : undefined,
+    )
+    messages.push({ role: 'tool', content: resultStr, toolCallId: outcome.tc.id })
+    yield { type: 'tool-result' as const, toolCall: outcome.tc, result: exec.result }
+    if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, outcome.tc.name, outcome.toolArgs, exec.result)
+  }
+}
+
+// ─── Parallel-mode helpers ───────────────────────────────
+
+type ReadyOutcome = {
+  kind:          'ready'
+  tc:            ToolCall
+  tool:          AnyTool
+  toolArgs:      Record<string, unknown>
+  validatedArgs: Record<string, unknown>
+}
+
+type PreludeOutcome =
+  | { kind: 'unknown-tool';             tc: ToolCall; result: string }
+  | { kind: 'client-tool-placeholder';  tc: ToolCall; result: string }
+  | { kind: 'client-tool-stop';         tc: ToolCall }
+  | { kind: 'rejected';                 tc: ToolCall; result: { rejected: true; reason: string } }
+  | { kind: 'pending-approval';         tc: ToolCall }
+  | { kind: 'mw-skip';                  tc: ToolCall; toolArgs: Record<string, unknown>; result: unknown }
+  | { kind: 'validation-error';         tc: ToolCall; toolArgs: Record<string, unknown>; error: InvalidToolArgumentsError }
+  | ReadyOutcome
+
+/**
+ * Walk `toolCalls` in order and decide each call's fate. Mutations to
+ * `loopCtx` for client-tool-stop, pending-approval, and middleware-abort
+ * happen here so the rest of the parallel flow sees the same state the
+ * serial path would. `pending-approval` and `mw-abort` stop the walk —
+ * later calls are not classified and are silently dropped.
+ */
+async function classifyToolCalls(loopCtx: LoopContext, toolCalls: ToolCall[]): Promise<PreludeOutcome[]> {
+  const { middlewares, toolMap, options, ctx } = loopCtx
+  const outcomes: PreludeOutcome[] = []
+
+  for (const tc of toolCalls) {
+    const tool = toolMap.get(tc.name)
+    if (!tool) {
+      outcomes.push({ kind: 'unknown-tool', tc, result: `Error: Unknown tool "${tc.name}"` })
+      continue
+    }
+    if (!tool.execute) {
+      if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
+        loopCtx.pendingClientToolCalls.push(tc)
+        loopCtx.loopFinishReason = 'client_tool_calls'
+        loopCtx.stopForClientTools = true
+        outcomes.push({ kind: 'client-tool-stop', tc })
+        continue
+      }
+      outcomes.push({ kind: 'client-tool-placeholder', tc, result: '[client tool — execute on client]' })
+      continue
+    }
+
+    const approvalDecision = await evaluateApproval(tool, tc, options)
+    if (approvalDecision === 'rejected') {
+      outcomes.push({ kind: 'rejected', tc, result: { rejected: true, reason: 'User rejected this tool call' } })
+      continue
+    }
+    if (approvalDecision === 'pending') {
+      loopCtx.pendingApprovalToolCall = { toolCall: tc, isClientTool: false }
+      loopCtx.loopFinishReason = 'tool_approval_required'
+      loopCtx.stopForApproval = true
+      outcomes.push({ kind: 'pending-approval', tc })
+      break
+    }
+
+    let toolArgs = tc.arguments
+    if (middlewares.length > 0) {
+      const beforeResult = await runOnBeforeToolCall(middlewares, ctx, tc.name, toolArgs)
+      if (beforeResult) {
+        if (beforeResult.type === 'skip') {
+          outcomes.push({ kind: 'mw-skip', tc, toolArgs, result: beforeResult.result })
+          continue
+        }
+        if (beforeResult.type === 'abort') {
+          await runOnAbort(middlewares, ctx, beforeResult.reason)
+          // Drop any prior outcomes too? No — serial mode emits prior
+          // outcomes' chunks before hitting abort, so we keep them in the
+          // outcomes list and Phase 3 emits them up to (but not including)
+          // this call. Stop classifying further.
+          break
+        }
+        if (beforeResult.type === 'transformArgs') {
+          toolArgs = beforeResult.args
+        }
+      }
+    }
+
+    const validation = validateToolArgs(tool, toolArgs)
+    if (!validation.ok) {
+      outcomes.push({ kind: 'validation-error', tc, toolArgs, error: validation.error })
+      continue
+    }
+
+    outcomes.push({ kind: 'ready', tc, tool, toolArgs, validatedArgs: validation.value })
+  }
+
+  return outcomes
+}
+
+type ToolExecutionResult =
+  | { kind: 'ok';     result: unknown; updates: StreamChunk[]; duration: number }
+  | { kind: 'paused';                   updates: StreamChunk[]; duration: number }
+  | { kind: 'error';  error: Error;     updates: StreamChunk[]; duration: number }
+
+/**
+ * Drive a single tool's `executeMaybeStreaming` to completion. Buffers
+ * `tool-update` chunks for replay in tool-call order; pause-for-client-tools
+ * mutations to `loopCtx` apply immediately and the call returns `paused`.
+ *
+ * `ctx` is shared across concurrent invocations. Middleware that writes
+ * through `ctx` during `runOnChunk` (uncommon — most use it read-only for
+ * telemetry) may observe interleaved updates from sibling tool calls;
+ * apps with such middleware should opt out via `parallelTools: false`.
+ */
+async function runToolExecution(loopCtx: LoopContext, outcome: ReadyOutcome): Promise<ToolExecutionResult> {
+  const { middlewares, ctx } = loopCtx
+  const updates: StreamChunk[] = []
+  const toolStart = performance.now()
+  try {
+    const execGen = executeMaybeStreaming(outcome.tool, outcome.validatedArgs, { toolCallId: outcome.tc.id })
+    let result: unknown
+    let paused = false
+    while (true) {
+      const step = await execGen.next()
+      if (step.done) {
+        result = step.value
+        break
+      }
+      if (isPauseForClientToolsChunk(step.value)) {
+        for (const pending of step.value.toolCalls) {
+          loopCtx.pendingClientToolCalls.push(pending)
+        }
+        loopCtx.loopFinishReason = 'client_tool_calls'
+        loopCtx.stopForClientTools = true
+        paused = true
+        break
+      }
+      const updateChunk: StreamChunk = { type: 'tool-update', toolCall: outcome.tc, update: step.value }
+      if (middlewares.length > 0) {
+        const transformed = runOnChunk(middlewares, ctx, updateChunk)
+        if (transformed) updates.push(transformed)
+      } else {
+        updates.push(updateChunk)
+      }
+    }
+    const duration = performance.now() - toolStart
+    if (paused) return { kind: 'paused', updates, duration }
+    return { kind: 'ok', result, updates, duration }
+  } catch (err) {
+    const duration = performance.now() - toolStart
+    return { kind: 'error', error: err instanceof Error ? err : new Error(String(err)), updates, duration }
+  }
 }
 
 /**

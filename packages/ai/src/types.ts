@@ -555,6 +555,25 @@ export interface AgentPromptOptions {
    * or `TimeoutError` for `AbortSignal.timeout()`.
    */
   signal?: AbortSignal
+  /**
+   * When the model emits multiple tool calls in a single step, run their
+   * `execute()` functions concurrently (`true`, default) instead of one
+   * after another (`false`). Parallelism applies only to `execute()`; the
+   * streamed chunk order is preserved as `tool-call A → updates A →
+   * tool-result A → tool-call B → ...` so consumers see deterministic
+   * sequences regardless of which tool finishes first.
+   *
+   * Approval gates, client-tool pauses, and `onBeforeToolCall` middleware
+   * decisions still resolve serially in tool-call order *before* any
+   * `execute()` runs — if a tool needs approval, the loop breaks at that
+   * point exactly as in serial mode and no later tools are dispatched.
+   *
+   * Set to `false` for tools with non-idempotent shared state (counters,
+   * file writes against the same path, sequential DB transactions).
+   * Per-call value wins over the agent-wide `Agent.parallelTools()`
+   * override.
+   */
+  parallelTools?: boolean
 }
 
 /** An attachment (file or image) to include with a prompt */

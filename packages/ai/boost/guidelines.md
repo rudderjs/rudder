@@ -137,6 +137,7 @@ const items = Output.array({ element: z.object({ title: z.string() }) })
 - **Optional SDK deps**: Provider SDKs (`@anthropic-ai/sdk`, `openai`, `@google/genai`) are optional dependencies. Install the ones you need.
 - **ConversationStore required for `.forUser()`/`.continue()`**: Call `setConversationStore()` or pass `conversations` in the AI config. Without it, conversation methods throw.
 - **Tool loop limits**: `maxSteps()` defaults to 20. If the agent hits the limit it stops silently. Increase it for complex multi-tool workflows.
+- **Parallel tool execution**: when the model emits multiple tool calls in a single step, their `execute()` functions run concurrently by default. Streamed chunks still emit in tool-call order. Opt out via `prompt(..., { parallelTools: false })` or override `parallelTools()` on the agent class for tools with non-idempotent shared state.
 - **Streaming response access**: `await response` only resolves after the stream is fully consumed. Always iterate the stream first.
 - **Embeddings**: Only providers that implement `createEmbedding()` support `AI.embed()`. Currently OpenAI-compatible providers.
 

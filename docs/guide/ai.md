@@ -121,6 +121,21 @@ const searchTool = tool('search_users', 'Search users by name or email')
 
 The agent decides when to call tools based on the prompt. Tool calls and results both flow through the response object — inspect `response.steps` for the full trace.
 
+When a model emits more than one tool call in a single step, their `execute()` functions run **in parallel** by default. The streamed chunk order is preserved (tool A's `tool-call` → updates → `tool-result` always precedes B's), so consumers see deterministic sequences regardless of which tool finishes first. Approval gates and `onBeforeToolCall` middleware decisions still resolve serially in tool-call order before any `execute()` runs. Opt out per call when tools share non-idempotent state (counters, file writes, sequential transactions):
+
+```ts
+await agent('…').prompt('go', { parallelTools: false })
+```
+
+Or per agent:
+
+```ts
+class CounterAgent extends Agent {
+  parallelTools() { return false }
+  // …
+}
+```
+
 For client-routed tools (dispatched to the browser to execute, e.g. updating form state), use `clientTool(...)` — see the [package README](https://github.com/rudderjs/rudder/tree/main/packages/ai).
 
 ## Streaming
