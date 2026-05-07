@@ -25,6 +25,11 @@ export class AiCollector implements Collector {
       const threshold = this.config.slowAiThreshold ?? 5000
 
       aiObservers.subscribe((event: AiEvent) => {
+        // Telescope records one entry per agent run; per-step progress
+        // events flow through the registry for live UIs / pulse but
+        // shouldn't create a separate watcher entry.
+        if (event.kind === 'agent.step.completed') return
+
         const tags: string[] = [
           `model:${event.model}`,
           `provider:${event.provider}`,
@@ -113,4 +118,16 @@ type AiEvent =
       conversationId:   string | null
       failoverAttempts: number
       error:            string
+    }
+  | {
+      kind:           'agent.step.completed'
+      agentName:      string
+      model:          string
+      provider:       string
+      iteration:      number
+      step:           AiStep
+      tokens:         { prompt: number; completion: number; total: number }
+      duration:       number
+      streaming:      boolean
+      conversationId: string | null
     }

@@ -494,6 +494,49 @@ function emitObserverFailed(loopCtx: LoopContext, err: unknown, streaming: boole
   })
 }
 
+/**
+ * Emit the per-step `agent.step.completed` observer event after each
+ * iteration. Built from the SAME `_buildObserverSteps` mapping used by
+ * the terminal events so consumers see consistent shapes — they just see
+ * the latest step rather than the full array.
+ */
+function emitObserverStepCompleted(
+  loopCtx:   LoopContext,
+  iteration: number,
+  streaming: boolean,
+): void {
+  const obs = _getAiObservers()
+  if (!obs) return
+  const justPushed = loopCtx.steps[loopCtx.steps.length - 1]
+  if (!justPushed) return
+  // Re-use _buildObserverSteps so the per-step shape matches the steps[]
+  // entries on the terminal events. Pass a single-element slice since we
+  // only need the latest step's mapping.
+  const built = _buildObserverSteps([justPushed], loopCtx.modelString)
+  const stepEvent = built[0]
+  if (!stepEvent) return
+  // Override iteration with the loop's iteration counter — _buildObserverSteps
+  // numbers from 1 within the array it sees, but we want the global step
+  // number across the whole run.
+  stepEvent.iteration = iteration + 1
+  obs.emit({
+    kind:           'agent.step.completed',
+    agentName:      loopCtx.agent.constructor.name,
+    model:          loopCtx.modelString,
+    provider:       loopCtx.providerName,
+    iteration:      iteration + 1,
+    step:           stepEvent,
+    tokens:         {
+      prompt:     loopCtx.totalUsage.promptTokens,
+      completion: loopCtx.totalUsage.completionTokens,
+      total:      loopCtx.totalUsage.totalTokens,
+    },
+    duration:       Math.round(performance.now() - loopCtx.loopStart),
+    streaming,
+    conversationId: null,
+  })
+}
+
 /** Emit the `agent.completed` observer event from the shared loop state. */
 function emitObserverCompleted(loopCtx: LoopContext, result: AgentResponse, streaming: boolean): void {
   const obs = _getAiObservers()
@@ -892,6 +935,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
         finishReason: response.finishReason,
       }
       steps.push(step)
+      emitObserverStepCompleted(loopCtx, iteration, false)
 
       if (loopCtx.stopForClientTools || loopCtx.stopForApproval) break
 
@@ -1024,6 +1068,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
           finishReason,
         }
         steps.push(step)
+        emitObserverStepCompleted(loopCtx, iteration, true)
 
         if (loopCtx.stopForClientTools || loopCtx.stopForApproval) break
 
