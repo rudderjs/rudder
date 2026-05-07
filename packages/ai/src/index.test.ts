@@ -511,8 +511,17 @@ describe('stopWhen combinators', () => {
 
 // ─── Middleware ────────────────────────────────────────────
 
-import { runOnConfig, runOnChunk, runOnBeforeToolCall } from './middleware.js'
-import type { AiMiddleware, MiddlewareContext, MiddlewareConfigResult } from './types.js'
+import {
+  runOnConfig,
+  runOnChunk,
+  runOnBeforeToolCall,
+  runOnAfterToolCall,
+  runOnUsage,
+  runSequential,
+  runOnAbort,
+  runOnError,
+} from './middleware.js'
+import type { AiMiddleware, MiddlewareContext, MiddlewareConfigResult, TokenUsage } from './types.js'
 
 describe('Middleware', () => {
   const baseCtx: MiddlewareContext = {
@@ -598,6 +607,94 @@ describe('Middleware', () => {
     }
     const result = await runOnBeforeToolCall([mw], baseCtx, 'dangerous', {})
     assert.deepStrictEqual(result, { type: 'abort', reason: 'Blocked' })
+  })
+
+  it('runOnAfterToolCall invokes every middleware sequentially with name/args/result', async () => {
+    const seen: Array<[string, string, unknown, unknown]> = []
+    const mk = (label: string): AiMiddleware => ({
+      name: label,
+      async onAfterToolCall(_ctx, toolName, args, result) {
+        seen.push([label, toolName, args, result])
+      },
+    })
+    await runOnAfterToolCall([mk('a'), mk('b')], baseCtx, 'search', { q: 'x' }, { hits: 3 })
+    assert.deepStrictEqual(seen, [
+      ['a', 'search', { q: 'x' }, { hits: 3 }],
+      ['b', 'search', { q: 'x' }, { hits: 3 }],
+    ])
+  })
+
+  it('runOnAfterToolCall skips middlewares that did not define the hook', async () => {
+    let called = 0
+    const noop: AiMiddleware = { name: 'noop' }
+    const counter: AiMiddleware = { name: 'counter', async onAfterToolCall() { called++ } }
+    await runOnAfterToolCall([noop, counter], baseCtx, 't', {}, null)
+    assert.strictEqual(called, 1)
+  })
+
+  it('runOnUsage forwards the same TokenUsage to every hook', async () => {
+    const seen: TokenUsage[] = []
+    const usage: TokenUsage = { promptTokens: 12, completionTokens: 8, totalTokens: 20 }
+    const recorder = (label: string): AiMiddleware => ({
+      name: label,
+      async onUsage(_ctx, u) { seen.push(u) },
+    })
+    await runOnUsage([recorder('a'), recorder('b')], baseCtx, usage)
+    assert.deepStrictEqual(seen, [usage, usage])
+  })
+
+  it('runSequential dispatches the right hook by name and preserves order', async () => {
+    const order: string[] = []
+    const mw: AiMiddleware = {
+      name: 'multi',
+      async onStart() { order.push('start') },
+      async onIteration() { order.push('iteration') },
+      async onToolPhaseComplete() { order.push('tool-phase') },
+      async onFinish() { order.push('finish') },
+    }
+    await runSequential([mw], 'onStart', baseCtx)
+    await runSequential([mw], 'onIteration', baseCtx)
+    await runSequential([mw], 'onToolPhaseComplete', baseCtx)
+    await runSequential([mw], 'onFinish', baseCtx)
+    assert.deepStrictEqual(order, ['start', 'iteration', 'tool-phase', 'finish'])
+  })
+
+  it('runSequential awaits async hooks across middlewares in declaration order', async () => {
+    const order: string[] = []
+    const slow: AiMiddleware = {
+      name: 'slow',
+      async onIteration() {
+        await new Promise(r => setTimeout(r, 5))
+        order.push('slow')
+      },
+    }
+    const fast: AiMiddleware = {
+      name: 'fast',
+      async onIteration() { order.push('fast') },
+    }
+    await runSequential([slow, fast], 'onIteration', baseCtx)
+    assert.deepStrictEqual(order, ['slow', 'fast'])
+  })
+
+  it('runOnAbort forwards the reason to every hook', async () => {
+    const reasons: string[] = []
+    const mk = (label: string): AiMiddleware => ({
+      name: label,
+      async onAbort(_ctx, reason) { reasons.push(`${label}:${reason}`) },
+    })
+    await runOnAbort([mk('a'), mk('b')], baseCtx, 'budget exceeded')
+    assert.deepStrictEqual(reasons, ['a:budget exceeded', 'b:budget exceeded'])
+  })
+
+  it('runOnError forwards the error to every hook in order', async () => {
+    const seen: unknown[] = []
+    const recorder = (label: string): AiMiddleware => ({
+      name: label,
+      async onError(_ctx, err) { seen.push([label, err]) },
+    })
+    const err = new Error('boom')
+    await runOnError([recorder('a'), recorder('b')], baseCtx, err)
+    assert.deepStrictEqual(seen, [['a', err], ['b', err]])
   })
 })
 
@@ -693,6 +790,158 @@ describe('MemoryConversationStore', () => {
   it('throws for unknown conversation', async () => {
     const store = new MemoryConversationStore()
     await assert.rejects(() => store.load('nonexistent'), /not found/)
+  })
+})
+
+// ─── ConversableAgent ─────────────────────────────────────
+
+import { ConversableAgent, setConversationStore } from './agent.js'
+import { AiFake as ConversableAiFake } from './fake.js'
+
+describe('ConversableAgent', () => {
+  let fake: ConversableAiFake
+
+  beforeEach(() => {
+    fake = ConversableAiFake.fake()
+    // Each test starts without a registered store so we can assert the
+    // unregistered-store error path independently.
+    setConversationStore(undefined as unknown as never)
+  })
+
+  it('throws when no ConversationStore is registered', async () => {
+    fake.respondWith('hi')
+    const a = agent('You are helpful.').forUser('u-1')
+    await assert.rejects(() => a.prompt('hello'), /No ConversationStore registered/)
+  })
+
+  it('forUser() creates a new conversation, returns its id, and persists user + assistant messages', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('Hi there.')
+
+    const a = agent('You are helpful.').forUser('u-42')
+    const response = await a.prompt('hello')
+
+    assert.ok(response.conversationId, 'response should carry the new conversationId')
+    const messages = await store.load(response.conversationId!)
+    // Loop produced one assistant step → 2 messages persisted (user + assistant)
+    assert.strictEqual(messages.length, 2)
+    assert.strictEqual(messages[0]!.role, 'user')
+    assert.strictEqual(messages[0]!.content, 'hello')
+    assert.strictEqual(messages[1]!.role, 'assistant')
+    assert.strictEqual(messages[1]!.content, 'Hi there.')
+
+    // userId metadata flowed into store.list()
+    const list = await store.list('u-42')
+    assert.strictEqual(list.length, 1)
+    assert.strictEqual(list[0]!.id, response.conversationId)
+  })
+
+  it('continue() loads existing history and threads it into the next provider call', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    const id = await store.create('Existing')
+    await store.append(id, [
+      { role: 'user', content: 'first user msg' },
+      { role: 'assistant', content: 'first assistant reply' },
+    ])
+
+    fake.respondWith('continued reply')
+    const a = agent('sys').continue(id)
+    const response = await a.prompt('second user msg')
+
+    assert.strictEqual(response.conversationId, id)
+    // The provider call must have seen the existing history before the new user msg.
+    const call = fake.getCalls()[0]!
+    const userTexts = call.messages.filter(m => m.role === 'user').map(m => m.content)
+    const assistantTexts = call.messages.filter(m => m.role === 'assistant').map(m => m.content)
+    assert.ok(userTexts.includes('first user msg'), `expected loaded user history; got ${userTexts.join(',')}`)
+    assert.ok(userTexts.includes('second user msg'), 'expected new user msg')
+    assert.ok(assistantTexts.includes('first assistant reply'), 'expected loaded assistant history')
+
+    // Persistence appended only the new user msg + new assistant msg, not duplicates.
+    const finalMessages = await store.load(id)
+    assert.strictEqual(finalMessages.length, 4)
+    assert.strictEqual(finalMessages[2]!.content, 'second user msg')
+    assert.strictEqual(finalMessages[3]!.content, 'continued reply')
+  })
+
+  it('reuses the same conversationId across multiple prompts on the same instance', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('ack')
+
+    const a = agent('sys').forUser('u-7')
+    const r1 = await a.prompt('one')
+    const r2 = await a.prompt('two')
+
+    assert.strictEqual(r1.conversationId, r2.conversationId)
+    const messages = await store.load(r1.conversationId!)
+    assert.strictEqual(messages.length, 4) // user/assistant × 2
+    assert.strictEqual(messages[0]!.content, 'one')
+    assert.strictEqual(messages[2]!.content, 'two')
+  })
+
+  it('persists tool messages alongside the assistant message for tool-using turns', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+
+    const greet = toolDefinition({
+      name: 'greet',
+      description: 'greet someone',
+      inputSchema: z.object({ name: z.string() }),
+    }).server(async ({ name }) => `hi ${name}`)
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 't1', name: 'greet', arguments: { name: 'world' } }] },
+      { text: 'all done' },
+    ])
+
+    const a = agent({ instructions: 'sys', tools: [greet] }).forUser('u-9')
+    const response = await a.prompt('greet world')
+
+    const messages = await store.load(response.conversationId!)
+    // user → assistant{toolCalls} → tool → assistant{text}
+    assert.strictEqual(messages.length, 4)
+    assert.strictEqual(messages[0]!.role, 'user')
+    assert.strictEqual(messages[1]!.role, 'assistant')
+    assert.deepStrictEqual(messages[1]!.toolCalls, [{ id: 't1', name: 'greet', arguments: { name: 'world' } }])
+    assert.strictEqual(messages[2]!.role, 'tool')
+    assert.strictEqual(messages[2]!.toolCallId, 't1')
+    assert.strictEqual(messages[2]!.content, 'hi world')
+    assert.strictEqual(messages[3]!.role, 'assistant')
+    assert.strictEqual(messages[3]!.content, 'all done')
+  })
+
+  it('streaming variant persists messages and resolves with the conversationId', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('streamed reply')
+
+    const a = agent('sys').forUser('u-stream')
+    const { stream, response } = a.stream('hi')
+    for await (const _ of stream) { /* drain */ }
+    const final = await response
+
+    assert.ok(final.conversationId)
+    assert.strictEqual(final.text, 'streamed reply')
+    const messages = await store.load(final.conversationId!)
+    assert.strictEqual(messages.length, 2)
+    assert.strictEqual(messages[0]!.content, 'hi')
+    assert.strictEqual(messages[1]!.content, 'streamed reply')
+  })
+
+  it('ConversableAgent can be constructed directly and threads through the same store', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('direct')
+
+    const inner = agent('sys')
+    const wrap = new ConversableAgent(inner).forUser('u-direct')
+    const response = await wrap.prompt('hey')
+    assert.ok(response.conversationId)
+    const messages = await store.load(response.conversationId!)
+    assert.strictEqual(messages.length, 2)
   })
 })
 
