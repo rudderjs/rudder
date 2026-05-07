@@ -84,6 +84,14 @@ export interface PassportConfig {
    * keys). RFC 8725 §3.10.
    */
   issuer?: string
+  /**
+   * Maximum value (in seconds) the per-row `oauth_device_codes.interval`
+   * is allowed to grow to via repeated `slow_down` escalations (RFC 8628
+   * §3.5). Default 60. Floor is 5 (the initial interval); values below
+   * the floor are clamped. Raise for machine-only / no-human-in-the-loop
+   * device flows where misbehaving clients warrant aggressive back-off.
+   */
+  deviceMaxInterval?: number
 }
 
 // ─── Service Provider ─────────────────────────────────────
@@ -125,6 +133,9 @@ export class PassportProvider extends ServiceProvider {
 
     // Configure issuer (P7) — see PassportConfig.issuer jsdoc.
     if (cfg.issuer) Passport.useIssuer(cfg.issuer)
+
+    // Device-flow polling cap — see PassportConfig.deviceMaxInterval jsdoc.
+    if (cfg.deviceMaxInterval !== undefined) Passport.deviceMaxInterval(cfg.deviceMaxInterval)
 
     this.app.instance('passport', Passport)
 
