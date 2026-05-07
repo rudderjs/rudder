@@ -213,6 +213,42 @@ export interface PassportRouteOptions {
    * existed).
    */
   tokenMiddleware?: MiddlewareHandler | MiddlewareHandler[]
+  /**
+   * Middleware applied to the consent endpoints — `GET/POST/DELETE
+   * /oauth/authorize` and `DELETE /oauth/tokens/:id`. POST /oauth/authorize
+   * is the canonical CSRF target (an attacker page that auto-submits a
+   * hidden form would mint authorization codes for the victim's logged-in
+   * session).
+   *
+   * Most apps should NOT use this option. The recommended pattern is to
+   * mount CSRF on the entire web group from `bootstrap/app.ts`:
+   *
+   * ```ts
+   * .withMiddleware((m) => m.web(CsrfMiddleware()))
+   * ```
+   *
+   * which automatically covers `/oauth/authorize` along with every other
+   * state-changing web route. `authorizeMiddleware` is the per-route
+   * fallback for apps that do NOT mount CSRF at the group level:
+   *
+   * ```ts
+   * import { CsrfMiddleware } from '@rudderjs/middleware'
+   * import { registerPassportWebRoutes } from '@rudderjs/passport'
+   *
+   * registerPassportWebRoutes(router, {
+   *   authorizeMiddleware: [CsrfMiddleware()],
+   * })
+   * ```
+   *
+   * Don't do both — CsrfMiddleware running twice on the same request
+   * emits duplicate `Set-Cookie`s on GETs and runs validation twice on
+   * POSTs.
+   *
+   * Accepts a single handler or an array. Empty / omitted means no
+   * additional middleware is applied — the typical case for apps that
+   * already CSRF-guard at the group level.
+   */
+  authorizeMiddleware?: MiddlewareHandler | MiddlewareHandler[]
 }
 
 function asMiddlewareArray(input: MiddlewareHandler | MiddlewareHandler[] | undefined): MiddlewareHandler[] {
@@ -239,7 +275,8 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
 
   const prefix = opts.prefix ?? '/oauth'
   const skip = new Set(opts.except ?? [])
-  const tokenMiddleware = asMiddlewareArray(opts.tokenMiddleware)
+  const tokenMiddleware     = asMiddlewareArray(opts.tokenMiddleware)
+  const authorizeMiddleware = asMiddlewareArray(opts.authorizeMiddleware)
 
   // ── /oauth/authorize ─────────────────────────────────────
   if (!skip.has('authorize')) {
@@ -285,7 +322,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
       } catch (e) {
         authErrorResponse(res, e, query['state'])
       }
-    })
+    }, authorizeMiddleware)
 
     // POST /oauth/authorize — user approves
     router.post(`${prefix}/authorize`, async (req: any, res: any) => {
@@ -319,7 +356,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
       } catch (e) {
         authErrorResponse(res, e, body['state'])
       }
-    })
+    }, authorizeMiddleware)
 
     // DELETE /oauth/authorize — user denies
     router.delete(`${prefix}/authorize`, async (req: any, res: any) => {
@@ -336,7 +373,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
       } catch (e) {
         authErrorResponse(res, e, body['state'])
       }
-    })
+    }, authorizeMiddleware)
   }
 
   // ── POST /oauth/token ────────────────────────────────────
@@ -463,7 +500,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
       await AccessTokenCls.where('id', token.id)
         .updateAll({ revoked: true } as Record<string, unknown>)
       res.status(204).send()
-    }, [RequireBearer()])
+    }, [RequireBearer(), ...authorizeMiddleware])
   }
 
   // ── GET /oauth/scopes ────────────────────────────────────
@@ -517,4 +554,58 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
       }
     })
   }
+}
+
+/**
+ * Register the **web-group** Passport routes — `GET/POST/DELETE
+ * /oauth/authorize` (the consent flow) and `DELETE /oauth/tokens/:id`
+ * (revoke). These endpoints depend on session + authenticated user
+ * resolution, so they belong on the same router that handles your
+ * application's logged-in pages.
+ *
+ * `POST /oauth/authorize` requires CSRF protection. The recommended
+ * pattern is to mount `CsrfMiddleware` on the entire web group from
+ * `bootstrap/app.ts` (`withMiddleware((m) => m.web(CsrfMiddleware()))`)
+ * — that single hook covers /oauth/authorize plus every other
+ * state-changing web route. Apps that don't have group-level CSRF can
+ * use the per-route fallback via `authorizeMiddleware: [CsrfMiddleware()]`
+ * — see PassportRouteOptions.authorizeMiddleware. Don't do both.
+ *
+ * Thin wrapper around `registerPassportRoutes(router, { except: ['token',
+ * 'scopes', 'device'] })`. Use `registerPassportApiRoutes()` for the
+ * stateless half on the api group.
+ */
+export function registerPassportWebRoutes(router: Router, opts: PassportRouteOptions = {}): void {
+  const except = new Set([...(opts.except ?? []), 'token', 'scopes', 'device'] as PassportRouteGroup[])
+  registerPassportRoutes(router, { ...opts, except: Array.from(except) })
+}
+
+/**
+ * Register the **api-group** Passport routes — `POST /oauth/token`,
+ * `POST /oauth/device/code`, `POST /oauth/device/approve`, and `GET
+ * /oauth/scopes`. These endpoints are stateless (machine-to-machine), so
+ * they belong on the api router alongside your other JSON endpoints.
+ *
+ * `POST /oauth/token` is the canonical brute-force target — pass a rate
+ * limiter via `tokenMiddleware`:
+ *
+ * ```ts
+ * import { RateLimit } from '@rudderjs/middleware'
+ * import { registerPassportApiRoutes } from '@rudderjs/passport'
+ *
+ * // routes/api.ts
+ * registerPassportApiRoutes(router, {
+ *   tokenMiddleware: [
+ *     RateLimit.perMinute(10).by((req) => `${req.ip}:${req.body?.client_id}`),
+ *   ],
+ * })
+ * ```
+ *
+ * Thin wrapper around `registerPassportRoutes(router, { except:
+ * ['authorize', 'revoke'] })`. Use `registerPassportWebRoutes()` for the
+ * stateful half on the web group.
+ */
+export function registerPassportApiRoutes(router: Router, opts: PassportRouteOptions = {}): void {
+  const except = new Set([...(opts.except ?? []), 'authorize', 'revoke'] as PassportRouteGroup[])
+  registerPassportRoutes(router, { ...opts, except: Array.from(except) })
 }

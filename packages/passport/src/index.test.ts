@@ -37,6 +37,8 @@ import {
   HasApiTokens,
   resetPersonalAccessClient,
   registerPassportRoutes,
+  registerPassportWebRoutes,
+  registerPassportApiRoutes,
 } from './index.js'
 import { safeCompare } from './grants/safe-compare.js'
 
@@ -110,6 +112,11 @@ describe('@rudderjs/passport exports', () => {
 
   test('registerPassportRoutes is a function', () => {
     assert.equal(typeof registerPassportRoutes, 'function')
+  })
+
+  test('registerPassportWebRoutes + registerPassportApiRoutes are functions', () => {
+    assert.equal(typeof registerPassportWebRoutes, 'function')
+    assert.equal(typeof registerPassportApiRoutes, 'function')
   })
 })
 
@@ -2696,6 +2703,153 @@ describe('resolveClientGrantTypes — passport:client CLI flag mapping (L2)', ()
       resolveClientGrantTypes({ isDevice: true, isM2M: true }),
       ['urn:ietf:params:oauth:grant-type:device_code', 'refresh_token'],
     )
+  })
+})
+
+describe('authorize/group-split routes (E7)', () => {
+  // Regression guards for E7 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // Two changes:
+  //   1. New `authorizeMiddleware` option mounts on GET/POST/DELETE
+  //      /oauth/authorize and DELETE /oauth/tokens/:id. Primary use is
+  //      CsrfMiddleware on the consent flow.
+  //   2. New `registerPassportWebRoutes` / `registerPassportApiRoutes`
+  //      thin wrappers route the consent half + the stateless half onto
+  //      separate routers. Each is internally a `registerPassportRoutes`
+  //      call with the matching `except`.
+
+  /** Capture every (method, path, middleware) tuple the wrapper emits. */
+  function capturingRouter() {
+    const captured: Array<{ method: string; path: string; mw: any[] }> = []
+    return {
+      captured,
+      router: {
+        get:    (path: string, _h: any, mw?: any) => captured.push({ method: 'GET',    path, mw: mw ?? [] }),
+        post:   (path: string, _h: any, mw?: any) => captured.push({ method: 'POST',   path, mw: mw ?? [] }),
+        delete: (path: string, _h: any, mw?: any) => captured.push({ method: 'DELETE', path, mw: mw ?? [] }),
+      },
+    }
+  }
+
+  // ── authorizeMiddleware wiring ──────────────────────────
+
+  test('authorizeMiddleware mounts on GET/POST/DELETE /oauth/authorize', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const { captured, router } = capturingRouter()
+    registerPassportRoutes(router, { authorizeMiddleware: sentinel })
+    const authorizeRoutes = captured.filter(r => r.path === '/oauth/authorize')
+    assert.equal(authorizeRoutes.length, 3, 'GET + POST + DELETE on /oauth/authorize')
+    for (const route of authorizeRoutes) {
+      assert.ok(route.mw.includes(sentinel), `${route.method} /oauth/authorize must carry authorizeMiddleware`)
+    }
+  })
+
+  test('authorizeMiddleware also mounts on DELETE /oauth/tokens/:id (alongside RequireBearer)', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const { captured, router } = capturingRouter()
+    registerPassportRoutes(router, { authorizeMiddleware: [sentinel] })
+    const revoke = captured.find(r => r.method === 'DELETE' && r.path === '/oauth/tokens/:id')
+    assert.ok(revoke, 'DELETE /oauth/tokens/:id must be registered')
+    assert.ok(revoke!.mw.includes(sentinel),
+      'authorizeMiddleware must mount on the revoke endpoint too — it shares the consent surface')
+    // Existing RequireBearer must still be present and ahead of the
+    // sentinel; otherwise an unauthenticated CSRF token would be enough.
+    assert.equal(revoke!.mw.length, 2)
+  })
+
+  test('omitted authorizeMiddleware → no extra middleware on authorize endpoints', () => {
+    Passport.reset()
+    const { captured, router } = capturingRouter()
+    registerPassportRoutes(router)
+    for (const route of captured.filter(r => r.path === '/oauth/authorize')) {
+      assert.deepEqual(route.mw, [])
+    }
+  })
+
+  test('authorizeMiddleware does NOT bleed onto token / device / scopes endpoints', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const { captured, router } = capturingRouter()
+    registerPassportRoutes(router, { authorizeMiddleware: [sentinel] })
+    const stateless = captured.filter(r =>
+      r.path === '/oauth/token' ||
+      r.path === '/oauth/device/code' ||
+      r.path === '/oauth/device/approve' ||
+      r.path === '/oauth/scopes',
+    )
+    for (const route of stateless) {
+      assert.equal(route.mw.includes(sentinel), false,
+        `${route.method} ${route.path} must NOT carry authorizeMiddleware`)
+    }
+  })
+
+  // ── registerPassportWebRoutes / registerPassportApiRoutes ──
+
+  test('registerPassportWebRoutes mounts ONLY consent + revoke endpoints', () => {
+    Passport.reset()
+    const { captured, router } = capturingRouter()
+    registerPassportWebRoutes(router)
+    const paths = new Set(captured.map(r => `${r.method} ${r.path}`))
+    assert.ok(paths.has('GET /oauth/authorize'))
+    assert.ok(paths.has('POST /oauth/authorize'))
+    assert.ok(paths.has('DELETE /oauth/authorize'))
+    assert.ok(paths.has('DELETE /oauth/tokens/:id'))
+    assert.equal(paths.has('POST /oauth/token'), false, 'token endpoint belongs on the api half')
+    assert.equal(paths.has('POST /oauth/device/code'), false, 'device endpoints belong on the api half')
+    assert.equal(paths.has('POST /oauth/device/approve'), false, 'device endpoints belong on the api half')
+    assert.equal(paths.has('GET /oauth/scopes'), false, 'scopes belongs on the api half')
+  })
+
+  test('registerPassportApiRoutes mounts ONLY token + device + scopes endpoints', () => {
+    Passport.reset()
+    const { captured, router } = capturingRouter()
+    registerPassportApiRoutes(router)
+    const paths = new Set(captured.map(r => `${r.method} ${r.path}`))
+    assert.ok(paths.has('POST /oauth/token'))
+    assert.ok(paths.has('POST /oauth/device/code'))
+    assert.ok(paths.has('POST /oauth/device/approve'))
+    assert.ok(paths.has('GET /oauth/scopes'))
+    assert.equal(paths.has('GET /oauth/authorize'), false, 'consent flow belongs on the web half')
+    assert.equal(paths.has('POST /oauth/authorize'), false, 'consent flow belongs on the web half')
+    assert.equal(paths.has('DELETE /oauth/authorize'), false, 'consent flow belongs on the web half')
+    assert.equal(paths.has('DELETE /oauth/tokens/:id'), false, 'revoke belongs on the web half')
+  })
+
+  test('registerPassportWebRoutes preserves caller `except` and merges with the wrapper exclusion', () => {
+    // If a caller wants to skip an endpoint within the web half (say,
+    // they implement their own consent UI but still want the revoke
+    // endpoint), `except: ['authorize']` should still take effect.
+    Passport.reset()
+    const { captured, router } = capturingRouter()
+    registerPassportWebRoutes(router, { except: ['authorize'] })
+    const paths = new Set(captured.map(r => `${r.method} ${r.path}`))
+    assert.equal(paths.has('GET /oauth/authorize'), false)
+    assert.equal(paths.has('POST /oauth/authorize'), false)
+    assert.equal(paths.has('DELETE /oauth/authorize'), false)
+    assert.ok(paths.has('DELETE /oauth/tokens/:id'), 'revoke must still be mounted')
+    // And the api half stays out regardless.
+    assert.equal(paths.has('POST /oauth/token'), false)
+  })
+
+  test('registerPassportWebRoutes forwards authorizeMiddleware to the underlying mount', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const { captured, router } = capturingRouter()
+    registerPassportWebRoutes(router, { authorizeMiddleware: [sentinel] })
+    const post = captured.find(r => r.method === 'POST' && r.path === '/oauth/authorize')
+    assert.ok(post)
+    assert.ok(post!.mw.includes(sentinel))
+  })
+
+  test('registerPassportApiRoutes forwards tokenMiddleware to the underlying mount', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const { captured, router } = capturingRouter()
+    registerPassportApiRoutes(router, { tokenMiddleware: [sentinel] })
+    const post = captured.find(r => r.method === 'POST' && r.path === '/oauth/token')
+    assert.ok(post)
+    assert.ok(post!.mw.includes(sentinel))
   })
 })
 
