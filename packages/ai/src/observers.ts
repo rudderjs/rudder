@@ -61,6 +61,27 @@ export type AiEvent =
       failoverAttempts: number
       error:            string
     }
+  | {
+      /**
+       * Emitted after each iteration of the agent loop, before the next
+       * provider call (or before the loop exits). Lets observers report
+       * incremental progress — token usage so far, tools called this step
+       * — without waiting for the full run to finish. Fires for every step
+       * in both `prompt()` and `stream()` runs.
+       */
+      kind:           'agent.step.completed'
+      agentName:      string
+      model:          string
+      provider:       string
+      iteration:      number
+      step:           AiObserverStep
+      /** Cumulative usage across all completed steps. */
+      tokens:         { prompt: number; completion: number; total: number }
+      /** Cumulative wall-clock ms since the loop started. */
+      duration:       number
+      streaming:      boolean
+      conversationId: string | null
+    }
 
 export type AiObserver = (event: AiEvent) => void
 

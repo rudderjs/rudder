@@ -2281,3 +2281,125 @@ describe('tool durations on observer events', () => {
     unsubscribe?.()
   })
 })
+
+// ─── Per-step observer event ─────────────────────────────────────────────
+
+describe('agent.step.completed observer event', () => {
+  let captured: AiEvent[] = []
+  let unsubscribe: (() => void) | undefined
+
+  beforeEach(() => {
+    captured = []
+    aiObservers.reset()
+    unsubscribe = aiObservers.subscribe((e) => captured.push(e))
+  })
+
+  it('emits one step event per iteration in non-streaming mode', async () => {
+    const fake = AiFake.fake()
+    const lookup = toolDefinition({
+      name: 'lookup',
+      description: 'lookup',
+      inputSchema: z.object({}),
+    }).server(async () => 'data')
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'a', name: 'lookup', arguments: {} }] },
+      { text: 'final answer' },
+    ])
+
+    await agent({ instructions: 's', tools: [lookup] }).prompt('go')
+
+    const stepEvents = captured.filter(e => e.kind === 'agent.step.completed')
+    assert.strictEqual(stepEvents.length, 2, 'expected 2 step events for 2 iterations')
+    assert.strictEqual(stepEvents[0]!.kind, 'agent.step.completed')
+    assert.strictEqual(stepEvents[0]!.iteration, 1)
+    assert.strictEqual(stepEvents[1]!.iteration, 2)
+    assert.strictEqual(stepEvents[0]!.streaming, false)
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('emits step events before agent.completed', async () => {
+    const fake = AiFake.fake()
+    fake.respondWithSequence([{ text: 'one-shot' }])
+
+    await agent({ instructions: 's' }).prompt('go')
+
+    // step events fire from inside the iteration loop; agent.completed
+    // fires after the loop finishes. Order should reflect that.
+    const kinds = captured.map(e => e.kind)
+    const stepIdx = kinds.indexOf('agent.step.completed')
+    const completedIdx = kinds.indexOf('agent.completed')
+    assert.ok(stepIdx >= 0 && completedIdx >= 0)
+    assert.ok(stepIdx < completedIdx, 'step event must precede completed event')
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('streaming variant emits step events with streaming: true', async () => {
+    const fake = AiFake.fake()
+    fake.respondWithSequence([{ text: 'streamed' }])
+
+    const { stream, response } = agent({ instructions: 's' }).stream('go')
+    for await (const _ of stream) { /* drain */ }
+    await response
+
+    const stepEvents = captured.filter(e => e.kind === 'agent.step.completed')
+    assert.strictEqual(stepEvents.length, 1)
+    assert.strictEqual(stepEvents[0]!.streaming, true)
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('cumulative tokens field is present on each step event', async () => {
+    const fake = AiFake.fake()
+    const fetch = toolDefinition({
+      name: 'fetch',
+      description: 'fetch',
+      inputSchema: z.object({}),
+    }).server(async () => 'ok')
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'a', name: 'fetch', arguments: {} }] },
+      { text: 'done' },
+    ])
+
+    await agent({ instructions: 's', tools: [fetch] }).prompt('go')
+
+    const stepEvents = captured.filter(e => e.kind === 'agent.step.completed') as Extract<AiEvent, { kind: 'agent.step.completed' }>[]
+    assert.strictEqual(stepEvents.length, 2)
+    // Shape only — AiFake hard-codes provider usage to 0, so we verify the
+    // running-total field is present and shaped correctly. Real providers
+    // produce non-zero values; integration coverage lives in playground.
+    for (const ev of stepEvents) {
+      assert.ok('prompt' in ev.tokens && 'completion' in ev.tokens && 'total' in ev.tokens)
+      assert.strictEqual(typeof ev.tokens.total, 'number')
+    }
+    fake.restore()
+    unsubscribe?.()
+  })
+
+  it('step event carries the just-completed step shape (with toolCalls)', async () => {
+    const fake = AiFake.fake()
+    const lookup = toolDefinition({
+      name: 'lookup',
+      description: 'lookup',
+      inputSchema: z.object({}),
+    }).server(async () => 'data')
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'tc1', name: 'lookup', arguments: {} }] },
+      { text: 'final' },
+    ])
+
+    await agent({ instructions: 's', tools: [lookup] }).prompt('go')
+
+    const firstStep = captured.find(e => e.kind === 'agent.step.completed') as Extract<AiEvent, { kind: 'agent.step.completed' }> | undefined
+    assert.ok(firstStep)
+    assert.strictEqual(firstStep.step.toolCalls.length, 1)
+    assert.strictEqual(firstStep.step.toolCalls[0]!.id, 'tc1')
+    assert.strictEqual(firstStep.step.toolCalls[0]!.name, 'lookup')
+    fake.restore()
+    unsubscribe?.()
+  })
+})
