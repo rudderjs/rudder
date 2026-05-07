@@ -97,6 +97,7 @@ export { zodToJsonSchema } from './zod-to-json-schema.js'
 
 // Agent
 export { Agent, ConversableAgent, agent, stepCountIs, hasToolCall, setConversationStore } from './agent.js'
+export type { InvalidToolArgumentsError } from './agent.js'
 export { QueuedPromptBuilder } from './queue-job.js'
 
 // Middleware

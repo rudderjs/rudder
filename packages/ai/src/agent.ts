@@ -571,6 +571,19 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
             }
           }
 
+          // Validate args against the tool's inputSchema. Runs after
+          // middleware transforms so transforms can reshape malformed
+          // model output before it is judged. On failure, feed the
+          // structured error back to the model and skip execute().
+          const validation = validateToolArgs(tool, toolArgs)
+          if (!validation.ok) {
+            toolResults.push({ toolCallId: tc.id, result: validation.error })
+            messages.push({ role: 'tool', content: JSON.stringify(validation.error), toolCallId: tc.id })
+            if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, validation.error)
+            continue
+          }
+          const validatedArgs = validation.value
+
           try {
             // Drain generator yields silently in the non-streaming loop —
             // the same tool definition must work in both prompt() and stream().
@@ -578,7 +591,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
             // halts iteration, propagates the nested calls to the parent's
             // pending list, and skips tool_result recording (see tool.ts
             // `pauseForClientTools` for rationale).
-            const execGen = executeMaybeStreaming(tool, toolArgs, { toolCallId: tc.id })
+            const execGen = executeMaybeStreaming(tool, validatedArgs, { toolCallId: tc.id })
             let result: unknown
             let paused = false
             while (true) {
@@ -954,6 +967,21 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               }
             }
 
+            // Validate args against the tool's inputSchema (see notes on
+            // the non-streaming loop). The tool-call chunk is emitted even
+            // on validation failure so UIs see a paired tool-call →
+            // tool-result(error) sequence.
+            const validation = validateToolArgs(tool, toolArgs)
+            if (!validation.ok) {
+              yield { type: 'tool-call' as const, toolCall: tc }
+              toolResults.push({ toolCallId: tc.id, result: validation.error })
+              messages.push({ role: 'tool', content: JSON.stringify(validation.error), toolCallId: tc.id })
+              yield { type: 'tool-result' as const, toolCall: tc, result: validation.error }
+              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, validation.error)
+              continue
+            }
+            const validatedArgs = validation.value
+
             try {
               // Emit the tool-call marker before execution so the UI sees
               // tool-call → tool-update* → tool-result in order. Async-
@@ -966,7 +994,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               // — the yielding tool's own call stays orphaned in the parent
               // message history until the caller resolves it on resume.
               yield { type: 'tool-call' as const, toolCall: tc }
-              const execGen = executeMaybeStreaming(tool, toolArgs, { toolCallId: tc.id })
+              const execGen = executeMaybeStreaming(tool, validatedArgs, { toolCallId: tc.id })
               let result: unknown
               let paused = false
               while (true) {
@@ -1200,11 +1228,22 @@ async function resumePendingToolCalls(deps: {
       break
     }
 
+    // Validate args before executing on resume. Approval-resume bypasses
+    // middleware so we use the raw tc.arguments. On failure, feed the
+    // structured error to the model so it can correct itself.
+    const validation = validateToolArgs(tool, tc.arguments)
+    if (!validation.ok) {
+      const m: AiMessage = { role: 'tool', content: JSON.stringify(validation.error), toolCallId: tc.id }
+      messages.push(m)
+      resumed.push(m)
+      continue
+    }
+
     try {
       // Drain generator yields silently — approval-resume runs outside the
       // stream, so any preliminary updates are discarded; only the final
       // return value is captured.
-      const execGen = executeMaybeStreaming(tool, tc.arguments, { toolCallId: tc.id })
+      const execGen = executeMaybeStreaming(tool, validation.value, { toolCallId: tc.id })
       let result: unknown
       while (true) {
         const step = await execGen.next()
@@ -1273,6 +1312,46 @@ async function* executeMaybeStreaming(
     }
   }
   return await ret
+}
+
+/**
+ * Structured error returned to the model when a tool call's arguments fail
+ * the tool's `inputSchema`. Surfaced both as the `result` on `AgentStep`
+ * and as the JSON-encoded `tool` message the next provider step receives,
+ * so the model can correct itself on the next turn.
+ */
+export interface InvalidToolArgumentsError {
+  error: 'invalid_arguments'
+  message: string
+  issues: Array<{ path: string; message: string }>
+}
+
+/**
+ * Validate a tool call's arguments against the tool's `inputSchema`. On
+ * success, the parsed value is returned — zod transforms (`.transform`,
+ * `.default`, type coercion) are applied, so `execute` receives the
+ * canonical shape the schema describes. On failure, a structured error
+ * suitable for feeding back to the model is returned.
+ */
+function validateToolArgs(
+  tool: Tool,
+  args: Record<string, unknown>,
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: InvalidToolArgumentsError } {
+  const parsed = tool.definition.inputSchema.safeParse(args)
+  if (parsed.success) {
+    return { ok: true, value: parsed.data as Record<string, unknown> }
+  }
+  return {
+    ok: false,
+    error: {
+      error: 'invalid_arguments',
+      message: `Tool "${tool.definition.name}" received arguments that did not match its inputSchema.`,
+      issues: parsed.error.issues.map(i => ({
+        path: i.path.map(seg => String(seg)).join('.'),
+        message: i.message,
+      })),
+    },
+  }
 }
 
 /**
