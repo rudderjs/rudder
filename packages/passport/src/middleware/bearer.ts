@@ -32,7 +32,12 @@ export function BearerMiddleware(): MiddlewareHandler {
     }
 
     try {
-      const payload = await verifyToken(jwt)
+      // Pass expectedIssuer when configured so verifyToken rejects
+      // tokens minted by an unrelated issuer sharing the same keypair
+      // (multi-tenant / staging+prod). Tokens with no `iss` claim are
+      // legacy and exempt — see verifyToken jsdoc.
+      const issuer = Passport.issuer()
+      const payload = await verifyToken(jwt, issuer ? { expectedIssuer: issuer } : undefined)
 
       // Check revocation in DB
       const AccessTokenCls = await Passport.tokenModel()
@@ -89,7 +94,12 @@ export function RequireBearer(): MiddlewareHandler {
     }
 
     try {
-      const payload = await verifyToken(jwt)
+      // Pass expectedIssuer when configured so verifyToken rejects
+      // tokens minted by an unrelated issuer sharing the same keypair
+      // (multi-tenant / staging+prod). Tokens with no `iss` claim are
+      // legacy and exempt — see verifyToken jsdoc.
+      const issuer = Passport.issuer()
+      const payload = await verifyToken(jwt, issuer ? { expectedIssuer: issuer } : undefined)
 
       // Check revocation
       const AccessTokenCls = await Passport.tokenModel()

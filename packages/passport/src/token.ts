@@ -14,12 +14,39 @@ export interface JwtPayload {
   sub:     string | null
   /** Audience — client ID */
   aud:     string
+  /**
+   * Issuer — set when `Passport.useIssuer(url)` was configured at the time
+   * the token was minted. Optional because tokens issued before issuer
+   * configuration carry no `iss` claim (legacy compat window). RFC 7519
+   * §4.1.1 makes `iss` optional; we treat it as RECOMMENDED in deployments
+   * that may have multiple signers (RFC 8725 §3.10).
+   */
+  iss?:    string
   /** Issued at (seconds) */
   iat:     number
   /** Expiration (seconds) */
   exp:     number
   /** Scopes */
   scopes:  string[]
+}
+
+/** Options for `verifyToken()` — see jsdoc on the function. */
+export interface VerifyTokenOptions {
+  /**
+   * Expected audience (clientId). When provided, `verifyToken` rejects
+   * tokens whose `aud` claim doesn't match. Resource servers that gate to
+   * a specific client should always pass this. Mitigates cross-client
+   * token confusion in multi-client deployments.
+   */
+  expectedAud?: string
+  /**
+   * Expected issuer URL. When provided, `verifyToken` rejects tokens whose
+   * `iss` claim doesn't match. Tokens minted before issuer configuration
+   * carry no `iss` claim and are exempt during the migration window —
+   * same pattern as redirect_uri (P1) and familyId (P4). Pass
+   * `Passport.issuer() ?? undefined` to opt in once configured.
+   */
+  expectedIssuer?: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -68,6 +95,11 @@ export async function createToken(payload: {
     exp:    Math.floor(payload.expiresAt.getTime() / 1000),
     scopes: payload.scopes,
   }
+  // Stamp `iss` only when the operator has configured one — keeps the
+  // payload identical for apps that haven't opted in (no surprise size
+  // bump on the wire) and keeps legacy verifiers working.
+  const issuer = Passport.issuer()
+  if (issuer) jwtPayload.iss = issuer
 
   const segments = [
     base64url(JSON.stringify(header)),
@@ -87,8 +119,23 @@ export async function createToken(payload: {
 /**
  * Verify and decode a JWT using RSA-SHA256.
  * Returns the payload if valid, throws if invalid.
+ *
+ * Validation runs in this order — each step throws with a specific message
+ * so callers can distinguish failure modes if they want to:
+ *   1. Format         — three base64url-encoded segments.
+ *   2. Signature      — RSA-SHA256 verifies against the configured public key.
+ *   3. Expiration     — `exp` claim is in the future.
+ *   4. Audience       — only when `options.expectedAud` is provided; rejects
+ *                       tokens whose `aud` claim doesn't match. Mitigates
+ *                       cross-client token confusion.
+ *   5. Issuer         — only when `options.expectedIssuer` is provided AND
+ *                       the token carries an `iss` claim; rejects mismatches.
+ *                       Tokens minted before `Passport.useIssuer(...)` was
+ *                       configured carry no `iss` and are exempt during the
+ *                       migration window — same pattern as redirect_uri /
+ *                       familyId rollouts.
  */
-export async function verifyToken(jwt: string): Promise<JwtPayload> {
+export async function verifyToken(jwt: string, options?: VerifyTokenOptions): Promise<JwtPayload> {
   const { createVerify } = await import('node:crypto')
   const { publicKey } = await Passport.keys()
 
@@ -116,6 +163,19 @@ export async function verifyToken(jwt: string): Promise<JwtPayload> {
   const now = Math.floor(Date.now() / 1000)
   if (payload.exp <= now) {
     throw new Error('Invalid JWT: token has expired')
+  }
+
+  // Check audience (RFC 7519 §4.1.3 + RFC 8725 §3.10).
+  if (options?.expectedAud !== undefined && payload.aud !== options.expectedAud) {
+    throw new Error('Invalid JWT: audience mismatch')
+  }
+
+  // Check issuer (RFC 7519 §4.1.1 + RFC 8725 §3.10). Tokens without an
+  // `iss` claim were minted before the issuer was configured — accept them
+  // during the migration window. New tokens issued after `Passport.useIssuer`
+  // is set carry the claim, and the verifier rejects mismatches.
+  if (options?.expectedIssuer !== undefined && payload.iss !== undefined && payload.iss !== options.expectedIssuer) {
+    throw new Error('Invalid JWT: issuer mismatch')
   }
 
   return payload
