@@ -155,7 +155,7 @@ export class PassportProvider extends ServiceProvider {
     rudder.command('passport:keys', async (args: string[]) => {
       const force = args.includes('--force')
       const { generateKeys } = await import('./commands/keys.js')
-      const { privatePath, publicPath, backup } = await generateKeys({ force })
+      const { privatePath, publicPath, backup, previousPublicPath } = await generateKeys({ force })
       console.log(`  RSA keys generated:`)
       console.log(`    Private: ${privatePath}`)
       console.log(`    Public:  ${publicPath}`)
@@ -163,7 +163,12 @@ export class PassportProvider extends ServiceProvider {
         console.log(`  Previous keys backed up to:`)
         console.log(`    Private: ${backup.privatePath}`)
         console.log(`    Public:  ${backup.publicPath}`)
-        console.log(`  WARNING: every JWT signed by the old key now fails verification.`)
+        if (previousPublicPath) {
+          console.log(`  Previous public key retained for grace verification at:`)
+          console.log(`    ${previousPublicPath}`)
+          console.log(`  JWTs signed by the old key continue verifying until they expire.`)
+          console.log(`  Delete this file once the old tokens have expired to drop the grace window.`)
+        }
       }
     }).description('Generate RSA encryption keys for OAuth tokens')
 

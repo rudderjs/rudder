@@ -3469,6 +3469,201 @@ describe('verifyToken aud/iss validation (P7)', () => {
   })
 })
 
+describe('JWKS-style previous-key verifier', () => {
+  // `passport:keys --force` rotates the signing key. Without a JWKS-style
+  // grace window, every JWT minted before the rotation fails verification
+  // on the next request — global sign-out. The fix keeps the prior public
+  // key around for verification only; `verifyToken` walks both keys, and
+  // `kid` headers (SHA-256 fingerprint of the public key) let it pick
+  // directly without trial-and-error. Once the old tokens expire naturally
+  // the operator can drop `oauth-previous-public.key` (or call
+  // `Passport.setPreviousPublicKey(null)`) to close the grace window.
+
+  /**
+   * Generate two distinct RSA keypairs so we can exercise the rotation
+   * path. 2048 instead of 4096 to keep tests fast.
+   */
+  async function genKeyPair(): Promise<{ privateKey: string; publicKey: string }> {
+    const { generateKeyPairSync } = await import('node:crypto')
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    })
+    return { privateKey, publicKey }
+  }
+
+  let oldKeys: { privateKey: string; publicKey: string } | null = null
+  let newKeys: { privateKey: string; publicKey: string } | null = null
+  async function ensureBothKeys(): Promise<{ oldKeys: typeof oldKeys; newKeys: typeof newKeys }> {
+    if (!oldKeys) oldKeys = await genKeyPair()
+    if (!newKeys) newKeys = await genKeyPair()
+    return { oldKeys, newKeys }
+  }
+
+  test('createToken stamps `kid` header equal to SHA-256(base64url) of the public key', async () => {
+    Passport.reset()
+    const { oldKeys: keys } = await ensureBothKeys()
+    Passport.setKeys(keys!.privateKey, keys!.publicKey)
+
+    const jwt = await createToken({
+      tokenId: 'AT-1', userId: 'U-1', clientId: 'C-1', scopes: ['read'],
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    const headerB64 = jwt.split('.')[0]!
+    const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8'))
+    assert.equal(typeof header.kid, 'string')
+    assert.match(header.kid, /^[A-Za-z0-9_-]+$/, 'kid must be base64url')
+
+    const expectedKid = createHash('sha256').update(keys!.publicKey).digest('base64url')
+    assert.equal(header.kid, expectedKid)
+
+    Passport.reset()
+  })
+
+  test('verifyToken accepts a JWT signed by the previous key after rotation', async () => {
+    Passport.reset()
+    const { oldKeys: prev, newKeys: curr } = await ensureBothKeys()
+
+    // 1) Mint a JWT under the OLD keypair.
+    Passport.setKeys(prev!.privateKey, prev!.publicKey)
+    const jwt = await createToken({
+      tokenId: 'AT-PRE-ROTATE', userId: 'U-1', clientId: 'C-1', scopes: ['read'],
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    // 2) Rotate to the NEW keypair. The old public key gets retained for
+    //    verification grace via setPreviousPublicKey().
+    Passport.setKeys(curr!.privateKey, curr!.publicKey)
+    Passport.setPreviousPublicKey(prev!.publicKey)
+
+    // 3) Pre-rotation JWT still verifies — found via kid → previous key.
+    const payload = await verifyToken(jwt)
+    assert.equal(payload.jti, 'AT-PRE-ROTATE')
+    assert.equal(payload.aud, 'C-1')
+
+    Passport.reset()
+  })
+
+  test('verifyToken rejects a JWT signed by the previous key once the grace slot is cleared', async () => {
+    Passport.reset()
+    const { oldKeys: prev, newKeys: curr } = await ensureBothKeys()
+
+    Passport.setKeys(prev!.privateKey, prev!.publicKey)
+    const jwt = await createToken({
+      tokenId: 'AT-PRE-ROTATE', userId: 'U-1', clientId: 'C-1', scopes: ['read'],
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    Passport.setKeys(curr!.privateKey, curr!.publicKey)
+    // Operator did NOT retain the previous key — clean break.
+    Passport.setPreviousPublicKey(null)
+
+    await assert.rejects(
+      () => verifyToken(jwt),
+      (e: any) => /signature verification failed/.test(e.message),
+    )
+
+    Passport.reset()
+  })
+
+  test('verifyToken accepts a legacy JWT (no `kid` header) by trial-verify against every verification key', async () => {
+    Passport.reset()
+    const { oldKeys: prev, newKeys: curr } = await ensureBothKeys()
+
+    // Hand-craft a no-kid JWT signed by the previous key — bypasses createToken
+    // (which always stamps kid now). This simulates a token minted before
+    // the JWKS PR shipped.
+    const { createSign } = await import('node:crypto')
+    const header = { alg: 'RS256', typ: 'JWT' } // no kid
+    const payload = {
+      jti: 'AT-LEGACY', sub: 'U-1', aud: 'C-1',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor((Date.now() + 60_000) / 1000),
+      scopes: ['read'],
+    }
+    const headerB64  = Buffer.from(JSON.stringify(header)).toString('base64url')
+    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url')
+    const signingInput = `${headerB64}.${payloadB64}`
+    const sign = createSign('RSA-SHA256')
+    sign.update(signingInput)
+    const sigB64 = sign.sign(prev!.privateKey, 'base64url')
+    const legacyJwt = `${signingInput}.${sigB64}`
+
+    // Set up the post-rotation state with the previous key retained.
+    Passport.setKeys(curr!.privateKey, curr!.publicKey)
+    Passport.setPreviousPublicKey(prev!.publicKey)
+
+    // verifyToken must succeed — falls through to "try each key" path
+    // because the JWT has no kid header.
+    const verified = await verifyToken(legacyJwt)
+    assert.equal(verified.jti, 'AT-LEGACY')
+
+    Passport.reset()
+  })
+
+  test('verifyToken rejects when kid points at a key that is no longer in the verification set', async () => {
+    Passport.reset()
+    const { oldKeys: prev, newKeys: curr } = await ensureBothKeys()
+
+    // Mint under the old key (carries kid = fingerprint of prev).
+    Passport.setKeys(prev!.privateKey, prev!.publicKey)
+    const jwt = await createToken({
+      tokenId: 'AT-1', userId: 'U-1', clientId: 'C-1', scopes: ['read'],
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+
+    // Rotate WITHOUT retaining prev — the kid in the JWT now points at a
+    // key that isn't in the verification set, so verification has no
+    // candidate keys to try and must fail.
+    Passport.setKeys(curr!.privateKey, curr!.publicKey)
+    Passport.setPreviousPublicKey(null)
+
+    await assert.rejects(
+      () => verifyToken(jwt),
+      (e: any) => /signature verification failed/.test(e.message),
+    )
+
+    Passport.reset()
+  })
+
+  test('Passport.setPreviousPublicKey(null) and reset() both clear the grace slot', () => {
+    Passport.reset()
+    assert.equal(Passport.previousPublicKey(), null)
+    Passport.setPreviousPublicKey('-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----\n')
+    assert.notEqual(Passport.previousPublicKey(), null)
+    Passport.setPreviousPublicKey(null)
+    assert.equal(Passport.previousPublicKey(), null)
+    Passport.setPreviousPublicKey('-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----\n')
+    Passport.reset()
+    assert.equal(Passport.previousPublicKey(), null, 'reset() must clear the previous-key slot')
+  })
+
+  test('verificationKeys() returns [current] when no previous key is set', async () => {
+    Passport.reset()
+    const { newKeys: curr } = await ensureBothKeys()
+    Passport.setKeys(curr!.privateKey, curr!.publicKey)
+    Passport.setPreviousPublicKey(null)
+    const keys = await Passport.verificationKeys()
+    assert.equal(keys.length, 1)
+    assert.equal(keys[0], curr!.publicKey)
+    Passport.reset()
+  })
+
+  test('verificationKeys() returns [current, previous] in current-first order', async () => {
+    Passport.reset()
+    const { oldKeys: prev, newKeys: curr } = await ensureBothKeys()
+    Passport.setKeys(curr!.privateKey, curr!.publicKey)
+    Passport.setPreviousPublicKey(prev!.publicKey)
+    const keys = await Passport.verificationKeys()
+    assert.equal(keys.length, 2)
+    assert.equal(keys[0], curr!.publicKey, 'current public key must come first')
+    assert.equal(keys[1], prev!.publicKey)
+    Passport.reset()
+  })
+})
+
 describe('oauth_device_codes hashing + interval escalation (P9 + M4)', () => {
   // Regression guards for P9 + M4 from the findings doc. Bundled because
   // they share the same Prisma migration on `oauth_device_codes`.

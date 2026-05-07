@@ -5,6 +5,15 @@ import { Passport } from './Passport.js'
 export interface JwtHeader {
   alg: 'RS256'
   typ: 'JWT'
+  /**
+   * Key ID — SHA-256 fingerprint (base64url) of the public key that verifies
+   * this token's signature. Stamped by `createToken()` on every new JWT so
+   * `verifyToken()` can pick the right public key directly during a key-
+   * rotation grace window. Legacy tokens minted before this PR have no
+   * `kid` and fall through to "try each verification key in order" — same
+   * compat pattern as `iss` (P7) and the at-rest hashing migrations.
+   */
+  kid?: string
 }
 
 export interface JwtPayload {
@@ -60,6 +69,17 @@ function base64urlDecode(str: string): string {
   return Buffer.from(str, 'base64url').toString('utf8')
 }
 
+/**
+ * Stable key id for an RSA public key — SHA-256 (base64url) of the PEM
+ * string verbatim. Cheaper than RFC 7638 JWK Thumbprint (no DER reparse)
+ * and good enough for our single-issuer / few-keys scenarios — we only
+ * need a tiebreaker between current and previous public key.
+ */
+async function publicKeyFingerprint(publicKeyPem: string): Promise<string> {
+  const { createHash } = await import('node:crypto')
+  return createHash('sha256').update(publicKeyPem).digest('base64url')
+}
+
 // ─── Create JWT ───────────────────────────────────────────
 
 /**
@@ -82,9 +102,13 @@ export async function createToken(payload: {
   iatMs?:   number
 }): Promise<string> {
   const { createSign } = await import('node:crypto')
-  const { privateKey } = await Passport.keys()
+  const { privateKey, publicKey } = await Passport.keys()
 
-  const header: JwtHeader = { alg: 'RS256', typ: 'JWT' }
+  // `kid` lets verifyToken pick the right public key during a key-rotation
+  // grace window without trial-and-error verification. Always stamp it on
+  // new tokens — legacy tokens (no kid) still verify, just less efficiently.
+  const kid = await publicKeyFingerprint(publicKey)
+  const header: JwtHeader = { alg: 'RS256', typ: 'JWT', kid }
 
   const iat = Math.floor((payload.iatMs ?? Date.now()) / 1000)
   const jwtPayload: JwtPayload = {
@@ -137,7 +161,6 @@ export async function createToken(payload: {
  */
 export async function verifyToken(jwt: string, options?: VerifyTokenOptions): Promise<JwtPayload> {
   const { createVerify } = await import('node:crypto')
-  const { publicKey } = await Passport.keys()
 
   const parts = jwt.split('.')
   if (parts.length !== 3) {
@@ -146,11 +169,33 @@ export async function verifyToken(jwt: string, options?: VerifyTokenOptions): Pr
 
   const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
 
-  // Verify signature
+  // Walk every public key the operator has marked verifiable — current key
+  // first, then any previous keys retained for the post-rotation grace
+  // window. When the JWT carries a `kid` header we pick the matching key
+  // directly; otherwise we try each in order. Either way, ONE successful
+  // verify is enough — most tokens hit on the current key.
+  const verificationKeys = await Passport.verificationKeys()
+  const header = JSON.parse(base64urlDecode(headerB64)) as JwtHeader
   const signingInput = `${headerB64}.${payloadB64}`
-  const verify = createVerify('RSA-SHA256')
-  verify.update(signingInput)
-  const valid = verify.verify(publicKey, signatureB64, 'base64url')
+
+  let candidates: string[]
+  if (header.kid) {
+    const fingerprints = await Promise.all(verificationKeys.map(publicKeyFingerprint))
+    const idx = fingerprints.indexOf(header.kid)
+    candidates = idx >= 0 ? [verificationKeys[idx]!] : []
+  } else {
+    candidates = verificationKeys
+  }
+
+  let valid = false
+  for (const pk of candidates) {
+    const verify = createVerify('RSA-SHA256')
+    verify.update(signingInput)
+    if (verify.verify(pk, signatureB64, 'base64url')) {
+      valid = true
+      break
+    }
+  }
 
   if (!valid) {
     throw new Error('Invalid JWT: signature verification failed')
