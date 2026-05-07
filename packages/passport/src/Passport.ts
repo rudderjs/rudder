@@ -61,6 +61,16 @@ export class Passport {
   // possible issuer (e.g. multi-tenant or staging vs prod sharing keys).
   private static _issuer: string | null = null
 
+  /**
+   * Maximum value (in seconds) the per-row `oauth_device_codes.interval` is
+   * allowed to grow to via repeated `slow_down` escalations (RFC 8628 §3.5
+   * doesn't specify a cap; we add one to keep degenerate clients from
+   * pushing the interval to absurd values). 60 seconds is the default — long
+   * enough to make a misbehaving client back off meaningfully, short enough
+   * that a legitimate user typing the user_code never hits it.
+   */
+  private static _deviceMaxInterval = 60
+
   // ── Scopes ──────────────────────────────────────────────
 
   /** Define available OAuth scopes. */
@@ -299,6 +309,32 @@ export class Passport {
   static useIssuer(url: string): void { this._issuer = url || null }
   static issuer(): string | null { return this._issuer }
 
+  // ── Device flow polling cap (RFC 8628 §3.5) ─────────────
+
+  /**
+   * Configure the maximum value (in seconds) the per-row device-code
+   * polling interval is allowed to grow to via repeated `slow_down`
+   * escalations. Must be >= 5 (the initial interval) and >= the increment
+   * step (5s) to make sense; values smaller than that disable escalation
+   * entirely and are clamped at 5.
+   *
+   * Defaults to 60 seconds. Raise it for niche flows where a misbehaving
+   * client should be backed off more aggressively (e.g. a daemon polling
+   * with no human in the loop). Lower it if your device-flow consumers can
+   * tolerate a quicker authorization handshake — but lowering below ~30
+   * gives legitimate users a small window to enter the user_code.
+   */
+  static deviceMaxInterval(seconds: number): void {
+    // Never below the floor — escalation is by 5s, so a cap below 5
+    // would prevent any escalation from ever taking effect.
+    this._deviceMaxInterval = Math.max(5, Math.floor(seconds))
+  }
+
+  /** Current cap on `oauth_device_codes.interval` (seconds). */
+  static deviceMaxIntervalSeconds(): number {
+    return this._deviceMaxInterval
+  }
+
   // ── Reset (testing) ─────────────────────────────────────
 
   /** @internal */
@@ -319,5 +355,6 @@ export class Passport {
     this._authorizationView = null
     this._routesIgnored     = false
     this._issuer            = null
+    this._deviceMaxInterval = 60
   }
 }

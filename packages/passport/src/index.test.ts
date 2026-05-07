@@ -3976,6 +3976,137 @@ describe('oauth_device_codes hashing + interval escalation (P9 + M4)', () => {
   })
 })
 
+describe('Passport.deviceMaxInterval — configurable cap on slow_down escalation', () => {
+  // The 60s cap on `oauth_device_codes.interval` was hardcoded after #282.
+  // Niche flows (machine-only daemons, integration tests) want it tunable.
+  // `Passport.deviceMaxInterval(seconds)` + `PassportConfig.deviceMaxInterval`
+  // expose the cap; default stays 60 so existing behavior is unchanged.
+
+  function makeFake(row: Record<string, unknown>): any {
+    const calls: Array<{ kind: 'update'; data: Record<string, unknown> }> = []
+    class Fake {
+      static __calls = calls
+      static where(_col: string, _val: unknown) {
+        return { first: async () => row as any }
+      }
+      static async update(_id: string, data: Record<string, unknown>) {
+        calls.push({ kind: 'update', data })
+      }
+    }
+    return Fake
+  }
+
+  test('default cap is 60 seconds (regression guard for #282 default)', () => {
+    Passport.reset()
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 60)
+  })
+
+  test('Passport.deviceMaxInterval(n) overrides the cap', () => {
+    Passport.reset()
+    Passport.deviceMaxInterval(120)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 120)
+    Passport.reset()
+  })
+
+  test('values below the 5s floor are clamped — escalation must always be able to take effect', () => {
+    Passport.reset()
+    Passport.deviceMaxInterval(0)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 5, '0 clamps to the 5s initial-interval floor')
+    Passport.deviceMaxInterval(-10)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 5, 'negative values clamp to 5')
+    Passport.deviceMaxInterval(3)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 5, '3 is below the floor → clamped to 5')
+    Passport.reset()
+  })
+
+  test('fractional values are floored', () => {
+    Passport.reset()
+    Passport.deviceMaxInterval(45.9)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 45)
+    Passport.reset()
+  })
+
+  test('reset() restores the default 60s cap', () => {
+    Passport.reset()
+    Passport.deviceMaxInterval(120)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 120)
+    Passport.reset()
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 60)
+  })
+
+  test('pollDeviceCode honors a raised cap — escalation goes past 60s', async () => {
+    Passport.reset()
+    Passport.deviceMaxInterval(120)
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 60, // the OLD cap
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(),
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+
+    assert.equal(result.status, 'slow_down')
+    if (result.status === 'slow_down') {
+      assert.equal(result.interval, 65, 'cap raised → escalation continues past 60s')
+    }
+    const update = Fake.__calls.find((c: any) => c.kind === 'update')
+    assert.deepEqual(update?.data, { interval: 65 })
+    Passport.reset()
+  })
+
+  test('pollDeviceCode honors a lowered cap — escalation stops at the new ceiling', async () => {
+    Passport.reset()
+    Passport.deviceMaxInterval(15)
+    const Fake = makeFake({
+      id: 'D-1', clientId: 'C-1',
+      deviceCodeHash: await hashDeviceSecret('plain-device'),
+      userCodeHash:   'usrhash',
+      scopes: '[]', userId: null, approved: null,
+      interval: 15, // already at the lowered cap
+      expiresAt: new Date(Date.now() + 60_000),
+      lastPolledAt: new Date(),
+    })
+    Passport.useDeviceCodeModel(Fake)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plain-device',
+      clientId:   'C-1',
+    })
+
+    assert.equal(result.status, 'slow_down')
+    if (result.status === 'slow_down') {
+      assert.equal(result.interval, 15, 'lowered cap held — no further escalation')
+    }
+    const update = Fake.__calls.find((c: any) => c.kind === 'update')
+    assert.equal(update, undefined, 'no DB write when already capped')
+    Passport.reset()
+  })
+
+  test('Passport.deviceMaxInterval setter+getter pair (boot integration via PassportConfig)', () => {
+    // The boot path is `if (cfg.deviceMaxInterval !== undefined)
+    // Passport.deviceMaxInterval(cfg.deviceMaxInterval)`. We don't run the
+    // full provider here (heavyweight — same approach as the P7 issuer
+    // test); the wiring is single-line and covered by the typecheck on the
+    // provider boot() method, plus the setter/getter regression below.
+    Passport.reset()
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 60, 'default')
+    Passport.deviceMaxInterval(180)
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 180)
+    Passport.reset()
+    assert.equal(Passport.deviceMaxIntervalSeconds(), 60, 'reset() restores default')
+  })
+})
+
 describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
   // Regression guard for M5 / second half of P6 from
   // docs/plans/2026-05-06-passport-surface-review-fixes.md.

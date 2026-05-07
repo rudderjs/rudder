@@ -8,10 +8,13 @@ import { OAuthError, validateScopes } from './authorization-code.js'
 
 /**
  * Initial polling interval for new device-code rows (RFC 8628 §3.5).
- * Server escalates by 5s on each `slow_down` response, capped at MAX.
+ * Server escalates by 5s on each `slow_down` response, capped at
+ * `Passport.deviceMaxIntervalSeconds()` (default 60). RFC 8628 §3.5 doesn't
+ * specify a cap; we add one to keep degenerate clients from pushing the
+ * interval to absurd values, with the cap exposed to the operator so a
+ * niche flow (machine-only daemons, integration tests) can override it.
  */
 const INITIAL_INTERVAL_SECONDS = 5
-const MAX_INTERVAL_SECONDS     = 60
 
 // ─── Device Authorization Request ─────────────────────────
 
@@ -159,7 +162,7 @@ export async function pollDeviceCode(params: {
   if (device.lastPolledAt) {
     const elapsed = Date.now() - new Date(device.lastPolledAt).getTime()
     if (elapsed < device.interval * 1000) {
-      const nextInterval = Math.min(device.interval + 5, MAX_INTERVAL_SECONDS)
+      const nextInterval = Math.min(device.interval + 5, Passport.deviceMaxIntervalSeconds())
       if (nextInterval !== device.interval) {
         await DeviceCodeCls.update(device.id, { interval: nextInterval } as any)
       }
