@@ -249,6 +249,42 @@ export interface PassportRouteOptions {
    * already CSRF-guard at the group level.
    */
   authorizeMiddleware?: MiddlewareHandler | MiddlewareHandler[]
+  /**
+   * Middleware applied to the device-flow endpoints — `POST /oauth/device/code`
+   * and `POST /oauth/device/approve`. RFC 8628 §5.2 calls for brute-force
+   * protection on the user_code surface (8-char alphabet → 32^8 ≈ 1.1×10^12
+   * keyspace; per-IP throttling makes exhaustion infeasible).
+   *
+   * Most apps should NOT need this option. The recommended pattern is to
+   * mount a rate limiter on the entire api group from `bootstrap/app.ts`
+   * (`withMiddleware((m) => m.api(RateLimit.perMinute(60)))`) — that single
+   * hook covers the device endpoints alongside every other api route, and
+   * 60/min per-IP is already enough that exhausting the user_code keyspace
+   * would take tens of thousands of years.
+   *
+   * `deviceMiddleware` is the per-route fallback for apps that want a
+   * tighter device-specific limit (e.g. `RateLimit.perMinute(5)`) on top of
+   * — or in place of — the group default:
+   *
+   * ```ts
+   * import { RateLimit } from '@rudderjs/middleware'
+   * import { registerPassportApiRoutes } from '@rudderjs/passport'
+   *
+   * registerPassportApiRoutes(router, {
+   *   deviceMiddleware: [RateLimit.perMinute(5).by((req) => req.ip)],
+   * })
+   * ```
+   *
+   * Layered limits compose in sequence — group + per-route both run, with
+   * the tightest budget winning. Locking individual user_codes after N
+   * misses (the stateful half of the original RFC 8628 §5.2 guidance)
+   * isn't covered by RateLimit; if you need it, wrap your own middleware.
+   *
+   * Accepts a single handler or an array. Empty / omitted means no
+   * additional middleware is applied — the typical case for apps that
+   * already throttle the api group.
+   */
+  deviceMiddleware?: MiddlewareHandler | MiddlewareHandler[]
 }
 
 function asMiddlewareArray(input: MiddlewareHandler | MiddlewareHandler[] | undefined): MiddlewareHandler[] {
@@ -277,6 +313,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
   const skip = new Set(opts.except ?? [])
   const tokenMiddleware     = asMiddlewareArray(opts.tokenMiddleware)
   const authorizeMiddleware = asMiddlewareArray(opts.authorizeMiddleware)
+  const deviceMiddleware    = asMiddlewareArray(opts.deviceMiddleware)
 
   // ── /oauth/authorize ─────────────────────────────────────
   if (!skip.has('authorize')) {
@@ -513,6 +550,9 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
   // ── /oauth/device ────────────────────────────────────────
   if (!skip.has('device')) {
     // POST /oauth/device/code — request device authorization
+    // `deviceMiddleware` runs ahead of the handler — primary intended use is
+    // a per-route rate limiter tighter than the api-group default. See
+    // PassportRouteOptions.deviceMiddleware jsdoc.
     router.post(`${prefix}/device/code`, async (req: any, res: any) => {
       try {
         const body = req.body ?? {}
@@ -531,7 +571,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
         }
       }
-    })
+    }, deviceMiddleware)
 
     // POST /oauth/device/approve — user approves/denies device
     router.post(`${prefix}/device/approve`, async (req: any, res: any) => {
@@ -552,7 +592,7 @@ export function registerPassportRoutes(router: Router, opts: PassportRouteOption
           res.status(500).json({ error: 'server_error', error_description: 'Internal server error.' })
         }
       }
-    })
+    }, deviceMiddleware)
   }
 }
 
