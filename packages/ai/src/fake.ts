@@ -24,12 +24,34 @@ import type {
   FileUploadResult,
   FileListResult,
   FileContent,
+  ToolCall,
+  FinishReason,
 } from './types.js'
+
+/**
+ * One scripted provider response in a multi-step agent loop.
+ *
+ * Pass an array of these to {@link AiFake.respondWithSequence} to script a
+ * multi-turn run end-to-end (e.g. step 0 returns tool calls, step 1 returns
+ * the final assistant text). Step indices are 0-based and align 1:1 with
+ * provider `generate`/`stream` calls.
+ *
+ * - `text` — assistant message content (default: empty string)
+ * - `toolCalls` — present when the assistant wants to call tools; the loop
+ *   will execute them and feed results into the next step
+ * - `finishReason` — defaults to `'tool_calls'` when `toolCalls` is set,
+ *   otherwise `'stop'`
+ */
+export interface AiFakeStep {
+  text?: string
+  toolCalls?: ToolCall[]
+  finishReason?: FinishReason
+}
 
 /**
  * Testing fake for @rudderjs/ai.
  *
- * @example
+ * @example Single-response shorthand
  * const fake = AiFake.fake()
  * fake.respondWith('Mocked response')
  *
@@ -38,6 +60,18 @@ import type {
  *
  * fake.assertPrompted(input => input.includes('Hello'))
  * fake.restore()
+ *
+ * @example Multi-step sequence
+ * const fake = AiFake.fake()
+ * fake.respondWithSequence([
+ *   { toolCalls: [{ id: 't1', name: 'lookup', arguments: { q: 'a' } }] },
+ *   { text: 'Done.' },
+ * ])
+ *
+ * @example Forced failure
+ * const fake = AiFake.fake()
+ * fake.failOnStep(0, new Error('Rate limited'))
+ * // first provider call throws; useful for testing onError middleware
  */
 export class AiFake {
   private readonly calls: ProviderRequestOptions[] = []
@@ -48,6 +82,8 @@ export class AiFake {
   private readonly rerankCalls: RerankingOptions[] = []
   private readonly fileCalls: Array<{ method: string; args: unknown }> = []
   private _response = 'fake response'
+  private _sequence: AiFakeStep[] = []
+  private readonly _failures = new Map<number, Error>()
   private _imageResponse = 'ZmFrZS1pbWFnZQ=='  // base64 of 'fake-image'
   private _ttsResponse: Buffer = Buffer.from('fake-audio')
   private _sttResponse = 'fake transcription'
@@ -58,6 +94,38 @@ export class AiFake {
   /** Set the text response the fake will return */
   respondWith(text: string): void {
     this._response = text
+  }
+
+  /**
+   * Script a multi-step provider response. Each entry in `steps` corresponds
+   * to one provider call (the Nth `generate`/`stream` invocation consumes
+   * `steps[N]`). When the sequence is exhausted, subsequent calls fall back
+   * to {@link respondWith} (default: `'fake response'`).
+   *
+   * Pair with `tools` on an agent to drive a complete tool-call loop:
+   * step 0 emits `toolCalls`, step 1 returns the final assistant text.
+   *
+   * Calling this resets the sequence and the provider-call counter so
+   * scripted step indices are relative to this call. Registered failures
+   * (see {@link failOnStep}) are left intact, so the order in which you
+   * call `respondWithSequence` and `failOnStep` does not matter.
+   */
+  respondWithSequence(steps: AiFakeStep[]): void {
+    this._sequence = [...steps]
+    this.calls.length = 0
+  }
+
+  /**
+   * Force the Nth provider call to throw. Useful for testing failover
+   * (paired with multiple registered factories), error middleware, and
+   * `onError` hooks without a real network failure.
+   *
+   * The step index is 0-based and counts every `generate`/`stream` call
+   * the fake adapter receives. Failures take precedence over any scripted
+   * sequence at the same index — the sequence step is NOT consumed.
+   */
+  failOnStep(stepIndex: number, error: Error): void {
+    this._failures.set(stepIndex, error)
   }
 
   /** Set the base64 image the fake will return */
@@ -96,7 +164,22 @@ export class AiFake {
 
     const adapter: ProviderAdapter = {
       async generate(opts: ProviderRequestOptions): Promise<ProviderResponse> {
+        const stepIndex = fake.calls.length
         fake.calls.push(opts)
+        const failure = fake._failures.get(stepIndex)
+        if (failure) throw failure
+        const next = fake._sequence[stepIndex]
+        if (next) {
+          return {
+            message: {
+              role: 'assistant',
+              content: next.text ?? '',
+              ...(next.toolCalls ? { toolCalls: next.toolCalls } : {}),
+            },
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
+          }
+        }
         return {
           message: { role: 'assistant', content: fake._response },
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
@@ -104,7 +187,23 @@ export class AiFake {
         }
       },
       async *stream(opts: ProviderRequestOptions): AsyncIterable<StreamChunk> {
+        const stepIndex = fake.calls.length
         fake.calls.push(opts)
+        const failure = fake._failures.get(stepIndex)
+        if (failure) throw failure
+        const next = fake._sequence[stepIndex]
+        if (next) {
+          if (next.text) yield { type: 'text-delta', text: next.text }
+          if (next.toolCalls) {
+            for (const tc of next.toolCalls) yield { type: 'tool-call', toolCall: tc }
+          }
+          yield {
+            type: 'finish',
+            finishReason: next.finishReason ?? (next.toolCalls ? 'tool_calls' : 'stop'),
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          }
+          return
+        }
         yield { type: 'text-delta', text: fake._response }
         yield { type: 'finish', finishReason: 'stop', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }
       },
