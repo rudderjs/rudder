@@ -2853,6 +2853,92 @@ describe('authorize/group-split routes (E7)', () => {
   })
 })
 
+describe('PassportRouteOptions.deviceMiddleware (P8)', () => {
+  // Regression guard for P8 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  // Mirrors E8's tokenMiddleware shape but applies to /oauth/device/code +
+  // /oauth/device/approve. The api-group rate limit covers the brute-force
+  // surface in most cases; deviceMiddleware is the per-route fallback for
+  // tighter device-specific limits.
+
+  test('omitted deviceMiddleware → device endpoints receive no extra middleware', () => {
+    Passport.reset()
+    const captured: Record<string, any[]> = {}
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, _h: any, mw?: any) => { captured[p] = mw ?? [] },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter)
+    assert.deepEqual(captured['/oauth/device/code'], [])
+    assert.deepEqual(captured['/oauth/device/approve'], [])
+  })
+
+  test('deviceMiddleware as a single handler is wrapped in an array', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: Record<string, any[]> = {}
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, _h: any, mw?: any) => { captured[p] = mw ?? [] },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter, { deviceMiddleware: sentinel })
+    assert.deepEqual(captured['/oauth/device/code'], [sentinel])
+    assert.deepEqual(captured['/oauth/device/approve'], [sentinel])
+  })
+
+  test('deviceMiddleware as an array preserves order on both device endpoints', () => {
+    Passport.reset()
+    const a = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const b = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: Record<string, any[]> = {}
+    const fakeRouter = {
+      get:    () => {},
+      post:   (p: string, _h: any, mw?: any) => { captured[p] = mw ?? [] },
+      delete: () => {},
+    }
+    registerPassportRoutes(fakeRouter, { deviceMiddleware: [a, b] })
+    assert.deepEqual(captured['/oauth/device/code'], [a, b])
+    assert.deepEqual(captured['/oauth/device/approve'], [a, b])
+  })
+
+  test('deviceMiddleware does NOT leak onto token / authorize / scopes / revoke endpoints', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: Record<string, any[]> = {}
+    const fakeRouter = {
+      get:    (p: string, _h: any, mw?: any) => { captured[`GET ${p}`] = mw ?? [] },
+      post:   (p: string, _h: any, mw?: any) => { captured[`POST ${p}`] = mw ?? [] },
+      delete: (p: string, _h: any, mw?: any) => { captured[`DELETE ${p}`] = mw ?? [] },
+    }
+    registerPassportRoutes(fakeRouter, { deviceMiddleware: [sentinel] })
+    assert.deepEqual(captured['POST /oauth/device/code'], [sentinel])
+    assert.deepEqual(captured['POST /oauth/device/approve'], [sentinel])
+    assert.equal(captured['POST /oauth/token']?.includes(sentinel), false,
+      'deviceMiddleware must not bleed onto the token endpoint')
+    assert.deepEqual(captured['POST /oauth/authorize'], [],
+      'deviceMiddleware must not bleed onto authorize')
+    assert.deepEqual(captured['GET /oauth/scopes'], [],
+      'deviceMiddleware must not bleed onto scopes')
+    assert.equal(captured['DELETE /oauth/tokens/:id']?.includes(sentinel), false,
+      'deviceMiddleware must not bleed onto revoke')
+  })
+
+  test('registerPassportApiRoutes forwards deviceMiddleware to the underlying mount', () => {
+    Passport.reset()
+    const sentinel = async (_req: any, _res: any, next: () => Promise<void>) => next()
+    const captured: Record<string, any[]> = {}
+    const fakeRouter = {
+      get:    (p: string, _h: any, mw?: any) => { captured[`GET ${p}`] = mw ?? [] },
+      post:   (p: string, _h: any, mw?: any) => { captured[`POST ${p}`] = mw ?? [] },
+      delete: () => {},
+    }
+    registerPassportApiRoutes(fakeRouter, { deviceMiddleware: [sentinel] })
+    assert.deepEqual(captured['POST /oauth/device/code'], [sentinel])
+    assert.deepEqual(captured['POST /oauth/device/approve'], [sentinel])
+  })
+})
+
 describe('PassportRouteOptions.tokenMiddleware (E8)', () => {
   // Regression guard for E8 from docs/plans/2026-05-06-passport-surface-review-fixes.md.
   // The token endpoint is the brute-force target for client_secret guessing
