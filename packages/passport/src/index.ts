@@ -6,7 +6,7 @@ export { Passport } from './Passport.js'
 export type { PassportScope, AuthorizationViewContext, AuthorizationViewFn } from './Passport.js'
 
 export { createToken, verifyToken, unsafeDecodeToken, decodeToken } from './token.js'
-export type { JwtHeader, JwtPayload } from './token.js'
+export type { JwtHeader, JwtPayload, VerifyTokenOptions } from './token.js'
 
 export { OAuthClient } from './models/OAuthClient.js'
 export { AccessToken } from './models/AccessToken.js'
@@ -72,6 +72,16 @@ export interface PassportConfig {
   personalAccessTokensExpireIn?: number
   /** OAuth scopes: { scopeId: 'description' } */
   scopes?: Record<string, string>
+  /**
+   * JWT issuer URL. When set, `createToken()` stamps it as the `iss` claim
+   * on every new access token, and `BearerMiddleware`/`RequireBearer` ask
+   * `verifyToken()` to reject tokens whose `iss` claim doesn't match.
+   * Tokens minted before this is configured carry no `iss` and pass
+   * verification (legacy migration window). Recommended once a deployment
+   * has more than one possible signer (multi-tenant, staging+prod sharing
+   * keys). RFC 8725 §3.10.
+   */
+  issuer?: string
 }
 
 // ─── Service Provider ─────────────────────────────────────
@@ -110,6 +120,9 @@ export class PassportProvider extends ServiceProvider {
 
     // Configure scopes
     if (cfg.scopes) Passport.tokensCan(cfg.scopes)
+
+    // Configure issuer (P7) — see PassportConfig.issuer jsdoc.
+    if (cfg.issuer) Passport.useIssuer(cfg.issuer)
 
     this.app.instance('passport', Passport)
 

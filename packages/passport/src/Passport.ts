@@ -45,6 +45,12 @@ export class Passport {
   // Route auto-registration toggle
   private static _routesIgnored = false
 
+  // JWT issuer URL — when set, createToken stamps `iss` on the payload and
+  // verifyToken can validate it via `expectedIssuer`. Optional per RFC 7519
+  // but recommended by RFC 8725 §3.10 once the deployment has more than one
+  // possible issuer (e.g. multi-tenant or staging vs prod sharing keys).
+  private static _issuer: string | null = null
+
   // ── Scopes ──────────────────────────────────────────────
 
   /** Define available OAuth scopes. */
@@ -201,6 +207,24 @@ export class Passport {
     return this._routesIgnored
   }
 
+  // ── JWT issuer ──────────────────────────────────────────
+
+  /**
+   * Configure the JWT `iss` claim that `createToken()` stamps on every new
+   * access token, and that `verifyToken()` validates when called with
+   * `expectedIssuer: Passport.issuer()` (BearerMiddleware does this
+   * automatically). Typically set to the canonical app URL — e.g.
+   * `Passport.useIssuer('https://app.example.com')`.
+   *
+   * RFC 8725 §3.10 recommends issuer validation once a deployment has more
+   * than one possible signer (multi-tenant, staging+prod sharing keys, etc.).
+   * Tokens minted before this is configured carry no `iss` claim and are
+   * exempt during the migration window — same pattern as redirect_uri (P1)
+   * and familyId (P4).
+   */
+  static useIssuer(url: string): void { this._issuer = url || null }
+  static issuer(): string | null { return this._issuer }
+
   // ── Reset (testing) ─────────────────────────────────────
 
   /** @internal */
@@ -219,5 +243,6 @@ export class Passport {
     this._deviceCodeModel   = null
     this._authorizationView = null
     this._routesIgnored     = false
+    this._issuer            = null
   }
 }
