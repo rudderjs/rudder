@@ -869,6 +869,110 @@ describe('AiFake', () => {
     assert.ok(calls[0]!.messages.some(m => m.content === 'Hello world'))
     fake.restore()
   })
+
+  it('respondWithSequence drives a multi-step tool-call loop end-to-end', async () => {
+    const fake = AiFake.fake()
+    let toolRanWith: string | undefined
+    const greet = toolDefinition({
+      name: 'greet',
+      description: 'Greet someone',
+      inputSchema: z.object({ name: z.string() }),
+    }).server(async ({ name }) => { toolRanWith = name; return `Hi ${name}!` })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'tc-1', name: 'greet', arguments: { name: 'World' } }] },
+      { text: 'Greeted World.' },
+    ])
+
+    const response = await agent({ instructions: 'sys', tools: [greet] }).prompt('go')
+
+    assert.strictEqual(toolRanWith, 'World')
+    assert.strictEqual(response.text, 'Greeted World.')
+    assert.strictEqual(response.steps.length, 2)
+    assert.strictEqual(fake.getCalls().length, 2)
+    fake.restore()
+  })
+
+  it('respondWithSequence falls back to respondWith when sequence is exhausted', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('fallback text')
+    fake.respondWithSequence([{ text: 'first' }])
+
+    const r1 = await AI.prompt('one')
+    const r2 = await AI.prompt('two')
+
+    assert.strictEqual(r1.text, 'first')
+    assert.strictEqual(r2.text, 'fallback text')
+    fake.restore()
+  })
+
+  it('failOnStep throws on the targeted provider call', async () => {
+    const fake = AiFake.fake()
+    const boom = new Error('Rate limited')
+    fake.failOnStep(0, boom)
+
+    await assert.rejects(() => AI.prompt('hi'), /Rate limited/)
+    // The call was still recorded — useful for "no retry" assertions.
+    assert.strictEqual(fake.getCalls().length, 1)
+    fake.restore()
+  })
+
+  it('failOnStep + respondWithSequence composes (step 0 throws, step 1 returns text on retry)', async () => {
+    // Models a transient-failure-then-success scenario where the agent's
+    // failover or onError middleware is expected to retry.
+    const fake = AiFake.fake()
+    fake.failOnStep(0, new Error('Transient'))
+    fake.respondWithSequence([
+      { text: 'should not be used (step 0 throws)' },
+      { text: 'recovered' },
+    ])
+
+    await assert.rejects(() => AI.prompt('first'), /Transient/)
+    const r2 = await AI.prompt('second')
+    // Step 1 of the sequence is consumed because step 0's call still
+    // incremented the counter even though it threw.
+    assert.strictEqual(r2.text, 'recovered')
+    fake.restore()
+  })
+
+  it('respondWithSequence works with the streaming variant', async () => {
+    const fake = AiFake.fake()
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'tc-s-1', name: 'ping', arguments: {} }] },
+      { text: 'streamed reply' },
+    ])
+
+    const ping = toolDefinition({
+      name: 'ping',
+      description: 'ping',
+      inputSchema: z.object({}),
+    }).server(async () => 'pong')
+
+    const a = agent({ instructions: 'sys', tools: [ping] })
+    const { stream, response } = a.stream('go')
+    const types: string[] = []
+    for await (const chunk of stream) types.push(chunk.type)
+
+    const final = await response
+    assert.strictEqual(final.text, 'streamed reply')
+    assert.ok(types.includes('tool-call'), `expected tool-call chunk, got: ${types.join(',')}`)
+    fake.restore()
+  })
+
+  it('respondWithSequence resets the call counter so step indices are relative', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('ignored')
+    await AI.prompt('warmup-1')
+    await AI.prompt('warmup-2')
+    assert.strictEqual(fake.getCalls().length, 2)
+
+    // Scripting a new scenario rewinds the counter so step 0 = next call.
+    fake.respondWithSequence([{ text: 'fresh-step-0' }])
+    const r = await AI.prompt('go')
+    assert.strictEqual(r.text, 'fresh-step-0')
+    assert.strictEqual(fake.getCalls().length, 1)
+    fake.restore()
+  })
 })
 
 // ─── AiProvider ───────────────────────────────────────────
