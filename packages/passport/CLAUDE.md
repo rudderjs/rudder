@@ -8,7 +8,7 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - `src/Passport.ts` — Static config singleton (scopes, lifetimes, RSA keys)
 - `src/token.ts` — JWT creation/verification using RS256
 - `src/personal-access-tokens.ts` — `HasApiTokens` mixin for user models
-- `src/routes.ts` — `registerPassportRoutes()` for `/oauth/*` endpoints
+- `src/routes.ts` — `registerPassportRoutes()` (everything), `registerPassportWebRoutes()` (consent + revoke), `registerPassportApiRoutes()` (token + device + scopes)
 - `src/grants/` — OAuth 2 grant implementations:
   - `authorization-code.ts` — Auth code + PKCE
   - `client-credentials.ts` — Machine-to-machine
@@ -33,6 +33,8 @@ OAuth 2 server — Laravel Passport equivalent. Turns your app into an OAuth 2 p
 - **Refresh tokens revoke the old pair** — prevents replay attacks
 - **Device codes rate-limited** — 5-second polling interval enforced server-side
 - **Personal access tokens** — auto-create an internal `__personal_access__` OAuth client on first use
+- **Routes split between web and api groups** — the consent flow (`GET/POST/DELETE /oauth/authorize` + `DELETE /oauth/tokens/:id`) belongs on the **web** group because it depends on session + authenticated user resolution. The token + device + scopes endpoints are stateless and belong on **api**. Use `registerPassportWebRoutes()` in `routes/web.ts` and `registerPassportApiRoutes()` in `routes/api.ts`. The original `registerPassportRoutes()` mounts everything on a single router and is kept for back-compat / single-group apps.
+- **POST `/oauth/authorize` requires CSRF** — it's a state-changing endpoint reached from a logged-in browser session, so it's a textbook CSRF target. The recommended setup is to mount `CsrfMiddleware` on the entire web group from `bootstrap/app.ts` — `withMiddleware((m) => m.web(CsrfMiddleware()))` — which automatically covers `/oauth/authorize` along with every other state-changing web route. Apps that prefer per-route opt-in can pass `[CsrfMiddleware()]` via `authorizeMiddleware` instead. Either path works; **don't do both** — CsrfMiddleware running twice on the same request emits duplicate `Set-Cookie`s on GETs and runs the validation pass twice on POSTs, which is wasteful and confusing for future readers.
 - **Token models are `MassPrunable`** — `AuthCode`, `DeviceCode`, `AccessToken`, `RefreshToken` each define `static prunable()` (same predicates as `passport:purge`) + `pruneMode = 'mass'`, so `pnpm rudder model:prune` reaps expired/revoked rows automatically without the operator needing to invoke `passport:purge`. `PassportProvider.boot()` eagerly registers the four classes with `ModelRegistry` so the prune walker sees them on day-1 fresh apps before any oauth flow has fired.
 - **`revoked` is NOT mass-assignable** — `AccessToken`, `RefreshToken`, and `AuthCode` keep `revoked` out of `fillable`. Lifecycle flips happen through `instance.revoke()` (token models) or `QueryBuilder.where(...).updateAll({ revoked: true })` (grants); both bypass the mass-assignment filter. Defense-in-depth so a future caller-controlled `Model.create()` payload can't pre-mark a row as revoked.
 - **`AccessToken.userId` and `clientId` are `@Hidden`** — `toJSON()` strips them by default so `user.tokens()` exposed over an API can't accidentally leak the user/client mapping. Privileged routes (admin views) opt in via `instance.makeVisible(['userId', 'clientId'])`.

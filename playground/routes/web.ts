@@ -4,6 +4,7 @@ import { view } from '@rudderjs/view'
 import { config, resolve } from '@rudderjs/core'
 import { auth } from '@rudderjs/auth'
 import { registerAuthRoutes } from '@rudderjs/auth/routes'
+import { registerPassportWebRoutes } from '@rudderjs/passport'
 import { registerCashierRoutes, Cashier } from '@rudderjs/cashier-paddle'
 import { Feature, FeatureMiddleware } from '@rudderjs/pennant'
 import { AuthController } from '../app/Http/Controllers/AuthController.js'
@@ -21,6 +22,20 @@ registerAuthRoutes(Route)
 
 // POST handlers — sign-in/email, sign-up/email, sign-out, password reset.
 Route.registerController(AuthController)
+
+// Passport's stateful endpoints — GET/POST/DELETE /oauth/authorize and
+// DELETE /oauth/tokens/:id. Belongs on `web` because the consent flow
+// needs the resolved authenticated user (web group runs AuthMiddleware
+// + session).
+//
+// CSRF protection comes from `m.web(CsrfMiddleware(...))` in
+// bootstrap/app.ts — every web-group route is already protected. Apps
+// that DON'T mount CSRF at the group level can opt in per-route via
+// `authorizeMiddleware: [CsrfMiddleware()]`.
+//
+// The stateless half (POST /oauth/token, /oauth/device/*, /oauth/scopes)
+// is mounted in routes/api.ts via registerPassportApiRoutes().
+registerPassportWebRoutes(Route)
 
 // Paddle webhook receiver — POST /paddle/webhook (standalone, no web/api group).
 registerCashierRoutes(Route)

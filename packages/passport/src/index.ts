@@ -53,7 +53,7 @@ export { HasApiTokens, resetPersonalAccessClient } from './personal-access-token
 export type { NewPersonalAccessToken } from './personal-access-tokens.js'
 
 // Routes
-export { registerPassportRoutes } from './routes.js'
+export { registerPassportRoutes, registerPassportWebRoutes, registerPassportApiRoutes } from './routes.js'
 export type { PassportRouteOptions, PassportRouteGroup } from './routes.js'
 
 // ─── Config ───────────────────────────────────────────────

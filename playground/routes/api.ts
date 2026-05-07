@@ -703,12 +703,15 @@ Route.post('/api/ai/stream', async (req) => {
 
 // ── Passport OAuth 2 routes ──────────────────────────────
 //
-// Registers /oauth/authorize, /oauth/token, /oauth/tokens/:id,
-// /oauth/scopes, /oauth/device/code, /oauth/device/approve.
+// Registers the **api half** of Passport — POST /oauth/token,
+// POST /oauth/device/code, POST /oauth/device/approve, GET /oauth/scopes.
+// The **web half** (consent + revoke endpoints) is mounted in routes/web.ts
+// via registerPassportWebRoutes(), because the consent flow depends on
+// session + authenticated user resolution.
 //
 // Requires: RSA keys generated via `pnpm rudder passport:keys` and
 // an OAuth client created via `pnpm rudder passport:client <name>`.
-import { registerPassportRoutes, RequireBearer, scope } from '@rudderjs/passport'
+import { registerPassportApiRoutes, RequireBearer, scope } from '@rudderjs/passport'
 
 // Adapter: Passport expects a router with .get/.post/.delete taking (path, handler)
 // but our Route uses the inverse signature. Wrap it.
@@ -717,7 +720,15 @@ const passportRouter = {
   post:   (path: string, handler: any) => Route.post(path, handler),
   delete: (path: string, handler: any) => Route.delete(path, handler),
 }
-registerPassportRoutes(passportRouter as any)
+registerPassportApiRoutes(passportRouter as any, {
+  // Per-route rate limit on the brute-force surface — keyed by ip+client_id
+  // so one noisy client doesn't exhaust the budget for legitimate co-tenants
+  // behind a shared NAT, AND a single IP can't churn through the registry.
+  // Requires a cache provider (see config/cache.ts).
+  tokenMiddleware: [
+    RateLimit.perMinute(10).by((req) => `${(req as any).ip}:${(req.body as any)?.client_id}`),
+  ],
+})
 
 // Example: protected route requiring a Bearer token with 'read' scope
 Route.get('/api/passport/me', async (req, res) => {
