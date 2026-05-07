@@ -101,7 +101,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     if (options.tools?.length) params['tools'] = toOpenAITools(options.tools)
     if (options.toolChoice) params['tool_choice'] = toOpenAIToolChoice(options.toolChoice)
 
-    const response = await client.chat.completions.create(params)
+    const response = await client.chat.completions.create(params, options.signal ? { signal: options.signal } : undefined)
     return fromOpenAIResponse(response)
   }
 
@@ -120,7 +120,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     if (options.tools?.length) params['tools'] = toOpenAITools(options.tools)
     if (options.toolChoice) params['tool_choice'] = toOpenAIToolChoice(options.toolChoice)
 
-    const stream = await client.chat.completions.create(params)
+    const stream = await client.chat.completions.create(params, options.signal ? { signal: options.signal } : undefined)
 
     for await (const chunk of stream) {
       const choice = chunk.choices?.[0]

@@ -393,6 +393,9 @@ function buildMiddlewareConfig(messages: AiMessage[], a: Agent): import('./types
 // ─── Agent Loop (non-streaming) ──────────────────────────
 
 async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+  // Honor caller-supplied AbortSignal as early as possible — if the signal
+  // is already aborted on entry, do no work at all.
+  options?.signal?.throwIfAborted()
   const loopStart = performance.now()
   const modelString = a.model() ?? AiRegistry.getDefault()
   const [providerName] = AiRegistry.parseModelString(modelString)
@@ -453,6 +456,12 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
     for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
       ctx.iteration = iteration
 
+      // Honor caller-supplied AbortSignal between iterations. Throws the
+      // signal's reason (e.g. DOMException 'AbortError', or TimeoutError
+      // for AbortSignal.timeout) so `prompt()` rejects with the standard
+      // shape callers already handle.
+      options?.signal?.throwIfAborted()
+
       // Check if middleware aborted
       if (ctx._aborted) {
         await runOnAbort(middlewares, ctx, ctx._abortReason)
@@ -493,10 +502,14 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
             tools: currentToolSchemas.length > 0 ? currentToolSchemas : undefined,
             temperature: a.temperature(),
             maxTokens: a.maxTokens(),
+            signal: options?.signal,
           }
           response = await adapter.generate(reqOptions)
           break
         } catch (err) {
+          // If the abort came from the caller, don't try the next failover
+          // model — re-throw so `prompt()` rejects immediately.
+          if (options?.signal?.aborted) throw options.signal.reason
           lastError = err instanceof Error ? err : new Error(String(err))
           failoverAttempts++
           if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
@@ -729,9 +742,18 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
 
 function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOptions): AgentStreamResponse {
   let resolveResponse: (r: AgentResponse) => void
-  const responsePromise = new Promise<AgentResponse>((resolve) => { resolveResponse = resolve })
+  let rejectResponse: (e: unknown) => void
+  const responsePromise = new Promise<AgentResponse>((resolve, reject) => {
+    resolveResponse = resolve
+    rejectResponse = reject
+  })
 
   async function* generateStream(): AsyncIterable<StreamChunk> {
+    // Honor caller-supplied AbortSignal as early as possible.
+    if (options?.signal?.aborted) {
+      rejectResponse(options.signal.reason)
+      throw options.signal.reason
+    }
     const loopStart = performance.now()
     const modelString = a.model() ?? AiRegistry.getDefault()
     const [providerName] = AiRegistry.parseModelString(modelString)
@@ -792,6 +814,11 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         ctx.iteration = iteration
         ctx.chunkIndex = 0
 
+        // Honor caller-supplied AbortSignal between iterations. Throws the
+        // signal's reason — `generateStream()` propagates it out, and the
+        // outer wrapper rejects the `response` promise with the same value.
+        options?.signal?.throwIfAborted()
+
         // Check if middleware aborted
         if (ctx._aborted) {
           await runOnAbort(middlewares, ctx, ctx._abortReason)
@@ -830,10 +857,14 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               tools: toolSchemas.length > 0 ? toolSchemas : undefined,
               temperature: a.temperature(),
               maxTokens: a.maxTokens(),
+              signal: options?.signal,
             }
             streamSource = adapter.stream(opts)
             break
           } catch (err) {
+            // If the abort came from the caller, don't try the next failover
+            // model — re-throw so the stream rejects immediately.
+            if (options?.signal?.aborted) throw options.signal.reason
             lastError = err instanceof Error ? err : new Error(String(err))
             failoverAttempts++
             if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
@@ -1150,8 +1181,21 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     resolveResponse!(result)
   }
 
+  // Outer wrapper: if `generateStream` throws (e.g. the caller's
+  // AbortSignal fired), reject the `response` promise with the same
+  // reason BEFORE re-throwing into the for-await consumer. Without this,
+  // `await response` would hang forever after a mid-stream abort.
+  async function* withRejectOnError(): AsyncIterable<StreamChunk> {
+    try {
+      yield* generateStream()
+    } catch (err) {
+      rejectResponse!(err)
+      throw err
+    }
+  }
+
   return {
-    stream: generateStream(),
+    stream: withRejectOnError(),
     response: responsePromise,
   }
 }

@@ -74,7 +74,7 @@ class AnthropicAdapter implements ProviderAdapter {
     if (options.tools?.length) params['tools'] = toAnthropicTools(options.tools)
     if (options.toolChoice) params['tool_choice'] = toAnthropicToolChoice(options.toolChoice)
 
-    const response = await client.messages.create(params)
+    const response = await client.messages.create(params, options.signal ? { signal: options.signal } : undefined)
     return fromAnthropicResponse(response)
   }
 
@@ -95,7 +95,7 @@ class AnthropicAdapter implements ProviderAdapter {
     if (options.tools?.length) params['tools'] = toAnthropicTools(options.tools)
     if (options.toolChoice) params['tool_choice'] = toAnthropicToolChoice(options.toolChoice)
 
-    const stream = await client.messages.stream(params)
+    const stream = await client.messages.stream(params, options.signal ? { signal: options.signal } : undefined)
 
     for await (const event of stream) {
       if (event.type === 'content_block_delta') {
