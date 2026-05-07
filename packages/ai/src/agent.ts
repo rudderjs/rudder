@@ -52,14 +52,17 @@ function _buildObserverSteps(steps: AgentStep[], modelString: string): AiObserve
     model:        modelString,
     tokens:       { prompt: step.usage.promptTokens, completion: step.usage.completionTokens, total: step.usage.totalTokens },
     finishReason: step.finishReason,
-    toolCalls:    step.toolCalls.map(tc => ({
-      id:            tc.id,
-      name:          tc.name,
-      args:          tc.arguments,
-      result:        step.toolResults.find(r => r.toolCallId === tc.id)?.result,
-      duration:      0,
-      needsApproval: false,
-    })),
+    toolCalls:    step.toolCalls.map(tc => {
+      const tr = step.toolResults.find(r => r.toolCallId === tc.id)
+      return {
+        id:            tc.id,
+        name:          tc.name,
+        args:          tc.arguments,
+        result:        tr?.result,
+        duration:      tr?.duration ?? 0,
+        needsApproval: false,
+      }
+    }),
   }))
 }
 
@@ -597,6 +600,7 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
           }
           const validatedArgs = validation.value
 
+          const toolStart = performance.now()
           try {
             // Drain generator yields silently in the non-streaming loop —
             // the same tool definition must work in both prompt() and stream().
@@ -623,10 +627,11 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
               // non-streaming loop — only the final return value matters.
             }
             if (paused) continue   // skip toolResults + message push for this tc
+            const duration = performance.now() - toolStart
             // toolResults preserves the ORIGINAL value; only the tool message
             // pushed onto `messages` (what the next model step sees) is
             // narrowed by toModelOutput.
-            toolResults.push({ toolCallId: tc.id, result })
+            toolResults.push({ toolCallId: tc.id, result, duration })
             const resultStr = await applyToModelOutput(
               tool,
               result,
@@ -637,8 +642,9 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
             // onAfterToolCall
             if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
           } catch (err: unknown) {
+            const duration = performance.now() - toolStart
             const msg = err instanceof Error ? err.message : String(err)
-            toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}` })
+            toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}`, duration })
             messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
 
             // onAfterToolCall (error case)
@@ -1013,6 +1019,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
             }
             const validatedArgs = validation.value
 
+            const toolStart = performance.now()
             try {
               // Emit the tool-call marker before execution so the UI sees
               // tool-call → tool-update* → tool-result in order. Async-
@@ -1052,11 +1059,12 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
                 }
               }
               if (paused) continue   // skip tool_result emission + message push for this tc
+              const duration = performance.now() - toolStart
               // The streamed `tool-result` chunk and `step.toolResults`
               // both carry the ORIGINAL value; only the message content
               // pushed onto `messages` (next-step model input) is narrowed
               // by toModelOutput.
-              toolResults.push({ toolCallId: tc.id, result })
+              toolResults.push({ toolCallId: tc.id, result, duration })
               const resultStr = await applyToModelOutput(
                 tool,
                 result,
@@ -1068,9 +1076,10 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
               // onAfterToolCall
               if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
             } catch (err: unknown) {
+              const duration = performance.now() - toolStart
               const msg = err instanceof Error ? err.message : String(err)
               const errResult = `Error: ${msg}`
-              toolResults.push({ toolCallId: tc.id, result: errResult })
+              toolResults.push({ toolCallId: tc.id, result: errResult, duration })
               messages.push({ role: 'tool', content: errResult, toolCallId: tc.id })
               yield { type: 'tool-result' as const, toolCall: tc, result: errResult }
 

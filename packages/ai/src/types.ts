@@ -29,6 +29,14 @@ export interface ToolCall {
 export interface ToolResult {
   toolCallId: string
   result: unknown
+  /**
+   * Wall-clock milliseconds spent inside the tool's `execute` for this
+   * call. Captured by the agent loop with `performance.now()` around the
+   * execute generator. Absent (or 0) for paths where no `execute` ran —
+   * unknown-tool, rejected, middleware-skipped, validation-failure,
+   * client-tool-placeholder.
+   */
+  duration?: number
 }
 
 /** Token usage stats */
