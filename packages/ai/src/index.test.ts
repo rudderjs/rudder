@@ -1848,3 +1848,177 @@ describe('toModelOutput', () => {
     assert.strictEqual(toolMsg?.content, 'Search complete — 3 hits out of 100 scanned')
   })
 })
+
+// ─── Tool argument validation ────────────────────────────────────────────
+
+describe('tool argument validation', () => {
+  beforeEach(() => installScriptedFake())
+
+  it('type mismatch: execute is not called and a structured error is fed to the model', async () => {
+    let executions = 0
+    const tool = toolDefinition({
+      name: 'lookup',
+      description: 'lookup',
+      inputSchema: z.object({ q: z.string() }),
+    }).server(async () => { executions++; return 'should not be reached' })
+
+    _script = [
+      // Model returns a number where a string is required.
+      { toolCalls: [{ id: 'iv-1', name: 'lookup', arguments: { q: 42 } }] },
+      { text: 'ok, retrying' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+
+    assert.strictEqual(executions, 0, 'execute must not run for invalid args')
+    const tr = result.steps[0]!.toolResults[0]!
+    assert.deepEqual((tr.result as { error: string }).error, 'invalid_arguments')
+    assert.ok(Array.isArray((tr.result as { issues: unknown[] }).issues))
+    assert.ok((tr.result as { issues: { path: string }[] }).issues.length > 0)
+
+    // The next provider call must have seen the structured error in the
+    // tool message so the model can correct itself on the next turn.
+    const secondCall = _calls[1]!
+    const toolMsg = secondCall.messages.find(m => m.role === 'tool' && m.toolCallId === 'iv-1')!
+    const parsed = JSON.parse(toolMsg.content as string)
+    assert.strictEqual(parsed.error, 'invalid_arguments')
+    assert.strictEqual(result.text, 'ok, retrying')
+  })
+
+  it('missing required field surfaces an issue with the field path', async () => {
+    const tool = toolDefinition({
+      name: 'greet',
+      description: 'greet',
+      inputSchema: z.object({ name: z.string(), greeting: z.string() }),
+    }).server(async () => 'unreached')
+
+    _script = [
+      { toolCalls: [{ id: 'iv-2', name: 'greet', arguments: { name: 'world' } }] }, // missing greeting
+      { text: 'ack' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+    const err = result.steps[0]!.toolResults[0]!.result as { issues: { path: string }[] }
+    assert.ok(err.issues.some(i => i.path === 'greeting'), `expected an issue at path "greeting"; got ${JSON.stringify(err.issues)}`)
+  })
+
+  it('zod defaults are applied: execute receives the parsed value', async () => {
+    let received: unknown
+    const tool = toolDefinition({
+      name: 'with_default',
+      description: 'has a default',
+      inputSchema: z.object({ q: z.string(), limit: z.number().default(10) }),
+    }).server(async (input) => { received = input; return 'ok' })
+
+    _script = [
+      // Model omits `limit`; the default should be applied before execute().
+      { toolCalls: [{ id: 'iv-3', name: 'with_default', arguments: { q: 'hi' } }] },
+      { text: 'done' },
+    ]
+
+    await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+    assert.deepStrictEqual(received, { q: 'hi', limit: 10 })
+  })
+
+  it('zod transforms are applied: execute receives the transformed value', async () => {
+    let received: unknown
+    const tool = toolDefinition({
+      name: 'shout',
+      description: 'uppercase',
+      inputSchema: z.object({ msg: z.string().transform(s => s.toUpperCase()) }),
+    }).server(async (input) => { received = input; return 'ok' })
+
+    _script = [
+      { toolCalls: [{ id: 'iv-4', name: 'shout', arguments: { msg: 'hi' } }] },
+      { text: 'done' },
+    ]
+
+    await agent({ instructions: 'sys', tools: [tool] }).prompt('go')
+    assert.deepStrictEqual(received, { msg: 'HI' })
+  })
+
+  it('streaming variant emits paired tool-call → tool-result(error) chunks on validation failure', async () => {
+    const tool = toolDefinition({
+      name: 'lookup',
+      description: 'lookup',
+      inputSchema: z.object({ q: z.string() }),
+    }).server(async () => 'unreached')
+
+    _script = [
+      { toolCalls: [{ id: 'iv-5', name: 'lookup', arguments: { q: 99 } }] },
+      { text: 'recovered' },
+    ]
+
+    const a = agent({ instructions: 'sys', tools: [tool] })
+    const { stream, response } = a.stream('go')
+    const chunks: StreamChunk[] = []
+    for await (const c of stream) chunks.push(c)
+    await response
+
+    const callIdx = chunks.findIndex(c => c.type === 'tool-call' && c.toolCall?.id === 'iv-5')
+    const resultIdx = chunks.findIndex(c => c.type === 'tool-result' && c.toolCall?.id === 'iv-5')
+    assert.ok(callIdx >= 0, 'expected a tool-call chunk for the invalid call')
+    assert.ok(resultIdx > callIdx, 'tool-result must come after tool-call')
+    assert.strictEqual(
+      (chunks[resultIdx]!.result as { error: string }).error,
+      'invalid_arguments',
+    )
+  })
+
+  it('onAfterToolCall middleware fires with the structured error as the result', async () => {
+    const seen: Array<{ name: string; result: unknown }> = []
+    const recorder: AiMiddleware = {
+      name: 'recorder',
+      async onAfterToolCall(_ctx, name, _args, result) { seen.push({ name, result }) },
+    }
+    const tool = toolDefinition({
+      name: 'lookup',
+      description: 'lookup',
+      inputSchema: z.object({ q: z.string() }),
+    }).server(async () => 'unreached')
+
+    _script = [
+      { toolCalls: [{ id: 'iv-6', name: 'lookup', arguments: { q: 1 } }] },
+      { text: 'k' },
+    ]
+
+    await agent({ instructions: 'sys', tools: [tool], middleware: [recorder] }).prompt('go')
+
+    assert.strictEqual(seen.length, 1)
+    assert.strictEqual(seen[0]!.name, 'lookup')
+    assert.strictEqual((seen[0]!.result as { error: string }).error, 'invalid_arguments')
+  })
+
+  it('approval-resume validates args before executing the approved tool', async () => {
+    let executed = false
+    const tool = toolDefinition({
+      name: 'delete_record',
+      description: 'd',
+      inputSchema: z.object({ id: z.string() }),
+      needsApproval: true,
+    }).server(async () => { executed = true; return 'deleted' })
+
+    // Caller supplies a continuation message list with bad args (`id: 99`
+    // is a number) and approves the call. Validation should reject it
+    // before execute runs.
+    _script = [{ text: 'understood' }]
+
+    const result = await agent({ instructions: 'sys', tools: [tool] })
+      .prompt('', {
+        messages: [
+          { role: 'user', content: 'do it' },
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{ id: 'res-iv', name: 'delete_record', arguments: { id: 99 } }],
+          },
+        ],
+        approvedToolCallIds: ['res-iv'],
+      })
+
+    assert.strictEqual(executed, false)
+    assert.strictEqual(result.resumedToolMessages?.length, 1)
+    const parsed = JSON.parse(result.resumedToolMessages![0]!.content as string)
+    assert.strictEqual(parsed.error, 'invalid_arguments')
+  })
+})
