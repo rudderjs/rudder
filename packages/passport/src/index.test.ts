@@ -1280,6 +1280,8 @@ describe('endpoint hardening — E5 / E10 / E11', () => {
 
     // Stub Passport.deviceCodeModel so pollDeviceCode finds a row that
     // forces a slow_down response (lastPolledAt very recent → throttled).
+    // Per M4, the lookup hashes its input, but this fake `where()` ignores
+    // the value, so the stub still resolves regardless of the digest.
     class FakeDeviceCode {
       static where(_col: string, _val: unknown) {
         return {
@@ -1293,6 +1295,7 @@ describe('endpoint hardening — E5 / E10 / E11', () => {
             approved:     null,
             expiresAt:    new Date(Date.now() + 60_000),
             lastPolledAt: new Date(), // now → forces slow_down
+            interval:     5,
             createdAt:    new Date(),
           }) as any,
         }
@@ -2936,6 +2939,209 @@ describe('PassportRouteOptions.deviceMiddleware (P8)', () => {
     registerPassportApiRoutes(fakeRouter, { deviceMiddleware: [sentinel] })
     assert.deepEqual(captured['POST /oauth/device/code'], [sentinel])
     assert.deepEqual(captured['POST /oauth/device/approve'], [sentinel])
+  })
+})
+
+describe('Device-flow at-rest hashing + interval escalation (P9 + M4)', () => {
+  // Regression guard for P9 + M4 from
+  // docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  //
+  // M4 (RFC 8628 §6.1): `oauth_device_codes.deviceCode` and `userCode`
+  // store SHA-256 hex of the user-displayed strings. Plaintext only lives
+  // in memory during the requestDeviceCode response.
+  //
+  // P9 (RFC 8628 §3.5): on `slow_down`, the server bumps the per-row
+  // polling interval by 5 seconds; subsequent polls are throttled against
+  // the new interval, not a fixed 5s.
+
+  async function sha256Hex(s: string): Promise<string> {
+    const { createHash } = await import('node:crypto')
+    return createHash('sha256').update(s).digest('hex')
+  }
+
+  function deviceClient(): any {
+    return {
+      id: 'C-1', name: 'app', secret: null, confidential: false, revoked: false,
+      redirectUris: '[]',
+      grantTypes:   '["urn:ietf:params:oauth:grant-type:device_code"]',
+      scopes:       '["read"]',
+    }
+  }
+
+  function fakeDeviceClientModel(record: Record<string, unknown> | null): any {
+    class FakeClient {
+      static where(_col: string, _val: unknown) {
+        return { first: async () => record as any }
+      }
+    }
+    return FakeClient
+  }
+
+  test('M4 — requestDeviceCode persists hashed device + user codes; returns plaintext to caller', async () => {
+    Passport.reset()
+    Passport.useClientModel(fakeDeviceClientModel(deviceClient()))
+
+    let persisted: Record<string, unknown> | null = null
+    class CapturingDeviceCode {
+      static async create(data: Record<string, unknown>) { persisted = data }
+    }
+    Passport.useDeviceCodeModel(CapturingDeviceCode as any)
+
+    const result = await requestDeviceCode({
+      clientId: 'C-1',
+      scope:    'read',
+      verificationUri: 'https://example.com/oauth/device',
+    })
+
+    // Plaintext returned to the device.
+    assert.equal(typeof result.device_code, 'string')
+    assert.equal(typeof result.user_code,   'string')
+    assert.ok(result.device_code.length > 0)
+    assert.ok(result.user_code.length > 0)
+    assert.equal(result.interval, 5)
+
+    // Persisted columns are SHA-256 hex of the plaintext, not the plaintext.
+    assert.ok(persisted)
+    assert.equal(persisted!['deviceCode'], await sha256Hex(result.device_code))
+    assert.equal(persisted!['userCode'],   await sha256Hex(result.user_code))
+    assert.notEqual(persisted!['deviceCode'], result.device_code)
+    assert.notEqual(persisted!['userCode'],   result.user_code)
+    assert.equal(persisted!['interval'], 5)
+
+    Passport.reset()
+  })
+
+  test('M4 — pollDeviceCode looks up by hashed device_code, never raw plaintext', async () => {
+    Passport.reset()
+
+    const seenLookups: Array<{ col: string; val: unknown }> = []
+    class CapturingDeviceCode {
+      static where(col: string, val: unknown) {
+        seenLookups.push({ col, val })
+        return { first: async () => null } // not-found short-circuits the rest
+      }
+    }
+    Passport.useDeviceCodeModel(CapturingDeviceCode as any)
+
+    await assert.rejects(() => pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'plaintext-DC-1',
+      clientId:   'C-1',
+    }))
+
+    assert.equal(seenLookups.length, 1)
+    assert.equal(seenLookups[0]!.col, 'deviceCode')
+    assert.equal(seenLookups[0]!.val, await sha256Hex('plaintext-DC-1'))
+    assert.notEqual(seenLookups[0]!.val, 'plaintext-DC-1')
+
+    Passport.reset()
+  })
+
+  test('M4 — approveDeviceCode looks up by hashed user_code, never raw plaintext', async () => {
+    Passport.reset()
+
+    const seenLookups: Array<{ col: string; val: unknown }> = []
+    class CapturingDeviceCode {
+      static where(col: string, val: unknown) {
+        seenLookups.push({ col, val })
+        return { first: async () => null } // not-found short-circuits the rest
+      }
+    }
+    Passport.useDeviceCodeModel(CapturingDeviceCode as any)
+
+    await assert.rejects(() => approveDeviceCode('ABCD-WXYZ', 'user-1', true))
+
+    assert.equal(seenLookups.length, 1)
+    assert.equal(seenLookups[0]!.col, 'userCode')
+    assert.equal(seenLookups[0]!.val, await sha256Hex('ABCD-WXYZ'))
+    assert.notEqual(seenLookups[0]!.val, 'ABCD-WXYZ')
+
+    Passport.reset()
+  })
+
+  test('P9 — slow_down increments the per-row polling interval by 5s', async () => {
+    Passport.reset()
+
+    const updates: Array<Record<string, unknown>> = []
+    class ThrottledDeviceCode {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id:           'DC-1',
+            clientId:     'C-1',
+            userCode:     'ABCD-WXYZ',
+            deviceCode:   'DC-1',
+            scopes:       '[]',
+            userId:       null,
+            approved:     null,
+            expiresAt:    new Date(Date.now() + 60_000),
+            lastPolledAt: new Date(), // now → throttled regardless of interval
+            interval:     10,         // already bumped once
+            createdAt:    new Date(),
+          }) as any,
+        }
+      }
+      static async update(_id: string, data: Record<string, unknown>) {
+        updates.push(data)
+      }
+    }
+    Passport.useDeviceCodeModel(ThrottledDeviceCode as any)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'DC-1',
+      clientId:   'C-1',
+    })
+
+    assert.equal(result.status, 'slow_down')
+    // Exactly one update — bump the interval, NOT lastPolledAt (which
+    // would extend the window legitimate clients can poll within).
+    assert.equal(updates.length, 1)
+    assert.equal(updates[0]!['interval'], 15) // 10 + 5
+    assert.equal('lastPolledAt' in updates[0]!, false)
+
+    Passport.reset()
+  })
+
+  test('P9 — legacy rows without an interval column fall back to the 5s default', async () => {
+    Passport.reset()
+
+    const updates: Array<Record<string, unknown>> = []
+    class LegacyDeviceCode {
+      static where(_col: string, _val: unknown) {
+        return {
+          first: async () => ({
+            id:           'DC-LEGACY',
+            clientId:     'C-1',
+            userCode:     'LEG-CODE',
+            deviceCode:   'DC-LEGACY',
+            scopes:       '[]',
+            userId:       null,
+            approved:     null,
+            expiresAt:    new Date(Date.now() + 60_000),
+            lastPolledAt: new Date(),
+            // interval column missing — pre-migration row
+            createdAt:    new Date(),
+          }) as any,
+        }
+      }
+      static async update(_id: string, data: Record<string, unknown>) {
+        updates.push(data)
+      }
+    }
+    Passport.useDeviceCodeModel(LegacyDeviceCode as any)
+
+    const result = await pollDeviceCode({
+      grantType:  'urn:ietf:params:oauth:grant-type:device_code',
+      deviceCode: 'DC-LEGACY',
+      clientId:   'C-1',
+    })
+
+    assert.equal(result.status, 'slow_down')
+    // Default interval (5s) → next bump lands at 10s.
+    assert.equal(updates[0]!['interval'], 10)
+
+    Passport.reset()
   })
 })
 

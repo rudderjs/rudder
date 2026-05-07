@@ -4,6 +4,13 @@ import type { DeviceCode }  from '../models/DeviceCode.js'
 import { clientHelpers, deviceCodeHelpers } from '../models/helpers.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 import { OAuthError, validateScopes } from './authorization-code.js'
+import { hashDeviceToken } from './device-code-hash.js'
+
+/** Initial polling interval per RFC 8628 §3.2 (seconds). */
+const INITIAL_POLL_INTERVAL_S = 5
+
+/** Per RFC 8628 §3.5: when returning slow_down, increase the interval by 5s. */
+const SLOW_DOWN_BUMP_S = 5
 
 // ─── Device Authorization Request ─────────────────────────
 
@@ -45,15 +52,22 @@ export async function requestDeviceCode(params: {
   const userCode   = await generateUserCode()
   const expiresAt  = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
+  // Per RFC 8628 §6.1: store at-rest hashes of the device + user codes; the
+  // plaintext only lives in this function's response. A DB dump no longer
+  // yields usable in-flight device-flow sessions on its own.
+  const deviceCodeHash = await hashDeviceToken(deviceCode)
+  const userCodeHash   = await hashDeviceToken(userCode)
+
   await DeviceCodeCls.create({
-    clientId:   params.clientId,
-    deviceCode,
-    userCode,
-    scopes:     JSON.stringify(scopes),
-    userId:     null,
-    approved:   null,
+    clientId:     params.clientId,
+    deviceCode:   deviceCodeHash,
+    userCode:     userCodeHash,
+    scopes:       JSON.stringify(scopes),
+    userId:       null,
+    approved:     null,
     expiresAt,
     lastPolledAt: null,
+    interval:     INITIAL_POLL_INTERVAL_S,
   } as Record<string, unknown>)
 
   return {
@@ -62,7 +76,7 @@ export async function requestDeviceCode(params: {
     verification_uri: params.verificationUri,
     verification_uri_complete: `${params.verificationUri}?user_code=${userCode}`,
     expires_in:       15 * 60, // 15 minutes in seconds
-    interval:         5,       // poll every 5 seconds
+    interval:         INITIAL_POLL_INTERVAL_S,
   }
 }
 
@@ -73,7 +87,10 @@ export async function requestDeviceCode(params: {
  */
 export async function approveDeviceCode(userCode: string, userId: string, approved: boolean): Promise<void> {
   const DeviceCodeCls = await Passport.deviceCodeModel()
-  const device = await DeviceCodeCls.where('userCode', userCode).first() as DeviceCode | null
+  // Lookup-by-hash — plaintext userCode never leaves this function's local
+  // scope. See `device-code-hash.ts` for the threat model.
+  const userCodeHash = await hashDeviceToken(userCode)
+  const device = await DeviceCodeCls.where('userCode', userCodeHash).first() as DeviceCode | null
   if (!device) {
     throw new OAuthError('invalid_request', 'Device code not found.')
   }
@@ -112,7 +129,8 @@ export async function pollDeviceCode(params: {
   }
 
   const DeviceCodeCls = await Passport.deviceCodeModel()
-  const device = await DeviceCodeCls.where('deviceCode', params.deviceCode).first() as DeviceCode | null
+  const deviceCodeHash = await hashDeviceToken(params.deviceCode)
+  const device = await DeviceCodeCls.where('deviceCode', deviceCodeHash).first() as DeviceCode | null
   if (!device) {
     throw new OAuthError('invalid_grant', 'Device code not found.')
   }
@@ -123,10 +141,17 @@ export async function pollDeviceCode(params: {
     return { status: 'expired_token' }
   }
 
-  // Rate limiting: enforce 5-second interval
+  // Per RFC 8628 §3.5: enforce the per-row polling interval (defaults to 5s
+  // on issuance) and bump it by 5s on every slow_down so misbehaving clients
+  // back off progressively. Rows persisted before this column existed read
+  // back as null/undefined; treat that as the initial 5s interval.
+  const interval = device.interval ?? INITIAL_POLL_INTERVAL_S
   if (device.lastPolledAt) {
     const elapsed = Date.now() - new Date(device.lastPolledAt).getTime()
-    if (elapsed < 5000) {
+    if (elapsed < interval * 1000) {
+      await DeviceCodeCls.update(device.id, {
+        interval: interval + SLOW_DOWN_BUMP_S,
+      } as any)
       return { status: 'slow_down' }
     }
   }

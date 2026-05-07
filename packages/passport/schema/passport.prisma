@@ -63,6 +63,9 @@ model OAuthAuthCode {
 }
 
 model OAuthDeviceCode {
+  // userCode + deviceCode are SHA-256 hex of the user-displayed strings
+  // (RFC 8628 §6.1). Plaintext only lives in memory during the
+  // requestDeviceCode response.
   id             String    @id @default(cuid())
   clientId       String
   userCode       String    @unique
@@ -72,6 +75,8 @@ model OAuthDeviceCode {
   approved       Boolean?
   expiresAt      DateTime
   lastPolledAt   DateTime?
+  // RFC 8628 §3.5 polling interval (seconds). Bumps by 5 on each `slow_down`.
+  interval       Int       @default(5)
   createdAt      DateTime  @default(now())
 
   @@map("oauth_device_codes")

@@ -1,6 +1,6 @@
 # Passport-surface review sweep findings — 2026-05-06
 
-**Status (refreshed 2026-05-07):** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). 20 hardening PRs total merged (#255–#279) plus P7 in flight. **3 schema-migration items remaining: P9, M4, M5/P6.** Per-finding status is recorded inline against each item below — search for `✅ FIXED — PR #N` for shipped, `⏳ OPEN` for not-yet-shipped.
+**Status (refreshed 2026-05-07):** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). 22 hardening PRs total merged (#255–#280) plus P9+M4 (oauth_device_codes migration) in flight. **1 schema-migration item remaining: M5/P6 — refresh-token + auth-code at-rest hashing.** Per-finding status is recorded inline against each item below — search for `✅ FIXED — PR #N` for shipped, `⏳ OPEN` for not-yet-shipped.
 **Pattern:** Same shape as `2026-05-06-auth-surface-review-fixes.md` (4-agent partitioned sweep).
 
 Four parallel review agents on `@rudderjs/passport` (RudderJS's Laravel Passport-equivalent OAuth2 server), partitioned by surface:
@@ -88,10 +88,10 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - 8 chars from a 32-symbol alphabet is ~1.1×10^12 — survivable with throttling, not without.
 - **Fixed in #279**: new `PassportRouteOptions.deviceMiddleware` slot for opt-in per-route limiters on `POST /oauth/device/code` and `POST /oauth/device/approve`. The recommended pattern is to rely on the api-group default (`m.api(RateLimit.perMinute(60))`) — at 60/min per-IP, exhausting the user_code keyspace takes ~35,000 years per attacker. `deviceMiddleware` is the per-route fallback for tighter limits (e.g. `RateLimit.perMinute(5).by(req => req.ip)`). The "lock userCode after N misses" half of §5.2's guidance is intentionally NOT covered by `RateLimit` (it's per-userCode state, not per-IP); apps that need it can wrap their own middleware.
 
-**P9. `device-code.ts:127` — `slow_down` does not escalate the polling interval** ⏳ OPEN
+**P9. `device-code.ts:127` — `slow_down` does not escalate the polling interval** ✅ FIXED — bundled with M4
 - RFC 8628 §3.5: when returning `slow_down`, the server SHOULD increase the required polling interval by 5 seconds and the client must use the new interval. Code re-checks against a fixed 5000ms forever.
 - Spec violation, low risk.
-- Fix: store an `interval` column; increment by 5 on each `slow_down`; return new interval. **Worth bundling with M4** — both touch `oauth_device_codes` schema, so a single Prisma migration covers both.
+- **Fixed**: new `oauth_device_codes.interval Int @default(5)` column. `pollDeviceCode` enforces `device.interval * 1000` ms throttle (not fixed 5000) and bumps the column by 5 on every `slow_down`. Legacy rows without an `interval` column read back as null/undefined and fall back to the 5s initial interval — same compat pattern as `redirect_uri` (P1) and `familyId` (P4). Bundled with M4 in the same Prisma migration.
 
 **P10. `personal-access-tokens.ts:78-82` — `user.tokens()` returns ALL access tokens for the user, not just personal ones** ✅ FIXED — PR #275
 - Query is `where('userId', userId)` — no filter on `clientId === personalAccessClientId`. Comment promises "personal access tokens for this user".
@@ -203,10 +203,10 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - Two concurrent token-exchange requests with the same code each found `revoked=false`, both proceeded past PKCE, both called the unconditional `update` last → two access-token pairs minted from one auth code (RFC 6749 §4.1.2 prohibits).
 - **Fixed**: replaced the unconditional `Model.update(id, { revoked: true })` with a conditional `Model.where('id', id).where('revoked', false).updateAll({ revoked: true })` against `QueryBuilder.updateAll()` (returns affected count). The atomic SQL `UPDATE ... WHERE revoked = false` lets exactly one concurrent caller see `count === 1`; the loser sees 0 and throws `invalid_grant("Authorization code has already been used.")` before reaching `issueTokens()`. Subsequent serial reuse keeps surfacing at the existing early-exit `if (authCode.revoked)` check.
 
-**M4. `device-code.ts:46-55` + `schema/passport.prisma:62-75` — `deviceCode` and `userCode` stored in plaintext; lookups use the secret as the lookup key** ⏳ OPEN
+**M4. `device-code.ts:46-55` + `schema/passport.prisma:62-75` — `deviceCode` and `userCode` stored in plaintext; lookups use the secret as the lookup key** ✅ FIXED — bundled with P9
 - `pollDeviceCode` does `where('deviceCode', params.deviceCode)`. A DB compromise yields any in-flight device-code session directly. Same for `userCode`.
 - RFC 8628 §6.1 explicitly recommends hashing device/user codes before storing.
-- Fix: store SHA-256 hashes in `oauth_device_codes.deviceCode` / `userCode`; look up by hash; user-displayed `userCode` is only in memory during the `requestDeviceCode` response. **Worth bundling with P9** — both touch the same Prisma model so a single migration covers both.
+- **Fixed**: `oauth_device_codes.deviceCode` and `userCode` columns now store SHA-256 hex digests of the user-displayed strings, not the plaintext. `requestDeviceCode()` returns the plaintext to the caller and forgets it; every subsequent `pollDeviceCode` / `approveDeviceCode` lookup hashes its input before querying. New helper `grants/device-code-hash.ts` documents the threat model and leaves a peppered-HMAC extension point for apps that want stronger at-rest protection of the lower-entropy `user_code`. In-flight legacy rows expire within 15 minutes; users would retry once during the deploy window. Bundled with P9 in the same Prisma migration.
 
 **M5. Same as P6** — refresh tokens / auth codes stored as DB id plaintext. Listed under grants.
 
@@ -322,18 +322,14 @@ The original sequencing — small focused PRs, security-first, no bundling clean
 | 22 | #277 | E8 — `tokenMiddleware` option for per-route rate limiting on `/oauth/token` |
 | 23 | #278 | E7 — web/api group split (`registerPassportWebRoutes` / `registerPassportApiRoutes`) + opt-in CSRF |
 | 24 | #279 | P8 — `deviceMiddleware` option for per-route rate limiting on device endpoints |
-| 25 | (in flight) | P7 — `verifyToken` aud/iss validation + opt-in JWT issuer |
+| 25 | #280 | P7 — `verifyToken` aud/iss validation + opt-in JWT issuer |
+| 26 | (in flight) | P9 + M4 — `oauth_device_codes` migration: SHA-256 hashing at rest + dynamic `slow_down` interval |
 
 ### Remaining
 
-Three schema-migration items left:
-
-- **P9 + M4 — bundled `oauth_device_codes` migration**
-  - P9: store an `interval` column; increment by 5 on each `slow_down`; return new interval per RFC 8628 §3.5.
-  - M4: hash `deviceCode` and `userCode` at rest (SHA-256); look up by hash; user-displayed `userCode` only in memory during the `requestDeviceCode` response.
-  - Single Prisma migration covers both. Plan first.
+One schema-migration item left:
 
 - **M5 / P6 — refresh-token + auth-code at-rest hashing** (biggest)
   - Schema migration on `oauth_refresh_tokens` + `oauth_auth_codes`. New `id` (random) + `tokenHash` (SHA-256 of separate plaintext) columns. Touches `issueTokens`, `exchangeAuthCode`, `refreshTokenGrant`, `BearerMiddleware`. Full plan first.
 
-Don't bundle security fixes with cleanup. The two remaining schema migrations are independent — ship in either order.
+Don't bundle security fixes with cleanup.

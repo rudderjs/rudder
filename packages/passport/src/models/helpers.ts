@@ -51,13 +51,17 @@ export interface AuthCodeRecord {
 export interface DeviceCodeRecord {
   id:           string
   clientId:     string
+  /** SHA-256 hex of the user-displayed userCode. */
   userCode:     string
+  /** SHA-256 hex of the device_code returned to the polling client. */
   deviceCode:   string
   scopes:       string
   userId:       string | null
   approved:     boolean | null
   expiresAt:    Date
   lastPolledAt: Date | null
+  /** RFC 8628 §3.5 polling interval (seconds). */
+  interval:     number
 }
 
 // ─── Parsing helpers ──────────────────────────────────────
