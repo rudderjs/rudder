@@ -8,7 +8,7 @@ export class AuthCode extends Model {
   // `QueryBuilder.where(...).updateAll(...)` in `exchangeAuthCode` (see M3
   // atomic consumption fix), which bypasses mass-assignment, so removing
   // it from fillable is non-breaking.
-  static override fillable = ['userId', 'clientId', 'scopes', 'expiresAt', 'redirectUri', 'codeChallenge', 'codeChallengeMethod']
+  static override fillable = ['userId', 'clientId', 'tokenHash', 'scopes', 'expiresAt', 'redirectUri', 'codeChallenge', 'codeChallengeMethod']
 
   /** `MassPrunable` — bulk `deleteAll()` per chunk; mirrors `passport:purge`. */
   static pruneMode = 'mass' as const
@@ -24,6 +24,8 @@ export class AuthCode extends Model {
   }
 
   declare id: string
+  /** SHA-256 hex of the plaintext authorization code. See `opaque-token.ts`. */
+  declare tokenHash: string
   declare userId: string
   declare clientId: string
   declare revoked: boolean

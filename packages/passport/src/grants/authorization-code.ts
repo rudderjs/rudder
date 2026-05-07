@@ -4,6 +4,7 @@ import type { AuthCode }    from '../models/AuthCode.js'
 import { clientHelpers, authCodeHelpers } from '../models/helpers.js'
 import { safeCompare } from './safe-compare.js'
 import { verifyClientSecret } from '../client-secret.js'
+import { hashOpaqueToken, newOpaqueToken } from '../opaque-token.js'
 import { issueTokens, type IssuedTokens } from './issue-tokens.js'
 
 // ─── Authorization Request Validation ─────────────────────
@@ -101,19 +102,27 @@ export async function issueAuthCode(opts: {
 }): Promise<string> {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
+  // M5/P6: the plaintext returned to the redirect URI is freshly generated
+  // CSPRNG hex; only its SHA-256 is persisted. The previous shape returned
+  // the row's cuid `id` directly, so a DB read leak handed every in-flight
+  // auth code to anyone with `SELECT * ON oauth_auth_codes` privilege.
+  const codePlaintext = await newOpaqueToken()
+  const codeHash      = await hashOpaqueToken(codePlaintext)
+
   const AuthCodeCls = await Passport.authCodeModel()
-  const code = await AuthCodeCls.create({
+  await AuthCodeCls.create({
     userId:              opts.userId,
     clientId:            opts.clientId,
+    tokenHash:           codeHash,
     scopes:              JSON.stringify(opts.scopes),
     revoked:             false,
     expiresAt,
     redirectUri:         opts.redirectUri,
     codeChallenge:       opts.codeChallenge ?? null,
     codeChallengeMethod: opts.codeChallengeMethod ?? null,
-  } as Record<string, unknown>) as AuthCode
+  } as Record<string, unknown>)
 
-  return code.id
+  return codePlaintext
 }
 
 // ─── Exchange Authorization Code for Tokens ───────────────
@@ -164,8 +173,12 @@ export async function exchangeAuthCode(params: TokenExchangeRequest): Promise<Is
     }
   }
 
-  // Validate auth code
-  const authCode = await AuthCodeCls.where('id', params.code).first() as AuthCode | null
+  // Validate auth code by hashed plaintext (M5/P6) — the row's `id` is no
+  // longer the bearer secret. Pre-migration codes won't match because their
+  // hashed form was never persisted; affected exchanges fall through to the
+  // 10-minute TTL drain window and the user simply re-clicks "Authorize".
+  const codeHash = await hashOpaqueToken(params.code)
+  const authCode = await AuthCodeCls.where('tokenHash', codeHash).first() as AuthCode | null
   if (!authCode) {
     throw new OAuthError('invalid_grant', 'Authorization code not found.')
   }

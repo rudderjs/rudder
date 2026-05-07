@@ -1,5 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 
 import {
   Passport,
@@ -785,6 +786,18 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
   // (every access + refresh token issued through the same rotation chain).
   // Legacy rows minted before the familyId column existed are exempt
   // during the migration window — same approach as redirect_uri (P1/E4).
+  //
+  // Post-M5/P6 (#TBD): refresh tokens are looked up by SHA-256 of the
+  // presented plaintext, not by row id. Tests below pass the row's id
+  // string as the plaintext for readability and stamp `tokenHash` onto
+  // each row to match. The grant's hashing path is exercised end-to-end.
+
+  // Synchronous SHA-256 hex helper for setting up `tokenHash` on test rows.
+  // The grant's `hashOpaqueToken` lazy-loads node:crypto for non-Node runtime
+  // safety; here we import it statically and mirror the same digest.
+  function sync256Hex(plaintext: string): string {
+    return createHash('sha256').update(plaintext).digest('hex')
+  }
 
   // Lazily-initialised RSA test keys — issueTokens signs a JWT, so any
   // test that gets past the early rejection branches needs real keys.
@@ -1007,7 +1020,7 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
     }
     Passport.useTokenModel(fakeAccessTokenForIssue('AT-1', accessRows))
     const refreshRows = {
-      'RT-1': { id: 'RT-1', accessTokenId: 'AT-1', familyId: 'FAM-1', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+      'RT-1': { id: 'RT-1', tokenHash: sync256Hex('RT-1'), accessTokenId: 'AT-1', familyId: 'FAM-1', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
     }
     const FakeRefresh = fakeRefreshToken(refreshRows)
     Passport.useRefreshTokenModel(FakeRefresh)
@@ -1044,8 +1057,8 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
     // current member of the same family. Presenting RT-OLD again is the
     // attacker scenario — both tokens (and their access tokens) must die.
     const refreshRows: Record<string, Record<string, unknown>> = {
-      'RT-OLD':  { id: 'RT-OLD',  accessTokenId: 'AT-OLD',  familyId: 'FAM-X', revoked: true,  expiresAt: new Date(Date.now() + 600_000) },
-      'RT-LIVE': { id: 'RT-LIVE', accessTokenId: 'AT-LIVE', familyId: 'FAM-X', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+      'RT-OLD':  { id: 'RT-OLD',  tokenHash: sync256Hex('RT-OLD'),  accessTokenId: 'AT-OLD',  familyId: 'FAM-X', revoked: true,  expiresAt: new Date(Date.now() + 600_000) },
+      'RT-LIVE': { id: 'RT-LIVE', tokenHash: sync256Hex('RT-LIVE'), accessTokenId: 'AT-LIVE', familyId: 'FAM-X', revoked: false, expiresAt: new Date(Date.now() + 600_000) },
     }
     const FakeRefresh = fakeRefreshToken(refreshRows)
     Passport.useRefreshTokenModel(FakeRefresh)
@@ -1084,8 +1097,8 @@ describe('refresh-token reuse-chain revocation (P4)', () => {
     Passport.useTokenModel(fakeAccessToken({}))
 
     const refreshRows: Record<string, Record<string, unknown>> = {
-      'RT-LEGACY':   { id: 'RT-LEGACY',   accessTokenId: 'AT-LEGACY',   familyId: null, revoked: true,  expiresAt: new Date(Date.now() + 600_000) },
-      'RT-UNRELATED':{ id: 'RT-UNRELATED',accessTokenId: 'AT-UNRELATED',familyId: null, revoked: false, expiresAt: new Date(Date.now() + 600_000) },
+      'RT-LEGACY':   { id: 'RT-LEGACY',   tokenHash: sync256Hex('RT-LEGACY'),   accessTokenId: 'AT-LEGACY',   familyId: null, revoked: true,  expiresAt: new Date(Date.now() + 600_000) },
+      'RT-UNRELATED':{ id: 'RT-UNRELATED',tokenHash: sync256Hex('RT-UNRELATED'),accessTokenId: 'AT-UNRELATED',familyId: null, revoked: false, expiresAt: new Date(Date.now() + 600_000) },
     }
     const FakeRefresh = fakeRefreshToken(refreshRows)
     Passport.useRefreshTokenModel(FakeRefresh)
@@ -3764,6 +3777,320 @@ describe('oauth_device_codes hashing + interval escalation (P9 + M4)', () => {
     assert.equal(status, 400)
     assert.equal(payload.error, 'slow_down')
     assert.equal(payload.interval, 10, 'response body must carry the escalated interval')
+    Passport.reset()
+  })
+})
+
+describe('oauth_refresh_tokens + oauth_auth_codes hashing (M5 + P6)', () => {
+  // Regression guard for M5 / second half of P6 from
+  // docs/plans/2026-05-06-passport-surface-review-fixes.md.
+  //
+  // Refresh tokens and auth codes are now stored as SHA-256(`tokenHash`)
+  // of fresh CSPRNG plaintext — the row's `id` is no longer the bearer
+  // secret. A DB read leak yields hashes, not usable credentials. Lookups
+  // hash before query.
+
+  function sha256Hex(plaintext: string): string {
+    return createHash('sha256').update(plaintext).digest('hex')
+  }
+
+  // Lazily-initialised RSA test keys — issueTokens signs a JWT, so any
+  // round-trip test needs real keys.
+  let TEST_PRIVATE_KEY: string | null = null
+  let TEST_PUBLIC_KEY:  string | null = null
+  async function ensureTestKeys(): Promise<void> {
+    if (TEST_PRIVATE_KEY && TEST_PUBLIC_KEY) {
+      Passport.setKeys(TEST_PRIVATE_KEY, TEST_PUBLIC_KEY)
+      return
+    }
+    const { generateKeyPairSync } = await import('node:crypto')
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+    })
+    TEST_PRIVATE_KEY = privateKey
+    TEST_PUBLIC_KEY  = publicKey
+    Passport.setKeys(privateKey, publicKey)
+  }
+
+  // ── Refresh tokens ───────────────────────────────────────
+
+  test('M5 — issueTokens persists tokenHash, returns plaintext distinct from row id', async () => {
+    Passport.reset()
+    await ensureTestKeys()
+
+    const accessRows: Record<string, Record<string, unknown>> = {}
+    class FakeAccess {
+      static async create(data: Record<string, unknown>) {
+        const id = 'AT-NEW-1'
+        accessRows[id] = { ...data, id }
+        return { ...data, id } as any
+      }
+    }
+
+    let persistedRefresh: Record<string, unknown> | null = null
+    let nextRefreshId = 0
+    class FakeRefresh {
+      static async create(data: Record<string, unknown>) {
+        nextRefreshId++
+        persistedRefresh = { ...data, id: `RT-${nextRefreshId}` }
+        return persistedRefresh as any
+      }
+    }
+
+    Passport.useTokenModel(FakeAccess as any)
+    Passport.useRefreshTokenModel(FakeRefresh as any)
+
+    const tokens = await issueTokens({
+      userId:         'U-1',
+      clientId:       'C-1',
+      scopes:         ['read'],
+      includeRefresh: true,
+    })
+
+    // Plaintext returned to the client — base64url, 64 chars (48 random bytes).
+    assert.ok(tokens.refresh_token)
+    assert.equal(typeof tokens.refresh_token, 'string')
+    assert.match(tokens.refresh_token!, /^[A-Za-z0-9_-]+$/, 'refresh token must be base64url')
+    assert.ok(tokens.refresh_token!.length >= 60)
+
+    // Persisted row carries the hash, not the plaintext, and is NOT the row id.
+    assert.ok(persistedRefresh)
+    assert.equal(persistedRefresh!['tokenHash'], sha256Hex(tokens.refresh_token!))
+    assert.notEqual(persistedRefresh!['tokenHash'], tokens.refresh_token)
+    assert.notEqual(persistedRefresh!['id'], tokens.refresh_token,
+      'plaintext must not equal the row id (was the pre-M5/P6 bug)')
+
+    Passport.reset()
+  })
+
+  test('M5 — refreshTokenGrant looks up by SHA-256 of the presented plaintext, not raw value', async () => {
+    Passport.reset()
+    Passport.useClientModel((() => {
+      class FakeClient {
+        static where(_col: string, _val: unknown) {
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+        }
+      }
+      return FakeClient as any
+    })())
+
+    const seenLookups: Array<{ col: string; val: unknown }> = []
+    class CapturingRefresh {
+      static where(col: string, val: unknown) {
+        seenLookups.push({ col, val })
+        return { first: async () => null } // not-found short-circuits the rest
+      }
+    }
+    Passport.useRefreshTokenModel(CapturingRefresh as any)
+
+    await assert.rejects(() => refreshTokenGrant({
+      grantType:    'refresh_token',
+      refreshToken: 'plaintext-rt',
+      clientId:     'C-1',
+    }))
+
+    assert.equal(seenLookups.length, 1)
+    assert.equal(seenLookups[0]!.col, 'tokenHash')
+    assert.equal(seenLookups[0]!.val, sha256Hex('plaintext-rt'))
+    assert.notEqual(seenLookups[0]!.val, 'plaintext-rt')
+
+    Passport.reset()
+  })
+
+  test('M5 — wrong plaintext returns invalid_grant (cannot brute-force via row id)', async () => {
+    Passport.reset()
+    Passport.useClientModel((() => {
+      class FakeClient {
+        static where(_col: string, _val: unknown) {
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+        }
+      }
+      return FakeClient as any
+    })())
+
+    // Row exists with a known tokenHash. Caller presents the row id, not
+    // the plaintext — pre-M5/P6 this would have succeeded.
+    class FakeRefresh {
+      static where(col: string, val: unknown) {
+        return {
+          first: async () => {
+            if (col === 'tokenHash' && val === sha256Hex('SECRET-PLAIN')) {
+              return { id: 'RT-X', tokenHash: sha256Hex('SECRET-PLAIN'), accessTokenId: 'AT-X', familyId: null, revoked: false, expiresAt: new Date(Date.now() + 600_000) } as any
+            }
+            return null
+          },
+        }
+      }
+    }
+    Passport.useRefreshTokenModel(FakeRefresh as any)
+
+    await assert.rejects(
+      () => refreshTokenGrant({ grantType: 'refresh_token', refreshToken: 'RT-X', clientId: 'C-1' }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant',
+    )
+
+    Passport.reset()
+  })
+
+  // ── Auth codes ────────────────────────────────────────────
+
+  test('P6 — issueAuthCode returns plaintext distinct from row id, persists tokenHash', async () => {
+    Passport.reset()
+
+    let persisted: Record<string, unknown> | null = null
+    let createdId: string | null = null
+    class CapturingAuthCode {
+      static async create(data: Record<string, unknown>) {
+        createdId = 'AC-NEW-1'
+        persisted = { ...data, id: createdId }
+        return persisted as any
+      }
+    }
+    Passport.useAuthCodeModel(CapturingAuthCode as any)
+
+    const code = await issueAuthCode({
+      userId:    'U-1',
+      clientId:  'C-1',
+      scopes:    ['read'],
+      redirectUri: 'https://app.example.com/cb',
+    })
+
+    assert.equal(typeof code, 'string')
+    assert.match(code, /^[A-Za-z0-9_-]+$/, 'auth code must be base64url')
+    assert.ok(code.length >= 60)
+
+    assert.ok(persisted)
+    assert.equal(persisted!['tokenHash'], sha256Hex(code))
+    assert.notEqual(persisted!['tokenHash'], code)
+    assert.notEqual(persisted!['id'], code,
+      'plaintext must not equal the row id (was the pre-M5/P6 bug)')
+
+    Passport.reset()
+  })
+
+  test('P6 — exchangeAuthCode looks up by SHA-256 of the presented plaintext', async () => {
+    Passport.reset()
+    Passport.useClientModel((() => {
+      class FakeClient {
+        static where(_col: string, _val: unknown) {
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+        }
+      }
+      return FakeClient as any
+    })())
+
+    const seenLookups: Array<{ col: string; val: unknown }> = []
+    class CapturingAuthCode {
+      static where(col: string, val: unknown) {
+        seenLookups.push({ col, val })
+        return { first: async () => null } // miss → invalid_grant
+      }
+    }
+    Passport.useAuthCodeModel(CapturingAuthCode as any)
+
+    await assert.rejects(() => exchangeAuthCode({
+      grantType:   'authorization_code',
+      code:        'plaintext-code',
+      clientId:    'C-1',
+      redirectUri: 'https://app.example.com/cb',
+    }))
+
+    assert.equal(seenLookups.length, 1)
+    assert.equal(seenLookups[0]!.col, 'tokenHash')
+    assert.equal(seenLookups[0]!.val, sha256Hex('plaintext-code'))
+
+    Passport.reset()
+  })
+
+  test('P6 — atomic single-use consume (M3) still fires on hashed lookup', async () => {
+    // Regression guard: the conditional-update path (M3) keys on the row's
+    // hydrated `id`, NOT the plaintext. Two concurrent exchanges must still
+    // produce one success + one `invalid_grant` even after the lookup column
+    // changed.
+    Passport.reset()
+    await ensureTestKeys()
+    Passport.useClientModel((() => {
+      class FakeClient {
+        static where(_col: string, _val: unknown) {
+          return { first: async () => ({ id: 'C-1', confidential: false, revoked: false }) as any }
+        }
+      }
+      return FakeClient as any
+    })())
+
+    const codePlaintext = 'plain-ac-1'
+    let consumed = false
+    class FakeAuthCode {
+      static where(col: string, val: unknown) {
+        const builder: any = {
+          first: async () => {
+            if (col === 'tokenHash' && val === sha256Hex(codePlaintext)) {
+              return {
+                id:                  'AC-1',
+                tokenHash:           sha256Hex(codePlaintext),
+                userId:              'U-1',
+                clientId:            'C-1',
+                scopes:              '["read"]',
+                revoked:             false,
+                expiresAt:           new Date(Date.now() + 60_000),
+                redirectUri:         'https://app.example.com/cb',
+                codeChallenge:       null,
+                codeChallengeMethod: null,
+              } as any
+            }
+            return null
+          },
+          where(_col: string, _opOrVal: unknown, _maybeVal?: unknown) { return builder },
+          async updateAll(_data: Record<string, unknown>) {
+            // First caller flips revoked → 1; second sees 0.
+            if (consumed) return 0
+            consumed = true
+            return 1
+          },
+        }
+        return builder
+      }
+    }
+    Passport.useAuthCodeModel(FakeAuthCode as any)
+
+    const accessRows: Record<string, Record<string, unknown>> = {}
+    class FakeAccess {
+      static async create(data: Record<string, unknown>) {
+        const id = 'AT-1'
+        accessRows[id] = { ...data, id }
+        return { ...data, id } as any
+      }
+    }
+    class FakeRefresh {
+      static async create(data: Record<string, unknown>) {
+        return { ...data, id: 'RT-1' } as any
+      }
+    }
+    Passport.useTokenModel(FakeAccess as any)
+    Passport.useRefreshTokenModel(FakeRefresh as any)
+
+    // First exchange — succeeds.
+    const tokens = await exchangeAuthCode({
+      grantType:   'authorization_code',
+      code:        codePlaintext,
+      clientId:    'C-1',
+      redirectUri: 'https://app.example.com/cb',
+    })
+    assert.ok(tokens.access_token)
+
+    // Second exchange — atomic consume returns 0, surfaces invalid_grant.
+    await assert.rejects(
+      () => exchangeAuthCode({
+        grantType:   'authorization_code',
+        code:        codePlaintext,
+        clientId:    'C-1',
+        redirectUri: 'https://app.example.com/cb',
+      }),
+      (e: any) => e instanceof OAuthError && e.error === 'invalid_grant' && /already been used/.test(e.errorDescription),
+    )
+
     Passport.reset()
   })
 })

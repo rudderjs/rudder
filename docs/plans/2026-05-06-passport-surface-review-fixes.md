@@ -1,6 +1,6 @@
 # Passport-surface review sweep findings — 2026-05-06
 
-**Status (refreshed 2026-05-07):** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). 20 hardening PRs total merged (#255–#279) plus P7 in flight. **3 schema-migration items remaining: P9, M4, M5/P6.** Per-finding status is recorded inline against each item below — search for `✅ FIXED — PR #N` for shipped, `⏳ OPEN` for not-yet-shipped.
+**Status (refreshed 2026-05-07):** Filed 2026-05-06 by Claude Opus 4.7. **All 9 HIGH shipped** (#255, #256, #258, #259, #260, #261). 23 hardening PRs merged (#255–#282) covering every endpoint, grant, lifecycle, and storage finding. **M5/P6 (refresh-token + auth-code at-rest hashing) is in flight — the last remaining schema-migration item.** Per-finding status is recorded inline against each item below — search for `✅ FIXED — PR #N` for shipped, `⏳ OPEN` for not-yet-shipped, `🚧 IN FLIGHT` for staged work.
 **Pattern:** Same shape as `2026-05-06-auth-surface-review-fixes.md` (4-agent partitioned sweep).
 
 Four parallel review agents on `@rudderjs/passport` (RudderJS's Laravel Passport-equivalent OAuth2 server), partitioned by surface:
@@ -72,11 +72,12 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 
 ### MEDIUM
 
-**P6. Client secret + refresh-token + auth-code storage — bare SHA-256, no salt; refresh tokens stored as DB id plaintext** ⏳ OPEN (client-secret half FIXED in #271; token at-rest hashing remains)
+**P6. Client secret + refresh-token + auth-code storage — bare SHA-256, no salt; refresh tokens stored as DB id plaintext** ✅ FIXED — client-secret half in #271; token at-rest hashing in flight (bundled with M5)
 - `commands/client.ts:27`: client secret hashed with bare SHA-256, no salt or work factor (Laravel uses bcrypt).
 - `issue-tokens.ts:65`: refresh-token returned to client IS the DB primary key. Same at `authorization-code.ts:103` for auth codes. A DB read-leak hands every active credential to the attacker.
 - Cross-flagged as **M5** by the storage agent (more detailed schema migration recipe).
-- **Partially fixed in #271** (client-secret half): client secrets now stored as `peppered:<HMAC-SHA256(secret, APP_KEY)>` when `APP_KEY` is set, with a self-describing prefix that lets legacy plain-SHA-256 rows keep verifying. The refresh-token + auth-code at-rest hashing half is the larger remaining surface — schema migration on `oauth_refresh_tokens` and `oauth_auth_codes` adding a separate `tokenHash` column. Tracked together with **M5** below.
+- **Fixed in #271** (client-secret half): client secrets now stored as `peppered:<HMAC-SHA256(secret, APP_KEY)>` when `APP_KEY` is set, with a self-describing prefix that lets legacy plain-SHA-256 rows keep verifying.
+- **In flight** (token at-rest hashing): new `tokenHash String @unique` column on `oauth_refresh_tokens` and `oauth_auth_codes`. The plaintext returned to the client is freshly generated `randomBytes(48).toString('base64url')` (384 bits CSPRNG); the row's cuid `id` is internal-only. `refreshTokenGrant` and `exchangeAuthCode` hash inbound plaintext before lookup. New helper `hashOpaqueToken` / `newOpaqueToken` in `src/opaque-token.ts` (sibling to `device-code-secret.ts`). Pre-migration credentials stop working at deploy time; refresh tokens force-relogin (same blast radius as RSA key rotation), auth codes drain in 10 minutes naturally.
 
 **P7. `token.ts:83-114` — `verifyToken` does not validate `aud` or `iss`** 🚧 IN FLIGHT — PR pending merge
 - Verification only checks signature + `exp`. JWT carries `aud` (clientId), but no caller passes an expected audience. RFC 8725 §3.10 / §3.12 recommend validating both.
@@ -208,7 +209,7 @@ After dedup (cross-agent overlap on 6 findings): **~9 HIGH, ~17 MEDIUM, ~14 LOW*
 - RFC 8628 §6.1 explicitly recommends hashing device/user codes before storing.
 - Fix: store SHA-256 hashes in `oauth_device_codes.deviceCode` / `userCode`; look up by hash; user-displayed `userCode` is only in memory during the `requestDeviceCode` response. **Worth bundling with P9** — both touch the same Prisma model so a single migration covers both.
 
-**M5. Same as P6** — refresh tokens / auth codes stored as DB id plaintext. Listed under grants.
+**M5. Same as P6** — refresh tokens / auth codes stored as DB id plaintext. Listed under grants. 🚧 IN FLIGHT (bundled with P6 token-hashing half).
 
 **M6. `client-credentials.ts:40, refresh-token.ts:43, authorization-code.ts:141` — Comparison can run with `client.secret === null` (schema allows null for public clients)** ✅ FIXED — PR #273
 - Non-confidential clients skip the secret check (good), but the typing `string | null` is vulnerable to a future refactor that could mask `null` as authenticating with `secret = sha256('')`.
@@ -322,18 +323,12 @@ The original sequencing — small focused PRs, security-first, no bundling clean
 | 22 | #277 | E8 — `tokenMiddleware` option for per-route rate limiting on `/oauth/token` |
 | 23 | #278 | E7 — web/api group split (`registerPassportWebRoutes` / `registerPassportApiRoutes`) + opt-in CSRF |
 | 24 | #279 | P8 — `deviceMiddleware` option for per-route rate limiting on device endpoints |
-| 25 | (in flight) | P7 — `verifyToken` aud/iss validation + opt-in JWT issuer |
+| 25 | #280 | P7 — `verifyToken` aud/iss validation + opt-in JWT issuer |
+| 26 | #282 | P9 + M4 — `oauth_device_codes` migration: at-rest hashing + dynamic `slow_down` interval |
+| 27 | (in flight) | M5 + P6 (token-hashing half) — `oauth_refresh_tokens` + `oauth_auth_codes` at-rest hashing |
 
 ### Remaining
 
-Three schema-migration items left:
+All schema-migration items are now in flight or shipped. The review is functionally complete; the remaining work is just M5/P6 making it through review and merge.
 
-- **P9 + M4 — bundled `oauth_device_codes` migration**
-  - P9: store an `interval` column; increment by 5 on each `slow_down`; return new interval per RFC 8628 §3.5.
-  - M4: hash `deviceCode` and `userCode` at rest (SHA-256); look up by hash; user-displayed `userCode` only in memory during the `requestDeviceCode` response.
-  - Single Prisma migration covers both. Plan first.
-
-- **M5 / P6 — refresh-token + auth-code at-rest hashing** (biggest)
-  - Schema migration on `oauth_refresh_tokens` + `oauth_auth_codes`. New `id` (random) + `tokenHash` (SHA-256 of separate plaintext) columns. Touches `issueTokens`, `exchangeAuthCode`, `refreshTokenGrant`, `BearerMiddleware`. Full plan first.
-
-Don't bundle security fixes with cleanup. The two remaining schema migrations are independent — ship in either order.
+Don't bundle security fixes with cleanup.

@@ -23,6 +23,7 @@ export type { CreateClientOpts } from './commands/client.js'
 export { purgeTokens } from './commands/purge.js'
 export { hashClientSecret, verifyClientSecret } from './client-secret.js'
 export { hashDeviceSecret } from './device-code-secret.js'
+export { hashOpaqueToken, newOpaqueToken } from './opaque-token.js'
 
 // Grants
 export {

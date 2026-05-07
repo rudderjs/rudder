@@ -30,6 +30,8 @@ export interface AccessTokenRecord {
 
 export interface RefreshTokenRecord {
   id:            string
+  /** SHA-256 hex of the plaintext refresh token. */
+  tokenHash:     string
   accessTokenId: string
   familyId:      string | null
   revoked:       boolean
@@ -38,6 +40,8 @@ export interface RefreshTokenRecord {
 
 export interface AuthCodeRecord {
   id:                  string
+  /** SHA-256 hex of the plaintext authorization code. */
+  tokenHash:           string
   userId:              string
   clientId:            string
   scopes:              string
