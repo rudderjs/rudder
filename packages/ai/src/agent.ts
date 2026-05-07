@@ -393,12 +393,343 @@ function buildMiddlewareConfig(messages: AiMessage[], a: Agent): import('./types
   return config
 }
 
-// ─── Agent Loop (non-streaming) ──────────────────────────
+// ─── Shared loop state ───────────────────────────────────
 
-async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+/**
+ * Mutable state shared between the non-streaming and streaming agent loops.
+ * Helpers (`runFailover`, `emitObserverFailed`, `emitObserverCompleted`,
+ * `buildAgentResponse`) read and write this struct so the same orchestration
+ * logic serves both `prompt()` and `stream()` callers.
+ */
+interface LoopContext {
+  // immutable per call
+  readonly agent:        Agent
+  readonly input:        string
+  readonly options:      AgentPromptOptions | undefined
+  readonly modelString:  string
+  readonly providerName: string
+  readonly tools:        AnyTool[]
+  readonly toolMap:      Map<string, AnyTool>
+  readonly toolSchemas:  ReturnType<typeof toolToSchema>[]
+  readonly middlewares:  AiMiddleware[]
+  readonly loopStart:    number
+  readonly ctx:          MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
+
+  // mutable
+  readonly messages:                 AiMessage[]
+  readonly steps:                    AgentStep[]
+  readonly totalUsage:               TokenUsage
+  readonly pendingClientToolCalls:   ToolCall[]
+  pendingApprovalToolCall:           { toolCall: ToolCall; isClientTool: boolean } | undefined
+  loopFinishReason:                  FinishReason | undefined
+  stopForClientTools:                boolean
+  stopForApproval:                   boolean
+  resumedToolMessages:               AiMessage[]
+  failoverAttempts:                  number
+}
+
+/**
+ * Iterate the failover model list and invoke `call` against each provider
+ * adapter until one succeeds. Mutates `loopCtx.failoverAttempts` so the
+ * observer event reflects the real number of attempts. A caller-supplied
+ * `AbortSignal` short-circuits — abort errors propagate immediately rather
+ * than triggering the next failover model.
+ */
+async function runFailover<T>(
+  loopCtx: LoopContext,
+  currentModel: string,
+  call: (adapter: import('./types.js').ProviderAdapter, modelId: string, opts: ProviderRequestOptions) => T | Promise<T>,
+): Promise<T> {
+  const failoverModels = [currentModel, ...loopCtx.agent.failover().filter(m => m !== currentModel)]
+  let lastError: Error | undefined
+  for (const tryModel of failoverModels) {
+    try {
+      const adapter = AiRegistry.resolve(tryModel)
+      const [, modelId] = AiRegistry.parseModelString(tryModel)
+      const reqOptions: ProviderRequestOptions = {
+        model:       modelId,
+        messages:    loopCtx.messages,
+        tools:       loopCtx.toolSchemas.length > 0 ? loopCtx.toolSchemas : undefined,
+        temperature: loopCtx.agent.temperature(),
+        maxTokens:   loopCtx.agent.maxTokens(),
+        signal:      loopCtx.options?.signal,
+      }
+      return await call(adapter, modelId, reqOptions)
+    } catch (err) {
+      // If the abort came from the caller, don't try the next failover
+      // model — re-throw so `prompt()` / the stream rejects immediately.
+      if (loopCtx.options?.signal?.aborted) throw loopCtx.options.signal.reason
+      lastError = err instanceof Error ? err : new Error(String(err))
+      loopCtx.failoverAttempts++
+      if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
+    }
+  }
+  throw lastError ?? new Error('No provider available')
+}
+
+/** Emit the `agent.failed` observer event from the shared loop state. */
+function emitObserverFailed(loopCtx: LoopContext, err: unknown, streaming: boolean): void {
+  const obs = _getAiObservers()
+  if (!obs) return
+  const inputText = loopCtx.options?.messages ? '' : loopCtx.input
+  obs.emit({
+    kind:             'agent.failed',
+    agentName:        loopCtx.agent.constructor.name,
+    model:            loopCtx.modelString,
+    provider:         loopCtx.providerName,
+    input:            inputText,
+    output:           '',
+    steps:            _buildObserverSteps(loopCtx.steps, loopCtx.modelString),
+    tokens:           {
+      prompt:     loopCtx.totalUsage.promptTokens,
+      completion: loopCtx.totalUsage.completionTokens,
+      total:      loopCtx.totalUsage.totalTokens,
+    },
+    duration:         Math.round(performance.now() - loopCtx.loopStart),
+    finishReason:     'error',
+    streaming,
+    conversationId:   null,
+    failoverAttempts: loopCtx.failoverAttempts,
+    error:            err instanceof Error ? err.message : String(err),
+  })
+}
+
+/** Emit the `agent.completed` observer event from the shared loop state. */
+function emitObserverCompleted(loopCtx: LoopContext, result: AgentResponse, streaming: boolean): void {
+  const obs = _getAiObservers()
+  if (!obs) return
+  const inputText = loopCtx.options?.messages ? '' : loopCtx.input
+  const lastStep = loopCtx.steps[loopCtx.steps.length - 1]
+  obs.emit({
+    kind:             'agent.completed',
+    agentName:        loopCtx.agent.constructor.name,
+    model:            loopCtx.modelString,
+    provider:         loopCtx.providerName,
+    input:            inputText,
+    output:           result.text,
+    steps:            _buildObserverSteps(loopCtx.steps, loopCtx.modelString),
+    tokens:           {
+      prompt:     loopCtx.totalUsage.promptTokens,
+      completion: loopCtx.totalUsage.completionTokens,
+      total:      loopCtx.totalUsage.totalTokens,
+    },
+    duration:         Math.round(performance.now() - loopCtx.loopStart),
+    finishReason:     result.finishReason ?? lastStep?.finishReason ?? 'stop',
+    streaming,
+    conversationId:   null,
+    failoverAttempts: loopCtx.failoverAttempts,
+  })
+}
+
+/** Build the final `AgentResponse` from accumulated loop state. */
+function buildAgentResponse(loopCtx: LoopContext): AgentResponse {
+  const lastStep = loopCtx.steps[loopCtx.steps.length - 1]
+  const result: AgentResponse = {
+    text:  lastStep ? getMessageText(lastStep.message.content) : '',
+    steps: loopCtx.steps,
+    usage: loopCtx.totalUsage,
+  }
+  if (loopCtx.loopFinishReason) result.finishReason = loopCtx.loopFinishReason
+  if (loopCtx.pendingClientToolCalls.length > 0) result.pendingClientToolCalls = loopCtx.pendingClientToolCalls
+  if (loopCtx.pendingApprovalToolCall) result.pendingApprovalToolCall = loopCtx.pendingApprovalToolCall
+  if (loopCtx.resumedToolMessages.length > 0) result.resumedToolMessages = loopCtx.resumedToolMessages
+  return result
+}
+
+/**
+ * Execute the tool phase for a single agent step. Yields the same
+ * `StreamChunk` sequence (`tool-call` → `tool-update*` → `tool-result`) that
+ * the streaming caller surfaces to consumers. Non-streaming callers iterate
+ * via `.next()` and discard yields — the side effects (message pushes,
+ * pending-state mutations on `loopCtx`) are identical regardless of whether
+ * the chunks reach a consumer.
+ *
+ * Returns the step's `ToolResult[]`. The caller passes the assistant message
+ * to push before iteration so the AgentStep shape (response.message) and the
+ * final `messages` array stay in sync with the loop variant.
+ */
+async function* executeToolPhase(
+  loopCtx:          LoopContext,
+  toolCalls:        ToolCall[],
+  assistantMessage: AiMessage,
+): AsyncGenerator<StreamChunk, ToolResult[], void> {
+  const { messages, middlewares, toolMap, options, ctx } = loopCtx
+  const toolResults: ToolResult[] = []
+
+  messages.push(assistantMessage)
+
+  for (const tc of toolCalls) {
+    const tool = toolMap.get(tc.name)
+    if (!tool) {
+      const unknownResult = `Error: Unknown tool "${tc.name}"`
+      toolResults.push({ toolCallId: tc.id, result: unknownResult })
+      messages.push({ role: 'tool', content: unknownResult, toolCallId: tc.id })
+      yield { type: 'tool-result' as const, toolCall: tc, result: unknownResult }
+      continue
+    }
+    if (!tool.execute) {
+      // Client tool — no server-side handler.
+      if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
+        loopCtx.pendingClientToolCalls.push(tc)
+        loopCtx.loopFinishReason = 'client_tool_calls'
+        loopCtx.stopForClientTools = true
+        yield { type: 'tool-call' as const, toolCall: tc }
+        continue
+      }
+      const placeholder = '[client tool — execute on client]'
+      toolResults.push({ toolCallId: tc.id, result: placeholder })
+      messages.push({ role: 'tool', content: placeholder, toolCallId: tc.id })
+      yield { type: 'tool-call' as const, toolCall: tc }
+      yield { type: 'tool-result' as const, toolCall: tc, result: placeholder }
+      continue
+    }
+
+    // needsApproval enforcement
+    const approvalDecision = await evaluateApproval(tool, tc, options)
+    if (approvalDecision === 'rejected') {
+      const rejectionResult = { rejected: true, reason: 'User rejected this tool call' }
+      toolResults.push({ toolCallId: tc.id, result: rejectionResult })
+      messages.push({ role: 'tool', content: JSON.stringify(rejectionResult), toolCallId: tc.id })
+      yield { type: 'tool-result' as const, toolCall: tc, result: rejectionResult }
+      continue
+    }
+    if (approvalDecision === 'pending') {
+      loopCtx.pendingApprovalToolCall = { toolCall: tc, isClientTool: false }
+      loopCtx.loopFinishReason = 'tool_approval_required'
+      loopCtx.stopForApproval = true
+      yield { type: 'tool-call' as const, toolCall: tc }
+      break
+    }
+
+    // onBeforeToolCall
+    let toolArgs = tc.arguments
+    if (middlewares.length > 0) {
+      const beforeResult = await runOnBeforeToolCall(middlewares, ctx, tc.name, toolArgs)
+      if (beforeResult) {
+        if (beforeResult.type === 'skip') {
+          const resultStr = typeof beforeResult.result === 'string' ? beforeResult.result : JSON.stringify(beforeResult.result)
+          toolResults.push({ toolCallId: tc.id, result: beforeResult.result })
+          messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+          yield { type: 'tool-result' as const, toolCall: tc, result: beforeResult.result }
+          await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, beforeResult.result)
+          continue
+        }
+        if (beforeResult.type === 'abort') {
+          await runOnAbort(middlewares, ctx, beforeResult.reason)
+          break
+        }
+        if (beforeResult.type === 'transformArgs') {
+          toolArgs = beforeResult.args
+        }
+      }
+    }
+
+    // Validate args against the tool's inputSchema. Runs after middleware
+    // transforms so transforms can reshape malformed model output before
+    // it is judged. The tool-call chunk is emitted even on validation
+    // failure so streaming UIs see a paired tool-call → tool-result(error)
+    // sequence; non-streaming callers discard the chunk.
+    const validation = validateToolArgs(tool, toolArgs)
+    if (!validation.ok) {
+      yield { type: 'tool-call' as const, toolCall: tc }
+      toolResults.push({ toolCallId: tc.id, result: validation.error })
+      messages.push({ role: 'tool', content: JSON.stringify(validation.error), toolCallId: tc.id })
+      yield { type: 'tool-result' as const, toolCall: tc, result: validation.error }
+      if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, validation.error)
+      continue
+    }
+    const validatedArgs = validation.value
+
+    const toolStart = performance.now()
+    try {
+      // Emit the tool-call marker before execution so streaming UIs see
+      // tool-call → tool-update* → tool-result in order. Async-generator
+      // executes stream their yields as tool-update chunks live; plain
+      // executes yield nothing here.
+      //
+      // Pause detection: a yielded `pause_for_client_tools` control chunk
+      // halts iteration, propagates the nested calls to the parent's
+      // pending list, and SKIPS the tool_result emission — the yielding
+      // tool's own call stays orphaned in the parent message history
+      // until the caller resolves it on resume.
+      yield { type: 'tool-call' as const, toolCall: tc }
+      const execGen = executeMaybeStreaming(tool, validatedArgs, { toolCallId: tc.id })
+      let result: unknown
+      let paused = false
+      while (true) {
+        const step = await execGen.next()
+        if (step.done) {
+          result = step.value
+          break
+        }
+        if (isPauseForClientToolsChunk(step.value)) {
+          for (const pending of step.value.toolCalls) {
+            loopCtx.pendingClientToolCalls.push(pending)
+          }
+          loopCtx.loopFinishReason = 'client_tool_calls'
+          loopCtx.stopForClientTools = true
+          paused = true
+          break
+        }
+        const updateChunk: StreamChunk = { type: 'tool-update', toolCall: tc, update: step.value }
+        if (middlewares.length > 0) {
+          const transformed = runOnChunk(middlewares, ctx, updateChunk)
+          if (transformed) yield transformed
+        } else {
+          yield updateChunk
+        }
+      }
+      if (paused) continue   // skip tool_result emission + message push for this tc
+      const duration = performance.now() - toolStart
+      // toolResults preserves the ORIGINAL value; only the message content
+      // pushed onto `messages` (next-step model input) is narrowed by
+      // toModelOutput. The streamed `tool-result` chunk also carries the
+      // ORIGINAL value.
+      toolResults.push({ toolCallId: tc.id, result, duration })
+      const resultStr = await applyToModelOutput(
+        tool,
+        result,
+        middlewares.length > 0 ? (e) => runOnError(middlewares, ctx, e) : undefined,
+      )
+      messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
+      yield { type: 'tool-result' as const, toolCall: tc, result }
+
+      // onAfterToolCall
+      if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
+    } catch (err: unknown) {
+      const duration = performance.now() - toolStart
+      const msg = err instanceof Error ? err.message : String(err)
+      const errResult = `Error: ${msg}`
+      toolResults.push({ toolCallId: tc.id, result: errResult, duration })
+      messages.push({ role: 'tool', content: errResult, toolCallId: tc.id })
+      yield { type: 'tool-result' as const, toolCall: tc, result: errResult }
+
+      // onAfterToolCall (error case)
+      if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, errResult)
+    }
+  }
+
+  // onToolPhaseComplete
+  if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
+
+  return toolResults
+}
+
+/**
+ * Build the shared `LoopContext` for a `prompt()` / `stream()` call, run
+ * approval-resume, and fire `onConfig(init)` + `onStart`. After this returns,
+ * the iteration loop can run with the same setup regardless of streaming
+ * mode.
+ */
+async function initializeLoop(
+  a: Agent,
+  input: string,
+  options: AgentPromptOptions | undefined,
+): Promise<{ loopCtx: LoopContext; stopConditions: StopCondition[] }> {
   // Honor caller-supplied AbortSignal as early as possible — if the signal
   // is already aborted on entry, do no work at all.
   options?.signal?.throwIfAborted()
+
   const loopStart = performance.now()
   const modelString = a.model() ?? AiRegistry.getDefault()
   const [providerName] = AiRegistry.parseModelString(modelString)
@@ -406,7 +737,6 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   const middlewares = getMiddleware(a)
   const toolSchemas = buildToolSchemas(tools)
   const toolMap = buildToolMap(tools)
-  let failoverAttempts = 0
 
   const messages: AiMessage[] = options?.messages
     ? [{ role: 'system', content: a.instructions() }, ...options.messages]
@@ -420,28 +750,44 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   const stopConditions = normalizeStopConditions(a.stopWhen())
   const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
-  // State for client-tool-stopping and approval-stopping
-  const pendingClientToolCalls: ToolCall[] = []
-  let pendingApprovalToolCall: { toolCall: ToolCall; isClientTool: boolean } | undefined
-  let loopFinishReason: FinishReason | undefined
-  let stopForClientTools = false
-  let stopForApproval = false
-  let resumedToolMessages: AiMessage[] = [] // eslint-disable-line no-useless-assignment
+  // Create middleware context (resume below mutates `messages`, captured by
+  // reference here, so order is safe).
+  const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
 
-  // Resume server tools left pending by a previous approval round-trip.
-  // (Must run before middleware context creation since `messages` may grow.)
-  {
-    const resume = await resumePendingToolCalls({ messages, toolMap, options })
-    resumedToolMessages = resume.resumed
-    if (resume.approvalStillRequired) {
-      pendingApprovalToolCall = resume.approvalStillRequired
-      loopFinishReason = 'tool_approval_required'
-      stopForApproval = true
-    }
+  const loopCtx: LoopContext = {
+    agent:                   a,
+    input,
+    options,
+    modelString,
+    providerName,
+    tools,
+    toolMap,
+    toolSchemas,
+    middlewares,
+    loopStart,
+    ctx,
+    messages,
+    steps,
+    totalUsage,
+    pendingClientToolCalls:  [],
+    pendingApprovalToolCall: undefined,
+    loopFinishReason:        undefined,
+    stopForClientTools:      false,
+    stopForApproval:         false,
+    resumedToolMessages:     [],
+    failoverAttempts:        0,
   }
 
-  // Create middleware context
-  const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
+  // Resume server tools left pending by a previous approval round-trip.
+  {
+    const resume = await resumePendingToolCalls({ messages, toolMap, options })
+    loopCtx.resumedToolMessages = resume.resumed
+    if (resume.approvalStillRequired) {
+      loopCtx.pendingApprovalToolCall = resume.approvalStillRequired
+      loopCtx.loopFinishReason = 'tool_approval_required'
+      loopCtx.stopForApproval = true
+    }
+  }
 
   // onConfig — init phase
   if (middlewares.length > 0) {
@@ -452,222 +798,102 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   // onStart
   if (middlewares.length > 0) await runSequential(middlewares, 'onStart', ctx)
 
+  return { loopCtx, stopConditions }
+}
+
+/**
+ * Run the per-iteration prelude — caller-abort check, middleware-abort
+ * check, `onIteration`, `prepareStep`, `onConfig(beforeModel)`. Returns the
+ * resolved model for this step or `{ aborted: true }` if middleware
+ * cancelled the run (caller should `break`). Throws the abort reason if a
+ * caller-supplied AbortSignal fired between iterations.
+ */
+async function runIterationPrelude(
+  loopCtx: LoopContext,
+  iteration: number,
+): Promise<{ currentModel: string } | { aborted: true }> {
+  const { agent, options, ctx, middlewares, messages, modelString, steps } = loopCtx
+  ctx.iteration = iteration
+  // Reset the streaming chunk index for middlewares that key off it. Harmless
+  // in non-streaming mode where no chunks flow through `onChunk`.
+  ctx.chunkIndex = 0
+
+  // Honor caller-supplied AbortSignal between iterations.
+  options?.signal?.throwIfAborted()
+
+  if (ctx._aborted) {
+    await runOnAbort(middlewares, ctx, ctx._abortReason)
+    return { aborted: true }
+  }
+
+  if (middlewares.length > 0) await runSequential(middlewares, 'onIteration', ctx)
+
+  let currentModel = modelString
+
+  if (agent.prepareStep) {
+    const prep = await agent.prepareStep({ stepNumber: iteration, steps, messages })
+    if (prep.model) currentModel = prep.model
+    if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
+    if (prep.system) messages[0] = { role: 'system', content: prep.system }
+  }
+
+  if (middlewares.length > 0) {
+    const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, agent), 'beforeModel')
+    if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
+  }
+
+  return { currentModel }
+}
+
+// ─── Agent Loop (non-streaming) ──────────────────────────
+
+async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+  const { loopCtx, stopConditions } = await initializeLoop(a, input, options)
+  const { ctx, middlewares, messages, steps, totalUsage } = loopCtx
+
   try {
-    if (stopForApproval) {
+    if (loopCtx.stopForApproval) {
       // Approval is still required from the resume — skip the model loop.
     } else {
     for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
-      ctx.iteration = iteration
+      const prelude = await runIterationPrelude(loopCtx, iteration)
+      if ('aborted' in prelude) break
+      const { currentModel } = prelude
 
-      // Honor caller-supplied AbortSignal between iterations. Throws the
-      // signal's reason (e.g. DOMException 'AbortError', or TimeoutError
-      // for AbortSignal.timeout) so `prompt()` rejects with the standard
-      // shape callers already handle.
-      options?.signal?.throwIfAborted()
-
-      // Check if middleware aborted
-      if (ctx._aborted) {
-        await runOnAbort(middlewares, ctx, ctx._abortReason)
-        break
-      }
-
-      // onIteration
-      if (middlewares.length > 0) await runSequential(middlewares, 'onIteration', ctx)
-
-      let currentModel = modelString
-      const currentToolSchemas = toolSchemas
-
-      // prepareStep hook
-      if (a.prepareStep) {
-        const prep = await a.prepareStep({ stepNumber: iteration, steps, messages })
-        if (prep.model) currentModel = prep.model
-        if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
-        if (prep.system) messages[0] = { role: 'system', content: prep.system }
-      }
-
-      // onConfig — beforeModel phase
-      if (middlewares.length > 0) {
-        const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'beforeModel')
-        if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
-      }
-
-      const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
-      let response: import('./types.js').ProviderResponse | undefined
-      let lastError: Error | undefined
-
-      for (const tryModel of failoverModels) {
-        try {
-          const adapter = AiRegistry.resolve(tryModel)
-          const [, modelId] = AiRegistry.parseModelString(tryModel)
-          const reqOptions: ProviderRequestOptions = {
-            model: modelId,
-            messages,
-            tools: currentToolSchemas.length > 0 ? currentToolSchemas : undefined,
-            temperature: a.temperature(),
-            maxTokens: a.maxTokens(),
-            signal: options?.signal,
-          }
-          response = await adapter.generate(reqOptions)
-          break
-        } catch (err) {
-          // If the abort came from the caller, don't try the next failover
-          // model — re-throw so `prompt()` rejects immediately.
-          if (options?.signal?.aborted) throw options.signal.reason
-          lastError = err instanceof Error ? err : new Error(String(err))
-          failoverAttempts++
-          if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
-        }
-      }
-      if (!response) throw lastError ?? new Error('No provider available')
+      const response = await runFailover(loopCtx, currentModel, (adapter, _, opts) => adapter.generate(opts))
       addUsage(totalUsage, response.usage)
 
       // onUsage
       if (middlewares.length > 0) await runOnUsage(middlewares, ctx, response.usage)
 
       const toolCalls = response.message.toolCalls ?? []
-      const toolResults: ToolResult[] = []
+      let toolResults: ToolResult[] = []
 
       if (toolCalls.length > 0) {
-        messages.push(response.message)
-
-        for (const tc of toolCalls) {
-          const tool = toolMap.get(tc.name)
-          if (!tool) {
-            toolResults.push({ toolCallId: tc.id, result: `Error: Unknown tool "${tc.name}"` })
-            messages.push({ role: 'tool', content: `Error: Unknown tool "${tc.name}"`, toolCallId: tc.id })
-            continue
-          }
-          if (!tool.execute) {
-            // Client tool — no server-side handler.
-            if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
-              pendingClientToolCalls.push(tc)
-              loopFinishReason = 'client_tool_calls'
-              stopForClientTools = true
-              continue
-            }
-            toolResults.push({ toolCallId: tc.id, result: '[client tool — execute on client]' })
-            messages.push({ role: 'tool', content: '[client tool — execute on client]', toolCallId: tc.id })
-            continue
-          }
-
-          // needsApproval enforcement
-          const approvalDecision = await evaluateApproval(tool, tc, options)
-          if (approvalDecision === 'rejected') {
-            const rejectionResult = { rejected: true, reason: 'User rejected this tool call' }
-            toolResults.push({ toolCallId: tc.id, result: rejectionResult })
-            messages.push({ role: 'tool', content: JSON.stringify(rejectionResult), toolCallId: tc.id })
-            continue
-          }
-          if (approvalDecision === 'pending') {
-            pendingApprovalToolCall = { toolCall: tc, isClientTool: false }
-            loopFinishReason = 'tool_approval_required'
-            stopForApproval = true
+        // Drain `executeToolPhase` to completion, discarding the streamed
+        // chunks — non-streaming callers don't surface them.
+        const phaseGen = executeToolPhase(loopCtx, toolCalls, response.message)
+        while (true) {
+          const next = await phaseGen.next()
+          if (next.done) {
+            toolResults = next.value
             break
           }
-
-          // onBeforeToolCall
-          let toolArgs = tc.arguments
-          if (middlewares.length > 0) {
-            const beforeResult = await runOnBeforeToolCall(middlewares, ctx, tc.name, toolArgs)
-            if (beforeResult) {
-              if (beforeResult.type === 'skip') {
-                const resultStr = typeof beforeResult.result === 'string' ? beforeResult.result : JSON.stringify(beforeResult.result)
-                toolResults.push({ toolCallId: tc.id, result: beforeResult.result })
-                messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-                await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, beforeResult.result)
-                continue
-              }
-              if (beforeResult.type === 'abort') {
-                await runOnAbort(middlewares, ctx, beforeResult.reason)
-                break
-              }
-              if (beforeResult.type === 'transformArgs') {
-                toolArgs = beforeResult.args
-              }
-            }
-          }
-
-          // Validate args against the tool's inputSchema. Runs after
-          // middleware transforms so transforms can reshape malformed
-          // model output before it is judged. On failure, feed the
-          // structured error back to the model and skip execute().
-          const validation = validateToolArgs(tool, toolArgs)
-          if (!validation.ok) {
-            toolResults.push({ toolCallId: tc.id, result: validation.error })
-            messages.push({ role: 'tool', content: JSON.stringify(validation.error), toolCallId: tc.id })
-            if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, validation.error)
-            continue
-          }
-          const validatedArgs = validation.value
-
-          const toolStart = performance.now()
-          try {
-            // Drain generator yields silently in the non-streaming loop —
-            // the same tool definition must work in both prompt() and stream().
-            // Exception: a `pause_for_client_tools` control chunk yield
-            // halts iteration, propagates the nested calls to the parent's
-            // pending list, and skips tool_result recording (see tool.ts
-            // `pauseForClientTools` for rationale).
-            const execGen = executeMaybeStreaming(tool, validatedArgs, { toolCallId: tc.id })
-            let result: unknown
-            let paused = false
-            while (true) {
-              const step = await execGen.next()
-              if (step.done) { result = step.value; break }
-              if (isPauseForClientToolsChunk(step.value)) {
-                for (const pending of step.value.toolCalls) {
-                  pendingClientToolCalls.push(pending)
-                }
-                loopFinishReason = 'client_tool_calls'
-                stopForClientTools = true
-                paused = true
-                break
-              }
-              // Plain tool-update yields are silently dropped in the
-              // non-streaming loop — only the final return value matters.
-            }
-            if (paused) continue   // skip toolResults + message push for this tc
-            const duration = performance.now() - toolStart
-            // toolResults preserves the ORIGINAL value; only the tool message
-            // pushed onto `messages` (what the next model step sees) is
-            // narrowed by toModelOutput.
-            toolResults.push({ toolCallId: tc.id, result, duration })
-            const resultStr = await applyToModelOutput(
-              tool,
-              result,
-              middlewares.length > 0 ? (e) => runOnError(middlewares, ctx, e) : undefined,
-            )
-            messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-
-            // onAfterToolCall
-            if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
-          } catch (err: unknown) {
-            const duration = performance.now() - toolStart
-            const msg = err instanceof Error ? err.message : String(err)
-            toolResults.push({ toolCallId: tc.id, result: `Error: ${msg}`, duration })
-            messages.push({ role: 'tool', content: `Error: ${msg}`, toolCallId: tc.id })
-
-            // onAfterToolCall (error case)
-            if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, `Error: ${msg}`)
-          }
         }
-
-        // onToolPhaseComplete
-        if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
       } else {
         messages.push(response.message)
       }
 
       const step: AgentStep = {
-        message: response.message,
+        message:      response.message,
         toolCalls,
         toolResults,
-        usage: response.usage,
+        usage:        response.usage,
         finishReason: response.finishReason,
       }
       steps.push(step)
 
-      if (stopForClientTools || stopForApproval) break
+      if (loopCtx.stopForClientTools || loopCtx.stopForApproval) break
 
       const shouldStop = stopConditions.some(cond =>
         cond({ steps, iteration, lastMessage: response.message }),
@@ -680,67 +906,15 @@ async function runAgentLoop(a: Agent, input: string, options?: AgentPromptOption
   } catch (err) {
     // onError
     if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
-
-    // Emit observer event on failure
-    const obs = _getAiObservers()
-    if (obs) {
-      const inputText = options?.messages ? '' : input
-      obs.emit({
-        kind:             'agent.failed',
-        agentName:        a.constructor.name,
-        model:            modelString,
-        provider:         providerName,
-        input:            inputText,
-        output:           '',
-        steps:            _buildObserverSteps(steps, modelString),
-        tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
-        duration:         Math.round(performance.now() - loopStart),
-        finishReason:     'error',
-        streaming:        false,
-        conversationId:   null,
-        failoverAttempts,
-        error:            err instanceof Error ? err.message : String(err),
-      })
-    }
-
+    emitObserverFailed(loopCtx, err, false)
     throw err
   }
 
   // onFinish
   if (middlewares.length > 0) await runSequential(middlewares, 'onFinish', ctx)
 
-  const lastStep = steps[steps.length - 1]
-  const result: AgentResponse = {
-    text: lastStep ? getMessageText(lastStep.message.content) : '',
-    steps,
-    usage: totalUsage,
-  }
-  if (loopFinishReason) result.finishReason = loopFinishReason
-  if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
-  if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
-  if (resumedToolMessages.length > 0) result.resumedToolMessages = resumedToolMessages
-
-  // Emit observer event on success
-  const obs = _getAiObservers()
-  if (obs) {
-    const inputText = options?.messages ? '' : input
-    obs.emit({
-      kind:             'agent.completed',
-      agentName:        a.constructor.name,
-      model:            modelString,
-      provider:         providerName,
-      input:            inputText,
-      output:           result.text,
-      steps:            _buildObserverSteps(steps, modelString),
-      tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
-      duration:         Math.round(performance.now() - loopStart),
-      finishReason:     result.finishReason ?? lastStep?.finishReason ?? 'stop',
-      streaming:        false,
-      conversationId:   null,
-      failoverAttempts,
-    })
-  }
-
+  const result = buildAgentResponse(loopCtx)
+  emitObserverCompleted(loopCtx, result, false)
   return result
 }
 
@@ -755,128 +929,19 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
   })
 
   async function* generateStream(): AsyncIterable<StreamChunk> {
-    // Honor caller-supplied AbortSignal as early as possible.
-    if (options?.signal?.aborted) {
-      rejectResponse(options.signal.reason)
-      throw options.signal.reason
-    }
-    const loopStart = performance.now()
-    const modelString = a.model() ?? AiRegistry.getDefault()
-    const [providerName] = AiRegistry.parseModelString(modelString)
-    const tools = getTools(a)
-    const middlewares = getMiddleware(a)
-    const toolSchemas = buildToolSchemas(tools)
-    const toolMap = buildToolMap(tools)
-    let failoverAttempts = 0
-
-    const messages: AiMessage[] = options?.messages
-      ? [{ role: 'system', content: a.instructions() }, ...options.messages]
-      : [
-        { role: 'system', content: a.instructions() },
-        ...(options?.history ?? []),
-        buildUserMessage(input, options?.attachments),
-      ]
-
-    const steps: AgentStep[] = []
-    const stopConditions = normalizeStopConditions(a.stopWhen())
-    const totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-
-    // State for client-tool-stopping and approval-stopping
-    const pendingClientToolCalls: ToolCall[] = []
-    let pendingApprovalToolCall: { toolCall: ToolCall; isClientTool: boolean } | undefined
-    let loopFinishReason: FinishReason | undefined
-    let stopForClientTools = false
-    let stopForApproval = false
-    let resumedToolMessages: AiMessage[] = [] // eslint-disable-line no-useless-assignment
-
-    // Resume server tools left pending by a previous approval round-trip.
-    {
-      const resume = await resumePendingToolCalls({ messages, toolMap, options })
-      resumedToolMessages = resume.resumed
-      if (resume.approvalStillRequired) {
-        pendingApprovalToolCall = resume.approvalStillRequired
-        loopFinishReason = 'tool_approval_required'
-        stopForApproval = true
-      }
-    }
-
-    // Create middleware context
-    const ctx = createMiddlewareContext(messages, modelString, tools, 0) as MiddlewareContext & { readonly _aborted: boolean; readonly _abortReason: string }
-
-    // onConfig — init phase
-    if (middlewares.length > 0) {
-      const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'init')
-      if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
-    }
-
-    // onStart
-    if (middlewares.length > 0) await runSequential(middlewares, 'onStart', ctx)
+    const { loopCtx, stopConditions } = await initializeLoop(a, input, options)
+    const { ctx, middlewares, messages, steps, totalUsage } = loopCtx
 
     try {
-      if (stopForApproval) {
+      if (loopCtx.stopForApproval) {
         // Resume detected unfulfilled approval — skip the model loop entirely.
       } else {
       for (let iteration = 0; iteration < a.maxSteps(); iteration++) {
-        ctx.iteration = iteration
-        ctx.chunkIndex = 0
+        const prelude = await runIterationPrelude(loopCtx, iteration)
+        if ('aborted' in prelude) break
+        const { currentModel } = prelude
 
-        // Honor caller-supplied AbortSignal between iterations. Throws the
-        // signal's reason — `generateStream()` propagates it out, and the
-        // outer wrapper rejects the `response` promise with the same value.
-        options?.signal?.throwIfAborted()
-
-        // Check if middleware aborted
-        if (ctx._aborted) {
-          await runOnAbort(middlewares, ctx, ctx._abortReason)
-          break
-        }
-
-        // onIteration
-        if (middlewares.length > 0) await runSequential(middlewares, 'onIteration', ctx)
-
-        let currentModel = modelString
-
-        if (a.prepareStep) {
-          const prep = await a.prepareStep({ stepNumber: iteration, steps, messages })
-          if (prep.model) currentModel = prep.model
-          if (prep.messages) messages.splice(0, messages.length, ...prep.messages)
-          if (prep.system) messages[0] = { role: 'system', content: prep.system }
-        }
-
-        // onConfig — beforeModel phase
-        if (middlewares.length > 0) {
-          const configResult = runOnConfig(middlewares, ctx, buildMiddlewareConfig(messages, a), 'beforeModel')
-          if (configResult.messages) messages.splice(0, messages.length, ...configResult.messages)
-        }
-
-        const failoverModels = [currentModel, ...a.failover().filter(m => m !== currentModel)]
-        let streamSource: AsyncIterable<StreamChunk> | undefined
-        let lastError: Error | undefined
-
-        for (const tryModel of failoverModels) {
-          try {
-            const adapter = AiRegistry.resolve(tryModel)
-            const [, modelId] = AiRegistry.parseModelString(tryModel)
-            const opts: ProviderRequestOptions = {
-              model: modelId,
-              messages,
-              tools: toolSchemas.length > 0 ? toolSchemas : undefined,
-              temperature: a.temperature(),
-              maxTokens: a.maxTokens(),
-              signal: options?.signal,
-            }
-            streamSource = adapter.stream(opts)
-            break
-          } catch (err) {
-            // If the abort came from the caller, don't try the next failover
-            // model — re-throw so the stream rejects immediately.
-            if (options?.signal?.aborted) throw options.signal.reason
-            lastError = err instanceof Error ? err : new Error(String(err))
-            failoverAttempts++
-            if (tryModel === failoverModels[failoverModels.length - 1]) throw lastError
-          }
-        }
-        if (!streamSource) throw lastError ?? new Error('No provider available')
+        const streamSource = await runFailover(loopCtx, currentModel, (adapter, _, opts) => adapter.stream(opts))
 
         let text = ''
         let currentToolCalls: ToolCall[] = []
@@ -932,164 +997,21 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         // onUsage
         if (middlewares.length > 0) await runOnUsage(middlewares, ctx, stepUsage)
 
-        const toolResults: ToolResult[] = []
+        let toolResults: ToolResult[] = []
 
         if (currentToolCalls.length > 0) {
           const assistantMsg: AiMessage = { role: 'assistant', content: text, toolCalls: currentToolCalls }
-          messages.push(assistantMsg)
-
-          for (const tc of currentToolCalls) {
-            const tool = toolMap.get(tc.name)
-            if (!tool) {
-              const unknownResult = `Error: Unknown tool "${tc.name}"`
-              toolResults.push({ toolCallId: tc.id, result: unknownResult })
-              messages.push({ role: 'tool', content: unknownResult, toolCallId: tc.id })
-              yield { type: 'tool-result' as const, toolCall: tc, result: unknownResult }
-              continue
-            }
-            if (!tool.execute) {
-              // Client tool — no server-side handler.
-              if (options?.toolCallStreamingMode === 'stop-on-client-tool') {
-                pendingClientToolCalls.push(tc)
-                loopFinishReason = 'client_tool_calls'
-                stopForClientTools = true
-                yield { type: 'tool-call' as const, toolCall: tc }
-                continue
-              }
-              const placeholder = '[client tool — execute on client]'
-              toolResults.push({ toolCallId: tc.id, result: placeholder })
-              messages.push({ role: 'tool', content: placeholder, toolCallId: tc.id })
-              yield { type: 'tool-call' as const, toolCall: tc }
-              yield { type: 'tool-result' as const, toolCall: tc, result: placeholder }
-              continue
-            }
-
-            // needsApproval enforcement
-            const approvalDecision = await evaluateApproval(tool, tc, options)
-            if (approvalDecision === 'rejected') {
-              const rejectionResult = { rejected: true, reason: 'User rejected this tool call' }
-              toolResults.push({ toolCallId: tc.id, result: rejectionResult })
-              messages.push({ role: 'tool', content: JSON.stringify(rejectionResult), toolCallId: tc.id })
-              yield { type: 'tool-result' as const, toolCall: tc, result: rejectionResult }
-              continue
-            }
-            if (approvalDecision === 'pending') {
-              pendingApprovalToolCall = { toolCall: tc, isClientTool: false }
-              loopFinishReason = 'tool_approval_required'
-              stopForApproval = true
-              yield { type: 'tool-call' as const, toolCall: tc }
+          // Forward chunks from the shared tool-phase generator straight
+          // through to the stream consumer.
+          const phaseGen = executeToolPhase(loopCtx, currentToolCalls, assistantMsg)
+          while (true) {
+            const next = await phaseGen.next()
+            if (next.done) {
+              toolResults = next.value
               break
             }
-
-            // onBeforeToolCall
-            let toolArgs = tc.arguments
-            if (middlewares.length > 0) {
-              const beforeResult = await runOnBeforeToolCall(middlewares, ctx, tc.name, toolArgs)
-              if (beforeResult) {
-                if (beforeResult.type === 'skip') {
-                  const resultStr = typeof beforeResult.result === 'string' ? beforeResult.result : JSON.stringify(beforeResult.result)
-                  toolResults.push({ toolCallId: tc.id, result: beforeResult.result })
-                  messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-                  yield { type: 'tool-result' as const, toolCall: tc, result: beforeResult.result }
-                  await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, beforeResult.result)
-                  continue
-                }
-                if (beforeResult.type === 'abort') {
-                  await runOnAbort(middlewares, ctx, beforeResult.reason)
-                  break
-                }
-                if (beforeResult.type === 'transformArgs') {
-                  toolArgs = beforeResult.args
-                }
-              }
-            }
-
-            // Validate args against the tool's inputSchema (see notes on
-            // the non-streaming loop). The tool-call chunk is emitted even
-            // on validation failure so UIs see a paired tool-call →
-            // tool-result(error) sequence.
-            const validation = validateToolArgs(tool, toolArgs)
-            if (!validation.ok) {
-              yield { type: 'tool-call' as const, toolCall: tc }
-              toolResults.push({ toolCallId: tc.id, result: validation.error })
-              messages.push({ role: 'tool', content: JSON.stringify(validation.error), toolCallId: tc.id })
-              yield { type: 'tool-result' as const, toolCall: tc, result: validation.error }
-              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, validation.error)
-              continue
-            }
-            const validatedArgs = validation.value
-
-            const toolStart = performance.now()
-            try {
-              // Emit the tool-call marker before execution so the UI sees
-              // tool-call → tool-update* → tool-result in order. Async-
-              // generator executes stream their yields as tool-update chunks
-              // live; plain executes yield nothing here.
-              //
-              // Pause detection: a yielded `pause_for_client_tools` control
-              // chunk halts iteration, propagates the nested calls to the
-              // parent's pending list, and SKIPS the tool_result emission
-              // — the yielding tool's own call stays orphaned in the parent
-              // message history until the caller resolves it on resume.
-              yield { type: 'tool-call' as const, toolCall: tc }
-              const execGen = executeMaybeStreaming(tool, validatedArgs, { toolCallId: tc.id })
-              let result: unknown
-              let paused = false
-              while (true) {
-                const step = await execGen.next()
-                if (step.done) {
-                  result = step.value
-                  break
-                }
-                if (isPauseForClientToolsChunk(step.value)) {
-                  for (const pending of step.value.toolCalls) {
-                    pendingClientToolCalls.push(pending)
-                  }
-                  loopFinishReason = 'client_tool_calls'
-                  stopForClientTools = true
-                  paused = true
-                  break
-                }
-                const updateChunk: StreamChunk = { type: 'tool-update', toolCall: tc, update: step.value }
-                if (middlewares.length > 0) {
-                  const transformed = runOnChunk(middlewares, ctx, updateChunk)
-                  if (transformed) yield transformed
-                } else {
-                  yield updateChunk
-                }
-              }
-              if (paused) continue   // skip tool_result emission + message push for this tc
-              const duration = performance.now() - toolStart
-              // The streamed `tool-result` chunk and `step.toolResults`
-              // both carry the ORIGINAL value; only the message content
-              // pushed onto `messages` (next-step model input) is narrowed
-              // by toModelOutput.
-              toolResults.push({ toolCallId: tc.id, result, duration })
-              const resultStr = await applyToModelOutput(
-                tool,
-                result,
-                middlewares.length > 0 ? (e) => runOnError(middlewares, ctx, e) : undefined,
-              )
-              messages.push({ role: 'tool', content: resultStr, toolCallId: tc.id })
-              yield { type: 'tool-result' as const, toolCall: tc, result }
-
-              // onAfterToolCall
-              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, result)
-            } catch (err: unknown) {
-              const duration = performance.now() - toolStart
-              const msg = err instanceof Error ? err.message : String(err)
-              const errResult = `Error: ${msg}`
-              toolResults.push({ toolCallId: tc.id, result: errResult, duration })
-              messages.push({ role: 'tool', content: errResult, toolCallId: tc.id })
-              yield { type: 'tool-result' as const, toolCall: tc, result: errResult }
-
-              // onAfterToolCall (error case)
-              if (middlewares.length > 0) await runOnAfterToolCall(middlewares, ctx, tc.name, toolArgs, errResult)
-            }
+            yield next.value
           }
-
-          // onToolPhaseComplete
-          if (middlewares.length > 0) await runSequential(middlewares, 'onToolPhaseComplete', ctx)
         } else {
           messages.push({ role: 'assistant', content: text })
         }
@@ -1103,7 +1025,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
         }
         steps.push(step)
 
-        if (stopForClientTools || stopForApproval) break
+        if (loopCtx.stopForClientTools || loopCtx.stopForApproval) break
 
         const shouldStop = stopConditions.some(cond =>
           cond({ steps, iteration, lastMessage: step.message }),
@@ -1118,29 +1040,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     } catch (err) {
       // onError
       if (middlewares.length > 0) await runOnError(middlewares, ctx, err)
-
-      // Emit observer event on failure
-      const obs = _getAiObservers()
-      if (obs) {
-        const inputText = options?.messages ? '' : input
-        obs.emit({
-          kind:             'agent.failed',
-          agentName:        a.constructor.name,
-          model:            modelString,
-          provider:         providerName,
-          input:            inputText,
-          output:           '',
-          steps:            _buildObserverSteps(steps, modelString),
-          tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
-          duration:         Math.round(performance.now() - loopStart),
-          finishReason:     'error',
-          streaming:        true,
-          conversationId:   null,
-          failoverAttempts,
-          error:            err instanceof Error ? err.message : String(err),
-        })
-      }
-
+      emitObserverFailed(loopCtx, err, true)
       throw err
     }
 
@@ -1148,44 +1048,15 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     if (middlewares.length > 0) await runSequential(middlewares, 'onFinish', ctx)
 
     // Emit pending state to consumers via dedicated chunk types
-    if (pendingClientToolCalls.length > 0) {
-      yield { type: 'pending-client-tools' as const, toolCalls: pendingClientToolCalls } as unknown as StreamChunk
+    if (loopCtx.pendingClientToolCalls.length > 0) {
+      yield { type: 'pending-client-tools' as const, toolCalls: loopCtx.pendingClientToolCalls } as unknown as StreamChunk
     }
-    if (pendingApprovalToolCall) {
-      yield { type: 'pending-approval' as const, toolCall: pendingApprovalToolCall.toolCall, isClientTool: pendingApprovalToolCall.isClientTool } as unknown as StreamChunk
+    if (loopCtx.pendingApprovalToolCall) {
+      yield { type: 'pending-approval' as const, toolCall: loopCtx.pendingApprovalToolCall.toolCall, isClientTool: loopCtx.pendingApprovalToolCall.isClientTool } as unknown as StreamChunk
     }
 
-    const lastStep = steps[steps.length - 1]
-    const result: AgentResponse = {
-      text: lastStep ? getMessageText(lastStep.message.content) : '',
-      steps,
-      usage: totalUsage,
-    }
-    if (loopFinishReason) result.finishReason = loopFinishReason
-    if (pendingClientToolCalls.length > 0) result.pendingClientToolCalls = pendingClientToolCalls
-    if (pendingApprovalToolCall) result.pendingApprovalToolCall = pendingApprovalToolCall
-    if (resumedToolMessages.length > 0) result.resumedToolMessages = resumedToolMessages
-
-    // Emit observer event on success
-    const obs = _getAiObservers()
-    if (obs) {
-      const inputText = options?.messages ? '' : input
-      obs.emit({
-        kind:             'agent.completed',
-        agentName:        a.constructor.name,
-        model:            modelString,
-        provider:         providerName,
-        input:            inputText,
-        output:           result.text,
-        steps:            _buildObserverSteps(steps, modelString),
-        tokens:           { prompt: totalUsage.promptTokens, completion: totalUsage.completionTokens, total: totalUsage.totalTokens },
-        duration:         Math.round(performance.now() - loopStart),
-        finishReason:     result.finishReason ?? lastStep?.finishReason ?? 'stop',
-        streaming:        true,
-        conversationId:   null,
-        failoverAttempts,
-      })
-    }
+    const result = buildAgentResponse(loopCtx)
+    emitObserverCompleted(loopCtx, result, true)
 
     resolveResponse!(result)
   }
