@@ -2403,3 +2403,268 @@ describe('agent.step.completed observer event', () => {
     unsubscribe?.()
   })
 })
+
+describe('parallel tool execution', () => {
+  beforeEach(() => installScriptedFake())
+
+  // Each test below issues two tool calls in a single step. The default
+  // agent.parallelTools() returns true, so unless overridden the calls
+  // run concurrently.
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  it('default mode runs execute() calls concurrently within a step', async () => {
+    const enters: string[] = []
+    const exits: string[] = []
+    const slow = toolDefinition({
+      name: 'slow_a',
+      description: 'a',
+      inputSchema: z.object({}),
+    }).server(async () => {
+      enters.push('a')
+      await sleep(40)
+      exits.push('a')
+      return 'a-done'
+    })
+    const fast = toolDefinition({
+      name: 'fast_b',
+      description: 'b',
+      inputSchema: z.object({}),
+    }).server(async () => {
+      enters.push('b')
+      await sleep(10)
+      exits.push('b')
+      return 'b-done'
+    })
+
+    _script = [
+      { toolCalls: [
+        { id: 'pa1', name: 'slow_a', arguments: {} },
+        { id: 'pa2', name: 'fast_b', arguments: {} },
+      ] },
+      { text: 'done' },
+    ]
+
+    await agent({ instructions: 'sys', tools: [slow, fast] }).prompt('go')
+
+    // Concurrent execution: both tools entered before the slow one exited.
+    // Serial execution would have produced enters: [a], exits: [a], enters: [b], ...
+    assert.deepEqual(enters, ['a', 'b'], 'both tools should have entered in order')
+    assert.deepEqual(exits, ['b', 'a'], 'fast tool should exit before slow tool')
+  })
+
+  it('parallelTools: false reverts to serial execution', async () => {
+    const enters: string[] = []
+    const exits: string[] = []
+    const slow = toolDefinition({
+      name: 'slow_a',
+      description: 'a',
+      inputSchema: z.object({}),
+    }).server(async () => {
+      enters.push('a')
+      await sleep(20)
+      exits.push('a')
+      return 'a-done'
+    })
+    const fast = toolDefinition({
+      name: 'fast_b',
+      description: 'b',
+      inputSchema: z.object({}),
+    }).server(async () => {
+      enters.push('b')
+      await sleep(5)
+      exits.push('b')
+      return 'b-done'
+    })
+
+    _script = [
+      { toolCalls: [
+        { id: 'ps1', name: 'slow_a', arguments: {} },
+        { id: 'ps2', name: 'fast_b', arguments: {} },
+      ] },
+      { text: 'done' },
+    ]
+
+    await agent({ instructions: 'sys', tools: [slow, fast] }).prompt('go', { parallelTools: false })
+
+    // Serial: a fully completes (enter+exit) before b enters.
+    assert.deepEqual(enters, ['a', 'b'])
+    assert.deepEqual(exits, ['a', 'b'])
+  })
+
+  it('agent-level parallelTools() override is honored when no per-call option', async () => {
+    const trace: string[] = []
+    const agentTools = [
+      toolDefinition({ name: 't_a', description: 'a', inputSchema: z.object({}) })
+        .server(async () => { trace.push('a-enter'); await sleep(15); trace.push('a-exit'); return 'a' }),
+      toolDefinition({ name: 't_b', description: 'b', inputSchema: z.object({}) })
+        .server(async () => { trace.push('b-enter'); await sleep(5); trace.push('b-exit'); return 'b' }),
+    ]
+    class SerialAgent extends Agent {
+      parallelTools() { return false }
+      instructions() { return 'sys' }
+      tools() { return agentTools }
+    }
+
+    _script = [
+      { toolCalls: [
+        { id: 'pa-cls-1', name: 't_a', arguments: {} },
+        { id: 'pa-cls-2', name: 't_b', arguments: {} },
+      ] },
+      { text: 'done' },
+    ]
+
+    await new SerialAgent().prompt('go')
+
+    assert.deepEqual(trace, ['a-enter', 'a-exit', 'b-enter', 'b-exit'])
+  })
+
+  it('chunk emission preserves tool-call order even when fast tool finishes first', async () => {
+    const slow = toolDefinition({
+      name: 'streamy_a',
+      description: 'a',
+      inputSchema: z.object({}),
+    }).server(async function* () {
+      await sleep(20)
+      yield { progress: 'a-1' }
+      yield { progress: 'a-2' }
+      return 'a-final'
+    })
+    const fast = toolDefinition({
+      name: 'streamy_b',
+      description: 'b',
+      inputSchema: z.object({}),
+    }).server(async function* () {
+      yield { progress: 'b-1' }
+      return 'b-final'
+    })
+
+    _script = [
+      { toolCalls: [
+        { id: 'po1', name: 'streamy_a', arguments: {} },
+        { id: 'po2', name: 'streamy_b', arguments: {} },
+      ] },
+      { text: 'ok' },
+    ]
+
+    const a = agent({ instructions: 'sys', tools: [slow, fast] })
+    const { stream, response } = a.stream('go')
+    // Filter to only the chunks executeToolPhase emits — tool-update and
+    // tool-result. The provider mock also pre-emits tool-call chunks (one
+    // per scripted call) before our phase runs, so checking those would
+    // conflate provider order with phase order.
+    const seq: Array<{ type: string; id: string }> = []
+    for await (const chunk of stream) {
+      if (chunk.type !== 'tool-update' && chunk.type !== 'tool-result') continue
+      const id = chunk.toolCall?.id
+      if (!id) continue
+      seq.push({ type: chunk.type, id })
+    }
+    await response
+
+    assert.deepEqual(seq, [
+      { type: 'tool-update', id: 'po1' },
+      { type: 'tool-update', id: 'po1' },
+      { type: 'tool-result', id: 'po1' },
+      { type: 'tool-update', id: 'po2' },
+      { type: 'tool-result', id: 'po2' },
+    ], 'updates + results must emit in tool-call order even when B finishes first')
+  })
+
+  it('one tool throwing does not break the sibling tool in the same step', async () => {
+    const broken = toolDefinition({
+      name: 'broken',
+      description: 'throws',
+      inputSchema: z.object({}),
+    }).server(async (): Promise<string> => { throw new Error('boom') })
+    const ok = toolDefinition({
+      name: 'ok',
+      description: 'ok',
+      inputSchema: z.object({}),
+    }).server(async () => 'fine')
+
+    _script = [
+      { toolCalls: [
+        { id: 'pe1', name: 'broken', arguments: {} },
+        { id: 'pe2', name: 'ok', arguments: {} },
+      ] },
+      { text: 'next' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [broken, ok] }).prompt('go')
+
+    assert.strictEqual(result.steps[0]!.toolResults.length, 2)
+    assert.strictEqual(result.steps[0]!.toolResults[0]!.result, 'Error: boom')
+    assert.strictEqual(result.steps[0]!.toolResults[1]!.result, 'fine')
+    assert.strictEqual(result.text, 'next')
+  })
+
+  it('approval-pending in the batch stops further tool processing', async () => {
+    let bExecuted = false
+    const ok = toolDefinition({
+      name: 'ok_first',
+      description: 'a',
+      inputSchema: z.object({}),
+    }).server(async () => 'first-done')
+    const dangerous = toolDefinition({
+      name: 'dangerous',
+      description: 'needs approval',
+      inputSchema: z.object({}),
+      needsApproval: true,
+    }).server(async () => { bExecuted = true; return 'should not run' })
+
+    _script = [
+      { toolCalls: [
+        { id: 'pap1', name: 'ok_first', arguments: {} },
+        { id: 'pap2', name: 'dangerous', arguments: {} },
+      ] },
+      { text: 'should-not-be-reached' },
+    ]
+
+    const result = await agent({ instructions: 'sys', tools: [ok, dangerous] }).prompt('go')
+
+    assert.strictEqual(result.finishReason, 'tool_approval_required')
+    assert.strictEqual(result.pendingApprovalToolCall?.toolCall.id, 'pap2')
+    assert.strictEqual(bExecuted, false, 'pending-approval tool must not have executed')
+    // The first tool ran and produced its result.
+    assert.strictEqual(result.steps[0]!.toolResults.length, 1)
+    assert.strictEqual(result.steps[0]!.toolResults[0]!.result, 'first-done')
+    // Loop stopped before the next provider call.
+    assert.strictEqual(_calls.length, 1)
+  })
+
+  it('single-tool batch returns identical behavior in parallel and serial modes', async () => {
+    // Sanity check: when parallelism would buy nothing, both paths produce
+    // the same chunk sequence and same results.
+    function makeTool() {
+      return toolDefinition({
+        name: 'single',
+        description: 's',
+        inputSchema: z.object({}),
+      }).server(async function* () {
+        yield { progress: 1 }
+        return 'final'
+      })
+    }
+
+    const collect = async (parallelTools: boolean) => {
+      installScriptedFake()
+      _script = [
+        { toolCalls: [{ id: 'sb1', name: 'single', arguments: {} }] },
+        { text: 'ok' },
+      ]
+      const types: string[] = []
+      const a = agent({ instructions: 'sys', tools: [makeTool()] })
+      const { stream, response } = a.stream('go', { parallelTools })
+      for await (const chunk of stream) types.push(chunk.type)
+      await response
+      return types
+    }
+
+    const parallel = await collect(true)
+    const serial = await collect(false)
+    assert.deepEqual(parallel, serial)
+  })
+})
