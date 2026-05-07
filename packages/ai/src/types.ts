@@ -99,6 +99,12 @@ export interface ProviderRequestOptions {
   maxTokens?: number | undefined
   topP?: number | undefined
   stop?: string[] | undefined
+  /**
+   * Optional AbortSignal forwarded by the agent loop. Provider adapters
+   * SHOULD pass this through to their underlying SDK / fetch call so a
+   * caller-side `.abort()` cancels the in-flight network request.
+   */
+  signal?: AbortSignal | undefined
   /** Provider-specific options */
   providerOptions?: Record<string, unknown> | undefined
 }
@@ -531,6 +537,16 @@ export interface AgentPromptOptions {
   approvedToolCallIds?: string[]
   /** Tool call ids the user has rejected. */
   rejectedToolCallIds?: string[]
+  /**
+   * Optional AbortSignal that cancels the in-flight agent run. Honored at
+   * iteration boundaries (between provider calls and between failover
+   * attempts) and forwarded to provider adapters so the underlying network
+   * request is also cancelled. When the signal aborts, `prompt()` rejects
+   * (and the streaming variant's `response` promise rejects) with the
+   * signal's reason — typically `DOMException: This operation was aborted`,
+   * or `TimeoutError` for `AbortSignal.timeout()`.
+   */
+  signal?: AbortSignal
 }
 
 /** An attachment (file or image) to include with a prompt */

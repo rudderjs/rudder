@@ -77,6 +77,8 @@ class GoogleAdapter implements ProviderAdapter {
     if (options.stop) config['stopSequences'] = options.stop
     if (options.tools?.length) config['tools'] = [{ functionDeclarations: toGeminiTools(options.tools) }]
     if (options.toolChoice) config['toolConfig'] = toGeminiToolConfig(options.toolChoice)
+    // The Gemini SDK reads abortSignal from the config block.
+    if (options.signal) config['abortSignal'] = options.signal
 
     const response = await client.models.generateContent({
       model: this.model,
@@ -99,6 +101,7 @@ class GoogleAdapter implements ProviderAdapter {
     if (options.stop) config['stopSequences'] = options.stop
     if (options.tools?.length) config['tools'] = [{ functionDeclarations: toGeminiTools(options.tools) }]
     if (options.toolChoice) config['toolConfig'] = toGeminiToolConfig(options.toolChoice)
+    if (options.signal) config['abortSignal'] = options.signal
 
     const response = await client.models.generateContentStream({
       model: this.model,

@@ -2022,3 +2022,135 @@ describe('tool argument validation', () => {
     assert.strictEqual(parsed.error, 'invalid_arguments')
   })
 })
+
+// ─── AbortSignal support ─────────────────────────────────────────────────
+
+describe('AbortSignal support', () => {
+  it('pre-aborted signal: prompt() rejects without making a provider call', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('would have been mocked')
+    const ac = new AbortController()
+    ac.abort(new Error('cancelled before start'))
+
+    await assert.rejects(
+      () => agent('s').prompt('hi', { signal: ac.signal }),
+      /cancelled before start/,
+    )
+    assert.strictEqual(fake.getCalls().length, 0, 'no provider call should have happened')
+    fake.restore()
+  })
+
+  it('abort between iterations: loop stops, prompt() rejects, no further provider calls', async () => {
+    const fake = AiFake.fake()
+    const ac = new AbortController()
+
+    let toolStarted = false
+    const slow = toolDefinition({
+      name: 'slow',
+      description: 'fires the abort during execute',
+      inputSchema: z.object({}),
+    }).server(async () => { toolStarted = true; ac.abort(new Error('mid-run abort')); return 'done' })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 't1', name: 'slow', arguments: {} }] },
+      { text: 'should not be reached' },
+    ])
+
+    await assert.rejects(
+      () => agent({ instructions: 's', tools: [slow] }).prompt('go', { signal: ac.signal }),
+      /mid-run abort/,
+    )
+    assert.strictEqual(toolStarted, true)
+    // Only the first provider call should have happened — the next
+    // iteration's throwIfAborted() picks up the abort before the second
+    // provider call fires.
+    assert.strictEqual(fake.getCalls().length, 1)
+    fake.restore()
+  })
+
+  it('signal is forwarded into ProviderRequestOptions on every provider call', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('ok')
+    const ac = new AbortController()
+
+    await agent('s').prompt('hi', { signal: ac.signal })
+    const calls = fake.getCalls()
+    assert.strictEqual(calls.length, 1)
+    assert.strictEqual(calls[0]!.signal, ac.signal, 'provider received the signal')
+    fake.restore()
+  })
+
+  it('streaming: pre-aborted signal rejects both the stream and the response promise', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('would have been mocked')
+    const ac = new AbortController()
+    ac.abort(new Error('aborted'))
+
+    const { stream, response } = agent('s').stream('hi', { signal: ac.signal })
+
+    let streamThrew = false
+    try {
+      for await (const _ of stream) { /* drain */ }
+    } catch (err) {
+      streamThrew = true
+      assert.match(err instanceof Error ? err.message : String(err), /aborted/)
+    }
+    assert.ok(streamThrew, 'stream must throw')
+    await assert.rejects(() => response, /aborted/)
+    assert.strictEqual(fake.getCalls().length, 0)
+    fake.restore()
+  })
+
+  it('streaming: mid-run abort surfaces via the stream and rejects the response promise', async () => {
+    const fake = AiFake.fake()
+    const ac = new AbortController()
+
+    const trigger = toolDefinition({
+      name: 'trigger',
+      description: 'fires abort while loop is between iterations',
+      inputSchema: z.object({}),
+    }).server(async () => { ac.abort(new Error('mid-stream abort')); return 'pulled' })
+
+    fake.respondWithSequence([
+      { toolCalls: [{ id: 'ts1', name: 'trigger', arguments: {} }] },
+      { text: 'unreachable' },
+    ])
+
+    const { stream, response } = agent({ instructions: 's', tools: [trigger] })
+      .stream('go', { signal: ac.signal })
+
+    let streamThrew = false
+    try {
+      for await (const _ of stream) { /* drain */ }
+    } catch (err) {
+      streamThrew = true
+      assert.match(err instanceof Error ? err.message : String(err), /mid-stream abort/)
+    }
+    assert.ok(streamThrew)
+    await assert.rejects(() => response, /mid-stream abort/)
+    fake.restore()
+  })
+
+  it('AbortSignal.timeout(0) cancels the run via the iteration check', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('would have been mocked')
+
+    // timeout(0) fires on the next macrotask; wait for it to fire before
+    // calling prompt() so the pre-entry throwIfAborted() picks it up.
+    const signal = AbortSignal.timeout(0)
+    await new Promise(r => setTimeout(r, 5))
+
+    await assert.rejects(
+      () => agent('s').prompt('hi', { signal }),
+      // Node labels timeouts as DOMException 'TimeoutError'. Accept either
+      // a name or a message containing "timeout"/"aborted".
+      (err: unknown) => {
+        if (typeof err === 'object' && err !== null && (err as { name?: string }).name === 'TimeoutError') return true
+        const msg = err instanceof Error ? err.message : String(err)
+        return /timeout|aborted/i.test(msg)
+      },
+    )
+    assert.strictEqual(fake.getCalls().length, 0)
+    fake.restore()
+  })
+})
