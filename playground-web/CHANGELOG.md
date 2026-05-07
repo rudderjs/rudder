@@ -1,5 +1,41 @@
 # rudderjs-playground-web
 
+## 0.0.24
+
+### Patch Changes
+
+- Updated dependencies [275c05d]
+- Updated dependencies [b4b37d3]
+- Updated dependencies [435a9ef]
+- Updated dependencies [6635e6e]
+- Updated dependencies [03f4b5e]
+- Updated dependencies [99c5a7d]
+- Updated dependencies [1f002ea]
+- Updated dependencies [b0ccd35]
+- Updated dependencies [6b1485a]
+- Updated dependencies [5d61ab5]
+- Updated dependencies [4ccb117]
+- Updated dependencies [5ac1136]
+- Updated dependencies [d585476]
+- Updated dependencies [c2363b7]
+- Updated dependencies [431eb0f]
+- Updated dependencies [8181057]
+- Updated dependencies [27dcb37]
+- Updated dependencies [6349788]
+- Updated dependencies [23c217f]
+- Updated dependencies [b839b89]
+- Updated dependencies [ac05bff]
+- Updated dependencies [6df0968]
+- Updated dependencies [1f63c56]
+- Updated dependencies [3672e21]
+- Updated dependencies [80888d2]
+- Updated dependencies [d2458ad]
+- Updated dependencies [a8c20d7]
+- Updated dependencies [4e006d9]
+- Updated dependencies [1f69791]
+  - @rudderjs/passport@1.1.0
+  - @rudderjs/server-hono@1.0.5
+
 ## 0.0.23
 
 ### Patch Changes
