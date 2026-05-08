@@ -51,7 +51,7 @@ c.first(x => x.active)               // first match or undefined
 c.chunk(100).each(batch => { /* ... */ })
 ```
 
-Every chainable operation returns a new `Collection`; originals aren't mutated. There is no `.where()` or `.sortBy()` — use `.filter(x => x.key === value)` and standard `Array.prototype.sort()` on `.all()`.
+Every chainable operation returns a new `Collection`; originals aren't mutated. Use `.filter(x => x.key === value)` instead of `.where()`. `.sortBy(key)` and `.unique(key?)` are available for ordering and deduplication.
 
 ### `dump(...)` / `dd(...)`
 
@@ -98,6 +98,63 @@ repo.set('runtime.featureFlag', true)     // mutates — use sparingly
 ```
 
 `set()` silently ignores keys containing `__proto__`, `constructor`, or `prototype` (prototype-pollution guard).
+
+### `Str` — string utilities
+
+```ts
+import { Str } from '@rudderjs/core'
+
+Str.camel('user_name')                // 'userName'
+Str.snake('UserName')                 // 'user_name'
+Str.kebab('UserName')                 // 'user-name'
+Str.studly('user_name')               // 'UserName'
+Str.title('hello world')              // 'Hello World'
+Str.headline('user_profile')          // 'User Profile'
+
+Str.slug('Hello World!')              // 'hello-world'
+Str.limit('long text...', 10)         // 'long text.'
+Str.words('one two three', 2)         // 'one two...'
+Str.plural('post')                    // 'posts'
+Str.plural('post', 1)                 // 'post'
+Str.singular('categories')            // 'category'
+
+Str.before('foo/bar', '/')            // 'foo'
+Str.after('foo/bar', '/')             // 'bar'
+Str.contains('hello world', 'hello')  // true
+Str.startsWith('foobar', 'foo')       // true
+Str.mask('4111 1111 1111 1111', '*', 0, 12) // '************ 1111'
+
+Str.uuid()        // crypto.randomUUID()
+Str.random(16)    // random alphanumeric string
+Str.password(32)  // random password with symbols
+```
+
+### `Num` — number utilities
+
+```ts
+import { Num } from '@rudderjs/core'
+
+Num.format(1234567.89, 2)    // '1,234,567.89'
+Num.currency(9.99)           // '$9.99'
+Num.currency(9.99, 'EUR', 'de-DE')
+Num.percentage(73.5, 1)      // '73.5%'
+Num.fileSize(1_048_576)      // '1.00 MB'
+Num.abbreviate(1_500_000)    // '1.5M'
+Num.ordinal(1)               // '1st'
+Num.spell(42)                // 'forty-two'
+Num.clamp(5, 1, 10)          // 5
+```
+
+### `t()` — simple template interpolation
+
+```ts
+import { t } from '@rudderjs/core'
+
+t('Hello :name, you have :count items', { name: 'Alice', count: 3 })
+// 'Hello Alice, you have 3 items'
+```
+
+Unknown placeholders are left as-is (`:key` untouched).
 
 ## Common Pitfalls
 

@@ -141,6 +141,7 @@ export class Collection<T> {
    * @example collect([1,2,3,4,5]).splitIn(2) → [[1,2,3],[4,5]]
    */
   splitIn(n: number): Collection<T[]> {
+    if (n < 1) throw new Error('[Collection] splitIn() n must be >= 1.')
     return this.chunk(Math.ceil(this.items.length / n))
   }
 
@@ -218,6 +219,31 @@ export class Collection<T> {
     return new Collection(
       this.items.map(item => fn(...(Array.isArray(item) ? item : [item])))
     )
+  }
+
+  // ── Ordering / Deduplication ─────────────────────────────
+
+  /** Sort by a key or resolver. Returns a new Collection; originals aren't mutated. */
+  sortBy<K extends keyof T>(key: K | ((item: T) => unknown)): Collection<T> {
+    const resolver = typeof key === 'function' ? key : (item: T) => item[key]
+    return new Collection([...this.items].sort((a, b) => {
+      const av = resolver(a) as string | number
+      const bv = resolver(b) as string | number
+      return av < bv ? -1 : av > bv ? 1 : 0
+    }))
+  }
+
+  /** Remove duplicate items, optionally keyed by a property or resolver. */
+  unique<K extends keyof T>(key?: K | ((item: T) => unknown)): Collection<T> {
+    if (!key) return new Collection([...new Set(this.items)])
+    const resolver = typeof key === 'function' ? key : (item: T) => item[key]
+    const seen = new Set<unknown>()
+    return new Collection(this.items.filter(item => {
+      const k = resolver(item)
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    }))
   }
 
   // ── Conditional / Pipe ───────────────────────────────────

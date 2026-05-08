@@ -21,6 +21,8 @@ import {
   setConfigRepository,
   Str,
   Num,
+  t,
+  validateSerializable,
 } from './index.js'
 import { z } from 'zod'
 
@@ -1114,6 +1116,31 @@ describe('Str.singular()', () => {
   it('handles -ies → -y', () => {
     assert.strictEqual(Str.singular('categories'), 'category')
   })
+  it('does not corrupt words ending in -ves from verbs', () => {
+    assert.strictEqual(Str.singular('drives'), 'drive')
+    assert.strictEqual(Str.singular('gives'), 'give')
+    assert.strictEqual(Str.singular('archives'), 'archive')
+  })
+  it('singularises consonant -ves words', () => {
+    assert.strictEqual(Str.singular('dwarves'), 'dwarf')
+    assert.strictEqual(Str.singular('scarves'), 'scarf')
+    assert.strictEqual(Str.singular('calves'), 'calf')
+  })
+})
+
+describe('Str.plural()', () => {
+  it('does not produce -oes for loanwords', () => {
+    assert.strictEqual(Str.plural('piano'), 'pianos')
+    assert.strictEqual(Str.plural('photo'), 'photos')
+    assert.strictEqual(Str.plural('solo'), 'solos')
+    assert.strictEqual(Str.plural('radio'), 'radios')
+  })
+  it('uses irregulars for -oes words', () => {
+    assert.strictEqual(Str.plural('potato'), 'potatoes')
+    assert.strictEqual(Str.plural('tomato'), 'tomatoes')
+    assert.strictEqual(Str.plural('echo'), 'echoes')
+    assert.strictEqual(Str.plural('hero'), 'heroes')
+  })
 })
 
 // ─── Num ───────────────────────────────────────────────────
@@ -1270,3 +1297,93 @@ describe('Num.spell()', () => {
     assert.strictEqual(Num.spell(3.9), 'three')
   })
 })
+
+// ─── t() ──────────────────────────────────────────────────
+
+describe('t()', () => {
+  it('substitutes :key placeholders', () => {
+    assert.strictEqual(t('Hello :name!', { name: 'Alice' }), 'Hello Alice!')
+  })
+  it('substitutes numeric values', () => {
+    assert.strictEqual(t('You have :count items', { count: 5 }), 'You have 5 items')
+  })
+  it('leaves unknown placeholders intact', () => {
+    assert.strictEqual(t('Hello :name :other', { name: 'Bob' }), 'Hello Bob :other')
+  })
+  it('returns template unchanged when no vars match', () => {
+    assert.strictEqual(t('no placeholders', {}), 'no placeholders')
+  })
+})
+
+// ─── validateSerializable() ───────────────────────────────
+
+describe('validateSerializable()', () => {
+  const origEnv = process.env['NODE_ENV']
+  beforeEach(() => { process.env['NODE_ENV'] = 'development' })
+  afterEach(() => { process.env['NODE_ENV'] = origEnv })
+
+  it('does not throw for a plain object', () => {
+    assert.doesNotThrow(() => validateSerializable({ a: 1, b: 'x', c: true }, 'test'))
+  })
+  it('does not throw for arrays and nested objects', () => {
+    assert.doesNotThrow(() => validateSerializable([{ id: 1 }, { id: 2 }], 'test'))
+  })
+  it('reports functions via console.error', () => {
+    const logs: string[] = []
+    const orig = console.error
+    console.error = (msg: string) => logs.push(msg)
+    validateSerializable({ fn: () => {} }, 'test')
+    console.error = orig
+    assert.ok(logs.some(l => l.includes('function')))
+  })
+  it('reports class instances via console.error', () => {
+    class Foo {}
+    const logs: string[] = []
+    const orig = console.error
+    console.error = (msg: string) => logs.push(msg)
+    validateSerializable({ x: new Foo() }, 'test')
+    console.error = orig
+    assert.ok(logs.some(l => l.includes('class instance')))
+  })
+})
+
+// ─── Collection.sortBy() / .unique() ─────────────────────
+
+describe('Collection.sortBy()', () => {
+  it('sorts by object key', () => {
+    const c = new Collection([{ n: 3 }, { n: 1 }, { n: 2 }]).sortBy('n')
+    assert.deepStrictEqual(c.pluck('n').toArray(), [1, 2, 3])
+  })
+  it('sorts by resolver function', () => {
+    const c = new Collection(['banana', 'apple', 'cherry']).sortBy(s => s)
+    assert.deepStrictEqual(c.toArray(), ['apple', 'banana', 'cherry'])
+  })
+  it('does not mutate original', () => {
+    const orig = [3, 1, 2]
+    const c = new Collection(orig).sortBy(n => n)
+    assert.deepStrictEqual(orig, [3, 1, 2])
+    assert.deepStrictEqual(c.toArray(), [1, 2, 3])
+  })
+})
+
+describe('Collection.unique()', () => {
+  it('removes duplicate primitives', () => {
+    const c = new Collection([1, 2, 1, 3, 2]).unique()
+    assert.deepStrictEqual(c.toArray(), [1, 2, 3])
+  })
+  it('deduplicates by object key', () => {
+    const c = new Collection([{ id: 1 }, { id: 2 }, { id: 1 }]).unique('id')
+    assert.deepStrictEqual(c.pluck('id').toArray(), [1, 2])
+  })
+  it('deduplicates by resolver', () => {
+    const c = new Collection([{ tag: 'A' }, { tag: 'B' }, { tag: 'A' }]).unique(x => x.tag)
+    assert.deepStrictEqual(c.pluck('tag').toArray(), ['A', 'B'])
+  })
+})
+
+describe('Collection.splitIn() guard', () => {
+  it('throws when n < 1', () => {
+    assert.throws(() => new Collection([1, 2, 3]).splitIn(0), /n must be >= 1/)
+  })
+})
+

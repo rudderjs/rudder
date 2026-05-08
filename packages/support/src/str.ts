@@ -296,7 +296,9 @@ export class Str {
     // Rules
     if (/(?:s|x|z|ch|sh)$/i.test(value)) return value + 'es'
     if (/[^aeiou]y$/i.test(value)) return value.slice(0, -1) + 'ies'
-    if (/(?:[^aeiou])o$/i.test(value)) return value + 'es'
+    // -oes words (potato, tomato, echo, hero, veto) are in irregulars above.
+    // Loanwords and modern -o words (piano, photo, radio, solo) pluralise with -s.
+    // Removed broad /[^aeiou]o/ → +es rule to prevent piano → pianoes.
     if (/(?:f)$/i.test(value)) return value.slice(0, -1) + 'ves'
     if (/(?:fe)$/i.test(value)) return value.slice(0, -2) + 'ves'
     return value + 's'
@@ -325,7 +327,7 @@ export class Str {
     if (uncountable.includes(lower)) return value
 
     if (/ies$/i.test(value)) return value.slice(0, -3) + 'y'
-    if (/ves$/i.test(value)) return value.slice(0, -3) + 'f'
+    if (/([^aeiou])ves$/i.test(value)) return value.slice(0, -3) + 'f'
     if (/(?:s|x|z|ch|sh)es$/i.test(value)) return value.slice(0, -2)
     if (/oes$/i.test(value)) return value.slice(0, -2)
     if (/s$/i.test(value) && !/ss$/i.test(value)) return value.slice(0, -1)
