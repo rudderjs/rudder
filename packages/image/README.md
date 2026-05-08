@@ -35,6 +35,8 @@ const { width, height, format } = await image(file).metadata()
 image(buffer)                  // Buffer
 image('/path/to/file.jpg')     // file path (read on terminal call)
 image(readableStream)          // Node.js ReadableStream
+image(blob)                    // Web API Blob
+image(file)                    // Web API File (e.g. from Hono's parseBody())
 ```
 
 ## Fluent Methods
@@ -169,7 +171,7 @@ import { image } from '@rudderjs/image'
 import { ImageProcessor } from '@rudderjs/image'  // class — exported for advanced use
 
 import type {
-  ImageInput,        // Buffer | string | NodeJS.ReadableStream
+  ImageInput,        // Buffer | string | NodeJS.ReadableStream | Blob | File
   ImageFormat,       // 'webp' | 'jpeg' | 'png' | 'avif' | 'tiff' | 'gif'
   FitStrategy,       // 'cover' | 'contain' | 'fill' | 'inside' | 'outside'
   ImageInfo,         // { width?, height?, format?, size?, channels?, hasAlpha? }
