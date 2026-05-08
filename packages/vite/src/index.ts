@@ -19,6 +19,7 @@ const SSR_EXTERNALS = [
   '@rudderjs/queue-bullmq',
   // ORM adapters — server-only
   '@rudderjs/orm-drizzle',
+  '@rudderjs/orm-prisma',
   // Database drivers — Node.js-only, must not be bundled into the client
   'pg',
   'mysql2',
@@ -144,7 +145,13 @@ export function rudderjs(): Promise<Plugin[]> {
           const interval = setInterval(() => {
             if (_G['__rudderjs_ws_upgrade__']) { flush(); clearInterval(interval) }
           }, 50)
-          setTimeout(() => clearInterval(interval), 10_000)
+          setTimeout(() => {
+            clearInterval(interval)
+            if (pending) {
+              for (const [, socket] of pending) (socket as { destroy(): void }).destroy()
+              pending = null
+            }
+          }, 10_000)
 
           server.httpServer?.on('upgrade', (req, socket, head) => {
             // Skip Vite's own HMR WebSocket (handled by Vite internally)
@@ -196,7 +203,7 @@ export function rudderjs(): Promise<Plugin[]> {
             // Tell the browser to do a full page reload so it picks up the
             // changes via a fresh SSR request.
             server.hot.send({ type: 'full-reload' })
-            console.log(`[RudderJS] change detected — reloading (${path.relative(cwd, file)}`)
+            console.log(`[RudderJS] change detected — reloading (${path.relative(cwd, file)})`)
           })
         },
       },

@@ -44,14 +44,14 @@ Install exactly one of `vike-react` / `vike-vue` / `vike-solid` — the view sca
 | `rudderjs:ws` | WebSocket upgrade handler for broadcast + sync |
 | `rudderjs:ip` | Dev-only `x-real-ip` injection from the Node socket |
 | `rudderjs:routes` | HMR watcher for `routes/`, `bootstrap/`, `app/` — invalidates SSR modules + clears `__rudderjs_instance__` / `__rudderjs_app__` globals |
-| `rudderjs:views` | Scans `app/Views/**`, generates Vike pages under `pages/__view/` |
+| `rudderjs:views-scanner` | Scans `app/Views/**`, generates Vike pages under `pages/__view/` |
 
 ### SSR externals
 
 The following packages are automatically excluded from the SSR bundle (Node-only, must not reach the browser):
 
 - RudderJS queue adapters: `@rudderjs/queue-inngest`, `@rudderjs/queue-bullmq`
-- ORM adapters: `@rudderjs/orm-drizzle`
+- ORM adapters: `@rudderjs/orm-drizzle`, `@rudderjs/orm-prisma`
 - DB drivers: `pg`, `mysql2`, `better-sqlite3`, `@prisma/adapter-*`, `@libsql/client`
 - Redis: `ioredis`
 - CLI prompts: `@clack/core`, `@clack/prompts`
