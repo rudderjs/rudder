@@ -82,9 +82,9 @@ Visit `http://localhost:3000`. Done.
 
 > Three foundation packages get you running. The rest are opt-in.
 
-**Foundation** — [`core`](./packages/core) · [`router`](./packages/router) · [`server-hono`](./packages/server-hono) · [`middleware`](./packages/middleware) · [`console`](./packages/console) · [`cli`](./packages/cli) · [`support`](./packages/support) · [`contracts`](./packages/contracts)
+**Foundation** — [`core`](./packages/core) · [`router`](./packages/router) · [`server-hono`](./packages/server-hono) · [`middleware`](./packages/middleware) · [`console`](./packages/console) · [`cli`](./packages/cli) · [`terminal`](./packages/terminal) · [`support`](./packages/support) · [`contracts`](./packages/contracts)
 
-**HTTP & frontend** — [`view`](./packages/view) · [`terminal`](./packages/terminal) · [`vite`](./packages/vite) · [`session`](./packages/session)
+**HTTP & frontend** — [`view`](./packages/view) · [`vite`](./packages/vite) · [`session`](./packages/session)
 
 **Data** — [`orm`](./packages/orm) · [`orm-prisma`](./packages/orm-prisma) · [`orm-drizzle`](./packages/orm-drizzle) · [`cache`](./packages/cache) · [`storage`](./packages/storage)
 
