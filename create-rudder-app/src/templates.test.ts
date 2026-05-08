@@ -12,6 +12,7 @@ const defaultPkgs: TemplateContext['packages'] = {
   localization: false, pennant: false,
   telescope: false, pulse: false, horizon: false,
   crypt: false, http: false, process: false, concurrency: false,
+  terminal: false,
 }
 
 const noPkgs: TemplateContext['packages'] = {
@@ -22,6 +23,7 @@ const noPkgs: TemplateContext['packages'] = {
   localization: false, pennant: false,
   telescope: false, pulse: false, horizon: false,
   crypt: false, http: false, process: false, concurrency: false,
+  terminal: false,
 }
 
 const noAuth: TemplateContext['packages'] = noPkgs
@@ -34,6 +36,7 @@ const allPkgs: TemplateContext['packages'] = {
   localization: true, pennant: true,
   telescope: true, pulse: true, horizon: true,
   crypt: true, http: true, process: true, concurrency: true,
+  terminal: true,
 }
 
 function ctx(overrides: Partial<TemplateContext> = {}): TemplateContext {

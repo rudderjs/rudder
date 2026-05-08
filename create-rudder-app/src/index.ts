@@ -101,6 +101,7 @@ async function main(): Promise<void> {
       { value: 'http',          label: 'HTTP',                  hint: 'fluent fetch client — retries, timeouts, pools' },
       { value: 'process',       label: 'Process',               hint: 'shell execution — run, pool, pipe' },
       { value: 'concurrency',   label: 'Concurrency',           hint: 'parallel execution via worker threads' },
+      { value: 'terminal',      label: 'Terminal',              hint: 'rich terminal UIs from CLI commands (Ink)' },
     ],
     'Media': [
       { value: 'image',         label: 'Image',                 hint: 'resize, crop, convert (sharp wrapper)' },
@@ -162,6 +163,7 @@ async function main(): Promise<void> {
     http:          selectedPackages.includes('http'),
     process:       selectedPackages.includes('process'),
     concurrency:   selectedPackages.includes('concurrency'),
+    terminal:      selectedPackages.includes('terminal'),
   }
 
   // Passport requires auth + prisma at runtime. Warn and drop silently if missing.
@@ -356,6 +358,7 @@ async function main(): Promise<void> {
   if (packages.passport) hints.push('  OAuth2:      /oauth/authorize, /oauth/token  (run `rudder passport:client <name>` first)')
   if (packages.telescope) hints.push('  Telescope:   /telescope  (debug dashboard — requests, queries, jobs, AI, mail)')
   if (packages.boost)    hints.push(`  Boost:       ${pmRun(pm, 'rudder')} boost:install  (wire your AI coding assistant)`)
+  if (packages.terminal) hints.push(`  Terminal:    ${pmRun(pm, 'rudder')} make:terminal <Name>  (scaffold a terminal view)`)
   const hintsStr = hints.length > 0 ? '\n\n' + hints.join('\n') : ''
 
   outro(

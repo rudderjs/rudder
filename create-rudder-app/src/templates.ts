@@ -37,6 +37,7 @@ import { appServiceProvider } from './templates/app/service-provider.js'
 import { mcpEchoServer } from './templates/app/mcp-echo-server.js'
 import { mcpEchoTool } from './templates/app/mcp-echo-tool.js'
 import { authController } from './templates/app/auth-controller.js'
+import { terminalDashboardView } from './templates/app/terminal-dashboard.js'
 import { routesApi } from './templates/routes/api.js'
 import { routesWeb, welcomeExt } from './templates/routes/web.js'
 import { routesConsole } from './templates/routes/console.js'
@@ -107,6 +108,7 @@ export interface TemplateContext {
     http:          boolean
     process:       boolean
     concurrency:   boolean
+    terminal:      boolean
   }
   /** Demo IDs to scaffold (e.g. 'contact', 'ws', 'sync'). See templates/demos/registry.ts. */
   demos: string[]
@@ -181,7 +183,11 @@ export function getTemplates(ctx: TemplateContext): Record<string, string> {
 
   files['routes/api.ts']     = routesApi(ctx)
   files['routes/web.ts']     = routesWeb(ctx)
-  files['routes/console.ts'] = routesConsole()
+  files['routes/console.ts'] = routesConsole(ctx)
+
+  if (ctx.packages.terminal) {
+    files['app/Terminal/Dashboard.tsx'] = terminalDashboardView()
+  }
 
   const ext = pageExt(ctx.primary)
   files['pages/+config.ts']              = pagesRootConfig(ctx)
