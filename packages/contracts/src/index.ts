@@ -351,6 +351,21 @@ export interface AppRequest {
   raw:     unknown  // the original server-specific request object
 
   /**
+   * Client IP address. Set by the server adapter when `trustProxy: true`;
+   * `undefined` otherwise. Always read from `req.ip` rather than raw headers —
+   * the adapter normalises `::1` → `127.0.0.1` and picks the right header.
+   */
+  ip?: string
+
+  // user?, session?, token? are intentionally absent from this base interface.
+  // Each is declared via module augmentation in its owning package:
+  //   user?    → @rudderjs/auth   (AuthUser)
+  //   session? → @rudderjs/session (SessionInstance)
+  //   token?   → @rudderjs/passport / @rudderjs/sanctum
+  // Adding them here as `unknown` causes TS2687/TS2717 when the augmentations
+  // redeclare them with different types or optionality.
+
+  /**
    * Resolved values for any route parameters bound via `router.bind(name, ...)`.
    * Populated by the router's per-route binding middleware before the handler runs.
    * Absent on routes that have no bound params; the raw string value remains in
