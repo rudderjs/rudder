@@ -1,5 +1,13 @@
 # @rudderjs/horizon
 
+## 6.0.1
+
+### Patch Changes
+
+- 4c24021: Guard JSON.parse on Redis/SQLite data and event serialization
+- Updated dependencies [8e682a6]
+  - @rudderjs/contracts@1.5.0
+
 ## 6.0.0
 
 ### Major Changes

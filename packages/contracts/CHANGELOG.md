@@ -1,5 +1,11 @@
 # @rudderjs/contracts
 
+## 1.5.0
+
+### Minor Changes
+
+- 8e682a6: Add `NOT LIKE` where operator
+
 ## 1.4.0
 
 ### Minor Changes

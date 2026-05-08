@@ -1,5 +1,23 @@
 # rudderjs-playground
 
+## 0.0.55
+
+### Patch Changes
+
+- Updated dependencies [8e682a6]
+- Updated dependencies [8e682a6]
+- Updated dependencies [3ce8b96]
+- Updated dependencies [4c24021]
+- Updated dependencies [2f85823]
+  - @rudderjs/image@1.1.0
+  - @rudderjs/contracts@1.5.0
+  - @rudderjs/orm-prisma@1.6.0
+  - @rudderjs/ai@1.1.1
+  - @rudderjs/boost@1.0.1
+  - @rudderjs/telescope@13.0.2
+  - @rudderjs/pulse@6.1.2
+  - @rudderjs/horizon@6.0.1
+
 ## 0.0.54
 
 ### Patch Changes
