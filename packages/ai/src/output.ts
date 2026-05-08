@@ -61,5 +61,12 @@ function extractJson(text: string): unknown {
     .replace(/^```(?:json)?\s*\n?/m, '')
     .replace(/\n?```\s*$/m, '')
     .trim()
-  return JSON.parse(stripped)
+  try {
+    return JSON.parse(stripped)
+  } catch (err) {
+    throw new Error(
+      `[RudderJS AI] Failed to parse JSON from model output: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    )
+  }
 }
