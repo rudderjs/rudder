@@ -5,7 +5,12 @@ export function getAppInfo(cwd: string): Record<string, unknown> {
   const pkgPath = join(cwd, 'package.json')
   if (!existsSync(pkgPath)) return { error: 'No package.json found' }
 
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
+  let pkg: Record<string, unknown>
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
+  } catch (err) {
+    return { error: `Failed to parse package.json: ${err instanceof Error ? err.message : String(err)}` }
+  }
   const deps = { ...(pkg['dependencies'] as Record<string, string> ?? {}), ...(pkg['devDependencies'] as Record<string, string> ?? {}) }
 
   const rudderPkgs = Object.entries(deps)

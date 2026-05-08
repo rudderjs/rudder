@@ -40,7 +40,12 @@ function findRudderPackages(cwd: string): string[] {
   if (!existsSync(pkgJsonPath)) return []
 
   const raw = readFileSync(pkgJsonPath, 'utf-8')
-  const pkg: PackageJson = JSON.parse(raw) as PackageJson
+  let pkg: PackageJson
+  try {
+    pkg = JSON.parse(raw) as PackageJson
+  } catch {
+    return []
+  }
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies }
 
   return Object.keys(allDeps).filter((name) => name.startsWith('@rudderjs/'))
