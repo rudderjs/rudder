@@ -85,7 +85,11 @@ export function renderErrorPage(
   const vendorCount = frames.filter(f => f.isVendor).length
 
   const nodeVersion = process.version
-  const rudderjsVersion = '0.0.2'
+  let rudderjsVersion = '1.x'
+  try {
+    const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')) as { version?: string }
+    rudderjsVersion = pkg.version ?? '1.x'
+  } catch { /* ok */ }
 
   const frameRow = (f: StackFrame, isApp: boolean) => `
     <div class="frame${isApp ? ' app' : ''}">
