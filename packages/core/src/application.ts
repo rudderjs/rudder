@@ -40,6 +40,8 @@ export class Application {
   private _registeredClasses = new Set<ProviderClass>()
   /** Tracks registered provider names to prevent duplicates from factory functions. */
   private _registeredNames   = new Set<string>()
+  /** Tracks provider instances that have already had register() called — prevents double-registration when app().register() is called before bootstrap(). */
+  private _registeredInstances = new Set<ServiceProvider>()
 
   /** Deferred providers — token → ProviderClass (lazily booted on first resolve). */
   private _deferredProviders = new Map<string, ProviderClass>()
@@ -162,6 +164,7 @@ export class Application {
     const instance = new Provider(this)
     this.providers.push(instance)
     instance.register()
+    this._registeredInstances.add(instance)
 
     if (this.booted || this._booting) {
       try {
@@ -192,7 +195,9 @@ export class Application {
         }
         continue
       }
+      if (this._registeredInstances.has(provider)) continue
       provider.register()
+      this._registeredInstances.add(provider)
     }
 
     // Wire the missing handler so deferred providers boot on first resolve
@@ -212,7 +217,10 @@ export class Application {
         this.providers.push(instance)
         instance.register()
         // Deferred providers must have sync boot (or none)
-        instance.boot?.()
+        const bootResult = instance.boot?.()
+        if (bootResult instanceof Promise) {
+          console.warn(`[RudderJS] Deferred provider "${instance.constructor.name}" returned a Promise from boot() — deferred providers must be synchronous. The async work will be dropped.`)
+        }
         this._bootedProviders.add(instance)
       })
     }

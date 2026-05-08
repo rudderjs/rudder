@@ -103,13 +103,19 @@ function wantsJson(req: AppRequest): boolean {
   return true
 }
 
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 function htmlPage(status: number, message: string, detail?: string): string {
+  const safeMsg    = esc(message)
+  const safeDetail = detail ? esc(detail) : undefined
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${status} ${message}</title>
+  <title>${status} ${safeMsg}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,-apple-system,sans-serif;background:#f8f9fa;color:#1a1a1a;
@@ -126,8 +132,8 @@ function htmlPage(status: number, message: string, detail?: string): string {
 <body>
   <div class="card">
     <h1>${status}</h1>
-    <h2>${message}</h2>
-    ${detail ? `<pre>${detail}</pre>` : ''}
+    <h2>${safeMsg}</h2>
+    ${safeDetail ? `<pre>${safeDetail}</pre>` : ''}
   </div>
 </body>
 </html>`

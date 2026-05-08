@@ -132,6 +132,30 @@ Use `abort(status, message?)`, `abort_if(condition, status)`, and `abort_unless(
 
 Extend `Listener` and call `dispatch(new MyEvent(data))`. Register listeners in a provider's `boot()`.
 
+### Testing Events (`EventFake`)
+
+Use `EventFake.fake()` in tests to intercept dispatched events without running real listeners:
+
+```ts
+import { EventFake, dispatch } from '@rudderjs/core'
+
+const fake = EventFake.fake()
+
+await dispatch(new UserRegistered(user))
+
+fake.assertDispatched('UserRegistered')
+fake.assertDispatchedTimes('UserRegistered', 1)
+fake.assertNotDispatched('OrderPlaced')
+fake.assertNothingDispatched() // fails if anything was dispatched
+
+// Access payloads
+const [event] = fake.dispatched('UserRegistered')
+
+fake.restore() // always call in afterEach
+```
+
+`EventFake.fake()` replaces `dispatcher.dispatch` globally for the duration of the test. Always restore in `afterEach` to avoid leaking state across tests.
+
 ### Validation
 
 Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.object({...})`). `z` is re-exported from `@rudderjs/core`. Five optional lifecycle hooks mirror Laravel: `prepareForValidation` (mutate input pre-parse), `messages` (per-request error message overrides keyed by dot-path), `after` (array of cross-field check closures with `addError(path, msg)`), `passedValidation` (final transform on parsed data), and `failedValidation` (override the throw — return a `Response` to short-circuit, otherwise it throws `ValidationError`). Parameterize as `extends FormRequest<typeof schema>` to get `z.infer<typeof schema>` typing inside the hooks.
@@ -140,7 +164,7 @@ Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.ob
 
 - **Missing `reflect-metadata`**: Must be imported at the very top of `bootstrap/app.ts` before any other imports. Install as a `dependency`, not `devDependency`.
 - **Provider boot order matters**: `DatabaseServiceProvider` must come before any provider that uses ORM models. Order your `providers` array accordingly.
-- **Scoped bindings outside request scope**: Calling `app().make('scopedToken')` outside of `container.runScoped()` throws. Ensure `ScopeMiddleware` is registered or wrap the call manually.
+- **Scoped bindings outside request scope**: Calling `app().make('scopedToken')` outside of `container.runScoped()` throws. `@rudderjs/server-hono` wraps each request automatically — in tests or scripts, call `container.runScoped(() => ...)` manually.
 - **Dynamic provider duplicates**: `app().register()` is safe to call multiple times with the same class -- duplicates are skipped. But factory functions create anonymous classes, so use consistent references.
 - **Circular dependency with `@rudderjs/router`**: Core loads router at runtime via dynamic `import()`. Never add `@rudderjs/core` to router's `dependencies` -- use `peerDependencies` only.
 
@@ -149,7 +173,7 @@ Extend `FormRequest` and define a `rules()` method returning a Zod schema (`z.ob
 ```ts
 import { Application, app, resolve, ServiceProvider, Injectable, Inject, Tag, tagToken } from '@rudderjs/core'
 import { FormRequest, ValidationError, ValidationResponse, z } from '@rudderjs/core'
-import { Listener, dispatch, events } from '@rudderjs/core'
+import { Listener, dispatch, eventsProvider } from '@rudderjs/core'
 import { HttpException, abort, abort_if, report } from '@rudderjs/core'
 import { Collection, Env, env, config, sleep } from '@rudderjs/core'
 import { rudder, Command } from '@rudderjs/core'

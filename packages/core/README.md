@@ -54,7 +54,7 @@ export default Application.configure({
 - `ServiceProvider` — `register()`, `boot()`, `publishes()`
 - `PublishGroup` — `{ from, to, tag? }`
 - `getPublishGroups()` — returns the global publish registry (used by `vendor:publish`)
-- `Listener`, `EventDispatcher`, `dispatcher`, `dispatch()`, `events()`
+- `Listener`, `EventDispatcher`, `dispatcher`, `dispatch()`, `eventsProvider()`
 - `Application`, `AppConfig`
 - `ConfigureOptions`, `RoutingOptions`
 - `MiddlewareConfigurator`, `ExceptionConfigurator`
@@ -259,7 +259,7 @@ pnpm rudder vendor:publish --list   # see all available assets
 ## Events
 
 ```ts
-import { dispatch, dispatcher, events } from '@rudderjs/core'
+import { dispatch, dispatcher, eventsProvider } from '@rudderjs/core'
 
 // Define an event
 class UserCreated {
@@ -274,9 +274,9 @@ class SendWelcomeEmail {
 }
 
 // Register via provider in bootstrap/providers.ts
-import { events } from '@rudderjs/core'
+import { eventsProvider } from '@rudderjs/core'
 export default [
-  events({ UserCreated: [SendWelcomeEmail] }),
+  eventsProvider({ UserCreated: [SendWelcomeEmail] }),
 ]
 
 // Dispatch anywhere
@@ -293,6 +293,20 @@ await dispatch(new UserCreated(42))
 | `hasListeners(name)` | `true` if at least one listener is registered. |
 | `list()` | `Record<string, number>` snapshot of all registered events and counts. |
 | `reset()` | Clear all listeners (testing / hot-reload). |
+
+### Testing events (`EventFake`)
+
+```ts
+import { EventFake, dispatch } from '@rudderjs/core'
+
+const fake = EventFake.fake()
+await dispatch(new UserCreated(42))
+
+fake.assertDispatched('UserCreated')
+fake.assertDispatchedTimes('UserCreated', 1)
+fake.assertNotDispatched('OrderPlaced')
+fake.restore() // always call in afterEach
+```
 
 ## Exception Handling
 
@@ -402,7 +416,7 @@ class StoreUser extends FormRequest<typeof schema> {
 }
 ```
 
-**Pipeline order:** `authorize → prepareForValidation → rules.parse → after → passedValidation`. Both Zod parse failures and `after()` errors converge through `failedValidation(errors)`.
+**Pipeline order:** `prepareForValidation → authorize → rules.parse → after → passedValidation`. Both Zod parse failures and `after()` errors converge through `failedValidation(errors)`.
 
 **Short-circuit responses:** `failedValidation` may `return` a Web `Response` to bypass the default 422 — the framework's exception handler unwraps the `ValidationResponse` sentinel and emits the wrapped Response directly.
 

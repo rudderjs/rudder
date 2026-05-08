@@ -185,7 +185,7 @@ describe('Application.register()', () => {
 
     // Now bootstrap — boot() should run as part of normal lifecycle
     await a.bootstrap()
-    assert.deepStrictEqual(calls, ['register', 'register', 'boot'])
+    assert.deepStrictEqual(calls, ['register', 'boot'])
   })
 
   it('guards against duplicate class references', async () => {
