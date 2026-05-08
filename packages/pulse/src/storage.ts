@@ -234,7 +234,7 @@ export class SqliteStorage implements PulseStorage {
     return rows.map(r => ({
       id:        r['id'] as string,
       type:      r['type'] as EntryType,
-      content:   JSON.parse(r['content'] as string) as Record<string, unknown>,
+      content:   (() => { try { return JSON.parse(r['content'] as string) as Record<string, unknown> } catch { return {} } })(),
       createdAt: new Date(r['created_at'] as string),
     }))
   }

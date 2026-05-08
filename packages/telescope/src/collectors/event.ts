@@ -35,9 +35,13 @@ export class EventCollector implements Collector {
 
     this.storage.store(createEntry('event', {
       name,
-      payload: event && typeof event === 'object'
-        ? JSON.parse(JSON.stringify(event))
-        : { value: event },
+      payload: (() => {
+        try {
+          return event && typeof event === 'object' ? JSON.parse(JSON.stringify(event)) : { value: event }
+        } catch {
+          return { value: String(event) }
+        }
+      })(),
     }, { tags: [`event:${name}`], ...batchOpts() }))
   }
 }
