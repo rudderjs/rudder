@@ -1,6 +1,7 @@
 import { Rudder } from '@rudderjs/console'
 import { Schedule } from '@rudderjs/schedule'
 import { Cache } from '@rudderjs/cache'
+import { terminal } from '@rudderjs/terminal'
 import { User } from '../app/Models/User.js'
 import { Greet } from '../app/Commands/Greet.js'
 
@@ -17,6 +18,13 @@ Rudder.command('inspire', () => {
   const quote = quotes[Math.floor(Math.random() * quotes.length)]!
   console.log(`\n  "${quote}"\n`)
 }).description('Display an inspiring quote')
+
+Rudder.command('dashboard', async () => {
+  return terminal('dashboard', {
+    appName: 'RudderJS',
+    version: '1.0.0',
+  })
+}).description('Show the app dashboard in the terminal')
 
 Rudder.command('db:seed', async () => {
   console.log('Seeding database...')
