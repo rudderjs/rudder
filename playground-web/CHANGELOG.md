@@ -1,5 +1,41 @@
 # rudderjs-playground-web
 
+## 0.0.26
+
+### Patch Changes
+
+- Updated dependencies [95e9f4a]
+- Updated dependencies [f867181]
+- Updated dependencies [0f69018]
+- Updated dependencies [b506997]
+- Updated dependencies [0da46c7]
+- Updated dependencies [95b588f]
+- Updated dependencies [9b33c2c]
+- Updated dependencies [4d4991c]
+- Updated dependencies [704ae11]
+- Updated dependencies [87a8de2]
+- Updated dependencies [6c93f36]
+  - @rudderjs/console@1.0.1
+  - @rudderjs/http@1.0.1
+  - @rudderjs/image@1.0.1
+  - @rudderjs/mcp@5.0.1
+  - @rudderjs/passport@1.1.1
+  - @rudderjs/support@1.2.0
+  - @rudderjs/vite@1.0.2
+  - @rudderjs/contracts@1.4.0
+  - @rudderjs/core@1.1.3
+  - @rudderjs/router@1.2.0
+  - @rudderjs/server-hono@1.0.6
+  - @rudderjs/auth@5.0.1
+  - @rudderjs/cache@1.1.2
+  - @rudderjs/session@1.0.5
+  - @rudderjs/middleware@1.0.2
+  - @rudderjs/orm@1.8.1
+  - @rudderjs/storage@1.1.2
+  - @rudderjs/log@1.0.2
+  - @rudderjs/schedule@1.0.4
+  - @rudderjs/localization@1.0.3
+
 ## 0.0.25
 
 ### Patch Changes

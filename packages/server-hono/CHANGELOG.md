@@ -1,5 +1,13 @@
 # @rudderjs/server-hono
 
+## 1.0.6
+
+### Patch Changes
+
+- 0da46c7: Fix `req.ip` ignoring `trustProxy` config (always read XFF/XRI regardless of setting), fix body parsing on `ALL`-method routes (`route.method` was registration-time value, not actual HTTP method), fix hardcoded version `'0.0.2'` in dev error page, and correct two inaccurate boost/guidelines.md claims (socket address fallback, lazy body parsing).
+- Updated dependencies [f867181]
+  - @rudderjs/contracts@1.4.0
+
 ## 1.0.5
 
 ### Patch Changes

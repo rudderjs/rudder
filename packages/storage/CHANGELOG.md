@@ -1,5 +1,15 @@
 # @rudderjs/storage
 
+## 1.1.2
+
+### Patch Changes
+
+- 704ae11: fix(storage,http,broadcast,log): Tier 4 quality sweep — S3 CopySource encoding, HTTP json() guard, WebSocket send guard, broadcast auth error surface, log cleanup error surface
+- Updated dependencies [0f69018]
+- Updated dependencies [b506997]
+  - @rudderjs/core@1.1.3
+  - @rudderjs/router@1.2.0
+
 ## 1.1.1
 
 ### Patch Changes

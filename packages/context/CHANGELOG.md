@@ -1,5 +1,13 @@
 # @rudderjs/context
 
+## 1.0.2
+
+### Patch Changes
+
+- 87a8de2: fix(schedule,context,pennant,localization): Tier 5 quality sweep — overlap key collision, hydrate guard, feature resolution race, JSON parse error surface
+- Updated dependencies [0f69018]
+  - @rudderjs/core@1.1.3
+
 ## 1.0.1
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @rudderjs/concurrency
 
+## 1.0.2
+
+### Patch Changes
+
+- 95e9f4a: Include `boost/` directory in npm tarball so `guidelines://<pkg>` MCP resources are available in installed apps.
+
 ## 1.0.1
 
 ### Patch Changes

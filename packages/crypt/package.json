@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/crypt",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "rudderjs": {
     "provider": "CryptProvider",
     "stage": "infrastructure"
