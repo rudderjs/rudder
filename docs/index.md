@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "RudderJS"
-  text: "Node.js Full-Stack Framework"
-  tagline: "An expressive, batteries-included full-stack framework for TypeScript."
+  text: "The fullstack Node.js framework with structure, speed, and AI built in."
+  tagline: "Ship a signup flow, a background queue, a real-time collaborative document, and an AI agent — from one monorepo."
   image:
     src: /logo.png
     alt: RudderJS
@@ -20,22 +20,22 @@ hero:
       link: https://github.com/rudderjs/rudder
 
 features:
-  - icon: ⚡
-    title: Expressive DX
-    details: Service providers, the Rudder CLI, an expressive ORM, fluent middleware groups — convention over configuration, batteries included.
-  - icon: 🧩
-    title: Modular by Design
-    details: Every feature is an optional package. Use only what you need. Zero lock-in to any specific database, queue, or storage engine.
-  - icon: 🌐
-    title: Framework-Agnostic UI
-    details: Built on Vike + Vite. Bring your own UI — React, Vue, Solid, or no frontend at all. Pure API mode is first-class.
+  - icon: 🎨
+    title: Controller-returned SSR views
+    details: "`return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax."
+  - icon: 🧠
+    title: AI-native
+    details: 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina). Agents with tools, streaming, MCP, queue-backed runs, approval gates.
   - icon: 🔌
-    title: Pluggable Adapters
-    details: Swap Prisma for Drizzle, BullMQ for Inngest, local storage for S3, SMTP for any mailer — all through a unified adapter interface.
-  - icon: 🛡️
-    title: TypeScript-First
-    details: Strict TypeScript throughout. Every API is fully typed with generics, branded types, and discriminated unions where it counts.
-  - icon: 🚀
-    title: WinterCG Compatible
-    details: Exports a standard Fetch handler. Deploy to Node.js, Cloudflare Workers, Deno, Bun, or any WinterCG-compatible runtime.
+    title: Real-time on one port
+    details: WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy, no Pusher dependency.
+  - icon: 🧱
+    title: Service-oriented
+    details: DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle) — one bootstrap file wires everything.
+  - icon: 🪶
+    title: Pay-as-you-go modularity
+    details: 46 first-party packages. Start with three, bolt on what you need. Swap Prisma ↔ Drizzle, BullMQ ↔ Inngest, local ↔ S3 without changing app code.
+  - icon: 🔒
+    title: TypeScript-first, strict by default
+    details: "`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, ESM + NodeNext everywhere. Incremental builds. WinterCG-compatible runtime."
 ---
