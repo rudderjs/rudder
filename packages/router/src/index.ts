@@ -645,6 +645,17 @@ export class Router {
   delete(path: string, handler: RouteHandler, middleware?: MiddlewareHandler[]): RouteBuilder { return this._rb('DELETE', path, handler, middleware) }
   all   (path: string, handler: RouteHandler, middleware?: MiddlewareHandler[]): RouteBuilder { return this._rb('ALL',    path, handler, middleware) }
 
+  /**
+   * Register a catch-all fallback route. Runs when no other route matches.
+   * Register it last — Hono evaluates routes in registration order.
+   *
+   * @example
+   * router.fallback((_req, res) => res.status(404).json({ message: 'Not found' }))
+   */
+  fallback(handler: RouteHandler, middleware: MiddlewareHandler[] = []): RouteBuilder {
+    return this.all('*', handler, middleware)
+  }
+
   private _rb(method: HttpMethod, path: string, handler: RouteHandler, middleware: MiddlewareHandler[] = []): RouteBuilder {
     const composed = this._applyGroupStack(path, middleware)
     const def: RouteDefinition = {
@@ -1005,7 +1016,7 @@ function _computeSignature(pathname: string, params: URLSearchParams): string {
   const sorted = new URLSearchParams(
     [...params.entries()]
       .filter(([k]) => k !== 'signature')
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
   )
   const toSign = sorted.size > 0 ? `${pathname}?${sorted.toString()}` : pathname
   if (!_crypto) throw new Error('[RudderJS Router] node:crypto not available — Url signing requires a server environment.')
@@ -1103,12 +1114,11 @@ export class Url {
 
     const expected = _computeSignature(pathname, params)
 
-    try {
-      if (!_crypto) return signature === expected
-      return _crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-    } catch {
-      return false
-    }
+    if (!_crypto) return signature === expected
+    const sigBuf = Buffer.from(signature)
+    const expBuf = Buffer.from(expected)
+    if (sigBuf.length !== expBuf.length) return false
+    return _crypto.timingSafeEqual(sigBuf, expBuf)
   }
 }
 
