@@ -31,14 +31,17 @@ export default [LocalizationProvider]
 
 ### Translation lookup
 
+`trans()` is **async** — it lazy-loads the namespace JSON before resolving. `__()` is sync but only reads from the in-memory cache; if the namespace hasn't been loaded yet, it returns the key as-is.
+
 ```ts
-import { trans, __ } from '@rudderjs/localization'
+import { trans, __, preloadNamespace } from '@rudderjs/localization'
 
-trans('messages.welcome', { app: 'RudderJS' })   // 'Welcome to RudderJS!'
-__('messages.greeting', { name: 'Alice' })        // alias — same thing
+await trans('messages.welcome', { app: 'RudderJS' })  // 'Welcome to RudderJS!'
+await trans('messages.items',   5)                    // pluralized — pass a number for count
 
-// With count for pluralization
-trans('messages.items', { count: 5 })             // '5 items'
+// __() only resolves from already-loaded namespaces; preload first if you need sync access
+await preloadNamespace('en', 'messages')
+__('messages.greeting', { name: 'Alice' })           // sync — works because messages is preloaded
 ```
 
 ### Pluralization
@@ -59,19 +62,24 @@ Translation files use Laravel's pipe syntax:
 ### Per-request locale
 
 ```ts
-import { setLocale, getLocale } from '@rudderjs/localization'
-
-// In middleware
-await setLocale(req.user?.preferredLocale ?? 'en', async () => {
-  // All trans() calls inside this block use the set locale
-  return next()
-})
+import { setLocale, getLocale, runWithLocale, LocalizationMiddleware } from '@rudderjs/localization'
 
 // Read current locale
 const locale = getLocale()  // 'en' by default
+
+// Set globally (mutates the global default — use sparingly outside tests)
+setLocale('es')
+
+// Scoped — runs `fn` with the given locale active in the current async chain
+await runWithLocale('es', async () => {
+  return await trans('messages.welcome', { app: 'RudderJS' })  // resolves in 'es'
+})
+
+// Built-in middleware reads Accept-Language and wraps the request in runWithLocale()
+m.web(LocalizationMiddleware())
 ```
 
-`setLocale()` uses AsyncLocalStorage — scoped to the async chain, not global. Safe in concurrent request handling.
+`runWithLocale()` uses AsyncLocalStorage — scoped to the async chain, not global. Safe in concurrent request handling. There is no callback form of `setLocale()`; use `runWithLocale()` for scoped switches.
 
 ### Global fallback
 
@@ -80,7 +88,7 @@ If a key is missing in the current locale, the `fallback` locale is tried. If st
 ## Common Pitfalls
 
 - **Missing `path` config.** Translations won't load. Set `path` to an absolute path — relative paths break under different working directories.
-- **`trans()` outside middleware.** If you never wrapped with `setLocale()`, it uses `config.locale` (the default). CLI commands and jobs need to call `setLocale()` manually if they should use a non-default locale.
+- **`trans()` outside middleware.** If you never entered a `runWithLocale()` scope, it uses `config.locale` (the default). CLI commands and jobs need to wrap their work in `runWithLocale(locale, fn)` if they should use a non-default locale.
 - **Nested JSON keys with dots.** `messages.welcome` looks up `messages.json` → key `welcome`. `messages.user.name` looks up `messages.json` → key `user.name`, NOT nested `user` → `name`. Flat keys only in JSON files.
 - **Interpolation typos.** `:name` in the template but `{ Name: 'Alice' }` in code = literal `:name` in output (no error). Case matters.
 - **Loading at startup.** The provider reads all translation files at boot. Adding/editing a translation file requires a restart — or dev HMR via `@rudderjs/vite`'s `rudderjs:routes` watcher.
@@ -89,7 +97,16 @@ If a key is missing in the current locale, the `fallback` locale is tried. If st
 ## Key Imports
 
 ```ts
-import { LocalizationProvider, trans, __, setLocale, getLocale } from '@rudderjs/localization'
+import {
+  LocalizationProvider,
+  LocalizationMiddleware,
+  trans,
+  __,
+  setLocale,
+  getLocale,
+  runWithLocale,
+  preloadNamespace,
+} from '@rudderjs/localization'
 
 import type { LocalizationConfig } from '@rudderjs/localization'
 ```

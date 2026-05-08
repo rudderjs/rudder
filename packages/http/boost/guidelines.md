@@ -50,55 +50,66 @@ The fluent chain is **immutable per-call** — each `Http.*` call starts fresh. 
 ### Retries
 
 ```ts
-Http.retry(3, 200)                          // simple: 3 retries, 200ms backoff
-Http.retry(3, 200, (attempt, error) => {    // conditional: decide per attempt
-  if (error.status === 429) return true     // retry on rate-limit
-  return attempt < 3 && error.status >= 500 // retry 5xx up to 3 times
-})
+Http.retry(3)            // 3 retries, default 100ms linear backoff
+Http.retry(3, 200)       // 3 retries, 200ms linear backoff between attempts
 ```
 
-Retries fire on network errors and on 5xx responses by default. Use the callback form to customize.
+Retries fire on network errors and non-2xx responses. The signature is `retry(times, delay = 100)` — there is no per-attempt predicate today; if you need conditional retry logic, branch in a response interceptor and re-issue the call.
 
 ### Interceptors
 
 ```ts
-Http.beforeSending((req) => {
-  req.headers['X-Trace'] = traceId()
-  return req
+// Global — applies to every Http.* call
+Http.interceptRequest((req) => {
+  // req is a PendingRequest; mutate via its fluent setters
+  return req.withHeaders({ 'X-Trace': traceId() })
 })
 
-Http.onResponse((res) => {
-  metrics.timing('http.response', res.duration)
+Http.interceptResponse((res) => {
+  // res is HttpResponseData: { status, headers, body, json(), ok() }
+  metrics.timing('http.response.status', res.status)
   return res
 })
-```
 
-Global interceptors apply to every `Http.*` call. Per-chain interceptors (via `.beforeSending()` on a chain) scope to that request.
+Http.clearInterceptors()  // remove all global interceptors (typically in afterEach)
+
+// Per-chain — only for this request
+await Http
+  .withRequestMiddleware((req) => req.withHeaders({ 'X-Once': '1' }))
+  .get('/users')
+```
 
 ### Testing
 
 ```ts
 import { Http } from '@rudderjs/http'
 
-Http.fake({
-  'api.example.com/users': { status: 200, body: { users: [] } },
-  'api.example.com/users/42': (req) => ({ status: req.method === 'DELETE' ? 204 : 200 }),
-})
+const fake = Http.fake()
+fake.register('api.example.com/users',     { status: 200, body: { users: [] }, headers: {} })
+fake.register('api.example.com/users/42',  { status: 204, body: '',           headers: {} })
+fake.register(/api\.example\.com\/.*/,     [                                                  // sequence
+  { status: 503, body: '', headers: {} },
+  { status: 200, body: { ok: true }, headers: {} },
+])
+fake.preventStrayRequests()  // throw on any unmatched URL
 
-await Http.get('https://api.example.com/users')   // returns the fake
+// Use fake.client() — it returns a PendingRequest wired to the fake
+const client = fake.client()
+const res = await client.get('https://api.example.com/users')
 
-Http.assertSent(req => req.url.includes('/users'))
-Http.assertSentCount(1)
-Http.restore()
+fake.assertSent(req => req.url.includes('/users'))
+fake.assertSentCount(1)
+fake.assertNotSent(req => req.method === 'DELETE')
+fake.assertNothingSent()
 ```
 
-No real network calls under `Http.fake()`. Matching is by URL pattern (substring or RegExp).
+Matching is by URL pattern (substring or RegExp). When you register an array, responses are returned in order and the last entry repeats. `Http.fake()` returns a fresh `FakeManager` each call — there is no global state to "restore."
 
 ## Common Pitfalls
 
 - **`res.json()` on non-JSON responses.** Throws. Guard with `res.ok()` + Content-Type check, or catch explicitly.
 - **Timeouts vs retries.** `.timeout(5000).retry(3)` = 5s per attempt × 3 retries + backoff = potentially 20+ seconds of wall time. Budget accordingly for request-path code.
-- **Forgetting to `Http.restore()` in tests.** Fake state persists globally — subsequent tests hit the stubs instead of the real network (or other stubs). Always restore in `afterEach`.
+- **Calling `Http.*` after `Http.fake()`.** `Http.fake()` returns a `FakeManager`; it does NOT replace the global `Http`. Use `fake.client()` to get a `PendingRequest` wired to the fake, or call `fake.preventStrayRequests()` to fail loudly when test code accidentally hits the real `Http` facade. Use `Http.clearInterceptors()` (not a non-existent `Http.restore()`) to drop global interceptors between tests.
 - **Interceptors mutating in place.** Return the req/res object. Mutating without returning works by reference today but isn't contract — future versions may require returns.
 - **`withQueryParameters` vs URL query strings.** Both work; if you mix them, values from `withQueryParameters` take precedence. Pick one style per call to avoid surprises.
 - **Retry + idempotency.** Retries apply to POST too. If the server is sensitive (charges a card, sends an email), use an idempotency key or disable retries for that call.
@@ -107,7 +118,12 @@ No real network calls under `Http.fake()`. Matching is by URL pattern (substring
 ## Key Imports
 
 ```ts
-import { Http } from '@rudderjs/http'
+import { Http, PendingRequest, FakeManager, Pool } from '@rudderjs/http'
 
-import type { HttpRequest, HttpResponse, HttpConfig } from '@rudderjs/http'
+import type {
+  HttpMethod,
+  HttpResponseData,
+  RequestInterceptor,
+  ResponseInterceptor,
+} from '@rudderjs/http'
 ```

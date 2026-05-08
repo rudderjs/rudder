@@ -95,5 +95,5 @@ If `@rudderjs/telescope` is installed, every connection, subscribe, unsubscribe,
 import { BroadcastingProvider, broadcast, Broadcast, broadcastStats } from '@rudderjs/broadcast'
 import { Channel, PrivateChannel, PresenceChannel } from '@rudderjs/broadcast'
 
-import type { BroadcastConfig, ChannelAuthRequest } from '@rudderjs/broadcast'
+import type { BroadcastConfig, BroadcastAuthRequest, AuthCallback } from '@rudderjs/broadcast'
 ```

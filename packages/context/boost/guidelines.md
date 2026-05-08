@@ -2,7 +2,7 @@
 
 ## Overview
 
-Request-scoped context — an AsyncLocalStorage-backed data bag that **auto-propagates to log entries and queued jobs**. Put `userId`, `tenantId`, `traceId` in at middleware time; every log line and every queued job carries those fields automatically. Laravel's context package for Node, plus the dehydrate/rehydrate flow that makes it safe across process boundaries.
+Request-scoped context — an AsyncLocalStorage-backed data bag that **auto-propagates to log entries and queued jobs**. Put `userId`, `tenantId`, `traceId` in at middleware time; every log line and every queued job carries those fields automatically. Laravel's context package for Node, plus the `dehydrate()` / `hydrate()` flow that makes it safe across process boundaries.
 
 ## Key Patterns
 
@@ -85,10 +85,10 @@ You don't wire any of this manually — Context hooks into both packages via obs
 Cross-process: serialize the visible (non-hidden) context to JSON, pass it downstream, rehydrate on the other side:
 
 ```ts
-const snapshot = Context.dehydrate()   // safe JSON
+const snapshot = Context.dehydrate()   // safe JSON (DehydratedContext)
 // ... ship over a message bus, queue, HTTP, etc ...
 
-Context.rehydrate(snapshot)             // restore in the receiving worker
+Context.hydrate(snapshot)               // restore in the receiving worker
 ```
 
 The queue package does this automatically. Do it yourself when you're implementing a custom transport (SQS, Kafka, RabbitMQ, etc.).

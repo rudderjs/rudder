@@ -41,7 +41,7 @@ describe('Users API', () => {
 
 ### HTTP helpers
 
-Requests go through `app.fetch` — no network, no listener:
+Requests go through the registered `fetchHandler` — no network, no listener. Every helper returns a `TestResponse`. All five take optional headers as the last arg.
 
 ```ts
 await t.get('/api/users')
@@ -49,24 +49,53 @@ await t.post('/api/users', { name: 'Alice' })
 await t.put('/api/users/1', { name: 'Alice' })
 await t.patch('/api/users/1', { name: 'Alice' })
 await t.delete('/api/users/1')
-
-await t.getJson('/api/users')                    // asserts 200 + parses JSON
-await t.postJson('/api/users', { name: 'Alice' }) // same for POST
 ```
+
+`Content-Type: application/json` is set automatically. Read JSON via `response.json()` (the body is already parsed) — there is no `getJson()` / `postJson()` helper, just call `.assertOk()` after `t.get(...)`.
 
 ### TestResponse assertions
 
 ```ts
+// Status
 response.assertStatus(201)
-response.assertOk()              // 2xx
+response.assertOk()              // 200
+response.assertCreated()         // 201
+response.assertNoContent()       // 204
+response.assertNotFound()        // 404
+response.assertForbidden()       // 403
+response.assertUnauthorized()    // 401
+response.assertUnprocessable()   // 422
+response.assertSuccessful()      // any 2xx
+response.assertServerError()     // any 5xx
+
+// Redirects
 response.assertRedirect('/dashboard')
-response.assertJson({ ok: true })
+
+// JSON (body is pre-parsed)
+response.assertJson({ ok: true })                          // partial match — checks given keys
 response.assertJsonPath('data.0.name', 'Alice')
-response.assertJsonStructure(['data', 'meta.total'])
-response.assertJsonValidationErrors(['email', 'password'])
-response.assertHeader('Content-Type', 'application/json')
-response.assertSee('Hello, Alice')           // HTML body contains
-response.assertSeeText('Hello')
+response.assertJsonStructure(['data', 'meta'])             // top-level keys present
+response.assertJsonCount(3, 'data.users')                  // array length at path
+response.assertJsonMissing({ password: 'secret' })
+
+// Headers
+response.assertHeader('Content-Type', 'application/json')  // value substring match
+response.assertHeaderMissing('X-Internal-Secret')
+
+// Raw access
+response.text()                  // raw response text
+response.json()                  // pre-parsed body (same as response.body)
+```
+
+There is no `assertSee` / `assertSeeText` / `assertJsonValidationErrors` today — for HTML body checks use `response.text().includes(...)`; for validation errors, `assertJsonPath('errors.email', ...)`.
+
+### Database assertions
+
+```ts
+await t.assertDatabaseHas('users',     { email: 'alice@example.com' })
+await t.assertDatabaseMissing('users', { email: 'gone@example.com' })
+await t.assertDatabaseCount('users', 3)
+await t.assertDatabaseEmpty('audit_log')
 ```
 
 ### Traits
@@ -86,10 +115,10 @@ class AppTest extends TestCase {
 const user = await UserFactory.new().create()
 
 await t.actingAs(user).get('/dashboard')
-await t.actingAs(user, 'api').get('/api/me')  // specific guard
+await t.actingAs(user).get('/api/me')
 ```
 
-`actingAs` sets up the auth context without going through the login flow.
+`actingAs(user)` takes a single user arg — there is no guard parameter today. The user object is JSON-serialized into an `x-testing-user` header that the auth provider reads. If you need guard-specific testing, either ensure the guard reads the same header, or stub the guard via DI in your `TestCase` subclass.
 
 ### Faking framework services
 
@@ -125,7 +154,7 @@ The framework packages use `tsx --test`. Your app can use whatever — node:test
 - **Shared DB without `RefreshDatabase`.** Tests pollute each other. Always include the trait when running against a persistent driver — or point `database.url` at a memory-only SQLite.
 - **Parallel tests writing the same SQLite file.** Node's `node:test --test-concurrency=N` runs files in parallel. Either serialize (`--test-concurrency=1`) or give each test a unique DB path.
 - **Not restoring fakes.** `Mail.fake()` patches globally. Without `fake.restore()` in `afterEach`, subsequent tests still see the stub (or the wrong stub). Restore after each test — same applies to `Queue.fake()`, `NotificationFake.fake()`, `EventFake.fake()`.
-- **`actingAs` with mismatched guard.** If your config's default guard is `'web'` and the route uses `'api'`, `t.actingAs(user)` sets up `web` auth — the api guard won't see it. Pass the guard name: `t.actingAs(user, 'api')`.
+- **`actingAs` and guards.** `actingAs(user)` injects the user into an `x-testing-user` header — guards have to read it for the test login to take effect. If your custom guard or a non-default guard ignores that header, it won't see the user; either wire the header into your guard, or stub the guard via DI in `providers()` for that TestCase.
 - **Long-running tests spinning up providers.** Each `TestCase.create()` runs `register()` + `boot()` for every provider. For speed, provide only the minimal providers your test needs — not the full app's provider list.
 - **Testing WebSocket flows.** Tests run through `app.fetch`, which handles HTTP only. For WS coverage, mock `broadcast()` via the observer registry rather than spinning up a real socket.
 

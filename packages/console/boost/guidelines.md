@@ -8,17 +8,20 @@ Command registry + class-based command primitives for the RudderJS CLI. Apps reg
 
 ### Functional commands
 
+The handler signature is `(args: string[], opts: Record<string, unknown>) => void | Promise<void>`. **Args is a positional string array, not a keyed object** — for keyed access by signature name, use a class command (next section).
+
 ```ts
 import { Rudder } from '@rudderjs/console'
 // Or re-exported via @rudderjs/core: import { rudder } from '@rudderjs/core'
 
 Rudder.command('greet {name}', (args) => {
-  console.log(`Hello, ${args.name}!`)
+  const name = args[0] ?? 'world'
+  console.log(`Hello, ${name}!`)
 }).description('Print a greeting')
 
-Rudder.command('post:publish {id} {--dry-run}', async (args) => {
-  const id = args.id
-  const dryRun = args.dryRun === true
+Rudder.command('post:publish {id} {--dry-run}', async (args, opts) => {
+  const id     = args[0]
+  const dryRun = opts['dry-run'] === true
   // ...
 })
 ```
@@ -111,7 +114,7 @@ Standard pattern for `make:*` commands. Skips app boot automatically.
 
 ## Common Pitfalls
 
-- **Functional command `args` shape.** Arguments AND options land on the same `args` object. `{id}` → `args.id`; `{--dry-run}` → `args.dryRun` (camelCased).
+- **Functional command handler signature.** `(args: string[], opts: Record<string, unknown>)` — `args` is a positional array, not a keyed object. To access arguments by their signature name (e.g. `{id}` → `id`), use a class command and call `this.argument('id')` / `this.option('dry-run')`.
 - **Class command without `signature`.** Required field. Missing → registration throws.
 - **`skipBoot` on runtime commands.** Commands that need the DI container, ORM, or config MUST boot. Only skip for source-file-manipulation commands.
 - **Re-registering under the same name.** Last registration wins silently. Check with `rudder:list` to see active commands.

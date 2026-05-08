@@ -41,18 +41,23 @@ Log.debug('Cache key resolved', { key, hit: true })
 Log.channel('daily').error('Detailed diagnostic', { stack })
 ```
 
-### Log context (request-scoped fields)
+### Log context (sticky fields)
 
-Add fields that get merged into every log call for the duration of a request or block:
+Add fields that get merged into every subsequent log call:
 
 ```ts
-Log.withContext({ requestId, userId }, async () => {
-  Log.info('Processing request')   // includes requestId + userId
-  await doWork()
-})
+// Mutates the default channel's local context — sticky until withoutContext() / reset
+Log.withContext({ requestId, userId })
+Log.info('Processing request')        // includes requestId + userId
+Log.withoutContext(['requestId'])     // drop a key
+Log.withoutContext()                  // clear all local context
+
+// Or share across every channel (current and future)
+Log.shareContext({ deploymentId })
+Log.flushSharedContext()
 ```
 
-Uses AsyncLocalStorage — scoped to the async chain, not global. Middleware that sets `requestId` at the top of a request gets it on every log line from that request's handlers.
+`withContext()` does NOT take a callback — there is no built-in scoped form, and the call mutates the channel until cleared. For per-request scoping, pair with `@rudderjs/context` (an AsyncLocalStorage data bag): set fields on the request scope and read them inside a custom formatter or via a `Log.listen(...)` listener. If you instead use `Log.withContext()` per-request, you must call `withoutContext(keys)` at request end to avoid leakage across requests.
 
 ### Testing
 
