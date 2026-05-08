@@ -10,9 +10,10 @@ async function loadSharp(): Promise<Sharp> {
   try {
     _sharp = (await import('sharp')).default as unknown as Sharp
     return _sharp
-  } catch {
+  } catch (err) {
     throw new Error(
       '[RudderJS Image] sharp is required but not installed.\n  Install it: pnpm add sharp',
+      { cause: err },
     )
   }
 }
@@ -298,9 +299,10 @@ export class ImageProcessor {
   private async _loadStorage(): Promise<{ Storage: { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void> } } }> {
     try {
       return await import('@rudderjs/storage') as { Storage: { disk(name: string): { put(path: string, contents: Buffer | string): Promise<void> } } }
-    } catch {
+    } catch (err) {
       throw new Error(
         '[RudderJS Image] toStorage() requires @rudderjs/storage.\n  Install it: pnpm add @rudderjs/storage',
+        { cause: err },
       )
     }
   }

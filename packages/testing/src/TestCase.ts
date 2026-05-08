@@ -239,9 +239,10 @@ export class TestCase {
         q = q.where(key, value)
       }
       return await q.first()
-    } catch {
+    } catch (err) {
       throw new Error(
         `[RudderJS Testing] Cannot query table "${table}". Ensure an ORM adapter is registered.`,
+        { cause: err },
       )
     }
   }
@@ -252,9 +253,10 @@ export class TestCase {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const orm = this.app.make<any>('orm')
       return await orm.query(table).get()
-    } catch {
+    } catch (err) {
       throw new Error(
         `[RudderJS Testing] Cannot query table "${table}". Ensure an ORM adapter is registered.`,
+        { cause: err },
       )
     }
   }
