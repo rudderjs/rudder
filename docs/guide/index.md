@@ -53,18 +53,18 @@ Optional packages — `@rudderjs/passport`, `@rudderjs/sanctum`, `@rudderjs/soci
 
 ## Status
 
-RudderJS shipped its **first 1.0 wave on 2026-04-29** — 29 framework packages graduated from `0.x` to `1.0.0` simultaneously, signaling stable public APIs. Breaking changes from here on require explicit major bumps and migration notes.
+RudderJS is **fully on 1.0+** as of 2026-05-02. The first wave (2026-04-29) graduated 29 packages simultaneously; three follow-up waves over the next four days finished the rest. Every published `@rudderjs/*` package has a stable public API — breaking changes from here on require explicit major bumps and migration notes.
 
 ## Versioning
 
-RudderJS uses **independent versioning** — each `@rudderjs/*` package has its own version line. Same model as Laravel's first-party packages, AdonisJS, and most of the npm ecosystem.
+RudderJS uses **independent versioning** — each `@rudderjs/*` package has its own version line, the same model Laravel's first-party packages, AdonisJS, and most of the npm ecosystem use.
 
 What you'll see across the workspace:
 
-- **`1.0.0`** — packages that graduated in the first wave (2026-04-29). Stable public API, breaking changes require a major bump.
-- **Higher majors** (`auth@4.x`, `cashier-paddle@2.x`, `cli@4.x`, `horizon@4.x`, `mcp@4.x`, `pulse@5.x`, `queue@4.x`, `sanctum@6.x`, `telescope@10.x`) — packages that were already past 1.0 before the graduation, plus this release's necessary cascade-major-bumps. The number reflects iteration history, not "more important."
+- **`1.0.x`** — packages that graduated in one of the four waves. Stable public API, breaking changes require a major bump.
+- **Higher majors** (`auth@5.x`, `cashier-paddle@3.x`, `cli@4.x`, `horizon@6.x`, `mcp@5.x`, `pulse@6.x`, `queue@4.x`, `sanctum@7.x`, `telescope@13.x`) — packages that were already past 1.0 before the graduation, plus the cascade-major-bumps from each wave. The number reflects iteration history, not "more important."
 
-The version spread is informative, not asymmetric: a higher major means the package has been through more iteration cycles, not that it's more central. `core@1.0.0` and `telescope@10.0.0` are equally stable from this release forward.
+`core@1.x` and `telescope@13.x` are equally stable; the spread is informative, not asymmetric.
 
 ## Where to next
 
