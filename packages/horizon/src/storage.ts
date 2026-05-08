@@ -679,14 +679,14 @@ export class RedisStorage implements HorizonStorage {
       name:         h['name']  ?? '',
       queue:        h['queue'] ?? 'default',
       status:       (h['status'] as JobStatus) ?? 'pending',
-      payload:      h['payload'] ? JSON.parse(h['payload']) as Record<string, unknown> : {},
+      payload:      h['payload'] ? (() => { try { return JSON.parse(h['payload']!) as Record<string, unknown> } catch { return {} } })() : {},
       attempts:     parseInt(h['attempts'] ?? '0', 10),
       exception:    h['exception'] ? h['exception'] : null,
       dispatchedAt: h['dispatchedAt'] ? new Date(h['dispatchedAt']) : new Date(0),
       startedAt:    h['startedAt']   ? new Date(h['startedAt'])   : null,
       completedAt:  h['completedAt'] ? new Date(h['completedAt']) : null,
       duration:     dur < 0 ? null : dur,
-      tags:         h['tags'] ? JSON.parse(h['tags']) as string[] : [],
+      tags:         h['tags'] ? (() => { try { return JSON.parse(h['tags']!) as string[] } catch { return [] } })() : [],
     }
   }
 
