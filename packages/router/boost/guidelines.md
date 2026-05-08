@@ -75,6 +75,53 @@ router.get('/me', me).domain(':tenant.example.com')
 
 Mismatched hosts return 404. Subdomain `:param` and path `:param` of the same name collide — path wins.
 
+### Resource routes
+
+```ts
+import { router } from '@rudderjs/router'
+
+// Full REST resource: index, create, store, show, edit, update, destroy
+router.resource('posts', PostController)
+
+// Subset
+router.resource('posts', PostController, { only: ['index', 'show'] })
+router.resource('posts', PostController, { except: ['destroy'] })
+
+// API resource (no create/edit — those render HTML forms)
+router.apiResource('posts', PostController)
+
+// Singleton resource — only one of the thing (e.g. the current user's profile)
+router.singleton('profile', ProfileController)
+router.singleton('profile', ProfileController).creatable()   // also registers create + store
+router.singleton('profile', ProfileController).destroyable() // also registers destroy
+```
+
+Generated route names follow `{resource}.{verb}` — e.g. `posts.index`, `posts.show`, `posts.store`. Use with `route('posts.show', { post: 42 })`.
+
+### Route model binding
+
+```ts
+import { router } from '@rudderjs/router'
+
+// Bind ':user' param to User model — auto-resolves req.bound.user from req.params.user
+router.bind('user', User)
+
+// Optional — resolves to null instead of 404 when not found
+router.bind('viewer', User, { optional: true })
+
+// Custom slug key — User.routeKey = 'slug' overrides the default 'id'
+```
+
+The resolved model is available as `req.bound.user` in the handler. Missing records throw `RouteModelNotFoundError` (→ 404). Optional bindings skip the throw and set `req.bound.user = null`.
+
+### Fallback route
+
+```ts
+router.fallback((_req, res) => res.status(404).json({ message: 'Not found' }))
+```
+
+Catches all unmatched requests. Must be registered last.
+
 ### Route binding 404 customisation
 
 ```ts
