@@ -59,7 +59,14 @@ class HttpResponse implements HttpResponseData {
   }
 
   json<T = unknown>(): T {
-    return JSON.parse(this.body) as T
+    try {
+      return JSON.parse(this.body) as T
+    } catch (err) {
+      throw new Error(
+        `[RudderJS HTTP] Response body is not valid JSON (status ${this.status}): ${this.body.slice(0, 120)}`,
+        { cause: err },
+      )
+    }
   }
 
   ok(): boolean {
