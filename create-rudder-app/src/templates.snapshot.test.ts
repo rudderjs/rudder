@@ -41,6 +41,7 @@ const ctx: TemplateContext = {
     http:          true,
     process:       true,
     concurrency:   true,
+    terminal:      true,
   },
   demos: ['contact', 'ws', 'sync'],
 }
@@ -59,7 +60,7 @@ test('getTemplates() output is byte-stable across refactor', () => {
   }
   const contentHash = hash.digest('hex')
 
-  // Baseline last captured 2026-05-03 (Phase 2 Task 2.3 — wire new package deps + configs).
+  // Baseline last captured 2026-05-09 (add @rudderjs/terminal opt-in).
   // If you change any template's output deliberately, recapture all four assertions.
   assert.equal(paths.length, EXPECTED_FILE_COUNT, 'file count drifted')
   assert.equal(totalBytes, EXPECTED_TOTAL_BYTES, 'total bytes drifted')
@@ -67,9 +68,9 @@ test('getTemplates() output is byte-stable across refactor', () => {
   assert.deepEqual(paths, EXPECTED_PATHS, 'file set drifted')
 })
 
-const EXPECTED_FILE_COUNT = 64
-const EXPECTED_TOTAL_BYTES = 65272
-const EXPECTED_CONTENT_HASH = '1800a9d28b5e31a019dd8280ec21afce549b125c5c783215aebff3e3fc96502c'
+const EXPECTED_FILE_COUNT = 65
+const EXPECTED_TOTAL_BYTES = 65931
+const EXPECTED_CONTENT_HASH = 'd8972aef55e7a26a6e5c14ec10a3243d02d34e1708768822fa0f60e1468b1a38'
 const EXPECTED_PATHS = [
   '+server.ts',
   '.env',
@@ -80,6 +81,7 @@ const EXPECTED_PATHS = [
   'app/Mcp/EchoTool.ts',
   'app/Models/User.ts',
   'app/Providers/AppServiceProvider.ts',
+  'app/Terminal/Dashboard.tsx',
   'app/Views/Demos/Contact.tsx',
   'app/Views/Demos/Index.tsx',
   'app/Views/Demos/Sync.tsx',

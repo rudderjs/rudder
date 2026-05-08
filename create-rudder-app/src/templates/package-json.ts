@@ -122,6 +122,10 @@ export function packageJson(ctx: TemplateContext): string {
   if (ctx.packages.http)          deps['@rudderjs/http']         = 'latest'
   if (ctx.packages.process)       deps['@rudderjs/process']      = 'latest'
   if (ctx.packages.concurrency)   deps['@rudderjs/concurrency']  = 'latest'
+  if (ctx.packages.terminal) {
+    deps['@rudderjs/terminal'] = 'latest'
+    deps['ink']                = '^7.0.0'
+  }
   const devDeps: Record<string, string> = {
     '@rudderjs/cli': 'latest',
     '@types/node':   '^20.0.0',
