@@ -351,6 +351,33 @@ export interface AppRequest {
   raw:     unknown  // the original server-specific request object
 
   /**
+   * Client IP address. Set by the server adapter when `trustProxy: true`;
+   * `undefined` otherwise. Always read from `req.ip` rather than raw headers —
+   * the adapter normalises `::1` → `127.0.0.1` and picks the right header.
+   */
+  ip?: string
+
+  /**
+   * The authenticated user for this request. Populated by `AuthMiddleware`
+   * on web routes (and by bearer-token guards on api routes). `undefined`
+   * on unauthenticated requests or routes that don't run auth middleware.
+   */
+  user?: unknown
+
+  /**
+   * The active session for this request. Populated by `SessionMiddleware`
+   * on web routes. `undefined` on api routes (stateless by default).
+   */
+  session?: unknown
+
+  /**
+   * The bearer token for this request. Populated by token-based auth guards
+   * (e.g. `@rudderjs/sanctum`, `@rudderjs/passport`). `undefined` when no
+   * bearer token was provided or the guard has not run.
+   */
+  token?: unknown
+
+  /**
    * Resolved values for any route parameters bound via `router.bind(name, ...)`.
    * Populated by the router's per-route binding middleware before the handler runs.
    * Absent on routes that have no bound params; the raw string value remains in

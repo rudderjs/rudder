@@ -2,7 +2,7 @@
 
 Framework-level TypeScript contracts for HTTP, routing, middleware, and server adapters.
 
-This package is **type-only** — it contains no runtime code. All `@rudderjs/*` packages depend on it as the shared type language for HTTP primitives.
+Shared type language for all `@rudderjs/*` packages. Exports TypeScript interfaces for HTTP primitives plus two small runtime exports (`InputTypeError` class and `attachInputAccessors` factory) used by server adapters.
 
 ## Installation
 
@@ -34,6 +34,11 @@ import type { AppRequest } from '@rudderjs/contracts'
 | `headers` | `Record<string, string>` | Lowercased request headers. |
 | `body` | `unknown` | Parsed request body. JSON bodies are parsed by the server adapter. |
 | `raw` | `unknown` | The raw underlying request object from the server adapter. Cast as needed. |
+| `ip?` | `string \| undefined` | Client IP. Set when `trustProxy: true`; `undefined` otherwise. |
+| `user?` | `unknown` | Authenticated user. Populated by `AuthMiddleware` on web routes. |
+| `session?` | `unknown` | Active session. Populated by `SessionMiddleware` on web routes. |
+| `token?` | `unknown` | Bearer token. Populated by token guards (Sanctum, Passport). |
+| `bound?` | `Record<string, unknown>` | Resolved route model bindings from `router.bind()`. |
 
 **Typed input accessors**
 
@@ -192,6 +197,6 @@ type FetchHandler = (
 
 ## Notes
 
-- No runtime code — `sideEffects: false`, fully tree-shakable.
+- Minimal runtime surface — `InputTypeError` (class) and `attachInputAccessors` (function). Everything else is types. `sideEffects: false`.
 - All types are re-exported from `@rudderjs/core` for convenience.
 - Server adapters map their native request/response objects to `AppRequest`/`AppResponse`. The `raw` field provides escape-hatch access to adapter-specific APIs.
