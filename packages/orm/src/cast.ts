@@ -44,10 +44,10 @@ export function castGet(type: string, key: string, value: unknown, attributes: R
     case 'date':      return new Date(String(value))
     case 'datetime':  return new Date(String(value))
     case 'json':
-    case 'array':     return typeof value === 'string' ? JSON.parse(value) as unknown : value
+    case 'array':     return typeof value === 'string' ? _parseJson(key, value) : value
     case 'collection':
       // Returns plain array — ModelCollection wrapping done by caller if needed
-      return typeof value === 'string' ? JSON.parse(value) as unknown : value
+      return typeof value === 'string' ? _parseJson(key, value) : value
     case 'encrypted':
     case 'encrypted:array':
     case 'encrypted:object':
@@ -84,6 +84,16 @@ export function castSet(type: string, key: string, value: unknown, attributes: R
   }
 }
 
+// ─── Internal helpers ───────────────────────────────────────
+
+function _parseJson(key: string, value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    throw new Error(`[RudderJS ORM] Invalid JSON in "${key}" cast: ${value.slice(0, 80)}`)
+  }
+}
+
 // ─── Encryption stubs ───────────────────────────────────────
 // Uses @rudderjs/crypt if available, otherwise throws clearly.
 
@@ -116,5 +126,5 @@ function _decrypt(castType: string, value: unknown): unknown {
     )
   }
   const decrypted = crypt.decrypt(String(value))
-  return castType === 'encrypted' ? decrypted : JSON.parse(decrypted) as unknown
+  return castType === 'encrypted' ? decrypted : _parseJson('(encrypted)', decrypted)
 }
