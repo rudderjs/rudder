@@ -18,7 +18,8 @@
   "type": "module",
   "files": [
     "dist",
-    "schema"
+    "schema",
+    "boost"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
