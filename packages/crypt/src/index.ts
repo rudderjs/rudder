@@ -99,10 +99,19 @@ export class Crypt {
    * Tries the current key first, then previous keys for rotation support.
    */
   static decrypt<T = unknown>(encrypted: string): T {
-    const payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
+    let payload: EncryptedPayload
+    try {
+      payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
+    } catch {
+      throw new Error('[RudderJS Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
+    }
     const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
     const decrypted = tryDecryptWithKeys(keys, payload)
-    return JSON.parse(decrypted.toString('utf8')) as T
+    try {
+      return JSON.parse(decrypted.toString('utf8')) as T
+    } catch {
+      throw new Error('[RudderJS Crypt] Decrypted payload is not valid JSON.')
+    }
   }
 
   /**
@@ -119,7 +128,12 @@ export class Crypt {
    * Decrypt a plain string (no JSON deserialization).
    */
   static decryptString(encrypted: string): string {
-    const payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
+    let payload: EncryptedPayload
+    try {
+      payload = JSON.parse(Buffer.from(encrypted, 'base64').toString('utf8')) as EncryptedPayload
+    } catch {
+      throw new Error('[RudderJS Crypt] Invalid encrypted payload — expected a base64-encoded JSON envelope.')
+    }
     const keys = [CryptRegistry.getKey(), ...CryptRegistry.getPreviousKeys()]
     return tryDecryptWithKeys(keys, payload).toString('utf8')
   }

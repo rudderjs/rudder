@@ -27,6 +27,13 @@ export interface PasswordResetConfig {
   expire?: number
   /** Seconds between reset requests for the same email (default: 60) */
   throttle?: number
+  /**
+   * HMAC secret for hashing stored reset tokens.
+   * Defaults to the generic string 'password-reset' when omitted.
+   * Set this to your APP_KEY (or a derived value) so stored token
+   * hashes are bound to your app instance.
+   */
+  secret?: string
 }
 
 // ─── Password Broker ──────────────────────────────────────
@@ -34,6 +41,7 @@ export interface PasswordResetConfig {
 export class PasswordBroker {
   private readonly expire: number
   private readonly throttle: number
+  private readonly secret: string
 
   constructor(
     private readonly tokens: TokenRepository,
@@ -42,6 +50,7 @@ export class PasswordBroker {
   ) {
     this.expire   = config.expire   ?? 60
     this.throttle = config.throttle ?? 60
+    this.secret   = config.secret   ?? 'password-reset'
   }
 
   /**
@@ -111,7 +120,7 @@ export class PasswordBroker {
   }
 
   private hashToken(token: string): string {
-    return createHmac('sha256', 'password-reset').update(token).digest('hex')
+    return createHmac('sha256', this.secret).update(token).digest('hex')
   }
 
   private verifyToken(plain: string, hashed: string): boolean {

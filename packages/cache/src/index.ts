@@ -245,7 +245,12 @@ class RedisAdapter implements CacheAdapter {
     const client = await this.getClient()
     const raw = await client.get(this.k(key))
     if (raw === null) return null
-    return JSON.parse(raw) as T
+    try {
+      return JSON.parse(raw) as T
+    } catch {
+      await this.forget(key)
+      return null
+    }
   }
 
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {

@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { ServiceProvider, app, config, appendToGroup } from '@rudderjs/core'
 import type { AppRequest, AppResponse, MiddlewareHandler } from '@rudderjs/contracts'
@@ -251,13 +251,10 @@ function verify(signed: string, secret: string): string | null {
   const value = signed.slice(0, dotIdx)
   const hmac  = signed.slice(dotIdx + 1)
   const expected = createHmac('sha256', secret).update(value).digest('base64url')
-  // Constant-time comparison
-  if (expected.length !== hmac.length) return null
-  let mismatch = 0
-  for (let i = 0; i < expected.length; i++) {
-    mismatch |= (expected.codePointAt(i) ?? 0) ^ (hmac.codePointAt(i) ?? 0)
-  }
-  return mismatch === 0 ? value : null
+  const expectedBuf = Buffer.from(expected, 'base64url')
+  const hmacBuf     = Buffer.from(hmac,     'base64url')
+  if (expectedBuf.length !== hmacBuf.length) return null
+  return timingSafeEqual(expectedBuf, hmacBuf) ? value : null
 }
 
 // ─── Cookie Driver ─────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto'
 import { Url } from '@rudderjs/router'
 import type { MiddlewareHandler } from '@rudderjs/contracts'
 import type { Authenticatable, AuthUser } from './contracts.js'
@@ -109,7 +109,9 @@ export async function handleEmailVerification(
   const email     = user.getEmailForVerification()
   const expected  = _sha256(email)
 
-  if (hash !== expected) return false
+  const hashBuf     = Buffer.from(hash,     'hex')
+  const expectedBuf = Buffer.from(expected, 'hex')
+  if (hashBuf.length !== expectedBuf.length || !cryptoTimingSafeEqual(hashBuf, expectedBuf)) return false
 
   if (!user.hasVerifiedEmail()) {
     await user.markEmailAsVerified()
