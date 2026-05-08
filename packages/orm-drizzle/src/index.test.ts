@@ -126,3 +126,16 @@ describe('DrizzleAdapter', () => {
     await assert.doesNotReject(() => adapter.connect())
   })
 })
+
+// ─── Where-operator clause building ────────────────────────
+// DrizzleQueryBuilder is not exported; verify that the QB accepts NOT LIKE
+// without throwing (full SQL output requires a live db connection).
+
+describe('DrizzleQueryBuilder — NOT LIKE operator', () => {
+  it('accepts NOT LIKE without throwing', async () => {
+    const fakeTable = { name: {} }
+    const adapter = await drizzle({ client: makeDb(), tables: { users: fakeTable } }).create()
+    const qb = adapter.query('users') as any
+    assert.doesNotThrow(() => qb.where('name', 'NOT LIKE', '%alice%'))
+  })
+})

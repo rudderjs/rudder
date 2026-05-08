@@ -57,6 +57,35 @@ describe('PrismaQueryBuilder — LIKE operator mapping', () => {
   })
 })
 
+describe('PrismaQueryBuilder — NOT LIKE operator mapping', () => {
+  async function buildWhere(pattern: string) {
+    const { fakeClient, getLastWhere } = makeCapturingClient()
+    const adapter = await prisma({ client: fakeClient }).create()
+    await (adapter.query('user') as any).where('name', 'NOT LIKE', pattern).get()
+    return getLastWhere()
+  }
+
+  it('%value% → not.contains (substring)', async () => {
+    const where = await buildWhere('%alice%')
+    assert.deepEqual(where['name'], { not: { contains: 'alice' } })
+  })
+
+  it('value% → not.startsWith', async () => {
+    const where = await buildWhere('ali%')
+    assert.deepEqual(where['name'], { not: { startsWith: 'ali' } })
+  })
+
+  it('%value → not.endsWith', async () => {
+    const where = await buildWhere('%alice')
+    assert.deepEqual(where['name'], { not: { endsWith: 'alice' } })
+  })
+
+  it('value (no %) → not.equals', async () => {
+    const where = await buildWhere('alice')
+    assert.deepEqual(where['name'], { not: { equals: 'alice' } })
+  })
+})
+
 describe('PrismaQueryBuilder — other operators', () => {
   async function buildWhere(op: string, value: unknown) {
     const { fakeClient, getLastWhere } = makeCapturingClient()
