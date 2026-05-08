@@ -1,5 +1,11 @@
 # @rudderjs/queue-bullmq
 
+## 1.1.1
+
+### Patch Changes
+
+- 4d4991c: fix(orm,queue-bullmq,queue-inngest): Tier 3 quality sweep — JSON parse guards, BullMQ double-execution fix, dispatch serialization errors
+
 ## 1.1.0
 
 ### Minor Changes

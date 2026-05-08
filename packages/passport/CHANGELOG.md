@@ -1,5 +1,17 @@
 # @rudderjs/passport
 
+## 1.1.1
+
+### Patch Changes
+
+- 95e9f4a: Include `boost/` directory in npm tarball so `guidelines://<pkg>` MCP resources are available in installed apps.
+- Updated dependencies [f867181]
+- Updated dependencies [0f69018]
+- Updated dependencies [4d4991c]
+  - @rudderjs/contracts@1.4.0
+  - @rudderjs/core@1.1.3
+  - @rudderjs/orm@1.8.1
+
 ## 1.1.0
 
 ### Minor Changes

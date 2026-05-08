@@ -1,5 +1,13 @@
 # @rudderjs/live
 
+## 1.0.1
+
+### Patch Changes
+
+- 95e9f4a: Include `boost/` directory in npm tarball so `guidelines://<pkg>` MCP resources are available in installed apps.
+- Updated dependencies [0f69018]
+  - @rudderjs/core@1.1.3
+
 ## 1.0.0
 
 ### Major Changes

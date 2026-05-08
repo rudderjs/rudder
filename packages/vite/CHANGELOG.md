@@ -1,5 +1,12 @@
 # @rudderjs/vite
 
+## 1.0.2
+
+### Patch Changes
+
+- 95e9f4a: Include `boost/` directory in npm tarball so `guidelines://<pkg>` MCP resources are available in installed apps.
+- 6c93f36: Add `@rudderjs/orm-prisma` to SSR externals, fix WS pending-buffer socket leak on 10s timeout (destroy queued sockets rather than silently dropping them), fix HMR log missing closing `)`, and correct boost/guidelines.md plugin name (`rudderjs:views` → `rudderjs:views-scanner`) and ORM externals list.
+
 ## 1.0.1
 
 ### Patch Changes

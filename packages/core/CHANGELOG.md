@@ -1,5 +1,19 @@
 # @rudderjs/core
 
+## 1.1.3
+
+### Patch Changes
+
+- 0f69018: Fix XSS in HTML error pages, double provider registration before bootstrap, fictional `events` export in docs, and FormRequest pipeline order docs. Add `EventFake` documentation. Warn on async deferred provider boot.
+- Updated dependencies [95e9f4a]
+- Updated dependencies [f867181]
+- Updated dependencies [b506997]
+- Updated dependencies [95b588f]
+  - @rudderjs/console@1.0.1
+  - @rudderjs/support@1.2.0
+  - @rudderjs/contracts@1.4.0
+  - @rudderjs/router@1.2.0
+
 ## 1.1.2
 
 ### Patch Changes

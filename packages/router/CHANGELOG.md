@@ -1,5 +1,16 @@
 # @rudderjs/router
 
+## 1.2.0
+
+### Minor Changes
+
+- b506997: Add `router.fallback()` catch-all route. Fix locale-sensitive param sort in `_computeSignature` (use byte-order comparison for deterministic cross-locale signatures). Fix `timingSafeEqual` to check buffer lengths before calling (avoids throw/catch timing side-channel on malformed-length signatures). Document `router.resource()`, `router.bind()`, and `router.fallback()` in boost guidelines.
+
+### Patch Changes
+
+- Updated dependencies [f867181]
+  - @rudderjs/contracts@1.4.0
+
 ## 1.1.2
 
 ### Patch Changes

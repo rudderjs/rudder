@@ -1,5 +1,12 @@
 # @rudderjs/http
 
+## 1.0.1
+
+### Patch Changes
+
+- 95e9f4a: Include `boost/` directory in npm tarball so `guidelines://<pkg>` MCP resources are available in installed apps.
+- 704ae11: fix(storage,http,broadcast,log): Tier 4 quality sweep — S3 CopySource encoding, HTTP json() guard, WebSocket send guard, broadcast auth error surface, log cleanup error surface
+
 ## 1.0.0
 
 ### Major Changes

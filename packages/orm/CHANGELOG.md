@@ -1,5 +1,13 @@
 # @rudderjs/orm
 
+## 1.8.1
+
+### Patch Changes
+
+- 4d4991c: fix(orm,queue-bullmq,queue-inngest): Tier 3 quality sweep — JSON parse guards, BullMQ double-execution fix, dispatch serialization errors
+- Updated dependencies [f867181]
+  - @rudderjs/contracts@1.4.0
+
 ## 1.8.0
 
 ### Minor Changes
