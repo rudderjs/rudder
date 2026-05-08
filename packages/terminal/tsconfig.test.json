@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist-test",
+    "rootDir": "src",
+    "tsBuildInfoFile": "./dist-test/.tsbuildinfo",
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}

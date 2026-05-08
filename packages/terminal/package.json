@@ -1,0 +1,49 @@
+{
+  "name": "@rudderjs/terminal",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rudderjs/rudder",
+    "directory": "packages/terminal"
+  },
+  "type": "module",
+  "files": ["dist", "boost"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./commands/make-terminal": {
+      "import": "./dist/commands/make-terminal.js",
+      "default": "./dist/commands/make-terminal.js",
+      "types": "./dist/commands/make-terminal.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "clean": "rm -rf dist",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/index.test.js; EXIT=$?; rm -rf dist-test; exit $EXIT"
+  },
+  "dependencies": {
+    "ink": "^7.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=19.2.0"
+  },
+  "devDependencies": {
+    "@rudderjs/console": "workspace:^",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "react": "^19.2.0",
+    "typescript": "^5.4.0",
+    "tsx": "^4.0.0"
+  },
+  "author": "Suleiman Shahbari"
+}

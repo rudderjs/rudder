@@ -166,6 +166,11 @@ async function loadPackageCommands(): Promise<void> {
       const register = mod['registerRouteListCommand'] as (r: typeof rudder) => void
       register(rudder)
     },
+    // @rudderjs/terminal → make:terminal
+    async () => {
+      const mod = await tryImport('@rudderjs/terminal', 'commands/make-terminal')
+      registerMakeSpecs(mod['makeTerminalSpec'] as import('@rudderjs/console').MakeSpec)
+    },
   ]
 
   await Promise.all(loaders.map(fn => fn().catch(() => { /* package not installed */ })))
