@@ -44,7 +44,7 @@ That's a typed, SSR'd `/dashboard` rendered through Vike — full SPA navigation
 
 ## Highlights
 
-- 🎨 **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax.
+- 🎨 **Controller-returned SSR views** — `return view('id', props)` renders typed React / Vue / Solid components through Vike. SPA nav after first paint, ~400 bytes per nav, no Inertia tax. `return terminal('id', props)` renders the same components in the terminal via Ink.
 - 🧠 **AI-native** — 11 providers (Anthropic, OpenAI, Google, Ollama, Groq, DeepSeek, xAI, Mistral, Azure, Cohere, Jina), agents with tools, streaming, MCP, queue-backed runs, approval gates.
 - 🔌 **Real-time on one port** — WebSocket channels, presence, and Yjs CRDT collab share the same Hono server. No second daemon, no proxy.
 - 🧱 **Service-oriented** — DI container with ALS request scope, service providers, gates & policies, active-record ORM (Prisma or Drizzle), one bootstrap file.
@@ -78,13 +78,13 @@ Visit `http://localhost:3000`. Done.
 
 ---
 
-## Packages (46)
+## Packages (47)
 
 > Three foundation packages get you running. The rest are opt-in.
 
 **Foundation** — [`core`](./packages/core) · [`router`](./packages/router) · [`server-hono`](./packages/server-hono) · [`middleware`](./packages/middleware) · [`console`](./packages/console) · [`cli`](./packages/cli) · [`support`](./packages/support) · [`contracts`](./packages/contracts)
 
-**HTTP & frontend** — [`view`](./packages/view) · [`vite`](./packages/vite) · [`session`](./packages/session)
+**HTTP & frontend** — [`view`](./packages/view) · [`terminal`](./packages/terminal) · [`vite`](./packages/vite) · [`session`](./packages/session)
 
 **Data** — [`orm`](./packages/orm) · [`orm-prisma`](./packages/orm-prisma) · [`orm-drizzle`](./packages/orm-drizzle) · [`cache`](./packages/cache) · [`storage`](./packages/storage)
 

@@ -121,6 +121,16 @@ Routes return `view('id', props)` and the page is rendered through Vike's SSR pi
 - **Packages shipping views** follow the shape `packages/<name>/views/<framework>/<Name>.{tsx,vue}` + `src/routes.ts` exporting `registerXRoutes(router, opts)`. `@rudderjs/auth` is the reference implementation — see `feedback_package_ui_shape.md` in memory.
 - **Welcome page** (`app/Views/Welcome.tsx` with `export const route = '/'`) is the default landing page scaffolded by `create-rudder-app`. Auth-aware: shows Log in / Register links or a signed-in user with a Sign out button.
 
+### Terminal Views (`@rudderjs/terminal`)
+
+Commands return `terminal('id', props)` and the component is rendered in the terminal via Ink (React 19). Component files live in `app/Terminal/**`, discovered by convention at runtime (no Vite scanner needed — commands run in Node).
+
+- **Id → file mapping**: `'dashboard'` → `app/Terminal/Dashboard.tsx`, `'admin.users'` → `app/Terminal/Admin/Users.tsx` (same dot-notation as `view()`)
+- **React 19 required**: `ink@7+` requires `react>=19.2.0`. Do not use `ink@5.x` — it crashes against React 19's internals.
+- **TTY guard**: `terminal()` throws a clear error in non-interactive environments (CI, piped output). Check `process.stdout.isTTY` if you need a no-op fallback.
+- **Exit signal**: use `useApp().exit()` from Ink to signal completion. Without it, the command hangs until `Ctrl+C`.
+- **Scaffolder**: `pnpm rudder make:terminal <Name>` generates `app/Terminal/<Name>.tsx` with a stub component.
+
 ### Package Merge Policy (Tight-Coupling Only)
 
 Merge packages only when they are effectively one runtime unit.
@@ -293,6 +303,7 @@ There is **no `rudderjs.config.ts`** — `bootstrap/app.ts` is the framework wir
 - **SPA nav falling back to full reloads between view() routes**: the controller URL must match the URL in the view's generated `+route.ts`. Add `export const route = '/...'` at the top of the view file so the scanner picks it up instead of using the id-derived default.
 - **Ghost signed-in user across requests**: `AuthManager` must not cache `SessionGuard` instances — the manager is a process-wide DI singleton and a cached guard's `_user` field leaks across requests. Fixed; don't re-introduce the `_guards` Map.
 - **Multi-renderer installed error from the view scanner**: install exactly one of `vike-react` / `vike-vue` / `vike-solid`. Multi-framework scaffolder projects with no `app/Views/` are fine because detection is lazy.
+- **`ink@5.x` crashes with React 19**: `Cannot read properties of undefined (reading 'ReactCurrentOwner')` — `react-reconciler@0.29.2` (used by Ink 5) accesses React 18 internals that were removed in React 19. Always use `ink@^7.0.0` which requires `react>=19.2.0`.
 - **`[RudderJS] @rudderjs/X listed in the provider manifest but not installed`**: you removed a package from `package.json` but the manifest still references it. Run `pnpm rudder providers:discover` to refresh `bootstrap/cache/providers.json`.
 - **A new framework package isn't loading after install**: run `pnpm rudder providers:discover`. The manifest is generated, not derived at runtime.
 - **Optional peer fails to load with `No "exports" main defined`**: the package's `exports` field is missing a `default` or `import` condition. `@rudderjs/support`'s `resolveOptionalPeer()` walks `node_modules` and reads `exports['.']['import']` directly as a fallback, but custom resolution paths may not. Add `"default": "./dist/index.js"` to the package's exports if you hit this in your own code.

@@ -286,6 +286,7 @@ RudderJS Framework
 │    ├── @rudderjs/validation         FormRequest, validate(), Zod re-export
 │    ├── @rudderjs/router             Decorator routing, route(), signed URLs
 │    ├── @rudderjs/view               Laravel-style view('id', props) controller responses
+│    ├── @rudderjs/terminal           terminal('id', props) — Ink/React components in rudder commands
 │    ├── @rudderjs/server-hono        Hono HTTP adapter, production WS upgrade
 │    ├── @rudderjs/console             Command registry, base class
 │    └── @rudderjs/core               Application, Container, ServiceProvider, Events
