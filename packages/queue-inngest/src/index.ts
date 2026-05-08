@@ -80,12 +80,22 @@ class InngestAdapter implements QueueAdapter {
   async dispatch(job: Job, options: DispatchOptions = {}): Promise<void> {
     const name = job.constructor.name
 
+    let payload: Record<string, unknown>
+    try {
+      payload = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+    } catch (err) {
+      throw new Error(
+        `[Inngest] Cannot serialize job "${name}": ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      )
+    }
+
     await this.client.send({
       name: eventName({ name }),
       data: {
-        job:     name,
-        payload: JSON.parse(JSON.stringify(job)),
-        queue:   options.queue ?? 'default',
+        job:  name,
+        payload,
+        queue: options.queue ?? 'default',
       },
       ...(options.delay ? { ts: Date.now() + options.delay } : {}),
     })

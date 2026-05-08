@@ -120,19 +120,23 @@ class BullMQAdapter implements QueueAdapter {
 
     // Hydrate request context if @rudderjs/context is available
     if (__context && typeof __context === 'object') {
+      let contextLoaded = false
       try {
         const specifier = '@rudderjs/context'
         const mod = await import(/* @vite-ignore */ specifier) as {
           runWithContext<T>(fn: () => T): T
           Context: { hydrate(payload: { data: Record<string, unknown>; stacks: Record<string, unknown[]> }): void }
         }
+        contextLoaded = true
         await mod.runWithContext(async () => {
           mod.Context.hydrate(__context as { data: Record<string, unknown>; stacks: Record<string, unknown[]> })
           await instance.handle()
         })
         return
-      } catch {
-        // @rudderjs/context not installed — run without context
+      } catch (err) {
+        // Re-throw if the import succeeded — error came from handle(), not the import
+        if (contextLoaded) throw err
+        // @rudderjs/context not installed — fall through to run without context
       }
     }
 
@@ -145,7 +149,15 @@ class BullMQAdapter implements QueueAdapter {
     const delay     = options.delay ?? Cls.delay  ?? 0
     const attempts  = Cls.retries ?? 3
 
-    const data = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
+    } catch (err) {
+      throw new Error(
+        `[BullMQ] Cannot serialize job "${job.constructor.name}": ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      )
+    }
 
     // Attach serialized context if provided by DispatchBuilder
     if (options.__context) {
