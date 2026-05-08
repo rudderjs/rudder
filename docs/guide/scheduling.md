@@ -70,19 +70,38 @@ The full set of fluent helpers, most-used first:
 
 For weekday filtering: `.weekdays()`, `.weekends()`, `.mondays()` … `.sundays()`. These chain with time helpers — `.weekdays().dailyAt('9:00')` is "9am Monday through Friday."
 
-## Constraints and timezones
+## Timezones
 
 ```ts
 schedule.call(syncData)
   .hourly()
   .timezone('America/New_York')          // run at NY time, not UTC
-  .between('9:00', '17:00')              // only fire during these hours
-  .when(() => process.env.MAINTENANCE !== 'true')  // skip when condition is false
-  .skip(() => isHoliday())               // skip when callback returns true
-  .description('Sync (business hours, NY)')
+  .description('Sync (NY hours)')
 ```
 
-By default, all times are UTC. Setting `.timezone('America/New_York')` shifts both the cron evaluation and the `.between(...)` window to that zone.
+By default, all times are UTC. Setting `.timezone('America/New_York')` shifts the cron evaluation to that zone.
+
+There is no built-in `.between(...)` window or `.when(...)` / `.skip(...)` predicate today — branch inside the callback to skip a run, or use `.evenInMaintenanceMode()` to opt a task into running when the app is otherwise paused:
+
+```ts
+schedule.call(async () => {
+  if (isHoliday())                    return
+  if (new Date().getHours() < 9 ||
+      new Date().getHours() >= 17)    return
+  await syncData()
+}).hourly().timezone('America/New_York')
+```
+
+## Lifecycle hooks
+
+```ts
+schedule.call(syncOrders)
+  .hourly()
+  .before(() => log.info('starting'))
+  .after(() => log.info('done'))
+  .onSuccess(() => metrics.increment('sync.success'))
+  .onFailure((err) => report(err))
+```
 
 ## Preventing overlap
 
@@ -111,11 +130,20 @@ This also uses cache locks — Redis-backed cache is required.
 
 ## Running rudder commands on a schedule
 
-For tasks that already exist as rudder commands (`db:cleanup`, `cache:clear`), use `schedule.command()` instead of wrapping the command yourself:
+`Scheduler.call(callback)` is the only entry point — there is no `schedule.command()` shortcut. Either extract the work into a plain function that both your rudder command and the schedule call into, or shell out via `@rudderjs/process`:
 
 ```ts
-schedule.command('db:cleanup').daily()
-schedule.command('cache:clear', ['--store=redis']).hourly()
+// Recommended — share the work as a function
+import { cleanupDatabase } from '../app/Services/cleanup.js'
+
+schedule.call(() => cleanupDatabase()).daily()
+
+// Or shell out (prints the command's logs as well)
+import { Process } from '@rudderjs/process'
+
+schedule.call(async () => {
+  await Process.run('pnpm rudder cache:clear --store=redis')
+}).hourly()
 ```
 
 ## Testing

@@ -190,16 +190,25 @@ Implement `StorageAdapter` for FTP, Backblaze native API, IPFS, etc. Register wi
 
 ## Testing
 
+`Storage.fake()` returns a `FakeAdapter` instance — assertions live on the returned fake, not on `Storage`:
+
 ```ts
 import { Storage } from '@rudderjs/storage'
 
-Storage.fake()
+const disk = Storage.fake()              // swap the default disk
+const s3   = Storage.fake('s3')          // swap a named disk
+
 await someCodeThatUploads()
-Storage.assertPut('avatars/user-1.jpg')
-Storage.assertMissing('avatars/user-2.jpg')
+
+disk.assertExists('avatars/user-1.jpg')
+disk.assertMissing('avatars/user-2.jpg')
+disk.assertCount('avatars/', 1)          // exactly one file under avatars/
+disk.assertDirectoryEmpty('reports/')
+
+Storage.restoreFakes()                   // afterEach — reverse every fake() swap
 ```
 
-`Storage.fake()` swaps the default disk with an in-memory fake.
+The fake records writes in memory and never touches the disk or network. Call `Storage.restoreFakes()` in `afterEach` so subsequent tests see the real disks again.
 
 ## Pitfalls
 

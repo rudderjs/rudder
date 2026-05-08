@@ -104,7 +104,7 @@ If you call `currentAuth()` outside a `runWithAuth()` scope, it throws immediate
 |---|---|---|
 | `@rudderjs/auth` | `runWithAuth()` | `currentAuth()` |
 | `@rudderjs/context` | `runWithContext()` | `Context.get()` |
-| `@rudderjs/localization` | `runWithLocale()` | accessed via `trans()` / `locale()` |
+| `@rudderjs/localization` | `runWithLocale()` | accessed via `trans()` / `getLocale()` |
 
 When you build a package of your own that holds per-request state, copy this shape.
 

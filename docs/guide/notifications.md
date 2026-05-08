@@ -105,20 +105,20 @@ pnpm rudder migrate
 
 ### Custom
 
-Implement `Channel` and register it:
+Implement `NotificationChannel` and register it via `ChannelRegistry.register(name, channel)`:
 
 ```ts
-import type { Channel, Notifiable, Notification } from '@rudderjs/notification'
+import type { NotificationChannel, Notifiable, Notification } from '@rudderjs/notification'
 import { ChannelRegistry } from '@rudderjs/notification'
 
-class SlackChannel implements Channel {
+class SlackChannel implements NotificationChannel {
   async send(notifiable: Notifiable, notification: Notification): Promise<void> {
-    const payload = (notification as any).toSlack(notifiable)
+    const payload = (notification as { toSlack(n: Notifiable): { webhook: string } }).toSlack(notifiable)
     await fetch(payload.webhook, { method: 'POST', body: JSON.stringify(payload) })
   }
 }
 
-ChannelRegistry.set('slack', new SlackChannel())
+ChannelRegistry.register('slack', new SlackChannel())
 ```
 
 Then add `'slack'` to `via()` on any notification with a `toSlack()` method.
@@ -145,18 +145,23 @@ For an automatic queue route, mark the notification as queueable in a future rel
 
 ## Testing
 
-```ts
-import { Notification, notify } from '@rudderjs/notification'
+`NotificationFake.fake()` returns a fake instance — assertions live on the fake, not on `Notification`:
 
-Notification.fake()
+```ts
+import { NotificationFake } from '@rudderjs/notification'
+
+const fake = NotificationFake.fake()
 await UserService.signup({ email: 'a@b.com' })
 
-Notification.assertSent(user, WelcomeNotification)
-Notification.assertSentTimes(WelcomeNotification, 1)
-Notification.assertNothingSent()
+fake.assertSentTo(user, WelcomeNotification)
+fake.assertSentToTimes(user, WelcomeNotification, 1)
+fake.assertNotSentTo(user, PasswordResetNotification)
+fake.assertCount(1)
+fake.assertNothingSent()
+fake.restore()
 ```
 
-`Notification.fake()` records dispatches in memory. The mail and database channels never fire — useful when you want to assert "this notification was triggered" without verifying SMTP delivery.
+The fake intercepts `Notifier.send` and records dispatches in memory — the mail and database channels never fire. Call `fake.restore()` in `afterEach` so the original dispatcher is reinstated.
 
 ## Pitfalls
 

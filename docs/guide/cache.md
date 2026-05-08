@@ -169,7 +169,7 @@ class MyAdapter implements CacheAdapter {
   async flush(): Promise<void> { /* ... */ }
 }
 
-CacheRegistry.set('my-driver', new MyAdapter())
+CacheRegistry.set(new MyAdapter())   // single adapter, no name — registry holds one active adapter
 ```
 
 ## Use with rate limiting
@@ -187,16 +187,28 @@ If no cache adapter is registered when `RateLimit` runs, it fails open (allows e
 
 ## Testing
 
+`Cache.fake()` returns a `FakeCacheAdapter` instance — assertions live on the returned fake, not on `Cache`:
+
 ```ts
 import { Cache } from '@rudderjs/cache'
 
-Cache.fake()
+const fake = Cache.fake()
 await someCodeThatCaches()
-Cache.assertPut('user:1')
-Cache.assertMissing('user:42')
+
+fake.assertSet('user:1')                          // value was written
+fake.assertSet('user:1', v => (v as User).id === 1)  // optional value predicate
+fake.assertGet('user:1')                          // key was read
+fake.assertHas('user:1')                          // currently present in the fake
+fake.assertMissing('user:42')                     // currently absent
+fake.assertForgotten('user:99')                   // forget(key) was called
+fake.assertFlushed()                              // flush() was called
+fake.assertLockAcquired('process-podcast:42')
+fake.assertLockReleased('process-podcast:42')
+
+fake.restore()                                    // clear and detach the fake
 ```
 
-`Cache.fake()` swaps the default store with an in-memory fake for the duration of the test. Reset between tests with `Cache.fake().clear()`.
+`Cache.fake()` swaps the registered adapter with an in-memory recording fake for the duration of the test. Call `fake.restore()` in `afterEach` so subsequent tests start with no adapter registered.
 
 ## Pitfalls
 
