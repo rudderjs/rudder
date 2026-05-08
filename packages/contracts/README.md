@@ -35,9 +35,9 @@ import type { AppRequest } from '@rudderjs/contracts'
 | `body` | `unknown` | Parsed request body. JSON bodies are parsed by the server adapter. |
 | `raw` | `unknown` | The raw underlying request object from the server adapter. Cast as needed. |
 | `ip?` | `string \| undefined` | Client IP. Set when `trustProxy: true`; `undefined` otherwise. |
-| `user?` | `unknown` | Authenticated user. Populated by `AuthMiddleware` on web routes. |
-| `session?` | `unknown` | Active session. Populated by `SessionMiddleware` on web routes. |
-| `token?` | `unknown` | Bearer token. Populated by token guards (Sanctum, Passport). |
+| `user?` | `AuthUser` | Authenticated user. Added by `@rudderjs/auth` via module augmentation. |
+| `session?` | `SessionInstance` | Active session. Added by `@rudderjs/session` via module augmentation. |
+| `token?` | _(package-specific)_ | Bearer token. Added by `@rudderjs/passport` / `@rudderjs/sanctum` via module augmentation. |
 | `bound?` | `Record<string, unknown>` | Resolved route model bindings from `router.bind()`. |
 
 **Typed input accessors**

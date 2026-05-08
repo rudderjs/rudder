@@ -357,25 +357,13 @@ export interface AppRequest {
    */
   ip?: string
 
-  /**
-   * The authenticated user for this request. Populated by `AuthMiddleware`
-   * on web routes (and by bearer-token guards on api routes). `undefined`
-   * on unauthenticated requests or routes that don't run auth middleware.
-   */
-  user?: unknown
-
-  /**
-   * The active session for this request. Populated by `SessionMiddleware`
-   * on web routes. `undefined` on api routes (stateless by default).
-   */
-  session?: unknown
-
-  /**
-   * The bearer token for this request. Populated by token-based auth guards
-   * (e.g. `@rudderjs/sanctum`, `@rudderjs/passport`). `undefined` when no
-   * bearer token was provided or the guard has not run.
-   */
-  token?: unknown
+  // user?, session?, token? are intentionally absent from this base interface.
+  // Each is declared via module augmentation in its owning package:
+  //   user?    → @rudderjs/auth   (AuthUser)
+  //   session? → @rudderjs/session (SessionInstance)
+  //   token?   → @rudderjs/passport / @rudderjs/sanctum
+  // Adding them here as `unknown` causes TS2687/TS2717 when the augmentations
+  // redeclare them with different types or optionality.
 
   /**
    * Resolved values for any route parameters bound via `router.bind(name, ...)`.

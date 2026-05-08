@@ -18,9 +18,9 @@ Shared type language for all `@rudderjs/*` packages. Defines `AppRequest`, `AppR
 | `headers` | `Record<string, string>` | Lowercased headers |
 | `body` | `unknown` | Parsed JSON / form body |
 | `ip?` | `string` | Client IP — set when `trustProxy: true`, `undefined` otherwise |
-| `user?` | `unknown` | Set by `AuthMiddleware` on web routes |
-| `session?` | `unknown` | Set by `SessionMiddleware` on web routes |
-| `token?` | `unknown` | Set by bearer-token guards (Sanctum, Passport) |
+| `user?` | `AuthUser` | Added by `@rudderjs/auth` via module augmentation |
+| `session?` | `SessionInstance` | Added by `@rudderjs/session` via module augmentation |
+| `token?` | _(package-specific)_ | Added by `@rudderjs/passport` / `@rudderjs/sanctum` via module augmentation |
 | `bound?` | `Record<string, unknown>` | Resolved route model bindings from `router.bind()` |
 | `raw` | `unknown` | Underlying adapter request — cast as needed |
 
@@ -94,7 +94,7 @@ try {
 ## Common Pitfalls
 
 - **Importing from `@rudderjs/contracts` in app code.** Import from `@rudderjs/core` instead — all types are re-exported, same result with fewer package deps.
-- **Accessing `req.user` without auth middleware.** `user` is `unknown` and `undefined` when `AuthMiddleware` hasn't run (api routes, unprotected web routes). Cast after a null check or use the typed accessor from `@rudderjs/auth`.
+- **Accessing `req.user` without auth middleware.** `user` is `undefined` when `AuthMiddleware` hasn't run (api routes, unprotected web routes). Cast after a null check or use the typed accessor from `@rudderjs/auth`. (`user` is typed as `AuthUser` by `@rudderjs/auth`'s module augmentation — it is not declared in the base contracts interface.)
 - **Accessing `req.session` on api routes.** Sessions are web-only by default. `req.session` is `undefined` on api routes. Use per-route `SessionMiddleware()` if you need session on a specific api endpoint.
 - **Reading `req.ip` when `trustProxy` is false.** Returns `undefined`. Set `trustProxy: true` in your server config when behind a load balancer or reverse proxy.
 - **`attachInputAccessors` called twice.** Calling it again on the same object re-defines the methods (idempotent but wasteful). Server adapters call it once in their request normalizer.
