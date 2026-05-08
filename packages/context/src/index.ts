@@ -156,11 +156,15 @@ export class Context {
 
   static hydrate(payload: DehydratedContext): void {
     const s = requireStore()
-    for (const [k, v] of Object.entries(payload.data)) {
-      s.data.set(k, v)
+    if (payload.data && typeof payload.data === 'object') {
+      for (const [k, v] of Object.entries(payload.data)) {
+        s.data.set(k, v)
+      }
     }
-    for (const [k, v] of Object.entries(payload.stacks)) {
-      s.stacks.set(k, [...v])
+    if (payload.stacks && typeof payload.stacks === 'object') {
+      for (const [k, v] of Object.entries(payload.stacks)) {
+        s.stacks.set(k, Array.isArray(v) ? [...v] : [])
+      }
     }
   }
 

@@ -78,6 +78,7 @@ function normalizeScope(scope: FeatureScope): string {
 class PennantManager {
   private definitions = new Map<string, FeatureResolver>()
   private driver: PennantDriver
+  private inflight   = new Map<string, Promise<unknown>>()
 
   constructor(driver: PennantDriver) {
     this.driver = driver
@@ -99,6 +100,11 @@ class PennantManager {
     const stored = await this.driver.get(name, scopeKey)
     if (stored !== undefined) return stored as T
 
+    // Deduplicate concurrent resolves for the same feature+scope
+    const inflightKey = `${name}:${scopeKey}`
+    const pending = this.inflight.get(inflightKey)
+    if (pending) return pending as Promise<T>
+
     // Resolve
     const resolver = this.definitions.get(name)
     if (!resolver) {
@@ -108,17 +114,19 @@ class PennantManager {
       )
     }
 
-    let result = await resolver(scope)
+    const resolution = (async () => {
+      let result = await resolver(scope)
+      if (result instanceof Lottery) result = result.pick()
+      await this.driver.set(name, scopeKey, result)
+      return result
+    })()
 
-    // If result is a Lottery, pick and store the boolean result
-    if (result instanceof Lottery) {
-      result = result.pick()
+    this.inflight.set(inflightKey, resolution)
+    try {
+      return (await resolution) as T
+    } finally {
+      this.inflight.delete(inflightKey)
     }
-
-    // Store the resolved value
-    await this.driver.set(name, scopeKey, result)
-
-    return result as T
   }
 
   async values(names: string[], scope?: FeatureScope): Promise<Record<string, unknown>> {
