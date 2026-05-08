@@ -75,7 +75,8 @@ export class SubscriptionResource {
     const target = priceId ? items.findIndex((i) => i.priceId === priceId) : 0
     if (target === -1) throw new Error(`[RudderJS Cashier] No subscription item for priceId "${priceId}"`)
     const item = items[target]
-    if (item) item.quantity += count
+    if (!item) throw new Error(`[RudderJS Cashier] Subscription has no item at index ${target}`)
+    item.quantity += count
     return this.callUpdate({ items })
   }
 
@@ -88,7 +89,8 @@ export class SubscriptionResource {
     const target = priceId ? items.findIndex((i) => i.priceId === priceId) : 0
     if (target === -1) throw new Error(`[RudderJS Cashier] No subscription item for priceId "${priceId}"`)
     const item = items[target]
-    if (item) item.quantity = count
+    if (!item) throw new Error(`[RudderJS Cashier] Subscription has no item at index ${target}`)
+    item.quantity = count
     return this.callUpdate({ items })
   }
 
@@ -184,7 +186,7 @@ export class SubscriptionResource {
   async nextPayment(): Promise<{ date: Date; amount: string; currency: string } | null> {
     const client = await paddle()
     const fn = client.subscriptions['get']
-    if (!fn) return null
+    if (!fn) throw new Error('[RudderJS Cashier] Paddle SDK has no `subscriptions.get` method.')
     const live = await fn.call(client.subscriptions, this.record.paddleId) as { nextBilledAt?: string; nextTransaction?: { details?: { totals?: { total: string; currencyCode: string } } } }
     const date = live.nextBilledAt ? new Date(live.nextBilledAt) : null
     const total = live.nextTransaction?.details?.totals?.total
