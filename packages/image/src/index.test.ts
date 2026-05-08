@@ -54,6 +54,36 @@ describe('@rudderjs/image', () => {
       const stream = Readable.from(Buffer.alloc(10))
       assert.ok(image(stream) instanceof ImageProcessor)
     })
+
+    it('returns an ImageProcessor instance from Blob', async () => {
+      const buf  = await createTestPng(10, 10)
+      const blob = new Blob([buf], { type: 'image/png' })
+      assert.ok(image(blob) instanceof ImageProcessor)
+    })
+
+    it('returns an ImageProcessor instance from File', async () => {
+      const buf  = await createTestPng(10, 10)
+      const file = new File([buf], 'test.png', { type: 'image/png' })
+      assert.ok(image(file) instanceof ImageProcessor)
+    })
+  })
+
+  describe('Blob / File input', () => {
+    it('image(Blob) → toBuffer() returns a Buffer', async () => {
+      const src  = await createTestPng(20, 20)
+      const blob = new Blob([src], { type: 'image/png' })
+      const out  = await image(blob).toBuffer()
+      assert.ok(Buffer.isBuffer(out))
+      assert.ok(out.length > 0)
+    })
+
+    it('image(File) → toBuffer() returns a Buffer', async () => {
+      const src  = await createTestPng(20, 20)
+      const file = new File([src], 'test.png', { type: 'image/png' })
+      const out  = await image(file).toBuffer()
+      assert.ok(Buffer.isBuffer(out))
+      assert.ok(out.length > 0)
+    })
   })
 
   // ─── Metadata ───────────────────────────────────────────────

@@ -1,5 +1,5 @@
 /** Accepted input for the `image()` factory. */
-export type ImageInput = Buffer | string | NodeJS.ReadableStream
+export type ImageInput = Buffer | string | NodeJS.ReadableStream | Blob | File
 
 /** Supported output formats. */
 export type ImageFormat = 'webp' | 'jpeg' | 'png' | 'avif' | 'tiff' | 'gif'

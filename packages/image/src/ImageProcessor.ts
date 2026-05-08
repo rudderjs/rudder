@@ -226,6 +226,9 @@ export class ImageProcessor {
       const { readFile } = await import('node:fs/promises')
       return readFile(this._input)
     }
+    if (this._input instanceof Blob) {
+      return Buffer.from(await this._input.arrayBuffer())
+    }
     // ReadableStream → Buffer
     const chunks: Buffer[] = []
     for await (const chunk of this._input as AsyncIterable<Buffer>) {
