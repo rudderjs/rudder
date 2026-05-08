@@ -87,9 +87,14 @@ async function loadNamespace(locale: string, namespace: string): Promise<Transla
 
 	try {
 		const raw = await readFile(filePath, 'utf-8')
-		const data = JSON.parse(raw) as TranslationMap
-		LocalizationRegistry.setCached(locale, namespace, data)
-		return data
+		try {
+			const data = JSON.parse(raw) as TranslationMap
+			LocalizationRegistry.setCached(locale, namespace, data)
+			return data
+		} catch (err) {
+			console.error(`[RudderJS Localization] Failed to parse ${filePath}:`, err)
+			return {}
+		}
 	} catch {
 		return {}
 	}

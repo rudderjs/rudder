@@ -5,6 +5,7 @@ import type { CacheAdapter, Lock } from '@rudderjs/cache'
 // ─── Scheduled Task ────────────────────────────────────────
 
 export class ScheduledTask {
+  private readonly _id = Math.random().toString(36).slice(2, 10)
   private _cron        = '* * * * *'
   private _description = ''
   private _timezone?:  string
@@ -110,7 +111,7 @@ export class ScheduledTask {
   withoutOverlapping(expiresAt = 1440): this {
     this._withoutOverlapping = true
     this._overlapExpiresAt   = expiresAt
-    this._overlapKey         = `rudderjs:schedule:overlap:${this._description || this._cron}`
+    this._overlapKey         = `rudderjs:schedule:overlap:${this._description || `${this._cron}:${this._id}`}`
     return this
   }
 
