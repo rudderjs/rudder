@@ -1,5 +1,15 @@
 # @rudderjs/image
 
+## 1.1.0
+
+### Minor Changes
+
+- 8e682a6: Accept `Blob` and `File` as `ImageInput`
+
+### Patch Changes
+
+- 2f85823: Add error cause to rethrown import errors
+
 ## 1.0.1
 
 ### Patch Changes

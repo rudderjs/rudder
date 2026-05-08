@@ -1,5 +1,11 @@
 # @rudderjs/boost
 
+## 1.0.1
+
+### Patch Changes
+
+- 3ce8b96: Guard JSON.parse on LLM output and filesystem reads
+
 ## 1.0.0
 
 ### Major Changes

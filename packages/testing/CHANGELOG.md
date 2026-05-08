@@ -1,5 +1,13 @@
 # @rudderjs/testing
 
+## 1.0.2
+
+### Patch Changes
+
+- 2f85823: Add error cause to rethrown import errors
+- Updated dependencies [8e682a6]
+  - @rudderjs/contracts@1.5.0
+
 ## 1.0.1
 
 ### Patch Changes
