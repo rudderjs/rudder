@@ -147,9 +147,9 @@ export class MemoryLock extends BaseLock {
   }
 
   protected async acquire(): Promise<boolean> {
+    if (this._seconds <= 0) return false
     if (this.readEntry()) return false
-    const expiresAt = this._seconds > 0 ? Date.now() + this._seconds * 1_000 : null
-    this.store.set(this.key(), { value: this._owner, expiresAt })
+    this.store.set(this.key(), { value: this._owner, expiresAt: Date.now() + this._seconds * 1_000 })
     return true
   }
 

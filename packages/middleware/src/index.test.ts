@@ -179,16 +179,23 @@ describe('Pipeline', () => {
 // ─── CorsMiddleware ────────────────────────────────────────
 
 describe('CorsMiddleware', () => {
-  it('sets CORS headers from explicit options', async () => {
+  it('reflects a matching origin from the allowlist', async () => {
     const bag = makeRes()
     await new CorsMiddleware({
       origin:  ['https://a.dev', 'https://b.dev'],
       methods: ['GET', 'POST'],
       headers: ['Content-Type'],
-    }).handle(makeReq(), bag.res, async () => {})
-    assert.strictEqual(bag.headers.get('access-control-allow-origin'),  'https://a.dev, https://b.dev')
+    }).handle(makeReq({ headers: { origin: 'https://b.dev' } }), bag.res, async () => {})
+    assert.strictEqual(bag.headers.get('access-control-allow-origin'),  'https://b.dev')
     assert.strictEqual(bag.headers.get('access-control-allow-methods'), 'GET, POST')
     assert.strictEqual(bag.headers.get('access-control-allow-headers'), 'Content-Type')
+  })
+
+  it('falls back to first allowed origin when request origin is not in the list', async () => {
+    const bag = makeRes()
+    await new CorsMiddleware({ origin: ['https://a.dev', 'https://b.dev'] })
+      .handle(makeReq({ headers: { origin: 'https://evil.com' } }), bag.res, async () => {})
+    assert.strictEqual(bag.headers.get('access-control-allow-origin'), 'https://a.dev')
   })
 
   it('uses * for origin when not specified', async () => {

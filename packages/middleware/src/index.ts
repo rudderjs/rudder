@@ -72,11 +72,20 @@ export class CorsMiddleware extends Middleware {
   }
 
   handle(req: AppRequest, res: AppResponse, next: () => Promise<void>): Promise<void> {
-    const origin  = Array.isArray(this.options.origin)
-      ? this.options.origin.join(', ')
-      : (this.options.origin ?? '*')
     const methods = (this.options.methods ?? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']).join(', ')
     const headers = (this.options.headers ?? ['Content-Type', 'Authorization']).join(', ')
+
+    // CORS spec: Access-Control-Allow-Origin must be '*' or a single origin.
+    // For an allowlist, reflect the request's Origin only when it matches.
+    const requestOrigin = req.headers['origin'] as string | undefined
+    let origin: string
+    if (Array.isArray(this.options.origin)) {
+      origin = (requestOrigin && this.options.origin.includes(requestOrigin))
+        ? requestOrigin
+        : this.options.origin[0] ?? '*'
+    } else {
+      origin = this.options.origin ?? '*'
+    }
 
     res.header('Access-Control-Allow-Origin',  origin)
     res.header('Access-Control-Allow-Methods', methods)
