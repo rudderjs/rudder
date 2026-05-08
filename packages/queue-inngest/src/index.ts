@@ -85,7 +85,8 @@ class InngestAdapter implements QueueAdapter {
       payload = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
     } catch (err) {
       throw new Error(
-        `[Inngest] Cannot serialize job "${name}": ${err instanceof Error ? err.message : String(err)}`
+        `[Inngest] Cannot serialize job "${name}": ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
       )
     }
 

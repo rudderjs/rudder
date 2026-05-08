@@ -154,7 +154,8 @@ class BullMQAdapter implements QueueAdapter {
       data = JSON.parse(JSON.stringify(job)) as Record<string, unknown>
     } catch (err) {
       throw new Error(
-        `[BullMQ] Cannot serialize job "${job.constructor.name}": ${err instanceof Error ? err.message : String(err)}`
+        `[BullMQ] Cannot serialize job "${job.constructor.name}": ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
       )
     }
 
