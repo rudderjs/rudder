@@ -71,7 +71,8 @@ function normalizeIp(ip: string): string {
   return ip === '::1' || ip === '::ffff:127.0.0.1' ? '127.0.0.1' : ip
 }
 
-function extractIp(c: Context): string | undefined {
+function extractIp(c: Context, trustProxy: boolean): string | undefined {
+  if (!trustProxy) return undefined
   // x-forwarded-for / x-real-ip (reverse proxy, or injected by rudderjs:ip vite plugin)
   const xff = c.req.header('x-forwarded-for')
   if (xff) return normalizeIp(xff.split(',')[0]!.trim())
@@ -80,7 +81,7 @@ function extractIp(c: Context): string | undefined {
   return undefined
 }
 
-function normalizeRequest(c: Context): AppRequest {
+function normalizeRequest(c: Context, trustProxy = false): AppRequest {
   const url = new URL(c.req.url)
   // Subdomain params captured by the route's `host` template are stashed by
   // registerRoute() before the chain runs. Merge them into `req.params` so
@@ -102,7 +103,7 @@ function normalizeRequest(c: Context): AppRequest {
       Object.entries(c.req.header() ?? {}).map(([k, v]) => [k, String(v)])
     ),
     raw:     c,
-    ip:      extractIp(c),
+    ip:      extractIp(c, trustProxy),
   }
   // Forward per-request augmentations stored on c by middleware (e.g. session, user).
   // Both applyMiddleware and registerRoute call normalizeRequest(c) with the same
@@ -320,6 +321,7 @@ function matchHost(template: string, host: string): { params: Record<string, str
 
 class HonoAdapter implements ServerAdapter {
   private app: Hono
+  private _trustProxy: boolean
   private _errorHandler?: (err: unknown, req: AppRequest) => Response | Promise<Response>
   private _groupMiddleware: Record<'web' | 'api', MiddlewareHandler[]> = { web: [], api: [] }
   /**
@@ -333,8 +335,9 @@ class HonoAdapter implements ServerAdapter {
    */
   readonly controllerViewPaths = new Set<string>()
 
-  constructor(app?: Hono) {
+  constructor(app?: Hono, trustProxy = false) {
     this.app = app ?? new Hono()
+    this._trustProxy = trustProxy
   }
 
   applyGroupMiddleware(group: 'web' | 'api', middleware: MiddlewareHandler): void {
@@ -372,7 +375,7 @@ class HonoAdapter implements ServerAdapter {
         ;(c as unknown as Record<string, unknown>)['__rjs_host_params'] = m.params
       }
 
-      const req = normalizeRequest(c)
+      const req = normalizeRequest(c, this._trustProxy)
       const res = normalizeResponse(c)
 
       // Compose group middleware (e.g. session, auth on the web group) before
@@ -408,7 +411,7 @@ class HonoAdapter implements ServerAdapter {
       // OAuth2 token endpoints; without this branch any spec-compliant OAuth
       // client (curl -d, Postman default, axios URLSearchParams) sends a
       // request whose body never reaches the handler.
-      if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
+      if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
         const ct = c.req.header('content-type') ?? ''
         if (ct.includes('application/json')) {
           try { req.body = await c.req.json() } catch { req.body = {} }
@@ -477,7 +480,7 @@ class HonoAdapter implements ServerAdapter {
 
   applyMiddleware(middleware: MiddlewareHandler): void {
     this.app.use('*', async (c, honoNext) => {
-      const req = normalizeRequest(c)
+      const req = normalizeRequest(c, this._trustProxy)
       const res = normalizeResponse(c)
       await middleware(req, res, honoNext)
       // Hono v4 requires the handler to finalize the context.
@@ -511,7 +514,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
     type: 'hono',
 
     create(): ServerAdapter {
-      return new HonoAdapter()
+      return new HonoAdapter(undefined, config.trustProxy ?? false)
     },
 
     createApp(): Hono {
@@ -521,6 +524,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
     async createFetchHandler(setup?: (adapter: ServerAdapter) => void): Promise<FetchHandler> {
       // Dynamic import keeps @vikejs/hono out of the vite.config.ts load path
       const vike = (await import('@vikejs/hono')).default
+      const trustProxy = config.trustProxy ?? false
 
       const app = new Hono()
 
@@ -538,7 +542,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
 
       const isProd = process.env['APP_ENV'] === 'production' || process.env['NODE_ENV'] === 'production'
 
-      const adapter = new HonoAdapter(app)
+      const adapter = new HonoAdapter(app, trustProxy)
       setup?.(adapter)
 
       // Install error handler — setup() may have registered one via adapter.setErrorHandler().
@@ -548,7 +552,7 @@ export function hono(config: HonoConfig = {}): ServerAdapterProvider {
       if (userHandler) {
         app.onError(async (err, c) => {
           try {
-            return await userHandler(err, normalizeRequest(c))
+            return await userHandler(err, normalizeRequest(c, trustProxy))
           } catch (e2) {
             const thrown = e2 instanceof Error ? e2 : new Error(String(e2))
             if (!isProd) {

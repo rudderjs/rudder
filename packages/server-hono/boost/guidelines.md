@@ -62,7 +62,7 @@ const ip = req.ip                // set by server-hono's extractIp()
 
 `req.ip` is the canonical accessor — populated by `extractIp(c)` in `normalizeRequest()`. Custom rate-limit `.by()` callbacks should read `req.ip`, not raw headers.
 
-Trust-proxy mode (`trustProxy: true`) reads `X-Forwarded-For` + `X-Real-IP`. Without it, the direct socket address is used. Dev-mode `x-real-ip` injection from `@rudderjs/vite`'s `rudderjs:ip` plugin populates the header from `req.socket.remoteAddress` before universal-middleware converts to Web Request.
+Trust-proxy mode (`trustProxy: true`) reads `X-Forwarded-For` + `X-Real-IP`; without it `req.ip` is `undefined`. Dev-mode `x-real-ip` injection from `@rudderjs/vite`'s `rudderjs:ip` plugin populates the header from `req.socket.remoteAddress` before universal-middleware converts to Web Request.
 
 ### Controller views (@rudderjs/view integration)
 
@@ -74,7 +74,7 @@ When a route returns a `ViewResponse` (from `view('id', props)`), server-hono du
 - **`trustProxy: true` without a trusted proxy chain.** Without a trusted proxy setting `X-Forwarded-For`, clients can spoof their IP by sending the header. Only set `trustProxy` when you're actually behind a proxy that strips client-supplied values.
 - **Assuming Node APIs.** The fetch handler is WinterCG — it must work on Cloudflare Workers (no Node `http.Server`, no `fs` at top level). Lazy-load node built-ins inside functions if needed.
 - **Installing a CORS middleware globally AND via server config.** The adapter's built-in CORS runs first. Additional `cors()` middleware via `m.use()` will run twice — usually benign but can double-set headers.
-- **Request body on streaming endpoints.** `req.body` is parsed on first access. For streaming uploads, access `req.raw.body` (the underlying `ReadableStream`) instead — the parsed body caches the full contents.
+- **Request body on streaming endpoints.** `req.body` is parsed eagerly before the handler runs (JSON + form-urlencoded). For streaming uploads, access `req.raw.body` (the underlying `ReadableStream`) instead — parsing consumes the stream.
 - **Custom `.listen()` ports.** `app.fetch` is the WinterCG handler; it doesn't auto-listen. `+server.ts` exports `{ fetch: app.fetch }` for Vike. For Node without Vike, use `serve({ fetch: app.fetch, port })` from `@hono/node-server`.
 
 ## Key Imports
