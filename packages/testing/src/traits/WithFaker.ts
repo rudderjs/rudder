@@ -19,9 +19,10 @@ export class WithFaker {
       const { faker } = await import('@faker-js/faker')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(testCase as any).faker = faker
-    } catch {
+    } catch (err) {
       throw new Error(
         '[RudderJS Testing] WithFaker requires @faker-js/faker. Install it: pnpm add -D @faker-js/faker',
+        { cause: err },
       )
     }
   }
