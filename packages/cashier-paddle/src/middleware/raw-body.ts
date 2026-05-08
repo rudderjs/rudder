@@ -31,7 +31,8 @@ export function captureRawBody(): MiddlewareHandler {
       raw.__rjs_paddle_raw_body = bodyText
       try {
         raw.__rjs_paddle_payload = bodyText ? JSON.parse(bodyText) as Record<string, unknown> : {}
-      } catch {
+      } catch (err) {
+        console.error('[RudderJS Cashier] Failed to parse webhook body as JSON:', err)
         raw.__rjs_paddle_payload = {}
       }
     }

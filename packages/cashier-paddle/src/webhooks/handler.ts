@@ -91,7 +91,7 @@ export async function handlePaddleWebhook(req: Req, res: Res): Promise<void> {
   } catch (err) {
     // Surface 500 → Paddle retries; the failure is logged by the framework's
     // exception handler since we re-throw after writing the response.
-    res.status(500).json({ ok: false, error: (err as Error).message })
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) })
   }
 }
 

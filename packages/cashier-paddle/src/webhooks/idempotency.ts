@@ -25,9 +25,13 @@ export async function markProcessed(eventId: string, eventType: string): Promise
       processedAt: new Date(),
     } as Record<string, unknown>)
     return true
-  } catch {
+  } catch (err) {
     // Race: another worker inserted the same event_id between our check and
-    // our create. Treat as "already processed".
-    return false
+    // our create. Distinguish by re-reading — if the row now exists, it's a
+    // genuine duplicate; otherwise re-throw so the handler returns 500 and
+    // Paddle retries instead of silently discarding the event.
+    const dup = await WebhookLog.where('eventId', eventId).first() as { id: string } | null
+    if (dup) return false
+    throw err
   }
 }
