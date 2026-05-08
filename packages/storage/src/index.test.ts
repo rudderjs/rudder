@@ -758,11 +758,16 @@ describe('S3Adapter (with mocked SDK client)', () => {
     assert.strictEqual(out.toString('utf8'), 's3-content')
   })
 
-  it('copy sends CopyObjectCommand with CopySource: bucket/<encoded-key>', async () => {
+  it('copy sends CopyObjectCommand with CopySource preserving path separators', async () => {
     await s3.copy('a/b.txt', 'c/d.txt')
     assert.strictEqual(recorded[0]?.command, 'CopyObject')
-    assert.strictEqual(recorded[0]?.input['CopySource'], 'b/a%2Fb.txt')
+    assert.strictEqual(recorded[0]?.input['CopySource'], 'b/a/b.txt')
     assert.strictEqual(recorded[0]?.input['Key'], 'c/d.txt')
+  })
+
+  it('copy encodes special characters in CopySource path segments', async () => {
+    await s3.copy('folder/file with spaces.txt', 'dst.txt')
+    assert.strictEqual(recorded[0]?.input['CopySource'], 'b/folder/file%20with%20spaces.txt')
   })
 
   it('temporaryUrl rejects when expiresAt is in the past', async () => {
