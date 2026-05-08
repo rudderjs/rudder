@@ -177,7 +177,7 @@ export class S3Adapter extends BaseAdapter {
     const client = await this.getClient()
     await client.send(new (this.cmds().CopyObjectCommand)({
       Bucket: this.bucket, Key: to,
-      CopySource: `${this.bucket}/${encodeURIComponent(from)}`,
+      CopySource: `${this.bucket}/${from.split('/').map(encodeURIComponent).join('/')}`,
     }))
   }
 

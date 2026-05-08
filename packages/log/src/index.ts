@@ -157,7 +157,9 @@ export class DailyAdapter implements LogAdapter {
     if (date !== this.lastDate) {
       this.lastDate = date
       this.currentAdapter = new FileAdapter(this.buildPath(date), this.formatter)
-      this.cleanup().catch(() => {})  // fire-and-forget
+      this.cleanup().catch((err: unknown) => {
+        console.error('[RudderJS Log] DailyAdapter cleanup error:', err)
+      })
     }
     await this.currentAdapter!.log(entry)
   }

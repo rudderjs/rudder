@@ -107,7 +107,12 @@ function nextId(state: WsState): string {
 }
 
 function send(ws: WsSocket, data: unknown): void {
-  if (ws.readyState === WsSocket.OPEN) ws.send(JSON.stringify(data))
+  if (ws.readyState !== WsSocket.OPEN) return
+  try {
+    ws.send(JSON.stringify(data))
+  } catch {
+    // serialization or write error — connection may be closing
+  }
 }
 
 function broadcastTo(state: WsState, channel: string, data: unknown, excludeId?: string): void {
@@ -192,7 +197,10 @@ async function onMessage(
           ...(token !== undefined ? { token } : {}),
         }
         const authStart = Date.now()
-        const result = await authFn(authReq, channel).catch(() => false as const)
+        const result = await authFn(authReq, channel).catch((err: unknown) => {
+          console.error('[RudderJS Broadcast] Auth callback error:', err)
+          return false as const
+        })
         const authMs  = Date.now() - authStart
         if (!result) {
           send(ws, { type: 'error', channel, message: 'Unauthorized' })
