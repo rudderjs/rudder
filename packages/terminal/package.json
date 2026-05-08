@@ -1,6 +1,6 @@
 {
   "name": "@rudderjs/terminal",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -8,7 +8,10 @@
     "directory": "packages/terminal"
   },
   "type": "module",
-  "files": ["dist", "boost"],
+  "files": [
+    "dist",
+    "boost"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
