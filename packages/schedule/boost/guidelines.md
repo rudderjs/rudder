@@ -16,6 +16,8 @@ export default [ScheduleProvider]
 
 ### Registering tasks
 
+`schedule.call(callback)` is the only entry point — the scheduler does not have a `.command()` method. To run a rudder command on a schedule, invoke its handler from the callback (or shell out via `@rudderjs/process`).
+
 ```ts
 // routes/console.ts
 import { schedule } from '@rudderjs/schedule'
@@ -24,11 +26,13 @@ schedule.call(async () => {
   await syncData()
 }).everyFiveMinutes().description('Sync external data')
 
-schedule.command('cache:prune').daily().at('02:00').description('Nightly cache prune')
+schedule.call(async () => {
+  await pruneCache()
+}).dailyAt('2:00').description('Nightly cache prune')
 
 schedule.call(async () => {
   await sendDigest()
-}).weekdays().dailyAt('9:00').timezone('America/New_York')
+}).dailyAt('9:00').timezone('America/New_York')
 ```
 
 ### Frequency helpers
@@ -44,24 +48,44 @@ schedule.call(async () => {
 | `.weekdays()` / `.weekends()` | day filter |
 | `.cron('*/3 * * * *')` | raw cron expression |
 
-### Filters & guards
+### Overlap & one-server protection
 
 ```ts
-schedule.call(cleanup).daily().when(() => config.cleanupEnabled)
-schedule.call(sync).hourly().skip(() => isHoliday())
-schedule.call(heavy).daily().withoutOverlapping()    // skip if previous run still running
-schedule.call(t).hourly().runInBackground()          // don't await
+// Skip the run if the previous one is still in progress (uses @rudderjs/cache lock)
+schedule.call(heavy).daily().withoutOverlapping()
+schedule.call(heavy).daily().withoutOverlapping(120)   // lock TTL in minutes (default 1440 = 24h)
+
+// Run on a single host even when multiple workers are scheduled (cache lock)
+schedule.call(weeklyReport).weekly().onOneServer()
+
+// Run even when the app is in maintenance mode
+schedule.call(criticalTask).hourly().evenInMaintenanceMode()
+```
+
+There is no `when()` / `skip()` / `runInBackground()` — branch inside the `.call(callback)` to skip a run, and use `@rudderjs/queue` for fire-and-forget work instead.
+
+### Lifecycle hooks
+
+```ts
+schedule.call(syncOrders).hourly()
+  .before(() => log.info('starting'))
+  .after(() => log.info('done'))
+  .onSuccess(() => metrics.increment('sync.success'))
+  .onFailure((err) => report(err))
 ```
 
 ### CLI
 
 ```bash
 pnpm rudder schedule:list     # list all scheduled tasks with next-fire time
-pnpm rudder schedule:run      # fire all tasks due this minute; intended for cron
-pnpm rudder schedule:test     # dry-run — print what would fire at given time
+pnpm rudder schedule:run      # fire all tasks due this minute; intended for system cron
+pnpm rudder schedule:work     # in-process worker — runs all tasks on their own crons until Ctrl+C
 ```
 
-**Production cron setup**: one system cron entry running `pnpm rudder schedule:run` every minute. The scheduler picks matching tasks.
+**Production setup — pick one:**
+
+- **External cron** — one system cron entry running `pnpm rudder schedule:run` every minute. The scheduler picks matching tasks.
+- **In-process worker** — long-running `pnpm rudder schedule:work` process. Self-contained; useful inside a single container where adding host cron is awkward.
 
 ### Timezones
 
@@ -83,7 +107,6 @@ Defaults to the server's local timezone. Use named timezones (IANA format) for d
 ## Key Imports
 
 ```ts
-import { ScheduleProvider, schedule } from '@rudderjs/schedule'
-
-import type { ScheduledTask, Frequency } from '@rudderjs/schedule'
+import { ScheduleProvider, schedule, Schedule, ScheduledTask } from '@rudderjs/schedule'
+// `schedule` and `Schedule` are the same singleton — both are exported for taste.
 ```

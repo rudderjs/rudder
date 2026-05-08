@@ -39,9 +39,11 @@ Route.get('/auth/github', () => {
 Route.get('/auth/github/callback', async (req) => {
   const socialUser = await Socialite.driver('github').user(req)
 
-  // socialUser exposes: getId(), getName(), getEmail(), getAvatar(), getToken()
-  const id    = socialUser.getId()
-  const email = socialUser.getEmail()
+  // socialUser methods: getId(), getName(), getEmail(), getAvatar(), getNickname(), getRaw()
+  // socialUser getters: .token, .refreshToken, .expiresIn
+  const id          = socialUser.getId()
+  const email       = socialUser.getEmail()
+  const accessToken = socialUser.token
 
   // Find or create a local user
   let user = await User.where('email', email).first()
@@ -58,31 +60,42 @@ Route.get('/auth/github/callback', async (req) => {
 ### Scopes + state
 
 ```ts
-Socialite.driver('github')
-  .scopes(['user:email', 'read:org'])
-  .with({ allow_signup: 'false' })        // extra query params
-  .redirect()
+// Replace defaults
+Socialite.driver('github').setScopes(['user:email', 'read:org']).redirect()
+
+// Or extend defaults — withScopes() merges, deduped
+Socialite.driver('github').withScopes(['read:org']).redirect()
+
+// Skip CSRF state (mobile / machine-to-machine flows that can't reach the session)
+Socialite.driver('github').stateless().redirect()
 ```
 
-State (CSRF) is handled automatically — stored in the session and verified on callback.
+State (CSRF) is handled automatically — stored in the session and verified on callback. To inject extra provider-specific query parameters (`prompt=consent`, Apple's `response_mode=form_post`, etc.), override `extraAuthParams()` on a custom driver subclass — there is no fluent `.with({...})` method.
 
 ### Custom providers
 
+`SocialiteDriver` declares `authUrl`, `tokenUrl`, `userUrl`, `defaultScopes`, and `mapToUser` as abstract **methods** (not properties). Override each:
+
 ```ts
-import { Socialite, SocialiteDriver } from '@rudderjs/socialite'
+import { Socialite, SocialiteDriver, SocialUser } from '@rudderjs/socialite'
 
 class DiscordDriver extends SocialiteDriver {
-  protected authUrl  = 'https://discord.com/api/oauth2/authorize'
-  protected tokenUrl = 'https://discord.com/api/oauth2/token'
-  protected userUrl  = 'https://discord.com/api/users/@me'
+  protected defaultScopes() { return ['identify', 'email'] }
+  protected authUrl()  { return 'https://discord.com/api/oauth2/authorize' }
+  protected tokenUrl() { return 'https://discord.com/api/oauth2/token' }
+  protected userUrl()  { return 'https://discord.com/api/users/@me' }
 
-  protected mapUser(raw: any) {
-    return {
-      id:     raw.id,
-      name:   raw.username,
-      email:  raw.email,
-      avatar: `https://cdn.discordapp.com/avatars/${raw.id}/${raw.avatar}.png`,
-    }
+  protected mapToUser(raw: Record<string, unknown>, token: string, refreshToken: string | null): SocialUser {
+    return new SocialUser({
+      id:       String(raw['id']),
+      name:     (raw['username'] as string) ?? null,
+      email:    (raw['email']    as string) ?? null,
+      avatar:   raw['avatar'] ? `https://cdn.discordapp.com/avatars/${raw['id']}/${raw['avatar']}.png` : null,
+      nickname: null,
+      token,
+      refreshToken,
+      raw,
+    })
   }
 }
 
@@ -92,12 +105,18 @@ Socialite.extend('discord', (cfg) => new DiscordDriver(cfg))
 ### SocialUser interface
 
 ```ts
-socialUser.getId()       // provider's user id
-socialUser.getName()
-socialUser.getEmail()
-socialUser.getAvatar()
-socialUser.getToken()    // access token
-socialUser.getRaw()      // full raw provider response
+// Methods
+socialUser.getId()         // provider's user id (always string)
+socialUser.getName()       // string | null
+socialUser.getEmail()      // string | null
+socialUser.getAvatar()     // string | null
+socialUser.getNickname()   // string | null
+socialUser.getRaw()        // Record<string, unknown> — full raw provider response
+
+// Getters (not methods)
+socialUser.token           // access token
+socialUser.refreshToken    // string | null
+socialUser.expiresIn       // number | null
 ```
 
 ## Common Pitfalls

@@ -34,21 +34,24 @@ config('cache.ttl', 60)      // with typed fallback
 
 ### `Collection` — typed array wrapper
 
-Lodash-lite. Useful where a chainable, typed, immutable collection reads better than successive array methods:
+Lodash-lite. Useful where a chainable, typed, immutable collection reads better than successive array methods.
 
 ```ts
 import { Collection } from '@rudderjs/core'
 
 const c = new Collection([{ id: 1, active: true }, { id: 2, active: false }])
 
-c.where('active', true)             // Collection of active items
+c.filter(x => x.active)              // Collection<T> of active items
+c.reject(x => x.active)              // inverse of filter
 c.pluck('id')                        // Collection<number>
-c.groupBy('category')                // Record<string, Collection<T>>
-c.sortBy('createdAt').first()
-c.chunk(100).forEach(batch => ...)
+c.groupBy('category')                // Record<string, T[]>  ← plain arrays, NOT Collection
+c.keyBy('id')                        // Record<string, T>    ← single item per key
+c.partition(x => x.active)           // [Collection<T>, Collection<T>]
+c.first(x => x.active)               // first match or undefined
+c.chunk(100).each(batch => { /* ... */ })
 ```
 
-Every operation returns a new `Collection`; originals aren't mutated.
+Every chainable operation returns a new `Collection`; originals aren't mutated. There is no `.where()` or `.sortBy()` — use `.filter(x => x.key === value)` and standard `Array.prototype.sort()` on `.all()`.
 
 ### `dump(...)` / `dd(...)`
 
@@ -102,7 +105,7 @@ repo.set('runtime.featureFlag', true)     // mutates — use sparingly
 - **`Env.get('X')` without a fallback in a required code path.** Throws at first call. If the var is truly required, let it throw at boot; if it's optional, pass a fallback.
 - **`dd()` in production.** Calls `process.exit(1)` — crashes the server. Grep for `dd(` before deploying and remove or swap to `dump(`.
 - **`config('app.name')` before providers booted.** The config repo is populated at boot; calls before that return `undefined` or the fallback. Not usually an issue in handlers (which always run post-boot) but can bite in top-level module code.
-- **`Collection` and mutation.** Collections are immutable. `c.sortBy('x')` returns a new collection — `c` is unchanged. Chaining intends the fluent return, not in-place mutation.
+- **`Collection` and mutation.** Chainable operations are immutable — `c.filter(...)` / `c.map(...)` / `c.pluck(...)` return new collections, `c` is unchanged. The terminal methods `each()` and `tap()` return `this` for fluent chaining but still don't mutate the underlying items.
 - **`resolveOptionalPeer()` and ESM-only packages.** The fallback that walks `node_modules` handles most cases, but if the package's `exports` doesn't include a `default` or `import` condition, it still fails. Add `"default": "./dist/index.js"` to the peer's exports if you hit this in your own code.
 
 ## Key Imports
