@@ -1,5 +1,5 @@
 import {
-  eq, ne, gt, gte, lt, lte, like, inArray, notInArray,
+  eq, ne, gt, gte, lt, lte, like, notLike, inArray, notInArray,
   isNull, isNotNull,
   and, or, asc, desc, count as sqlCount, sql,
   exists, notExists,
@@ -198,8 +198,9 @@ class DrizzleQueryBuilder<T> implements QueryBuilder<T> {
       case '>=':     return gte(col, clause.value) as SQL
       case '<':      return lt(col, clause.value) as SQL
       case '<=':     return lte(col, clause.value) as SQL
-      case 'LIKE':   return like(col, clause.value as string) as SQL
-      case 'IN':     return inArray(col, clause.value as unknown[]) as SQL
+      case 'LIKE':     return like(col, clause.value as string) as SQL
+      case 'NOT LIKE': return notLike(col, clause.value as string) as SQL
+      case 'IN':       return inArray(col, clause.value as unknown[]) as SQL
       case 'NOT IN': return notInArray(col, clause.value as unknown[]) as SQL
       default: {
         const _exhaustive: never = clause.operator

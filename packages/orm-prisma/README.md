@@ -192,7 +192,7 @@ const page = await User.query()
 | Method | Description |
 |---|---|
 | `.where(col, value)` | AND `col = value` |
-| `.where(col, op, value)` | AND `col op value` — operators: `=` `!=` `>` `>=` `<` `<=` `LIKE` `IN` `NOT IN` |
+| `.where(col, op, value)` | AND `col op value` — operators: `=` `!=` `>` `>=` `<` `<=` `LIKE` `NOT LIKE` `IN` `NOT IN` |
 | `.orWhere(col, value)` | OR `col = value` |
 | `.orWhere(col, op, value)` | OR `col op value` — same operators as `where` |
 | `.orderBy(col, dir?)` | `ORDER BY col ASC\|DESC` |
@@ -206,7 +206,7 @@ const page = await User.query()
 | `.count()` | Returns `number` of matching rows |
 | `.paginate(page, perPage?)` | Returns `PaginatedResult<T>` |
 
-> **`LIKE` with Prisma**: pass SQL-style wildcards (`%value%`). The adapter strips them and maps to Prisma's `contains`, `startsWith`, or `endsWith` filter automatically.
+> **`LIKE` / `NOT LIKE` with Prisma**: pass SQL-style wildcards (`%value%`). The adapter strips them and maps to Prisma's `contains`, `startsWith`, or `endsWith` filter automatically. `NOT LIKE` wraps each filter in `{ not: ... }`.
 
 > **`orWhere` semantics**: multiple `orWhere` calls are combined as Prisma `OR: [...]`. `where` calls are combined as top-level AND conditions. The two compose naturally: `WHERE (and1 AND and2 AND ...) AND (OR: [or1, or2, ...])`.
 

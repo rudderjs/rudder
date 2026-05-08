@@ -174,7 +174,7 @@ All methods mirror the `@rudderjs/orm` `QueryBuilder<T>` contract:
 | Method | Description |
 |--------|-------------|
 | `where(col, value)` | Equality filter (AND) |
-| `where(col, op, value)` | Filter with operator (`=`, `!=`, `>`, `>=`, `<`, `<=`, `LIKE`, `IN`, `NOT IN`) |
+| `where(col, op, value)` | Filter with operator (`=`, `!=`, `>`, `>=`, `<`, `<=`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN`) |
 | `orWhere(col, value)` | Equality filter joined with `OR` |
 | `orWhere(col, op, value)` | Operator filter joined with `OR` |
 | `orderBy(col, dir?)` | Sort by column (`ASC` / `DESC`) |

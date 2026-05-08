@@ -1,6 +1,6 @@
 // ─── ORM Types ─────────────────────────────────────────────
 
-export type WhereOperator = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE' | 'IN' | 'NOT IN'
+export type WhereOperator = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE' | 'NOT LIKE' | 'IN' | 'NOT IN'
 
 export interface WhereClause {
   column:   string

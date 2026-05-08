@@ -293,6 +293,20 @@ class PrismaQueryBuilder<T> implements QueryBuilder<T> {
         }
         return { [clause.column]: { equals: raw } }
       }
+      case 'NOT LIKE': {
+        const raw = String(clause.value)
+        const hasLeading  = raw.startsWith('%')
+        const hasTrailing = raw.endsWith('%')
+        const inner = raw.replace(/^%|%$/g, '')
+        if (hasLeading && hasTrailing) {
+          return { [clause.column]: { not: { contains: inner } } }
+        } else if (hasTrailing) {
+          return { [clause.column]: { not: { startsWith: inner } } }
+        } else if (hasLeading) {
+          return { [clause.column]: { not: { endsWith: inner } } }
+        }
+        return { [clause.column]: { not: { equals: raw } } }
+      }
       case 'IN':     return { [clause.column]: { in: clause.value } }
       case 'NOT IN': return { [clause.column]: { notIn: clause.value } }
       default:       return { [clause.column]: clause.value }
