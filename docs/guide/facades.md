@@ -44,17 +44,17 @@ These facades wrap their package's manager. They are typed so your editor autoco
 | `Queue` | `@rudderjs/queue` | The queue dispatcher |
 | `Schedule` | `@rudderjs/schedule` | The cron scheduler |
 | `view(id, props)` | `@rudderjs/view` | Returns a view response — call from a route handler |
-| `trans(key, params?)` | `@rudderjs/localization` | Translate a key in the current locale |
-| `locale()` | `@rudderjs/localization` | The current request's locale |
+| `trans(key, params?)` | `@rudderjs/localization` | Translate a key in the current locale (async — lazy-loads the namespace) |
+| `getLocale()` | `@rudderjs/localization` | The current request's locale |
 
 ```ts
 import { Cache } from '@rudderjs/cache'
 import { Log } from '@rudderjs/log'
 import { Session } from '@rudderjs/session'
 
-await Cache.put('user:42', user, 600)
+await Cache.set('user:42', user, 600)
 Log.info('user.created', { userId: user.id })
-await Session.put('flash.success', 'Saved!')
+Session.put('flash.success', 'Saved!')   // Session writes are sync
 ```
 
 ## Request-scoped facades
@@ -99,16 +99,17 @@ The two styles compose freely — many RudderJS apps use both, choosing per-call
 
 ## Testing with facades
 
-Most facades expose a `fake()` helper that swaps the underlying singleton with an in-memory test double for the duration of the test:
+Most facades expose a `fake()` helper that swaps the underlying singleton with an in-memory test double. The fake **returns the test double** — assertion helpers live on the returned instance, not on the facade itself:
 
 ```ts
 import { Cache } from '@rudderjs/cache'
 
 test('caches the user', async () => {
-  Cache.fake()
+  const fake = Cache.fake()
   await UserService.warmCache(user)
-  Cache.assertPut('user:42', user)
+  fake.assertSet('user:42')
+  fake.restore()
 })
 ```
 
-`fake()` doubles ship with `@rudderjs/cache`, `@rudderjs/queue`, `@rudderjs/mail`, `@rudderjs/notification`, `@rudderjs/storage`, and `@rudderjs/events`. Each test double exposes assertion helpers (`assertPut`, `assertDispatched`, `assertSent`) that match the underlying API.
+`fake()` doubles ship with `@rudderjs/cache` (`Cache.fake()`), `@rudderjs/queue` (`Queue.fake()`), `@rudderjs/mail` (`Mail.fake()`), `@rudderjs/storage` (`Storage.fake()`), `@rudderjs/notification` (`NotificationFake.fake()` — note: not on the `Notification` class), and event dispatches via `EventFake` from `@rudderjs/core`. Each test double exposes its own assertion helpers — see the package's docs for the exact names (e.g. `assertSet`/`assertSentTo`/`assertDispatched`).

@@ -100,7 +100,7 @@ import { dispatcher } from '@rudderjs/core'
 
 dispatcher.register('UserRegistered', new SendWelcomeEmail())
 dispatcher.hasListeners('UserRegistered')   // boolean
-dispatcher.listenerCount('UserRegistered')  // number
+dispatcher.count('UserRegistered')          // number
 ```
 
 Most apps stick with `eventsProvider({...})` — it's declarative and the listener map is one place to read.

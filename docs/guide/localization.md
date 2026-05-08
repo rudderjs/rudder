@@ -86,21 +86,34 @@ await trans('messages.shoes', 12)  // '12 shoes'
 
 ## Per-request locale
 
-The locale is per-request. Set it from middleware, a route handler, or a sign-in flow:
+Per-request locale switching is AsyncLocalStorage-based, but the API is `runWithLocale(locale, fn)` (the scoped form), not `setLocale()` (which mutates the global default).
+
+The simplest path is to mount `LocalizationMiddleware()` — it reads `Accept-Language` and wraps the rest of the request in `runWithLocale()` automatically:
 
 ```ts
-import { setLocale, locale } from '@rudderjs/localization'
+import { LocalizationMiddleware } from '@rudderjs/localization'
 
-const detectLocale: MiddlewareHandler = async (req, _res, next) => {
-  const lang = req.headers['accept-language']?.split(',')[0] ?? 'en'
-  setLocale(lang)            // request-scoped via ALS
-  await next()
-}
-
-console.log(locale())        // current locale
+.withMiddleware((m) => {
+  m.use(LocalizationMiddleware())
+})
 ```
 
-Calling `setLocale('es')` inside a request changes the locale for the rest of that request only — concurrent requests are unaffected. See [Request Lifecycle](/guide/lifecycle) for the AsyncLocalStorage model.
+To switch locales mid-request (e.g. inside a sign-in flow that learns the user's preferred locale from the database), call `runWithLocale()`:
+
+```ts
+import { runWithLocale, getLocale } from '@rudderjs/localization'
+
+Route.post('/login', async (req) => {
+  const user = await authenticate(req)
+  return runWithLocale(user.preferredLocale, async () => {
+    return view('dashboard.welcome', {
+      currentLocale: getLocale(),  // user's locale, scoped to this callback
+    })
+  })
+})
+```
+
+`setLocale('es')` exists too, but it mutates the global default — useful in CLI commands or test setup, dangerous in concurrent request handling.
 
 ## Multiple namespaces
 
@@ -130,5 +143,5 @@ The validator passes `:field` automatically. See [Validation](/guide/validation)
 ## Pitfalls
 
 - **`__()` in `+data.ts`.** Sync lookup miss returns the key, not the translation. Use `trans()` (async) so the namespace can load on first access.
-- **Locale leaking across requests.** Don't store the locale on a singleton service. `setLocale()` writes to AsyncLocalStorage — that's the only safe path.
+- **Locale leaking across requests.** Don't call `setLocale()` per-request — it mutates the global default, not request-scoped state. Use `LocalizationMiddleware()` (auto) or `runWithLocale()` (manual) for per-request scoping.
 - **Plural matching order.** Specific ranges (`{2,4}`) must come before `{n}` — the matcher takes the first matching segment.

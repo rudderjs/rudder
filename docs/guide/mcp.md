@@ -67,7 +67,7 @@ Two transports: **HTTP/SSE (web)** for remote agents, **stdio (local)** for loca
 import { Mcp } from '@rudderjs/mcp'
 import { WeatherServer } from '../app/Mcp/WeatherServer.js'
 
-Mcp.web(WeatherServer, '/mcp/weather')
+Mcp.web('/mcp/weather', WeatherServer)
 ```
 
 Visit `http://localhost:3000/mcp/weather` to see the SSE endpoint. To gate access, add `.oauth2(...)` (see Authentication below).
@@ -79,7 +79,7 @@ Visit `http://localhost:3000/mcp/weather` to see the SSE endpoint. To gate acces
 import { Mcp } from '@rudderjs/mcp'
 import { WeatherServer } from '../app/Mcp/WeatherServer.js'
 
-Mcp.local(WeatherServer, 'mcp:weather')
+Mcp.local('mcp:weather', WeatherServer)
 ```
 
 Then run `pnpm rudder mcp:weather` — Claude Desktop or any stdio MCP client can spawn this process and talk to your server.
@@ -164,7 +164,7 @@ Resources can use URI templates: `weather://{city}` accepts `weather://paris` an
 Gate HTTP/SSE servers with OAuth 2 + scopes (via `@rudderjs/passport`):
 
 ```ts
-Mcp.web(WeatherServer, '/mcp/weather').oauth2({
+Mcp.web('/mcp/weather', WeatherServer).oauth2({
   scopes:           ['weather:read'],
   scopesSupported: ['weather:read', 'weather:write'],
 })

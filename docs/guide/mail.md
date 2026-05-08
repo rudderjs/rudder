@@ -29,14 +29,12 @@ export default {
   mailers: {
     log: { driver: 'log' },
     smtp: {
-      driver:   'smtp',
-      host:     Env.get('MAIL_HOST', 'smtp.example.com'),
-      port:     Env.getNumber('MAIL_PORT', 587),
-      secure:   Env.getBool('MAIL_SECURE', false),
-      auth: {
-        user: Env.get('MAIL_USERNAME', ''),
-        pass: Env.get('MAIL_PASSWORD', ''),
-      },
+      driver:     'smtp',
+      host:       Env.get('MAIL_HOST', 'smtp.example.com'),
+      port:       Env.getNumber('MAIL_PORT', 587),
+      username:   Env.get('MAIL_USERNAME', ''),
+      password:   Env.get('MAIL_PASSWORD', ''),
+      encryption: Env.get('MAIL_ENCRYPTION', 'tls'),  // 'tls' | 'ssl' | 'none'
     },
   },
 } satisfies MailConfig
@@ -141,36 +139,52 @@ Sends mail via Nodemailer. Works with any SMTP server — Postmark, SendGrid, AW
 
 ```ts
 {
-  driver: 'smtp',
-  host:   'smtp.example.com',
-  port:   587,
-  secure: false,
-  auth:   { user: '...', pass: '...' },
+  driver:     'smtp',
+  host:       'smtp.example.com',
+  port:       587,
+  username:   '...',
+  password:   '...',
+  encryption: 'tls',   // 'tls' | 'ssl' | 'none'
 }
 ```
 
-For services with a Nodemailer transport (Postmark, SendGrid, Mailgun), pass their transport directly via the `transport` option — see the package source for the full shape.
+For services with their own Nodemailer transport (Postmark, SendGrid, Mailgun), implement a custom adapter — see the next section.
 
 ## Custom drivers
 
-Implement `MailAdapter` for proprietary providers (Resend, Loops, in-house). Register with `MailRegistry.set('my-driver', adapter)`.
+Implement `MailAdapter` for proprietary providers (Resend, Loops, in-house) and register the adapter through the registry. `MailRegistry.set(adapter)` takes a single adapter — there is no name argument; the registry holds one active adapter at a time.
+
+```ts
+import { MailRegistry, type MailAdapter } from '@rudderjs/mail'
+
+class ResendAdapter implements MailAdapter { /* ... */ }
+
+MailRegistry.set(new ResendAdapter())
+```
+
+For multi-mailer apps, route at the call site (branching on env / feature flag) rather than expecting the registry to multiplex.
 
 ## Testing
+
+`Mail.fake()` returns a `FakeMailAdapter` instance — assertions live on the returned fake, not on `Mail`:
 
 ```ts
 import { Mail } from '@rudderjs/mail'
 import { WelcomeEmail } from '../app/Mail/WelcomeEmail.js'
 
-Mail.fake()
+const fake = Mail.fake()
 await UserService.signup({ email: 'a@b.com' })
 
-Mail.assertSent(WelcomeEmail)
-Mail.assertSent(WelcomeEmail, (m) => m.to.includes('a@b.com'))
-Mail.assertSentCount(1)
-Mail.assertNothingSent()
+fake.assertSent(WelcomeEmail)
+// Predicate receives { mailable, options } — recipient lives on options.to
+fake.assertSent(WelcomeEmail, (entry) => entry.options.to.includes('a@b.com'))
+fake.assertSentCount(1)
+fake.assertNotSent(PasswordResetEmail)
+fake.assertNothingSent()
+fake.restore()   // clear the fake adapter and reset the registry
 ```
 
-`Mail.fake()` captures every send into memory and exposes assertion helpers — no real delivery, no queue side effects.
+The fake captures every send into memory — no real delivery, no queue side effects. Call `fake.restore()` in `afterEach` so subsequent tests start with a fresh registry.
 
 ## Pitfalls
 

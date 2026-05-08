@@ -55,10 +55,10 @@ export default {
 
 | Method | Description |
 |---|---|
-| `Env.get(key, fallback?)` | String value or fallback |
-| `Env.getNumber(key, fallback?)` | Parsed integer |
-| `Env.getBool(key, fallback?)` | Parses `'true'` / `'false'` strings |
-| `Env.require(key)` | Throws if the key is missing |
+| `Env.get(key, fallback?)` | String value or fallback. Throws if the key is missing AND no fallback was supplied. |
+| `Env.getNumber(key, fallback?)` | Parsed integer; throws on `NaN`. |
+| `Env.getBool(key, fallback?)` | Parses `'true'` / `'false'` / `'1'` / `'0'`. |
+| `Env.has(key)` | Existence check; doesn't read the value. |
 
 For critical values, validate at startup with `defineEnv`:
 

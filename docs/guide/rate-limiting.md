@@ -19,18 +19,20 @@ Route.post('/auth/sign-in', handler, [
 RateLimit.perMinute(60).by((req) => req.user?.id ?? req.ip)
 ```
 
-`RateLimit.perMinute(n)` and `RateLimit.perHour(n)` are the common entry points. For arbitrary windows, use `RateLimit.attempts(n).every(seconds)`.
+`RateLimit.perMinute(n)` / `perHour(n)` / `perDay(n)` are the common entry points. For arbitrary windows, use `RateLimit.per(n, windowMs)`.
 
 ## Builder methods
 
 | Method | Description |
 |---|---|
-| `.perMinute(n)` / `.perHour(n)` | Convenience constructors |
-| `.attempts(n)` | Set the request count |
-| `.every(seconds)` | Window length |
-| `.by(fn)` | Custom key — defaults to `req.ip` |
+| `RateLimit.perMinute(n)` / `.perHour(n)` / `.perDay(n)` | Convenience constructors — all key by IP |
+| `RateLimit.per(n, windowMs)` | Arbitrary window in milliseconds |
+| `.byIp()` | Key by IP (default) |
+| `.byRoute()` | Key by IP + route path |
+| `.by(fn)` | Custom key function — receives `req` |
 | `.message(text)` | Body returned on 429 |
-| `.toHandler()` | Convert to a `MiddlewareHandler` (mostly automatic) |
+| `.skipIf(fn)` | Skip rate-limiting when the predicate returns true |
+| `.toHandler()` | Convert to a `MiddlewareHandler` (mostly automatic — the handler is itself callable) |
 
 The builder is immutable — chaining returns a new instance, so it's safe to share between routes:
 

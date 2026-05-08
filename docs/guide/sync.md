@@ -67,36 +67,32 @@ pnpm rudder migrate
 
 Both adapters store the document as a sequence of binary updates, replaying them on first load. Snapshots happen periodically to keep load time bounded.
 
-## Auth
+## Auth and change hooks
 
-Gate document access with `onAuth`:
+`onAuth` and `onChange` are configured on `SyncConfig` (`config/sync.ts`), not via a runtime call. The provider reads them at boot.
 
 ```ts
-sync({
+// config/sync.ts
+import { syncRedis } from '@rudderjs/sync'
+import type { SyncConfig } from '@rudderjs/sync'
+
+export default {
+  persistence: syncRedis({ url: process.env.REDIS_URL }),
+
+  /** Runs at WebSocket upgrade. Return false to reject. */
   onAuth: async (req, docName) => {
-    const token = req.headers['authorization']?.split(' ')[1]
+    const token = (req.headers['authorization'] as string | undefined)?.split(' ')[1]
     const user  = await verifyToken(token)
     if (!user) return false
-
-    // Per-document authorization
     return await canAccess(user, docName)
   },
-})
-```
 
-`onAuth` runs at WebSocket upgrade. Returning `false` rejects the connection; returning `true` (or any truthy value) allows it. The truthy value is attached to the connection — read it back inside `onChange`.
-
-## Reacting to changes
-
-`onChange` fires whenever a document's state advances — useful for indexing, webhooks, or cross-system propagation:
-
-```ts
-sync({
+  /** Fires whenever a document's state advances — index, webhook, side-effect. */
   onChange: async (docName, update) => {
     await reindex(docName)
     await Webhook.dispatch('document.updated', { docName })
   },
-})
+} satisfies SyncConfig
 ```
 
 `update` is the binary CRDT update (a `Uint8Array`). For semantic processing, decode it through the document type — see the editor adapters below.

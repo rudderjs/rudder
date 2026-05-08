@@ -75,7 +75,7 @@ res.assertStatus(204)
 res.assertJson({ name: 'Suleiman' })                       // subset match
 res.assertJsonPath('data.user.email', 'su@example.com')    // dot-path
 res.assertJsonCount(3, 'data.users')                       // array length
-res.assertJsonStructure({ data: { id: true, name: true } })// keys only
+res.assertJsonStructure(['data', 'meta'])                  // top-level keys present
 res.assertJsonMissing({ password: 'secret' })
 
 res.assertHeader('content-type', 'application/json')
