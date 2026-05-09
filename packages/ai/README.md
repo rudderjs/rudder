@@ -231,7 +231,7 @@ new Researcher().asTool({
 })
 ```
 
-The wrapped subagent runs via `prompt()` (non-streaming) regardless of how the parent was invoked. Token deltas from the subagent are not surfaced as `tool-update` chunks in the parent stream — if you need that, write the wrapping tool by hand and drive `agent.stream(...)` yourself.
+The wrapped subagent runs via `prompt()` (non-streaming) by default — to surface inner-agent progress as `tool-update` chunks in the parent stream, pass `streaming: true` (or a custom `(chunk) => SubAgentUpdate | null` projector). When the sub-agent's model emits a *client* tool call, opt into the suspend/resume protocol with `suspendable: { runStore }` — the parent loop halts with the inner agent's `pendingClientToolCalls`, the snapshot persists in the run store, and the host resumes via `Agent.resumeAsTool(subRunId, browserResults, { runStore, agent })`. See `docs/guide/ai.md` for the full flow. `InMemorySubAgentRunStore` works for tests; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process persistence. Suspend without streaming throws at builder time.
 
 ### Tool execution context
 
@@ -252,7 +252,7 @@ const myTool = toolDefinition({
 })
 ```
 
-The primary consumer is `@rudderjs/panels`'s `runAgentTool`, which uses
+The primary consumer is `@pilotiq-pro/ai`'s `runAgentTool`, which uses
 `ctx.toolCallId` to correlate sub-agent suspensions with the parent's
 `run_agent` call (see "Pausing the loop from a server tool" below).
 

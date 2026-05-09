@@ -18,6 +18,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 |---|---|---|---|
 | A1 | Prompt caching | S (~1 wk) | Pays for itself day one. Smallest scope, biggest immediate $ ROI. |
 | A2 | Handoffs | S (~3–5 d) | Small, complements `asTool`. Closes the multi-agent picture. |
+| A2.5 | `asTool()` streaming + sub-agent suspend/resume | S (~2.5 d) | Richer call-and-return shape; absorbs ~700 LOC of bespoke plumbing from `@pilotiq-pro/ai`. See `2026-05-09-asTool-streaming-and-suspend.md`. |
 | A3 | MCP ↔ Agent bridge | S (~3–4 d) | Closes the loop between our two AI packages. Small surface. |
 | A4 | User memory (Mem0-style) | M (~2 wk) | Personalized agents — clear customer ask once A1–A3 land. |
 | A5 | Eval framework | L (~2–3 wk) | Most valuable long-term, but needs real surface area to test. |
