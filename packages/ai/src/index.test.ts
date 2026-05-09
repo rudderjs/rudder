@@ -1191,6 +1191,133 @@ describe('Agent failover', () => {
   })
 })
 
+// ─── Media failover (B1) ──────────────────────────────────
+
+import { ImageGenerator } from './image.js'
+import { AudioGenerator } from './audio.js'
+import { Transcription } from './transcription.js'
+
+describe('Media failover', () => {
+  it('ImageGenerator falls back to next provider on error', async () => {
+    AiRegistry.reset()
+
+    let failCalls = 0
+    const failingImage: import('./types.js').ImageGenerationAdapter = {
+      async generate() { failCalls++; throw new Error('Image provider down') },
+    }
+    const successImage: import('./types.js').ImageGenerationAdapter = {
+      async generate(opts) { return { images: [{ base64: 'OK' }], model: opts.model ?? 'fallback' } },
+    }
+    AiRegistry.register({
+      name: 'failimg',
+      create: (m) => mockFactory.create(m),
+      createImage: () => failingImage,
+    })
+    AiRegistry.register({
+      name: 'okimg',
+      create: (m) => mockFactory.create(m),
+      createImage: () => successImage,
+    })
+
+    const result = await ImageGenerator.of('A donut')
+      .model('failimg/v1')
+      .failover('okimg/v1')
+      .generate()
+
+    assert.equal(failCalls, 1)
+    assert.equal(result.images[0]!.base64, 'OK')
+  })
+
+  it('ImageGenerator surfaces last error when all fail', async () => {
+    AiRegistry.reset()
+    const failing: import('./types.js').ImageGenerationAdapter = {
+      async generate() { throw new Error('boom') },
+    }
+    AiRegistry.register({ name: 'a', create: (m) => mockFactory.create(m), createImage: () => failing })
+    AiRegistry.register({ name: 'b', create: (m) => mockFactory.create(m), createImage: () => failing })
+
+    await assert.rejects(
+      () => ImageGenerator.of('A donut').model('a/v1').failover('b/v1').generate(),
+      /boom/,
+    )
+  })
+
+  it('ImageGenerator skips a fallback that lacks the capability', async () => {
+    AiRegistry.reset()
+
+    const failingImage: import('./types.js').ImageGenerationAdapter = {
+      async generate() { throw new Error('first down') },
+    }
+    AiRegistry.register({ name: 'failimg', create: (m) => mockFactory.create(m), createImage: () => failingImage })
+    // Second provider has NO createImage — should error with "not supported", caught + skipped
+    AiRegistry.register({ name: 'noimg',  create: (m) => mockFactory.create(m) })
+    // Third provider works
+    const okImage: import('./types.js').ImageGenerationAdapter = {
+      async generate(opts) { return { images: [{ base64: 'OK' }], model: opts.model ?? 'ok' } },
+    }
+    AiRegistry.register({ name: 'okimg',  create: (m) => mockFactory.create(m), createImage: () => okImage })
+
+    const result = await ImageGenerator.of('A donut')
+      .model('failimg/v1')
+      .failover('noimg/v1', 'okimg/v1')
+      .generate()
+    assert.equal(result.images[0]!.base64, 'OK')
+  })
+
+  it('AudioGenerator falls back across providers', async () => {
+    AiRegistry.reset()
+    const failTts: import('./types.js').TextToSpeechAdapter = {
+      async generate() { throw new Error('tts down') },
+    }
+    const okTts: import('./types.js').TextToSpeechAdapter = {
+      async generate(opts) {
+        return { audio: Buffer.from('audio-bytes'), format: opts.format ?? 'mp3', model: opts.model ?? 'ok' }
+      },
+    }
+    AiRegistry.register({ name: 'failtts', create: (m) => mockFactory.create(m), createTts: () => failTts })
+    AiRegistry.register({ name: 'oktts',  create: (m) => mockFactory.create(m), createTts: () => okTts })
+
+    const result = await AudioGenerator.of('Hi').model('failtts/v1').failover('oktts/v1').generate()
+    assert.equal(result.audio.toString(), 'audio-bytes')
+  })
+
+  it('Transcription falls back across providers', async () => {
+    AiRegistry.reset()
+    const failStt: import('./types.js').SpeechToTextAdapter = {
+      async transcribe() { throw new Error('stt down') },
+    }
+    const okStt: import('./types.js').SpeechToTextAdapter = {
+      async transcribe(opts) { return { text: 'hello', language: opts.language, model: opts.model ?? 'ok' } },
+    }
+    AiRegistry.register({ name: 'failstt', create: (m) => mockFactory.create(m), createStt: () => failStt })
+    AiRegistry.register({ name: 'okstt',  create: (m) => mockFactory.create(m), createStt: () => okStt })
+
+    const result = await Transcription.fromBytes(new Uint8Array([1, 2, 3]))
+      .model('failstt/v1')
+      .failover('okstt/v1')
+      .generate()
+    assert.equal(result.text, 'hello')
+  })
+
+  it('does not call fallback when primary succeeds', async () => {
+    AiRegistry.reset()
+    let primaryCalls = 0
+    let fallbackCalls = 0
+    const primary: import('./types.js').ImageGenerationAdapter = {
+      async generate() { primaryCalls++; return { images: [{ base64: 'P' }], model: 'p' } },
+    }
+    const fallback: import('./types.js').ImageGenerationAdapter = {
+      async generate() { fallbackCalls++; throw new Error('should not be called') },
+    }
+    AiRegistry.register({ name: 'primary',  create: (m) => mockFactory.create(m), createImage: () => primary })
+    AiRegistry.register({ name: 'fallback', create: (m) => mockFactory.create(m), createImage: () => fallback })
+
+    await ImageGenerator.of('x').model('primary/v1').failover('fallback/v1').generate()
+    assert.equal(primaryCalls, 1)
+    assert.equal(fallbackCalls, 0)
+  })
+})
+
 // ─── AiFake ───────────────────────────────────────────────
 
 import { AiFake } from './fake.js'
@@ -1230,6 +1357,48 @@ describe('AiFake', () => {
     const fake = AiFake.fake()
     await AI.prompt('Hi')
     assert.throws(() => fake.assertNothingPrompted(), /Expected no prompts/)
+    fake.restore()
+  })
+
+  it('preventStrayPrompts() throws on unscripted prompt', async () => {
+    const fake = AiFake.fake().preventStrayPrompts()
+    await assert.rejects(() => AI.prompt('unexpected'), /Stray prompt/)
+    fake.restore()
+  })
+
+  it('preventStrayPrompts() allows scripted prompts via respondWithSequence', async () => {
+    const fake = AiFake.fake().preventStrayPrompts()
+    fake.respondWithSequence([{ text: 'expected' }])
+    const r = await AI.prompt('hi')
+    assert.equal(r.text, 'expected')
+    fake.restore()
+  })
+
+  it('preventStrayPrompts() throws on prompts beyond the scripted sequence', async () => {
+    const fake = AiFake.fake().preventStrayPrompts()
+    fake.respondWithSequence([{ text: 'first' }])
+    await AI.prompt('one')   // OK
+    await assert.rejects(() => AI.prompt('two'), /Stray prompt/)
+    fake.restore()
+  })
+
+  it('preventStrayPrompts() ignores ambient respondWith()', async () => {
+    const fake = AiFake.fake()
+    fake.respondWith('ambient')
+    fake.preventStrayPrompts()
+    await assert.rejects(() => AI.prompt('hi'), /Stray prompt/)
+    fake.restore()
+  })
+
+  it('preventStrayPrompts() applies to streaming mode too', async () => {
+    const fake = AiFake.fake().preventStrayPrompts()
+    class StreamingAgent extends Agent { instructions() { return '' } }
+    const { stream, response } = new StreamingAgent().stream('hi')
+    // Swallow the response rejection so it doesn't surface as unhandled.
+    response.catch(() => {})
+    await assert.rejects(async () => {
+      for await (const _ of stream) { /* drain */ }
+    }, /Stray prompt/)
     fake.restore()
   })
 

@@ -48,7 +48,7 @@ export default [AiProvider]
 
 Provider auto-discovery (`defaultProviders()`) finds `AiProvider` automatically via the `rudderjs.providerSubpath` field in `@rudderjs/ai/package.json` — no manual subpath import needed when using auto-discovery.
 
-Agents support failover: `failover() { return ['openai/gpt-4o'] }`
+Agents support failover: `failover() { return ['openai/gpt-4o'] }`. The same pattern is on the media generators: `ImageGenerator.of('...').model('openai/dall-e-3').failover('google/imagen-3').generate()` (also `AudioGenerator`, `Transcription`).
 
 ### Tools
 

@@ -1,5 +1,40 @@
 import type { AiModelConfig, ProviderFactory, ProviderAdapter, RerankingAdapter, FileAdapter } from './types.js'
 
+/**
+ * Try a list of provider/model strings in order until one succeeds.
+ *
+ * Used by the media-generation paths (Image, Audio, Transcription) to give
+ * the same failover ergonomics agents already have. The first model is the
+ * "primary"; the rest are fallbacks. Errors from earlier candidates are
+ * swallowed; only the last error is thrown if every candidate fails.
+ *
+ * The agent loop has its own failover wired into LoopContext (telemetry,
+ * abort handling, observer attempts counter). This is a simpler helper for
+ * single-shot calls outside the agent loop.
+ *
+ * @param primary    The user's chosen model string (e.g. `'openai/dall-e-3'`).
+ * @param fallbacks  Additional candidates to try on failure.
+ * @param call       Receives each candidate model string and runs the work.
+ */
+export async function tryWithFailover<T>(
+  primary: string,
+  fallbacks: readonly string[],
+  call: (modelString: string) => Promise<T>,
+): Promise<T> {
+  const candidates = fallbacks.length > 0
+    ? [primary, ...fallbacks.filter((m) => m !== primary)]
+    : [primary]
+  let lastError: Error | undefined
+  for (const m of candidates) {
+    try {
+      return await call(m)
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+  throw lastError ?? new Error('[RudderJS AI] No provider available for failover.')
+}
+
 export class AiRegistry {
   private static readonly factories = new Map<string, ProviderFactory>()
   private static _default: string | null = null
