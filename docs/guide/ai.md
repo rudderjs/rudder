@@ -227,7 +227,69 @@ new ResearchAgent().asTool({
 })
 ```
 
-For full control — for instance, to surface subagent token deltas as `tool-update` chunks in the parent stream — write the wrapping tool by hand:
+### Streaming sub-agent progress
+
+Pass `streaming: true` to surface inner-agent progress as `tool-update` chunks on the parent's stream. The default projection emits `agent_start` once, `tool_call` per inner tool call, and `agent_done` once when the sub-agent finishes:
+
+```ts
+const research = new ResearchAgent().asTool({
+  name:        'research',
+  description: 'Research a topic in depth.',
+  streaming:   true,
+})
+
+const { stream } = agent({ tools: [research] }).stream('summarize that paper')
+for await (const chunk of stream) {
+  if (chunk.type === 'tool-update' && chunk.update?.kind === 'tool_call') {
+    console.log(`subagent calling ${chunk.update.tool}…`)
+  }
+}
+```
+
+For different cadence (e.g. surfacing inner `text-delta` as preview text or per-step usage), pass a projector:
+
+```ts
+streaming: (chunk) => chunk.type === 'finish'
+  ? { kind: 'agent_step', step: ++n, tokens: chunk.usage?.totalTokens ?? 0 }
+  : null
+```
+
+### Suspend / resume — sub-agents that call client tools
+
+When a sub-agent's model emits a *client* tool call (one with no `execute` — handled by the browser), the inner loop has to halt and the parent loop has to surface the pending calls upward. Pass `suspendable: { runStore }` to opt into the propagation protocol:
+
+```ts
+import { CachedSubAgentRunStore } from '@rudderjs/ai'
+
+const research = new ResearchAgent().asTool({
+  name:        'research',
+  description: 'Research with browser-side tools.',
+  streaming:   true,
+  suspendable: { runStore: new CachedSubAgentRunStore() },
+})
+```
+
+When the sub-agent pauses, `asTool` snapshots its message history into the `runStore`, yields a `subagent_paused` update with a `subRunId`, and halts the parent loop with `pendingClientToolCalls` set. The host's continuation endpoint resumes via:
+
+```ts
+import { Agent } from '@rudderjs/ai'
+
+const r = await Agent.resumeAsTool(subRunId, browserResults, {
+  runStore,
+  agent: rebuiltSubAgent,   // host rebuilds the sub-agent context per resume
+})
+if (r.kind === 'completed') {
+  // feed r.response.text back into the parent's run_agent tool result
+} else {
+  // r.kind === 'paused' — emit another pending_client_tools event with r.subRunId / r.pendingToolCallIds
+}
+```
+
+`InMemorySubAgentRunStore` works for tests / single-process dev; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process / cross-restart persistence. Suspend without streaming throws at builder time — silent suspend is a UX trap.
+
+### Hand-rolled sub-agent tools
+
+For full control — custom progress shape, sub-agent token-deltas as `tool-update` chunks, anything outside the `asTool` envelope — write the wrapping tool by hand:
 
 ```ts
 const research = toolDefinition({

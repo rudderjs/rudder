@@ -746,3 +746,26 @@ export interface ConversationalSpec {
  * declaration; omitted falls through to `Agent.conversational()`.
  */
 export type ConversationalOverride = false | ConversationalSpec
+
+// ─── Sub-agent updates (asTool streaming projection) ──────
+
+/**
+ * Higher-level progress event surfaced by a streaming
+ * {@link Agent.asTool} wrapper to the parent agent's stream. Emitted as
+ * `tool-update` chunks with this payload as the chunk's `update` field —
+ * the parent's UI can switch on `kind` to render sub-agent progress
+ * (agent name, tool calls in progress, step boundaries, completion,
+ * suspend pauses).
+ *
+ * The default projection emits `agent_start` once at the beginning,
+ * `tool_call` per inner `tool-call` chunk, `agent_done` once at the end,
+ * and `subagent_paused` when the inner loop pauses on a client tool.
+ * Hosts wanting a different shape pass `streaming: chunk => …` to
+ * {@link Agent.asTool} and own the discriminator.
+ */
+export type SubAgentUpdate =
+  | { kind: 'agent_start';      agentName: string }
+  | { kind: 'tool_call';        tool: string; args?: Record<string, unknown> }
+  | { kind: 'agent_step';       step: number; tokens: number }
+  | { kind: 'agent_done';       steps: number; tokens: number }
+  | { kind: 'subagent_paused';  subRunId: string; pendingToolCallIds: string[] }

@@ -91,7 +91,7 @@ class Planner extends Agent implements HasTools {
 }
 ```
 
-The subagent runs via `prompt()` (non-streaming); for `tool-update` chunks from a streaming subagent, write the wrapping tool by hand.
+By default the subagent runs via `prompt()` (non-streaming). Pass `streaming: true` to surface inner progress as `tool-update` chunks (default projection emits `agent_start` / `tool_call` / `agent_done`); pass `(chunk) => SubAgentUpdate | null` for a custom projector. To propagate inner client-tool calls upward through the parent loop, also pass `suspendable: { runStore }` (suspend without streaming throws at builder time) — the host's continuation calls `Agent.resumeAsTool(subRunId, results, { runStore, agent })` to resume the inner agent with the browser's results. `InMemorySubAgentRunStore` works for tests; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for multi-worker persistence.
 
 ### Middleware
 

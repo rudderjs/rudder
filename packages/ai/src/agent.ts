@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { AiRegistry } from './registry.js'
-import { isPauseForClientToolsChunk, toolDefinition, toolToSchema } from './tool.js'
-import type { ServerToolBuilder } from './tool.js'
+import { isPauseForClientToolsChunk, pauseForClientTools, toolDefinition, toolToSchema } from './tool.js'
+import type { PauseForClientToolsChunk, ServerToolBuilder } from './tool.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import { QueuedPromptBuilder } from './queue-job.js'
 import {
@@ -9,6 +9,7 @@ import {
   runWithPersistence,
   runWithPersistenceStreaming,
 } from './conversation-persistence.js'
+import type { SubAgentRunSnapshot, SubAgentRunStore } from './sub-agent-run-store.js'
 import {
   runOnConfig,
   runOnChunk,
@@ -35,6 +36,7 @@ import type {
   ConversationalOverride,
   ConversationalSpec,
   ConversationStore,
+  SubAgentUpdate,
   FinishReason,
   HasMiddleware,
   HasTools,
@@ -255,11 +257,15 @@ export abstract class Agent {
     inputSchema:  TInput
     prompt:       (input: z.infer<TInput>) => string
     modelOutput?: (response: AgentResponse) => string | Promise<string>
+    streaming?:   AsToolStreamingOption
+    suspendable?: AsToolSuspendableOption
   }): ServerToolBuilder<z.infer<TInput>, AgentResponse>
   asTool(options: {
     name:         string
     description:  string
     modelOutput?: (response: AgentResponse) => string | Promise<string>
+    streaming?:   AsToolStreamingOption
+    suspendable?: AsToolSuspendableOption
   }): ServerToolBuilder<{ prompt: string }, AgentResponse>
   asTool(options: {
     name:         string
@@ -267,19 +273,247 @@ export abstract class Agent {
     inputSchema?: z.ZodType
     prompt?:      (input: unknown) => string
     modelOutput?: (response: AgentResponse) => string | Promise<string>
+    streaming?:   AsToolStreamingOption
+    suspendable?: AsToolSuspendableOption
   }): ServerToolBuilder<unknown, AgentResponse> {
+    if (options.suspendable && !options.streaming) {
+      throw new Error('[RudderJS AI] asTool: `suspendable` requires `streaming: true` (or a projector). Silent suspend would leave the parent UI with no progress signal between sub-agent invocations.')
+    }
+
     const schema      = options.inputSchema ?? z.object({ prompt: z.string() })
     const promptOf    = options.prompt      ?? ((input: unknown) => (input as { prompt: string }).prompt)
     const modelOutput = options.modelOutput ?? ((response: AgentResponse) => response.text)
+
+    if (!options.streaming) {
+      // 1.2.0 zero-config path — single prompt() call, single AgentResponse out.
+      return toolDefinition({
+        name:        options.name,
+        description: options.description,
+        inputSchema: schema,
+      })
+        .server((input: unknown): Promise<AgentResponse> => this.prompt(promptOf(input)))
+        .modelOutput(modelOutput)
+    }
+
+    const project: ChunkProjector = options.streaming === true ? defaultSubAgentProjector : options.streaming
+    const innerAgent = this // eslint-disable-line @typescript-eslint/no-this-alias
+    const agentName  = options.name
+    const suspendable = options.suspendable
+
+    const generatorExecute = async function* (
+      input: unknown,
+    ): AsyncGenerator<SubAgentUpdate | PauseForClientToolsChunk, AgentResponse, void> {
+      const userPrompt = promptOf(input)
+
+      yield { kind: 'agent_start', agentName }
+
+      const streamOpts = suspendable
+        ? { toolCallStreamingMode: 'stop-on-client-tool' as const }
+        : undefined
+      const { stream, response } = innerAgent.stream(userPrompt, streamOpts)
+
+      for await (const chunk of stream) {
+        const update = project(chunk)
+        if (update) yield update
+      }
+
+      const result = await response
+
+      if (
+        suspendable &&
+        result.finishReason === 'client_tool_calls' &&
+        result.pendingClientToolCalls?.length
+      ) {
+        const subRunId = generateSubRunId()
+        const snapshot: SubAgentRunSnapshot = {
+          messages:           buildSubAgentSnapshotMessages(userPrompt, result),
+          pendingToolCallIds: result.pendingClientToolCalls.map((tc) => tc.id),
+          stepsSoFar:         result.steps.length,
+          tokensSoFar:        result.usage?.totalTokens ?? 0,
+        }
+        await suspendable.runStore.store(subRunId, snapshot)
+
+        yield { kind: 'subagent_paused', subRunId, pendingToolCallIds: snapshot.pendingToolCallIds }
+        yield pauseForClientTools(result.pendingClientToolCalls, subRunId)
+        // Unreachable — the parent loop halts iteration after the pause chunk.
+        return undefined as never
+      }
+
+      yield {
+        kind:   'agent_done',
+        steps:  result.steps.length,
+        tokens: result.usage?.totalTokens ?? 0,
+      }
+      return result
+    }
 
     return toolDefinition({
       name:        options.name,
       description: options.description,
       inputSchema: schema,
     })
-      .server((input: unknown): Promise<AgentResponse> => this.prompt(promptOf(input)))
-      .modelOutput(modelOutput)
+      .server(generatorExecute)
+      .modelOutput(modelOutput) as unknown as ServerToolBuilder<unknown, AgentResponse>
   }
+
+  /**
+   * Resume a sub-agent run that previously paused with
+   * `pauseForClientTools` (typically from {@link Agent.asTool} with
+   * `suspendable: { runStore }` set). Loads the snapshot, validates the
+   * incoming tool-result ids against the pending set, and re-runs the
+   * inner loop with those results appended.
+   *
+   * Returns either a `'completed'` result (the inner agent finished) or
+   * a `'paused'` continuation pointing at a fresh `subRunId` for the
+   * next round-trip.
+   *
+   * @example
+   * const r = await Agent.resumeAsTool(subRunId, browserResults, { runStore, agent: subAgent })
+   * if (r.kind === 'completed') {
+   *   feedToolResultBackToParent(r.response.text)
+   * } else {
+   *   emitPendingClientToolsSse(r.subRunId, r.pendingToolCallIds)
+   * }
+   */
+  static async resumeAsTool(
+    subRunId:          string,
+    clientToolResults: ReadonlyArray<{ toolCallId: string; result: unknown }>,
+    options: {
+      runStore: SubAgentRunStore
+      agent:    Agent
+    },
+  ): Promise<
+    | { kind: 'completed'; response: AgentResponse }
+    | { kind: 'paused';    subRunId: string; pendingToolCallIds: string[] }
+  > {
+    const snapshot = await options.runStore.consume(subRunId)
+    if (!snapshot) {
+      throw new Error(`[RudderJS AI] resumeAsTool: subRunId "${subRunId}" expired or never existed.`)
+    }
+
+    // Forgery guard — every incoming tool-result id must be in the pending set.
+    const pending = new Set(snapshot.pendingToolCallIds)
+    const seen    = new Set<string>()
+    for (const r of clientToolResults) {
+      if (!pending.has(r.toolCallId)) {
+        throw new Error(`[RudderJS AI] resumeAsTool: toolCallId "${r.toolCallId}" was not in the pending set.`)
+      }
+      if (seen.has(r.toolCallId)) {
+        throw new Error(`[RudderJS AI] resumeAsTool: duplicate result for toolCallId "${r.toolCallId}".`)
+      }
+      seen.add(r.toolCallId)
+    }
+
+    // Append client tool-result messages to the snapshot, in incoming order.
+    const messages: AiMessage[] = [...snapshot.messages]
+    for (const r of clientToolResults) {
+      messages.push({
+        role:       'tool',
+        content:    typeof r.result === 'string' ? r.result : JSON.stringify(r.result),
+        toolCallId: r.toolCallId,
+      })
+    }
+
+    const result = await options.agent.prompt('', {
+      messages,
+      toolCallStreamingMode: 'stop-on-client-tool',
+    })
+
+    if (
+      result.finishReason === 'client_tool_calls' &&
+      result.pendingClientToolCalls?.length
+    ) {
+      const newSubRunId = generateSubRunId()
+      const newSnapshot: SubAgentRunSnapshot = {
+        messages:           buildResumeSnapshotMessages(messages, result),
+        pendingToolCallIds: result.pendingClientToolCalls.map((tc) => tc.id),
+        stepsSoFar:         snapshot.stepsSoFar + result.steps.length,
+        tokensSoFar:        snapshot.tokensSoFar + (result.usage?.totalTokens ?? 0),
+        ...(snapshot.meta !== undefined ? { meta: snapshot.meta } : {}),
+      }
+      await options.runStore.store(newSubRunId, newSnapshot)
+      return {
+        kind:               'paused',
+        subRunId:           newSubRunId,
+        pendingToolCallIds: newSnapshot.pendingToolCallIds,
+      }
+    }
+
+    return { kind: 'completed', response: result }
+  }
+}
+
+// ─── asTool helpers ──────────────────────────────────────
+
+type ChunkProjector = (chunk: StreamChunk) => SubAgentUpdate | null
+
+/**
+ * Default projection from inner-agent stream chunks to {@link SubAgentUpdate}
+ * events. Emits one `tool_call` per inner `tool-call` chunk; everything
+ * else is suppressed (the wrapping execute emits the `agent_start` /
+ * `agent_done` bookends and the suspend path emits `subagent_paused`).
+ *
+ * Hosts wanting different cadence (e.g. surfacing `text-delta` previews
+ * or per-step usage) pass `streaming: chunk => …` and own the discriminator.
+ */
+function defaultSubAgentProjector(chunk: StreamChunk): SubAgentUpdate | null {
+  if (chunk.type === 'tool-call' && chunk.toolCall?.name) {
+    return {
+      kind: 'tool_call',
+      tool: chunk.toolCall.name,
+      ...(chunk.toolCall.arguments ? { args: chunk.toolCall.arguments as Record<string, unknown> } : {}),
+    }
+  }
+  return null
+}
+
+type AsToolStreamingOption  = boolean | ChunkProjector
+type AsToolSuspendableOption = { runStore: SubAgentRunStore }
+
+/**
+ * Reconstruct the inner-agent message history at the point the loop
+ * paused, so a subsequent {@link Agent.resumeAsTool} can rerun the loop
+ * with the appended client tool results. The shape is `[user, …(message
+ * + serverToolResults)*]` — system messages are omitted because the
+ * `messages` mode of the agent loop prepends `system` itself.
+ *
+ * Each step's `message` includes ALL `toolCalls` (server + client).
+ * Server-side `toolResults` are interleaved; client-side calls remain
+ * unfulfilled until resume appends their results.
+ */
+function buildSubAgentSnapshotMessages(userPrompt: string, response: AgentResponse): AiMessage[] {
+  const out: AiMessage[] = [{ role: 'user', content: userPrompt }]
+  for (const step of response.steps) {
+    out.push(step.message)
+    for (const tr of step.toolResults) {
+      const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
+      out.push({ role: 'tool', content: resultStr, toolCallId: tr.toolCallId })
+    }
+  }
+  return out
+}
+
+/**
+ * Snapshot reconstruction for a resume-time pause. The `priorMessages`
+ * already include the original user prompt + every step prior to the
+ * resume call. Append the freshly-completed steps' messages and any
+ * server-side tool results so the next resume sees the full history.
+ */
+function buildResumeSnapshotMessages(priorMessages: AiMessage[], response: AgentResponse): AiMessage[] {
+  const out: AiMessage[] = [...priorMessages]
+  for (const step of response.steps) {
+    out.push(step.message)
+    for (const tr of step.toolResults) {
+      const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
+      out.push({ role: 'tool', content: resultStr, toolCallId: tr.toolCallId })
+    }
+  }
+  return out
+}
+
+function generateSubRunId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
+  return `sub-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
 // ─── Conversable Agent (conversation persistence) ───────

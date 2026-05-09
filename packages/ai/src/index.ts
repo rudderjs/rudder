@@ -111,6 +111,15 @@ export { Output, type OutputWrapper } from './output.js'
 // Conversation
 export { MemoryConversationStore } from './conversation.js'
 
+// Sub-agent run store (asTool streaming + suspend)
+export {
+  InMemorySubAgentRunStore,
+  CachedSubAgentRunStore,
+  type SubAgentRunStore,
+  type SubAgentRunSnapshot,
+  type CachedSubAgentRunStoreOptions,
+} from './sub-agent-run-store.js'
+
 // Facade
 export { AI } from './facade.js'
 
