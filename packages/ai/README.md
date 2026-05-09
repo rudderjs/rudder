@@ -11,11 +11,12 @@ pnpm add @rudderjs/ai
 Install the provider SDK(s) you need:
 
 ```bash
-pnpm add @anthropic-ai/sdk   # Anthropic (Claude)
-pnpm add openai               # OpenAI (GPT)
-pnpm add @google/genai        # Google (Gemini)
-pnpm add cohere-ai            # Cohere (reranking + embeddings)
-# Ollama, Jina — no extra package needed
+pnpm add @anthropic-ai/sdk             # Anthropic (Claude)
+pnpm add openai                         # OpenAI (GPT) — also used for OpenRouter / Mistral / DeepSeek / Groq / xAI / Ollama
+pnpm add @google/genai                  # Google (Gemini)
+pnpm add cohere-ai                      # Cohere (reranking + embeddings)
+pnpm add @aws-sdk/client-bedrock-runtime # AWS Bedrock
+# Jina — no extra package needed
 ```
 
 ## Runtime Compatibility
@@ -45,6 +46,17 @@ export default {
     ollama:    { driver: 'ollama',    baseUrl: 'http://localhost:11434' },
     cohere:    { driver: 'cohere',    apiKey: process.env.COHERE_API_KEY! },
     jina:      { driver: 'jina',      apiKey: process.env.JINA_API_KEY! },
+    openrouter: {
+      driver:   'openrouter',
+      apiKey:   process.env.OPENROUTER_API_KEY!,
+      siteUrl:  process.env.APP_URL,    // optional — sent as HTTP-Referer
+      siteName: 'My App',                // optional — sent as X-Title
+    },
+    bedrock: {
+      driver: 'bedrock',
+      region: process.env.AWS_REGION ?? 'us-east-1',
+      // credentials are read from the AWS chain (env, IAM, ~/.aws/credentials)
+    },
   },
 }
 
@@ -718,11 +730,14 @@ Under strict mode, only `respondWithSequence` entries count as valid responses; 
 | xAI | *(none)* | `xai/grok-3` | ✓ | | | | | |
 | Mistral | *(none)* | `mistral/mistral-large` | ✓ | ✓ | | | | |
 | Azure OpenAI | `openai` | `azure/gpt-4o` | ✓ | | | | | |
+| OpenRouter | `openai` | `openrouter/anthropic/claude-3.5-sonnet` | ✓ | | | | | |
+| AWS Bedrock | `@aws-sdk/client-bedrock-runtime` | `bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0` | ✓ | | | | | |
 
 ## Notes
 
 - Provider SDKs are optional dependencies — install only what you use
 - `exactOptionalPropertyTypes` compatible
 - All adapters lazy-load their SDK on first use
-- Ollama, Groq, DeepSeek, xAI, Mistral reuse the OpenAI adapter (OpenAI-compatible API)
+- Ollama, Groq, DeepSeek, xAI, Mistral, OpenRouter reuse the OpenAI adapter (OpenAI-compatible API)
 - Cohere requires `cohere-ai` SDK; Jina uses direct HTTP (no SDK needed)
+- Bedrock uses the AWS credential chain (env vars / IAM roles / `~/.aws/credentials`); v1 supports Anthropic Claude models on Bedrock

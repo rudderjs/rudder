@@ -35,7 +35,7 @@ await agent('You are helpful.').prompt('Hello') // simplest form
 Configure providers in `config/ai.ts` and register with `ai()`:
 
 ```ts
-// config/ai.ts — providers: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure
+// config/ai.ts — providers: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure, openrouter, bedrock
 export default {
   default: 'anthropic/claude-sonnet-4-5',
   providers: {

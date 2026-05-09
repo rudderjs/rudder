@@ -7,7 +7,7 @@ AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + Ru
 - `src/agent.ts` — `Agent` base class: `instructions()`, `model()`, `tools()`, `stopWhen()`, `prompt()`, `stream()`, `asTool()` (subagents)
 - `src/tool.ts` — `toolDefinition()`, `dynamicTool()`, `ToolBuilder`, pause control
 - `src/types.ts` — `StreamChunk`, `FinishReason`, `ToolDefinition`, `AgentConfig`
-- `src/providers/` — 8 provider adapters: anthropic, openai, google, ollama, deepseek, xai, groq, azure
+- `src/providers/` — provider adapters: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure, cohere, jina, openrouter, bedrock
 - `src/middleware.ts` — Hooks: `runOnConfig`, `runOnChunk`, `runOnBeforeToolCall`, `runOnAfterToolCall`, `runOnUsage`
 - `src/facade.ts` — `AI` convenience class for one-shot prompts
 - `src/observers.ts` — Event observers for telescope telemetry (subpath export)
@@ -58,6 +58,9 @@ pnpm test       # tsx --test
 
 ## Pitfalls
 
-- Provider SDKs are optional — install only the ones you use (`@anthropic-ai/sdk`, `openai`, `@google/genai`)
+- Provider SDKs are optional — install only the ones you use (`@anthropic-ai/sdk`, `openai`, `@google/genai`, `@aws-sdk/client-bedrock-runtime` for Bedrock)
+- **OpenRouter** uses the `openai` SDK with a different base URL — installs nothing extra. Optional `siteUrl` / `siteName` config flow through `OpenAIConfig.defaultHeaders` as `HTTP-Referer` / `X-Title` for OpenRouter analytics.
+- **Bedrock v1 supports Anthropic Claude models only** — passing `meta.*` / `amazon.*` / `cohere.*` / `mistral.*` / `ai21.*` model ids throws at adapter construction time with guidance. Other families can be added in follow-up PRs. The `isAnthropicOnBedrock()` helper also matches cross-region inference profiles (`us.anthropic.*`, `eu.anthropic.*`, `apac.anthropic.*`).
+- **Bedrock auth uses the AWS credential chain** — env vars, IAM roles on EC2/ECS/Lambda, `~/.aws/credentials`. Don't pass static keys in app code; only set `BedrockConfig.credentials` for niche multi-account explicit-creds cases.
 - `exactOptionalPropertyTypes` in tsconfig causes issues if you pass `undefined` for optional tool params
 - The `observers.ts` subpath export is for telescope integration — don't import it in normal app code

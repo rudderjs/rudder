@@ -143,7 +143,7 @@ class AnthropicAdapter implements ProviderAdapter {
 
 // ─── Conversion Helpers ──────────────────────────────────
 
-function splitSystemMessages(messages: AiMessage[]): { system: string | undefined; messages: AiMessage[] } {
+export function splitSystemMessages(messages: AiMessage[]): { system: string | undefined; messages: AiMessage[] } {
   const systemMsgs = messages.filter(m => m.role === 'system')
   const rest = messages.filter(m => m.role !== 'system')
   const system = systemMsgs.length > 0
@@ -171,7 +171,7 @@ function contentToAnthropicParts(content: string | import('../types.js').Content
   })
 }
 
-function toAnthropicMessages(messages: AiMessage[]): unknown[] {
+export function toAnthropicMessages(messages: AiMessage[]): unknown[] {
   return messages.map(m => {
     if (m.role === 'assistant' && m.toolCalls?.length) {
       const text = contentToString(m.content)
@@ -206,7 +206,7 @@ function toAnthropicMessages(messages: AiMessage[]): unknown[] {
   })
 }
 
-function toAnthropicTools(tools: ToolDefinitionSchema[]): unknown[] {
+export function toAnthropicTools(tools: ToolDefinitionSchema[]): unknown[] {
   return tools.map(t => ({
     name: t.name,
     description: t.description,
@@ -263,7 +263,7 @@ export function applyCacheToMessages(messages: unknown[], cacheCount: number | u
   })
 }
 
-function toAnthropicToolChoice(choice: ToolChoice): unknown {
+export function toAnthropicToolChoice(choice: ToolChoice): unknown {
   if (choice === 'auto') return { type: 'auto' }
   if (choice === 'required') return { type: 'any' }
   if (choice === 'none') return undefined
@@ -271,7 +271,7 @@ function toAnthropicToolChoice(choice: ToolChoice): unknown {
   return { type: 'auto' }
 }
 
-function fromAnthropicResponse(response: any): ProviderResponse {
+export function fromAnthropicResponse(response: any): ProviderResponse {
   const toolCalls: ToolCall[] = []
   let text = ''
 
