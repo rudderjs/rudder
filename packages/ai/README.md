@@ -604,6 +604,21 @@ const response = await agent('You are helpful.').prompt('Follow up question', {
 
 Works with both `.prompt()` and `.stream()`. History messages are prepended after the system prompt, before the current user message.
 
+### Auto-persist conversations
+
+Override `conversational()` on an agent class to auto-load and auto-save threads without threading user ids through every call site:
+
+```ts
+class ChatAgent extends Agent {
+  conversational() { return { user: Auth.user()?.id } }
+}
+
+await new ChatAgent().prompt('Hi')         // auto-loads + auto-saves
+await new ChatAgent().prompt('Continue?')  // resumes same thread (per user + class)
+```
+
+Returning `false` (the default) keeps the agent stateless. Async returns are awaited; an optional `historyLimit` caps loaded messages. Per-call escape hatches: `prompt(input, { conversation: false })` or `agent.forUser(id).prompt()` / `agent.continue(id).prompt()` — explicit always wins. See `docs/guide/ai.md` for the full precedence chain.
+
 ### Model Selection
 
 Configure available models for user selection (used by `@rudderjs/panels` chat UI):

@@ -297,6 +297,43 @@ const second = await new AssistantAgent().continue(first.conversationId!).prompt
 
 `MemoryConversationStore` is fine for tests. For production, implement `ConversationStore` against your database — Prisma and Redis adapters are the typical choices.
 
+### Auto-persist (`conversational()`)
+
+For chat-style agents, threading `forUser()` through every call site is a footgun — forget it once and the conversation silently doesn't persist. Override `conversational()` on the agent class to auto-load + auto-save without each caller passing the user id:
+
+```ts
+class ChatAgent extends Agent {
+  conversational() {
+    return { user: Auth.user()?.id }   // null user → falsy → opt-out
+  }
+}
+
+await new ChatAgent().prompt('Hi')          // auto-loads thread, runs, auto-saves
+await new ChatAgent().prompt('Still you?')  // resumes the same thread
+```
+
+Each `(user, agent class)` pair gets its own thread, so a user can talk to a `ChatAgent` and a `SupportAgent` without their histories merging. Override the segregation key with `agent: 'custom'` if you ever rename the class.
+
+Async hook returns are awaited — useful when the user identity comes from an async DI binding:
+
+```ts
+conversational() { return Promise.resolve({ user: await loadUserId() }) }
+```
+
+For long-running threads, cap loaded history to the last N messages:
+
+```ts
+conversational() { return { user: ctx.user.id, historyLimit: 50 } }
+```
+
+Per-call override and explicit-form precedence (high → low):
+
+1. `agent.forUser(id).prompt()` / `agent.continue(id).prompt()` — explicit always wins.
+2. `agent.prompt(input, { conversation: false | { user, id?, historyLimit? } })` — per-call.
+3. `agent.conversational()` — class declaration.
+
+`MemoryConversationStore` works out of the box; Prisma / Redis stores plug in by implementing `ConversationStore`. Stores that surface the `agent` meta in `list()` results get the per-class thread separation; stores that ignore it fall back to "always create a new thread", which is the conservative behavior.
+
 ## Middleware
 
 Middleware is an `AiMiddleware` interface — implement only the lifecycle hooks you care about. Hooks: `onConfig`, `onStart`, `onIteration`, `onChunk`, `onBeforeToolCall`, `onAfterToolCall`, `onToolPhaseComplete`, `onUsage`, `onFinish`, `onAbort`, `onError`.

@@ -5,6 +5,11 @@ import type { ServerToolBuilder } from './tool.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
 import { QueuedPromptBuilder } from './queue-job.js'
 import {
+  resolveAutoPersistSpec,
+  runWithPersistence,
+  runWithPersistenceStreaming,
+} from './conversation-persistence.js'
+import {
   runOnConfig,
   runOnChunk,
   runOnBeforeToolCall,
@@ -27,6 +32,8 @@ import type {
   CacheableConfig,
   CacheableMarkers,
   ContentPart,
+  ConversationalOverride,
+  ConversationalSpec,
   ConversationStore,
   FinishReason,
   HasMiddleware,
@@ -140,6 +147,37 @@ export abstract class Agent {
   cacheable(): CacheableConfig | undefined { return undefined }
 
   /**
+   * Opt into auto-persisted conversation behavior. Override on a subclass
+   * to declare *which* user owns the thread and (optionally) which
+   * specific thread, and the framework will load history before each
+   * `prompt()`/`stream()` call and append the new turn after it — without
+   * any caller having to remember `forUser()` / `continue()`.
+   *
+   * Returning `false` (the default) disables auto-persist; the agent runs
+   * stateless. Returning a {@link ConversationalSpec} opts in:
+   *
+   * @example
+   * class ChatAgent extends Agent {
+   *   conversational() {
+   *     return { user: Auth.user()?.id }   // null user → falsy → opt-out
+   *   }
+   * }
+   *
+   * await new ChatAgent().prompt('Hi')          // auto-loads + auto-saves
+   *
+   * **Precedence (high → low):**
+   * 1. Explicit `agent.forUser(id).prompt()` / `agent.continue(id).prompt()`
+   * 2. Per-call `prompt(input, { conversation: false | {...} })`
+   * 3. This method's return value
+   *
+   * Async returns are supported — useful when the user identity is fetched
+   * from an async DI binding.
+   */
+  conversational(): false | ConversationalSpec | Promise<false | ConversationalSpec> {
+    return false
+  }
+
+  /**
    * Default for `AgentPromptOptions.parallelTools`. When `true` (default),
    * multiple tool calls within a single step run their `execute()` functions
    * concurrently. Override on a subclass to flip the default for an agent
@@ -149,12 +187,23 @@ export abstract class Agent {
 
   /** Run the agent with a prompt (non-streaming) */
   async prompt(input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
+    const spec = await resolveAutoPersistSpec(() => this.conversational(), options?.conversation)
+    if (spec) {
+      return runWithPersistence(
+        spec,
+        this.constructor.name,
+        resolveConversationStore,
+        input,
+        options,
+        (effOptions) => runAgentLoop(this, input, effOptions),
+      )
+    }
     return runAgentLoop(this, input, options)
   }
 
   /** Run the agent with a prompt (streaming) */
   stream(input: string, options?: AgentPromptOptions): AgentStreamResponse {
-    return runAgentLoopStreaming(this, input, options)
+    return runStreamWithMaybeAutoPersist(this, input, options)
   }
 
   /** Queue the prompt for background execution */
@@ -256,94 +305,50 @@ export class ConversableAgent {
   }
 
   async prompt(input: string, options?: AgentPromptOptions): Promise<AgentResponse> {
-    const store = resolveConversationStore()
-    if (!store) throw new Error('[RudderJS AI] No ConversationStore registered. Register one via the DI container with key "ai.conversations".')
-
-    // Load or create conversation
-    let history: AiMessage[] = options?.history ?? []
-    if (this._conversationId) {
-      history = [...(await store.load(this._conversationId)), ...history]
-    } else {
-      const meta = this._userId ? { userId: this._userId } : undefined
-      this._conversationId = await store.create(undefined, meta)
-    }
-
-    const response = await runAgentLoop(this.agent, input, { ...options, history })
-
-    // Persist messages
-    const newMessages: AiMessage[] = [
-      { role: 'user', content: input },
-      ...response.steps.flatMap(s => {
-        const msgs: AiMessage[] = [s.message]
-        for (const tr of s.toolResults) {
-          const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
-          msgs.push({ role: 'tool', content: resultStr, toolCallId: tr.toolCallId })
-        }
-        return msgs
-      }),
-    ]
-    await store.append(this._conversationId, newMessages)
-
-    return { text: response.text, steps: response.steps, usage: response.usage, conversationId: this._conversationId! }
+    const spec = this.toSpec()
+    return runWithPersistence(
+      spec,
+      this.agent.constructor.name,
+      resolveConversationStore,
+      input,
+      options,
+      (effOptions) => runAgentLoop(this.agent, input, effOptions),
+    ).then((r) => {
+      // Track the resolved id back on the wrapper so a subsequent
+      // `wrapper.prompt()` call resumes the same thread.
+      if (r.conversationId) this._conversationId = r.conversationId
+      return r
+    })
   }
 
   stream(input: string, options?: AgentPromptOptions): AgentStreamResponse {
-    const store = resolveConversationStore()
-    if (!store) throw new Error('[RudderJS AI] No ConversationStore registered. Register one via the DI container with key "ai.conversations".')
+    const spec = this.toSpec()
+    const persisted = runWithPersistenceStreaming(
+      spec,
+      this.agent.constructor.name,
+      resolveConversationStore,
+      input,
+      options,
+      (effOptions) => runAgentLoopStreaming(this.agent, input, effOptions),
+    )
+    // Update the wrapper's id once the run completes.
+    persisted.response.then(
+      (r) => { if (r.conversationId) this._conversationId = r.conversationId },
+      () => {},
+    )
+    return persisted
+  }
 
-    // We need to handle async setup, so wrap the streaming
-    let resolveReady: () => void
-    const ready = new Promise<void>(r => { resolveReady = r })
-    let loadedHistory: AiMessage[] = []
-    let convId = this._conversationId
-
-    // Kick off async setup
-    const setupPromise = (async () => {
-      if (convId) {
-        loadedHistory = await store.load(convId)
-      } else {
-        const meta = this._userId ? { userId: this._userId } : undefined
-        convId = await store.create(undefined, meta)
-        this._conversationId = convId
-      }
-      resolveReady!()
-    })()
-
-    let resolveResponse: (r: AgentResponse) => void
-    const responsePromise = new Promise<AgentResponse>(r => { resolveResponse = r })
-
-    const self = this // eslint-disable-line @typescript-eslint/no-this-alias
-    const storeRef = store
-    async function* generateStream(): AsyncIterable<StreamChunk> {
-      await setupPromise
-      const history = [...loadedHistory, ...(options?.history ?? [])]
-      const inner = runAgentLoopStreaming(self.agent, input, { ...options, history })
-
-      for await (const chunk of inner.stream) {
-        yield chunk
-      }
-
-      const response = await inner.response
-
-      // Persist messages
-      const newMessages: AiMessage[] = [
-        { role: 'user', content: input },
-        ...response.steps.flatMap(s => {
-          const msgs: AiMessage[] = [s.message]
-          for (const tr of s.toolResults) {
-            const resultStr = typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
-            msgs.push({ role: 'tool', content: resultStr, toolCallId: tr.toolCallId })
-          }
-          return msgs
-        }),
-      ]
-      await storeRef.append(convId!, newMessages)
-
-      const result: AgentResponse = { text: response.text, steps: response.steps, usage: response.usage, conversationId: convId! }
-      resolveResponse!(result)
-    }
-
-    return { stream: generateStream(), response: responsePromise }
+  /**
+   * Translate the wrapper's explicit-form state (`forUser` / `continue`)
+   * into a {@link ConversationalSpec}. The explicit chain bypasses the
+   * agent's `conversational()` declaration entirely — `forUser` always
+   * wins over class defaults.
+   */
+  private toSpec(): ConversationalSpec {
+    if (this._conversationId) return { user: this._userId ?? '', id: this._conversationId }
+    if (this._userId)         return { user: this._userId }
+    throw new Error('[RudderJS AI] ConversableAgent requires forUser() or continue() to be called before prompt().')
   }
 }
 
@@ -414,6 +419,89 @@ export function setConversationStore(store: ConversationStore): void {
 
 function resolveConversationStore(): ConversationStore | undefined {
   return _conversationStore
+}
+
+/**
+ * Streaming counterpart of `Agent.prompt`'s auto-persist branch. The spec
+ * resolution is async (since `conversational()` may return a Promise), so
+ * we defer the decision into the outer wrapper that handles the inner
+ * stream's setup the same way `runWithPersistenceStreaming` does for the
+ * persisted path.
+ */
+function runStreamWithMaybeAutoPersist(
+  a:       Agent,
+  input:   string,
+  options: AgentPromptOptions | undefined,
+): AgentStreamResponse {
+  // Synchronous fast path — most agents don't override `conversational()`,
+  // so we'd pay an extra microtask boundary on every streaming call. Bail
+  // out cheaply when we can prove the call is stateless.
+  const declared = a.conversational()
+  const isFast = (
+    options?.conversation === false ||
+    (declared === false && (options?.conversation === undefined))
+  )
+  if (isFast) {
+    return runAgentLoopStreaming(a, input, options)
+  }
+
+  // Async path — resolve the spec, then dispatch to the persisted or plain stream.
+  let resolveResp: (r: AgentResponse) => void
+  let rejectResp:  (e: unknown) => void
+  const responsePromise = new Promise<AgentResponse>((res, rej) => { resolveResp = res; rejectResp = rej })
+
+  async function* outer(): AsyncIterable<StreamChunk> {
+    let spec: ConversationalSpec | null
+    try {
+      spec = await resolveAutoPersistSpec(() => a.conversational(), options?.conversation)
+    } catch (err) {
+      rejectResp!(err)
+      throw err
+    }
+
+    if (!spec) {
+      const inner = runAgentLoopStreaming(a, input, options)
+      try {
+        for await (const chunk of inner.stream) yield chunk
+      } catch (err) {
+        rejectResp!(err)
+        throw err
+      }
+      try {
+        const r = await inner.response
+        resolveResp!(r)
+      } catch (err) {
+        rejectResp!(err)
+        throw err
+      }
+      return
+    }
+
+    const persisted = runWithPersistenceStreaming(
+      spec,
+      a.constructor.name,
+      resolveConversationStore,
+      input,
+      options,
+      (effOptions) => runAgentLoopStreaming(a, input, effOptions),
+    )
+
+    try {
+      for await (const chunk of persisted.stream) yield chunk
+    } catch (err) {
+      rejectResp!(err)
+      throw err
+    }
+    try {
+      const r = await persisted.response
+      resolveResp!(r)
+    } catch (err) {
+      rejectResp!(err)
+      throw err
+    }
+  }
+
+  return { stream: outer(), response: responsePromise }
 }
 
 // ─── Helpers ─────────────────────────────────────────────
