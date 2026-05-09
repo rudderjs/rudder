@@ -1,5 +1,166 @@
 # @rudderjs/ai
 
+## 1.5.0
+
+### Minor Changes
+
+- 949c5cb: `AWS Bedrock` and `OpenRouter` providers (B4 + B5):
+
+  - **`BedrockProvider`** — new `bedrock` driver. Lazy-loaded `@aws-sdk/client-bedrock-runtime` (added as an optional dep). Region from config; AWS credential chain (env vars / IAM roles / `~/.aws/credentials`) by default, explicit `credentials` accepted for multi-account cases. Streams via `InvokeModelWithResponseStreamCommand`; non-streaming via `InvokeModelCommand`. Prompt-caching markers (`cache_control`) work end-to-end through Bedrock-Anthropic.
+
+    v1 supports **Anthropic Claude models on Bedrock** (`anthropic.*` and the regional cross-region inference profiles `us.anthropic.*` / `eu.anthropic.*` / `apac.anthropic.*`). Other model families on Bedrock (Llama, Nova, Cohere on Bedrock, Mistral on Bedrock, AI21) throw at adapter construction with a clear message — they can be added in follow-up PRs when there's customer demand.
+
+    ```ts
+    // config/ai.ts
+    bedrock: {
+      driver: 'bedrock',
+      region: process.env.AWS_REGION ?? 'us-east-1',
+    }
+
+    // model strings: bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0
+    ```
+
+  - **`OpenRouterProvider`** — new `openrouter` driver. Wraps `OpenAIAdapter` with `https://openrouter.ai/api/v1` as the base URL — installs no extra SDK (reuses `openai`). Optional `siteUrl` / `siteName` config flow through as `HTTP-Referer` / `X-Title` for OpenRouter's per-app analytics.
+
+    Two-slash model strings parse cleanly thanks to `AiRegistry.parseModelString()` already splitting on the first slash — `openrouter/anthropic/claude-3.5-sonnet` → provider `openrouter`, model `anthropic/claude-3.5-sonnet`.
+
+    ```ts
+    // config/ai.ts
+    openrouter: {
+      driver:   'openrouter',
+      apiKey:   process.env.OPENROUTER_API_KEY!,
+      siteUrl:  process.env.APP_URL,
+      siteName: 'My App',
+    }
+
+    // model strings: openrouter/anthropic/claude-3.5-sonnet, openrouter/openai/gpt-4o, etc.
+    ```
+
+  - Internal: `OpenAIConfig` gains a `defaultHeaders?: Record<string, string>` field (passed through to the OpenAI SDK and the embeddings `fetch` call). OpenRouter is the first consumer; safe to use from any OpenAI-compatible derivative.
+  - Internal: `splitSystemMessages` / `toAnthropicMessages` / `toAnthropicTools` / `toAnthropicToolChoice` / `fromAnthropicResponse` are now `export`s from `providers/anthropic.ts` so Bedrock can reuse them. Not re-exported from the package's main entry — internal-only.
+
+- a0cc611: `handoff()` — control transfer between agents (A2):
+
+  `asTool()` lets a parent agent _call_ a subagent and use its result. `handoff()` lets the parent _step out_ — the child agent owns the rest of the conversation.
+
+  ```ts
+  import { Agent, handoff } from "@rudderjs/ai";
+
+  class SalesAgent extends Agent {
+    instructions() {
+      return "You handle pricing and plans.";
+    }
+  }
+  class SupportAgent extends Agent {
+    instructions() {
+      return "You triage bugs.";
+    }
+  }
+
+  class TriageAgent extends Agent {
+    instructions() {
+      return "Greet, then route to the right specialist.";
+    }
+    tools() {
+      return [
+        handoff(SalesAgent, { when: "pricing or sales questions" }),
+        handoff(SupportAgent, { when: "bug reports or technical issues" }),
+      ];
+    }
+  }
+
+  const r = await new TriageAgent().prompt("What does the Pro plan cost?");
+  console.log(r.text); // SalesAgent's reply — TriageAgent's loop ended
+  console.log(r.handoffPath); // ['TriageAgent', 'SalesAgent']
+  ```
+
+  **Default behavior:**
+
+  - Tool name: `handoffTo${AgentClass.name}` (override via `name`).
+  - Description: `'Hand off the conversation to ${AgentClass.name}'` (+ `' for ${when}.'` if `when` is set; or fully replaced via `description`).
+  - Input schema: `{ message: string }` — the parent's model writes a transition prompt that becomes the child's first user message.
+  - Carried history: full conversation flows to the child; the parent's system message is stripped and the child prepends its own `instructions()`.
+  - Multi-hop is supported (Triage → Sales → Billing). Cycles are bounded by `MAX_HANDOFFS = 5`; exceeding throws a clear error.
+  - Sibling tool calls in the same step as a handoff are skipped with a synthetic `'Skipped: parent agent handed off to another agent.'` tool result so the message log stays well-formed for persistence/replay.
+  - Handoffs force serial dispatch (override of `parallelTools: true`) — running siblings concurrently while the parent is being torn down is wasted work.
+
+  **Streaming:** a new `'handoff'` `StreamChunk` is emitted right before control transfers, with `{ from, to, message? }` — UIs can render a transition indicator before the next agent's chunks arrive. The same `AsyncIterable<StreamChunk>` flows through every hop; the resolved `response` carries the merged final state.
+
+  **Response shape:**
+
+  - `text` — final text from the agent that produced the terminal answer.
+  - `steps` — every hop's steps merged in order.
+  - `usage` — summed across all hops.
+  - `finishReason` — the terminal hop's reason.
+  - `handoffPath` — chain of class names traversed (absent when no handoff occurred).
+
+  **Implementation notes:**
+
+  - Detection: handoff tools are tagged with `Symbol.for('rudderjs.ai.handoff')`. The loop checks via `isHandoffTool()` before the client-tool branch in `runToolPhaseSerial`.
+  - The non-streaming entry point now wraps `runAgentLoopOnce` and drives handoffs iteratively in `driveHandoffs`. The streaming entry point inlines the same iterative driver so chunks flow per-hop.
+  - New types: `HandoffTool`, `HandoffOptions`, `HandoffSpec`. New stream chunk: `type: 'handoff'` with `handoff: { from, to, message? }`. New optional field: `AgentResponse.handoffPath?: string[]`.
+
+  Distinct from `asTool()`:
+
+  |                    | `asTool` (call-and-return) | `handoff` (control transfer) |
+  | ------------------ | -------------------------- | ---------------------------- |
+  | Parent loop        | continues                  | ends                         |
+  | Conversation owner | parent                     | child                        |
+  | Final `text`       | parent's                   | last child in chain          |
+  | Use case           | "look something up"        | "transfer to specialist"     |
+
+- d8ba117: `Agent.asTool({ suspendable })` — symmetric pause/resume for approval-gated tools inside sub-agents:
+
+  `@rudderjs/ai@1.4.0` shipped suspend/resume for sub-agents that pause on a **client tool** (`finishReason === 'client_tool_calls'`). Approval-gated tools (`needsApproval: true`) inside sub-agents had no equivalent path — when the inner loop paused with `finishReason === 'tool_approval_required'`, no snapshot was persisted, the parent loop saw the inner agent "complete" with empty/partial text, and approve/reject from the UI had nowhere to land. This release makes the approval pause first-class.
+
+  **New control chunk** — `pauseForApproval(toolCall, isClientTool, resumeHandle?)`:
+
+  ```ts
+  import { pauseForApproval } from "@rudderjs/ai";
+  // inside a server tool's async generator:
+  yield pauseForApproval(innerToolCall, isClientTool, subRunId);
+  ```
+
+  The parent loop recognizes the chunk via `isPauseForApprovalChunk()`, sets `loopFinishReason = 'tool_approval_required'`, and halts iteration the same way it does for `pauseForClientTools`.
+
+  **Snapshot extension** — `SubAgentRunSnapshot.pauseKind?: 'client_tool' | 'approval'` discriminates the resume contract. Older v1.4 snapshots (no field) default to `'client_tool'`. Approval snapshots also carry `pendingApprovalToolCall: { toolCall, isClientTool }` so renderers can show "approve `delete_user(id=42)`?" without a round-trip.
+
+  **`Agent.asTool({ suspendable })` suspend branch** — when the inner loop ends with `finishReason === 'tool_approval_required'`, the wrapper persists a snapshot with `pauseKind: 'approval'`, yields `subagent_paused_approval` (with `subRunId`, `toolCall`, `isClientTool`), then yields `pauseForApproval(...)` to halt the parent.
+
+  **`Agent.resumeAsTool` accepts approval decisions:**
+
+  ```ts
+  const r = await Agent.resumeAsTool(subRunId, [], {
+    runStore,
+    agent: subAgent,
+    approvedToolCallIds: ["inner-call-id"], // or rejectedToolCallIds
+  });
+  ```
+
+  The function dispatches on `snapshot.pauseKind`: `'client_tool'` keeps the existing tool-result-append path; `'approval'` injects `approvedToolCallIds`/`rejectedToolCallIds` into the inner `agent.prompt()` options. The resume can pause again on either kind — the returned `'paused'` variant now carries `pauseKind` and (for approval) `toolCall` + `isClientTool` so the host can route correctly.
+
+  **Streaming projection** — the default sub-agent projector now translates inner `pending-approval` stream chunks into `agent_pending_approval` updates, so renderers can surface "approval needed" mid-stream (analogous to how `tool-call` chunks become `tool_call` updates). `subagent_paused_approval` fires once at the suspend boundary with the `subRunId` the host needs to drive resume.
+
+  **New `SubAgentUpdate` kinds:**
+
+  ```ts
+  | { kind: 'agent_pending_approval';   toolCall: ToolCall; isClientTool: boolean }
+  | { kind: 'subagent_paused_approval'; subRunId: string; toolCall: ToolCall; isClientTool: boolean }
+  ```
+
+  **Back-compat:** the existing `pauseForClientTools` path is unchanged; new snapshots from that path now carry `pauseKind: 'client_tool'` explicitly. Older snapshots in flight (no `pauseKind` field) resume as client-tool pauses by default. The previous `resumeAsTool` `'paused'` return shape gains optional fields (`pauseKind`, `toolCall`, `isClientTool`) — existing call sites that destructure `pendingToolCallIds` continue to work without changes.
+
+  **New exports:**
+
+  - `pauseForApproval`, `isPauseForApprovalChunk`, `PauseForApprovalChunk` (from `@rudderjs/ai`)
+  - `SubAgentPauseKind` (from `@rudderjs/ai`)
+
+  Tests: `astool-approval-suspend.test.ts` and `astool-approval-resume.test.ts` cover the suspend, approve, reject, pause-again, and cross-kind-transition (approval → client-tool) flows.
+
+### Patch Changes
+
+- 644aa5d: Re-export `SubAgentUpdate` from the package entry. The type was defined in 1.4.0 alongside `Agent.asTool`'s streaming branch and is the recommended public discriminator for hosts wrapping streaming sub-agents — but it was never wired into the public types block, so consumers had to mirror the union locally or reach in via a deep `./types.js` path. No runtime change.
+
 ## 1.4.0
 
 ### Minor Changes
