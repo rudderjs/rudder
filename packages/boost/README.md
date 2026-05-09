@@ -65,6 +65,8 @@ rudder boost:mcp        # Start the MCP server (stdio transport)
 | `browser_logs` | Read browser console logs from Vite dev server |
 | `get_absolute_url` | Convert relative URI paths to absolute URLs using APP_URL |
 | `search_docs` | Search local `@rudderjs/*` package documentation by keyword |
+| `commands_list` | List all rudder commands (built-in + package + user-defined) with args, options, and source. Optional `namespace` filter |
+| `command_run` | Execute a rudder command and return stdout, stderr, exit code, and duration |
 
 ## MCP Resources
 

@@ -48,6 +48,48 @@ The scaffolder's `app/Views/Demos/Index.tsx` is generated from `DEMOS` via `temp
 
 ---
 
+## Non-interactive / JSON mode
+
+Inspired by Laravel Installer v5.27. When run inside an AI coding agent the prompts degrade to garbage, so the scaffolder switches to a flag-driven mode and emits a single line of JSON to stdout (logs go to stderr).
+
+**Triggers** — any of:
+- Detected agent env var: `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CURSOR_TRACE_ID`, `TERM_PROGRAM=cursor`, `GITHUB_COPILOT_CLI`, `CODEX_CLI`, `OPENAI_CODEX`, `GEMINI_CLI`, `WINDSURF_AGENT`, `WINDSURF`
+- `RUDDER_NONINTERACTIVE=1` (CI / scripting)
+- `--json` flag
+- `--interactive` overrides all of the above
+
+**Required flags in JSON mode** (every prompt has a corresponding flag):
+```
+<project-name>
+--orm=prisma|drizzle|none
+--db=sqlite|postgresql|mysql           (omit when --orm=none)
+--packages=auth,queue,...              ('*' = all defaults; '' = none)
+--frameworks=react,vue,solid           (comma-separated)
+--primary-framework=react|vue|solid    (only when >1 framework)
+--tailwind=true|false
+--shadcn=true|false                    (only when react + tailwind=true)
+--demos=contact,queue,...              ('*' = all gated-available; '' = none)
+--install=true|false
+```
+
+**Output**:
+```jsonc
+// success
+{ "success": true, "name": "my-app", "directory": "/abs/path", "files": 42, "agent": "claude-code", "installed": true, "providersDiscovered": true }
+
+// missing flags (exit 1)
+{ "success": false, "error": "Missing required flags...", "requiredFlags": ["--orm", "--db"], "agent": "claude-code" }
+
+// install crash (exit 1)
+{ "success": false, "error": "...", "logFile": "/tmp/cra-xxx.log", "logTail": "...", "agent": "claude-code" }
+```
+
+Flags also work in interactive mode — passing `--orm=prisma` skips that prompt. This makes the scaffolder scriptable for templates and CI without forcing JSON output.
+
+Detection logic lives in `src/agent-detect.ts`; flag parsing + validation in `src/cli-flags.ts` (kept separate from `index.ts` so tests can import without triggering `main()`).
+
+---
+
 ## Package Manager Support
 
 PM is auto-detected from `npm_config_user_agent` (set by pnpm/npm/yarn/bun when invoking the installer).

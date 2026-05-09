@@ -7,6 +7,9 @@ import { getConfigValue } from './tools/config-get.js'
 import { getRouteList } from './tools/route-list.js'
 import { getModelList } from './tools/model-list.js'
 import { getLastError } from './tools/last-error.js'
+import { listCommands } from './tools/commands-list.js'
+import { runCommand } from './tools/command-run.js'
+import { parseFirstJsonObject } from './tools/_pm.js'
 import { createBoostServer, BoostProvider } from './index.js'
 
 // Use the playground as the test project
@@ -125,6 +128,64 @@ describe('createBoostServer', () => {
   it('creates an MCP server', () => {
     const server = createBoostServer(PLAYGROUND)
     assert.ok(server)
+  })
+})
+
+// ─── parseFirstJsonObject ────────────────────────────────
+
+describe('parseFirstJsonObject', () => {
+  it('extracts JSON after a script-header preamble', () => {
+    const stdout = '> playground@0.0.1 rudder\n> tsx index.ts command:list\n\n{"commands":[]}'
+    const parsed = parseFirstJsonObject<{ commands: unknown[] }>(stdout)
+    assert.deepStrictEqual(parsed, { commands: [] })
+  })
+
+  it('handles braces inside string values', () => {
+    const stdout = `prelude {"description":"escape } here","ok":true}`
+    const parsed = parseFirstJsonObject<{ description: string; ok: boolean }>(stdout)
+    assert.strictEqual(parsed.description, 'escape } here')
+    assert.strictEqual(parsed.ok, true)
+  })
+
+  it('throws when no JSON object present', () => {
+    assert.throws(() => parseFirstJsonObject('no json here'))
+  })
+})
+
+// ─── listCommands ────────────────────────────────────────
+
+describe('listCommands', () => {
+  it('returns built-in + package commands from playground', { timeout: 60_000 }, async () => {
+    const result = await listCommands(PLAYGROUND)
+    assert.ok(Array.isArray(result.commands))
+    assert.ok(result.commands.length > 0, 'expected at least one command')
+    const names = result.commands.map(c => c.name)
+    assert.ok(names.includes('command:list'), 'expected command:list to be present')
+    // make:* are package-contributed; one of them should be there
+    assert.ok(names.some(n => n.startsWith('make:')), 'expected at least one make:* command')
+  })
+
+  it('filters by namespace', { timeout: 60_000 }, async () => {
+    const result = await listCommands(PLAYGROUND, 'make')
+    assert.ok(result.commands.length > 0)
+    assert.ok(result.commands.every(c => c.name.startsWith('make:') || c.name === 'make'))
+  })
+})
+
+// ─── runCommand ──────────────────────────────────────────
+
+describe('runCommand', () => {
+  it('runs a no-side-effect command and returns structured result', { timeout: 60_000 }, async () => {
+    const result = await runCommand(PLAYGROUND, 'command:list', ['--all', '--json'], 30_000)
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.killed, false)
+    assert.ok(result.stdout.length > 0, 'expected stdout from command')
+    assert.ok(result.durationMs >= 0)
+  })
+
+  it('returns non-zero exit code for unknown command', { timeout: 30_000 }, async () => {
+    const result = await runCommand(PLAYGROUND, 'this:does:not:exist', [], 15_000)
+    assert.notStrictEqual(result.exitCode, 0)
   })
 })
 

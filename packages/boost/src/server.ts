@@ -14,6 +14,8 @@ import { readLogs } from './tools/read-logs.js'
 import { readBrowserLogs } from './tools/browser-logs.js'
 import { getAbsoluteUrl } from './tools/get-absolute-url.js'
 import { searchDocs } from './tools/search-docs.js'
+import { listCommands } from './tools/commands-list.js'
+import { runCommand } from './tools/command-run.js'
 
 export function createBoostServer(cwd: string): McpServer {
   const server = new McpServer(
@@ -153,6 +155,39 @@ export function createBoostServer(cwd: string): McpServer {
   }, async ({ path }) => {
     const result = await getAbsoluteUrl(cwd, path)
     return { content: [{ type: 'text' as const, text: result }] }
+  })
+
+  // ── commands_list ─────────────────────────────────────
+
+  server.registerTool('commands_list', {
+    title: 'List Commands',
+    description: 'List all rudder commands available in this project (built-in + package + user-defined). Returns name, description, args, options, and source. Use before command_run to discover what commands exist. If the app cannot boot, user-defined commands may be omitted; the response includes a bootError field in that case.',
+    inputSchema: {
+      namespace: z.string().optional().describe('Filter to a namespace prefix — e.g. "make", "db", "queue", "migrate".'),
+    },
+  }, async ({ namespace }) => {
+    try {
+      const result = await listCommands(cwd, namespace)
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { content: [{ type: 'text' as const, text: `Failed to list commands: ${message}` }], isError: true }
+    }
+  })
+
+  // ── command_run ───────────────────────────────────────
+
+  server.registerTool('command_run', {
+    title: 'Run Command',
+    description: 'Execute a rudder command in the application context and return stdout, stderr, exit code, and duration. Runs as a subprocess via the project\'s package manager. Some commands write files, modify the database, or perform other side-effects — review the description from commands_list before running.',
+    inputSchema: {
+      name:      z.string().describe('Command name — e.g. "make:model", "route:list", "db:seed".'),
+      args:      z.array(z.string()).default([]).describe('Positional arguments and flags — e.g. ["User", "--migration"].'),
+      timeoutMs: z.number().default(60_000).describe('Hard timeout in milliseconds. Commands exceeding this are killed and exitCode is set to 124.'),
+    },
+  }, async ({ name, args, timeoutMs }) => {
+    const result = await runCommand(cwd, name, args, timeoutMs)
+    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
   })
 
   // ── guidelines resources ───────────────────────────────
