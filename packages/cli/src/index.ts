@@ -283,8 +283,24 @@ async function main(): Promise<void> {
   // Register all make:* commands (CLI-owned + package-contributed)
   makeCommand(program)
 
+  // Tolerate boot failures for purely introspective tooling invocations.
+  // `command:list --json` is consumed by AI agents (boost MCP server) and must
+  // produce *something* even when the user's app can't boot — partial info beats
+  // an opaque crash for an agent mid-session. The boot error is stashed on the
+  // command for inclusion in the JSON output.
+  const argv = process.argv.slice(2)
+  const introspectiveJson = argv.includes('command:list') && argv.includes('--json')
+
   // Boot the app (providers + route files) so commands can use DB, etc.
-  if (!skipBoot) await bootApp()
+  if (!skipBoot) {
+    try {
+      await bootApp()
+    } catch (err) {
+      if (!introspectiveJson) throw err
+      ;(globalThis as Record<string, unknown>)['__rudderjs_cli_boot_error__'] =
+        err instanceof Error ? err.message : String(err)
+    }
+  }
 
   // ── Built-in framework commands ───────────────────────────
 
