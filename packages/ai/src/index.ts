@@ -18,6 +18,8 @@ export type {
   AgentStreamResponse,
   AnyTool,
   BeforeToolCallResult,
+  CacheableConfig,
+  CacheableMarkers,
   ClientTool,
   ConversationStore,
   ConversationStoreMeta,

@@ -104,6 +104,99 @@ describe('AnthropicProvider', () => {
   })
 })
 
+describe('Anthropic cache_control markers', () => {
+  it('passes through string system unchanged when caching is disabled', async () => {
+    const { applyCacheToSystem } = await import('./providers/anthropic.js')
+    assert.equal(applyCacheToSystem('You are helpful', false), 'You are helpful')
+  })
+
+  it('converts string system to a text block with cache_control when enabled', async () => {
+    const { applyCacheToSystem } = await import('./providers/anthropic.js')
+    const result = applyCacheToSystem('You are helpful', true)
+    assert.deepStrictEqual(result, [
+      { type: 'text', text: 'You are helpful', cache_control: { type: 'ephemeral' } },
+    ])
+  })
+
+  it('returns undefined for absent system regardless of flag', async () => {
+    const { applyCacheToSystem } = await import('./providers/anthropic.js')
+    assert.equal(applyCacheToSystem(undefined, true), undefined)
+    assert.equal(applyCacheToSystem(undefined, false), undefined)
+  })
+
+  it('marks the last tool with cache_control when enabled', async () => {
+    const { applyCacheToTools } = await import('./providers/anthropic.js')
+    const tools = [
+      { name: 'a', description: 'A', input_schema: {} },
+      { name: 'b', description: 'B', input_schema: {} },
+    ]
+    const result = applyCacheToTools(tools, true) as Array<{ name: string; cache_control?: unknown }>
+    assert.equal(result[0]!.cache_control, undefined)
+    assert.deepStrictEqual(result[1]!.cache_control, { type: 'ephemeral' })
+  })
+
+  it('passes tools through unchanged when caching is disabled', async () => {
+    const { applyCacheToTools } = await import('./providers/anthropic.js')
+    const tools = [{ name: 'a', description: 'A', input_schema: {} }]
+    assert.equal(applyCacheToTools(tools, false), tools)
+  })
+
+  it('handles empty tools list without crashing', async () => {
+    const { applyCacheToTools } = await import('./providers/anthropic.js')
+    assert.deepStrictEqual(applyCacheToTools([], true), [])
+  })
+
+  it('marks the Nth message — string content gets converted to text block', async () => {
+    const { applyCacheToMessages } = await import('./providers/anthropic.js')
+    const messages = [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'second' },
+      { role: 'user', content: 'third' },
+    ]
+    const result = applyCacheToMessages(messages, 2) as Array<{ role: string; content: unknown }>
+    // First message untouched
+    assert.equal(result[0]!.content, 'first')
+    // Second message — content converted to array with cache_control on last block
+    assert.deepStrictEqual(result[1]!.content, [
+      { type: 'text', text: 'second', cache_control: { type: 'ephemeral' } },
+    ])
+    // Third untouched
+    assert.equal(result[2]!.content, 'third')
+  })
+
+  it('marks the Nth message — array content gets cache_control on last block', async () => {
+    const { applyCacheToMessages } = await import('./providers/anthropic.js')
+    const messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'a' },
+          { type: 'text', text: 'b' },
+        ],
+      },
+    ]
+    const result = applyCacheToMessages(messages, 1) as Array<{ content: Array<{ type: string; text: string; cache_control?: unknown }> }>
+    assert.equal(result[0]!.content[0]!.cache_control, undefined)
+    assert.deepStrictEqual(result[0]!.content[1]!.cache_control, { type: 'ephemeral' })
+  })
+
+  it('clamps message count to last index if it exceeds the message list', async () => {
+    const { applyCacheToMessages } = await import('./providers/anthropic.js')
+    const messages = [{ role: 'user', content: 'only' }]
+    const result = applyCacheToMessages(messages, 99) as Array<{ content: unknown }>
+    assert.deepStrictEqual(result[0]!.content, [
+      { type: 'text', text: 'only', cache_control: { type: 'ephemeral' } },
+    ])
+  })
+
+  it('passes messages unchanged when count is zero or undefined', async () => {
+    const { applyCacheToMessages } = await import('./providers/anthropic.js')
+    const messages = [{ role: 'user', content: 'x' }]
+    assert.equal(applyCacheToMessages(messages, 0), messages)
+    assert.equal(applyCacheToMessages(messages, undefined), messages)
+  })
+})
+
 describe('OpenAIProvider', () => {
   it('has name "openai"', () => {
     const p = new OpenAIProvider({ apiKey: 'test-key' })
@@ -1139,6 +1232,162 @@ describe('AI facade', () => {
     AiRegistry.setDefault('noemb/test')
 
     await assert.rejects(() => AI.embed('hello'), /does not support embeddings/)
+  })
+})
+
+// ─── Prompt caching (A1) ─────────────────────────────────
+
+describe('Prompt caching — agent plumbing', () => {
+  it('does not set cache when agent has no cacheable() declaration', async () => {
+    AiRegistry.reset()
+    let captured: import('./types.js').ProviderRequestOptions | undefined
+    const adapter: import('./types.js').ProviderAdapter = {
+      async generate(opts) {
+        captured = opts
+        return {
+          message: { role: 'assistant', content: 'ok' },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+    AiRegistry.register({ name: 'cap', create: () => adapter })
+    AiRegistry.setDefault('cap/v1')
+
+    class A extends Agent { instructions() { return 'sys' } }
+    await new A().prompt('hi')
+    assert.equal(captured!.cache, undefined)
+  })
+
+  it('forwards cacheable markers to the provider', async () => {
+    AiRegistry.reset()
+    let captured: import('./types.js').ProviderRequestOptions | undefined
+    const adapter: import('./types.js').ProviderAdapter = {
+      async generate(opts) {
+        captured = opts
+        return {
+          message: { role: 'assistant', content: 'ok' },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+    AiRegistry.register({ name: 'cap', create: () => adapter })
+    AiRegistry.setDefault('cap/v1')
+
+    class CachedAgent extends Agent {
+      instructions() { return 'sys' }
+      cacheable() { return { instructions: true, tools: true, messages: 2 } }
+    }
+    await new CachedAgent().prompt('hi')
+
+    assert.deepStrictEqual(captured!.cache, {
+      instructions: true,
+      tools:        true,
+      messages:     2,
+    })
+  })
+
+  it('per-call cache: false disables caching even when agent declares it', async () => {
+    AiRegistry.reset()
+    let captured: import('./types.js').ProviderRequestOptions | undefined
+    const adapter: import('./types.js').ProviderAdapter = {
+      async generate(opts) {
+        captured = opts
+        return {
+          message: { role: 'assistant', content: 'ok' },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+    AiRegistry.register({ name: 'cap', create: () => adapter })
+    AiRegistry.setDefault('cap/v1')
+
+    class CachedAgent extends Agent {
+      instructions() { return 'sys' }
+      cacheable() { return { instructions: true } }
+    }
+    await new CachedAgent().prompt('hi', { cache: false })
+    assert.equal(captured!.cache, undefined)
+  })
+
+  it('per-call cache config replaces the agent default for that call', async () => {
+    AiRegistry.reset()
+    let captured: import('./types.js').ProviderRequestOptions | undefined
+    const adapter: import('./types.js').ProviderAdapter = {
+      async generate(opts) {
+        captured = opts
+        return {
+          message: { role: 'assistant', content: 'ok' },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+    AiRegistry.register({ name: 'cap', create: () => adapter })
+    AiRegistry.setDefault('cap/v1')
+
+    class CachedAgent extends Agent {
+      instructions() { return 'sys' }
+      cacheable() { return { instructions: true } }
+    }
+    await new CachedAgent().prompt('hi', { cache: { tools: true } })
+    assert.deepStrictEqual(captured!.cache, { tools: true })
+  })
+
+  it('omits the cache field when all flags are zero/false', async () => {
+    AiRegistry.reset()
+    let captured: import('./types.js').ProviderRequestOptions | undefined
+    const adapter: import('./types.js').ProviderAdapter = {
+      async generate(opts) {
+        captured = opts
+        return {
+          message: { role: 'assistant', content: 'ok' },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+    AiRegistry.register({ name: 'cap', create: () => adapter })
+    AiRegistry.setDefault('cap/v1')
+
+    class A extends Agent {
+      instructions() { return '' }
+      cacheable() { return { instructions: false, messages: 0 } }
+    }
+    await new A().prompt('hi')
+    assert.equal(captured!.cache, undefined)
+  })
+
+  it('messages count is floored to a positive integer', async () => {
+    AiRegistry.reset()
+    let captured: import('./types.js').ProviderRequestOptions | undefined
+    const adapter: import('./types.js').ProviderAdapter = {
+      async generate(opts) {
+        captured = opts
+        return {
+          message: { role: 'assistant', content: 'ok' },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        }
+      },
+      async *stream() { yield { type: 'finish', finishReason: 'stop' } },
+    }
+    AiRegistry.register({ name: 'cap', create: () => adapter })
+    AiRegistry.setDefault('cap/v1')
+
+    class A extends Agent {
+      instructions() { return '' }
+      cacheable() { return { messages: 2.7 } }
+    }
+    await new A().prompt('hi')
+    assert.equal(captured!.cache?.messages, 2)
   })
 })
 

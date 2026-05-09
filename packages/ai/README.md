@@ -338,6 +338,50 @@ const output = Output.object({
 // Use with agent (append output instructions to system prompt)
 ```
 
+### Prompt caching
+
+Mark stable parts of the prompt as cacheable. Provider adapters translate the markers to native primitives — Anthropic adds `cache_control: { type: 'ephemeral' }` to the last content block of each marked region. Cache hits typically save 50–90% on input tokens for long system prompts and tool definitions.
+
+```ts
+class SupportAgent extends Agent {
+  instructions() { return LONG_SYSTEM_PROMPT }     // 50k tokens of policy
+  tools()        { return [...biggToolList] }      // 30k tokens of tool defs
+
+  cacheable() {
+    return { instructions: true, tools: true }
+    //                                  ^ both eligible — Anthropic caches up to the last marked block
+  }
+}
+
+await new SupportAgent().prompt('How do I reset my password?')
+//   ↑ first call: cache miss; subsequent calls within 5 minutes: cache hit
+```
+
+Cache the first N messages of a multi-turn conversation:
+
+```ts
+class ChatAgent extends Agent {
+  cacheable() { return { messages: 4 } }   // cache up to message[3]
+}
+```
+
+Per-call override:
+
+```ts
+await agent.prompt('one-off',  { cache: false })          // disable for this call
+await agent.prompt('different', { cache: { tools: true } }) // replace agent default
+```
+
+**Provider support:**
+
+| Provider | Status |
+|---|---|
+| Anthropic | ✓ — `cache_control` on system, tools, and Nth message |
+| OpenAI    | (pending) — automatic above 1024 tokens; sub-PR will add `prompt_cache_key` for routing affinity |
+| Google    | (pending) — `cachedContent` resource translation |
+
+Other adapters ignore the markers — the request runs uncached.
+
 ### Failover
 
 Try multiple providers in order — if the primary fails, fall through to the next:

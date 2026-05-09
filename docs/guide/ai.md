@@ -239,6 +239,38 @@ const research = toolDefinition({
 })
 ```
 
+## Prompt caching
+
+Mark stable parts of the prompt as cacheable. Provider adapters translate the markers to native cache primitives — Anthropic adds `cache_control: { type: 'ephemeral' }` to the last content block of each marked region, OpenAI uses `prompt_cache_key` for routing affinity (sub-PR follow-up), Google translates to `cachedContent` resources (sub-PR follow-up). Cache hits typically save 50–90% on input tokens.
+
+```ts
+class SupportAgent extends Agent {
+  instructions() { return LONG_SYSTEM_PROMPT }
+  tools()        { return [...] }
+
+  cacheable() {
+    return { instructions: true, tools: true }
+  }
+}
+```
+
+`messages: N` caches the first N messages — useful for multi-turn conversations where early context is stable:
+
+```ts
+class ChatAgent extends Agent {
+  cacheable() { return { messages: 4 } }   // cache up to message[3]
+}
+```
+
+Per-call override:
+
+```ts
+await agent.prompt('one-off',  { cache: false })          // disable for this call
+await agent.prompt('different', { cache: { tools: true } }) // replace agent default
+```
+
+Adapters that don't support caching ignore the markers — the request still runs, uncached. Today only Anthropic is wired up; OpenAI and Google are tracked in the [AI roadmap](../plans/2026-05-09-ai-roadmap.md#a1-prompt-caching-as-a-first-class-api).
+
 ## Conversation persistence
 
 Register a `ConversationStore`, then call `.forUser(userId)` to start a new conversation or `.continue(conversationId)` to resume one:
