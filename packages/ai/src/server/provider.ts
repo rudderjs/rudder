@@ -75,6 +75,23 @@ export class AiProvider extends ServiceProvider {
             apiKey: providerConfig.apiKey!,
             baseUrl: providerConfig.baseUrl!,
           }))
+        } else if (driver === 'openrouter') {
+          const { OpenRouterProvider } = await import('../providers/openrouter.js')
+          AiRegistry.register(new OpenRouterProvider({
+            apiKey: providerConfig.apiKey!,
+            baseUrl: providerConfig.baseUrl,
+            siteUrl: providerConfig['siteUrl'] as string | undefined,
+            siteName: providerConfig['siteName'] as string | undefined,
+          }))
+        } else if (driver === 'bedrock') {
+          const { BedrockProvider } = await import('../providers/bedrock.js')
+          const region = (providerConfig['region'] as string | undefined) ?? 'us-east-1'
+          const credentials = providerConfig['credentials'] as
+            | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
+            | undefined
+          AiRegistry.register(new BedrockProvider(
+            credentials ? { region, credentials } : { region },
+          ))
         }
       }
 

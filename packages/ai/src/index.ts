@@ -84,6 +84,8 @@ export { MistralProvider, type MistralConfig } from './providers/mistral.js'
 export { AzureOpenAIProvider, type AzureOpenAIConfig } from './providers/azure.js'
 export { CohereProvider, type CohereConfig } from './providers/cohere.js'
 export { JinaProvider, type JinaConfig } from './providers/jina.js'
+export { OpenRouterProvider, type OpenRouterConfig } from './providers/openrouter.js'
+export { BedrockProvider, type BedrockConfig } from './providers/bedrock.js'
 
 // Tools
 export {

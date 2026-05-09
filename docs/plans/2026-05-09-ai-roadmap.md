@@ -32,8 +32,8 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | B1 | Provider failover for `Image` / `Audio` / `Transcription` | XS (~½ d) | Trivial extension; agents already have it. |
 | B2 | `AiFake.preventStrayPrompts()` | XS (~½ d) | Fakes silently pass when nothing was sent — a real test-correctness gap. |
 | B3 | Auto-persist conversation behavior | S (~3 d) | Devs forget to call `forUser` / `continue`. Auto-thread is the Laravel default. |
-| B4 | Bedrock provider | S (~3 d) | Enterprise. AWS customers won't adopt without it. |
-| B5 | OpenRouter provider | S (~3 d) | Routing/failover layer popular for cost optimization. |
+| B4 | Bedrock provider ✓ | S (~3 d) | Enterprise. AWS customers won't adopt without it. *Shipped 2026-05-10 (Anthropic Claude on Bedrock; other families pending demand).* |
+| B5 | OpenRouter provider ✓ | S (~3 d) | Routing/failover layer popular for cost optimization. *Shipped 2026-05-10.* |
 | B6 | `broadcastOnQueue()` integration | S (~2 d) | Background AI → live UI without polling. We have `@rudderjs/broadcast` + `queue()` separately; just glue. |
 | B7 | Vector storage in ORM + `SimilaritySearch` tool | M (~1 wk) | Lives in `@rudderjs/orm`, not `ai`. Real RAG ergonomics. |
 | B8 | Hosted vector stores + `FileSearch` provider tool | M (~1 wk) | Wraps OpenAI/Gemini hosted stores. |
@@ -358,25 +358,27 @@ Implementation:
 
 ---
 
-## B4. Bedrock provider
+## B4. Bedrock provider — ✓ shipped 2026-05-10
 
 **Problem.** AWS-shop customers can't adopt RudderJS for AI without Bedrock. Anthropic models on Bedrock are particularly common.
 
-**Design.** New `packages/ai/src/providers/bedrock.ts` mirroring the existing 11. Lazy-loaded SDK (`@aws-sdk/client-bedrock-runtime`), region from config, IAM-role-aware auth. Streams via `InvokeModelWithResponseStreamCommand`.
+**Shipped.** `packages/ai/src/providers/bedrock.ts`. Lazy-loaded `@aws-sdk/client-bedrock-runtime`. Region from config; auth via the AWS credential chain (env vars, IAM roles, `~/.aws/credentials`) by default — explicit `credentials` accepted but discouraged. Streams via `InvokeModelWithResponseStreamCommand`; non-streaming via `InvokeModelCommand`. Reuses Anthropic conversion helpers (system/messages/tools, prompt-cache markers via `cache_control`) since v1 supports Anthropic Claude on Bedrock only — `meta.*` / `amazon.*` / `cohere.*` / `mistral.*` / `ai21.*` model ids throw at adapter construction with guidance.
 
-Models follow Bedrock's naming: `bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0`, etc.
+Recognized model prefixes: `anthropic.*`, `us.anthropic.*`, `eu.anthropic.*`, `apac.anthropic.*` (the last three are cross-region inference profiles).
 
-**Effort:** ~3 days. Provider + adapter + streaming + tests.
+**Out of scope:** non-Anthropic Bedrock model families. Add as follow-up PRs when there's customer demand — each family needs its own request/response shape conversion.
 
 ---
 
-## B5. OpenRouter provider
+## B5. OpenRouter provider — ✓ shipped 2026-05-10
 
 **Problem.** OpenRouter is a popular cost-optimization layer — single API, dozens of models, automatic fallback, often cheaper. Users want to point one config key at OpenRouter and access everything.
 
-**Design.** Trivial — OpenRouter is OpenAI-compatible. New `packages/ai/src/providers/openrouter.ts` extending `OpenAIAdapter` with a different base URL and slightly different model-string parsing. ~1 day if existing `OpenAIAdapter` is well factored.
+**Shipped.** `packages/ai/src/providers/openrouter.ts`. Wraps `OpenAIAdapter` with `https://openrouter.ai/api/v1` as the base URL. Optional `siteUrl` / `siteName` config flow through a small `OpenAIConfig.defaultHeaders` extension as `HTTP-Referer` / `X-Title` for OpenRouter analytics.
 
-**Effort:** ~3 days including handling OpenRouter-specific extensions (provider preferences, route hints).
+`AiRegistry.parseModelString()` already splits on the *first* slash, so OpenRouter's two-slash model strings (`openrouter/anthropic/claude-3.5-sonnet`) parse cleanly into provider `openrouter` + model `anthropic/claude-3.5-sonnet`.
+
+**Out of scope:** OpenRouter-specific extensions (provider preferences, route hints). Currently passable via `providerOptions` if needed; first-class API can land later if demand justifies.
 
 ---
 

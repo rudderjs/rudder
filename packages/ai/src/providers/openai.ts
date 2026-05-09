@@ -32,6 +32,11 @@ export interface OpenAIConfig {
   apiKey: string
   baseUrl?: string | undefined
   organization?: string | undefined
+  /**
+   * Extra headers to send with every request. Used by OpenAI-compatible
+   * derivatives — OpenRouter sends `HTTP-Referer` and `X-Title` for analytics.
+   */
+  defaultHeaders?: Record<string, string> | undefined
 }
 
 export class OpenAIProvider implements ProviderFactory {
@@ -85,6 +90,7 @@ export class OpenAIAdapter implements ProviderAdapter {
       apiKey: this.config.apiKey,
       ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
       ...(this.config.organization ? { organization: this.config.organization } : {}),
+      ...(this.config.defaultHeaders ? { defaultHeaders: this.config.defaultHeaders } : {}),
     })
     return this.client
   }
@@ -321,6 +327,7 @@ class OpenAIEmbeddingAdapter implements EmbeddingAdapter {
         'Authorization': `Bearer ${this.config.apiKey}`,
         'Content-Type': 'application/json',
         ...(this.config.organization ? { 'OpenAI-Organization': this.config.organization } : {}),
+        ...(this.config.defaultHeaders ?? {}),
       },
       body: JSON.stringify({ model: this.model, input: inputs }),
     })
@@ -363,6 +370,7 @@ class OpenAIImageAdapter implements ImageGenerationAdapter {
       apiKey: this.config.apiKey,
       ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
       ...(this.config.organization ? { organization: this.config.organization } : {}),
+      ...(this.config.defaultHeaders ? { defaultHeaders: this.config.defaultHeaders } : {}),
     })
     return this.client
   }
@@ -412,6 +420,7 @@ class OpenAITtsAdapter implements TextToSpeechAdapter {
       apiKey: this.config.apiKey,
       ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
       ...(this.config.organization ? { organization: this.config.organization } : {}),
+      ...(this.config.defaultHeaders ? { defaultHeaders: this.config.defaultHeaders } : {}),
     })
     return this.client
   }
@@ -454,6 +463,7 @@ class OpenAISttAdapter implements SpeechToTextAdapter {
       apiKey: this.config.apiKey,
       ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
       ...(this.config.organization ? { organization: this.config.organization } : {}),
+      ...(this.config.defaultHeaders ? { defaultHeaders: this.config.defaultHeaders } : {}),
     })
     return this.client
   }
@@ -497,6 +507,7 @@ class OpenAIFileAdapter implements FileAdapter {
       apiKey: this.config.apiKey,
       ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
       ...(this.config.organization ? { organization: this.config.organization } : {}),
+      ...(this.config.defaultHeaders ? { defaultHeaders: this.config.defaultHeaders } : {}),
     })
     return this.client
   }

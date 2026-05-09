@@ -29,7 +29,7 @@ await agent('You are helpful.').prompt('Hello') // simplest form
 Configure providers in `config/ai.ts`. The Node-only `AiProvider` lives at `@rudderjs/ai/server` (the main `@rudderjs/ai` entry is runtime-agnostic and has no provider class):
 
 ```ts
-// config/ai.ts — providers: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure
+// config/ai.ts — providers: anthropic, openai, google, ollama, deepseek, xai, groq, mistral, azure, openrouter, bedrock
 import type { AiConfig } from '@rudderjs/ai'
 
 export default {
