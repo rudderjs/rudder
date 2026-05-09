@@ -187,6 +187,52 @@ const searchTool = toolDefinition({
 
 The UI still receives `{ results, total }` in the tool-result chunk — useful for rendering a rich results card — but the model only sees the summary string on its next step. Smaller context, same UX.
 
+### Subagents — `agent.asTool()`
+
+Wrap one agent as a tool another agent can call. The parent delegates work; the subagent runs its own loop end-to-end (its own model, tools, middleware) and returns a single result.
+
+```ts
+class Researcher extends Agent implements HasTools {
+  instructions() { return 'You research topics and return concise summaries.' }
+  model() { return 'anthropic/claude-sonnet-4-6' }
+  tools() { return [searchTool, readUrlTool] }
+}
+
+class Planner extends Agent implements HasTools {
+  instructions() { return 'You break work into steps. Use `research` for facts.' }
+  model() { return 'anthropic/claude-opus-4-7' }
+  tools() {
+    return [
+      new Researcher().asTool({
+        name:        'research',
+        description: 'Research a topic in depth and return a summary.',
+      }),
+    ]
+  }
+}
+
+await new Planner().prompt('Plan a launch for our new ORM feature.')
+```
+
+Defaults are tuned for the zero-config case:
+
+- `inputSchema` defaults to `{ prompt: string }` and the subagent runs with `input.prompt`.
+- The parent model only sees `response.text` on its next step (override with `modelOutput`); the UI still receives the full `AgentResponse` via the `tool-result` chunk.
+
+For a typed input schema, pass an explicit `inputSchema` and a `prompt` mapper:
+
+```ts
+new Researcher().asTool({
+  name:        'research',
+  description: 'Research a topic in depth.',
+  inputSchema: z.object({ topic: z.string(), depth: z.enum(['quick', 'deep']) }),
+  prompt:      ({ topic, depth }) => `Research ${topic} at ${depth} depth.`,
+  modelOutput: (r) => `${r.steps.length} step(s); ${r.text.slice(0, 280)}…`,
+})
+```
+
+The wrapped subagent runs via `prompt()` (non-streaming) regardless of how the parent was invoked. Token deltas from the subagent are not surfaced as `tool-update` chunks in the parent stream — if you need that, write the wrapping tool by hand and drive `agent.stream(...)` yourself.
+
 ### Tool execution context
 
 Server-tool executes can optionally accept a second `ctx: ToolCallContext`

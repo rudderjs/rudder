@@ -199,7 +199,35 @@ Other stop conditions: `until(predicate)`, `tokenLimit(n)`, `noTokensUsed(n)`.
 
 ## Sub-agents
 
-A tool's handler can itself invoke another agent. Streaming progress and approval state propagate upstream so the parent agent's UI stays in sync:
+A tool's handler can itself invoke another agent. Streaming progress and approval state propagate upstream so the parent agent's UI stays in sync.
+
+The shortest path is `agent.asTool({ name, description })` — wrap an agent as a tool the parent can call. The subagent runs its own loop end-to-end (its own model, tools, middleware) and returns a single result.
+
+```ts
+const research = new ResearchAgent().asTool({
+  name:        'research',
+  description: 'Research a topic in depth.',
+})
+
+await agent({ tools: [research], stopWhen: stepCountIs(5) })
+  .prompt('Summarize the transformer paper.')
+```
+
+Defaults are tuned for the zero-config case: `inputSchema` is `{ prompt: string }` and the parent model only sees `response.text` on its next step. The UI still receives the full `AgentResponse` via the `tool-result` chunk, so dashboards can render rich subagent transcripts without bloating the parent's context.
+
+For a typed input schema, pass `inputSchema` + `prompt`:
+
+```ts
+new ResearchAgent().asTool({
+  name:        'research',
+  description: 'Research a topic in depth.',
+  inputSchema: z.object({ topic: z.string(), depth: z.enum(['quick', 'deep']) }),
+  prompt:      ({ topic, depth }) => `Research ${topic} at ${depth} depth.`,
+  modelOutput: (r) => `${r.steps.length} step(s); ${r.text.slice(0, 280)}…`,
+})
+```
+
+For full control — for instance, to surface subagent token deltas as `tool-update` chunks in the parent stream — write the wrapping tool by hand:
 
 ```ts
 const research = toolDefinition({
@@ -209,9 +237,6 @@ const research = toolDefinition({
 }).server(async ({ topic }) => {
   return await new ResearchAgent().prompt(topic)
 })
-
-await agent({ tools: [research], stopWhen: stepCountIs(5) })
-  .prompt('Summarize the transformer paper.')
 ```
 
 ## Conversation persistence

@@ -4,7 +4,7 @@ AI agent framework — Laravel ergonomics + Vercel/TanStack execution model + Ru
 
 ## Key Files
 
-- `src/agent.ts` — `Agent` base class: `instructions()`, `model()`, `tools()`, `stopWhen()`, `prompt()`, `stream()`
+- `src/agent.ts` — `Agent` base class: `instructions()`, `model()`, `tools()`, `stopWhen()`, `prompt()`, `stream()`, `asTool()` (subagents)
 - `src/tool.ts` — `toolDefinition()`, `dynamicTool()`, `ToolBuilder`, pause control
 - `src/types.ts` — `StreamChunk`, `FinishReason`, `ToolDefinition`, `AgentConfig`
 - `src/providers/` — 8 provider adapters: anthropic, openai, google, ollama, deepseek, xai, groq, azure
@@ -38,6 +38,7 @@ Provider auto-discovery reads `rudderjs.providerSubpath` from `package.json` (`"
 - **Client tools**: omit `execute` from the tool definition — the loop pauses and returns `pending-client-tools`
 - **Approval gates**: `needsApproval: true` stops the loop with `tool_approval_required` finish reason
 - **Zod schemas**: tool inputs defined with zod, converted to JSON Schema for each provider
+- **Subagents**: `agent.asTool({ name, description })` wraps an agent as a tool a parent agent can call. Defaults: `inputSchema = { prompt: string }`, `modelOutput = response.text` (full `AgentResponse` still surfaces in the `tool-result` chunk for the UI). Pass `inputSchema` + `prompt` for a typed schema. Subagent runs via `prompt()`, not `stream()` — token deltas don't surface as `tool-update` chunks; write the wrapping tool by hand if you need that.
 
 ## Stream Chunk Types
 
