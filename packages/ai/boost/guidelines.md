@@ -59,7 +59,7 @@ class SupportAgent extends Agent {
 }
 ```
 
-Per-call override: `agent.prompt(input, { cache: false })` to disable; `{ cache: {...} }` to replace. Anthropic is wired up today; OpenAI and Google are sub-PR follow-ups (markers ignored, request still runs uncached).
+Per-call override: `agent.prompt(input, { cache: false })` to disable; `{ cache: {...} }` to replace. All three big providers (Anthropic, OpenAI, Google) are wired up. The `ttl` field is Google-only and defaults to `'1h'`; Anthropic and OpenAI ignore it.
 
 ### Tools
 

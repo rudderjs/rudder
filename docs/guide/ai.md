@@ -241,7 +241,7 @@ const research = toolDefinition({
 
 ## Prompt caching
 
-Mark stable parts of the prompt as cacheable. Provider adapters translate the markers to native cache primitives — Anthropic adds `cache_control: { type: 'ephemeral' }` to the last content block of each marked region, OpenAI uses `prompt_cache_key` for routing affinity (sub-PR follow-up), Google translates to `cachedContent` resources (sub-PR follow-up). Cache hits typically save 50–90% on input tokens.
+Mark stable parts of the prompt as cacheable. Provider adapters translate the markers to native cache primitives — Anthropic adds `cache_control: { type: 'ephemeral' }` to the last content block of each marked region, OpenAI uses `prompt_cache_key` for routing affinity, and Google translates to `cachedContent` resources via a pluggable registry. Cache hits typically save 50–90% on input tokens.
 
 ```ts
 class SupportAgent extends Agent {
@@ -269,7 +269,17 @@ await agent.prompt('one-off',  { cache: false })          // disable for this ca
 await agent.prompt('different', { cache: { tools: true } }) // replace agent default
 ```
 
-Adapters that don't support caching ignore the markers — the request still runs, uncached. Today only Anthropic is wired up; OpenAI and Google are tracked in the [AI roadmap](../plans/2026-05-09-ai-roadmap.md#a1-prompt-caching-as-a-first-class-api).
+Google's `cachedContent` resources are stateful and have a configurable TTL — set it via the `ttl` field (default `'1h'`, max ~24h depending on the model). Anthropic and OpenAI ignore `ttl` because their cache layers don't expose a per-call lifetime knob:
+
+```ts
+class SupportAgent extends Agent {
+  cacheable() { return { instructions: true, tools: true, ttl: '6h' } }
+}
+```
+
+When `@rudderjs/cache` is installed, the Google registry uses the registered adapter for cross-process / cross-restart persistence — install it for any multi-worker deployment to avoid creating duplicate cache resources. Without it, the registry uses an in-process `Map` and warns once on first use.
+
+Adapters that don't support caching ignore the markers — the request still runs, uncached.
 
 ## Conversation persistence
 

@@ -589,7 +589,11 @@ function resolveCacheMarkers(
   if (config.messages !== undefined && config.messages > 0) {
     markers.messages = Math.floor(config.messages)
   }
-  return Object.keys(markers).length > 0 ? markers : undefined
+  if (config.ttl) markers.ttl = config.ttl
+  // ttl alone with no region markers is meaningless — drop it.
+  const hasRegion = markers.instructions || markers.tools || (markers.messages && markers.messages > 0)
+  if (!hasRegion) return undefined
+  return markers
 }
 
 /** Emit the `agent.failed` observer event from the shared loop state. */

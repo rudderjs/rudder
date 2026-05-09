@@ -372,13 +372,26 @@ await agent.prompt('one-off',  { cache: false })          // disable for this ca
 await agent.prompt('different', { cache: { tools: true } }) // replace agent default
 ```
 
+Google's `cachedContent` is the only provider with a stateful cache resource — its TTL is configurable via the `ttl` field (default `'1h'`):
+
+```ts
+class SupportAgent extends Agent {
+  cacheable() {
+    return { instructions: true, tools: true, ttl: '6h' }
+    //                                        ^ Google-only; Anthropic/OpenAI ignore it
+  }
+}
+```
+
+When `@rudderjs/cache` is installed and registered, the Google cache registry uses it for cross-process / cross-restart persistence so multi-worker deployments don't create duplicate cache resources. Without it, the registry falls back to in-memory storage and warns once on first use.
+
 **Provider support:**
 
 | Provider | Status |
 |---|---|
 | Anthropic | ✓ — `cache_control` on system, tools, and Nth message |
-| OpenAI    | (pending) — automatic above 1024 tokens; sub-PR will add `prompt_cache_key` for routing affinity |
-| Google    | (pending) — `cachedContent` resource translation |
+| OpenAI    | ✓ — `prompt_cache_key` for routing affinity (caching is automatic above 1024 tokens) |
+| Google    | ✓ — `cachedContent` resource translation, with TTL refresh and 404 recovery |
 
 Other adapters ignore the markers — the request runs uncached.
 

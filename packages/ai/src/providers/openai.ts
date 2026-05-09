@@ -26,6 +26,7 @@ import type {
   ToolChoice,
   CacheableMarkers,
 } from '../types.js'
+import { cyrb53Hex } from '../util/hash.js'
 
 export interface OpenAIConfig {
   apiKey: string
@@ -279,23 +280,6 @@ export function buildPromptCacheKey(
   if (parts.length === 0) return undefined
 
   return cyrb53Hex(JSON.stringify(parts))
-}
-
-// cyrb53 — public-domain non-cryptographic 53-bit hash. Good distribution,
-// pure JS, no node:crypto needed (this file lives in the runtime-agnostic
-// main entry — see src/isomorphic-check.test.ts).
-function cyrb53Hex(str: string): string {
-  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
-  for (let i = 0; i < str.length; i++) {
-    const ch = str.charCodeAt(i)
-    h1 = Math.imul(h1 ^ ch, 2654435761)
-    h2 = Math.imul(h2 ^ ch, 1597334677)
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
-  const hi = (2097151 & h2).toString(16).padStart(6, '0')
-  const lo = (h1 >>> 0).toString(16).padStart(8, '0')
-  return hi + lo
 }
 
 function fromOpenAIResponse(response: any): ProviderResponse {
