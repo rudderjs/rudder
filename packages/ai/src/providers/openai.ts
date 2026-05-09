@@ -24,6 +24,7 @@ import type {
   AiMessage,
   ToolCall,
   ToolChoice,
+  CacheableMarkers,
 } from '../types.js'
 
 export interface OpenAIConfig {
@@ -90,16 +91,22 @@ export class OpenAIAdapter implements ProviderAdapter {
   async generate(options: ProviderRequestOptions): Promise<ProviderResponse> {
     const client = await this.getClient()
 
+    const messages = toOpenAIMessages(options.messages)
+    const tools = options.tools?.length ? toOpenAITools(options.tools) : undefined
+
     const params: Record<string, unknown> = {
       model: this.model,
-      messages: toOpenAIMessages(options.messages),
+      messages,
     }
     if (options.maxTokens) params['max_tokens'] = options.maxTokens
     if (options.temperature !== undefined) params['temperature'] = options.temperature
     if (options.topP !== undefined) params['top_p'] = options.topP
     if (options.stop) params['stop'] = options.stop
-    if (options.tools?.length) params['tools'] = toOpenAITools(options.tools)
+    if (tools) params['tools'] = tools
     if (options.toolChoice) params['tool_choice'] = toOpenAIToolChoice(options.toolChoice)
+
+    const cacheKey = buildPromptCacheKey(messages, tools, options.cache)
+    if (cacheKey) params['prompt_cache_key'] = cacheKey
 
     const response = await client.chat.completions.create(params, options.signal ? { signal: options.signal } : undefined)
     return fromOpenAIResponse(response)
@@ -108,17 +115,23 @@ export class OpenAIAdapter implements ProviderAdapter {
   async *stream(options: ProviderRequestOptions): AsyncIterable<StreamChunk> {
     const client = await this.getClient()
 
+    const messages = toOpenAIMessages(options.messages)
+    const tools = options.tools?.length ? toOpenAITools(options.tools) : undefined
+
     const params: Record<string, unknown> = {
       model: this.model,
-      messages: toOpenAIMessages(options.messages),
+      messages,
       stream: true,
     }
     if (options.maxTokens) params['max_tokens'] = options.maxTokens
     if (options.temperature !== undefined) params['temperature'] = options.temperature
     if (options.topP !== undefined) params['top_p'] = options.topP
     if (options.stop) params['stop'] = options.stop
-    if (options.tools?.length) params['tools'] = toOpenAITools(options.tools)
+    if (tools) params['tools'] = tools
     if (options.toolChoice) params['tool_choice'] = toOpenAIToolChoice(options.toolChoice)
+
+    const cacheKey = buildPromptCacheKey(messages, tools, options.cache)
+    if (cacheKey) params['prompt_cache_key'] = cacheKey
 
     const stream = await client.chat.completions.create(params, options.signal ? { signal: options.signal } : undefined)
 
@@ -218,6 +231,71 @@ function toOpenAIToolChoice(choice: ToolChoice): unknown {
   if (choice === 'none') return 'none'
   if (typeof choice === 'object' && 'name' in choice) return { type: 'function', function: { name: choice.name } }
   return 'auto'
+}
+
+// ─── Prompt-cache key ────────────────────────────────────
+//
+// OpenAI caches prompts automatically once they exceed 1024 tokens. The only
+// SDK knob is `prompt_cache_key`: an opaque string that gives OpenAI a routing
+// hint so requests with the same cacheable prefix land on the same backend
+// (which has the prefix already cached). Stable hashing is the goal — not
+// cryptographic strength — so we use cyrb53 over canonical JSON of the
+// regions the agent declared as `cacheable()`.
+//
+// Spec: https://platform.openai.com/docs/guides/prompt-caching
+
+/**
+ * Build a stable `prompt_cache_key` from the regions the agent marked as
+ * cacheable. Returns `undefined` if no markers apply (request goes out
+ * without a cache key — OpenAI still caches automatically above 1024
+ * tokens, just without routing affinity).
+ *
+ * Exported for unit testing.
+ */
+export function buildPromptCacheKey(
+  messages: unknown[],
+  tools: unknown[] | undefined,
+  cache: CacheableMarkers | undefined,
+): string | undefined {
+  if (!cache) return undefined
+
+  const parts: unknown[] = []
+
+  if (cache.instructions) {
+    const sys = messages.find(m => (m as { role?: string }).role === 'system')
+    if (sys) parts.push({ s: (sys as { content: unknown }).content })
+  }
+
+  if (cache.tools && tools && tools.length > 0) {
+    parts.push({ t: tools })
+  }
+
+  if (cache.messages && cache.messages > 0) {
+    const conv = messages.filter(m => (m as { role?: string }).role !== 'system')
+    const sliced = conv.slice(0, cache.messages)
+    if (sliced.length > 0) parts.push({ m: sliced })
+  }
+
+  if (parts.length === 0) return undefined
+
+  return cyrb53Hex(JSON.stringify(parts))
+}
+
+// cyrb53 — public-domain non-cryptographic 53-bit hash. Good distribution,
+// pure JS, no node:crypto needed (this file lives in the runtime-agnostic
+// main entry — see src/isomorphic-check.test.ts).
+function cyrb53Hex(str: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  const hi = (2097151 & h2).toString(16).padStart(6, '0')
+  const lo = (h1 >>> 0).toString(16).padStart(8, '0')
+  return hi + lo
 }
 
 function fromOpenAIResponse(response: any): ProviderResponse {
