@@ -139,6 +139,35 @@ async *handle({ url }) {
 
 `async function*` handlers yield `McpToolProgress` objects and return the final result. The runtime forwards yields as `notifications/progress` when the client supplies a `progressToken`.
 
+## Behavior annotations
+
+Tools may carry MCP-spec hints that clients use to decide whether to auto-approve, batch, or sandbox a call. Apply them as decorators:
+
+```ts
+import { IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld } from '@rudderjs/mcp'
+
+@IsReadOnly() @IsIdempotent()  class GetUserTool extends McpTool { /* ... */ }
+@IsDestructive() @IsOpenWorld() class DeleteFileTool extends McpTool { /* ... */ }
+```
+
+Both `true` and `false` carry meaning per the spec, so the decorators take an explicit value: `@IsReadOnly()` is `true`, `@IsReadOnly(false)` is `false`, no decorator is omitted entirely. The hints are advisory — clients still apply their own policy.
+
+Resources accept three protocol-level annotations: `@Audience('user' | 'assistant')`, `@Priority(0..1)`, and `@LastModified(string | Date)`. Clients use them to rank and surface resources in their UI.
+
+## Conditional registration
+
+Hide a primitive when a feature flag is off, in dev mode, or under any other static condition:
+
+```ts
+class ExperimentalTool extends McpTool {
+  schema() { return z.object({}) }
+  async handle() { return McpResponse.text('experimental') }
+  shouldRegister() { return process.env.FEATURE_EXPERIMENTAL === 'true' }
+}
+```
+
+Returning `false` hides the primitive from `tools/list` AND blocks `tools/call` (returning "Unknown tool"), so direct calls can't bypass the gate. The same hook works on `McpResource` and `McpPrompt`. Async hooks are supported. The hook runs with no arguments today; per-request gating (auth-scoped tools) is roadmap work — see `docs/plans/2026-05-09-mcp-roadmap.md`.
+
 ## Resources and prompts
 
 ```ts

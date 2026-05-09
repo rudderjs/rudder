@@ -25,4 +25,13 @@ export abstract class McpResource {
    * container when the method is decorated with `@Handle()`.
    */
   abstract handle(params?: Record<string, string>, ...deps: unknown[]): Promise<string>
+
+  /**
+   * Optional hook controlling whether this resource is exposed to clients.
+   *
+   * Returning `false` hides the resource from `resources/list` and
+   * `resources/templates/list`, AND causes `resources/read` to throw
+   * "Unknown resource" — preventing bypass via direct URI.
+   */
+  shouldRegister?(): boolean | Promise<boolean>
 }

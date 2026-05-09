@@ -14,7 +14,7 @@ import type { McpTool, McpToolResult, McpToolReturn, McpToolProgress } from './M
 import type { McpResource } from './McpResource.js'
 import type { McpPrompt } from './McpPrompt.js'
 import { zodToJsonSchema } from './zod-to-json-schema.js'
-import { getInjectTokens, type InjectToken } from './decorators.js'
+import { getInjectTokens, getToolAnnotations, getResourceAnnotations, type InjectToken } from './decorators.js'
 import type { McpObserverRegistry } from './observers.js'
 
 // Lazy accessor — avoids importing the registry eagerly so the global
@@ -173,6 +173,25 @@ export function resolveHandleDeps(instance: object, propertyKey: string): unknow
   return extras
 }
 
+/**
+ * Resolve `shouldRegister?()` for a primitive. Items without the hook are
+ * always registered. Awaits async hooks.
+ */
+export async function isRegistered(item: { shouldRegister?(): boolean | Promise<boolean> }): Promise<boolean> {
+  if (!item.shouldRegister) return true
+  return Boolean(await item.shouldRegister())
+}
+
+export async function filterRegistered<T extends { shouldRegister?(): boolean | Promise<boolean> }>(
+  items: T[],
+): Promise<T[]> {
+  const out: T[] = []
+  for (const item of items) {
+    if (await isRegistered(item)) out.push(item)
+  }
+  return out
+}
+
 export function createSdkServer(server: McpServer): Server {
   const meta = server.metadata()
   const sdk = new Server(
@@ -190,7 +209,7 @@ export function createSdkServer(server: McpServer): Server {
 
   // ── Tools ────────────────────────────────────────────────
   sdk.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map((t) => {
+    tools: (await filterRegistered(tools)).map((t) => {
       const def: Record<string, unknown> = {
         name: t.name(),
         description: t.description(),
@@ -199,13 +218,17 @@ export function createSdkServer(server: McpServer): Server {
       if (t.outputSchema) {
         def['outputSchema'] = zodToJsonSchema(t.outputSchema())
       }
+      const annotations = getToolAnnotations(t.constructor)
+      if (annotations) {
+        def['annotations'] = annotations
+      }
       return def
     }),
   }))
 
   sdk.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const tool = tools.find((t) => t.name() === request.params.name)
-    if (!tool) {
+    if (!tool || !(await isRegistered(tool))) {
       return { content: [{ type: 'text' as const, text: `Unknown tool: ${request.params.name}` }], isError: true }
     }
     const input = (request.params.arguments ?? {}) as Record<string, unknown>
@@ -233,23 +256,39 @@ export function createSdkServer(server: McpServer): Server {
   const staticResources = resources.filter((r) => !r.isTemplate())
   const templateResources = resources.filter((r) => r.isTemplate())
 
-  sdk.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: staticResources.map((r) => ({
+  function decorateResource(r: McpResource): Record<string, unknown> {
+    const def: Record<string, unknown> = {
       uri: r.uri(),
       name: r.uri(),
       description: r.description(),
       mimeType: r.mimeType(),
-    })),
+    }
+    const annotations = getResourceAnnotations(r.constructor)
+    if (annotations) {
+      def['annotations'] = annotations
+    }
+    return def
+  }
+
+  sdk.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: (await filterRegistered(staticResources)).map(decorateResource),
   }))
 
   if (templateResources.length > 0) {
     sdk.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
-      resourceTemplates: templateResources.map((r) => ({
-        uriTemplate: r.uri(),
-        name: r.uri(),
-        description: r.description(),
-        mimeType: r.mimeType(),
-      })),
+      resourceTemplates: (await filterRegistered(templateResources)).map((r) => {
+        const def: Record<string, unknown> = {
+          uriTemplate: r.uri(),
+          name: r.uri(),
+          description: r.description(),
+          mimeType: r.mimeType(),
+        }
+        const annotations = getResourceAnnotations(r.constructor)
+        if (annotations) {
+          def['annotations'] = annotations
+        }
+        return def
+      }),
     }))
   }
 
@@ -272,7 +311,7 @@ export function createSdkServer(server: McpServer): Server {
       }
     }
 
-    if (!resource) {
+    if (!resource || !(await isRegistered(resource))) {
       throw new Error(`Unknown resource: ${uri}`)
     }
     const start = performance.now()
@@ -298,7 +337,7 @@ export function createSdkServer(server: McpServer): Server {
 
   // ── Prompts ──────────────────────────────────────────────
   sdk.setRequestHandler(ListPromptsRequestSchema, async () => ({
-    prompts: prompts.map((p) => ({
+    prompts: (await filterRegistered(prompts)).map((p) => ({
       name: p.name(),
       description: p.description(),
       ...(p.arguments ? { arguments: Object.keys(p.arguments().shape as Record<string, unknown>).map((k) => ({ name: k, required: true })) } : {}),
@@ -307,7 +346,7 @@ export function createSdkServer(server: McpServer): Server {
 
   sdk.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const prompt = prompts.find((p) => p.name() === request.params.name)
-    if (!prompt) {
+    if (!prompt || !(await isRegistered(prompt))) {
       throw new Error(`Unknown prompt: ${request.params.name}`)
     }
     const args = (request.params.arguments ?? {}) as Record<string, unknown>

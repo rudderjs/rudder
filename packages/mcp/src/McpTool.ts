@@ -64,4 +64,16 @@ export abstract class McpTool {
    * ```
    */
   abstract handle(input: Record<string, unknown>, ...deps: unknown[]): McpToolReturn
+
+  /**
+   * Optional hook controlling whether this tool is exposed to clients.
+   *
+   * Returning `false` hides the tool from `tools/list` AND causes `tools/call`
+   * to return an "unknown tool" error — preventing bypass via direct call.
+   *
+   * Use for static gating (env flags, feature toggles, build mode). The hook
+   * runs with no arguments today; per-request gating (auth-scoped tools) is
+   * tracked as future work.
+   */
+  shouldRegister?(): boolean | Promise<boolean>
 }

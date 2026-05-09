@@ -85,6 +85,38 @@ Don't take a `send` callback parameter — the generator pattern matches
 `@rudderjs/ai` and lets the runtime choose where progress lands (HTTP SSE,
 in-process collector, etc.).
 
+### Tool annotations (behavior hints)
+
+Tools may carry MCP-spec hints that clients (Claude Desktop, Cursor, etc.) use to decide whether to auto-approve a call, batch it, or sandbox it. Apply them as class decorators:
+
+```ts
+import { McpTool, IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld } from '@rudderjs/mcp'
+
+@IsReadOnly()
+@IsIdempotent()
+class GetUserTool extends McpTool { /* ... */ }
+
+@IsDestructive()
+@IsOpenWorld()
+class DeleteFileTool extends McpTool { /* ... */ }
+```
+
+These surface as `annotations` on `tools/list` per the MCP spec. The hints are advisory — clients still apply their own policy. Both `true` and `false` are meaningful (vs. omitted), so the decorators accept an explicit value: `@IsReadOnly()` (= true), `@IsReadOnly(false)`, or no decorator (= omitted).
+
+### Conditional registration (`shouldRegister`)
+
+Hide a tool, resource, or prompt from listings based on static state — feature flags, env mode, build-time config:
+
+```ts
+class ExperimentalTool extends McpTool {
+  schema() { return z.object({}) }
+  async handle() { return McpResponse.text('experimental') }
+  shouldRegister() { return process.env.FEATURE_EXPERIMENTAL === 'true' }
+}
+```
+
+Returning `false` hides the primitive from `tools/list` AND causes `tools/call` to return "Unknown tool" — preventing bypass via direct call. The same hook is available on `McpResource` and `McpPrompt`. Async hooks are supported.
+
 ### Server-initiated notifications
 
 Push events to all connected clients via `McpServer` instance methods. The
@@ -118,6 +150,24 @@ export class WeatherGuidelinesResource extends McpResource {
   async handle() { return 'Always check conditions before...' }
 }
 ```
+
+### Resource annotations
+
+Resources accept three protocol-level annotations: `@Audience`, `@Priority`, and `@LastModified`. These help clients rank and surface resources in their UI:
+
+```ts
+import { McpResource, Audience, Priority, LastModified } from '@rudderjs/mcp'
+
+@Audience('user')                            // 'user' | 'assistant' | both
+@Priority(0.9)                                // 0..1 importance score
+@LastModified('2026-05-09T00:00:00Z')         // ISO 8601 string or Date
+export class ReleaseNotesResource extends McpResource {
+  uri() { return 'file://release-notes' }
+  async handle() { return await readReleaseNotes() }
+}
+```
+
+Resources also accept the same `shouldRegister()` hook as tools.
 
 ## Prompts
 
