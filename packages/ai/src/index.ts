@@ -96,8 +96,10 @@ export {
   toolToSchema,
   pauseForClientTools,
   isPauseForClientToolsChunk,
+  pauseForApproval,
+  isPauseForApprovalChunk,
 } from './tool.js'
-export type { PauseForClientToolsChunk } from './tool.js'
+export type { PauseForClientToolsChunk, PauseForApprovalChunk } from './tool.js'
 export { zodToJsonSchema } from './zod-to-json-schema.js'
 
 // Handoffs
@@ -124,6 +126,7 @@ export {
   CachedSubAgentRunStore,
   type SubAgentRunStore,
   type SubAgentRunSnapshot,
+  type SubAgentPauseKind,
   type CachedSubAgentRunStoreOptions,
 } from './sub-agent-run-store.js'
 

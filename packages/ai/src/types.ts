@@ -784,12 +784,20 @@ export type ConversationalOverride = false | ConversationalSpec
  * The default projection emits `agent_start` once at the beginning,
  * `tool_call` per inner `tool-call` chunk, `agent_done` once at the end,
  * and `subagent_paused` when the inner loop pauses on a client tool.
+ * For approval-gated tools, the inner loop's `pending-approval` chunk
+ * surfaces as `agent_pending_approval` (informational, during streaming)
+ * and the suspend boundary emits `subagent_paused_approval` (carrying
+ * the `subRunId` the host needs to drive resume). The split mirrors the
+ * `tool_call` / `subagent_paused` cadence for client tools.
+ *
  * Hosts wanting a different shape pass `streaming: chunk => …` to
  * {@link Agent.asTool} and own the discriminator.
  */
 export type SubAgentUpdate =
-  | { kind: 'agent_start';      agentName: string }
-  | { kind: 'tool_call';        tool: string; args?: Record<string, unknown> }
-  | { kind: 'agent_step';       step: number; tokens: number }
-  | { kind: 'agent_done';       steps: number; tokens: number }
-  | { kind: 'subagent_paused';  subRunId: string; pendingToolCallIds: string[] }
+  | { kind: 'agent_start';             agentName: string }
+  | { kind: 'tool_call';               tool: string; args?: Record<string, unknown> }
+  | { kind: 'agent_step';              step: number; tokens: number }
+  | { kind: 'agent_done';              steps: number; tokens: number }
+  | { kind: 'subagent_paused';         subRunId: string; pendingToolCallIds: string[] }
+  | { kind: 'agent_pending_approval';  toolCall: ToolCall; isClientTool: boolean }
+  | { kind: 'subagent_paused_approval'; subRunId: string; toolCall: ToolCall; isClientTool: boolean }

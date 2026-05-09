@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { AiRegistry } from './registry.js'
-import { isPauseForClientToolsChunk, pauseForClientTools, toolDefinition, toolToSchema } from './tool.js'
-import type { PauseForClientToolsChunk, ServerToolBuilder } from './tool.js'
+import { isPauseForApprovalChunk, isPauseForClientToolsChunk, pauseForApproval, pauseForClientTools, toolDefinition, toolToSchema } from './tool.js'
+import type { PauseForApprovalChunk, PauseForClientToolsChunk, ServerToolBuilder } from './tool.js'
 import { isHandoffTool } from './handoff.js'
 import type { HandoffSpec } from './handoff.js'
 import { attachmentsToContentParts, getMessageText } from './attachment.js'
@@ -11,7 +11,7 @@ import {
   runWithPersistence,
   runWithPersistenceStreaming,
 } from './conversation-persistence.js'
-import type { SubAgentRunSnapshot, SubAgentRunStore } from './sub-agent-run-store.js'
+import type { SubAgentPauseKind, SubAgentRunSnapshot, SubAgentRunStore } from './sub-agent-run-store.js'
 import {
   runOnConfig,
   runOnChunk,
@@ -304,7 +304,7 @@ export abstract class Agent {
 
     const generatorExecute = async function* (
       input: unknown,
-    ): AsyncGenerator<SubAgentUpdate | PauseForClientToolsChunk, AgentResponse, void> {
+    ): AsyncGenerator<SubAgentUpdate | PauseForClientToolsChunk | PauseForApprovalChunk, AgentResponse, void> {
       const userPrompt = promptOf(input)
 
       yield { kind: 'agent_start', agentName }
@@ -332,11 +332,40 @@ export abstract class Agent {
           pendingToolCallIds: result.pendingClientToolCalls.map((tc) => tc.id),
           stepsSoFar:         result.steps.length,
           tokensSoFar:        result.usage?.totalTokens ?? 0,
+          pauseKind:          'client_tool',
         }
         await suspendable.runStore.store(subRunId, snapshot)
 
         yield { kind: 'subagent_paused', subRunId, pendingToolCallIds: snapshot.pendingToolCallIds }
         yield pauseForClientTools(result.pendingClientToolCalls, subRunId)
+        // Unreachable — the parent loop halts iteration after the pause chunk.
+        return undefined as never
+      }
+
+      if (
+        suspendable &&
+        result.finishReason === 'tool_approval_required' &&
+        result.pendingApprovalToolCall
+      ) {
+        const subRunId = generateSubRunId()
+        const { toolCall: pendingCall, isClientTool } = result.pendingApprovalToolCall
+        const snapshot: SubAgentRunSnapshot = {
+          messages:                buildSubAgentSnapshotMessages(userPrompt, result),
+          pendingToolCallIds:      [pendingCall.id],
+          stepsSoFar:              result.steps.length,
+          tokensSoFar:             result.usage?.totalTokens ?? 0,
+          pauseKind:               'approval',
+          pendingApprovalToolCall: { toolCall: pendingCall, isClientTool },
+        }
+        await suspendable.runStore.store(subRunId, snapshot)
+
+        yield {
+          kind:         'subagent_paused_approval',
+          subRunId,
+          toolCall:     pendingCall,
+          isClientTool,
+        }
+        yield pauseForApproval(pendingCall, isClientTool, subRunId)
         // Unreachable — the parent loop halts iteration after the pause chunk.
         return undefined as never
       }
@@ -359,67 +388,119 @@ export abstract class Agent {
   }
 
   /**
-   * Resume a sub-agent run that previously paused with
-   * `pauseForClientTools` (typically from {@link Agent.asTool} with
-   * `suspendable: { runStore }` set). Loads the snapshot, validates the
-   * incoming tool-result ids against the pending set, and re-runs the
-   * inner loop with those results appended.
+   * Resume a sub-agent run that previously paused with either
+   * `pauseForClientTools` (client-tool pause) or `pauseForApproval`
+   * (approval pause), typically from {@link Agent.asTool} with
+   * `suspendable: { runStore }` set. The snapshot's `pauseKind`
+   * (default `'client_tool'`) selects the resume contract:
    *
-   * Returns either a `'completed'` result (the inner agent finished) or
+   * - **`client_tool`** — `clientToolResults` must carry one entry per
+   *   id in the snapshot's `pendingToolCallIds`. Results are appended
+   *   to the inner-agent message history and the loop re-runs.
+   * - **`approval`** — `approvedToolCallIds` and/or
+   *   `rejectedToolCallIds` must reference the single pending id.
+   *   `clientToolResults` must be empty; the loop re-runs with the
+   *   approval decision injected via `AgentPromptOptions`.
+   *
+   * Returns either a `'completed'` result (the inner agent finished),
    * a `'paused'` continuation pointing at a fresh `subRunId` for the
-   * next round-trip.
+   * next round-trip, or stays `'paused'` if the inner loop hits another
+   * gate. The resume can pause on a different kind than it started on
+   * (e.g. an approval pause that, once approved, hits a client-tool
+   * pause on the next step).
    *
-   * @example
+   * @example  Client-tool resume
    * const r = await Agent.resumeAsTool(subRunId, browserResults, { runStore, agent: subAgent })
-   * if (r.kind === 'completed') {
-   *   feedToolResultBackToParent(r.response.text)
-   * } else {
-   *   emitPendingClientToolsSse(r.subRunId, r.pendingToolCallIds)
-   * }
+   *
+   * @example  Approval resume
+   * const r = await Agent.resumeAsTool(subRunId, [], {
+   *   runStore, agent: subAgent,
+   *   approvedToolCallIds: ['inner-call-id'],
+   * })
    */
   static async resumeAsTool(
     subRunId:          string,
     clientToolResults: ReadonlyArray<{ toolCallId: string; result: unknown }>,
     options: {
-      runStore: SubAgentRunStore
-      agent:    Agent
+      runStore:             SubAgentRunStore
+      agent:                Agent
+      approvedToolCallIds?: string[]
+      rejectedToolCallIds?: string[]
     },
   ): Promise<
     | { kind: 'completed'; response: AgentResponse }
-    | { kind: 'paused';    subRunId: string; pendingToolCallIds: string[] }
+    | {
+        kind:               'paused'
+        subRunId:           string
+        pauseKind:          SubAgentPauseKind
+        pendingToolCallIds: string[]
+        toolCall?:          ToolCall
+        isClientTool?:      boolean
+      }
   > {
     const snapshot = await options.runStore.consume(subRunId)
     if (!snapshot) {
       throw new Error(`[RudderJS AI] resumeAsTool: subRunId "${subRunId}" expired or never existed.`)
     }
 
-    // Forgery guard — every incoming tool-result id must be in the pending set.
+    const pauseKind: SubAgentPauseKind = snapshot.pauseKind ?? 'client_tool'
     const pending = new Set(snapshot.pendingToolCallIds)
-    const seen    = new Set<string>()
-    for (const r of clientToolResults) {
-      if (!pending.has(r.toolCallId)) {
-        throw new Error(`[RudderJS AI] resumeAsTool: toolCallId "${r.toolCallId}" was not in the pending set.`)
+
+    let messages: AiMessage[]
+    const promptOpts: AgentPromptOptions = { toolCallStreamingMode: 'stop-on-client-tool' }
+
+    if (pauseKind === 'client_tool') {
+      // Forgery guard — every incoming tool-result id must be in the pending set.
+      const seen = new Set<string>()
+      for (const r of clientToolResults) {
+        if (!pending.has(r.toolCallId)) {
+          throw new Error(`[RudderJS AI] resumeAsTool: toolCallId "${r.toolCallId}" was not in the pending set.`)
+        }
+        if (seen.has(r.toolCallId)) {
+          throw new Error(`[RudderJS AI] resumeAsTool: duplicate result for toolCallId "${r.toolCallId}".`)
+        }
+        seen.add(r.toolCallId)
       }
-      if (seen.has(r.toolCallId)) {
-        throw new Error(`[RudderJS AI] resumeAsTool: duplicate result for toolCallId "${r.toolCallId}".`)
+
+      // Append client tool-result messages to the snapshot, in incoming order.
+      messages = [...snapshot.messages]
+      for (const r of clientToolResults) {
+        messages.push({
+          role:       'tool',
+          content:    typeof r.result === 'string' ? r.result : JSON.stringify(r.result),
+          toolCallId: r.toolCallId,
+        })
       }
-      seen.add(r.toolCallId)
+    } else {
+      // Approval-pause resume — clientToolResults must be empty; either an
+      // approval or a rejection must be supplied for the pending id.
+      if (clientToolResults.length > 0) {
+        throw new Error('[RudderJS AI] resumeAsTool: snapshot.pauseKind === "approval" but clientToolResults was non-empty. Pass `approvedToolCallIds` or `rejectedToolCallIds` instead.')
+      }
+      const approved = options.approvedToolCallIds ?? []
+      const rejected = options.rejectedToolCallIds ?? []
+      for (const id of approved) {
+        if (!pending.has(id)) {
+          throw new Error(`[RudderJS AI] resumeAsTool: approvedToolCallId "${id}" was not in the pending set.`)
+        }
+      }
+      for (const id of rejected) {
+        if (!pending.has(id)) {
+          throw new Error(`[RudderJS AI] resumeAsTool: rejectedToolCallId "${id}" was not in the pending set.`)
+        }
+      }
+      if (approved.length === 0 && rejected.length === 0) {
+        throw new Error('[RudderJS AI] resumeAsTool: snapshot.pauseKind === "approval" requires `approvedToolCallIds` or `rejectedToolCallIds`.')
+      }
+
+      messages = [...snapshot.messages]
+      if (approved.length > 0) promptOpts.approvedToolCallIds = approved
+      if (rejected.length > 0) promptOpts.rejectedToolCallIds = rejected
     }
 
-    // Append client tool-result messages to the snapshot, in incoming order.
-    const messages: AiMessage[] = [...snapshot.messages]
-    for (const r of clientToolResults) {
-      messages.push({
-        role:       'tool',
-        content:    typeof r.result === 'string' ? r.result : JSON.stringify(r.result),
-        toolCallId: r.toolCallId,
-      })
-    }
+    promptOpts.messages = messages
 
-    const result = await options.agent.prompt('', {
-      messages,
-      toolCallStreamingMode: 'stop-on-client-tool',
-    })
+    const result = await options.agent.prompt('', promptOpts)
 
     if (
       result.finishReason === 'client_tool_calls' &&
@@ -431,13 +512,41 @@ export abstract class Agent {
         pendingToolCallIds: result.pendingClientToolCalls.map((tc) => tc.id),
         stepsSoFar:         snapshot.stepsSoFar + result.steps.length,
         tokensSoFar:        snapshot.tokensSoFar + (result.usage?.totalTokens ?? 0),
+        pauseKind:          'client_tool',
         ...(snapshot.meta !== undefined ? { meta: snapshot.meta } : {}),
       }
       await options.runStore.store(newSubRunId, newSnapshot)
       return {
         kind:               'paused',
         subRunId:           newSubRunId,
+        pauseKind:          'client_tool',
         pendingToolCallIds: newSnapshot.pendingToolCallIds,
+      }
+    }
+
+    if (
+      result.finishReason === 'tool_approval_required' &&
+      result.pendingApprovalToolCall
+    ) {
+      const newSubRunId = generateSubRunId()
+      const { toolCall: pendingCall, isClientTool } = result.pendingApprovalToolCall
+      const newSnapshot: SubAgentRunSnapshot = {
+        messages:                buildResumeSnapshotMessages(messages, result),
+        pendingToolCallIds:      [pendingCall.id],
+        stepsSoFar:              snapshot.stepsSoFar + result.steps.length,
+        tokensSoFar:             snapshot.tokensSoFar + (result.usage?.totalTokens ?? 0),
+        pauseKind:               'approval',
+        pendingApprovalToolCall: { toolCall: pendingCall, isClientTool },
+        ...(snapshot.meta !== undefined ? { meta: snapshot.meta } : {}),
+      }
+      await options.runStore.store(newSubRunId, newSnapshot)
+      return {
+        kind:               'paused',
+        subRunId:           newSubRunId,
+        pauseKind:          'approval',
+        pendingToolCallIds: newSnapshot.pendingToolCallIds,
+        toolCall:           pendingCall,
+        isClientTool,
       }
     }
 
@@ -451,9 +560,11 @@ type ChunkProjector = (chunk: StreamChunk) => SubAgentUpdate | null
 
 /**
  * Default projection from inner-agent stream chunks to {@link SubAgentUpdate}
- * events. Emits one `tool_call` per inner `tool-call` chunk; everything
+ * events. Emits one `tool_call` per inner `tool-call` chunk and
+ * `agent_pending_approval` per inner `pending-approval` chunk; everything
  * else is suppressed (the wrapping execute emits the `agent_start` /
- * `agent_done` bookends and the suspend path emits `subagent_paused`).
+ * `agent_done` bookends and the suspend paths emit `subagent_paused` /
+ * `subagent_paused_approval`).
  *
  * Hosts wanting different cadence (e.g. surfacing `text-delta` previews
  * or per-step usage) pass `streaming: chunk => …` and own the discriminator.
@@ -464,6 +575,13 @@ function defaultSubAgentProjector(chunk: StreamChunk): SubAgentUpdate | null {
       kind: 'tool_call',
       tool: chunk.toolCall.name,
       ...(chunk.toolCall.arguments ? { args: chunk.toolCall.arguments as Record<string, unknown> } : {}),
+    }
+  }
+  if (chunk.type === 'pending-approval' && chunk.toolCall && chunk.toolCall.id && chunk.toolCall.name) {
+    return {
+      kind:         'agent_pending_approval',
+      toolCall:     chunk.toolCall as ToolCall,
+      isClientTool: !!chunk.isClientTool,
     }
   }
   return null
@@ -1277,6 +1395,16 @@ async function* runToolPhaseSerial(
           paused = true
           break
         }
+        if (isPauseForApprovalChunk(step.value)) {
+          loopCtx.pendingApprovalToolCall = {
+            toolCall:     step.value.toolCall,
+            isClientTool: step.value.isClientTool,
+          }
+          loopCtx.loopFinishReason = 'tool_approval_required'
+          loopCtx.stopForApproval = true
+          paused = true
+          break
+        }
         const updateChunk: StreamChunk = { type: 'tool-update', toolCall: tc, update: step.value }
         if (middlewares.length > 0) {
           const transformed = runOnChunk(middlewares, ctx, updateChunk)
@@ -1565,6 +1693,16 @@ async function runToolExecution(loopCtx: LoopContext, outcome: ReadyOutcome): Pr
         }
         loopCtx.loopFinishReason = 'client_tool_calls'
         loopCtx.stopForClientTools = true
+        paused = true
+        break
+      }
+      if (isPauseForApprovalChunk(step.value)) {
+        loopCtx.pendingApprovalToolCall = {
+          toolCall:     step.value.toolCall,
+          isClientTool: step.value.isClientTool,
+        }
+        loopCtx.loopFinishReason = 'tool_approval_required'
+        loopCtx.stopForApproval = true
         paused = true
         break
       }

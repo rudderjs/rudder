@@ -243,7 +243,7 @@ new Researcher().asTool({
 })
 ```
 
-The wrapped subagent runs via `prompt()` (non-streaming) by default — to surface inner-agent progress as `tool-update` chunks in the parent stream, pass `streaming: true` (or a custom `(chunk) => SubAgentUpdate | null` projector). When the sub-agent's model emits a *client* tool call, opt into the suspend/resume protocol with `suspendable: { runStore }` — the parent loop halts with the inner agent's `pendingClientToolCalls`, the snapshot persists in the run store, and the host resumes via `Agent.resumeAsTool(subRunId, browserResults, { runStore, agent })`. See `docs/guide/ai.md` for the full flow. `InMemorySubAgentRunStore` works for tests; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process persistence. Suspend without streaming throws at builder time.
+The wrapped subagent runs via `prompt()` (non-streaming) by default — to surface inner-agent progress as `tool-update` chunks in the parent stream, pass `streaming: true` (or a custom `(chunk) => SubAgentUpdate | null` projector). Pass `suspendable: { runStore }` to opt into the propagation protocol when the sub-agent pauses on a **client tool call** (`finishReason: 'client_tool_calls'`) or an **approval gate** (`finishReason: 'tool_approval_required'`) — the parent loop halts, the snapshot persists in the run store with a `pauseKind: 'client_tool' | 'approval'` discriminator, and the host resumes via `Agent.resumeAsTool(subRunId, results, { runStore, agent, approvedToolCallIds? })`. See `docs/guide/ai.md` for the full flow. `InMemorySubAgentRunStore` works for tests; `CachedSubAgentRunStore` plugs into `@rudderjs/cache` for cross-process persistence. Suspend without streaming throws at builder time.
 
 ### Handoffs — `handoff()`
 
@@ -379,6 +379,17 @@ const runNestedTool = toolDefinition({
 internally. Tool authors should construct chunks via the
 `pauseForClientTools()` factory rather than by hand so future shape
 changes stay source-compatible.
+
+**Approval pauses:** the sibling `pauseForApproval(toolCall, isClientTool, resumeHandle?)`
+chunk halts the parent loop when a sub-agent's inner approval gate fires
+(inner `finishReason === 'tool_approval_required'`). The parent's loop
+sets `loopFinishReason = 'tool_approval_required'` and surfaces the
+gated call on `pendingApprovalToolCall`. The wrapping `asTool({ suspendable })`
+generator persists a snapshot with `pauseKind: 'approval'` and yields
+this chunk automatically — hand-rolled tools that wrap their own
+approval-gated sub-agents can yield it directly. Resume with
+`Agent.resumeAsTool(subRunId, [], { runStore, agent, approvedToolCallIds: [...] })`
+(or `rejectedToolCallIds`).
 
 **Resuming:** that's caller territory — `@rudderjs/ai` knows nothing about
 the resume protocol. The canonical implementation is in
