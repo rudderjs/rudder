@@ -75,6 +75,7 @@ export interface StreamChunk {
     | 'finish'
     | 'pending-client-tools'
     | 'pending-approval'
+    | 'handoff'
   /** Text content delta (when type === 'text-delta') */
   text?: string
   /** Tool call info (when type === 'tool-call', 'tool-call-delta', 'tool-result', 'tool-update', or 'pending-approval') */
@@ -95,6 +96,20 @@ export interface StreamChunk {
   usage?: TokenUsage | undefined
   /** Finish reason (when type === 'finish') */
   finishReason?: FinishReason
+  /**
+   * Handoff metadata (when type === 'handoff'). Emitted right before the
+   * parent agent's loop ends and control transfers to a new agent. UIs
+   * typically render a "transferred to X" indicator before the next
+   * agent's chunks start streaming.
+   */
+  handoff?: {
+    /** Class name of the agent that just yielded control. */
+    from: string
+    /** Class name of the agent now in control. */
+    to: string
+    /** Transition message the parent's model wrote — if any. */
+    message?: string
+  }
 }
 
 /** Options passed to the provider for each request */
@@ -557,6 +572,15 @@ export interface AgentResponse {
    * the conversation store never holds an unfulfilled `tool_use` block.
    */
   resumedToolMessages?: AiMessage[]
+  /**
+   * Chain of agent class names traversed when one or more handoffs occurred
+   * during the run, in the order each took control. The first entry is the
+   * agent originally invoked; the last is the agent that produced `text`.
+   * Absent when no handoff happened.
+   *
+   * @example ['TriageAgent', 'SalesAgent']
+   */
+  handoffPath?: string[]
 }
 
 export interface AgentStreamResponse {

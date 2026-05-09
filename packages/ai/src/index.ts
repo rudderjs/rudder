@@ -99,6 +99,10 @@ export {
 export type { PauseForClientToolsChunk } from './tool.js'
 export { zodToJsonSchema } from './zod-to-json-schema.js'
 
+// Handoffs
+export { handoff, isHandoffTool } from './handoff.js'
+export type { HandoffTool, HandoffOptions, HandoffSpec } from './handoff.js'
+
 // Agent
 export { Agent, ConversableAgent, agent, stepCountIs, hasToolCall, setConversationStore } from './agent.js'
 export type { InvalidToolArgumentsError } from './agent.js'

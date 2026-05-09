@@ -17,7 +17,7 @@ The shape of this doc is intentional: a ranked, scoped backlog with design sketc
 | # | Item | Scope | Why this slot |
 |---|---|---|---|
 | A1 | Prompt caching | S (~1 wk) | Pays for itself day one. Smallest scope, biggest immediate $ ROI. |
-| A2 | Handoffs | S (~3–5 d) | Small, complements `asTool`. Closes the multi-agent picture. |
+| A2 | Handoffs ✓ | S (~3–5 d) | Small, complements `asTool`. Closes the multi-agent picture. *Shipped 2026-05-10.* |
 | A2.5 | `asTool()` streaming + sub-agent suspend/resume | S (~2.5 d) | Richer call-and-return shape; absorbs ~700 LOC of bespoke plumbing from `@pilotiq-pro/ai`. See `2026-05-09-asTool-streaming-and-suspend.md`. |
 | A3 | MCP ↔ Agent bridge | S (~3–4 d) | Closes the loop between our two AI packages. Small surface. |
 | A4 | User memory (Mem0-style) | M (~2 wk) | Personalized agents — clear customer ask once A1–A3 land. |
@@ -84,31 +84,24 @@ Provider adapters translate the declaration to native primitives. For Google's r
 
 ---
 
-## A2. Handoffs
+## A2. Handoffs — ✓ shipped 2026-05-10
 
-**Problem.** `asTool()` is "call a subagent and get a result back." Sometimes you want **control transfer** — the parent agent steps out, the child agent owns the rest of the conversation. Triage → specialist (intake bot → sales bot → support bot) is the canonical case. With `asTool` the user waits for a synchronous round-trip; with handoffs the conversation seamlessly shifts.
+**Problem.** `asTool()` is "call a subagent and get a result back." Sometimes you want **control transfer** — the parent agent steps out, the child agent owns the rest of the conversation. Triage → specialist (intake bot → sales bot → support bot) is the canonical case.
 
-**Design.** New stream chunk type + helper:
+**Shipped.** `handoff(AgentClass, { when?, name?, description?, inputSchema? })` factory in `packages/ai/src/handoff.ts`. The returned tool is tagged with `Symbol.for('rudderjs.ai.handoff')`; the agent loop detects it in `runToolPhaseSerial` and short-circuits — no `execute()` runs. Default schema `{ message: string }`; the model writes a transition prompt that becomes the child's first user message. The full prior conversation log carries forward (parent's system message stripped; the child prepends its own `instructions()`).
 
-```ts
-class TriageAgent extends Agent {
-  tools() {
-    return [
-      handoff(SalesAgent,    { when: 'pricing or sales questions' }),
-      handoff(SupportAgent,  { when: 'bug reports or technical issues' }),
-    ]
-  }
-}
-```
+A `'handoff'` `StreamChunk` is emitted right before control transfers. `AgentResponse.handoffPath` records the chain of class names traversed (e.g. `['Triage', 'Sales']`). Multi-hop is supported; `MAX_HANDOFFS = 5` bounds runaway cycles. Sibling tool calls in the same step as a handoff are skipped with synthetic "skipped: handed off" tool results so the message log stays well-formed for replay. Handoffs always force serial dispatch (override of `parallelTools`).
 
-Under the hood, `handoff()` is a tool whose execute swaps the active agent in the run-context and returns control to the loop with a `handoff` stream chunk. Conversation history is carried forward.
+**Decisions locked in:**
+- Full history forwarded (no summarization) — matches the open-question default.
+- Between-step transitions only — a handoff tool call ends the current step and the parent loop.
+- Multi-hop: child agents with their own handoff tools work without special handling — driven by an iterative driver in `runAgentLoop` / `runAgentLoopStreaming`.
+- New `FinishReason` enum value was deliberately *not* added — observers see the parent's last step finish as `'tool_calls'` (unchanged) and the merged response's `finishReason` is the child's. Adding `'handed_off'` would cost surface area without clear benefit; can be added later if observers want it.
 
-**Open questions:**
-- Does the new agent see the full prior history, or a summary? Default: full history.
-- Can a handoff happen mid-step (after one tool call) or only between steps? Between steps is simpler.
-- Multi-hop: can SupportAgent further hand off to SeniorSupport? Yes, no special handling needed.
-
-**Effort:** ~3–5 days. New chunk type, loop wiring, observer integration.
+**Out of scope (potential follow-ups):**
+- Custom history-shaping hooks (summarize-before-handoff, drop-tool-results, etc.).
+- Handoffs across the `parallelTools: true` path — currently always serial.
+- Cross-process handoffs (handing off mid-conversation across services).
 
 ---
 
